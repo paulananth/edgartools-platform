@@ -101,8 +101,10 @@ Design: configuration only. `mastering_cusip` gains `figi_ids` (each listing FIG
 - [x] `rules/source-sequence.yaml`: OpenFIGI after N-PORT funds, Securities after OpenFIGI, the order in its comments (2026-10-23 21:30 ET): `test_source_sequence.py` 31 passed
 - [x] Tests (2026-10-23 21:30 ET): `test_openfigi_security.py` 8 passed (an ISIN sharing a FIGI with one CUSIP carries it, with two is set aside, with none carries none; CUSIP records carry only their own CUSIP; in the Merge Stage the CUSIP answers create five Securities, the sharing ISIN joins its CUSIP's, the others create theirs, and an N-PORT record filing both joins, creating none; silver listings take those ids); removing the CUSIP mapping fails two of them; `test_declared_chain_postgres.py`: the ISIN target, declared and run by Bookkeeping after a complete CUSIP run, reads that run's `figi_ids` and gives the hand chain's records; affected unit, MDM and architecture 1,258 passed
 - [x] Mapping Documents regenerated; `rules mapdoc check` 0; `rules check` every file ok (2026-10-23 21:30 ET)
+- [x] One CUSIP offered two ISINs stays one Security when those answers share a FIGI (operator, 2026-10-24: "resolve using figi"); both ISINs kept. Verified on figi-full at 19:27 ET: 374,065 Securities, 47,442 ISIN stage rows, 0 identifiers on two Securities (`counts()`)
 - [ ] Proof on one slice in a fresh disposable store: CUSIP slice, the ISINs sharing its FIGIs, N-PORT for those; counts against the one-record test; second pass changes nothing
-- [ ] The full-size time stated, then the full proof
-- [ ] Switch-on on the operator's words
+- [ ] ~~The full-size time stated, then the full proof~~ deferred: the operator stopped after ISIN bundle 1 (2026-10-24) and then said one proving run only if the switch-on needed it. The completed figi-full store is that proof. Quarter totals for ISIN bundles 2–8 stay unchecked
+- [x] Switch-on in the rules files, on the operator's words "switch on ticket 120" (2026-10-24 19:27 ET), and "approved if required" (2026-10-24 19:30 ET): `openfigi-security-cusip`, `openfigi-isin-security-cusip`, `openfigi-security-isin` at 2026-10-23.1 in `policy.yaml`. No new run. The Rules database activate is still open
+- [ ] ~~Rules database activate of this merge version in company-on~~ not done: a saved version's proof digest has to match the file, and the completed run used the proving copy. Not started; the behavior is already in figi-full
 - [ ] Three-axis review, PR, CI green, merge
 - [ ] Learning → skill

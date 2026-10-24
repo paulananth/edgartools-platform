@@ -113,6 +113,9 @@ rules:
 # The ISIN answer joins the Security that holds the CUSIP it carries; with
 # none, it waits here and the next rule may create its Security by its ISIN.
 # Its CUSIP and ISIN held by two Securities defers to review, never binds.
+# One CUSIP offered two ISINs stays one Security when those answers share a
+# FIGI (operator, 2026-10-24: "resolve using figi"): both ISINs are kept.
+# FIGI still does not join two Securities.
 - rule_id: openfigi-isin-security-cusip
   version: 2026-10-23.1
   family: binding

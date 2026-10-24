@@ -1,0 +1,16 @@
+{
+  "ticket": 120,
+  "claim": "OpenFIGI answers create Securities. An ISIN answer joins the Security of the one CUSIP that shares its listing FIGI. One CUSIP offered two ISINs stays one Security when those answers share a FIGI, and both ISINs are kept. FIGI does not join two Securities.",
+  "words": "switch on ticket 120",
+  "stores": "figi-full",
+  "counts": {
+    "securities": 374065,
+    "cusip_stage": 353491,
+    "isin_stage": 47442,
+    "decisions_bind": 400933,
+    "waiting_not_found_by_openfigi": 33876,
+    "waiting_isin_shares_figi_with_several_cusips": 3,
+    "identifiers_on_two_masters": 0
+  },
+  "scope": "The CUSIP half of 2026 Q2 finished, and ISIN bundle 1 finished at 19:04 ET on 2026-10-24. The slice had already passed twice. ISIN bundles 2-8 were not run. No identifier sits on two Securities."
+}

@@ -24,6 +24,8 @@ struct Reading {
     fields: BTreeMap<String, Document>,
     identifiers: Document,
     #[serde(default)]
+    cross_references: Object,
+    #[serde(default)]
     details: BTreeMap<String, Document>,
     profiles: Vec<Document>,
     relationships: Document,
@@ -34,6 +36,8 @@ struct CurrentRecord {
     kind: String,
     fields: BTreeMap<String, Object>,
     identifiers: Document,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    cross_references: Object,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     details: BTreeMap<String, Document>,
     profiles: Vec<Document>,
@@ -259,6 +263,7 @@ pub fn prepare_current_records(
                 kind: reading.kind,
                 fields,
                 identifiers: reading.identifiers,
+                cross_references: reading.cross_references,
                 details: reading.details,
                 profiles: reading.profiles,
                 profile_fields,
@@ -292,5 +297,12 @@ mod tests {
         let raw = r#"[{"assertion_id":"a","subject":"record","source_code":"example","record_key":"r","publication_key":"p","revision":999999999999999999999999999999999999999,"effective_at":null,"kind":"record","fields":{"amount":{"op":"value","value":999999999999999999999999999999999999999}},"identifiers":{},"profiles":[],"relationships":[]}]"#;
         let output = prepare_current_records(raw, "2026-10-19T00:00:00+00:00", &[]).unwrap();
         assert!(output.contains(r#""value":999999999999999999999999999999999999999"#));
+    }
+
+    #[test]
+    fn a_reading_keeps_its_figi_cross_reference() {
+        let raw = r#"[{"assertion_id":"a","subject":"record","source_code":"example","record_key":"r","publication_key":"p","revision":1,"effective_at":null,"kind":"security","fields":{},"identifiers":{"isin":"LEFT"},"cross_references":{"share_class_figi":"BBG000000001"},"profiles":[],"relationships":[]}]"#;
+        let output = prepare_current_records(raw, "2026-10-24T00:00:00+00:00", &[]).unwrap();
+        assert!(output.contains(r#""share_class_figi":"BBG000000001""#));
     }
 }
