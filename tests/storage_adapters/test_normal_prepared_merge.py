@@ -12,13 +12,19 @@ from tests.engine.test_data_skill_bundle_postgres import installed  # noqa: F401
 from tests.mdm.test_configured_pair_comparison import configured_root  # noqa: F401
 
 
-@pytest.mark.parametrize("case", ["join", "issuer_only", "corrected", "released", "quarantine",
+CASES = ["join", "issuer_only", "corrected", "released", "quarantine",
                                   "lifted", "newest", "scope", "retired", "assessment",
                                   "stale_assessment", "preview", "collision", "rollback",
                                   "unchanged", "occurrence", "deferred", "competing", "mint_competing", "no_identity_stale",
                                   "name_holder_first", "name_candidate_first", "name_held_value",
-                                  "cascade_holder_first", "cascade_candidate_first", "links", "hierarchy", "details"])
-@pytest.mark.parametrize("kind", ["invented-kind", "invented-other-kind"])
+                                  "cascade_holder_first", "cascade_candidate_first", "links", "hierarchy", "details"]
+KINDS = ["invented-kind", "invented-other-kind"]
+if os.environ.get("SKILL_ADAPTER_TEST_ENGINE") == "mssql":
+    CASES, KINDS = ["deferred"], ["invented-kind"]
+
+
+@pytest.mark.parametrize("case", CASES)
+@pytest.mark.parametrize("kind", KINDS)
 def test_normal_prepared_merge(case, kind, database_factory, configured_root):
     body = files.load(configured_root / "mastering/engine-v1.yaml")
     if kind not in body["kinds"]:

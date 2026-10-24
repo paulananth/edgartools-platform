@@ -15,16 +15,18 @@ Can one shared normal MDM caller prepare and atomically commit every merge effec
 
 - [x] Extract one shared Merge Stage preparation; verify joins, new identities and corrections without identity work on PostgreSQL/MySQL, with retained native assessments — 2026-10-24 08:03 ET; three preparation cases per engine and nine native assessment/checkpoint cases pass.
 - [x] Complete the normal prepared-store owner command, transactional registry/pin approval, deferred activation and restart qualification on both engines — 2026-10-24 09:35 ET; seven PostgreSQL and six MySQL owner cases pass, including normal CLI, interrupted retry, approval rollback and legacy-write refusal.
-- [ ] Qualify normal destination preview, assessed intent with actual producing-run publication metadata, held-record natural keys and complete occurrence retention.
-- [ ] Expand normal-save proof across configured kinds/sources, relationship/detail history boundaries and competing writers; retain native/read-phase regressions and independently installed save smoke.
-- [ ] Connect shared identity replay, value selection, relationships and detail preparation to the normal Merge Stage save path.
-- [ ] Commit source assertions, decisions, identities, current masters, history, detail lists, generation/checkpoints and publication as one admitted destination transaction.
-- [ ] Validate observed state and registered pins at the destination; refuse stale assessments and competing writers; preserve batch/root-run association and duplicate semantics.
-- [ ] Prove history boundaries, identity uniqueness, corrections, retirement and unchanged replay with invented configuration.
-- [ ] Account for ready/unapplied assessment enforcement, exact assessed effects and root-run duplicate association at the destination; generation alone is insufficient.
-- [ ] Preserve relationship/review index envelopes and actual generated review scopes when integrating native index preparation.
+- [x] Qualify normal destination preview, assessed intent with actual producing-run publication metadata, held-record natural keys and complete occurrence retention. — 2026-10-24 09:48 ET; 56 normal cases per engine plus the restricted-role admission pack and installed save smoke pass.
+- [x] Expand normal-save proof across configured kinds/sources, relationship/detail history boundaries and competing writers; retain native/read-phase regressions and independently installed save smoke. — 2026-10-24 09:48 ET; two kinds and two sources, 56 normal cases per engine, 146/145 retained checks, 15 native PostgreSQL checks and one independently installed save smoke per engine pass.
+- [x] Connect shared identity replay, value selection, relationships and detail preparation to the normal Merge Stage save path. — 2026-10-24 09:48 ET; 56 normal cases per engine verify the shared preparation through normal saves.
+- [x] Commit source assertions, decisions, identities, current masters, history, detail lists, generation/checkpoints and publication as one admitted destination transaction. — 2026-10-24 09:48 ET; normal late-outbox fault tests verify rollback of all seven business groups; retry succeeds on each engine.
+- [x] Validate observed state and registered pins at the destination; refuse stale assessments and competing writers; preserve batch/root-run association and duplicate semantics. — 2026-10-24 09:48 ET; stale/no-identity/concurrent-allocation normal cases and governed admission/refusal tests pass on both engines.
+- [x] Prove history boundaries, identity uniqueness, corrections, retirement and unchanged replay with invented configuration. — 2026-10-24 09:48 ET; 56 normal cases per engine, including relationship history and five detail-history states, pass.
+- [x] Account for ready/unapplied assessment enforcement, exact assessed effects and root-run duplicate association at the destination; generation alone is insufficient. — 2026-10-24 09:48 ET; restricted-role proposal/intent cases and independent installed assessment/application/replay smoke pass on both engines.
+- [x] Preserve relationship/review index envelopes and actual generated review scopes when integrating native index preparation. — 2026-10-24 09:48 ET; normal hierarchy cases verify all three affected identities, with original generated review bodies, on both engines.
 - [x] Qualify the minimal prepared-command lifecycle and owner-approved pin capability on both engines, preserving protocol 1–4 fingerprints and direct-request refusal — 2026-10-24 08:03 ET; 87 affected checks per engine pass, plus three shared preparation cases per engine. This qualifies the storage capability, not the normal portable save.
-- [ ] Learning → skill: update its owning skill on a separate branch/PR, or record none.
+- [x] Learning → skill: update its owning skill on a separate branch/PR, or record none. — 2026-10-24 09:48 ET; mdm-engineering/reference guidance in separate PR #1158; 79 focused checks pass; owner activation, assessed intent/producer metadata, preview, input identity and full-workflow limits recorded.
+
+- [ ] Publish the implementation PR, finish final affected reader checks and require every final-head CI check to pass before readiness.
 
 ## Acceptance evidence
 
@@ -133,3 +135,50 @@ publication recovery and run observation remain ticket 06. They are explicitly
 refused where their normal Store methods are called, rather than reported as
 success. Full installed workflow evidence remains ticket 07. Historical SQL
 migrations and native rollback behavior are retained.
+
+### Independently installed save qualified — 2026-10-24 09:48 ET
+
+Both engines pass the committed five-wheel installation smoke from revision
+73123361, outside the checkout in isolated Python. It checks packaged adapter
+and native-library provenance, normal owner installation and approved source
+registration, rollback-only preview, normal assessment and application,
+80-digit-plus exact integer readback, and duplicate replay with unchanged
+business counts. PostgreSQL passes in 18.06 seconds; MySQL in 24.88 seconds.
+Final normal-save reruns pass all 56 cases per engine in bounded groups.
+Fifteen retained native PostgreSQL assessment/checkpoint checks pass.
+
+Two initial installation test runs hit the 280-second deadline while sharing
+the native distribution-cache build lock. The concurrently loaded second-kind
+reruns also timed out. Their disposable containers were stopped. A serialized
+five-wheel build finished in 82.40 seconds; the installed proofs and normal
+reruns then passed. An attempted installed test using a saved local test-instance
+connection was refused before execution; the successful proofs use fresh
+isolated databases. Timeouts and connection refusal are not counted as passes.
+
+### Standards — normal save review
+
+Fresh dedicated branch and worktree; no historical SQL is edited. Protocol
+1–4 fingerprints and restricted-role enforcement are retained. Evidence uses
+invented inputs and counts/outcomes; no provider or hosted target is contacted.
+Overlap and syntax/name lint pass. SQL Server full workflow stays deferred;
+its normal migration refusal is checked once rather than repeated per fixture.
+
+### Spec — normal save review
+
+The normal Store/Merge Stage save and independent installed save smoke pass
+on PostgreSQL and MySQL. The explicit fresh prepared-store owner command
+refuses populated native conversion without qualified migration. This work
+does not establish operator/context/Silver reads (05), configured worker
+external authority, source-mapping run freeze, publication recovery (06),
+full installed matrix (07), or PostgreSQL routine retirement (08).
+
+### GoF — normal save review
+
+The existing Adapter boundary carries opaque prepared effects; the shared
+Merge Stage preparation remains the single policy interpretation. Evidence
+from #1121, #1152 and #1156 supports this repeatedly changing transport seam.
+The preparation extraction removes duplicate calculation; publication-floor
+validation and bulk identity reads are reused at that seam. A strategy/class
+hierarchy would add dispatch and maintenance without removing an observed
+variation. Retaining the native writer during qualification costs dual-path
+regression checks; those checks pass. No further pattern refactor is justified.
