@@ -61,41 +61,57 @@ def comparable(record):
                                                                        "consumer", "publication"))}}
 
 
-@pytest.mark.parametrize("word, target, found_count, refused_count", [
-    ("cusip", "mastering_cusip", 5, 8), ("isin", "mastering_isin", 2, 7)])
-def test_the_declared_chain_gives_the_hand_built_chains_records(databases, tmp_path, monkeypatch, word, target,
-                                                                found_count, refused_count):
-    by_hand, refused_by_hand = figi.prepared_records(tmp_path / "hand", word)
-    body = declared(monkeypatch, target=target)
-    code = figi.KINDS[word][2]
+STEPS = {"requests": 8, "answers": 3, "reduce": 1, "combine": 1, "record": 1, "prepare": 1, "merge": 1, "processed": 1}
+# Ticket 120, OpenFIGI first: the CUSIP target also writes `figi_ids`; the ISIN target reads every
+# complete CUSIP run's `figi_ids` (`figi_cusips`) and puts each ISIN's CUSIPs on its row (`attach`).
+EXTRA = {"mastering_cusip": {"figi_ids": 1}, "mastering_isin": {"figi_cusips": 1, "attach": 1}}
+
+
+def run_target(databases, tmp_path, body, word, target):
+    """Write `target`'s manifest over one kind's invented files and drive it to complete in
+    Bookkeeping under the source's own name (another run reads it by that name), without MDM."""
     keys = capture(tmp_path / "capture", word=word)
     listed = tmp_path / "documents.json"
     listed.write_text(json.dumps(keys))
-    report = write_manifest(source="openfigi", target=target, capture=str(tmp_path / "capture"),
-                            documents=str(listed), capture_run="capture-1", output=str(tmp_path / "bundle"),
-                            as_of="2026-10-17T00:00:00Z", revision=0, journal=MemoryJournal())
     book = Bookkeeping(databases.runtime)
     book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)
+    report = write_manifest(source="openfigi", target=target, capture=str(tmp_path / "capture"),
+                            documents=str(listed), capture_run="capture-1", output=str(tmp_path / "bundle"),
+                            as_of="2026-10-17T00:00:00Z", revision=0, journal=MemoryJournal(), bookkeeping=book)
     for profile in WORKERS:
         grant_profile(databases.admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")
     declared_target = copy.deepcopy(body["bookkeeping"]["targets"][target])
     declared_target["steps"] = declared_target["steps"][:-2]  # no MDM here: the merge and the journal are Person's tests'
-    name = f"figi-{uuid4().hex}"
-    rules_body = {"source": name, "bookkeeping": {"version": 2, "targets": {target: declared_target}}}
+    rules_body = {"source": "openfigi", "bookkeeping": {"version": 2, "targets": {target: declared_target}}}
     steps = book.artifacts.json(report["manifest"])["steps"]
-    assert {step: len(units) for step, units in steps.items()} == {
-        "requests": 8, "answers": 3, "reduce": 1, "combine": 1, "record": 1, "prepare": 1, "merge": 1, "processed": 1}
+    assert {step: len(units) for step, units in steps.items()} == STEPS | EXTRA[target]
     del steps["merge"], steps["processed"]
     manifest = book.artifacts.put(tmp_path.as_uri() + "/submitted", {"version": 2, "steps": steps})
-    saved = databases.rules.save("source", name, "1", rules_body)
-    databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": manifest["sha256"], "passed": True})
-    databases.rules.activate("source", name, "1")
-    rules = databases.rules.resolve("source", name, root=tmp_path.as_uri() + "/rules")
-    rid = book.start(rules_ref=rules, inputs_ref=manifest, target=target, scope={"test": name})
-
+    version = uuid4().hex
+    saved = databases.rules.save("source", "openfigi", version, rules_body)
+    databases.rules.prove("source", "openfigi", version,
+                          {"digest": saved["digest"], "batch_hash": manifest["sha256"], "passed": True})
+    databases.rules.activate("source", "openfigi", version)
+    rules = databases.rules.resolve("source", "openfigi", root=tmp_path.as_uri() + "/rules")
+    rid = book.start(rules_ref=rules, inputs_ref=manifest, target=target, scope={"test": version})
     state = drive(book, rid, databases.ledger, workers=WORKERS)
-
     assert state["run"]["state"] == "complete", state
+    return state, book
+
+
+@pytest.mark.parametrize("word, target, found_count, refused_count", [
+    ("cusip", "mastering_cusip", 5, 8), ("isin", "mastering_isin", 3, 8)])
+def test_the_declared_chain_gives_the_hand_built_chains_records(databases, tmp_path, monkeypatch, word, target,
+                                                                found_count, refused_count):
+    by_hand, refused_by_hand = figi.prepared_records(tmp_path / "hand", word)
+    body = declared(monkeypatch, target=target)
+    if word == "isin":
+        # The CUSIP target completes first, as the source sequence orders it.
+        declared(monkeypatch, target="mastering_cusip")
+        run_target(databases, tmp_path / "cusip", files.source("openfigi"), "cusip", "mastering_cusip")
+    code = figi.KINDS[word][2]
+    state, book = run_target(databases, tmp_path, body, word, target)
+
     prepared = tmp_path / "bundle" / "prepare" / "manifest.json"
     refused: dict[str, str] = {}
     found = chain.records(book.artifacts, tmp_path / "bundle" / "prepare",
@@ -105,4 +121,5 @@ def test_the_declared_chain_gives_the_hand_built_chains_records(databases, tmp_p
         r["provenance"]["record_key"]: comparable(r) for r in by_hand}
     assert refused == refused_by_hand
     assert len(found) == len(by_hand) == found_count and len(refused) == refused_count
-    assert state["counts"] == {"verified": 15}  # 8 requests, 3 answers groups, reduce, combine, record, prepare
+    # 8 requests, 3 answers groups, reduce, combine, record, prepare, and the target's own steps above.
+    assert state["counts"] == {"verified": 15 + sum(EXTRA[target].values())}

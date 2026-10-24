@@ -138,7 +138,8 @@ def test_a_read_with_lookups_and_no_context_gets_an_empty_one(tmp_path, monkeypa
 
 def test_pieces_are_read_from_a_combine(tmp_path, monkeypatch):
     def from_answers(steps):
-        steps[4]["requires"], steps[4]["input"]["pieces"] = ["answers"], {"step": "answers"}
+        (record,) = [step for step in steps if step["name"] == "record"]
+        record["requires"], record["input"]["pieces"] = ["answers"], {"step": "answers"}
 
     with pytest.raises(ValueError, match="pieces are read from a source.combine step"):
         write(tmp_path, monkeypatch, from_answers)
