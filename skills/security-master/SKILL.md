@@ -139,6 +139,12 @@ it; the priority decides only where several give it. For each field
    none, so a clear opens an `unauthorized_clear` review.
 6. **The losing values that differ are kept beside the winner** as its
    `conflicts`. Nothing a source said is lost.
+7. **A disagreement never blanks a field** (operator, 2026-10-23, ticket 131:
+   "mastering is all about having good values not blanks, use priority").
+   No field rule asks the sources to agree. To find a disagreement, read the
+   `master_field` view where `conflict_count` is above 0. Within one source,
+   filers that disagree on `share_class` still give no letter (ticket 130,
+   `share_class_one_letter`). Both rulings are revisited once real examples exist.
 
 What this gives today, measured (ticket 84): OpenFIGI fills the name: it
 states one name for 99.7% of its 353,491 CUSIPs. OpenFIGI gives no title, so

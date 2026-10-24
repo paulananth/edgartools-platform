@@ -49,7 +49,7 @@ Two tracks run side by side; the recreation proof runs last, on everything switc
 
 **Track B: every captured feed mastered, then the recreation proof (32)**
 1. Switch-ons, each on the operator's words: [120](issues/120-switch-on-securities.md) Securities, then OpenFIGI's own records, in `company-on`; [09](issues/09-mastering-to-done-07-cascade-passes-switch-on.md) the cascade passes (about 1½ h of the operator's labels, 344 pairs). [114](issues/114-onboard-company.md) and [80](issues/80-onboard-openfigi.md) have only bookkeeping lines left; their source activations moved to 71 (hosting).
-2. Mastering gaps, now unblocked: [131](issues/131-a-field-kept-only-when-sources-agree.md) a field kept only when sources agree, then [24](issues/24-security-mastering-04-form-4-attaches-by-class.md) a Form 4 attaches by share class; [132](issues/132-relationship-types-in-one-place.md) relationship types in one place; [79](issues/79-onboard-funds-and-securities-with-the-skills.md)'s Bookkeeping silver-landing step; [01](issues/01-profiling-07-readers-per-feed.md) Form ADV's custodians and the ownership feed's Dataset Contracts (the engine reads XML inside an SGML submission first).
+2. Mastering gaps, now unblocked: [24](issues/24-security-mastering-04-form-4-attaches-by-class.md) a Form 4 attaches by share class; [132](issues/132-relationship-types-in-one-place.md) relationship types in one place; [79](issues/79-onboard-funds-and-securities-with-the-skills.md)'s Bookkeeping silver-landing step; [01](issues/01-profiling-07-readers-per-feed.md) Form ADV's custodians and the ownership feed's Dataset Contracts (the engine reads XML inside an SGML submission first).
 3. The proof's readiness: [135](issues/135-the-proof-starts-from-configured-company-records.md) (the gate above); [14](issues/14-rules-skill-15-test-rules-locally.md) rules tested locally at full size (512-file bundles); [20](issues/20-mastering-to-done-19-restore-the-catalog-and-publish-person.md) the catalog, after 01's ownership contracts; [21](issues/21-clean-mdm-06-version-consumer-contracts.md) consumer contracts, verified offline (its hosted cut-over is 68).
 4. [32: the recreation proof](issues/32-profiling-08-recreation-proof.md); the operator accepts, and the program ends.
 
@@ -135,7 +135,8 @@ Two tracks run side by side; the recreation proof runs last, on everything switc
 - [The company facts source extract](issues/45-company-financials-13-build-company-facts-reader.md): configured only, one table per taxonomy, every number exact (#1140)
 - [Exact decimals in configured reading](issues/134-exact-decimals-in-configured-reading.md): `value` gains `decimals: text`, a decimal kept as its filed digits; refused where numbers were already parsed (#1139)
 - [Fields in MDM that belong elsewhere](issues/129-fields-in-mdm-that-belong-elsewhere.md): issuer LEI and filed dates to silver, SIC labels to RDM, GLEIF's dates and the SIC label out of the Company (#1133, #1141); the hosted migration is 68
-- [A Security's share class](issues/130-a-security-share-class.md): one letter from the filed titles (#1135); disagreeing sources give none in 131
+- [A Security's share class](issues/130-a-security-share-class.md): one letter from the filed titles (#1135)
+- [A field kept only when its sources agree](issues/131-a-field-kept-only-when-sources-agree.md): not built; source priority decides and the conflict stays recorded beside the winner (operator, 2026-10-23)
 - [A Person holds and does not issue](issues/25-security-mastering-05-a-person-holds-and-does-not-issue.md): HOLDS out of MDM; Form 4 holdings land in silver (#1134)
 
 ## Not yet specified
