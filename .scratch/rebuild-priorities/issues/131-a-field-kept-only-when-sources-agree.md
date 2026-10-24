@@ -20,9 +20,10 @@ source's quality check sees only its own filers.
 survivorship. That is new code in the merge, so it is built after Codex's
 PR #1121, which edits the same files.
 
-**Status:** open, unblocked (2026-10-22 21:11 ET): #1121 merged (2026-10-22 19:08 ET)
+**Status:** closed, no code (2026-10-23 19:56 ET): the operator ruled that source priority decides; no "agree or none" field rule is built.
 
-- [ ] The field rule's name and its words in the kind file, the operator's ruling
-- [ ] The Merge Stage applies it; a test with two sources agreeing, disagreeing and one alone
-- [ ] `share_class` on the Security uses it
-- [ ] Learning → skill
+- [x] The operator's ruling (2026-10-23 19:55 ET): "mastering is all about having good values not blanks, use priority agreeing is not nessary for all fields", then, on the two recommendations, "agreed for now one we have actual examples will sharpen this desission". Across sources the first-ranked source wins (for `share_class`, N-PORT before 13F) and the disagreement stays recorded beside the winner (`conflicts`; `conflict_count` in the `master_field` view, `edgar_warehouse/mdm/clean/schema.py:21-31`), so nothing new is built. Within one source ticket 130's rule stays: filers that disagree give no letter, listed by `share_class_one_letter`. Both are revisited once real disagreeing examples exist
+- [ ] ~~The Merge Stage applies it; a test with two sources agreeing, disagreeing and one alone~~ not built: the ruling above keeps source priority
+- [ ] ~~`share_class` on the Security uses it~~ not built: the ruling above
+- [ ] PR, CI green, merge
+- [x] Learning → skill: `skills/security-master/SKILL.md`, Survivorship: a disagreement between sources never blanks a field; find one by `conflict_count` (2026-10-23 19:56 ET). `skills/data-onboarding/REFERENCE.md`, Merge rules: the same for every kind, and propose a field that must agree only with real examples. `skills/mdm-engineering/SKILL.md`, the cheapest proof's Speed row: per-worker times, and how to get a time per Merge Stage step. `skills/refining-rules/SKILL.md`, change-matching: a switched-off rule's binds stand until a correction batch, which has no command yet (2026-10-23 20:02 ET)
