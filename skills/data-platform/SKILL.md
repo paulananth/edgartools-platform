@@ -32,7 +32,7 @@ it against the seven, and drop what adds no value:
 | Inventory | Branches, worktrees, stores, drafts and tickets left open | Finish or close each; stop and remove what a run left |
 | Motion | Searching code for what a skill should say; rebuilding inputs a run already made | Write the answer into the skill once; keep a run's inputs with its report |
 | Waiting | Runs that stop on a deadline too short; questions a ruling already answers | Size the deadline from the measured time; decide what follows from a ruling |
-| Over-processing | A full Proving Run, profile or review for a change its own tests prove | The cheapest proof (`mdm-engineering`); carry a proof forward |
+| Over-processing | The rest of a delivery after its tests, a slice, and each new case are already proved | The cheapest proof (`mdm-engineering`); carry a proof forward |
 | Over-production | Building a feature, a target or a check before a source needs it | Build only what the step in hand needs |
 | Defects | Guessed times, unchecked limits, a skill word CI refuses: rework | Read the clock; check bounds first; run the checks the change can affect |
 
