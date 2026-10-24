@@ -256,17 +256,24 @@ A statement whose key-list size changes enough to pick a bad cached plan uses
 
 ## Choose the cheapest proof
 
+Name the claim in one sentence, then take the smallest cohort that can falsify it. The agent chooses that cohort; the operator does not pick a size each time (operator, 2026-10-24: "the skill must be intelligent and use the most optimal path"). A proof drops work that cannot change the claim. A recurring load is a different claim and still processes every file ([data-operations](../data-operations/SKILL.md), "Size the work").
+
 | The change | The proof |
 |---|---|
 | Any code, a migration, a rules or data file | The affected tests, locally, and CI (`AGENTS.md`, "Tests and CI") |
 | A rule upstream of MDM (a source extract, a combine step) | Compare the changed step's output over a capture, and the combined output on one bundle. Equal combined bytes mean everything downstream is unchanged |
-| The Merge Stage, matching rules, a Dataset Contract, a worker, Bookkeeping | A Proving Run on a pinned cohort, and the full installed proof on an empty store: every count as before, a killed worker resumes, the second pass changes nothing |
+| The Merge Stage engine, a worker, Bookkeeping | A Proving Run on a pinned cohort, and the full installed proof on an empty store: every count as before, a killed worker resumes, the second pass changes nothing |
+| Matching rules, a Dataset Contract | The smallest cohort that contains each new case. One slice whose second pass changes nothing proves the path on real records. A case that slice did not contain is the one bundle that contains it, then stop. The whole delivery is the proof only when the claim is that delivery's totals, or switch-on |
 | A storage adapter or a change claimed to work across databases | The shared per-engine behavior checks above for every affected kind and source; preserve restricted-role, transaction and recovery guarantees |
 | Speed | Time per batch over a whole feed: flat, not growing with the store. Each worker's process time is in the run's progress lines; `mdm.merge` gives one total for matching, survivorship, links and the save (`MergeStage.apply`), so a time per Merge Stage step needs a profile of one Proving Run's merge, or a timer per phase in its report. Measured (installed proof, 2026-10-12, 6,726 source documents): `source.read` 0.10 s a document, `mdm.prepare` 13 ms a document, `mdm.merge` 25 ms a record |
 | A version whose rules moved since its last proof, each change proven by its own merged PR at the level this table names for it | No new run: carry the last proof forward. Write a proof file from the last one: its counts and `batch_hash`, `passed: true`, `digest` set to the new version's digest (`rules record-proof` refuses any other), its acquisition evidence if it had any, and under `evidence` and `note` the run it came from and each change since with its PR. Record it with `rules record-proof --proof-uri --proof-sha256`; `rules pending` then shows that evidence for approval. A change without such a proof gets its own row's proof first |
 
-Say the time of any proof over ten minutes before starting it. Stop its
-containers when it ends, whatever the outcome.
+Say the time of any proof over ten minutes before starting it. When a run
+shows a case the cohort did not contain, prove that case and stop. Name what
+stays unchecked, including the delivery's totals until switch-on. A domain
+skill that names a whole-delivery test uses that test only when the claim is
+the delivery's totals or switch-on. Stop the proof's containers when it ends,
+whatever the outcome.
 
 ## Examples
 
@@ -299,6 +306,12 @@ These name this repo's code and the failures each rule came from.
   the dated master table directly, instead of copying rows between tables.
 - **Cheapest proof** (operator, 2026-10-13): a source extract column trim
   already shown equal over 7,000 documents needed no 45-minute proof.
+- **Lean cohort** (operator, 2026-10-24): ticket 120. A slice of the
+  Securities proof passed twice, and the CUSIP half of the quarter matched.
+  The ISIN half's only new case was one CUSIP offered two ISINs that share a
+  FIGI, inside the first bundle. The other seven bundles were the same join,
+  about 11 hours: over-processing. Stop after the bundle that holds the new
+  case. The quarter's totals stay unchecked until switch-on.
 - **The full installed proof** for the Company population:
   `.planning/workstreams/whole-source-census/installed_proof.py` (its
   docstring has the command; about 28 minutes; 6,414 Companies, 3,052 GLEIF

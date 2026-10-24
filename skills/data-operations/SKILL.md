@@ -257,6 +257,8 @@ it.
    measurements and current supported bounds to choose concurrency and bundle size.
    Account for verifier costs too. Unknown estimates start conservatively; exhausted
    resources wait. Size divides the whole backlog into work, never drops records.
+   A proof is not this step: [Choose the cheapest proof](../mdm-engineering/SKILL.md#choose-the-cheapest-proof)
+   stops once every new case is shown. A load still takes every file.
 4. **Submit or resume.** Use [Bookkeeping run](../bookkeeping/RUN.md) and
    [recovery](../bookkeeping/RECOVERY.md) for the existing task protocol. Keep the
    source-owned steps, original input/rule/reference/runtime pins and authoritative

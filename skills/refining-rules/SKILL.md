@@ -225,11 +225,11 @@ record's effective time, not a field of the master (rebuild ticket 129).
 
 ### test: the cheapest proof, then record it
 
-Prove the change at the level it needs, no more (`mdm-engineering`, "Choose
-the cheapest proof"): a change upstream of MDM compares the changed step's
-output; only a merge, matching or contract change needs a proving run. Then
-`rules save` and record the proof, or carry the last one forward (same
-table, its last row). Show what changes, record by record.
+Prove the change at the level
+[Choose the cheapest proof](../mdm-engineering/SKILL.md#choose-the-cheapest-proof)
+names, and no further. Then `rules save` and record the proof, or carry the
+last one forward (same table, its last row). Show what changes, record by
+record.
 
 ### approve and switch-on
 
