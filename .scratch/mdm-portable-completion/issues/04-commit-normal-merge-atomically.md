@@ -24,9 +24,9 @@ Can one shared normal MDM caller prepare and atomically commit every merge effec
 - [x] Account for ready/unapplied assessment enforcement, exact assessed effects and root-run duplicate association at the destination; generation alone is insufficient. — 2026-10-24 09:48 ET; restricted-role proposal/intent cases and independent installed assessment/application/replay smoke pass on both engines.
 - [x] Preserve relationship/review index envelopes and actual generated review scopes when integrating native index preparation. — 2026-10-24 09:48 ET; normal hierarchy cases verify all three affected identities, with original generated review bodies, on both engines.
 - [x] Qualify the minimal prepared-command lifecycle and owner-approved pin capability on both engines, preserving protocol 1–4 fingerprints and direct-request refusal — 2026-10-24 08:03 ET; 87 affected checks per engine pass, plus three shared preparation cases per engine. This qualifies the storage capability, not the normal portable save.
+- [ ] Publish the implementation PR, finish final affected reader checks and require every final-head CI check to pass before readiness.
 - [x] Learning → skill: update its owning skill on a separate branch/PR, or record none. — 2026-10-24 09:48 ET; mdm-engineering/reference guidance in separate PR #1158; 79 focused checks pass; owner activation, assessed intent/producer metadata, preview, input identity and full-workflow limits recorded.
 
-- [ ] Publish the implementation PR, finish final affected reader checks and require every final-head CI check to pass before readiness.
 
 ## Acceptance evidence
 
