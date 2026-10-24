@@ -295,6 +295,7 @@ fn source_contract(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(prepare_record_history, m)?)?;
     m.add_function(wrap_pyfunction!(plan_affected_records, m)?)?;
     m.add_function(wrap_pyfunction!(prepare_record_lookups, m)?)?;
+    m.add_function(wrap_pyfunction!(prepare_scope_lookups, m)?)?;
     m.add_function(wrap_pyfunction!(resolve_record_bindings, m)?)?;
     m.add_function(wrap_pyfunction!(prepare_current_records, m)?)?;
     m.add_function(wrap_pyfunction!(identify_profile, m)?)?;
@@ -544,6 +545,11 @@ fn plan_affected_records(py: Python<'_>, command: &str) -> PyResult<String> {
 #[pyfunction]
 fn prepare_record_lookups(py: Python<'_>, command: &str) -> PyResult<String> {
     py.allow_threads(|| crate::record_lookups::prepare_record_lookups(command)).map_err(PyValueError::new_err)
+}
+
+#[pyfunction]
+fn prepare_scope_lookups(py: Python<'_>, command: &str) -> PyResult<String> {
+    py.allow_threads(|| crate::record_lookups::prepare_scope_lookups(command)).map_err(PyValueError::new_err)
 }
 
 #[pyfunction]

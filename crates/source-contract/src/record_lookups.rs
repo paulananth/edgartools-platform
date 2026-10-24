@@ -308,3 +308,166 @@ pub fn prepare_record_lookups(raw: &str) -> Result<String, String> {
     serde_json::to_string(&(current, changes))
         .map_err(|_| "Cannot serialize source-record lookup changes".into())
 }
+
+#[derive(Deserialize)]
+struct Projection {
+    #[serde(rename = "type")]
+    record_type: String,
+    id: String,
+    body: Object,
+}
+
+#[derive(Deserialize)]
+struct ScopeInputs {
+    previous: Vec<Projection>,
+    objects: Vec<Projection>,
+    identities: Vec<Object>,
+    previous_publications: BTreeMap<String, Object>,
+}
+
+fn projection_entries(
+    objects: &[Projection],
+) -> Result<BTreeMap<(String, String), String>, String> {
+    let mut entries = BTreeMap::new();
+    let mut seen = BTreeSet::new();
+    for object in objects {
+        if object.id.is_empty() || !seen.insert((&object.record_type, &object.id)) {
+            return Err("Projection keys require distinct nonempty identities".into());
+        }
+        let mut groups = BTreeSet::new();
+        match object.record_type.as_str() {
+            "entity" => {
+                if values::read_text(&object.body, "entity_id")? != object.id {
+                    return Err("Projection identity differs from its key".into());
+                }
+            }
+            "relationship" => {
+                if values::read_text(&object.body, "relationship_id")? != object.id {
+                    return Err("Projection identity differs from its key".into());
+                }
+                groups.insert(lookup_type(
+                    "outgoing_links",
+                    &[values::read_text(&object.body, "source_id")?],
+                )?);
+                groups.insert(lookup_type(
+                    "incoming_links",
+                    &[values::read_text(&object.body, "target_id")?],
+                )?);
+            }
+            "review" => {
+                if values::read_text(&object.body, "review_id")? != object.id {
+                    return Err("Projection identity differs from its key".into());
+                }
+                let mut keys = BTreeSet::new();
+                for field in ["entity_id", "subject"] {
+                    if values::has_value(&object.body, field) {
+                        keys.insert(values::read_text(&object.body, field)?);
+                    }
+                }
+                for field in ["affected_subjects", "entities"] {
+                    if values::has_value(&object.body, field) {
+                        for raw in values::read_array(&object.body, field)? {
+                            keys.insert(values::read_value::<String>(&raw)?);
+                        }
+                    }
+                }
+                for key in keys {
+                    groups.insert(lookup_type("related_reviews", &[key])?);
+                }
+            }
+            _ => return Err("Unsupported current projection index type".into()),
+        }
+        let pointer = values::write_sorted_json(&values::write_value(&Object::from([
+            ("type".into(), values::write_value(&object.record_type)?),
+            ("id".into(), values::write_value(&object.id)?),
+            ("immutable".into(), values::write_value(&false)?),
+        ]))?)?;
+        for group in groups {
+            entries.insert((group, object.id.clone()), pointer.clone());
+        }
+    }
+    Ok(entries)
+}
+
+/// Storage keys for projected links/reviews and monotonic identity publication floors.
+/// The caller saves these with the projections and retained identities atomically.
+pub fn prepare_scope_lookups(raw: &str) -> Result<String, String> {
+    let input: ScopeInputs =
+        serde_json::from_str(raw).map_err(|_| "Invalid scope lookup inputs")?;
+    let before = projection_entries(&input.previous)?;
+    let after = projection_entries(&input.objects)?;
+    let mut changes = Vec::new();
+    for ((record_type, id), body) in &after {
+        if before.get(&(record_type.clone(), id.clone())) != Some(body) {
+            changes.push(Entry {
+                record_type: record_type.clone(),
+                id: id.clone(),
+                body_json: Some(body.clone()),
+                removed: false,
+            });
+        }
+    }
+    for ((record_type, id), _) in before {
+        if !after.contains_key(&(record_type.clone(), id.clone())) {
+            changes.push(Entry {
+                record_type,
+                id,
+                body_json: None,
+                removed: true,
+            });
+        }
+    }
+    let mut publications = input.previous_publications.clone();
+    for (kind, body) in &publications {
+        if body.len() != 3 || values::read_text(body, "kind")? != *kind {
+            return Err("Invalid retained identity publication floor".into());
+        }
+        values::read_text(body, "entity_id")?;
+        values::read_time(&values::read_text(body, "published_at")?)?;
+    }
+    for identity in input.identities {
+        let kind = values::read_text(&identity, "kind")?;
+        let id = values::read_text(&identity, "entity_id")?;
+        let at = values::read_text(&identity, "published_at")?;
+        let instant = values::read_time(&at)?;
+        let newer = match publications.get(&kind) {
+            None => true,
+            Some(previous) => {
+                (instant, id.clone())
+                    > (
+                        values::read_time(&values::read_text(previous, "published_at")?)?,
+                        values::read_text(previous, "entity_id")?,
+                    )
+            }
+        };
+        if newer {
+            publications.insert(
+                kind.clone(),
+                Object::from([
+                    ("kind".into(), values::write_value(&kind)?),
+                    ("entity_id".into(), values::write_value(&id)?),
+                    ("published_at".into(), values::write_value(&at)?),
+                ]),
+            );
+        }
+    }
+    for (kind, body) in &publications {
+        let serialized = values::write_sorted_json(&values::write_value(body)?)?;
+        let previous = input
+            .previous_publications
+            .get(kind)
+            .map(|body| values::write_value(body).and_then(|raw| values::write_sorted_json(&raw)))
+            .transpose()?;
+        if previous.as_ref() != Some(&serialized) {
+            changes.push(Entry {
+                record_type: "identity-publication".into(),
+                id: kind.clone(),
+                body_json: Some(serialized),
+                removed: false,
+            });
+        }
+    }
+    changes.sort_by(|a, b| (&a.record_type, &a.id).cmp(&(&b.record_type, &b.id)));
+    serde_json::to_string(&(publications, changes))
+        .map_err(|_| "Cannot serialize scope lookup changes".into())
+}

@@ -70,7 +70,8 @@ def holders(conn, policy: dict, wanted: dict[str, set[str]], released: set[str] 
         # Containment, one value at a time, so the GIN index on identifiers
         # (`stage_record_identifiers`) serves every namespace alike; `OFFSET 0`
         # keeps each value its own probe (ticket 77: 1.3 s a call before).
-        found_rows = rows(
+        found_rows = (conn.holders(namespace, values, _issuers(policy, namespace), released)
+                      if isinstance(conn, RecordReader) else rows(
             conn,
             """SELECT s.reading->'identifiers'->>:namespace AS value,
                       s.entity_id::text AS entity_id, i.kind
@@ -83,10 +84,13 @@ def holders(conn, policy: dict, wanted: dict[str, set[str]], released: set[str] 
             wanted=[json.dumps({namespace: v}) for v in sorted(values)],
             sources=_issuers(policy, namespace),
             released=sorted(released),
-        )
+        ))
         merged = survivors(conn, {r["entity_id"] for r in found_rows})
         for row in found_rows:
             key = (namespace, _normal(policy, namespace, row["value"]))
+            if isinstance(conn,RecordReader) and key[1] not in values:
+                from .store import Conflict
+                raise Conflict("Identifier reference differs from retained reading")
             found[key][merged.get(row["entity_id"], row["entity_id"])] = row["kind"]
     return found
 
@@ -99,8 +103,7 @@ def bound(conn, subjects) -> dict[str, str]:
     if not subjects:
         return {}
     if isinstance(conn, RecordReader):
-        return {subject:record["entity_id"] for subject,record in conn.current(subjects).items()
-                if record.get("entity_id")}
+        return conn.bindings(subjects)
     return {
         r["subject"]: r["entity_id"]
         for r in rows(
@@ -211,10 +214,11 @@ def propose(
             return nothing()
         found = holders(conn, policy, {name: set(values) for name, values in plan["wanted"].items()}, released)
         suspended = in_review(conn, {entity for held in found.values() for entity in held})
-        newest = {}
-        for kind in plan["kinds"]:
-            at = conn.scalar(text("SELECT max(published_at) FROM mdm.master_entity WHERE kind=:kind"), {"kind": kind})
-            newest[kind] = str(at) if at is not None else None
+        newest = conn.newest(plan["kinds"]) if isinstance(conn,RecordReader) else {}
+        if not isinstance(conn,RecordReader):
+            for kind in plan["kinds"]:
+                at=conn.scalar(text("SELECT max(published_at) FROM mdm.master_entity WHERE kind=:kind"), {"kind": kind})
+                newest[kind]=str(at) if at is not None else None
         return link_matching_records({
             "plan": plan,
             "found": [{"namespace": name, "value": value, "records": held} for (name, value), held in found.items()],
@@ -265,6 +269,10 @@ def proposal_is_stale(conn, policy: dict, automatic: dict, released: set[str] = 
         at = earliest.get(i["kind"])
         if at is None or instant(i["published_at"]) < instant(at):
             earliest[i["kind"]] = i["published_at"]
+    if isinstance(conn,RecordReader):
+        newest=conn.newest(earliest)
+        return any(newest[kind] is not None and instant(newest[kind])>=instant(at)
+                   for kind,at in earliest.items())
     return any(
         conn.scalar(
             text(
