@@ -227,6 +227,11 @@ Learned the hard way; each is a standing operator rule.
   containers when a run ends, however it ends. macOS has no `timeout`
   command (a watcher wrapped in it exits at once and does nothing); give the
   deadline with a background `sleep N; kill <pid>` instead.
+- A run already going (a proof, a load, a recovery) is checked every 30
+  minutes, not on a tighter loop (operator, 2026-10-24: "do not use token
+  constantly polling the runs check every 30 min"). A check that finds
+  nothing changed sends no message. A failure, a finished part, or the end
+  is reported at that check.
 - Choose the cheapest proof that proves the change (the `mdm-engineering`
   skill, "Choose the cheapest proof"); say the time of any step over ten
   minutes before starting it.

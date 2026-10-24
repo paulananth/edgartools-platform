@@ -166,6 +166,11 @@ Learned the hard way; each is a standing operator rule.
 - Every background watcher (CI, a long test, a proof) has a deadline and an
   exit for every outcome, including the PR merging or closing. Stop test
   containers when a run ends, however it ends.
+- A run already going (a proof, a load, a recovery) is checked every 30
+  minutes, not on a tighter loop (operator, 2026-10-24: "do not use token
+  constantly polling the runs check every 30 min"). A check that finds
+  nothing changed sends no message. A failure, a finished part, or the end
+  is reported at that check.
 - Choose the cheapest proof that proves the change (the `mdm-engineering`
   skill, "Choose the cheapest proof"); say the time of any step over ten
   minutes before starting it.

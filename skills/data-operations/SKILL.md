@@ -215,6 +215,10 @@ While a run is live:
   and report (Securities: 73 s each against 20 s of work), so the default
   120 s lease expired ("Stale lease"). The target sets `lease_seconds` and
   `heartbeat_seconds`.
+- **Check a live run every 30 minutes.** Do not poll it on a tighter loop
+  (operator, 2026-10-24: "do not use token constantly polling the runs
+  check every 30 min"). A check that finds nothing changed sends no
+  message. Report a failure, a finished part, or the end at that check.
 - **A laptop run needs power.** Sleep on a flat battery stops the workers,
   the leases expire and the units run again; `caffeinate` cannot prevent it.
 - **A deadline that stops a run leaves it resumable.** A driver's or
@@ -273,9 +277,10 @@ it.
    partial run honestly. Save the run ID, frozen evidence references, resource
    measurements, blocker and next action in the source runbook for the next agent.
 
-For a monitoring request, set an explicit deadline and exit on completion,
-blockage, cancellation or the deadline. At expiry retain resumable state and
-report the next action. Scheduling a future invocation is separate deployment work.
+For a monitoring request, check every 30 minutes and exit on completion,
+blockage, cancellation or the deadline. A quiet interval sends no message.
+At expiry retain resumable state and report the next action. Scheduling a
+future invocation is separate deployment work.
 
 ## Durable owners
 
