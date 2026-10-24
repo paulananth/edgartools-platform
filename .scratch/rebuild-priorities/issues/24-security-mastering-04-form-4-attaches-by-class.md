@@ -6,7 +6,7 @@ Priority: 24, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md)
 
 **Blocked by:** security-mastering 01: Publish one Security per 13F CUSIP (done); [22: ISSUED_BY a mastered Company](22-security-mastering-02-issued-by-a-mastered-company.md); [130: A Security's share class](130-a-security-share-class.md); Codex PR #1121 (the matching code it needs).
 
-**Status:** in progress (2026-10-23 20:28 ET), Claude, branch `claude/t24-form4-security`; waits on ticket 120's OpenFIGI first
+**Status:** in progress (2026-10-24 19:21 ET), Grok, branch `grok/t24-form4-security`, taken over from `claude/t24-form4-security` at `7b427867` and replayed onto `main` `3e48169f`. The Claude worktree is untouched. Waits on ticket 120's OpenFIGI first for the proving run; the next open part is the issuer-name check on the 1,285 symbols.
 
 **Finding (2026-10-22 13:55 ET):** not configuration alone. A Form 4 names its issuer by CIK and the class in words, and carries no CUSIP; today's matching rules only match an identifier the record carries. "The issuer's Securities, narrowed to one class" is a new matching rule in code (`primitives.py`, `binding.py`, `matching.py`, `merge.py`), all four edited by #1121. Measured on the Form 4 cohort (3,398 filings, 63 issuers): 5,283 of 9,495 common-stock rows (56%) name a class, from 6 issuers; 1 issuer names two classes.
 
