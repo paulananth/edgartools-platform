@@ -208,7 +208,12 @@ For example: a cascade pass, a name rule, or records waiting for review.
 4. Show which records it moves. Use a proving run on a disposable
    PostgreSQL 16 (data-onboarding's test step): counts before and after,
    with examples.
-5. Continue with **approve**, using "Switch one declared matching rule on"
+5. A rule switched off, or a newer version, leaves the binds it already made
+   standing. A correction batch revokes them and the active rules reconsider
+   those records (`correction.correction_batch`: revoke, quarantine, lift),
+   but it has no command yet (2026-10-23): log the records it would move, and
+   ask before coding the command.
+6. Continue with **approve**, using "Switch one declared matching rule on"
    in APPROVE.md. A rule short of its bar stays off, and its records go to
    review.
 

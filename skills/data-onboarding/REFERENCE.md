@@ -234,7 +234,13 @@ wins every field it fills) and holds the matching rules. One field may have
 its own rule, `fields.<name>`: it takes `defaults` and changes any part of
 it, such as `sources` (its own order), `clear_sources` (who may empty it),
 `max_age_days` or `allow_unknown_effective`: one source may win one field
-while another wins the rest (Examples). Its comments record
+while another wins the rest (Examples). No field rule asks the sources to
+agree: mastering keeps good values, not blanks (operator, 2026-10-23, ticket
+131: "use priority agreeing is not nessary for all fields"). The first-ranked
+source wins; the losing values that differ stay beside the winner as its
+`conflicts`, and the `master_field` view counts them (`conflict_count`).
+Propose a field that must agree only with real disagreeing examples in hand.
+Its comments record
 which of a source's values fills a field that two sources share. Adding a
 source to a kind's ranks, adding a field or adding a kind changes what MDM
 decides. Each one needs the operator's

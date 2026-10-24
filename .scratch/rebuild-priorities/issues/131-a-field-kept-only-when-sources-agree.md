@@ -26,4 +26,4 @@ PR #1121, which edits the same files.
 - [ ] ~~The Merge Stage applies it; a test with two sources agreeing, disagreeing and one alone~~ not built: the ruling above keeps source priority
 - [ ] ~~`share_class` on the Security uses it~~ not built: the ruling above
 - [ ] PR, CI green, merge
-- [x] Learning → skill: `skills/security-master/SKILL.md`, Survivorship: a disagreement between sources never blanks a field; find one by `conflict_count` (2026-10-23 19:56 ET)
+- [x] Learning → skill: `skills/security-master/SKILL.md`, Survivorship: a disagreement between sources never blanks a field; find one by `conflict_count` (2026-10-23 19:56 ET). `skills/data-onboarding/REFERENCE.md`, Merge rules: the same for every kind, and propose a field that must agree only with real examples. `skills/mdm-engineering/SKILL.md`, the cheapest proof's Speed row: per-worker times, and how to get a time per Merge Stage step. `skills/refining-rules/SKILL.md`, change-matching: a switched-off rule's binds stand until a correction batch, which has no command yet (2026-10-23 20:02 ET)
