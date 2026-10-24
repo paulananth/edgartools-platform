@@ -21,6 +21,8 @@ One configuration-driven normal MDM workflow runs on PostgreSQL and MySQL, with 
 - [Inventory the current caller and preserve unfinished work](issues/01-inventory-current-caller-and-preserve-work.md) — merged WIP retained; all 36 installed functions and remaining caller operations allocated to their replacement tickets; historical SQL and storage enforcement are separately accounted for.
 - [Install governed MDM storage on both engines](issues/02-install-governed-portable-store.md) — normal PostgreSQL/MySQL owner installation and retained registry qualification delivered in PR #1152, with skill learning in #1153; both implementation revisions pass all nine checks. Final landing checks and named merge approval remain PR gates. MySQL normal merge execution stays withheld until its caller qualifies.
 
+- [Connect indexed records to shared matching and scope](issues/03-connect-indexed-record-reads.md) — normal read-only proposal/scope API implemented in PR #1156 with independent installed read smoke on PostgreSQL/MySQL, exact reference/provenance validation and configured native scope indexes. Skill learning is PR #1155. Final CI and named merge approval remain landing gates; atomic merge is ticket 04.
+
 ## Not yet specified
 
 - Exact replacement implementation details and final DROP signatures/dependency order must be pinned by the replacement and retirement tickets. The source/catalog baseline and responsibility assignments now live in the resolved inventory ticket.

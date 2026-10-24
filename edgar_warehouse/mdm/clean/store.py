@@ -483,13 +483,18 @@ class Publisher(Protocol):
 
 
 class Store:
-    def __init__(self, engine: Engine, *, lease_authority=None):
-        if engine.dialect.name != "postgresql":
+    def __init__(self, engine: Engine, *, lease_authority=None, read_only: bool = False):
+        if type(read_only) is not bool:
+            raise ValueError("read_only must be a boolean")
+        if engine.dialect.name != "postgresql" and not (read_only and engine.dialect.name == "mysql"):
             raise ValueError("MDM requires PostgreSQL")
         self.engine = engine
         self.lease_authority = lease_authority
+        self.read_only = read_only
 
     def _authorize(self, conn: Connection) -> None:
+        if self.read_only:
+            raise Conflict("A read-only MDM store cannot admit writes or publication")
         if self.lease_authority is not None:
             from edgar_warehouse.bookkeeping.clean.destinations import guard
 
@@ -556,6 +561,8 @@ class Store:
 
     def run_status(self, run_id: str) -> dict:
         """Observation for Bookkeeping; never declares an empty run complete."""
+        if self.engine.dialect.name != "postgresql":
+            raise Conflict("Normal run observation is not yet qualified for this engine")
         with self.engine.connect() as conn:
             result = rows(
                 conn,

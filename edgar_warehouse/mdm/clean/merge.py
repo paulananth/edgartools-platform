@@ -127,6 +127,8 @@ class MergeStage:
         a transaction of its own. A rule's proposal another run has overtaken is
         proposed again.
         """
+        if getattr(self.store,"read_only",False):
+            raise Conflict("A read-only MDM store cannot admit a merge")
         if command.get("preview"):
             return self._execute(**command, automatic=self.propose(**command))
         for attempt in range(3):
@@ -146,8 +148,16 @@ class MergeStage:
 
     def propose(self, **command) -> dict:
         """What the policy's active identifier and name rules would bind or create."""
-        with self.store.engine.connect() as conn:
-            policy = storage_adapter().registered_policy(conn, command["policy_digest"])
+        return self.propose_on(self.store.engine, **command)
+
+    @staticmethod
+    def propose_on(engine, **command) -> dict:
+        """The normal read phase, independently callable before admitting writes."""
+        from .record_reads import for_connection, RecordReader
+        with engine.connect() as connection:
+            conn=for_connection(connection)
+            generation=conn.adapter.generation(connection=connection) if isinstance(conn,RecordReader) else None
+            policy = storage_adapter().registered_policy(connection, command["policy_digest"])
             if policy is None:
                 return binding.nothing()
             # A record this batch releases (a revoked bind, ticket 13) or
@@ -185,7 +195,24 @@ class MergeStage:
             )
             for part in ("decisions", "reviews"):
                 proposed[part] += named[part]
+            if generation is not None:
+                proposed["observed_generation"]=generation
             return proposed
+
+    @staticmethod
+    def read_scope_on(engine, assertions, decisions):
+        """Read the same affected-identity scope used by the normal Merge Stage."""
+        from .record_reads import for_connection
+        with engine.connect() as connection:
+            conn=for_connection(connection)
+            scope=scoping.identities(conn,assertions,decisions)
+            sources={body["source_code"] for body in [*scope.readings.values(),*assertions]}
+            scope.decisions.update(scoping.retirements(conn,sources))
+            scope.stored_decisions.update(scope.decisions)
+            return scope
+
+    def read_scope(self, assertions, decisions):
+        return self.read_scope_on(self.store.engine,assertions,decisions)
 
     def assess(self, *, automatic: dict | None = None, **command) -> dict:
         """Record a proposal without saving its batch, for `apply_assessment`.
@@ -194,6 +221,8 @@ class MergeStage:
         proposals are kept beside the caller's command, never inside it, so
         the command's hash stays the caller's own.
         """
+        if getattr(self.store,"read_only",False):
+            raise Conflict("A read-only MDM store cannot retain an assessment")
         if not _identity_work(command.get("decisions"), automatic):
             raise ValueError("Assessment requires an identity proposal")
         proposal, kept = _proposal(command), _kept(automatic)
@@ -255,6 +284,8 @@ class MergeStage:
         """Save the batch a recorded proposal computed. It is computed again
         under the lock; if the save finds it writes other than the proposal's
         effects, or the proposal already applied, it is stale and superseded."""
+        if getattr(self.store,"read_only",False):
+            raise Conflict("A read-only MDM store cannot apply an assessment")
         with self.store.engine.connect() as conn:
             body = assessment.load(conn, assessment_id)
         if body["outcome"] != "ready":
@@ -299,6 +330,8 @@ class MergeStage:
         automatic: dict | None = None,
         _record: dict | None = None,
     ) -> dict:
+        if getattr(self.store,"read_only",False):
+            raise Conflict("A read-only MDM store cannot admit a merge")
         assertions = sorted(assertions or [], key=lambda a: a["assertion_id"])
         decisions = sorted(decisions or [], key=lambda d: (d["at"], d["decision_id"]))
         identities = sorted(identities or [], key=lambda i: i["entity_id"])

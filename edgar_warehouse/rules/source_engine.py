@@ -368,6 +368,13 @@ def prepare_record_lookups(command: Mapping) -> tuple[dict, list[dict]]:
     return records, changes
 
 
+def prepare_scope_lookups(command: Mapping) -> tuple[dict, list[dict]]:
+    """Prepare indexed link/review references and retained publication floors."""
+    publications, changes = json.loads(source_contract.prepare_scope_lookups(
+        json.dumps(dict(command), ensure_ascii=False, separators=(",", ":"), allow_nan=False)))
+    return publications, changes
+
+
 def resolve_record_bindings(command: Mapping) -> dict[str, str | None]:
     """Carry explicit current bindings, including unbound owned records, from Rust."""
     return json.loads(source_contract.resolve_record_bindings(
