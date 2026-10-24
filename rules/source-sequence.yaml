@@ -37,22 +37,27 @@ sources:
     target: mastering
     requires: []
     after: [sec.nport.registrant]
-  # Its runs read GLEIF's `umbrellas` runs and OpenFIGI's `answers_cusip` and
-  # `answers_isin` runs (ticket 120): those targets run first, over their own
-  # captures. This
-  # inventory names one target per source, so those targets are named here.
-  sec.nport.security:
-    target: mastering
-    requires: []
-    after: [sec.nport.fund]
-  # OpenFIGI (ticket 80): its `mastering_cusip` and `mastering_isin` records
-  # join the Securities N-PORT gives and wait otherwise, so they run after
-  # them; its `answers_cusip` and `answers_isin` targets run before Securities
-  # (ticket 120). Its mastering is not switched on yet.
+  # OpenFIGI first (ticket 120; operator, 2026-10-23: "make the seurities run
+  # should process openfigi first", "agreed"): its records create the
+  # Securities, so its mastering runs before Securities'. The order of one
+  # delivery: N-PORT's read decides which identifiers OpenFIGI is asked (the
+  # capture); `answers_cusip` and `answers_isin`; `mastering_cusip`, which
+  # creates a Security per CUSIP answer; `mastering_isin`, which joins each ISIN
+  # answer to its CUSIP's Security by their shared FIGI (it reads every complete
+  # `mastering_cusip` run, so that target runs first) or creates one; then
+  # Securities (N-PORT), then 13F. Its mastering is not switched on yet.
   openfigi:
     target: null
     requires: []
-    after: [sec.nport.security]
+    after: [sec.nport.fund]
+  # Its runs read GLEIF's `umbrellas` runs and OpenFIGI's `answers_cusip` and
+  # `answers_isin` runs (ticket 120). This inventory names one target per
+  # source, so those targets are named here. It joins the Securities OpenFIGI
+  # created and creates the rest.
+  sec.nport.security:
+    target: mastering
+    requires: []
+    after: [openfigi]
   # Company facts (ticket 45): silver rows linked to the Company by CIK, so they
   # run after it. Its silver landing target comes with ticket 46.
   sec.company-facts:

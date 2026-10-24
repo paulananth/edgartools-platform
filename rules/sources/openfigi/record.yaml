@@ -8,6 +8,11 @@
 # "Use the primary exchange listing", "US, else the ISIN's country"), else
 # none; every listing is kept (`listings`, ticket 120). Run once per
 # kind asked; mdm.prepare reads its table `security` with that kind's contract.
+# In the ISIN target (ticket 120, OpenFIGI first; operator, 2026-10-23:
+# "agreed"), it reads isin-attach.yaml's pieces instead: `figi_cusips` lists
+# every CUSIP sharing a listing FIGI with the ISIN; the record keeps them
+# (space-separated) and, when there is exactly one, that CUSIP. A CUSIP answer's
+# row has no `figi_cusips`, so its record gains neither.
 execution: {profile: source.read, workers: 1, max_artifacts: 512}
 read:
   format: json
@@ -118,3 +123,16 @@ read:
                       - {join: {path: home_composite.home_composite_sample, item_path: figi_ticker, separator: "", max_items: 1, null_if_empty: true}}
                       - {join: {path: listing.listing_sample, item_path: figi_ticker, separator: "", max_items: 1, null_if_empty: true}}
                   transforms: [{regex_replace: {pattern: "^[^ ]+ ", with: ""}}]
+              # Ticket 120: every CUSIP sharing a listing FIGI with this ISIN, then the one CUSIP.
+              figi_cusips: {join: {path: figi_cusips, item_path: ".", item_type: text, separator: " ", max_items: 100000, null_if_empty: true}}
+              figi_cusip:
+                choose:
+                  condition:
+                    equal:
+                      left:
+                        transform:
+                          value: {join: {path: figi_cusips, item_path: ".", item_type: text, separator: " ", max_items: 100000, null_if_empty: true}}
+                          transforms: [{regex_replace: {pattern: "^.* .*$", with: ""}}]
+                      right: {const: {value: ""}}
+                  then: {value: {path: NO_SUCH_FIELD}}
+                  else: {join: {path: figi_cusips, item_path: ".", item_type: text, separator: " ", max_items: 100000, null_if_empty: true}}

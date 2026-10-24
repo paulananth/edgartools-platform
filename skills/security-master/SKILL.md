@@ -26,7 +26,7 @@ and switch-on.
 |---|---|
 | Join two Securities on a FIGI or a ticker | They are cross-references: lookup only (operator, 2026-10-20: "Lookup only for now") |
 | Let one identifier sit on two Securities | Every proof counts `identifiers_on_two_masters`; it must be 0 |
-| Let OpenFIGI create a Security | OpenFIGI's records join the Security holding their CUSIP or ISIN, or wait (live) |
+| Let an OpenFIGI ISIN answer create a second Security for an issue its CUSIP answer already made | It joins that CUSIP's Security by their shared listing FIGI; two or more such CUSIPs set it aside for review (decided, ticket 120) |
 | Attach an ISIN to a CUSIP on a filing alone | Only when OpenFIGI agrees, one to one (live) |
 | Fill a security-level field by guessing between disagreeing listings | Take the primary listing's value, else leave it blank (decided) |
 | Fold OpenFIGI's values into N-PORT's record | OpenFIGI keeps its own record on the same Security (decided) |
@@ -42,7 +42,7 @@ CUSIP). Each source keeps its own record on it; MDM merges them.
 |---|---|---|---|
 | SEC N-PORT | `sec.nport.security.v2` | Yes (decided) | CUSIP, ISIN (FIGI-agreed), issuer name as filed, title of class, issuer LEI, "issued by" link |
 | SEC 13F | `sec.thirteenf.information_table.security.v1` | Yes (live) | CUSIP, name and title as filed, a filed FIGI |
-| OpenFIGI | `openfigi.security.v1` (CUSIP), `openfigi.security_isin.v1` (ISIN) | Never: joins or waits (live) | All ten OpenFIGI fields and every listing (decided) |
+| OpenFIGI | `openfigi.security.v1` (CUSIP), `openfigi.security_isin.v1` (ISIN) | Yes, and first (decided 2026-10-23, ticket 120; the live versions join or wait until the switch-on) | All ten OpenFIGI fields and every listing; an ISIN answer also carries the one CUSIP sharing a listing FIGI with it |
 
 The ranking that fills a field: OpenFIGI first, then N-PORT, then 13F
 (operator, 2026-10-18: "make openfigi priority 1 and 13f last"; ticket 84).
@@ -84,8 +84,9 @@ their Identifier Contract is verified (`policy.yaml`, `automatic_rules`,
 | `security-cusip` | 13F | CUSIP | creates one | 2026-10-15 ("merge 985 when green agreed for the rest") |
 | `nport-security-cusip` | N-PORT | CUSIP | creates one | 2026-10-17 21:03 ET ("Switch on all six (Recommended)"); v2 version 2026-10-20.1 decided |
 | `nport-security-isin` | N-PORT | its ISIN (FIGI-agreed on a CUSIP's record; the key of an ISIN-only one) | creates one | same; it replaces `nport-isin-security-isin` (retired with `sec.nport.security_isin.v1`) |
-| `openfigi-security-cusip` | OpenFIGI (CUSIP asked) | CUSIP | **waits** | 2026-10-17 13:12 ET ("Switch on CUSIP rule (Recommended)") |
-| `openfigi-security-isin` | OpenFIGI (ISIN asked) | ISIN | **waits** | 2026-10-18 13:22 ET ("Switch it on (Recommended)") |
+| `openfigi-security-cusip` | OpenFIGI (CUSIP asked) | CUSIP | creates one (version 2026-10-23.1, decided) | waits for its switch-on; version 2026-10-17.1 (waits) switched on 2026-10-17 13:12 ET |
+| `openfigi-isin-security-cusip` | OpenFIGI (ISIN asked) | the CUSIP sharing a listing FIGI with it | waits (then the ISIN rule below) | waits for its switch-on (new, 2026-10-23.1) |
+| `openfigi-security-isin` | OpenFIGI (ISIN asked) | ISIN | creates one (version 2026-10-23.1, decided) | waits for its switch-on; version 2026-10-17.1 (waits) switched on 2026-10-18 13:22 ET |
 
 - **Records that may create go first** in a batch, so a record that may only
   join (OpenFIGI) finds the Security created in the same batch. One identifier
@@ -166,6 +167,17 @@ review ("Held back, never dropped", below).
 2026-10-15: "Use FIGI to add pairs too"): the filed CUSIP and ISIN share a
 FIGI, and neither is offered twice: the CUSIP is offered one ISIN and the
 ISIN one CUSIP (`figi-agree.yaml`, `figi-offers.yaml`, `figi-attach.yaml`).
+
+**OpenFIGI first: an ISIN answer finds its CUSIP's Security by a shared
+listing FIGI** (decided; operator, 2026-10-23: "make the seurities run should
+process openfigi first", then "agreed"). The ISIN target reads `figi_ids`
+(each listing FIGI and the CUSIP asked) from every complete CUSIP run
+(`figi-ids.yaml`, `isin-figi-cusips.yaml`, `isin-attach.yaml`); its record
+carries the CUSIP when exactly one shares a FIGI, and the contract sets aside
+two or more (`isin_shares_figi_with_several_cusips`). Every listing FIGI, not
+only the ones a record keeps as cross-references: those would reach 349,761
+of the 350,867 (2026-10-15 capture). The FIGI stays a cross-reference on the
+Security; only the CUSIP it leads to is matched.
 
 **An ISIN-only holding whose ISIN is already on a CUSIP's row is folded into
 that row before MDM (decided)**, so no ISIN reaches MDM twice: `combine.yaml`
@@ -270,12 +282,20 @@ Each waits with an open review. 2026 Q2: 1,769 `invalid_cusip_checksum` and
 
 ## Run order
 
-1. GLEIF `umbrellas` (sub-fund pairs; read only).
-2. OpenFIGI `answers_cusip`, `answers_isin` (the captured answers; read only).
-3. N-PORT funds.
-4. Securities `mastering`: one run over the quarter (decided: CUSIP and ISIN
-   Securities together).
-5. OpenFIGI's Security records, which join what N-PORT made.
+OpenFIGI first (decided, ticket 120; operator, 2026-10-23):
+
+1. N-PORT's read decides which identifiers OpenFIGI is asked (the capture).
+2. GLEIF `umbrellas` (sub-fund pairs; read only).
+3. OpenFIGI `answers_cusip`, `answers_isin` (the captured answers; read only).
+4. N-PORT funds.
+5. OpenFIGI `mastering_cusip`: creates a Security per CUSIP answer, and
+   writes `figi_ids`.
+6. OpenFIGI `mastering_isin`: joins each ISIN answer to its CUSIP's Security,
+   or creates one. It reads every complete `mastering_cusip` run, so step 5
+   completes first.
+7. Securities `mastering` (N-PORT): one run over the quarter; joins what
+   OpenFIGI made and creates the rest.
+8. 13F.
 
 `rules/source-sequence.yaml` holds the order; a source reads another
 finished run by `{run: {source, target, step}}` (Bookkeeping SPEC).
@@ -294,11 +314,10 @@ until the operator permits it.
   second pass changes nothing. 2026 Q2, one record per Security, takes about
   3 h 10 min a pass on a laptop; keep it on power ("Make the Securities run
   faster", ticket 122).
-- OpenFIGI joins a Security N-PORT made and never makes one, so its
-  `rules test` in an empty store only stages its records (`binding_required`).
-  That proves the fields and listings it reads; to prove the join and the
-  listings on the Security, run one slice in a store that holds N-PORT's
-  Securities (ticket 120: 49,082 of 49,082 joined, 158,554 listing rows, no
-  new Security).
+- OpenFIGI first: OpenFIGI's CUSIP answers create the Securities, so its
+  `rules test` in an empty store creates them. Its ISIN target reads the
+  complete CUSIP runs' `figi_ids`, so run the CUSIP slice first in the same
+  stores. Before OpenFIGI first, a CUSIP slice in a store holding N-PORT's
+  Securities joined 49,082 of 49,082, at about 61 ms a record of merge.
 - Report counts only: Securities, held back by reason, identifiers on two
   Securities. Never an identifier or a name from the data.
