@@ -21,6 +21,8 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     migrate = mdm_sub.add_parser("migrate", help="Create or upgrade the MDM schema")
     migrate.add_argument("--application-role", default="application")
     migrate.add_argument("--application-host", default="%", help="MySQL runtime account host")
+    migrate.add_argument("--prepared-store", action="store_true",
+                         help="Install governed prepared storage on a fresh PostgreSQL or MySQL target")
     migrate.set_defaults(handler=_logged_handler("migrate", _handle_migrate))
 
     prepare = mdm_sub.add_parser("prepare-clean-company", help="Write the Company mastering target's input manifest for a bounded local sample from a raw SEC capture")
@@ -99,7 +101,8 @@ def _handle_migrate(args: argparse.Namespace) -> int:
     engine = engine_from_env("MDM_DATABASE_URL", restricted=False)
     try:
         payload = migrate(engine, application_role=args.application_role,
-                          application_host=args.application_host)
+                          application_host=args.application_host,
+                          prepared=args.prepared_store)
     finally:
         engine.dispose()
     print(json.dumps(payload, indent=2, sort_keys=True))

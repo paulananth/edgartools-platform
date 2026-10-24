@@ -36,7 +36,7 @@ def runtime_files() -> list[Path]:
     from edgar_warehouse.mdm.clean import (
         activation, adapters, assessment, binding, cascade, catalog, classification,
         correction, evidence, identifier_types, identity, matching, merge,
-        name_census, names, primitives, quality, relationships, run, schema, scope, store, survivorship,
+        name_census, names, prepared, prepared_registry, primitives, quality, relationships, run, schema, scope, store, survivorship,
     )
     from edgar_warehouse.rules import files, source_engine
     from edgar_warehouse.workers import source_mapping
@@ -46,7 +46,7 @@ def runtime_files() -> list[Path]:
     # the separately tracked complete environment/reproducibility fingerprint.
     modules = (activation, adapters, assessment, binding, cascade, catalog, classification, config,
                correction, destinations, evidence, files, identifier_types,
-               identity, limits, matching, merge, name_census, names, primitives, quality,
+               identity, limits, matching, merge, name_census, names, prepared, prepared_registry, primitives, quality,
                relationships, run, schema, scope, source_mapping, store, survivorship)
     adapter = store.storage_adapter()
     adapter_files = [Path(getfile(adapter)).with_name(name) for name in

@@ -14,6 +14,9 @@ Can one shared normal MDM caller prepare and atomically commit every merge effec
 ## Parts
 
 - [x] Extract one shared Merge Stage preparation; verify joins, new identities and corrections without identity work on PostgreSQL/MySQL, with retained native assessments — 2026-10-24 08:03 ET; three preparation cases per engine and nine native assessment/checkpoint cases pass.
+- [x] Complete the normal prepared-store owner command, transactional registry/pin approval, deferred activation and restart qualification on both engines — 2026-10-24 09:35 ET; seven PostgreSQL and six MySQL owner cases pass, including normal CLI, interrupted retry, approval rollback and legacy-write refusal.
+- [ ] Qualify normal destination preview, assessed intent with actual producing-run publication metadata, held-record natural keys and complete occurrence retention.
+- [ ] Expand normal-save proof across configured kinds/sources, relationship/detail history boundaries and competing writers; retain native/read-phase regressions and independently installed save smoke.
 - [ ] Connect shared identity replay, value selection, relationships and detail preparation to the normal Merge Stage save path.
 - [ ] Commit source assertions, decisions, identities, current masters, history, detail lists, generation/checkpoints and publication as one admitted destination transaction.
 - [ ] Validate observed state and registered pins at the destination; refuse stale assessments and competing writers; preserve batch/root-run association and duplicate semantics.
@@ -48,6 +51,8 @@ merge algorithm or a dialect-specific policy interpreter. The temporary cost
 is qualifying both retained native persistence and the replacement path.
 
 ## Implementation checkpoint
+
+### Checkpoint 76c1e9a2 (superseded by work in progress below)
 
 Protocol 5 adds destination-owned ready/rejected/applied/superseded proposals,
 exact assessed intent checks, observed-generation enforcement and owner-approved
@@ -95,3 +100,36 @@ The latter has two concrete callers; a new strategy hierarchy would add cost
 without simplifying these operations. The cost of the extraction is preserving
 the retained native save while the replacement path qualifies; its assessment
 and checkpoint regression checks pass.
+
+### Normal save integration in progress — 2026-10-24 09:35 ET
+
+The normal owner command now offers an explicit fresh prepared-store install.
+PostgreSQL and MySQL select the same shared Merge Stage preparation from the
+installed storage protocol. Owner registry activation and approved references
+become visible atomically before runtime execution is granted. A populated
+native PostgreSQL store is refused pending a qualified data migration.
+
+Normal caller coverage passed 56 cases per engine, spanning two invented kinds,
+two source priorities, identifier and configured name matching in both arrival
+orders, concurrent first identity allocation, no-identity stale retries,
+relationships, hierarchy review scope, exact numeric detail history, quarantine,
+corrections, retirement, assessments, rollback, occurrence retention and replay.
+The retained regression pack passes 146 PostgreSQL and 145 MySQL checks. Each
+invocation finished below five minutes; these are checkout API results.
+
+Destination preview exercises the same storage validation and write assembly,
+then rolls back every business effect. Assessed intent excludes the observing
+run while publication inserts the actual producing run, preserving exact byte
+hashes and original-producer batch association. Natural source revision and
+held-record references retain their immutable original bodies; occurrences
+remain individually retrievable.
+
+Final review reuses the validated publication-floor reader and bulk identity
+probes rather than trusting raw reference bodies or probing once per kind.
+Final affected reruns and an independent committed five-wheel save/assessment/
+replay smoke are in progress. This checkpoint is incomplete. Public/operator
+reads are ticket 05; external worker authority, per-run source-mapping freezes,
+publication recovery and run observation remain ticket 06. They are explicitly
+refused where their normal Store methods are called, rather than reported as
+success. Full installed workflow evidence remains ticket 07. Historical SQL
+migrations and native rollback behavior are retained.

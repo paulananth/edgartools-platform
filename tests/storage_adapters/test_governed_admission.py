@@ -42,6 +42,11 @@ CASES = (
         "migration_rerun",
         "stored_replay",
         "proposal_without_pins",
+        "deferred_activation",
+        "activation_rollback",
+        "producer_payload",
+        "required_references",
+        "preview",
     ]
 )
 
@@ -55,7 +60,10 @@ def test_governed_command_admission(case, database_factory, storage_api):
             return
         prefix = "invented_admission"
         protocol = 4 if case == "upgrade" else 5
-        storage_api.migrate(owner, runtime_role=role, prefix=prefix, protocol=protocol)
+        deferred_activation = case in ("deferred_activation", "activation_rollback")
+        storage_api.migrate(owner, runtime_role=role, prefix=prefix, protocol=protocol,
+                            runtime_execute=not deferred_activation,
+                            defer_ready=deferred_activation)
         api = storage_api.Adapter(runtime, prefix=prefix, protocol=protocol)
         b = batch(
             storage_api,
@@ -65,6 +73,19 @@ def test_governed_command_admission(case, database_factory, storage_api):
         )
         if case == "unicode_pins":
             b = replace(b, pins={'invented."pin/😀': "invented-ß-值"})
+        if deferred_activation:
+            admin = storage_api.Adapter(owner, prefix=prefix, protocol=5)
+            with pytest.raises(storage_api.AdapterError):
+                api.claim(b.scope, "invented-worker")
+            if case == "activation_rollback":
+                with pytest.raises(RuntimeError, match="invented interruption"), owner.begin() as conn:
+                    admin.activate(conn, b.pins)
+                    raise RuntimeError("invented interruption")
+                with pytest.raises(storage_api.AdapterError, match="storage_not_initialized"):
+                    admin.enable_runtime(role)
+            with owner.begin() as conn:
+                admin.activate(conn, b.pins)
+            admin.enable_runtime(role)
         if protocol == 5:
             with owner.begin() as conn:
                 for name, value in b.pins.items():
@@ -75,6 +96,70 @@ def test_governed_command_admission(case, database_factory, storage_api):
         def count(name):
             with owner.connect() as conn:
                 return conn.scalar(select(func.count()).select_from(api.tables[name]))
+
+        if case == "preview":
+            names = ("batch", "proposal", "proposal_event", "current", "history",
+                     "evidence", "lookup", "checkpoint", "outbox", "run")
+            assert api.preview(b, proposal_body=body)["generation"] == 1
+            assert api.generation() == 0 and all(count(name) == 0 for name in names)
+            invalid = replace(b, indexes=(storage_api.IndexChange(
+                "invented-lookup", "one", {"ref": "one"}, expected_version=1),))
+            with pytest.raises(storage_api.AdapterError, match="stale_index_version"):
+                api.preview(invalid, proposal_body=body)
+            assert api.generation() == 0 and all(count(name) == 0 for name in names)
+            api.apply(b, lease, proposal_body=body)
+            before = {name: count(name) for name in names}
+            assert api.preview(b, proposal_body=body)["duplicate"]
+            assert before == {name: count(name) for name in names}
+            return
+
+        if case == "producer_payload":
+            payload = storage_api.ProducerPayload(b'{"content":"invented","origin":', b'}')
+            changed = replace(b, payloads={c: payload for c in b.consumers})
+            proposal = api.record_proposal(b.batch, body, b.run, outcome="ready",
+                                           expected_generation=0, intent=changed.intent())
+            producer = 'invented-producer-"😀'
+            api.apply(changed, lease, proposal_key=proposal, observer=producer)
+            with runtime.connect() as conn:
+                rows = conn.execute(select(api.tables["outbox"])).mappings().all()
+                assert len(rows) == 2
+                for row in rows:
+                    raw = bytes(row["payload"])
+                    assert json.loads(raw) == {"content": "invented", "origin": producer}
+                    assert raw == payload.before + storage_api.canonical(producer) + payload.after
+                    assert row["payload_hash"] == sha256(raw).hexdigest()
+            assert api.read_batch(b.batch)["run_key"] == storage_api.key(producer)
+            api.replay(b.batch, lease, observer="another-observer")
+            with runtime.connect() as conn:
+                assert [bytes(row[0]) for row in conn.execute(select(api.tables["outbox"].c.payload))] == [raw, raw]
+            return
+        if case == "required_references":
+            b = replace(b, required_pins={"invented-mapping": "one"})
+            with pytest.raises(storage_api.AdapterError, match="unregistered_frozen_pins"):
+                api.apply(b, lease, proposal_body=body)
+            with owner.begin() as conn:
+                api.admit_pin(conn, "invented-mapping", "one")
+                api.admit_pin(conn, "invented-mapping", "two")
+            api.apply(b, lease, proposal_body=body)
+            other = replace(b, batch="another-command", expected_generation=1,
+                            expected_checkpoint=1, checkpoint=2, objects=(), evidence=(), indexes=(),
+                            required_pins={"invented-mapping": "two"})
+            api.apply(other, lease, proposal_body={"command": "another"})
+            assert api.replay(b.batch, lease, observer=b.run)["duplicate"]
+            return
+
+        if deferred_activation:
+            assert api.apply(b, lease, proposal_body=body)["generation"] == 1
+            storage_api.migrate(owner, runtime_role=role, prefix=prefix, protocol=5,
+                                runtime_execute=False, defer_ready=True)
+            with pytest.raises(storage_api.AdapterError):
+                api.replay(b.batch, lease, observer="during-migration")
+            with owner.begin() as conn:
+                admin.activate(conn, b.pins)
+            admin.enable_runtime(role)
+            assert api.replay(b.batch, lease, observer="after-migration")["duplicate"]
+            assert count("history") == count("batch") == 1
+            return
 
         if case == "proposal_without_pins":
             intent = json.loads(b.intent())

@@ -131,18 +131,23 @@ class MergeStage:
             raise Conflict("A read-only MDM store cannot admit a merge")
         if command.get("preview"):
             return self._execute(**command, automatic=self.propose(**command))
+        if getattr(self.store, "prepared", False):
+            api = storage_adapter().Adapter(self.store.engine, prefix="mdm_store", protocol=5)
+            if api.read_batch(command["batch_id"]) is not None:
+                return self._execute(**command, automatic=binding.nothing())
         for attempt in range(3):
             automatic = self.propose(**command)
-            if not _identity_work(command.get("decisions"), automatic):
-                return self._execute(**command, automatic=automatic)
+            identity_work = _identity_work(command.get("decisions"), automatic)
             proposal, kept = _proposal(command), _kept(automatic)
             try:
-                return self._execute(**command, automatic=automatic, _record={"command": proposal, **kept})
+                return self._execute(**command, automatic=automatic,
+                                     _record={"command": proposal, **kept} if identity_work else None)
             except assessment.StaleAssessment:
                 if attempt == 2:
                     raise
             except (Conflict, DBAPIError) as exc:
-                self._reject(proposal, kept, exc, command["run_id"])
+                if identity_work:
+                    self._reject(proposal, kept, exc, command["run_id"])
                 raise
         raise AssertionError("Unreachable assessment retry state")
 
@@ -227,7 +232,8 @@ class MergeStage:
             raise ValueError("Assessment requires an identity proposal")
         proposal, kept = _proposal(command), _kept(automatic)
         try:
-            result = self._execute(**{**command, "preview": True}, automatic=automatic)
+            result = self._execute(**{**command, "preview": True}, automatic=automatic,
+                                   _record={"command": proposal, **kept} if self.store.prepared else None)
         except (Conflict, DBAPIError) as exc:
             self._reject(proposal, kept, exc, command["run_id"])
             raise
@@ -235,7 +241,8 @@ class MergeStage:
         if body is None:
             return result
         return assessment.record(
-            self.store, {**body, "command": proposal, **kept}, command["run_id"]
+            self.store, {**body, "command": proposal, **kept}, command["run_id"],
+            intent=result.get("_prepared_intent"),
         )
 
     @staticmethod
@@ -246,7 +253,9 @@ class MergeStage:
         than mint twice, join the wrong Company, or publish a new Company before
         one already stored. A preview passes no proposals and checks only the
         policy. Returns the policy."""
-        policy = storage_adapter().registered_policy(conn, policy_digest)
+        from .record_reads import RecordReader
+        connection = conn.connection if isinstance(conn, RecordReader) else conn
+        policy = storage_adapter().registered_policy(connection, policy_digest)
         if policy is None:
             raise Conflict("Unknown or unqualified policy")
         # Again per batch, not only at registration: a body that reached
@@ -338,7 +347,7 @@ class MergeStage:
         deferred = sorted(deferred or [], key=lambda d: d["deferred_id"])
         occurrences = _occurrences(occurrences or [], assertions)
         instant(as_of)
-        if (
+        if not getattr(self.store, "prepared", False) and (
             len(assertions) + len(deferred) > limits.BATCH_RECORDS
             or len(decisions) > limits.BATCH_RECORDS
             or len(identities) > limits.BATCH_RECORDS
@@ -409,6 +418,12 @@ class MergeStage:
         identities = sorted(
             [*identities, *automatic["identities"]], key=lambda i: i["entity_id"]
         )
+        if getattr(self.store, "prepared", False):
+            from .prepared import execute
+            return execute(self, command=command, assertions=assertions,
+                           decisions=decisions, identities=identities, deferred=deferred,
+                           automatic=automatic, input_hash=input_hash, run_id=run_id,
+                           preview=preview, assessment_id=assessment_id, record=_record)
         with self.store.engine.begin() as conn:
             conn.execute(text("SELECT pg_advisory_xact_lock(730234)"))
             previous = conn.scalar(
@@ -424,7 +439,7 @@ class MergeStage:
             policy = self._check_rule_proposals(
                 conn, policy_digest, None if preview else automatic, decisions
             )
-            request, before = self._prepare(
+            request, before, _ = self._prepare(
                 conn, policy=policy, command=command, assertions=assertions,
                 decisions=decisions, identities=identities, deferred=deferred,
                 automatic=automatic, input_hash=input_hash,
@@ -643,7 +658,10 @@ class MergeStage:
         ] + [
             {"object_type": "entity", "object_id": k, "body": b} for k, b in stored.items()
         ]
-        return request, before
+        return request, before, {
+            "scope": scope, "state": state, "readings": evidence,
+            "old": old, "stored": stored, "projected": projected,
+        }
 
 
 def _check_hashes(decisions: list[dict]) -> None:
