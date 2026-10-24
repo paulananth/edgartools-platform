@@ -43,9 +43,20 @@ class MdmIds:
         self.engine = engine
 
     def __call__(self, source_code: str, kind: str, keys: set[str]) -> dict[str, str | None]:
+        if not keys:
+            return {}
         found: dict[str, str | None] = {}
         ordered = sorted(keys)
-        with self.engine.connect() as conn:
+        # Pointer, immutable reading and master must come from one snapshot.
+        with self.engine.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
+            from edgar_warehouse.mdm.clean.record_reads import for_connection, RecordReader
+            from edgar_warehouse.mdm.clean.store import Conflict
+
+            reader = for_connection(conn)
+            if isinstance(reader, RecordReader):
+                if reader.adapter.protocol < 5:
+                    raise Conflict("Master identifier lookup requires governed prepared storage")
+                return reader.master_ids(source_code, kind, keys)
             for start in range(0, len(ordered), LOOKUP):
                 for row in conn.execute(_IDS, {"source_code": source_code, "kind": kind,
                                                "keys": ordered[start:start + LOOKUP]}):

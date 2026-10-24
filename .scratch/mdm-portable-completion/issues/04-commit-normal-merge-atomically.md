@@ -1,7 +1,7 @@
 # Commit the normal Merge Stage atomically
 
 Type: task
-Status: claimed
+Status: resolved
 Assignee: Codex
 Claimed: 2026-10-23 21:20 ET
 Parent: [Complete portable MDM and retire PostgreSQL business logic](../map.md)
@@ -24,7 +24,7 @@ Can one shared normal MDM caller prepare and atomically commit every merge effec
 - [x] Account for ready/unapplied assessment enforcement, exact assessed effects and root-run duplicate association at the destination; generation alone is insufficient. — 2026-10-24 09:48 ET; restricted-role proposal/intent cases and independent installed assessment/application/replay smoke pass on both engines.
 - [x] Preserve relationship/review index envelopes and actual generated review scopes when integrating native index preparation. — 2026-10-24 09:48 ET; normal hierarchy cases verify all three affected identities, with original generated review bodies, on both engines.
 - [x] Qualify the minimal prepared-command lifecycle and owner-approved pin capability on both engines, preserving protocol 1–4 fingerprints and direct-request refusal — 2026-10-24 08:03 ET; 87 affected checks per engine pass, plus three shared preparation cases per engine. This qualifies the storage capability, not the normal portable save.
-- [ ] Publish the implementation PR, finish final affected reader checks and require every final-head CI check to pass before readiness.
+- [x] Publish the implementation PR, finish final affected reader checks and require every final-head CI check to pass before readiness — 2026-10-24 18:24 ET; PR #1159 final head 568fb1a8 passes all nine checks; 40 final reader checks pass per engine; merged as 4a3d0bf6. Skill #1158 merged as 4bf7c386.
 - [x] Learning → skill: update its owning skill on a separate branch/PR, or record none. — 2026-10-24 09:48 ET; mdm-engineering/reference guidance in separate PR #1158; 79 focused checks pass; owner activation, assessed intent/producer metadata, preview, input identity and full-workflow limits recorded.
 
 
@@ -182,3 +182,10 @@ validation and bulk identity reads are reused at that seam. A strategy/class
 hierarchy would add dispatch and maintenance without removing an observed
 variation. Retaining the native writer during qualification costs dual-path
 regression checks; those checks pass. No further pattern refactor is justified.
+
+### Landing verified — 2026-10-24 18:24 ET
+
+PR #1159 merged at 2026-10-24 11:20:25 ET as 4a3d0bf6; skill PR #1158
+merged at 11:20:05 ET as 4bf7c386. Both final heads passed all nine CI checks.
+Implementation CI took 10 minutes 15 seconds, including the final gate.
+All parts above are checked. Tickets 05–07 and retirement remain separate.

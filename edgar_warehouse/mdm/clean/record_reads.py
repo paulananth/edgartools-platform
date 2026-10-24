@@ -169,6 +169,39 @@ class RecordReader:
             if body.get("entity_id")
         }
 
+    def master_ids(self, source_code, kind, keys):
+        """Read the stored canonical master for each exact source-record key."""
+        from .evidence import subject_key
+
+        subjects = {subject_key(source_code, key): key for key in keys}
+        pointers = self.current(subjects)
+        self._readings(pointers)
+        selected = {}
+        for subject, pointer in pointers.items():
+            if (pointer.get("source_code") != source_code
+                    or pointer.get("record_key") != subjects[subject]):
+                raise Conflict("Master lookup pointer differs from its requested source key")
+            if pointer.get("kind") == kind:
+                identity = pointer.get("entity_id")
+                if identity is not None and (not isinstance(identity, str) or not identity):
+                    raise Conflict("Source-record binding requires a retained master identity")
+                selected[subjects[subject]] = identity
+        bound = {identity for identity in selected.values() if identity is not None}
+        masters = self.adapter.read([("entity", identity) for identity in sorted(bound)],
+                                    connection=self.connection)
+        canonical = {}
+        for identity in bound:
+            row = masters.get(("entity", identity))
+            if row is None:
+                raise Conflict("Bound source record has no current master")
+            body = self._body(row)
+            if (body.get("entity_id") != identity or body.get("kind") != kind
+                    or not isinstance(body.get("canonical_id"), str) or not body["canonical_id"]):
+                raise Conflict("Current master differs from its bound identity")
+            canonical[identity] = body["canonical_id"]
+        return {key: canonical[identity] if identity is not None else None
+                for key, identity in selected.items()}
+
     def readings(self, subjects):
         pointers = self.current(subjects)
         return self._readings(pointers)
