@@ -184,7 +184,7 @@ edgar-warehouse load \
   --source <source> --target <target> \
   --capture <capture folder> --capture-run <capture run id> \
   --stores <stores folder> \
-  --workers <readers> --minutes <window>
+  --workers <readers> --bundles <runs at once> --minutes <window>
 ```
 
 - `--stores` is the folder holding the stores' `worker.env`, `verifier.env`
@@ -205,7 +205,10 @@ What it does, in order:
    `execution.max_artifacts` documents.
 4. **Loads each bundle.** It prepares the bundle (`mdm prepare-capture`),
    submits it (`rules run`), works each step in its declared order and
-   finalizes. The Change Journal leaves out documents already loaded under
+   finalizes. `--bundles N` loads N bundles at once. Each is its own run with
+   its own verifier, because bundles of one target are one wave, not a
+   queue. A bundle that stops does not stop the others, and every stop is
+   named at the end. The Change Journal leaves out documents already loaded under
    these rules. Already-loaded documents are counted and skipped, and an
    unchanged rerun starts no work.
 
@@ -251,14 +254,19 @@ Work it out from counts before starting:
 1. **Documents and bundles.** Count the documents not yet loaded, and divide
    by `execution.max_artifacts`.
 2. **Wide and narrow steps.** A wide step has one unit per file or group
-   (`source.read`), and more workers make it faster. A narrow step is one
-   unit per bundle (`mdm.merge`, `mdm.prepare`), and more workers do not
-   help it.
-3. **Readers.** `--workers` is `cores - 2`, at least 2 when one worker would
-   miss the window. `load` never starts more workers than a step has units
-   left, so a one-unit step gets one. There is always one verifier.
-4. **The bound.** Take (wide units ÷ workers) × the measured time per unit,
-   add the narrow steps once per bundle, then add `finalize`. If it does not
+   (`source.read`). A narrow step is one unit per bundle (`mdm.merge`,
+   `mdm.prepare`). Only more bundles at once shorten narrow steps in total.
+3. **Bundles and readers.** One verifier checks a run's units one at a
+   time, so a run's wide step goes no faster than its verifier: OpenFIGI,
+   2026-10-25: 512 request units took 14 minutes, about 1.6 s each, with 6
+   workers. Spread the work over runs: `--bundles` runs at once, each with
+   its own verifier. `--workers` is per run, and 1 or 2 is enough when many
+   bundles run together. Keep `bundles × (workers + 1)` near the core
+   count. `load` never starts more workers than a step has units left.
+4. **The bound.** Measure one bundle first (`load` prints each run's
+   minutes). The load takes roughly (bundles ÷ `--bundles`) × that time.
+   Expect each bundle to run slower when the cores are shared. A target that
+   reads another target's runs waits for that target. If the total does not
    fit the window, say so and do not start. Never drop files to make it fit.
 
 ### While a load runs

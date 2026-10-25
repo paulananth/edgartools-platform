@@ -8,7 +8,8 @@ One command for every source and target, with nothing named after either:
    first step's `files` pattern (all of them when it names none).
 3. They are cut into bundles of the source's `execution.max_artifacts`. Each bundle
    is prepared (`mdm prepare-capture`: the Change Journal leaves out what is already
-   processed under these rules), submitted (`rules run`) and driven to `complete`.
+   processed under these rules), submitted (`rules run`) and driven to `complete`,
+   `--bundles` at once: bundles of one target are one wave, not a queue.
 
 Stopping is safe: run the same command again and it carries on where it stopped.
 """
@@ -20,6 +21,7 @@ import fnmatch
 import json
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -57,9 +59,11 @@ def target_of(source: str, target: str) -> dict:
 class Loader:
     """One source's target over one capture, on the stores one environment folder names."""
 
-    def __init__(self, *, source: str, target: str, stores: Path, workers: int, minutes: float,
+    def __init__(self, *, source: str, target: str, stores: Path, workers: int, minutes: float, at_a_time: int = 1,
                  say=lambda line: print(line, file=sys.stderr, flush=True)):
-        self.source, self.target, self.say = source, target, say
+        if at_a_time < 1:
+            raise RunStopped("At least one bundle at a time")
+        self.source, self.target, self.say, self.at_a_time = source, target, say, at_a_time
         self.reading = target_of(source, target)
         self.runtimes: dict[str, str] = {}
         env = duties(stores)
@@ -115,6 +119,44 @@ class Loader:
         self.say(f"  run {run_id} complete in {round((time.monotonic() - began) / 60, 1)} min")
         return final
 
+    def bundle(self, number: int, total: int, keys: list[str], *, folder: Path, capture: Path, capture_run: str,
+               as_of: str, extra: list[str]) -> dict:
+        """Prepare one bundle, then submit and drive it unless every document is loaded already."""
+        where = folder / f"bundle-{number:03d}"
+        where.mkdir(parents=True, exist_ok=True)
+        (where / "documents.json").write_text(json.dumps(keys))
+        prepared = json.loads(self.commands(
+            "worker", "mdm", "prepare-capture", "--source", self.source, "--target", self.target,
+            "--capture", str(capture), "--documents", str(where / "documents.json"), "--capture-run", capture_run,
+            "--as-of", as_of, "--revision", "0", "--output", str(where / "manifest"), *extra))
+        fresh = prepared["scope"]["documents"]
+        entry = {"bundle": number, "documents": len(keys), "new": fresh, "run_id": None}
+        if prepared["manifest"] is None:
+            self.say(f"Bundle {number}/{total}: all {len(keys)} documents already loaded")
+            return entry
+        self.say(f"Bundle {number}/{total}: {fresh} of {len(keys)} documents to load")
+        submitted = json.loads(self.commands(
+            "worker", "rules", "run", "--source", self.source, "--target", self.target,
+            "--input-manifest", prepared["manifest"]["uri"], "--input-sha256", prepared["manifest"]["sha256"]))
+        entry["run_id"] = str(submitted["run"]["run_id"])
+        entry["counts"] = self.drive(entry["run_id"]).get("counts")
+        return entry
+
+    def at_once(self, work: list) -> list:
+        """Each piece of work (a function of no arguments), `self.at_a_time` at once, in order.
+        A piece that stops does not stop the others; every stop is named at the end."""
+        def guarded(piece):
+            try:
+                return piece()
+            except RunStopped as error:
+                return error
+        with ThreadPoolExecutor(self.at_a_time) as pool:
+            done = list(pool.map(guarded, work))
+        stopped = [str(d) for d in done if isinstance(d, RunStopped)]
+        if stopped:
+            raise RunStopped(f"{len(stopped)} of {len(done)} stopped: " + " | ".join(stopped))
+        return done
+
     def load(self, *, capture: Path, capture_run: str, as_of: str, facts: list[str], run_files: list[str]) -> dict:
         result = {"source": self.source, "target": self.target, "finished_open_runs": [], "bundles": []}
         unfinished, result["left_as_they_are"] = self.open_runs()
@@ -122,33 +164,17 @@ class Loader:
             self.say(f"Run {run_id} is left as it is: {why}")
         for run_id in unfinished:
             self.say(f"Finishing run {run_id}, left open before")
-            self.drive(run_id)
-            result["finished_open_runs"].append(run_id)
+        self.at_once([lambda run_id=run_id: self.drive(run_id) for run_id in unfinished])
+        result["finished_open_runs"] = unfinished
         keys = documents(self.reading, self.target, capture)
         cut = bundles(keys, self.reading["execution"]["max_artifacts"])
-        self.say(f"{self.source} {self.target}: {len(keys)} documents in {len(cut)} bundles")
+        self.say(f"{self.source} {self.target}: {len(keys)} documents in {len(cut)} bundles, {self.at_a_time} at once")
+        extra = [*(a for fact in facts for a in ("--fact", fact)), *(a for f in run_files for a in ("--file", f))]
         folder = self.root / as_of.replace(":", "")
-        for number, bundle in enumerate(cut, 1):
-            where = folder / f"bundle-{number:03d}"
-            where.mkdir(parents=True, exist_ok=True)
-            (where / "documents.json").write_text(json.dumps(bundle))
-            extra = [*(a for fact in facts for a in ("--fact", fact)), *(a for f in run_files for a in ("--file", f))]
-            prepared = json.loads(self.commands(
-                "worker", "mdm", "prepare-capture", "--source", self.source, "--target", self.target,
-                "--capture", str(capture), "--documents", str(where / "documents.json"), "--capture-run", capture_run,
-                "--as-of", as_of, "--revision", "0", "--output", str(where / "manifest"), *extra))
-            fresh = prepared["scope"]["documents"]
-            entry = {"bundle": number, "documents": len(bundle), "new": fresh, "run_id": None}
-            if prepared["manifest"] is None:
-                self.say(f"Bundle {number}/{len(cut)}: all {len(bundle)} documents already loaded")
-            else:
-                self.say(f"Bundle {number}/{len(cut)}: {fresh} of {len(bundle)} documents to load")
-                submitted = json.loads(self.commands(
-                    "worker", "rules", "run", "--source", self.source, "--target", self.target,
-                    "--input-manifest", prepared["manifest"]["uri"], "--input-sha256", prepared["manifest"]["sha256"]))
-                entry["run_id"] = str(submitted["run"]["run_id"])
-                entry["counts"] = self.drive(entry["run_id"]).get("counts")
-            result["bundles"].append(entry)
+        result["bundles"] = self.at_once([
+            lambda number=number, keys=keys: self.bundle(number, len(cut), keys, folder=folder, capture=capture,
+                                                         capture_run=capture_run, as_of=as_of, extra=extra)
+            for number, keys in enumerate(cut, 1)])
         self.say(f"Done: {sum(b['new'] for b in result['bundles'])} documents loaded, "
                  f"{sum(b['documents'] - b['new'] for b in result['bundles'])} already loaded before")
         return result
@@ -157,7 +183,7 @@ class Loader:
 def _handle(args) -> int:
     try:
         loader = Loader(source=args.source, target=args.target, stores=args.stores.expanduser(),
-                        workers=args.workers, minutes=args.minutes)
+                        workers=args.workers, minutes=args.minutes, at_a_time=args.bundles)
         result = loader.load(capture=args.capture.expanduser(), capture_run=args.capture_run,
                              as_of=args.as_of or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                              facts=args.fact or [], run_files=args.file or [])
@@ -179,7 +205,9 @@ def register(subparsers) -> None:
     parser.add_argument("--capture-run", required=True, help="The capture's approved run ID")
     parser.add_argument("--stores", required=True, type=Path,
                         help="The stores' environment folder, holding worker.env, verifier.env and governance.env")
-    parser.add_argument("--workers", type=int, default=1, help="Worker processes on each step (one verifier)")
+    parser.add_argument("--workers", type=int, default=1, help="Worker processes on each step of a run (one verifier a run)")
+    parser.add_argument("--bundles", type=int, default=1,
+                        help="Bundles loaded at once, each its own run with its own verifier (default 1)")
     parser.add_argument("--minutes", type=float, default=120, help="Stop after this long; rerun to carry on")
     parser.add_argument("--as-of", help="The load's time, UTC (YYYY-MM-DDTHH:MM:SSZ); default now")
     parser.add_argument("--fact", action="append", help="A run fact the target declares: name=value (repeat)")
