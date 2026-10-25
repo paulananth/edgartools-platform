@@ -56,9 +56,12 @@ environment file in your terminal; keep its contents out of reports.
 
 A copy's container may publish a new port after Docker restarts; its private
 environment files keep the old one, and a connection is refused. `up` from the
-worktree that owns the copy rewrites them; another worktree asks that owner
-and never rewrites the files. A read-only check may connect at the container's
-published port in memory (`docker port <container>`), printing no address.
+worktree that owns the copy rewrites them. Another worktree does not, while
+that checkout exists. When the owner checkout is gone, `up` from the current
+checkout adopts the copy and rewrites the files. Do not write a client, and
+do not edit the files by hand. A read-only check may connect at the
+container's published port in memory (`docker port <container>`), printing
+no address.
 
 Read `docs/local-agent-testing.md` in that checkout for recovery and backup
 details. Verify startup and the task's data checks before claiming readiness.

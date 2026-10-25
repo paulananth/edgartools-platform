@@ -18,7 +18,21 @@ def test_environment_names_cannot_escape_their_folder(tmp_path, name):
         local.LocalStores(tmp_path, tmp_path).folder(name)
 
 
+def test_a_gone_owner_checkout_is_adopted(tmp_path):
+    gone = tmp_path / "gone"
+    gone.mkdir()
+    first = local.LocalStores(tmp_path, gone)
+    with first.locked("same"):
+        first.identity("same", create=True)
+    gone.rmdir()
+    second_root = tmp_path / "second"
+    second_root.mkdir()
+    adopted = local.LocalStores(tmp_path, second_root).identity("same")
+    assert adopted["owner"] == str(second_root.resolve())
+
+
 def test_another_worktree_cannot_adopt_an_environment(tmp_path):
+    (tmp_path / "first").mkdir()
     first = local.LocalStores(tmp_path, tmp_path / "first")
     with first.locked("same"):
         saved = first.identity("same", create=True)
