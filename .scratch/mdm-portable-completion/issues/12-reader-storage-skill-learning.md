@@ -16,6 +16,7 @@ Blocked by: 05 qualification and implementation landing
 - [ ] Observe rebased skill checks, reconcile implementation landing and follow named merge approval for #1165.
 - [x] Add source-neutral configured name search, coverage gaps, bounded owner rebuild and driver statement-count guidance — 2026-10-25 12:24 ET; 91 affected guide/genericity/command checks pass.
 - [x] Qualify the documented command against the new independent installed search checkpoint — 2026-10-25 12:27 ET; independent ca2f6f75 five-wheel installation passes normal search, gap refusal and actual owner CLI resume/zero-work repeat for both configured kinds on PostgreSQL/MySQL.
+- [x] Diagnose and qualify the installed guide/command dependency — 2026-10-25 13:07 ET; both exact failed doctor cases pass through independent stacked five-wheel build 58933e0c.
 - [x] Learning → skill — 2026-10-24 20:56 ET; mdm-engineering points to storage-adapters.md, Retained-read provenance, for original metadata bytes, applied producer/time, coherent snapshots, stable page cursors and explicit unsupported routes.
 
 ## Evidence boundary
@@ -109,3 +110,23 @@ governed installation reference. The wording now names the independently
 qualified assessment/save/replay and read/search operations, while retaining
 the unqualified full worker/publication boundary. All 91 affected checks pass
 again. This documents operation-specific evidence; it does not activate work.
+
+
+## Installed doctor dependency resolution — 2026-10-25 13:07 ET
+
+The original skill-only head correctly failed two installed doctor checks:
+its guide named the new command, but its main-based runtime lacked #1164.
+Rebase the skill branch on the implementation and compare only its five
+documentation files; keep the implementation PR head unchanged while its
+merge approval is pending. Independent stacked five-wheel build 58933e0c
+completed in 352.19 seconds. Both exact failed tests now pass (16.16 seconds):
+`test_doctor_passes_from_the_installed_bundle` and
+`test_doctor_names_a_command_no_skill_may_write`. The database fixture cleans
+up its temporary PostgreSQL server; no assertion was relaxed.
+
+The current workflow runs PR CI only against main. Therefore the stacked
+skill PR has no new full-CI claim. After approved #1164 merges, rebase the
+skill commits onto that main, retarget #1165 to main, observe all nine CI
+checks and obtain named approval before merging #1165. Those gates remain
+unchecked. The installed build differs from the current branch only in
+tracker documentation.
