@@ -100,3 +100,12 @@ then repeats with zero work. Normal search works afterward; business counts
 and generation stay unchanged. The documented command is now independently
 qualified on PostgreSQL/MySQL. Final skill CI and named merge approval remain
 open. Learning is in mdm-engineering, Governed name-index rebuilding.
+
+
+## Capability wording reconciliation — 2026-10-25 12:34 ET
+
+Removed stale blanket MySQL caller refusals from the skill introduction and
+governed installation reference. The wording now names the independently
+qualified assessment/save/replay and read/search operations, while retaining
+the unqualified full worker/publication boundary. All 91 affected checks pass
+again. This documents operation-specific evidence; it does not activate work.

@@ -70,9 +70,11 @@ registry. The owner connection selects PostgreSQL or MySQL; supply a separate,
 pre-provisioned runtime account and MySQL's intended application host. The
 MySQL installation requires an isolated database and its pinned catalog. It
 retains immutable policy and dataset versions, catalog history and configured
-vocabulary. Normal MySQL mastering remains unsupported: prepared-effect
-storage is installed with runtime execution withheld until the normal merge
-caller qualifies. SQL Server normal installation remains deferred.
+vocabulary. Normal assessment/save/replay and master reads/search have
+independent installed caller qualification on PostgreSQL and MySQL. Full
+worker authority and publication recovery remain unqualified; owner
+installation alone grants no authority to run them. SQL Server normal
+installation remains deferred.
 
 Qualify installation through the normal owner command from an independent
 five-wheel installation, then register configuration through the normal API

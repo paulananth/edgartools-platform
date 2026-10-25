@@ -19,8 +19,8 @@ one Merge Stage contract across those engines and the engineering needed to
 support their storage differences. Its executable adapter persists prepared
 effects without interpreting entity or source policy. The application's
 native owner migration installs governed registry storage on PostgreSQL and
-MySQL; normal mastering remains PostgreSQL-only until its portable caller is
-qualified. Read [governed owner installation](references/storage-adapters.md#governed-owner-installation)
+MySQL. Normal assessment/save/replay and master reads/search are qualified on
+both engines; full worker authority and publication recovery remain unqualified. Read [governed owner installation](references/storage-adapters.md#governed-owner-installation)
 before installing or recovering that registry. A silver table spec is applied by
 [data-operations](../data-operations/SKILL.md).
 
