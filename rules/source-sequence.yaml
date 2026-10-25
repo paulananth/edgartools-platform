@@ -45,7 +45,8 @@ sources:
   # creates a Security per CUSIP answer; `mastering_isin`, which joins each ISIN
   # answer to its CUSIP's Security by their shared FIGI (it reads every complete
   # `mastering_cusip` run, so that target runs first) or creates one; then
-  # Securities (N-PORT), then 13F. Its mastering is not switched on yet.
+  # Securities (N-PORT). Switched on in the files 2026-10-24 ("switch on
+  # ticket 120"). 13F stays after GLEIF and has no target in this inventory.
   openfigi:
     target: null
     requires: []
