@@ -38,6 +38,12 @@ stop is named at the end. Open runs are finished the same way, N at a time.
 - [x] Tests (2026-10-25 13:39 ET): `test_rules_loading.py` 11 passed; a pool of one fails the at-once test; skill and driver tests 53 passed
 - [x] data-operations "Fit the load into the window": a run's verifier is the bound; spread over runs with `--bundles`; measure one bundle first (2026-10-25 13:39 ET)
 - [x] GoF consult (2026-10-25 13:39 ET, made after the code, against the hard rule's order): leave it. A thread pool is the language's own facility, and one `at_once` helper serves both open runs and bundles
-- [ ] Three-axis review, PR, CI green, merge
+- [x] Three-axis review (2026-10-25 13:43 ET). GoF: leave it. Standards and Spec: no shared-state race; fixed and tested:
+  - [x] After the deadline no queued bundle starts; they are named once (`test_after_the_deadline_no_bundle_starts...`)
+  - [x] Any failure, not only a stop, is named with its bundle and the others go on (`test_any_failure_is_named_with_its_bundle`)
+  - [x] The at-once test waits on a barrier, not on timing; a stop with bundles still queued is tested (`--bundles 1`)
+  - [x] The skill names `--bundles` and the number of bundles apart
+  - Tests: `test_rules_loading.py` 13 passed
+- [ ] PR, CI green, merge
 - [ ] 120's load restarted with `--bundles`, the total stated before it starts
 - [ ] Learning → skill

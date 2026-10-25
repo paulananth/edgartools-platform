@@ -142,19 +142,27 @@ class Loader:
         entry["counts"] = self.drive(entry["run_id"]).get("counts")
         return entry
 
-    def at_once(self, work: list) -> list:
-        """Each piece of work (a function of no arguments), `self.at_a_time` at once, in order.
-        A piece that stops does not stop the others; every stop is named at the end."""
-        def guarded(piece):
+    def at_once(self, work: list[tuple[str, object]]) -> list:
+        """Each named piece of work (a function of no arguments), `self.at_a_time` at once, results in
+        order. A piece that stops does not stop the others. Once the deadline has passed, a piece
+        not yet started is not started. Every stop and every piece not started is named at the end."""
+        late = []
+
+        def guarded(name, piece):
+            if time.monotonic() >= self.commands.deadline:
+                late.append(name)
+                return None
             try:
                 return piece()
-            except RunStopped as error:
-                return error
+            except Exception as error:  # one piece's failure, named; the others go on
+                return RunStopped(f"{name}: {error}")
         with ThreadPoolExecutor(self.at_a_time) as pool:
-            done = list(pool.map(guarded, work))
+            done = list(pool.map(lambda named: guarded(*named), work))
         stopped = [str(d) for d in done if isinstance(d, RunStopped)]
+        if late:
+            stopped.append(f"the deadline passed before {len(late)} started ({', '.join(sorted(late))})")
         if stopped:
-            raise RunStopped(f"{len(stopped)} of {len(done)} stopped: " + " | ".join(stopped))
+            raise RunStopped(f"{len(stopped)} of {len(done)} did not finish: " + " | ".join(stopped))
         return done
 
     def load(self, *, capture: Path, capture_run: str, as_of: str, facts: list[str], run_files: list[str]) -> dict:
@@ -164,7 +172,7 @@ class Loader:
             self.say(f"Run {run_id} is left as it is: {why}")
         for run_id in unfinished:
             self.say(f"Finishing run {run_id}, left open before")
-        self.at_once([lambda run_id=run_id: self.drive(run_id) for run_id in unfinished])
+        self.at_once([(f"run {run_id}", lambda run_id=run_id: self.drive(run_id)) for run_id in unfinished])
         result["finished_open_runs"] = unfinished
         keys = documents(self.reading, self.target, capture)
         cut = bundles(keys, self.reading["execution"]["max_artifacts"])
@@ -172,8 +180,9 @@ class Loader:
         extra = [*(a for fact in facts for a in ("--fact", fact)), *(a for f in run_files for a in ("--file", f))]
         folder = self.root / as_of.replace(":", "")
         result["bundles"] = self.at_once([
-            lambda number=number, keys=keys: self.bundle(number, len(cut), keys, folder=folder, capture=capture,
-                                                         capture_run=capture_run, as_of=as_of, extra=extra)
+            (f"bundle {number}", lambda number=number, keys=keys: self.bundle(
+                number, len(cut), keys, folder=folder, capture=capture, capture_run=capture_run, as_of=as_of,
+                extra=extra))
             for number, keys in enumerate(cut, 1)])
         self.say(f"Done: {sum(b['new'] for b in result['bundles'])} documents loaded, "
                  f"{sum(b['documents'] - b['new'] for b in result['bundles'])} already loaded before")

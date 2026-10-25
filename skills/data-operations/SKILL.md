@@ -207,8 +207,8 @@ What it does, in order:
    submits it (`rules run`), works each step in its declared order and
    finalizes. `--bundles N` loads N bundles at once. Each is its own run with
    its own verifier, because bundles of one target are one wave, not a
-   queue. A bundle that stops does not stop the others, and every stop is
-   named at the end. The Change Journal leaves out documents already loaded under
+   queue. A bundle that stops does not stop the others. Once `--minutes`
+   has passed no new bundle starts, and every stop is named at the end. The Change Journal leaves out documents already loaded under
    these rules. Already-loaded documents are counted and skipped, and an
    unchanged rerun starts no work.
 
@@ -261,10 +261,11 @@ Work it out from counts before starting:
    2026-10-25: 512 request units took 14 minutes, about 1.6 s each, with 6
    workers. Spread the work over runs: `--bundles` runs at once, each with
    its own verifier. `--workers` is per run, and 1 or 2 is enough when many
-   bundles run together. Keep `bundles × (workers + 1)` near the core
-   count. `load` never starts more workers than a step has units left.
+   bundles run together. Keep `--bundles` × (`--workers` + 1) near the
+   core count. `load` never starts more workers than a step has units left.
 4. **The bound.** Measure one bundle first (`load` prints each run's
-   minutes). The load takes roughly (bundles ÷ `--bundles`) × that time.
+   minutes). The load takes roughly (the number of bundles ÷ `--bundles`,
+   rounded up) × that time.
    Expect each bundle to run slower when the cores are shared. A target that
    reads another target's runs waits for that target. If the total does not
    fit the window, say so and do not start. Never drop files to make it fit.
