@@ -16,7 +16,7 @@ Can installed consumers and operators use normal engine-selected MDM read and in
 - [x] Connect and qualify actual Silver delivery and refresh against normal MDM saves on two configured kinds and both engines — 2026-10-24 18:24 ET; two real Silver integration cases per engine pass, including later mastery, merge, reversal and unchanged refresh.
 - [ ] Finish current/history/detail/relationship/context reads and independently installed master-identifier lookup used by Silver.
 - [ ] Connect counts, connectivity, health, inspection and supported publication commands to selected-engine storage; preserve authorization and bounded exact-key plans.
-- [ ] Verify original JSON, large numbers, Unicode and opaque identifiers survive transport; keep errors and public evidence free of source values.
+- [x] Verify original JSON, large numbers, Unicode and opaque identifiers survive reader transport — 2026-10-25 07:23 ET; two independent installed cases per engine preserve large field/detail integers, Unicode text and a source-record key longer than 5,000 characters. Public evidence uses invented fixtures and outcomes only; rebased-head qualification remains separate.
 - [x] Qualify existing applied-event recording time and generation-pinned pages without a storage extension — 2026-10-24 20:04 ET; recording/business-time boundaries and metadata key plans pass on both engines; all 13 supported protocol/engine migration fingerprint sets match current main.
 - [x] Qualify installed assessment/save, current/history provenance, Context, master lookup, merge/reversal and pinned pages for two configured kinds and sources — 2026-10-24 20:52 ET; two cases per engine pass outside the checkout using the independently built five-wheel runtime 8e15a9ee.
 - [x] Qualify the normal installed consumer/context and actual Silver-facing lookup on both engines, with original provenance, aliases and historical detail/relationship boundaries — 2026-10-24 20:54 ET; two configured-kind/source cases per engine pass outside the checkout. Indexed plans have separate local two-kind proof; installed reader/adapter files are unchanged from that qualified checkpoint.
@@ -29,7 +29,7 @@ Can installed consumers and operators use normal engine-selected MDM read and in
 - [x] Qualify single-snapshot Context under a concurrent normal save — 2026-10-24 20:04 ET; two cases per engine pass. The delayed MySQL result was observed terminal at 19:58 ET.
 - [x] Refuse uninstalled prepared-store name search explicitly — 2026-10-24 20:04 ET; two cases per engine return a bounded semantic error and supported lookup commands. This qualifies refusal, not name search.
 - [x] Qualify populated review/relationship pages for both configured kinds on each engine — 2026-10-24 20:41 ET; four cases per engine pass, covering cycle reviews, historical endpoints and retained retirement markers.
-- [ ] Qualify the latest 405-field provenance query for both configured kinds on each engine.
+- [x] Qualify the latest 405-field provenance query for both configured kinds on each engine — 2026-10-25 07:23 ET; two cases per engine pass, each verifying 405 exact fields and original producers with fewer than 30 read queries; scheduled results observed terminal.
 - [ ] Finish prepared master-name search with indexed completeness and a governed populated rebuild; current native-only search is an explicit capability gap.
 - [x] Learning → skill — 2026-10-24 20:52 ET; mdm-engineering retained-read provenance and metadata guidance is published separately in draft PR #1165; earlier 80 affected checks pass. Its rebased check and landing remain pending.
 
@@ -388,3 +388,17 @@ runtime difference after 8e15a9ee is the separately proved five-line forced
 publication refusal. Master-name search and final integration/landing remain
 open; full worker/recovery/activation readiness is not inferred. Skill learning
 is draft PR #1165 and this implementation is draft PR #1164.
+
+## Rebase continuation — 2026-10-25 07:23 ET
+
+Rebased both active branches cleanly onto origin/main 0d212617, preserving the
+verified exact-transport test and tracker edits. Earlier scheduled results
+are all terminal and passing: both-kind bulk provenance (two per engine),
+PostgreSQL original installed-reader cases (two), MySQL reused-install cases
+(two), and the rebased 80 skill checks. The final exact-transport installed
+cohort also passed two cases per engine before this rebase. Main changed the
+shared source Rust library, so those results remain tied to their recorded
+pre-rebase revisions until the new committed installation is qualified.
+
+Name search and full worker/publication recovery remain incomplete. No
+activation, migration or provider acquisition was performed by this work.

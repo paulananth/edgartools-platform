@@ -126,7 +126,8 @@ with owner.begin() as conn:
 stage=MergeStage(Store(runtime))
 record=assertion(source_code="invented.authority",record_key="one",publication_key="one",
     revision=1,effective_at="2026-01-01T00:00:00Z",kind="invented-kind",
-    identifiers={"invented_number":"171"},fields={"invented_amount":10**80+1},
+    identifiers={"invented_number":"171"},
+    fields={"invented_amount":10**80+1,"invented_text":"INVENTED 雪 💠 é"},
     details={"invented_rows":[{"key":"invented-row","amount":10**80+7}]})
 command={"batch_id":"invented-installed-save","run_id":str(uuid4()),"policy_digest":pin,
     "consumer":"invented-proof","expected_checkpoint":0,"checkpoint":1,
@@ -145,6 +146,7 @@ read=reader.entity(pointer["entity_id"])
 assert read["identity"]==master and reader.entity(pointer["entity_id"],generation=1)==read
 assert read["projection"]["origin_run_id"]==producer
 assert read["field_provenance"]["invented_amount"]["evidence"]==record
+assert read["identity"]["fields"]["invented_text"]["value"]=="INVENTED 雪 💠 é"
 assert read["identity"]["details"]["invented_rows"]==[
     {"key":"invented-row","amount":10**80+7,"sources":["invented.authority"]}]
 assert MdmIds(runtime)("invented.authority","invented-kind",{"one","missing"})=={"one":pointer["entity_id"]}
@@ -181,7 +183,8 @@ assert updated["field_provenance"]["invented_amount"]["evidence"]==updated_recor
 assert updated["identity"]["details"]["invented_rows"]==[
     {"key":"invented-row","amount":10**80+8,"sources":["invented.authority"]}]
 assert reader.entity(pointer["entity_id"],generation=1)==read
-other_record=assertion(source_code="invented.authority",record_key="two",publication_key="one",
+opaque_key="INVENTED-雪-"+"x"*5000
+other_record=assertion(source_code="invented.authority",record_key=opaque_key,publication_key="one",
     revision=1,effective_at="2026-01-01T00:00:00Z",kind="invented-kind",
     identifiers={},fields={"invented_amount":10**80+3})
 other_id=str(uuid4())
@@ -199,15 +202,15 @@ save(decisions=[merge])
 merged=reader.entity(other_id)
 assert merged["canonical_id"]==pointer["entity_id"]
 assert reader.entity(other_id,generation=other_before["generation"])==other_before
-assert MdmIds(runtime)("invented.authority","invented-kind",{"one","two"})=={
-    "one":pointer["entity_id"],"two":pointer["entity_id"]}
+assert MdmIds(runtime)("invented.authority","invented-kind",{"one",opaque_key})=={
+    "one":pointer["entity_id"],opaque_key:pointer["entity_id"]}
 alias_args=Namespace(subject="invented-kind",key=other_id,search=None,as_of=None,as_at=None,detail="full",page=None)
 assert Context(runtime).answer(alias_args)["merged_from"]==other_id
 save(decisions=[decision("reverse",actor="fixture",reason="invented installed reversal",
     at="2026-02-02T00:00:00Z",target=merge["decision_id"])])
 assert reader.entity(other_id)["canonical_id"]==other_id
 assert reader.entity(other_id,generation=merged["generation"])==merged
-assert MdmIds(runtime)("invented.authority","invented-kind",{"two"})=={"two":other_id}
+assert MdmIds(runtime)("invented.authority","invented-kind",{opaque_key})=={opaque_key:other_id}
 linked=assertion(source_code="invented.authority",record_key="one",publication_key="three",
     revision=3,effective_at="2026-01-03T00:00:00Z",kind="invented-kind",
     identifiers={"invented_number":"171"},fields={"invented_amount":10**80+2},
