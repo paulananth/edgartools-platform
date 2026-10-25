@@ -221,17 +221,22 @@ first and never loads a document twice.
 
 | You see | It means | Do this |
 | --- | --- | --- |
-| `step <s>: unit <u> failed (<error>)` | A worker or verifier rejected that unit. | Read `load-errors.log` in the stores folder, fix the cause, and run the same command again. |
+| `workers work <operation> ... failed with status 1; its message is in <log>` | A worker or verifier could not finish a unit. | Read that log (`load-errors.log` in the stores folder), fix the cause, and run the same command again. The unit is tried again first. |
+| `step <s>: unit <u> failed (<error>)` | A unit failed and is still failing. | Run `bookkeeping status <run> --step <s>` to see its error, fix the cause, and run the same command again. |
+| `Run <id> of <source> <target> is blocked` | Bookkeeping stopped that run on corrupt or missing evidence. `load` will not submit its documents again. | Read `bookkeeping status <id>` and recover it ([recovery](../bookkeeping/RECOVERY.md)), then run the same command again. |
 | `did not finish before the deadline` | `--minutes` ran out. | Run the same command again, or give a longer `--minutes`. |
 | `declares no <target> target` | No target of that name in `rules/sources/<source>/source.yaml`. | Use a target listed there. `rules sequence check --source <source>` names the wired one. |
-| `submitted with other steps than the rules on disk` | An open run was frozen under another rules version. | Load from a checkout of the active rules version. |
 | `ended waiting` or `ended blocked` | `finalize` found a check that did not pass. | Read `bookkeeping status <run>` (its `run.checks`) and the run's errors. Never submit the bundle again. |
 | `all N documents already loaded` | The Change Journal holds every document of that bundle under these rules. | Nothing to do. Rerun with changed rules or new files only. |
 
 A unit left `waiting` with `Lease or prerequisite contention; retry on
 resume` is not a failure: a worker found its prerequisites or leases busy.
-`load` claims it again on the next pass. (`bookkeeping resume` resets only
-the run's state, not such a unit.)
+`load` claims it again on the next pass, and waits a few seconds when a pass
+moved nothing (a lease from a stopped worker has not expired yet).
+(`bookkeeping resume` resets only the run's state, not such a unit.)
+
+An open run is driven by the steps it was frozen with, so a later rules
+version never changes a run already under way.
 
 ### Fit the load into the window
 
@@ -246,8 +251,8 @@ Work it out from counts before starting:
    unit per bundle (`mdm.merge`, `mdm.prepare`), and more workers do not
    help it.
 3. **Readers.** `--workers` is `cores - 2`, at least 2 when one worker would
-   miss the window, and never more than the units still pending. There is
-   always one verifier.
+   miss the window. `load` never starts more workers than a step has units
+   left, so a one-unit step gets one. There is always one verifier.
 4. **The bound.** Take (wide units ÷ workers) × the measured time per unit,
    add the narrow steps once per bundle, then add `finalize`. If it does not
    fit the window, say so and do not start. Never drop files to make it fit.

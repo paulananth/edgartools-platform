@@ -23,6 +23,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.mdm.clean import raw_capture
 
 from . import files
@@ -60,27 +61,32 @@ class Loader:
                  say=lambda line: print(line, file=sys.stderr, flush=True)):
         self.source, self.target, self.say = source, target, say
         self.reading = target_of(source, target)
-        self.steps = self.reading["bookkeeping"]["targets"][target]["steps"]
         env = duties(stores)
         self.root = manifest_root(env) / "load" / source / target
         self.commands = Commands(env, (self.root / "reports").as_uri(), deadline=time.monotonic() + minutes * 60,
                                  log=stores / "load-errors.log", workers=workers)
 
+    def mine(self, state: str) -> list[dict]:
+        listed = json.loads(self.commands("worker", "bookkeeping", "runs", "--state", state, "--limit", "1000"))
+        return [r for r in listed if (r.get("name"), r.get("target")) == (self.source, self.target)]
+
     def open_runs(self) -> list[str]:
-        """Runs of this source and target that are not finished, oldest first."""
-        found = []
-        for state in OPEN:
-            listed = json.loads(self.commands("worker", "bookkeeping", "runs", "--state", state, "--limit", "1000"))
-            found += [r for r in listed if (r.get("name"), r.get("target")) == (self.source, self.target)]
+        """Runs of this source and target that are not finished, oldest first. A blocked one
+        stops the load: its documents would otherwise be submitted again in a new run."""
+        blocked = self.mine("blocked")
+        if blocked:
+            raise RunStopped(f"Run {blocked[0]['run_id']} of {self.source} {self.target} is blocked: read "
+                             f"bookkeeping status {blocked[0]['run_id']}, and recover it (bookkeeping RECOVERY.md) "
+                             "before loading more")
+        found = [r for state in OPEN for r in self.mine(state)]
         return [str(r["run_id"]) for r in sorted(found, key=lambda r: str(r["created_at"]))]
 
     def drive(self, run_id: str) -> dict:
-        frozen = self.commands.status(run_id)["run"]["submission"].get("profiles") or {}
-        if set(frozen) != {step["name"] for step in self.steps}:
-            raise RunStopped(f"Run {run_id} was submitted with other steps than the rules on disk: "
-                             "load from the checkout of the active rules version")
+        """Drive a run by the steps it was frozen with, which a later rules version cannot change."""
+        submission = self.commands.status(run_id)["run"]["submission"]
+        frozen = Artifacts().json(submission["rules"])["body"]["bookkeeping"]["targets"][self.target]["steps"]
         began = time.monotonic()
-        final = self.commands.drive(run_id, self.steps)
+        final = self.commands.drive(run_id, frozen)
         state = final["run"]["state"]
         if state != "complete":
             raise RunStopped(f"Run {run_id} ended {state}, not complete; its checks: {final['run'].get('checks')}")

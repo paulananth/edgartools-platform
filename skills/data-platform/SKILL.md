@@ -334,6 +334,11 @@ publication-input migration and preserves existing publication readers' SELECT
 grants. Already frozen runs retain their original code/native binary; their
 SQL claim and delivery APIs remain compatible.
 
+For a source's target over a captured delivery, one command does steps 1–4
+for every bundle and is safe to rerun: `edgar-warehouse load`
+([data-operations, Load a capture](../data-operations/SKILL.md#load-a-capture)).
+The steps below are what it runs, for a run you drive by hand.
+
 1. For a combined run already submitted in Parse, retain its `run_id` and
    continue its declared steps. Otherwise submit:
    `edgar-warehouse rules run --source <name> --target mdm --input-manifest <uri> --input-sha256 <sha256>`.
@@ -354,8 +359,9 @@ SQL claim and delivery APIs remain compatible.
    every declared unit verified.
 
 A lost acknowledgement is harmless: the worker resumes the same MDM run, and
-MDM never merges or publishes a batch twice. After a stop, use
-`edgar-warehouse bookkeeping resume <run_id>` and run the workers again.
+MDM never merges or publishes a batch twice. After a stop, run the same
+`edgar-warehouse load` again; by hand, use `edgar-warehouse bookkeeping resume
+<run_id>` and run the workers again.
 
 ### Examples: current source qualification
 

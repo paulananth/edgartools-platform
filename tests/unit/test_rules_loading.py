@@ -59,10 +59,10 @@ class Recorded:
         raise AssertionError(args)
 
     def status(self, run_id):
-        return {"run": {"submission": {"profiles": {"read": "source.read", "merge": "mdm.merge"}}}}
+        return {"run": {"submission": {"rules": {"uri": f"file:///frozen/{run_id}", "sha256": "2" * 64}}}}
 
     def drive(self, run_id, steps):
-        self.calls.append(("drive", run_id))
+        self.calls.append(("drive", run_id, tuple(step["name"] for step in steps)))
         return {"run": {"state": "complete"}, "counts": {"verified": 2}}
 
 
@@ -70,6 +70,9 @@ def loader(tmp_path, monkeypatch, commands):
     for duty in driving.DUTIES:
         (tmp_path / f"{duty}.env").write_text("export BOOKKEEPING_MANIFEST_ROOT=file://%s/m\n" % tmp_path)
     monkeypatch.setattr(loading.files, "source", lambda name: READING)
+    # Each run's frozen rules: an older version, whose target had one step only.
+    frozen = {"body": {"bookkeeping": {"targets": {"by_letter": {"steps": [{"name": "read"}]}}}}}
+    monkeypatch.setattr(loading, "Artifacts", lambda: type("Frozen", (), {"json": lambda self, ref: frozen})())
     found = loading.Loader(source="example", target="by_letter", stores=tmp_path, workers=2, minutes=1,
                            say=lambda line: None)
     found.commands = commands
@@ -84,7 +87,7 @@ def test_each_new_bundle_is_prepared_submitted_and_driven(tmp_path, monkeypatch)
         capture=folder, capture_run="capture-1", as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
 
     assert [(b["documents"], b["new"], b["run_id"]) for b in result["bundles"]] == [(2, 0, None), (1, 1, "new-1")]
-    assert ("drive", "new-1") in commands.calls
+    assert ("drive", "new-1", ("read",)) in commands.calls  # the run's frozen steps, not the files on disk
     assert (tmp_path / "m" / "load" / "example" / "by_letter" / "2026-10-25T000000Z" / "bundle-002").is_dir()
 
 
@@ -98,8 +101,18 @@ def test_a_run_left_open_is_finished_before_anything_new(tmp_path, monkeypatch):
         capture=folder, capture_run="capture-1", as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
 
     assert result["finished_open_runs"] == ["old-1"]
-    assert commands.calls.index(("drive", "old-1")) < commands.calls.index(("mdm", "prepare-capture"))
-    assert ("drive", "other-1") not in commands.calls
+    assert commands.calls.index(("drive", "old-1", ("read",))) < commands.calls.index(("mdm", "prepare-capture"))
+    assert not [c for c in commands.calls if c[:2] == ("drive", "other-1")]
+
+
+def test_a_blocked_run_stops_the_load_before_anything_is_submitted(tmp_path, monkeypatch):
+    commands = Recorded(open_runs=[("stuck-1", "example", "by_letter", "blocked")])
+    folder = capture(tmp_path / "c", "letters/a.json")
+
+    with pytest.raises(driving.RunStopped, match="Run stuck-1 of example by_letter is blocked"):
+        loader(tmp_path, monkeypatch, commands).load(
+            capture=folder, capture_run="capture-1", as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
+    assert ("mdm", "prepare-capture") not in commands.calls
 
 
 def test_a_target_the_source_does_not_declare_is_refused(monkeypatch):

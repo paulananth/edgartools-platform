@@ -55,7 +55,7 @@ def _handle(args):
             if operation == "runs":
                 result = book.runs(limit=args.limit, state=args.state)
             elif operation == "status":
-                result = book.status(args.run_id, limit=args.limit)
+                result = book.status(args.run_id, limit=args.limit, step=args.step)
             elif operation == "checks":
                 result = book.check(args.run_id)
             elif operation == "leases":
@@ -110,6 +110,8 @@ def register(subparsers):
         command = commands.add_parser(name)
         command.add_argument("run_id")
         command.add_argument("--limit", type=int, default=100)
+        if name == "status":
+            command.add_argument("--step", help="Only this step's units and counts")
         command.set_defaults(handler=_handle)
     for name, help_text in (("claim", "Claim task envelopes for a worker profile"),
                             ("verifications", "List reported candidates for a verifier")):

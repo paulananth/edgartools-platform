@@ -61,6 +61,15 @@ repetition. One helper also reads the manifest root URI.
 - [x] Tests (2026-10-25 12:45 ET): 20 passed; making the driver stop on a busy unit fails the retry test, and treating every document as new fails the bundle test; testmon over unit, architecture, mdm 2,101 passed (4 min 19 s); skill and rules files' tests 549 passed
 - [x] data-operations skill: **Load a capture** (the one command, a "you see, it means, do this" table, fitting the window, while it runs, what runs underneath); bookkeeping RUN.md points at it (2026-10-25 12:45 ET)
 - [x] `company-on` removed from rules and skills (`rules/sources/openfigi/source.yaml` comment, `skills/security-master/SKILL.md`) (2026-10-25 12:45 ET): `rules check` ok, `rules mapdoc check` 0
-- [ ] Three-axis review, PR, CI green, merge
-- [ ] The operator's working store moved to a generic name; 120's load run with the one command
+- [x] Three-axis review (2026-10-25 12:55 ET). GoF: leave it (the driver is one function, no pattern earned). Standards and Spec, each fixed and tested:
+  - [x] A step over 1,000 units could be judged done from a cut list: `bookkeeping status --step` counts one step exactly; the driver judges by it (`test_one_steps_status_counts_only_its_units...`, Postgres)
+  - [x] A blocked run would be submitted again on rerun: `load` stops and names it (`test_a_blocked_run_stops_the_load...`)
+  - [x] An open run was driven by the steps on disk: now by its frozen rules export's steps (`test_each_new_bundle...` asserts the frozen steps)
+  - [x] N workers on a one-unit step, and back-to-back passes when nothing can be claimed: workers capped at units left, a 15 s pause after a pass that moved nothing (`test_steps_run_in_declared_order_with_workers_only_where_units_are_left`, `test_a_pass_that_moved_nothing_pauses_before_the_next`)
+  - [x] A unit that failed before is tried again first, not refused (`test_a_unit_that_failed_before_is_tried_again_first`)
+  - [x] The skill's table lacked the worker-failure and blocked-run messages; data-platform, change-journal and data-onboarding now point at `load`
+  - Tests after the fixes: 22 driver and load tests; 390 skill, rules and architecture tests; 70 Postgres (3 min 33 s)
+- [ ] PR, CI green, merge
+- [x] The operator's working store moved to a generic name, `working` (2026-10-25 12:55 ET): backed up from `company-on` (its identity file named Grok's worktree while the container named the deleted `claude-company` worktree; the identity was set back to the labels' owner to take the backup) and restored as `working`, owned by the main checkout
+- [ ] 120's load run with the one command, in `working`
 - [ ] Learning → skill

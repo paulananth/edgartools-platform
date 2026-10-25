@@ -177,16 +177,18 @@ def checkpoint(engine, resource):
         return rows(conn, statement)
 
 
-def status(engine, run_id, limit):
+def status(engine, run_id, limit, step=None):
     named = tables(engine.dialect.name)
     work, checkpoints, leases, outbox = (named[key] for key in
                                         ("work_item", "checkpoint", "lease", "journal_outbox"))
+    # One step's units and counts when a step is named; the whole run's otherwise.
+    selected = [work.c.run_id == run_id, *([work.c.step == step] if step is not None else [])]
     with engine.connect() as conn:
         counts = rows(conn, select(work.c.state, count(engine).label("count")).where(
-            work.c.run_id == run_id).group_by(work.c.state))
+            *selected).group_by(work.c.state))
         items = rows(conn, select(*(work.c[key] for key in
             ("step", "unit_key", "ordinal", "state", "attempt", "attempts", "receipt", "checks", "error"))
-        ).where(work.c.run_id == run_id).order_by(work.c.step, work.c.ordinal).limit(limit))
+        ).where(*selected).order_by(work.c.step, work.c.ordinal).limit(limit))
         progress = rows(conn, select(checkpoints).where(checkpoints.c.run_id == run_id))
         authority = rows(conn, select(leases).where(leases.c.run_id == run_id).order_by(
             leases.c.resource).limit(limit))

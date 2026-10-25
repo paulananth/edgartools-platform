@@ -23,7 +23,7 @@ from edgar_warehouse.bookkeeping.clean.database import grant_profile, migrate
 from edgar_warehouse.bookkeeping.clean.destinations import guard, migrate_guard
 from edgar_warehouse.change_journal import ChangeJournal, JournalConflict
 from edgar_warehouse.change_journal.database import migrate as migrate_journal
-from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
+from edgar_warehouse.bookkeeping.clean.engine import CONTENTION, Bookkeeping
 from edgar_warehouse.rules.db import Rules, migrate as migrate_rules
 from edgar_warehouse.workers import copy
 from tests.support import pg16
@@ -312,6 +312,22 @@ def test_out_of_order_and_stage_prerequisites(databases, tmp_path):
     assert next(c for c in book.status(rid)["checkpoints"] if c["scope"] == "s0")["ordinal"] == 2
     state = drive(book, rid, databases.ledger)
     assert state["run"]["state"] == "complete"
+
+
+def test_one_steps_status_counts_only_its_units_and_a_busy_unit_is_claimed_again(databases, tmp_path):
+    """`bookkeeping status --step` (ticket 136): the run driver judges a step by its own counts."""
+    book, rid, _, _ = submit(databases, tmp_path, body=config(2))
+    assert book.claim(rid, "s1", "0", sleep=lambda _: None) is None  # s0 unfinished: the unit waits
+    waiting = book.status(rid, step="s1")
+    assert waiting["counts"] == {"pending": 2, "waiting": 1}
+    assert [(i["unit_key"], i["error"]) for i in waiting["items"] if i["state"] == "waiting"] == [("0", CONTENTION)]
+    for key in "012":
+        complete(book, rid, key)
+    assert book.status(rid, step="s0")["counts"] == {"verified": 3}
+    assert {i["step"] for i in book.status(rid, step="s0")["items"]} == {"s0"}
+    complete(book, rid, "0", step="s1")  # the waiting unit is claimed again once s0 is verified
+    assert book.status(rid, step="s1")["counts"] == {"pending": 2, "verified": 1}
+    assert book.status(rid)["counts"] == {"pending": 2, "verified": 4}
 
 
 def staged_submission(databases, tmp_path):

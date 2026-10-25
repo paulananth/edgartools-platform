@@ -567,10 +567,10 @@ class Bookkeeping:
         record_run_resume(self.engine, wire)
         return self.status(run_id)
 
-    def status(self, run_id: str, *, limit: int = 100) -> dict:
+    def status(self, run_id: str, *, limit: int = 100, step: str | None = None) -> dict:
         if not 1 <= limit <= 1000:
             raise ValueError("status limit must be 1..1000")
-        return {"run": self._run(run_id), **storage.status(self.engine, run_id, limit)}
+        return {"run": self._run(run_id), **storage.status(self.engine, run_id, limit, step)}
 
     def runs(self, *, limit: int = 100, state: str | None = None) -> list[dict]:
         """Bounded discovery after a lost submission acknowledgement."""

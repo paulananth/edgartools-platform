@@ -25,6 +25,8 @@ from urllib.parse import unquote, urlparse
 from edgar_warehouse.bookkeeping.clean.engine import CONTENTION
 
 DUTIES = ("worker", "verifier", "governance")
+# Seconds to wait after a pass that moved nothing: the units left are under another attempt's lease.
+PAUSE = 15
 
 
 class RunStopped(ValueError):
@@ -92,25 +94,33 @@ class Commands:
             raise RunStopped(f"{' '.join(args[:3])} failed with status {done.returncode}; its message is in {self.log}")
         return done.stdout
 
-    def status(self, run_id: str) -> dict:
-        return json.loads(self("worker", "bookkeeping", "status", run_id, "--limit", "1000"))
+    def status(self, run_id: str, step: str | None = None) -> dict:
+        named = ("--step", step) if step is not None else ()
+        return json.loads(self("worker", "bookkeeping", "status", run_id, "--limit", "1000", *named))
 
     def drive(self, run_id: str, steps: list[dict]) -> dict:
         """Each step's workers, then its verifier, in step order, until nothing is left."""
         for step in steps:
             profile = step["operation"]
+            # The step's own counts: exact however many units it has.
+            found = self.status(run_id, step["name"])
             while time.monotonic() < self.deadline:
-                work = ("worker", "workers", "work", profile, run_id, "--limit", "100")
-                with ThreadPoolExecutor(self.workers) as pool:
-                    list(pool.map(lambda _: self(*work), range(self.workers)))
-                self("verifier", "workers", "verify", profile, run_id, "--reports", self.reports, "--limit", "1000")
-                items = [i for i in self.status(run_id)["items"] if i["step"] == step["name"]]
-                if items and all(i["state"] == "verified" for i in items):
+                if found["counts"] and set(found["counts"]) == {"verified"}:
                     break
-                failed = [i for i in items if i["state"] == "waiting" and i.get("error") != CONTENTION]
+                # No more workers than units left: a one-unit step (a merge) gets one.
+                left = sum(n for state, n in found["counts"].items() if state != "verified")
+                work = ("worker", "workers", "work", profile, run_id, "--limit", "100")
+                with ThreadPoolExecutor(max(1, min(self.workers, left))) as pool:
+                    list(pool.map(lambda _: self(*work), range(max(1, min(self.workers, left)))))
+                self("verifier", "workers", "verify", profile, run_id, "--reports", self.reports, "--limit", "1000")
+                before, found = found["counts"], self.status(run_id, step["name"])
+                if found["counts"] == before:
+                    time.sleep(PAUSE)
+                failed = [i for i in found["items"] if i["state"] == "waiting" and i.get("error") != CONTENTION]
                 if failed:
                     raise RunStopped(f"step {step['name']}: unit {failed[0]['unit_key']} failed "
-                                     f"({failed[0].get('error')}); fix it, then drive run {run_id} again")
+                                     f"({failed[0].get('error')}); see bookkeeping status {run_id} --step "
+                                     f"{step['name']}, fix it, then drive run {run_id} again")
             else:
                 raise RunStopped(f"step {step['name']} did not finish before the deadline; drive run {run_id} again")
         return json.loads(self("worker", "bookkeeping", "finalize", run_id))
