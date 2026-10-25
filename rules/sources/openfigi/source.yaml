@@ -986,7 +986,7 @@ mdm:
           composite_figi: composite_figi
           share_class_figi: share_class_figi
           openfigi_ticker: ticker
-  # v2 because company-on already held v1, and this contract also issues a CUSIP.
+  # v2 because a Rules database already held v1, and this contract also issues a CUSIP.
   # An identifier cannot be added on an existing source code (2026-10-24).
   openfigi.security_isin.v2:
     contract:

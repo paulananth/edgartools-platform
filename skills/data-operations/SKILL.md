@@ -24,7 +24,8 @@ decisions. Discover actual command capabilities with `edgar-warehouse doctor` an
 CLI help. Report missing enforcement or unsupported stages as runtime gaps;
 instructions cannot make them available. An offline sequence check is not a
 runtime readiness certificate. To install, enable and run one source, then
-clear a finished test, follow **Install and enable one source**. Recover
+clear a finished test, follow **Install and enable one source**. To load a
+captured delivery, use **Load a capture**: one command for every source. Recover
 retained progress before making a new run.
 
 When deploying tested configuration to an environment, follow **Configuration
@@ -166,115 +167,120 @@ submits one source.
    ```
    Enabled means `rules status` shows that version `active`. There is no
    separate enable command.
-4. **Wire the run.** Submit only this source and the target from the
-   sequence check, over files already captured (no feed:
-   [Bookkeeping run](../bookkeeping/RUN.md)):
-   ```bash
-   edgar-warehouse mdm prepare-capture --source <name> --target <target> \
-     --capture <capture folder> --documents <keys.json> --capture-run <run> \
-     --as-of <time> --revision 0 --output <bundle folder> \
-     [--fact <name>=<value> ...] [--file <name>=<path> ...]
-   edgar-warehouse rules run --source <name> --target <target> \
-     --input-manifest <uri> --input-sha256 <sha256>
-   ```
-   The first writes the bundle's input manifest from the target's declaration;
-   give each fact and file the target's `run` names.
-   Work and verify as in [Bookkeeping run](../bookkeeping/RUN.md). The next
-   source waits until `edgar-warehouse bookkeeping status <run_id>` shows
-   `run.state` `complete` and every declared unit verified.
+4. **Load it.** One command, for any source and target, over files already
+   captured. See **Load a capture** below.
 
 A test of this path, and how to clear that test, is
 [Test and clear a source run](RUNBOOK.md#test-and-clear-a-source-run).
 
-### Submit and drive one run
+## Load a capture
 
-What a run needs, in order, learned on the Securities runs (ticket 120):
+One command loads a captured delivery through one source's target, from
+start to finish. It knows no source, target or store by name. Everything
+comes from the rules files and the stores folder you give it.
 
-1. **Prepare.** `mdm prepare-capture` needs every one of `--capture`,
-   `--documents`, `--capture-run`, `--as-of`, `--revision` and `--output`,
-   plus each fact and file the target's `run` names. It lists only the
-   documents the Change Journal does not record as processed under these
-   rules; `--all` forces every one. It prints the manifest's `uri` and
-   `sha256`.
-2. **Submit.** `rules run` with that manifest only submits: it freezes the
-   active rules version, the manifest and each step's worker profile, and
-   returns the run id. Nothing works yet.
-3. **Drive each step in its declared order.** Fit the load into the window
-   below before the first worker, and again when a one-worker driver is
-   already going. A unit `waiting` failed its checks: stop and read its error.
-4. **Finalize.** `bookkeeping finalize <run>` checks the whole run again and
-   marks it `complete`. On a large run this is not instant (Securities, 2026
-   Q2: 16 minutes).
+```bash
+edgar-warehouse load \
+  --source <source> --target <target> \
+  --capture <capture folder> --capture-run <capture run id> \
+  --stores <stores folder> \
+  --workers <readers> --minutes <window>
+```
 
-### Fit a load into the window
+- `--stores` is the folder holding the stores' `worker.env`, `verifier.env`
+  and `governance.env` (`infra/scripts/local-test-stores.py up <name>` writes
+  them). Each step runs under its own duty's login. Nothing is printed from
+  those files.
+- Add `--fact name=value` and `--file name=path` for each input the target's
+  `run` declares.
+
+What it does, in order:
+
+1. **Finishes what is open.** A run of this source and target that is still
+   running or waiting is driven to the end first.
+2. **Picks the documents.** It takes the capture's receipts that match the
+   target's first step's `files` pattern, or every receipt when no pattern
+   is given.
+3. **Cuts bundles.** Each bundle holds at most the source's
+   `execution.max_artifacts` documents.
+4. **Loads each bundle.** It prepares the bundle (`mdm prepare-capture`),
+   submits it (`rules run`), works each step in its declared order and
+   finalizes. The Change Journal leaves out documents already loaded under
+   these rules. Already-loaded documents are counted and skipped, and an
+   unchanged rerun starts no work.
+
+It prints one line per bundle as it goes. At the end it prints a JSON
+summary: documents loaded, documents already loaded, and each run's id and
+counts.
+
+**Stopping is safe.** A deadline, a closed laptop or a failed unit leaves
+the run resumable. Run the same command again. It finishes the open run
+first and never loads a document twice.
+
+### When it stops
+
+| You see | It means | Do this |
+| --- | --- | --- |
+| `step <s>: unit <u> failed (<error>)` | A worker or verifier rejected that unit. | Read `load-errors.log` in the stores folder, fix the cause, and run the same command again. |
+| `did not finish before the deadline` | `--minutes` ran out. | Run the same command again, or give a longer `--minutes`. |
+| `declares no <target> target` | No target of that name in `rules/sources/<source>/source.yaml`. | Use a target listed there. `rules sequence check --source <source>` names the wired one. |
+| `submitted with other steps than the rules on disk` | An open run was frozen under another rules version. | Load from a checkout of the active rules version. |
+| `ended waiting` or `ended blocked` | `finalize` found a check that did not pass. | Read `bookkeeping status <run>` (its `run.checks`) and the run's errors. Never submit the bundle again. |
+| `all N documents already loaded` | The Change Journal holds every document of that bundle under these rules. | Nothing to do. Rerun with changed rules or new files only. |
+
+A unit left `waiting` with `Lease or prerequisite contention; retry on
+resume` is not a failure: a worker found its prerequisites or leases busy.
+`load` claims it again on the next pass. (`bookkeeping resume` resets only
+the run's state, not such a unit.)
+
+### Fit the load into the window
 
 The operator names the window. A plan that does not fit it is not the plan
 (operator, 2026-10-24: "10 hours will never fly must be within 1-2 hours").
+Work it out from counts before starting:
 
-Do this before starting, from counts, not from a bundle count times a guessed
-bundle time:
+1. **Documents and bundles.** Count the documents not yet loaded, and divide
+   by `execution.max_artifacts`.
+2. **Wide and narrow steps.** A wide step has one unit per file or group
+   (`source.read`), and more workers make it faster. A narrow step is one
+   unit per bundle (`mdm.merge`, `mdm.prepare`), and more workers do not
+   help it.
+3. **Readers.** `--workers` is `cores - 2`, at least 2 when one worker would
+   miss the window, and never more than the units still pending. There is
+   always one verifier.
+4. **The bound.** Take (wide units ÷ workers) × the measured time per unit,
+   add the narrow steps once per bundle, then add `finalize`. If it does not
+   fit the window, say so and do not start. Never drop files to make it fit.
 
-1. Count the documents the Change Journal has not processed, and the bundle
-   size (`execution.max_artifacts`, 512 for OpenFIGI). Bundles of one target
-   that do not read each other are one wave, not a queue.
-2. On one submitted bundle, count units by step. The wide step has many units
-   and reads one file each (`source.read`). The narrow step is one unit for
-   the whole bundle (`mdm.merge`). More workers do not shorten a narrow step.
-   OpenFIGI's merge of 49,082 records took 50 minutes, and that time stands
-   no matter how many readers ran first.
-3. Workers on the wide step: `cores - 2`, at least 2 when one worker would
-   miss the window, and never more than the units still pending. On the
-   8-core laptop that ran ticket 120, that is 6 readers. One verifier for
-   the run, never two. One worker on the narrow step.
-4. The bound is (wide units / readers) × the last measured time per unit,
-   plus the narrow step once per bundle, plus `finalize`. Bundles in one wave
-   share the readers. A target that reads another target still waits
-   (`mastering_isin` after every `mastering_cusip` run). If that sum exceeds
-   the window, say so and do not start. Do not drop files to make it fit.
-5. A one-worker driver already on the run is the mistake. Leave its run.
-   Start the extra `workers work <wide operation> <run> --limit 100` beside
-   it. Do not submit the bundle again. The lease keeps them off the same unit.
-   A profile shared by several steps still runs one step at a time: verify
-   the earlier step before more workers of that profile start. Workers that
-   lose the row lock park the unit (`Lease or prerequisite contention;
-   retry on resume`). `bookkeeping resume` does not reopen that unit. The
-   next `workers work` of the same profile claims it again, once the earlier
-   step is verified and no live lease holds it. Do not submit the bundle again.
+### While a load runs
 
-The serial plan that missed the window: 3,837 CUSIP files and 3,877 ISIN
-files, 512 a bundle, one reader, CUSIP then ISIN. The first CUSIP bundle had
-512 request units and 32 answer units. Readers are the part that divides.
+- **Leave worker code alone** (`edgar_warehouse/workers/*`). A run pins its
+  worker runtime and stops on a change ("Pinned worker runtime changed;
+  start a new run"). Change code between loads.
+- **Size the lease to the slowest claim, not to the work.** A step that
+  reads another run's output rechecks that run on every claim and report,
+  which can outlast the default 120 s lease ("Stale lease"). The target sets
+  `lease_seconds` and `heartbeat_seconds`.
+- **Check every 30 minutes, not in a tight loop** (operator, 2026-10-24).
+  A check that finds nothing changed sends no message. Report a failure, a
+  finished bundle or the end.
+- **Keep the machine awake and on power.** Sleep stops the workers. Their
+  leases expire and the units run again later, with nothing loaded twice.
+- **Read a failed call's database error**, the `(psycopg2.errors.X)` line,
+  not SQLAlchemy's last line, which is only a link.
+- **A target that reads another target's runs** (`{run: {source, target,
+  step}}`, [Bookkeeping SPEC](../bookkeeping/SPEC.md)) loads after that
+  target. The comments in `rules/source-sequence.yaml` give the order.
 
-While a run is live:
-- **Do not change worker code** (`edgar_warehouse/workers/*`). A run pins its
-  worker runtime, and a changed one stops it with "Pinned worker runtime
-  changed; start a new run". Change code between runs.
-- **Size the lease to the slowest claim or report, not to the work.** A step
-  that reads another run's output rechecks that run's history on every claim
-  and report (Securities: 73 s each against 20 s of work), so the default
-  120 s lease expired ("Stale lease"). The target sets `lease_seconds` and
-  `heartbeat_seconds`.
-- **Check a live run every 30 minutes.** Do not poll it on a tighter loop
-  (operator, 2026-10-24: "do not use token constantly polling the runs
-  check every 30 min"). A check that finds nothing changed sends no
-  message. Report a failure, a finished part, or the end at that check.
-- **A laptop run needs power.** Sleep on a flat battery stops the workers,
-  the leases expire and the units run again; `caffeinate` cannot prevent it.
-- **A deadline that stops a run leaves it resumable.** A driver's or
-  `rules test`'s deadline can stop a worker mid-unit (OpenFIGI's merge, 49,082
-  records joining Securities: 50 minutes) or stop `finalize`. Drive the same
-  run again by its id: the unit's lease expires, the merge continues record by
-  record from where it stopped, and nothing is merged twice. Never submit a
-  new run for it. `rules test --minutes` covers both passes and their
-  `finalize`s; size it to all four.
-- **Read a failed call's database error, not its last line.** The control
-  call reports the `(psycopg2.errors.X)` line; SQLAlchemy's last line is only
-  a link.
+### Underneath `load`
 
-A step may read the verified output of another source's complete runs
-(`{run: {source, target, step}}`, [Bookkeeping SPEC](../bookkeeping/SPEC.md)).
-Run that source's target first; `rules/source-sequence.yaml`'s comments name
-it.
+`load` runs the same steps you can run by hand when diagnosing: `mdm
+prepare-capture`, `rules run`, `workers work <operation> <run>` (several in
+parallel; a lease keeps two off the same unit), one `workers verify`, and
+`bookkeeping finalize <run>` ([Bookkeeping run](../bookkeeping/RUN.md)).
+`rules test` drives its two proof passes with the same driver. Do not write
+a source-specific driver script. A missing step is a gap in `load`: fix it
+there.
 
 ## Operate the recurring loop
 
@@ -293,14 +299,14 @@ it.
    qualification and approval; missing version evidence is reconciled, not invented.
 3. **Size the work.** Measure usable CPU, memory, disk, database connection budget
    and competing work at the actual execution host/container. Fit the load into
-   the window under **Submit and drive one run** before choosing a one-worker
-   queue. Use prior verified measurements and current supported bounds to choose
+   the window (**Load a capture**) before choosing `--workers`. Use prior verified measurements and current supported bounds to choose
    concurrency and bundle size.
    Account for verifier costs too. Unknown estimates start conservatively; exhausted
    resources wait. Size divides the whole backlog into work, never drops records.
    A proof is not this step: [Choose the cheapest proof](../mdm-engineering/SKILL.md#choose-the-cheapest-proof)
    stops once every new case is shown. A load still takes every file.
-4. **Submit or resume.** Use [Bookkeeping run](../bookkeeping/RUN.md) and
+4. **Submit or resume.** Run `edgar-warehouse load` (**Load a capture**): it
+   resumes an open run before submitting. Underneath, use [Bookkeeping run](../bookkeeping/RUN.md) and
    [recovery](../bookkeeping/RECOVERY.md) for the existing task protocol. Keep the
    source-owned steps, original input/rule/reference/runtime pins and authoritative
    leases. Run declared local prerequisites only through supported approved paths.

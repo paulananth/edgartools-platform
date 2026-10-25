@@ -1,0 +1,109 @@
+"""`edgar-warehouse load`: any source's target over a capture, in bundles (ticket 136).
+
+Every name below is invented: the command knows no source or store by name."""
+import json
+
+import pytest
+
+from edgar_warehouse.rules import driving, loading
+
+READING = {
+    "execution": {"max_artifacts": 2},
+    "bookkeeping": {"targets": {
+        "by_letter": {"steps": [{"name": "read", "operation": "source.read", "input": {"files": "letters/*"}},
+                                {"name": "merge", "operation": "mdm.merge"}]},
+        "everything": {"steps": [{"name": "read", "operation": "source.read", "input": {}}]},
+    }},
+}
+
+
+def capture(folder, *keys):
+    folder.mkdir(exist_ok=True)
+    (folder / "receipts.jsonl").write_text("".join(json.dumps({"file": k, "sha256": "0" * 64}) + "\n" for k in keys))
+    return folder
+
+
+def test_the_documents_are_the_receipts_the_first_step_reads(tmp_path):
+    folder = capture(tmp_path / "c", "letters/b.json", "numbers/1.json", "letters/a.json")
+
+    assert loading.documents(READING, "by_letter", folder) == ["letters/a.json", "letters/b.json"]
+    assert loading.documents(READING, "everything", folder) == ["letters/a.json", "letters/b.json", "numbers/1.json"]
+
+
+def test_bundles_hold_at_most_the_sources_limit_in_key_order():
+    assert loading.bundles(["a", "b", "c", "d", "e"], 2) == [["a", "b"], ["c", "d"], ["e"]]
+    with pytest.raises(driving.RunStopped):
+        loading.bundles(["a"], 0)
+
+
+class Recorded:
+    """The platform's commands, answered from invented state, and every call kept."""
+
+    def __init__(self, open_runs=(), processed=()):
+        self.calls, self.open, self.processed, self.submitted = [], list(open_runs), set(processed), 0
+
+    def __call__(self, duty, *args):
+        self.calls.append(args[:2])
+        if args[:2] == ("bookkeeping", "runs"):
+            state = args[args.index("--state") + 1]
+            return json.dumps([{"run_id": r, "name": n, "target": t, "created_at": r}
+                               for r, n, t, s in self.open if s == state])
+        if args[:2] == ("mdm", "prepare-capture"):
+            bundle = json.loads(open(args[args.index("--documents") + 1]).read())
+            fresh = [k for k in bundle if k not in self.processed]
+            return json.dumps({"scope": {"documents": len(fresh)},
+                               "manifest": {"uri": "file:///m", "sha256": "1" * 64} if fresh else None})
+        if args[:2] == ("rules", "run"):
+            self.submitted += 1
+            return json.dumps({"run": {"run_id": f"new-{self.submitted}"}})
+        raise AssertionError(args)
+
+    def status(self, run_id):
+        return {"run": {"submission": {"profiles": {"read": "source.read", "merge": "mdm.merge"}}}}
+
+    def drive(self, run_id, steps):
+        self.calls.append(("drive", run_id))
+        return {"run": {"state": "complete"}, "counts": {"verified": 2}}
+
+
+def loader(tmp_path, monkeypatch, commands):
+    for duty in driving.DUTIES:
+        (tmp_path / f"{duty}.env").write_text("export BOOKKEEPING_MANIFEST_ROOT=file://%s/m\n" % tmp_path)
+    monkeypatch.setattr(loading.files, "source", lambda name: READING)
+    found = loading.Loader(source="example", target="by_letter", stores=tmp_path, workers=2, minutes=1,
+                           say=lambda line: None)
+    found.commands = commands
+    return found
+
+
+def test_each_new_bundle_is_prepared_submitted_and_driven(tmp_path, monkeypatch):
+    commands = Recorded(processed={"letters/a.json", "letters/b.json"})
+    folder = capture(tmp_path / "c", "letters/a.json", "letters/b.json", "letters/c.json")
+
+    result = loader(tmp_path, monkeypatch, commands).load(
+        capture=folder, capture_run="capture-1", as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
+
+    assert [(b["documents"], b["new"], b["run_id"]) for b in result["bundles"]] == [(2, 0, None), (1, 1, "new-1")]
+    assert ("drive", "new-1") in commands.calls
+    assert (tmp_path / "m" / "load" / "example" / "by_letter" / "2026-10-25T000000Z" / "bundle-002").is_dir()
+
+
+def test_a_run_left_open_is_finished_before_anything_new(tmp_path, monkeypatch):
+    commands = Recorded(open_runs=[("old-1", "example", "by_letter", "waiting"),
+                                   ("other-1", "example", "everything", "running")],
+                        processed={"letters/a.json"})
+    folder = capture(tmp_path / "c", "letters/a.json")
+
+    result = loader(tmp_path, monkeypatch, commands).load(
+        capture=folder, capture_run="capture-1", as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
+
+    assert result["finished_open_runs"] == ["old-1"]
+    assert commands.calls.index(("drive", "old-1")) < commands.calls.index(("mdm", "prepare-capture"))
+    assert ("drive", "other-1") not in commands.calls
+
+
+def test_a_target_the_source_does_not_declare_is_refused(monkeypatch):
+    monkeypatch.setattr(loading.files, "source", lambda name: READING)
+
+    with pytest.raises(driving.RunStopped, match="declares no `missing` target"):
+        loading.target_of("example", "missing")

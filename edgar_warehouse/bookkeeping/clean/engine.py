@@ -25,6 +25,8 @@ from .config import (RUN_CHECKS, STEP_CHECKS, Blocked, canonical, digest, genera
 PROTOCOL = 1
 # Units a claim looks over: one another attempt holds is passed for the next.
 SCAN = 1000
+# A unit left waiting because its prerequisites or leases were busy: claim it again later.
+CONTENTION = "Lease or prerequisite contention; retry on resume"
 
 
 def _authority(export: dict, scope: dict, artifacts) -> dict:
@@ -201,7 +203,7 @@ class Bookkeeping:
                 if n + 1 < retry["attempts"]:
                     sleep(random.uniform(0, min(retry["cap_ms"], retry["base_ms"] * 2 ** n)) / 1000)
         self._call("SELECT bookkeeping.wait_work(CAST(:r AS uuid),:s,:k,:m,NULL,'[]'::jsonb)",
-                   r=run_id, s=step_name, k=key, m="Lease or prerequisite contention; retry on resume")
+                   r=run_id, s=step_name, k=key, m=CONTENTION)
         return None
 
     def heartbeat(self, claim: Claim) -> Claim:
