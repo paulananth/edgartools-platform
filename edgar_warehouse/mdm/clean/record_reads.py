@@ -106,27 +106,29 @@ class RecordReader:
         )
         if required and set(found) != wanted:
             raise Conflict("Retained-input reference has no saved input")
-        result = {}
+        return {identity: self.input_body(*identity, entry) for identity, entry in found.items()}
+
+    @staticmethod
+    def input_body(kind, key, entry):
+        """Validate one immutable input's original identity and evidence hash."""
         fields = {
             "source-reading": "assertion_id",
             "decision": "decision_id",
             "identity": "entity_id",
         }
-        for (kind, key), entry in found.items():
-            body = self._body(entry)
-            if kind not in fields or body.get(fields[kind]) != key:
-                raise Conflict("Retained-input identity differs from its stored key")
-            if kind == "source-reading":
-                from .evidence import validate_assertion
+        body = RecordReader._body(entry)
+        if kind not in fields or body.get(fields[kind]) != key:
+            raise Conflict("Retained-input identity differs from its stored key")
+        if kind == "source-reading":
+            from .evidence import validate_assertion
 
-                validate_assertion(body)
-            elif kind == "decision":
-                from .store import digest
+            validate_assertion(body)
+        elif kind == "decision":
+            from .store import digest
 
-                if digest({k: v for k, v in body.items() if k != "decision_id"}) != key:
-                    raise Conflict("Retained decision hash differs from its body")
-            result[kind, key] = body
-        return result
+            if digest({k: v for k, v in body.items() if k != "decision_id"}) != key:
+                raise Conflict("Retained decision hash differs from its body")
+        return body
 
     def subjects(self, groups):
         """Resolve current-member pointers, rejecting a mismatched member key."""
@@ -201,6 +203,46 @@ class RecordReader:
             canonical[identity] = body["canonical_id"]
         return {key: canonical[identity] if identity is not None else None
                 for key, identity in selected.items()}
+
+    def carrying_entities(self, groups, namespace, raw, *, kind=None, cross_reference=False):
+        """Resolve indexed carriers without treating shared references as identity."""
+        entries = self.subject_entries(groups)
+        subjects = {member for _, member in entries}
+        pointers = self.current(subjects)
+        if set(pointers) != subjects:
+            raise Conflict("Identifier carrier has no current source record")
+        readings = self._readings(pointers)
+        selected = {}
+        for group, member in entries:
+            pointer, reading = pointers[member], readings[member]
+            if cross_reference:
+                family, keys = self._group_keys(group, 2)
+                if (family != "cross_reference_records" or keys != [namespace, raw]
+                        or reading.get("cross_references", {}).get(namespace) != raw):
+                    raise Conflict("Cross-reference carrier differs from its indexed value")
+            else:
+                family, keys = self._group_keys(group, 4)
+                if (family != "identifier_records" or keys[0] != namespace
+                        or keys[1] != pointer.get("normalized_identifiers", {}).get(namespace)
+                        or keys[2] != pointer["source_code"] or keys[3] != "bound"
+                        or not pointer.get("entity_id")):
+                    raise Conflict("Identifier carrier differs from its indexed value")
+                # Match the original query contract: lookup takes the carried
+                # value; normalization locates its index without rewriting it.
+                if reading.get("identifiers", {}).get(namespace) != raw:
+                    continue
+            if pointer.get("entity_id") and (kind is None or pointer["kind"] == kind):
+                selected[pointer["entity_id"]] = pointer["kind"]
+        masters = self.masters(selected)
+        if set(masters) != set(selected):
+            raise Conflict("Identifier carrier has no current master")
+        result = set()
+        for identity, body in masters.items():
+            if (body.get("kind") != selected[identity] or not isinstance(body.get("canonical_id"), str)
+                    or not body["canonical_id"]):
+                raise Conflict("Identifier carrier differs from its master")
+            result.add(body["canonical_id"])
+        return result
 
     def readings(self, subjects):
         pointers = self.current(subjects)
@@ -469,6 +511,26 @@ class RecordReader:
         found = self.retained_groups(groups)
         found.update(self.inputs(("source-reading", key) for key in assertion_ids))
         return list(found.values())
+
+    def historical_links(self, generation, *, starts=(), changed=()):
+        """Read retained link versions through their stable endpoint indexes.
+
+        Normal relationship IDs include their endpoints. Retirement keeps a
+        current marker and its endpoint references, so those references also
+        address earlier versions. A later-created link has no earlier body.
+        """
+        starts, changed = set(starts), set(changed)
+        current = self.projections(starts=starts, changed=changed)
+        keys = [(item["object_type"], item["object_id"]) for item in current]
+        rows = self.adapter.read_origins(keys, generation=generation, connection=self.connection)
+        result = []
+        for (kind, key), row in rows.items():
+            body = self._body(row)
+            if (kind != "relationship" or body.get("relationship_id") != key
+                    or not (body.get("source_id") in starts or body.get("target_id") in changed)):
+                raise Conflict("Historical link differs from its indexed endpoint scope")
+            result.append({"object_type": kind, "object_id": key, "body": body})
+        return result
 
     def projections(self, *, starts=(), changed=(), reviews=()):
         groups = {

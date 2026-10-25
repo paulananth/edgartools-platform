@@ -7,7 +7,7 @@ from uuid import uuid4
 from sqlalchemy import event, select
 
 # Reuse the normal-save fixture, including actual restricted-role seed writes.
-os.environ["READ_CASE"] = "join"
+os.environ["READ_CASE"] = os.environ.get("READ_BASE_CASE", "join")
 g = runpy.run_module("tests.storage_adapters.record_read_scenarios")
 
 from edgar_warehouse.database_connections import engine_from_env

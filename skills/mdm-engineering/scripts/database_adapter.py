@@ -27,6 +27,7 @@ from typing import Any
 from sqlalchemy import (
     BigInteger,
     String,
+    case,
     cast,
     create_engine,
     event,
@@ -41,6 +42,7 @@ from sqlalchemy import (
     update,
 )
 from sqlalchemy.engine import make_url
+from sqlalchemy.dialects.postgresql import JSON as PostgreSQLJSON
 from sqlalchemy.exc import DBAPIError, IntegrityError, SQLAlchemyError
 from sqlalchemy.schema import CreateIndex, CreateTable
 
@@ -80,6 +82,20 @@ def registered_policy(conn, digest: str) -> dict | None:
     _, tables = native_registry_model(conn.dialect.name)
     table = tables["policy"]
     return conn.scalar(select(table.c.body).where(table.c.digest == digest))
+
+
+def registered_sources(conn) -> list[str]:
+    """Names from the governance catalog, not a scan of source records."""
+    require_registry(conn)
+    _, tables = native_registry_model(conn.dialect.name)
+    table = tables["dataset"]
+    rows = conn.execute(select(table)).mappings()
+    result = []
+    for row in rows:
+        if conn.dialect.name != "postgresql" and key(row["source_code"]) != row["source_key"]:
+            raise AdapterError("Registered source differs from its key")
+        result.append(row["source_code"])
+    return result
 
 
 def dataset_contracts(conn, codes) -> dict[str, dict]:
@@ -953,6 +969,222 @@ class Adapter:
             }
             for r in rows
         ]
+
+    def origin_statement(self, keys, *, generation=None, immutable=False):
+        """Bound original producer reads, with one historical seek per key."""
+        if self.protocol < 5:
+            raise AdapterError("Record origins require governed proposal storage")
+        if not keys:
+            raise AdapterError("A nonempty origin key collection is required")
+        if generation is not None:
+            counter(generation)
+        if generation is not None and not immutable:
+            table = self.tables["history"]
+            probes = [select(table).where(
+                table.c.type_key == self._bound_key(t), table.c.id_key == self._bound_key(i),
+                table.c.generation <= generation).order_by(table.c.generation.desc()).limit(1)
+                .subquery().select() for t, i in keys]
+            selected = (union_all(*probes) if len(probes) > 1 else probes[0]).subquery("selected")
+        else:
+            selected = self.lookup_statement(keys, immutable=immutable).subquery("selected")
+        batch, run = self.tables["batch"], self.tables["run"]
+        if self.engine.dialect.name == "postgresql":
+            batch = select(batch).where(batch.c.batch_key == selected.c.batch_key).offset(0).lateral("origin_batch")
+            run = select(run).where(run.c.run_key == batch.c.run_key).offset(0).lateral("origin_run")
+            joined = selected.join(batch, true()).join(run, true())
+        else:
+            joined = selected.join(batch, batch.c.batch_key == selected.c.batch_key).join(run, run.c.run_key == batch.c.run_key)
+        proposal, event = self.tables["proposal"], self.tables["proposal_event"]
+        if self.engine.dialect.name == "postgresql":
+            proposal = select(proposal).where(proposal.c.batch_key == selected.c.batch_key,
+                proposal.c.state == "applied").offset(0).lateral("origin_proposal")
+            event = select(event).where(event.c.proposal_key == proposal.c.proposal_key,
+                event.c.observer_key == run.c.run_key, event.c.event == "applied").offset(0).lateral("origin_event")
+            joined = joined.outerjoin(proposal, true()).outerjoin(event, true())
+        else:
+            joined = joined.outerjoin(proposal, (proposal.c.batch_key == selected.c.batch_key)
+                & (proposal.c.state == "applied")).outerjoin(event,
+                (event.c.proposal_key == proposal.c.proposal_key)
+                & (event.c.observer_key == run.c.run_key) & (event.c.event == "applied"))
+        statement = select(selected, batch.c.batch_bytes.label("origin_batch"),
+            batch.c.generation.label("origin_generation"), batch.c.intent.label("origin_intent"),
+            batch.c.request_hash.label("origin_hash"), batch.c.assessment.label("origin_assessment"),
+            run.c.run_key.label("origin_run_key"), run.c.run_bytes.label("origin_run"),
+            event.c.occurred.label("origin_recorded_at"),
+            event.c.observer_bytes.label("origin_observer"),
+            event.c.batch_key.label("origin_event_batch")).select_from(joined)
+        if immutable and generation is not None:
+            statement = statement.where(batch.c.generation <= generation)
+        if self.engine.dialect.name == "mysql":
+            statement = statement.prefix_with("STRAIGHT_JOIN", dialect="mysql")
+            for table in (self.tables["batch"], self.tables["run"]):
+                statement = statement.with_hint(table, "FORCE INDEX (PRIMARY)", dialect_name="mysql")
+            statement = statement.with_hint(proposal, f"FORCE INDEX ({self.prefix}_proposal_batch)", dialect_name="mysql")
+            statement = statement.with_hint(event, "FORCE INDEX (PRIMARY)", dialect_name="mysql")
+        return statement
+
+    def batch_metadata_statement(self, before, *, limit=100, path=()):
+        """Bounded generation-key reads of recording time and one opaque scalar.
+
+        The caller names a JSON path; storage does not interpret its meaning.
+        PostgreSQL extracts from JSON text. MySQL returns original bytes for
+        Python extraction: its binary JSON parser rejects valid huge integers.
+        """
+        counter(before)
+        if type(limit) is not int or not 1 <= limit <= 1000 or any(not isinstance(p, str) for p in path):
+            raise AdapterError("Invalid bounded batch metadata page")
+        if self.protocol < 5:
+            raise AdapterError("Batch metadata requires governed proposal storage")
+        batch = self.tables["batch"]
+        scalar = literal(None)
+        if path:
+            if self.engine.dialect.name == "postgresql":
+                scalar = func.convert_from(batch.c.assessment, "UTF8").cast(PostgreSQLJSON)
+                for member in path:
+                    scalar = scalar[member]
+                scalar = scalar.astext
+            elif self.engine.dialect.name == "mysql":
+                scalar = batch.c.assessment
+            else:
+                raise AdapterError("Batch scalar reads are not qualified on this engine")
+        columns = (batch.c.generation, batch.c.batch_key, batch.c.batch_bytes,
+                   batch.c.run_key, scalar.label("scalar"))
+        if self.engine.dialect.name == "postgresql" and before:
+            # Admission increments generation by exactly one. A short page of
+            # exact generation probes avoids bitmap/whole-index plans even
+            # when a small store contains fewer rows than the requested page.
+            probes = [select(literal(g).label("generation"))
+                      for g in range(before, max(0, before - limit), -1)]
+            wanted = (union_all(*probes) if len(probes) > 1 else probes[0]).subquery("wanted_generations")
+            probe = select(*columns).where(batch.c.generation == wanted.c.generation).offset(0).lateral("batch_probe")
+            selected = select(probe).select_from(wanted.join(probe, true()))
+        else:
+            selected = select(*columns).where(batch.c.generation <= before).order_by(
+                batch.c.generation.desc()).limit(limit)
+        if self.engine.dialect.name == "mysql":
+            selected = selected.with_hint(batch, f"FORCE INDEX ({self.prefix}_generation_unique)", dialect_name="mysql")
+        selected = selected.subquery("selected_batches")
+        proposal, event = self.tables["proposal"], self.tables["proposal_event"]
+        if self.engine.dialect.name == "postgresql":
+            proposal = select(proposal).where(proposal.c.batch_key == selected.c.batch_key,
+                proposal.c.state == "applied").offset(0).lateral("applied_proposal")
+            event = select(event).where(event.c.proposal_key == proposal.c.proposal_key,
+                event.c.observer_key == selected.c.run_key, event.c.event == "applied").offset(0).lateral("applied_event")
+            joined = selected.outerjoin(proposal, true()).outerjoin(event, true())
+        else:
+            joined = selected.outerjoin(proposal, (proposal.c.batch_key == selected.c.batch_key)
+                & (proposal.c.state == "applied")).outerjoin(event,
+                (event.c.proposal_key == proposal.c.proposal_key)
+                & (event.c.observer_key == selected.c.run_key) & (event.c.event == "applied"))
+        statement = select(selected, event.c.occurred, event.c.observer_bytes,
+            event.c.batch_key.label("event_batch_key")).select_from(joined).order_by(selected.c.generation.desc())
+        if self.engine.dialect.name == "mysql":
+            statement = statement.prefix_with("STRAIGHT_JOIN", dialect="mysql")
+            statement = statement.with_hint(proposal, f"FORCE INDEX ({self.prefix}_proposal_batch)", dialect_name="mysql")
+            statement = statement.with_hint(event, "FORCE INDEX (PRIMARY)", dialect_name="mysql")
+        return statement
+
+    def batch_metadata(self, before, *, limit=100, path=(), connection=None):
+        with self.engine.connect() if connection is None else nullcontext(connection) as conn:
+            rows = conn.execute(self.batch_metadata_statement(before, limit=limit, path=path)).mappings().all()
+        found = {}
+        for row in rows:
+            if (row["generation"] in found or row["occurred"] is None or row["occurred"] <= 0
+                    or row["observer_bytes"] is None or row["event_batch_key"] != row["batch_key"]
+                    or hashlib.sha256(bytes(row["batch_bytes"])).hexdigest() != row["batch_key"]
+                    or hashlib.sha256(bytes(row["observer_bytes"])).hexdigest() != row["run_key"]):
+                raise AdapterError("batch_metadata_origin_mismatch")
+            scalar = row["scalar"]
+            if path and self.engine.dialect.name == "mysql":
+                try:
+                    scalar = json.loads(bytes(scalar))
+                    for member in path:
+                        scalar = scalar.get(member) if isinstance(scalar, dict) else None
+                except (TypeError, ValueError):
+                    raise AdapterError("Invalid retained batch metadata") from None
+            found[row["generation"]] = {"generation": int(row["generation"]),
+                "recorded_at": int(row["occurred"]), "scalar": scalar}
+        return list(found.values())
+
+    def record_keys_statement(self, object_type, *, after="", limit=100):
+        """A bounded page in stable storage-key order, retaining opaque IDs."""
+        if not isinstance(after, str) or type(limit) is not int or not 1 <= limit <= 1001:
+            raise AdapterError("Invalid bounded record key page")
+        table = self.tables["current"]
+        statement = select(table.c.type_bytes, table.c.id_bytes, table.c.id_key).where(
+            table.c.type_key == self._bound_key(object_type),
+            table.c.id_key > (self._bound_key(after) if after else ""),
+        ).order_by(table.c.id_key).limit(limit)
+        if self.engine.dialect.name == "mysql":
+            statement = statement.with_hint(table, "FORCE INDEX (PRIMARY)", dialect_name="mysql")
+        return statement
+
+    def record_keys(self, object_type, *, after="", limit=100, connection=None):
+        with self.engine.connect() if connection is None else nullcontext(connection) as conn:
+            rows = conn.execute(self.record_keys_statement(object_type, after=after, limit=limit)).mappings().all()
+        result = []
+        for row in rows:
+            raw = bytes(row["id_bytes"])
+            if bytes(row["type_bytes"]) != object_type.encode() or hashlib.sha256(raw).hexdigest() != row["id_key"]:
+                raise AdapterError("object_digest_collision")
+            result.append(raw.decode())
+        return result
+
+    def type_count_statement(self, types):
+        """Count requested opaque type prefixes, checking their original bytes."""
+        if not types:
+            raise AdapterError("A nonempty type collection is required")
+        table = self.tables["current"]
+        probes = []
+        for type in types:
+            statement = select(literal(type).label("type"), func.count().label("count"),
+                func.sum(case((table.c.type_bytes != type.encode(), 1), else_=0)).label("invalid"))
+            statement = statement.where(table.c.type_key == self._bound_key(type))
+            if self.engine.dialect.name == "mysql":
+                statement = statement.with_hint(table, "FORCE INDEX (PRIMARY)", dialect_name="mysql")
+            probes.append(statement)
+        return union_all(*probes) if len(probes) > 1 else probes[0]
+
+    def count_types(self, types, *, connection=None):
+        unique, result = list(dict.fromkeys(types)), {}
+        for start in range(0, len(unique), 200):
+            with self.engine.connect() if connection is None else nullcontext(connection) as conn:
+                rows = conn.execute(self.type_count_statement(unique[start:start + 200])).mappings().all()
+            for row in rows:
+                if row["invalid"]:
+                    raise AdapterError("object_digest_collision")
+                result[row["type"]] = int(row["count"])
+        return result
+
+    def read_origins(self, keys, *, generation=None, immutable=False, connection=None):
+        """Return exact records and the immutable batch's original producer."""
+        unique, found = list(dict.fromkeys(keys)), {}
+        for start in range(0, len(unique), 200):
+            chunk = unique[start:start + 200]
+            with self.engine.connect() if connection is None else nullcontext(connection) as conn:
+                rows = conn.execute(self.origin_statement(chunk, generation=generation, immutable=immutable)).mappings().all()
+            for row in rows:
+                identity = bytes(row["type_bytes"]).decode(), bytes(row["id_bytes"]).decode()
+                if identity not in chunk:
+                    raise AdapterError("object_digest_collision")
+                if identity in found:
+                    raise AdapterError("ambiguous_record_origin")
+                batch, run, intent = bytes(row["origin_batch"]), bytes(row["origin_run"]), bytes(row["origin_intent"])
+                if (hashlib.sha256(batch).hexdigest() != row["batch_key"]
+                        or hashlib.sha256(run).hexdigest() != row["origin_run_key"]
+                        or hashlib.sha256(intent).hexdigest() != row["origin_hash"]
+                        or row["origin_recorded_at"] is None or row["origin_recorded_at"] <= 0
+                        or row["origin_event_batch"] != row["batch_key"]
+                        or row["origin_observer"] is None or bytes(row["origin_observer"]) != run
+                        or not immutable and row["generation"] != row["origin_generation"]):
+                    raise AdapterError("record_origin_mismatch")
+                found[identity] = {**self._read_record(row), "origin": {
+                    "batch": batch.decode(), "run": run.decode(), "intent": intent,
+                    "assessment": bytes(row["origin_assessment"]),
+                    "generation": int(row["origin_generation"]),
+                    "recorded_at": int(row["origin_recorded_at"]),
+                }}
+        return found
 
     def claim_outbox(self, batch: str, consumer: str, owner: str, *, seconds=300):
         for value in (batch, consumer, owner):

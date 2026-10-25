@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
+
 from sqlalchemy import text
 
 from .store import Conflict, digest
@@ -73,8 +75,16 @@ class ContractReader:
         ).mappings().first()
         return None, dict(company) if company else None
 
-    def entity(self, requested_id: str, *, generation: int | None = None) -> dict:
-        with self.engine.connect() as conn:
+    def entity(self, requested_id: str, *, generation: int | None = None, connection=None) -> dict:
+        with (self.engine.connect().execution_options(isolation_level="REPEATABLE READ")
+              if connection is None else nullcontext(connection)) as conn:
+            from .prepared_registry import installed
+            adapter = installed(conn)
+            if adapter is not None:
+                from .master_reads import entity
+                return entity(adapter, conn, requested_id, generation)
+            if conn.dialect.name != "postgresql":
+                raise Conflict("Master reads require governed prepared storage")
             generation = self._generation(conn, generation)
             if generation < 1:
                 raise KeyError(requested_id)
@@ -141,7 +151,14 @@ class ContractReader:
             or not 1 <= limit <= 1000
         ):
             raise ValueError("Invalid bounded consumer page")
-        with self.engine.connect() as conn:
+        with self.engine.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
+            from .prepared_registry import installed
+            adapter = installed(conn)
+            if adapter is not None:
+                from .master_reads import snapshot_page
+                return snapshot_page(adapter, conn, object_type, generation, after, limit)
+            if conn.dialect.name != "postgresql":
+                raise Conflict("Master pages require governed prepared storage")
             generation = self._generation(conn, generation)
             if object_type == "entity":
                 query = """WITH versions AS (
