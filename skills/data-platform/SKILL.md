@@ -126,8 +126,16 @@ checks and points to the repository lifecycle script.
    ```
 
    Building the engine takes about two minutes. It worked when
-   `edgar-warehouse --help` lists `rules`, `bookkeeping`, `mdm`, `workers`,
-   `plan` and `doctor`.
+   `edgar-warehouse --help` lists `rules`, `load`, `bookkeeping`, `mdm`,
+   `workers`, `plan` and `doctor`.
+
+   Each wheel ships a list of files, not a folder:
+   `packages/<wheel>/pyproject.toml`'s `force-include`. When you add a
+   module that the command line imports, add it to its wheel's list too.
+   Otherwise the installed `edgar-warehouse` fails on import, though every
+   test run from a checkout passes. The bundle tests
+   (`tests/engine/test_data_skill_bundle_postgres.py`) install from the
+   committed head and catch it (ticket 136).
 
 2. **Skills and rules folder.** `edgar-warehouse skill install --rules <new folder>`
    copies these skills into `~/.agents/skills` and `~/.claude/skills`, and the

@@ -2,7 +2,7 @@
 
 Priority: 136. Map: [Rebuild priorities](../map.md). Opened 2026-10-25 12:32 ET.
 
-Type: task. Status: in progress (Claude, branch `claude/generic-load-command`).
+Type: task. Status: done (Claude). PR #1168 merged 2026-10-25 13:22 ET.
 Blocked by: none. Unblocks the last part of [120](120-switch-on-securities.md).
 
 ## Why
@@ -69,7 +69,9 @@ repetition. One helper also reads the manifest root URI.
   - [x] A unit that failed before is tried again first, not refused (`test_a_unit_that_failed_before_is_tried_again_first`)
   - [x] The skill's table lacked the worker-failure and blocked-run messages; data-platform, change-journal and data-onboarding now point at `load`
   - Tests after the fixes: 22 driver and load tests; 390 skill, rules and architecture tests; 70 Postgres (3 min 33 s)
-- [ ] PR, CI green, merge
+- [x] Found by CI on PR #1168: the installed bundle failed to import `edgar_warehouse.rules.loading`. The data-skill wheel lists its files, and `driving.py`/`loading.py` were not on the list. Added to `packages/data-skill/pyproject.toml`. Locally, 3 bundle tests passed (3 min 18 s), and CI's engine and skill adapter jobs passed
+- [x] A run pinned to other worker code is left as it is and its documents load in a new run. Found on the first real load: Grok's open OpenFIGI run was pinned to an uncommitted worktree's code. Test `test_an_open_run_pinned_to_other_worker_code_is_left...`
+- [x] PR #1168, CI green (9 checks on `f06d1c2f`), merged 2026-10-25 13:22 ET (`e44e5daa`)
 - [x] The operator's working store moved to a generic name, `working` (2026-10-25 12:55 ET): backed up from `company-on` (its identity file named Grok's worktree while the container named the deleted `claude-company` worktree; the identity was set back to the labels' owner to take the backup) and restored as `working`, owned by the main checkout
-- [ ] 120's load run with the one command, in `working`
-- [ ] Learning → skill
+- [ ] ~~120's load run with the one command, in `working`~~ moved to [120](120-switch-on-securities.md): the load is 120's last part; it started 2026-10-25 12:58 ET
+- [x] Learning → skill (2026-10-25 13:23 ET): `data-operations` "Load a capture" (the one command, written in this ticket); `data-platform` Setup: a module the CLI imports goes on its wheel's file list, which the bundle tests check
