@@ -14,8 +14,8 @@ Can installed consumers and operators use normal engine-selected MDM read and in
 ## Parts
 
 - [x] Connect and qualify actual Silver delivery and refresh against normal MDM saves on two configured kinds and both engines — 2026-10-24 18:24 ET; two real Silver integration cases per engine pass, including later mastery, merge, reversal and unchanged refresh.
-- [ ] Finish current/history/detail/relationship/context reads and independently installed master-identifier lookup used by Silver.
-- [ ] Connect counts, connectivity, health, inspection and supported publication commands to selected-engine storage; preserve authorization and bounded exact-key plans.
+- [x] Finish current/history/detail/relationship/context reads and independently installed master-identifier lookup used by Silver — 2026-10-25 12:26 ET; two configured-kind/source cases per engine pass in the independent ca2f6f75 five-wheel installation, including the actual Silver MdmIds and Context callers.
+- [x] Connect counts, connectivity, health, inspection and supported publication commands to selected-engine storage; preserve authorization and bounded exact-key plans — 2026-10-25 12:26 ET; installed counts/connectivity/Context trust and inspection pass on both engines. Forced publication remains explicitly unsupported and separately assigned to ticket 06; its refusal is qualified, not its execution.
 - [x] Verify original JSON, large numbers, Unicode and opaque identifiers survive reader transport — 2026-10-25 07:23 ET; two independent installed cases per engine preserve large field/detail integers, Unicode text and a source-record key longer than 5,000 characters. Public evidence uses invented fixtures and outcomes only; rebased-head qualification remains separate.
 - [x] Qualify existing applied-event recording time and generation-pinned pages without a storage extension — 2026-10-24 20:04 ET; recording/business-time boundaries and metadata key plans pass on both engines; all 13 supported protocol/engine migration fingerprint sets match current main.
 - [x] Qualify installed assessment/save, current/history provenance, Context, master lookup, merge/reversal and pinned pages for two configured kinds and sources — 2026-10-24 20:52 ET; two cases per engine pass outside the checkout using the independently built five-wheel runtime 8e15a9ee.
@@ -30,14 +30,14 @@ Can installed consumers and operators use normal engine-selected MDM read and in
 - [x] Refuse uninstalled prepared-store name search explicitly — 2026-10-24 20:04 ET; two cases per engine return a bounded semantic error and supported lookup commands. This qualifies refusal, not name search.
 - [x] Qualify populated review/relationship pages for both configured kinds on each engine — 2026-10-24 20:41 ET; four cases per engine pass, covering cycle reviews, historical endpoints and retained retirement markers.
 - [x] Qualify the latest 405-field provenance query for both configured kinds on each engine — 2026-10-25 07:23 ET; two cases per engine pass, each verifying 405 exact fields and original producers with fewer than 30 read queries; scheduled results observed terminal.
-- [ ] Finish prepared master-name search with indexed completeness and a governed populated rebuild; current native-only search is an explicit capability gap.
+- [x] Finish prepared master-name search with indexed completeness and a governed populated rebuild — 2026-10-25 12:26 ET; the independent ca2f6f75 installation passes normal search and the owner CLI for two configured kinds on each engine, alongside the local completeness/index/recovery cases.
   - [x] Reuse shared Rust word grammar/ranking and add generic literal-fragment preparation with configured name-field selection — 2026-10-25 12:19 ET; four Rust tests and 43 affected configuration/Context/CLI checks pass.
   - [x] Save name references and complete-generation coverage atomically with normal batches; refuse stale, legacy and changed-configuration gaps — 2026-10-25 12:19 ET; normal search cases pass for two configured kinds on both engines.
   - [x] Add owner-controlled bounded/resumable populated rebuilding without business history or publication changes — 2026-10-25 12:19 ET; interruption, resume, overtaking and explicit restart pass on both engines; 401-reference maintenance uses three insert statements and three mixed update/delete statements.
   - [x] Qualify indexed Context searches and rebuild interruption/retry across both configured kinds/sources on PostgreSQL/MySQL — 2026-10-25 12:19 ET; 20 local search cases per engine pass; latest bulk maintenance adds two passing cases per engine.
-  - [ ] Qualify the independent installed search and actual owner rebuild on both engines.
+  - [x] Qualify the independent installed search and actual owner rebuild on both engines — 2026-10-25 12:26 ET; two installed cases per engine pass outside the checkout, including gap refusal, bounded resume, unchanged business counts/generation and zero-work repeat.
   - [ ] Finish final source review and CI for the published search checkpoint.
-- [ ] Learning → skill — extend separate PR #1165 with qualified search/rebuild guidance; retained reader learning completed 2026-10-24 20:52 ET; mdm-engineering retained-read provenance and metadata guidance is published separately in draft PR #1165; earlier 80 affected checks pass. Its rebased check and landing remain pending.
+- [x] Learning → skill — 2026-10-25 12:26 ET; separate PR #1165 now includes search coverage, bounded owner rebuild, overtaking/restart and batched-maintenance lessons, with 91 affected documentation checks passing; retained reader learning completed 2026-10-24 20:52 ET; mdm-engineering retained-read provenance and metadata guidance is published separately in draft PR #1165; earlier 80 affected checks pass. Its rebased check and landing remain pending.
 
 ## Acceptance evidence
 
@@ -457,3 +457,16 @@ seam and shared Rust functions: a new Strategy hierarchy adds indirection
 without reducing any demonstrated repeated policy change. The identified
 current cost was per-reference owner writes; bounded set-based maintenance
 removes it and driver statement counts verify the replacement.
+
+
+## Independent search installation — 2026-10-25 12:26 ET
+
+The committed ca2f6f75 normal five-wheel installation built successfully in
+314.06 seconds. Two configured-kind/source cases per engine pass outside the
+checkout using isolated Python, installed shared Rust modules, the bundled
+adapter, Context/ContractReader and actual Silver MdmIds. They cover all prior
+reader/history/link assertions plus normal name search and rename cleanup,
+missed-generation refusal, the actual owner CLI in two bounded pages,
+unchanged business counts/generation and zero-work repeat. Independent local
+checkout helper success is not substituted for this evidence. Final PR CI
+remains pending; the ticket is incomplete until that last part is checked.
