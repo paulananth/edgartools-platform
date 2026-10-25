@@ -9,8 +9,8 @@ from sqlalchemy import event
 
 os.environ["READ_ID_CASE"] = "lookup"
 case = os.environ["READ_CONSUMER_CASE"]
-if case in ("context_links", "context_relationships"):
-    os.environ["READ_CASE"] = "links"
+if case in ("context_links", "context_relationships", "review_pages"):
+    os.environ["READ_CASE"] = "hierarchy" if case == "review_pages" else "links"
     g = runpy.run_module("tests.storage_adapters.record_read_scenarios")
     s = {"g": g, "runtime": g["runtime"], "root": g["master"]["entity_id"],
          "primary": g["PRIMARY"], "secondary": g["SECONDARY"]}
@@ -255,6 +255,16 @@ try:
             assert conn.execute(query).one() == before
         for table in (proposal, events):
             assert_index_lookup(runtime, query, table.name)
+    if case == "review_pages":
+        from edgar_warehouse.mdm.clean.record_reads import RecordReader
+
+        related = RecordReader(g["normal"]).projections(reviews=[root])
+        expected = {item["object_id"]: item["body"] for item in related if item["object_type"] == "review"}
+        assert expected and all(body["reason"] == "hierarchy_cycle" for body in expected.values())
+        page = reader.snapshot_page("review")
+        assert {item["object_id"]: item["body"] for item in page["items"]} == expected
+        assert page["next_after"] is None
+        assert reader.snapshot_page("review", generation=page["generation"] - 1)["items"] == []
     if case == "context_search_gap":
         import io
         import json
@@ -291,6 +301,12 @@ try:
         assert old["related_count"] == 1
         assert old["related"][0]["to"]["entity_id"] == g["second_id"]["entity_id"]
         assert old["trust"]["generation"] == earlier["generation"]
+        old_page = reader.snapshot_page("relationship", generation=earlier["generation"])
+        assert len(old_page["items"]) == 1
+        assert old_page["items"][0]["body"]["target_id"] == g["second_id"]["entity_id"]
+        current_page = reader.snapshot_page("relationship")
+        assert len(current_page["items"]) == 2
+        assert any(item["body"].get("retired") for item in current_page["items"])
         os.environ["MDM_DATABASE_URL"] = os.environ["READ_RUNTIME_URL"]
         os.environ["MDM_APPLICATION_ROLE"] = os.environ["READ_RUNTIME_ROLE"]
         output = io.StringIO()

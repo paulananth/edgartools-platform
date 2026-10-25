@@ -50,7 +50,11 @@ def test_normal_prepared_merge(case, kind, database_factory, configured_root):
         assert result.returncode == 0, "normal prepared merge failed; private diagnostic retained"
 
 
-def test_installed_normal_prepared_merge(installed, database_factory, configured_root):
+@pytest.mark.parametrize("kind,source_code", [
+    ("invented-kind", "invented.authority"),
+    ("invented-other-kind", "invented.other-authority"),
+])
+def test_installed_normal_prepared_merge(kind, source_code, installed, database_factory, configured_root):
     """Committed five-wheel installation saves and replays outside the checkout."""
     import json
     from uuid import uuid4
@@ -60,16 +64,22 @@ def test_installed_normal_prepared_merge(installed, database_factory, configured
 
     python, root = installed
     body = files.load(configured_root / "mastering/engine-v1.yaml")
-    body["accepted_bars"]["invented-kind"] = copy.deepcopy(body["accepted_bars"]["company"])
+    if kind not in body["kinds"]:
+        body["kinds"].append(kind)
+    body["accepted_bars"][kind] = copy.deepcopy(body["accepted_bars"]["company"])
     (configured_root / "mastering/engine-v1.yaml").write_text(files.dumps(body))
-    contract = {**CIK_CONTRACT, "authority": "invented-issuer", "sources": ["invented.authority"],
+    definitions = files.load(configured_root / "context/definitions.yaml")
+    definitions["kinds"][kind] = "Invented installed master."
+    (configured_root / "context/definitions.yaml").write_text(files.dumps(definitions))
+    contract = {**CIK_CONTRACT, "authority": "invented-issuer", "sources": [source_code],
                 "normalizer": "normalize_identifier@crd-v1"}
     source = {"provider": "fixture", "family": "fixture", "schema_version": "1",
               "record_key": "key", "publication_key": "version", "effective_time": "effective_at",
               "semantics": "patch"}
-    envelope = authority("invented.authority", source, str(uuid4()))
+    envelope = authority(source_code, source, str(uuid4()))
     code = '''
 import json, os
+import inspect
 from pathlib import Path
 from uuid import uuid4
 import source_contract
@@ -80,8 +90,13 @@ from edgar_warehouse.mdm.clean.evidence import assertion
 from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.record_reads import RecordReader
 from edgar_warehouse.mdm.clean.store import Store, migrate, register_policy, register_dataset
+from edgar_warehouse.mdm.clean.consumer import ContractReader
+from edgar_warehouse.silver_writer.writer import MdmIds
+from edgar_warehouse.context import Context
 assert Path(prepared.__file__).resolve().is_relative_to(Path(INSTALL).resolve())
 assert Path(source_contract.__file__).resolve().is_relative_to(Path(INSTALL).resolve())
+for implementation in (ContractReader, MdmIds, Context):
+    assert Path(inspect.getfile(implementation)).resolve().is_relative_to(Path(INSTALL).resolve())
 assert "bundle_data" in str(Path(storage_adapter().__file__).resolve())
 owner, runtime = engine_from_env("READ_OWNER_URL"), engine_from_env("READ_RUNTIME_URL")
 migrate(owner, application_role=os.environ["READ_RUNTIME_ROLE"], prepared=True)
@@ -116,6 +131,20 @@ assert result["generation"]==1 and not result["duplicate"]
 pointer=RecordReader(api).current([record["subject"]])[record["subject"]]
 master=json.loads(bytes(api.read([("entity",pointer["entity_id"])])["entity",pointer["entity_id"]]["body"]))
 assert master["fields"]["invented_amount"]["value"]==10**80+1
+reader=ContractReader(runtime)
+read=reader.entity(pointer["entity_id"])
+assert read["identity"]==master and reader.entity(pointer["entity_id"],generation=1)==read
+assert read["projection"]["origin_run_id"]==producer
+assert read["field_provenance"]["invented_amount"]["evidence"]==record
+assert MdmIds(runtime)("invented.authority","invented-kind",{"one","missing"})=={"one":pointer["entity_id"]}
+page=reader.snapshot_page("entity",generation=1,limit=1)
+assert page["items"][0]["body"]==master and page["next_after"] is None
+from argparse import Namespace
+context=Context(runtime).answer(Namespace(subject="invented-kind",key="invented_number:171",
+    search=None,as_of=None,as_at="2030-01-01T00:00:00Z",detail="full",page=None))
+assert context["entity_id"]==pointer["entity_id"]
+assert context["trust"]["recorded_at"]==read["projection"]["recorded_at"]
+assert context["sources"]=={"invented.authority":["one"]}
 def counts():
     with runtime.connect() as conn:
         return {name:conn.scalar(select(func.count()).select_from(api.tables[name]))
@@ -124,8 +153,9 @@ before=counts()
 assert stage.apply(**{**command,"run_id":str(uuid4())})["duplicate"]
 assert api.generation()==1 and counts()==before
 print(json.dumps({"independent_install":True,"preview_rolled_back":True,
-                  "assessment_applied":True,"duplicate_unchanged":True,"identities":1}))
-'''
+                  "assessment_applied":True,"duplicate_unchanged":True,"identities":1,
+                  "master_reads":True,"context":True,"silver_lookup":True}))
+'''.replace("invented-kind", kind).replace("invented.authority", source_code)
     with database_factory() as (owner, runtime, role):
         if owner.dialect.name == "mssql":
             pytest.skip("SQL Server installed writes follow the two-engine gate")
@@ -144,4 +174,5 @@ print(json.dumps({"independent_install":True,"preview_rolled_back":True,
         assert result.returncode == 0, "installed normal save failed; private diagnostic retained"
         proof = json.loads(result.stdout.splitlines()[-1])
         assert proof == {"independent_install": True, "preview_rolled_back": True,
-                         "assessment_applied": True, "duplicate_unchanged": True, "identities": 1}
+                         "assessment_applied": True, "duplicate_unchanged": True, "identities": 1,
+                         "master_reads": True, "context": True, "silver_lookup": True}

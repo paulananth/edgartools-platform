@@ -27,6 +27,8 @@ Can installed consumers and operators use normal engine-selected MDM read and in
 - [x] Qualify Context identifier and cross-reference lookup, waiting carriers, ambiguity and canonical redirects — 2026-10-24 20:04 ET; two cases per engine pass through existing indexed references and shared Rust normalization.
 - [x] Qualify single-snapshot Context under a concurrent normal save — 2026-10-24 20:04 ET; two cases per engine pass. The delayed MySQL result was observed terminal at 19:58 ET.
 - [x] Refuse uninstalled prepared-store name search explicitly — 2026-10-24 20:04 ET; two cases per engine return a bounded semantic error and supported lookup commands. This qualifies refusal, not name search.
+- [x] Qualify populated review/relationship pages for both configured kinds on each engine — 2026-10-24 20:41 ET; four cases per engine pass, covering cycle reviews, historical endpoints and retained retirement markers.
+- [ ] Qualify the latest 405-field provenance query for both configured kinds on each engine.
 - [ ] Finish prepared master-name search with indexed completeness and a governed populated rebuild; current native-only search is an explicit capability gap.
 - [ ] Learning → skill: update its owning skill on a separate branch/PR, or record none.
 
@@ -255,3 +257,69 @@ merge algorithm or second timestamp authority is justified. The cost of the
 portable seam is grouped key probes and bounded metadata pages; concurrency,
 large provenance and actual index plans cover that boundary, while deep
 retrospective latency and installed completeness remain explicit limits.
+
+
+## Remaining name-search capability — 2026-10-24 20:29 ET
+
+This is a design to qualify, not an installed command or supported route.
+The current explicit refusal is the first behavior test: after a normal save,
+a configured name search must find the stored canonical master on both
+engines, under restricted roles. The prepared store has generic lookup groups
+but no installed master-name index or governed populated rebuild.
+
+Use the existing shared Rust word tokenizer, query matcher and ranking from
+the reference search implementation. Add only the missing shared substring
+index/matcher capability if normal word and contains behavior requires it.
+Name-field preference and index version belong in configuration; the reader
+and writer must select the same name without kind/source branches. Preserve
+short/stop words, phrases, alternatives, exclusions and literal punctuation.
+
+The existing opaque lookup storage can hold versioned master-name scope,
+word and substring references, saved with normal effects. Read candidates by
+those groups and verify each original master/name before ranking. Alias and
+name changes must remove obsolete references atomically. A new storage table
+is not presumed necessary.
+
+Completeness needs a configuration-specific coverage generation. Every new
+normal batch can advance it atomically only from complete coverage of the
+observed generation; duplicate replay leaves it unchanged. A legacy writer
+that omits the index, or a changed name configuration, must make search refuse
+rather than return a false miss. A later compatible save must not hide such a
+gap by advancing the coverage marker over it. An empty store is complete at
+generation zero. Lookup metadata needs existing batch provenance; do not
+invent an initial batch just to create a marker.
+
+A populated rebuild must be an owner-controlled, resumable, bounded operation
+with a --limit proving mode. It writes derived lookups without business
+history or publication changes and marks ready only after full coverage.
+Acquire the destination gate before reading each batch of authoritative
+masters; refuse stale progress. For a first quiescent-store implementation,
+any intervening business generation invalidates the pass and leaves search
+unready; do not claim online catch-up without proving it. Test interruption,
+changed configuration, stale/legacy writers and unchanged retry before
+publishing a procedure. This capability remains on ticket 05; the ticket is
+not closed by qualifying the other reader paths.
+
+## Continuation checkpoint — 2026-10-24 20:35 ET
+
+The final current/producer group passed eight cases per engine (including
+Context current/concurrency selected by the test filter). Runtime remains
+frozen at 8e15a9ee while the independent five-wheel build and new populated
+page cases await their scheduled observations. The installed proof now covers
+two invented kinds and two sources and verifies that Context, ContractReader
+and the Silver-facing lookup load from the independent installation. Those
+new installed assertions are not yet claimed passing.
+
+Main advanced to a3b615be through PR #1163 during this continuation. Its
+changes are outside this reader checkpoint and will be preserved by rebase;
+8e15a9ee evidence is tied to its earlier base until the rebased code is
+qualified. No provider access, source activation or schema change was run.
+
+## Populated pages and installation build — 2026-10-24 20:41 ET
+
+Four populated review/relationship page cases pass on each engine. The
+independent five-wheel build of 8e15a9ee succeeded in 230.66 seconds. The
+installed PostgreSQL proof has started; its result is not yet observed.
+Reader runtime files remain byte-identical to 8e15a9ee; this continuation
+changes test coverage and the ticket evidence only. Draft PR #1164 publishes
+the reader checkpoint; the final-head rebase and qualification are pending.
