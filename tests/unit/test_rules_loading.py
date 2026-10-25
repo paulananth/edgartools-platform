@@ -39,11 +39,14 @@ def test_bundles_hold_at_most_the_sources_limit_in_key_order():
 class Recorded:
     """The platform's commands, answered from invented state, and every call kept."""
 
-    def __init__(self, open_runs=(), processed=()):
+    def __init__(self, open_runs=(), processed=(), versions=None):
         self.calls, self.open, self.processed, self.submitted = [], list(open_runs), set(processed), 0
+        self.versions = versions or {}
 
     def __call__(self, duty, *args):
         self.calls.append(args[:2])
+        if args[:2] == ("rules", "status"):
+            return json.dumps([{"version": "example-2", "status": "active"}, {"version": "example-1", "status": "retired"}])
         if args[:2] == ("bookkeeping", "runs"):
             state = args[args.index("--state") + 1]
             return json.dumps([{"run_id": r, "name": n, "target": t, "created_at": r}
@@ -59,7 +62,8 @@ class Recorded:
         raise AssertionError(args)
 
     def status(self, run_id):
-        return {"run": {"submission": {"rules": {"uri": f"file:///frozen/{run_id}", "sha256": "2" * 64}}}}
+        return {"run": {"submission": {"rules": {"uri": f"file:///frozen/{run_id}", "sha256": "2" * 64},
+                                       "rule_version": self.versions.get(run_id, "example-2")}}}
 
     def drive(self, run_id, steps):
         self.calls.append(("drive", run_id, tuple(step["name"] for step in steps)))
@@ -113,6 +117,19 @@ def test_a_blocked_run_stops_the_load_before_anything_is_submitted(tmp_path, mon
         loader(tmp_path, monkeypatch, commands).load(
             capture=folder, capture_run="capture-1", as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
     assert ("mdm", "prepare-capture") not in commands.calls
+
+
+def test_a_blocked_run_under_retired_rules_stays_as_it_is_and_the_load_goes_on(tmp_path, monkeypatch):
+    commands = Recorded(open_runs=[("old-rules-1", "example", "by_letter", "blocked")],
+                        versions={"old-rules-1": "example-1"})
+    folder = capture(tmp_path / "c", "letters/a.json")
+
+    result = loader(tmp_path, monkeypatch, commands).load(
+        capture=folder, capture_run="capture-1", as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
+
+    assert result["blocked_under_retired_rules"] == ["old-rules-1"]
+    assert not [c for c in commands.calls if c[:2] == ("drive", "old-rules-1")]
+    assert [b["run_id"] for b in result["bundles"]] == ["new-1"]
 
 
 def test_a_target_the_source_does_not_declare_is_refused(monkeypatch):

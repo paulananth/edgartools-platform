@@ -70,16 +70,23 @@ class Loader:
         listed = json.loads(self.commands("worker", "bookkeeping", "runs", "--state", state, "--limit", "1000"))
         return [r for r in listed if (r.get("name"), r.get("target")) == (self.source, self.target)]
 
-    def open_runs(self) -> list[str]:
-        """Runs of this source and target that are not finished, oldest first. A blocked one
-        stops the load: its documents would otherwise be submitted again in a new run."""
-        blocked = self.mine("blocked")
-        if blocked:
-            raise RunStopped(f"Run {blocked[0]['run_id']} of {self.source} {self.target} is blocked: read "
-                             f"bookkeeping status {blocked[0]['run_id']}, and recover it (bookkeeping RECOVERY.md) "
-                             "before loading more")
+    def open_runs(self) -> tuple[list[str], list[str]]:
+        """Runs of this source and target that are not finished, oldest first, and the blocked
+        runs left as they are. A blocked run under the active rules version stops the load: its
+        documents would otherwise be submitted again. One under a retired version stays as it
+        is: the Change Journal loads its documents again under the active rules anyway."""
+        listed = json.loads(self.commands("worker", "rules", "status", "--source", self.source))
+        active = next((v["version"] for v in listed if v.get("status") == "active"), None)
+        superseded = []
+        for run in self.mine("blocked"):
+            version = self.commands.status(str(run["run_id"]))["run"]["submission"].get("rule_version")
+            if version == active:
+                raise RunStopped(f"Run {run['run_id']} of {self.source} {self.target} is blocked: read "
+                                 f"bookkeeping status {run['run_id']}, and recover it (bookkeeping RECOVERY.md) "
+                                 "before loading more")
+            superseded.append(str(run["run_id"]))
         found = [r for state in OPEN for r in self.mine(state)]
-        return [str(r["run_id"]) for r in sorted(found, key=lambda r: str(r["created_at"]))]
+        return [str(r["run_id"]) for r in sorted(found, key=lambda r: str(r["created_at"]))], superseded
 
     def drive(self, run_id: str) -> dict:
         """Drive a run by the steps it was frozen with, which a later rules version cannot change."""
@@ -95,7 +102,10 @@ class Loader:
 
     def load(self, *, capture: Path, capture_run: str, as_of: str, facts: list[str], run_files: list[str]) -> dict:
         result = {"source": self.source, "target": self.target, "finished_open_runs": [], "bundles": []}
-        for run_id in self.open_runs():
+        unfinished, result["blocked_under_retired_rules"] = self.open_runs()
+        for run_id in result["blocked_under_retired_rules"]:
+            self.say(f"Run {run_id} stays blocked: it was frozen under a retired rules version")
+        for run_id in unfinished:
             self.say(f"Finishing run {run_id}, left open before")
             self.drive(run_id)
             result["finished_open_runs"].append(run_id)

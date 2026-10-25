@@ -223,7 +223,7 @@ first and never loads a document twice.
 | --- | --- | --- |
 | `workers work <operation> ... failed with status 1; its message is in <log>` | A worker or verifier could not finish a unit. | Read that log (`load-errors.log` in the stores folder), fix the cause, and run the same command again. The unit is tried again first. |
 | `step <s>: unit <u> failed (<error>)` | A unit failed and is still failing. | Run `bookkeeping status <run> --step <s>` to see its error, fix the cause, and run the same command again. |
-| `Run <id> of <source> <target> is blocked` | Bookkeeping stopped that run on corrupt or missing evidence. `load` will not submit its documents again. | Read `bookkeeping status <id>` and recover it ([recovery](../bookkeeping/RECOVERY.md)), then run the same command again. |
+| `Run <id> of <source> <target> is blocked` | Bookkeeping stopped that run, frozen under the active rules version, on corrupt or missing evidence. `load` will not submit its documents again. | Read `bookkeeping status <id>` and recover it ([recovery](../bookkeeping/RECOVERY.md)), then run the same command again. |
 | `did not finish before the deadline` | `--minutes` ran out. | Run the same command again, or give a longer `--minutes`. |
 | `declares no <target> target` | No target of that name in `rules/sources/<source>/source.yaml`. | Use a target listed there. `rules sequence check --source <source>` names the wired one. |
 | `ended waiting` or `ended blocked` | `finalize` found a check that did not pass. | Read `bookkeeping status <run>` (its `run.checks`) and the run's errors. Never submit the bundle again. |
@@ -236,7 +236,9 @@ moved nothing (a lease from a stopped worker has not expired yet).
 (`bookkeeping resume` resets only the run's state, not such a unit.)
 
 An open run is driven by the steps it was frozen with, so a later rules
-version never changes a run already under way.
+version never changes a run already under way. A blocked run frozen under a
+retired rules version is reported and left as it is: the Change Journal loads
+its documents again under the active rules.
 
 ### Fit the load into the window
 
