@@ -139,8 +139,13 @@ submits one source.
    ```
    Exit 0 and status `configured` means its `target` is a declared Bookkeeping
    target whose steps have workers. Exit 3 with `source_target_not_configured`
-   means the source is not wired: report that and stop. Do not invent a target
-   or submit a different source to stand in for it. A successful check does
+   means stop only when that source's `source.yaml` declares no Bookkeeping
+   target. The inventory holds one `target`. A source that declares several,
+   and whose sequence comment names them in order, is wired: run those
+   targets in that order. OpenFIGI is `answers_cusip`, `answers_isin`,
+   `mastering_cusip`, then `mastering_isin` (the comment on its sequence
+   line). Do not add a second inventory field, and do not submit another
+   source in its place. A successful check does
    not install, approve or start a run. Detail is in
    `docs/specs/source-sequencing.md` in the repository.
 2. **Install that source only.** Save its document into the Rules database.
