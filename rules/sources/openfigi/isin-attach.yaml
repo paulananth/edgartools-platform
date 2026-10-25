@@ -1,0 +1,22 @@
+# Each ISIN's row (combine.yaml's `security`) with every CUSIP that shares a
+# listing FIGI with it (`figi_cusips`, from isin-figi-cusips.yaml), distinct
+# and sorted (ticket 120). record.yaml carries the CUSIP when there is exactly
+# one; the ISIN contract sets aside an ISIN with two or more for review
+# (operator, 2026-10-23: "agreed"). Measured (2026-10-15 capture): of 380,047
+# ISINs found, 350,867 share a FIGI with one CUSIP answer, 29,169 with none and
+# 11 with two or more. Pin canonical JSON of this file as the source.combine
+# contract.
+execution:
+  profile: source.combine
+combine:
+  max_rows: 10000000
+  groups:
+    figi_cusips: {source: rows, table: rows, key: id, value: cusips, mode: collect_flat, order_by: [], distinct: true, skip_null_values: true, sort_values: true, checks: {}, where: {}}
+  tables:
+    security:
+      source: security
+      table: security
+      checks: {}
+      where: {}
+      joins:
+        figi_cusips: {group: figi_cusips, key: id, on_missing: empty, replace: false}

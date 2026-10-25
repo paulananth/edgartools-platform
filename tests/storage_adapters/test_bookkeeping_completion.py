@@ -7,6 +7,7 @@ database; the runtime can save checks only through the restricted capability.
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 import json
+import time
 from uuid import uuid4
 
 import edgar_control
@@ -173,12 +174,14 @@ def test_concurrent_completions_share_one_durable_result(completion):
     rid = ready_run(completion)
 
     def finish(_):
-        for _ in range(20):
+        for attempt in range(20):
             try:
                 run_storage.record_run_checks(runtime, prepared(runtime, rid))
                 return
             except run_storage.StaleObservation:
-                continue
+                # NOWAIT refuses an occupied row immediately. Yield between
+                # attempts so the lock holder can commit on a busy runner.
+                time.sleep(min(0.01 * (attempt + 1), 0.05))
         pytest.fail("Concurrent completion did not settle within its bounded retries")
 
     with ThreadPoolExecutor(max_workers=4) as pool:

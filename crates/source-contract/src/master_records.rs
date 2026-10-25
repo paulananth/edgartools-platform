@@ -41,6 +41,60 @@ fn decision_changes_record(
     Ok(false)
 }
 
+const FIGI_REFERENCES: &[&str] = &["share_class_figi", "composite_figi", "figi"];
+
+/// The records that assert these identifier values share one FIGI.
+fn shared_figi(
+    claims: &IndexMap<String, Object>,
+    contributors: &IndexMap<String, BTreeMap<String, Vec<String>>>,
+    namespace: &str,
+    candidates: &BTreeSet<String>,
+) -> Result<bool, String> {
+    let mut subjects = Vec::new();
+    for value in candidates {
+        if let Some(found) = contributors.get(namespace).and_then(|rows| rows.get(value)) {
+            subjects.extend(found.iter().cloned());
+        }
+    }
+    subjects.sort();
+    subjects.dedup();
+    if subjects.is_empty() {
+        return Ok(false);
+    }
+    for reference in FIGI_REFERENCES {
+        let mut token: Option<String> = None;
+        let mut agreed = true;
+        for subject in &subjects {
+            let Some(claim) = claims.get(subject) else {
+                agreed = false;
+                break;
+            };
+            let refs = values::read_object(claim, "cross_references")?;
+            let Some(raw) = refs.get(*reference) else {
+                agreed = false;
+                break;
+            };
+            let text: String = values::read_value(raw)?;
+            if text.is_empty() {
+                agreed = false;
+                break;
+            }
+            match &token {
+                None => token = Some(text),
+                Some(held) if held == &text => {}
+                Some(_) => {
+                    agreed = false;
+                    break;
+                }
+            }
+        }
+        if agreed && token.is_some() {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 /// Keep one row per detail key, with the approved source order and all contributors.
 fn select_detail_rows(
     kind: &str,
@@ -174,6 +228,7 @@ pub fn prepare_master_records(raw: &str) -> Result<String, String> {
         let mut members = groups.entry(record.clone()).or_default().clone();
         members.sort();
         let mut identifiers: IndexMap<String, BTreeSet<String>> = IndexMap::new();
+        let mut contributors: IndexMap<String, BTreeMap<String, Vec<String>>> = IndexMap::new();
         let mut conflicts = Vec::new();
         for subject in &members {
             let Some(claim) = claims.get(subject) else {
@@ -186,23 +241,34 @@ pub fn prepare_master_records(raw: &str) -> Result<String, String> {
                 ]));
             }
             for (namespace, raw) in values::read_object(claim, "identifiers")? {
-                identifiers
-                    .entry(namespace)
+                let value: String = values::read_value(&raw)?;
+                contributors
+                    .entry(namespace.clone())
                     .or_default()
-                    .insert(values::read_value(&raw)?);
+                    .entry(value.clone())
+                    .or_default()
+                    .push(subject.clone());
+                identifiers.entry(namespace).or_default().insert(value);
             }
         }
         for (namespace, candidates) in &identifiers {
-            if candidates.len() > 1 {
-                conflicts.push(Object::from([
-                    (
-                        "reason".into(),
-                        values::write_value(&"authoritative_identifier_conflict")?,
-                    ),
-                    ("namespace".into(), values::write_value(namespace)?),
-                    ("values".into(), values::write_value(candidates)?),
-                ]));
+            if candidates.len() <= 1 {
+                continue;
             }
+            // One CUSIP offered two ISINs stays one Security when those
+            // records share a FIGI (operator, 2026-10-24: "resolve using
+            // figi"). FIGI still does not join two Securities.
+            if namespace == "isin" && shared_figi(&claims, &contributors, namespace, candidates)? {
+                continue;
+            }
+            conflicts.push(Object::from([
+                (
+                    "reason".into(),
+                    values::write_value(&"authoritative_identifier_conflict")?,
+                ),
+                ("namespace".into(), values::write_value(namespace)?),
+                ("values".into(), values::write_value(candidates)?),
+            ]));
         }
         if !conflicts.is_empty() {
             for decision in &decisions {
@@ -299,4 +365,60 @@ pub fn prepare_master_records(raw: &str) -> Result<String, String> {
     }
     serde_json::to_string(&(projected, reviews, groups))
         .map_err(|_| "Cannot serialize prepared master records".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn command(namespace: &str, left_figi: &str, right_figi: &str) -> String {
+        format!(
+            r#"{{
+              "identities": {{"e1": {{"entity_id": "e1", "kind": "security"}}}},
+              "canonical": {{"e1": "e1"}},
+              "bindings": {{"s1": "e1", "s2": "e1"}},
+              "quarantined": {{}},
+              "claims": {{
+                "s1": {{"kind": "security", "identifiers": {{"{namespace}": "LEFT"}},
+                        "cross_references": {{"share_class_figi": "{left_figi}"}}}},
+                "s2": {{"kind": "security", "identifiers": {{"{namespace}": "RIGHT"}},
+                        "cross_references": {{"share_class_figi": "{right_figi}"}}}}
+              }},
+              "policy": {{"kinds": {{"security": {{"version": "t", "defaults": {{"sources": []}}}}}}}},
+              "overrides": [],
+              "decisions": [{{"operation": "bind", "entity_id": "e1"}}],
+              "as_of": "2026-10-24T00:00:00Z",
+              "policy_digest": "test",
+              "profile_kinds": {{}}
+            }}"#
+        )
+    }
+
+    #[test]
+    fn two_isins_that_share_a_figi_stay_on_one_security() {
+        let prepared = prepare_master_records(&command("isin", "BBG000000001", "BBG000000001"))
+            .expect("shared figi");
+        assert!(prepared.contains("\"isin\":[\"LEFT\",\"RIGHT\"]"));
+        assert!(!prepared.contains("authoritative_identifier_conflict"));
+    }
+
+    #[test]
+    fn two_isins_without_one_figi_are_still_refused() {
+        let error = prepare_master_records(&command("isin", "BBG000000001", "BBG000000002"))
+            .expect_err("different figi");
+        assert_eq!(
+            error,
+            "Identity decision has unresolved authoritative identifier or kind conflict"
+        );
+    }
+
+    #[test]
+    fn two_cusips_are_not_resolved_by_a_shared_figi() {
+        let error = prepare_master_records(&command("cusip", "BBG000000001", "BBG000000001"))
+            .expect_err("cusip");
+        assert_eq!(
+            error,
+            "Identity decision has unresolved authoritative identifier or kind conflict"
+        );
+    }
 }

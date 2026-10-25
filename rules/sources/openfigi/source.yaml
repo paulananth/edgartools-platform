@@ -665,6 +665,16 @@ bookkeeping:
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.combined]
           input: {contract: combine.yaml, readings: {counts: {step: reduce}, answers: {all: answers}}}
+        # Each listing FIGI and the CUSIP asked, for the ISIN target (ticket
+        # 120, OpenFIGI first): one unit a run, so the ISIN target reads every
+        # complete run's.
+        - name: figi_ids
+          operation: source.combine
+          requires: [answers]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input: {contract: figi-ids.yaml, readings: {answers: {all: answers}}}
         - name: record
           operation: source.read
           requires: [combine]
@@ -738,13 +748,35 @@ bookkeeping:
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.combined]
           input: {contract: combine.yaml, readings: {counts: {step: reduce}, answers: {all: answers}}}
+        # Ticket 120 (OpenFIGI first; operator, 2026-10-23: "agreed"): each
+        # ISIN listing with the CUSIPs whose answers give its FIGI, from every
+        # complete CUSIP run (so the CUSIP target runs first), then every
+        # ISIN's CUSIPs on its row.
+        - name: figi_cusips
+          operation: source.combine
+          requires: [answers]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input:
+            contract: isin-figi-cusips.yaml
+            readings:
+              answers: {all: answers}
+              cusips: {run: {source: openfigi, target: mastering_cusip, step: figi_ids}}
+        - name: attach
+          operation: source.combine
+          requires: [combine, figi_cusips]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input: {contract: isin-attach.yaml, readings: {security: {step: combine}, rows: {step: figi_cusips}}}
         - name: record
           operation: source.read
-          requires: [combine]
+          requires: [attach]
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.output]
-          input: {contract: record.yaml, pieces: {step: combine}}
+          input: {contract: record.yaml, pieces: {step: attach}}
         - name: prepare
           operation: mdm.prepare
           requires: [record]
@@ -958,7 +990,7 @@ mdm:
     contract:
       provider: OpenFIGI
       family: openfigi
-      schema_version: openfigi-security-isin-v2
+      schema_version: openfigi-security-isin-v3
       record_key: the ISIN asked, upper-cased; one record per ISIN asked
       publication_key: the capture's mapping answer files and the reduce, combine and record
         contracts
@@ -970,6 +1002,9 @@ mdm:
       - invalid_isin_checksum
       - missing_record_identity
       - not_found_by_openfigi
+      # Not listed, so blocking: an ISIN sharing a listing FIGI with two or
+      # more CUSIP answers waits for review (ticket 120; operator, 2026-10-23,
+      # "agreed").
       adapter:
         reading:
           source: openfigi
@@ -992,7 +1027,24 @@ mdm:
                   column: _found
                   reason: not_found_by_openfigi
                   on_fail: defer
+                - check: absent
+                  column: _several_cusips
+                  reason: isin_shares_figi_with_several_cusips
+                  on_fail: defer
                 columns:
+                  # The CUSIPs sharing a listing FIGI with this ISIN (record.yaml),
+                  # kept only when there are two or more.
+                  _several_cusips:
+                    choose:
+                      condition:
+                        equal:
+                          left:
+                            transform:
+                              value: {value: {path: figi_cusips}}
+                              transforms: [{regex_replace: {pattern: "^[^ ]*$", with: ""}}]
+                          right: {const: {value: ""}}
+                      then: {value: {path: NO_SUCH_FIELD}}
+                      else: {value: {path: figi_cusips}}
                   _found:
                     text:
                       path: found
@@ -1046,17 +1098,24 @@ mdm:
           - security_type2
           - market_sector
           - listings
-        version: openfigi-security-isin-v3
+          - figi_cusip
+          - figi_cusips
+        version: openfigi-security-isin-v4
         retain_deferred: true
         source_record_provenance: true
         kind: security
         record_key:
         - id
         record_key_format: isin
+        # The ISIN asked, and the one CUSIP whose answer shares a listing FIGI
+        # with it (ticket 120): the CUSIP finds the Security OpenFIGI's CUSIP
+        # answer created (rules/merge/kinds/security.yaml).
         identifiers:
           isin: id
+          cusip: figi_cusip
         identifier_formats:
           isin: isin
+          cusip: cusip
         detail_keys:
           listings: figi
         cross_references:
