@@ -41,8 +41,8 @@ The identity of one natural person, distinct from a Company and shared with an a
 _Avoid_: Employer identity, role as identity, same name as proof of sameness
 
 **Security Identity**:
-The identity of one financial instrument. A 13F CUSIP is that identity, and the Security can exist before its issuer is known. One issuer has one Security per CUSIP, so Class A and Class C are two Securities. The reported class title is not the identity.
-_Avoid_: A share class stored on the Company, a second Security for the same CUSIP because a Form 4 used a different title, issuer plus title as proof of sameness
+The identity of one financial instrument, held by the master id that mastering mints for it. Its CUSIP, ISIN and listing FIGIs are identifiers in the Cross-reference; any one of them finds it, and a source record with none found mints a new one. The Security can exist before its issuer is known. Class A and Class C are two Securities. The reported class title is not the identity.
+_Avoid_: A CUSIP or ISIN as the identity itself, one Security per kind of identifier asked, a share class stored on the Company, a second Security for the same CUSIP because a Form 4 used a different title, issuer plus title as proof of sameness
 
 **Security Title**:
 The one display title of a Security. A share class is written as the normalized class, such as Class A, and an instrument with no class is written as its kind, such as Option. A title that names neither waits. Each filing keeps the title its manager wrote.
@@ -189,8 +189,8 @@ The declaration, per identifier namespace, of who issues the value, how many ide
 _Avoid_: "The id is unique" as an unstated assumption, a name match as the claim, a contract without a measurement
 
 **Cross-reference**:
-An identifier kept so a record can be found, which its kind's Identifier Contract does not use to decide identity. Records that share one stay separate.
-_Avoid_: An identifier the Identifier Contract declares, a crosswalk, a name that creates an identity
+The one table of every identifier a master identity carries, each joined to its master id and marked as matching or lookup only. A matching identifier, declared by its kind's Identifier Contract, finds the identity a record joins. A lookup-only identifier only finds records, and records that share one stay separate.
+_Avoid_: A second identifiers table, a crosswalk, a name that creates an identity, joining records on a lookup-only identifier
 
 **Source Contract**:
 The one versioned file that declares everything about one source after its Bronze Artifacts exist: how they are read, the silver table they produce, the Dataset Contract that maps them into MDM, and the test cases and batch gate that prove it.

@@ -23,11 +23,82 @@ on ticket 120") and in the operator's Rules database. The ISIN dataset is
 also issues a CUSIP, which cannot be added on an existing source code
 (2026-10-24, "complete ticket 120 using skills to turn on additional rules").
 
+## The mastering process (decided 2026-10-25, ticket 138; not built)
+
+The operator replaced the per-kind design on 2026-10-25 ("secutiy is the kind
+cusip and isin are diffrant identifiers of the same securities", "there
+should be one processing with all the identifier", "first lookup if not exists
+then master", "mastering must create an unique id and the unique id joins with
+all the other tables cross refrence and silver"). Until ticket 138 is built,
+the sections below it describe what runs today; each says where 138 changes it.
+
+**One master id.** Mastering mints one master id for each Security. The
+Cross-reference, the Source Stage and every silver table join on it; silver
+carries the master id only. When two Securities consolidate, the oldest id
+survives and the other points to it; silver is re-pointed.
+
+**The Cross-reference holds every identifier** ("cross_refrence table must
+hold all the identifiers", "no need for identifier table"). No other
+identifiers or listings table. Each row: the master id, the identifier kind,
+the value, matching or lookup only, the source, first seen, last seen.
+
+| Identifier | Role |
+|---|---|
+| CUSIP, ISIN, each listing FIGI, composite FIGI, share-class FIGI | matching, from any source (a FIGI 13F or N-PORT files too) |
+| SEDOL, CINS, LoanX | matching, each under its verified Identifier Contract (ticket 125) |
+| ticker, ticker + exchange, Bloomberg ID | lookup only: 17,941 (ticker, exchange) pairs are on two or more CUSIPs (55,057 CUSIPs, 2026-10-15 capture) |
+
+**Each source does the same: look up, then master.** A source record carries
+every identifier it has (a list where it has several, such as every listing
+FIGI). The Merge Stage looks up each matching identifier:
+
+| Found | Then |
+|---|---|
+| no Security | mint a new master id |
+| one Security | bind to it; its new identifiers go into the Cross-reference |
+| two Securities | consolidate them automatically, the oldest id survives, then bind |
+
+A wrong consolidation is split by a steward; both ids return and a Match
+Exclusion stops the same records merging again. The Identifier Contract's
+tolerance still switches automatic matching off when errors pass 5 per 10,000.
+A new CUSIP whose listing FIGIs a Security holds joins it (one Security, both
+CUSIPs, the old one with its last-seen date).
+
+**Each source:**
+
+- **OpenFIGI first, one load.** One target reads the CUSIP and the ISIN
+  answers together; every bundle runs in parallel. Its record keeps the
+  identifier asked and every listing's FIGI, ticker and ticker + exchange. On
+  the 2026-10-15 capture, of 380,047 ISIN answers found, 350,867 share a
+  listing FIGI with one CUSIP answer's Security, 29,169 mint their own and 11
+  consolidate. The ISIN target, `figi_ids`, `figi_cusips`, `attach` and
+  `answers_cusip` / `answers_isin` go. MDM keeps no listings; each listing
+  stays in silver's `openfigi_listing`.
+- **N-PORT adds fields.** A holding's record looks up its CUSIP, ISIN or other
+  issued identifier; it mints only when none is found. Its seven pairing steps
+  (`cusips_found` to `fold`) go.
+- **13F adds fields** the same way: look up first, then mint.
+- **Form 4** finds a class by its trading symbol only among the Securities of
+  the filing's issuer Company: one found attaches, none or two go to review
+  (ticket 24). The ticker still joins nothing.
+
+**The Security's fields** (Field Survivorship: OpenFIGI, then N-PORT, then 13F):
+
+| Field | From |
+|---|---|
+| name | OpenFIGI, N-PORT, 13F |
+| security type, security type 2, market sector, security description | OpenFIGI: the one value the listings state, else the US composite's, else the ISIN country's composite's (description is new to MDM, "Same rule as name") |
+| title of class, share class, issuer | N-PORT, 13F; the issuer by N-PORT's issuer LEI |
+| asset category, issuer type, investment country, currency, restricted, derivative category | N-PORT: the value the most holdings file; a tie keeps none ("Most-filed value"); each holding keeps its own in silver |
+
+The one Cross-reference serves every kind; Company, Person and Fund move onto
+it in their own tickets ("Security now, others next tickets").
+
 ## Hard stops
 
 | Never | Instead |
 |---|---|
-| Join two Securities on a FIGI or a ticker | They are cross-references: lookup only (operator, 2026-10-20: "Lookup only for now") |
+| Join two Securities on a ticker, a ticker and exchange, or a Bloomberg ID | Lookup only (2026-10-25, ticket 138). Today FIGI is lookup only too; ticket 138 makes it matching |
 | Let one identifier sit on two Securities | Every proof counts `identifiers_on_two_masters`; it must be 0 |
 | Let an OpenFIGI ISIN answer create a second Security for an issue its CUSIP answer already made | It joins that CUSIP's Security by their shared listing FIGI; two or more such CUSIPs set it aside for review (switched on in the files, ticket 120) |
 | Attach an ISIN to a CUSIP on a filing alone | Only when OpenFIGI agrees, one to one (live) |
@@ -35,6 +106,7 @@ also issues a CUSIP, which cannot be added on an existing source code
 | Fold OpenFIGI's values into N-PORT's record | OpenFIGI keeps its own record on the same Security (decided) |
 | Send a request to OpenFIGI or the SEC | Captured files only; a new request needs the operator's permission for that request |
 | Load ISIN-only Securities in a second run over the same quarter | One run reads the quarter once (decided) |
+| Pair a CUSIP with an ISIN in a source's own rules, or order one source's loads by kind of identifier | The Merge Stage pairs them through the Cross-reference (decided, ticket 138) |
 
 ## One Security, several sources
 
@@ -52,6 +124,9 @@ The ranking that fills a field: OpenFIGI first, then N-PORT, then 13F
 `rules/merge/kinds/security.yaml`, `defaults.sources`.
 
 ## Keys and identifiers
+
+Today's keys and identifiers. Ticket 138 replaces the identifier part with
+"The mastering process" above.
 
 - **Record key (decided):** N-PORT gives one record per Security keyed by its
   CUSIP, else its ISIN (operator, 2026-10-20: "One master record ... why
@@ -269,7 +344,12 @@ countries, and for 25 of 36 countries tried the home composite never appears
 in the answers, which is why the code set holds 11. A Security OpenFIGI did
 not find (5%) keeps its N-PORT and 13F fields only.
 
-## The listings detail table (decided)
+## The listings detail table (today; removed by ticket 138)
+
+Operator, 2026-10-25: "we don't need this table". Ticket 138 removes
+OpenFIGI's listings from MDM: each listing stays in silver's
+`openfigi_listing`, and its FIGI, ticker and ticker + exchange go into the
+Cross-reference. Until it is built:
 
 Operator, 2026-10-20: "Maybe create a security detail table and keep it in
 the mdm", then "Detail rows set in config (Recommended)".
@@ -296,6 +376,10 @@ Each waits with an open review. 2026 Q2: 1,769 `invalid_cusip_checksum` and
 1 `invalid_cusip` of 385,382 filed CUSIPs.
 
 ## Run order
+
+Ticket 138 (decided): OpenFIGI's one load, its bundles in parallel; then any
+source that adds fields (N-PORT, 13F), in any order. Until it is built, the
+order switched on in the files is:
 
 OpenFIGI first (switched on in the files, ticket 120; operator, 2026-10-23):
 
