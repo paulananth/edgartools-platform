@@ -1,4 +1,4 @@
-"""The `mdm` command offers five MDM commands, each bound to one
+"""The `mdm` commands are each bound to one
 function (platform validation slice 2a)."""
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ PREPARE = ["--capture", "c", "--documents", "d", "--population", "p", "--catalog
     (["mdm", "name-census", *CENSUS], "name_census"),
     (["mdm", "prepare-clean-company", *PREPARE], "prepare_clean_company"),
     (["mdm", "force-publish", "--consumer", "graph", "--output", "o"], "force_publish"),
+    (["mdm", "rebuild-name-index", "--limit", "1"], "rebuild_name_index"),
 ])
 def test_each_command_runs_its_function(monkeypatch, argv, function):
     called = []
@@ -27,10 +28,36 @@ def test_each_command_runs_its_function(monkeypatch, argv, function):
     assert args.handler(args) == 0 and called == [argv[1]]
 
 
-def test_only_the_five_clean_commands_are_offered():
+def test_retired_commands_stay_unavailable():
     parser = build_parser()
     for retired in ("mastering", "apply-decisions", "bronze-receipts", "correction-batch", "export"):
         with pytest.raises(SystemExit):
             parser.parse_args(["mdm", retired])
     with pytest.raises(SystemExit):
         parser.parse_args(["mdm", "migrate", "--model", "legacy"])
+
+
+def test_force_publish_keeps_the_legacy_route(monkeypatch, tmp_path, capsys):
+    import json
+    from contextlib import nullcontext
+    from types import SimpleNamespace
+
+    calls, disposed = [], []
+
+    def page(statement, parameters):
+        assert "mdm.force_publish" in str(statement)
+        calls.append(parameters)
+        return {"batch_id": "invented-forced-page", "generation": 1, "records": 1, "next": None}
+
+    engine = SimpleNamespace(connect=lambda: nullcontext(object()),
+        begin=lambda: nullcontext(SimpleNamespace(scalar=page)),
+        dispose=lambda: disposed.append(True))
+    monkeypatch.setattr(clean_cli, "engine_from_env", lambda name: engine)
+    monkeypatch.setattr(clean_cli, "_inspection_adapter", lambda conn: None)
+    args = build_parser().parse_args(["mdm", "force-publish", "--consumer", "invented-export",
+                                     "--output", str(tmp_path / "output")])
+    assert clean_cli.force_publish(args) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["pages"] == report["records"] == 1 and report["forced"] is True
+    assert len(calls) == 1 and calls[0]["c"] == "invented-export"
+    assert disposed == [True]

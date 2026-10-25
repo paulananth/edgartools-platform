@@ -71,7 +71,7 @@ def _print_mdm_report(read) -> int:
     """Run one read on the MDM database as the application role and print it."""
     mdm = engine_from_env("MDM_DATABASE_URL")
     try:
-        with mdm.connect() as conn:
+        with mdm.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
             report = read(conn)
     finally:
         mdm.dispose()
@@ -80,18 +80,39 @@ def _print_mdm_report(read) -> int:
 
 
 def check_connectivity(args) -> int:
-    return _print_mdm_report(lambda conn: {
-        "sql": conn.scalar(text("SELECT 1")) == 1,
-        "migrations": conn.scalar(text("SELECT count(*) FROM mdm.migration")),
-    })
+    def report(conn):
+        from sqlalchemy import func, select
+        adapter = _inspection_adapter(conn)
+        return {"sql": conn.scalar(text("SELECT 1")) == 1,
+                "migrations": conn.scalar(select(func.count()).select_from(adapter.tables["migration"]))
+                if adapter else conn.scalar(text("SELECT count(*) FROM mdm.migration"))}
+    return _print_mdm_report(report)
+
+
+def _inspection_adapter(conn):
+    from .record_reads import for_connection, RecordReader
+    from .store import Conflict
+
+    reader = for_connection(conn)
+    if isinstance(reader, RecordReader):
+        if reader.adapter.protocol < 5:
+            raise Conflict("MDM inspection requires governed prepared storage")
+        return reader.adapter
+    return None
 
 
 def counts(args) -> int:
-    return _print_mdm_report(lambda conn: dict(conn.execute(text(
-        "SELECT 'entity',count(*) FROM mdm.current_entity "
-        "UNION ALL SELECT object_type,count(*) FROM mdm.current_record "
-        "WHERE object_type<>'entity' GROUP BY object_type"
-    )).all()))
+    def report(conn):
+        adapter = _inspection_adapter(conn)
+        if adapter is not None:
+            result = adapter.count_types(("entity", "relationship", "review"), connection=conn)
+            return {kind: count for kind, count in result.items() if kind == "entity" or count}
+        return dict(conn.execute(text(
+            "SELECT 'entity',count(*) FROM mdm.current_entity "
+            "UNION ALL SELECT object_type,count(*) FROM mdm.current_record "
+            "WHERE object_type<>'entity' GROUP BY object_type"
+        )).all())
+    return _print_mdm_report(report)
 
 
 def force_publish(args) -> int:
@@ -107,6 +128,11 @@ def force_publish(args) -> int:
     mdm = engine_from_env("MDM_DATABASE_URL")
     pages, after = [], {"object_type": "", "object_id": ""}
     try:
+        with mdm.connect() as conn:
+            if _inspection_adapter(conn) is not None:
+                from .store import Conflict
+
+                raise Conflict("Forced publication requires its qualified prepared-store workflow")
         while after is not None:
             with mdm.begin() as conn:
                 page = conn.scalar(text(
@@ -128,4 +154,16 @@ def force_publish(args) -> int:
     manifest = store.put(root, {"version": 2, "steps": {args.step: units}})
     print(json.dumps({"run_id": run_id, "consumer": args.consumer, "forced": True, "pages": len(pages),
                       "records": sum(page["records"] for page in pages), "manifest": manifest}, sort_keys=True))
+    return 0
+
+
+def rebuild_name_index(args) -> int:
+    from .master_search import rebuild
+
+    engine = engine_from_env("MDM_DATABASE_URL", restricted=False)
+    try:
+        report = rebuild(engine, limit=args.limit, page_size=args.page_size, restart=args.restart)
+    finally:
+        engine.dispose()
+    print(json.dumps(report, sort_keys=True))
     return 0
