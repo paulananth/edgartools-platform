@@ -15,7 +15,7 @@ Blocked by: 05 qualification and implementation landing
 - [x] Publish this skill change on its own PR after its implementation evidence is qualified — 2026-10-24 20:56 ET; draft PR #1165 links reader PR #1164, whose two-kind/source installed reader checks pass on both engines.
 - [ ] Observe rebased skill checks, reconcile implementation landing and follow named merge approval for #1165.
 - [x] Add source-neutral configured name search, coverage gaps, bounded owner rebuild and driver statement-count guidance — 2026-10-25 12:24 ET; 91 affected guide/genericity/command checks pass.
-- [ ] Qualify the documented command against the new independent installed search checkpoint before final readiness.
+- [x] Qualify the documented command against the new independent installed search checkpoint — 2026-10-25 12:27 ET; independent ca2f6f75 five-wheel installation passes normal search, gap refusal and actual owner CLI resume/zero-work repeat for both configured kinds on PostgreSQL/MySQL.
 - [x] Learning → skill — 2026-10-24 20:56 ET; mdm-engineering points to storage-adapters.md, Retained-read provenance, for original metadata bytes, applied producer/time, coherent snapshots, stable page cursors and explicit unsupported routes.
 
 ## Evidence boundary
@@ -59,8 +59,8 @@ aliases/reversal, historical details and relationships, pinned pages and the
 actual restricted-role Context/inspection CLI. Six installed reader/adapter
 files match the local qualified files byte for byte. A later forced-publication
 refusal is separately qualified locally and remains an unimplemented workflow.
-The original 80 skill checks passed; the rebased result awaits its scheduled
-observation. Full workflow support and name search remain unclaimed.
+The original 80 skill checks and their rebased run pass. Full worker workflow
+support remains unclaimed; name-search qualification is recorded below.
 
 
 ## Search guidance checkpoint — 2026-10-25 12:24 ET
@@ -89,3 +89,14 @@ owner command. Keeps qualification, activation and worker publication separate.
 Retains the existing adapter and shared-function boundary. Documentation adds
 no classes or alternate computation; maintenance statement counts expose the
 measured cost that the implementation removed.
+
+
+## Installed command evidence — 2026-10-25 12:27 ET
+
+Two configured-kind/source cases per engine pass outside the checkout through
+the committed ca2f6f75 five-wheel installation. The actual owner command
+repairs a missed index generation in two one-master pages, reports ready,
+then repeats with zero work. Normal search works afterward; business counts
+and generation stay unchanged. The documented command is now independently
+qualified on PostgreSQL/MySQL. Final skill CI and named merge approval remain
+open. Learning is in mdm-engineering, Governed name-index rebuilding.
