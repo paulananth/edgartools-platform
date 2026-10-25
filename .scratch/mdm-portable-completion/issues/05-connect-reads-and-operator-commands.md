@@ -31,7 +31,13 @@ Can installed consumers and operators use normal engine-selected MDM read and in
 - [x] Qualify populated review/relationship pages for both configured kinds on each engine — 2026-10-24 20:41 ET; four cases per engine pass, covering cycle reviews, historical endpoints and retained retirement markers.
 - [x] Qualify the latest 405-field provenance query for both configured kinds on each engine — 2026-10-25 07:23 ET; two cases per engine pass, each verifying 405 exact fields and original producers with fewer than 30 read queries; scheduled results observed terminal.
 - [ ] Finish prepared master-name search with indexed completeness and a governed populated rebuild; current native-only search is an explicit capability gap.
-- [x] Learning → skill — 2026-10-24 20:52 ET; mdm-engineering retained-read provenance and metadata guidance is published separately in draft PR #1165; earlier 80 affected checks pass. Its rebased check and landing remain pending.
+  - [x] Reuse shared Rust word grammar/ranking and add generic literal-fragment preparation with configured name-field selection — 2026-10-25 12:19 ET; four Rust tests and 43 affected configuration/Context/CLI checks pass.
+  - [x] Save name references and complete-generation coverage atomically with normal batches; refuse stale, legacy and changed-configuration gaps — 2026-10-25 12:19 ET; normal search cases pass for two configured kinds on both engines.
+  - [x] Add owner-controlled bounded/resumable populated rebuilding without business history or publication changes — 2026-10-25 12:19 ET; interruption, resume, overtaking and explicit restart pass on both engines; 401-reference maintenance uses three insert statements and three mixed update/delete statements.
+  - [x] Qualify indexed Context searches and rebuild interruption/retry across both configured kinds/sources on PostgreSQL/MySQL — 2026-10-25 12:19 ET; 20 local search cases per engine pass; latest bulk maintenance adds two passing cases per engine.
+  - [ ] Qualify the independent installed search and actual owner rebuild on both engines.
+  - [ ] Finish final source review and CI for the published search checkpoint.
+- [ ] Learning → skill — extend separate PR #1165 with qualified search/rebuild guidance; retained reader learning completed 2026-10-24 20:52 ET; mdm-engineering retained-read provenance and metadata guidance is published separately in draft PR #1165; earlier 80 affected checks pass. Its rebased check and landing remain pending.
 
 ## Acceptance evidence
 
@@ -402,3 +408,52 @@ pre-rebase revisions until the new committed installation is qualified.
 
 Name search and full worker/publication recovery remain incomplete. No
 activation, migration or provider acquisition was performed by this work.
+
+## Name-search implementation consult — 2026-10-25 07:26 ET
+
+Existing reference search already owns the word grammar and cover-density
+ranking. Its history shows repeated portability changes, so reuse those
+functions through one generic text-search preparation entry point. The only
+new computation is literal fragment indexing and configured name selection;
+no entity/source branches or database policy functions are needed. Keep the
+current Adapter/RecordReader seam. An indexed coverage generation and an owner
+rebuild must qualify before Context stops refusing the route.
+
+The rebased committed reader runtime 75ea418d is independently building while
+this search work remains uncommitted; its build uses the frozen git ref.
+
+
+## Search freeze checkpoint — 2026-10-25 12:19 ET
+
+Configured name selection, word grammar/ranking and literal-fragment preparation
+run in shared Rust. Normal saves atomically maintain opaque name references and
+complete-generation coverage. Context holds one read snapshot; gaps refuse
+search until an owner-controlled bounded/restartable pass completes. Local
+proof covers 20 cases per engine across two configured kinds and sources,
+including 401 matching masters with bounded ranking buffers. Four Rust tests,
+43 affected units and 14 normal-save regression cases per engine pass.
+
+### Standards
+
+No migration or grants change; all 13 engine/protocol fingerprint sets equal
+the retained baseline. The adapter takes the destination gate, checks current
+batch provenance and optimistic versions, then writes derived lookups in
+200-row statements. Runtime cannot perform owner rebuilding. Counts and
+invented fixtures only. Independent installed search remains unqualified.
+
+### Spec
+
+Name fields and rank weight are configuration. Missing coverage, overtaking,
+changed configuration and interrupted rebuilds are tested explicitly. Search
+uses indexed groups and exact master probes, with no candidate-count refusal.
+Search/rebuild changes neither business history nor publication. Full worker
+publication recovery remains ticket 06.
+
+### GoF
+
+The available gof-refactor-reviewer skill was applied to Context and the
+adapter with their change history. Keep the established Adapter/RecordReader
+seam and shared Rust functions: a new Strategy hierarchy adds indirection
+without reducing any demonstrated repeated policy change. The identified
+current cost was per-reference owner writes; bounded set-based maintenance
+removes it and driver statement counts verify the replacement.

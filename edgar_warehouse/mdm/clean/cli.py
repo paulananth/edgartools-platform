@@ -155,3 +155,15 @@ def force_publish(args) -> int:
     print(json.dumps({"run_id": run_id, "consumer": args.consumer, "forced": True, "pages": len(pages),
                       "records": sum(page["records"] for page in pages), "manifest": manifest}, sort_keys=True))
     return 0
+
+
+def rebuild_name_index(args) -> int:
+    from .master_search import rebuild
+
+    engine = engine_from_env("MDM_DATABASE_URL", restricted=False)
+    try:
+        report = rebuild(engine, limit=args.limit, page_size=args.page_size, restart=args.restart)
+    finally:
+        engine.dispose()
+    print(json.dumps(report, sort_keys=True))
+    return 0

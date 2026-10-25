@@ -77,7 +77,7 @@ def test_installed_normal_prepared_merge(kind, source_code, installed, database_
     source = {"provider": "fixture", "family": "fixture", "schema_version": "1",
               "record_key": "key", "publication_key": "version", "effective_time": "effective_at",
               "semantics": "patch"}
-    configured = reading({"invented_amount": "invented_amount"})
+    configured = reading({"invented_amount": "invented_amount", "name": "name"})
     configured["read"]["tables"]["mapped"]["columns"]["details"] = {
         "object": {"fields": {"invented_rows": {"value": {"path": "rows"}}}}}
     source["adapter"] = {"version": "invented-installed-details", "kind": kind,
@@ -89,6 +89,7 @@ import inspect
 from pathlib import Path
 from uuid import uuid4
 import source_contract
+import edgar_control
 from sqlalchemy import func, select
 from edgar_warehouse.database_connections import engine_from_env, storage_adapter
 from edgar_warehouse.mdm.clean import prepared
@@ -101,6 +102,8 @@ from edgar_warehouse.silver_writer.writer import MdmIds
 from edgar_warehouse.context import Context
 assert Path(prepared.__file__).resolve().is_relative_to(Path(INSTALL).resolve())
 assert Path(source_contract.__file__).resolve().is_relative_to(Path(INSTALL).resolve())
+assert Path(edgar_control.__file__).resolve().is_relative_to(Path(INSTALL).resolve())
+assert hasattr(edgar_control,"prepare_text_search")
 for implementation in (ContractReader, MdmIds, Context):
     assert Path(inspect.getfile(implementation)).resolve().is_relative_to(Path(INSTALL).resolve())
 assert "bundle_data" in str(Path(storage_adapter().__file__).resolve())
@@ -127,7 +130,7 @@ stage=MergeStage(Store(runtime))
 record=assertion(source_code="invented.authority",record_key="one",publication_key="one",
     revision=1,effective_at="2026-01-01T00:00:00Z",kind="invented-kind",
     identifiers={"invented_number":"171"},
-    fields={"invented_amount":10**80+1,"invented_text":"INVENTED 雪 💠 é"},
+    fields={"invented_amount":10**80+1,"invented_text":"INVENTED 雪 💠 é","name":"INVENTED ROOT"},
     details={"invented_rows":[{"key":"invented-row","amount":10**80+7}]})
 command={"batch_id":"invented-installed-save","run_id":str(uuid4()),"policy_digest":pin,
     "consumer":"invented-proof","expected_checkpoint":0,"checkpoint":1,
@@ -158,6 +161,10 @@ context=Context(runtime).answer(Namespace(subject="invented-kind",key="invented_
 assert context["entity_id"]==pointer["entity_id"]
 assert context["trust"]["recorded_at"]==read["projection"]["recorded_at"]
 assert context["sources"]=={"invented.authority":["one"]}
+def searched(words):
+    return Context(runtime).answer(Namespace(subject="invented-kind",key=None,search=words,limit=5,
+        as_of=None,as_at=None,detail="full",page=None))["matches"]
+assert searched("root")[0]["entity_id"]==pointer["entity_id"]
 def counts():
     with runtime.connect() as conn:
         return {name:conn.scalar(select(func.count()).select_from(api.tables[name]))
@@ -174,7 +181,7 @@ def save(**parts):
         checkpoint=position,as_of="2026-03-01T00:00:00Z",**parts)
 updated_record=assertion(source_code="invented.authority",record_key="one",publication_key="two",
     revision=2,effective_at="2026-01-02T00:00:00Z",kind="invented-kind",
-    identifiers={"invented_number":"171"},fields={"invented_amount":10**80+2},
+    identifiers={"invented_number":"171"},fields={"invented_amount":10**80+2,"name":"INVENTED UPDATED"},
     details={"invented_rows":[{"key":"invented-row","amount":10**80+8}]})
 save(assertions=[updated_record])
 updated=reader.entity(pointer["entity_id"])
@@ -183,6 +190,7 @@ assert updated["field_provenance"]["invented_amount"]["evidence"]==updated_recor
 assert updated["identity"]["details"]["invented_rows"]==[
     {"key":"invented-row","amount":10**80+8,"sources":["invented.authority"]}]
 assert reader.entity(pointer["entity_id"],generation=1)==read
+assert searched("root")==[] and searched("updated")[0]["entity_id"]==pointer["entity_id"]
 opaque_key="INVENTED-雪-"+"x"*5000
 other_record=assertion(source_code="invented.authority",record_key=opaque_key,publication_key="one",
     revision=1,effective_at="2026-01-01T00:00:00Z",kind="invented-kind",
@@ -213,7 +221,7 @@ assert reader.entity(other_id,generation=merged["generation"])==merged
 assert MdmIds(runtime)("invented.authority","invented-kind",{opaque_key})=={opaque_key:other_id}
 linked=assertion(source_code="invented.authority",record_key="one",publication_key="three",
     revision=3,effective_at="2026-01-03T00:00:00Z",kind="invented-kind",
-    identifiers={"invented_number":"171"},fields={"invented_amount":10**80+2},
+    identifiers={"invented_number":"171"},fields={"invented_amount":10**80+2,"name":"INVENTED UPDATED"},
     relationships=[{"type":"invented_link","target_subject":other_record["subject"],
         "valid_from":"2026-01-01T00:00:00Z","valid_to":None,"scope":"invented"}])
 linked_result=save(assertions=[linked])
@@ -229,7 +237,7 @@ recorded=api.batch_metadata(linked_result["generation"],limit=1)[0]["recorded_at
 at=(datetime(1970,1,1,tzinfo=UTC)+timedelta(microseconds=recorded)).isoformat()
 unlinked=assertion(source_code="invented.authority",record_key="one",publication_key="four",
     revision=4,effective_at="2026-01-04T00:00:00Z",kind="invented-kind",
-    identifiers={"invented_number":"171"},fields={"invented_amount":10**80+2},relationships=[])
+    identifiers={"invented_number":"171"},fields={"invented_amount":10**80+2,"name":"INVENTED UPDATED"},relationships=[])
 save(assertions=[unlinked])
 assert Context(runtime).answer(relation_args)["related_count"]==0
 assert Context(runtime).answer(Namespace(**{**vars(relation_args),"as_at":at}))["related_count"]==1
@@ -251,11 +259,37 @@ output=io.StringIO()
 with redirect_stdout(output):
     status=main(["context","relationship",pointer["entity_id"],"--as-at",at,"--detail","full"])
 assert status==0 and json.loads(output.getvalue())["related_count"]==1
+from unittest.mock import patch
+from edgar_warehouse.mdm.clean import master_search
+from edgar_warehouse.context import ContextError
+missed=assertion(source_code="invented.authority",record_key="one",publication_key="five",
+    revision=5,effective_at="2026-01-05T00:00:00Z",kind="invented-kind",
+    identifiers={"invented_number":"171"},fields={"name":"INVENTED REBUILT"})
+with patch.object(master_search,"normal_changes",return_value=[]):
+    save(assertions=[missed])
+try:
+    searched("rebuilt")
+except ContextError as error:
+    assert "complete index" in str(error)
+else:
+    raise AssertionError("A missed index generation must refuse search")
+before={key:value for key,value in counts().items() if key!="lookup"}
+generation=api.generation()
+os.environ["MDM_DATABASE_URL"]=os.environ["READ_OWNER_URL"]
+for processed,ready in [(1,False),(1,True),(0,True)]:
+    output=io.StringIO()
+    with redirect_stdout(output):
+        status=main(["mdm","rebuild-name-index","--limit","1"])
+    assert status==0 and json.loads(output.getvalue())=={
+        "generation":generation,"processed":processed,"ready":ready}
+assert api.generation()==generation and {key:value for key,value in counts().items() if key!="lookup"}==before
+assert searched("rebuilt")[0]["entity_id"]==pointer["entity_id"]
 print(json.dumps({"independent_install":True,"preview_rolled_back":True,
                   "assessment_applied":True,"duplicate_unchanged":True,"identities":2,
                   "master_reads":True,"context":True,"silver_lookup":True,
                   "history_alias_reversal":True,"pinned_page":True,
-                  "details":True,"relationships":True,"operator_cli":True}))
+                  "details":True,"relationships":True,"operator_cli":True,
+                  "search":True,"owner_rebuild":True}))
 '''.replace("invented-kind", kind).replace("invented.authority", source_code)
     with database_factory() as (owner, runtime, role):
         if owner.dialect.name == "mssql":
@@ -278,4 +312,5 @@ print(json.dumps({"independent_install":True,"preview_rolled_back":True,
                          "assessment_applied": True, "duplicate_unchanged": True, "identities": 2,
                          "master_reads": True, "context": True, "silver_lookup": True,
                          "history_alias_reversal": True, "pinned_page": True,
-                         "details": True, "relationships": True, "operator_cli": True}
+                         "details": True, "relationships": True, "operator_cli": True,
+                         "search": True, "owner_rebuild": True}

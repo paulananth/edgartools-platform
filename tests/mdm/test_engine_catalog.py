@@ -23,6 +23,28 @@ def test_configuration_is_part_of_the_execution_identity():
     assert catalog.path().is_file()
 
 
+@pytest.mark.parametrize("change", ["valid", "missing_version", "empty_fields", "duplicate_fields",
+                                    "bad_field", "bad_weight", "boolean_weight", "unknown"])
+def test_master_search_is_configured_and_validated(tmp_path, change):
+    body = copy.deepcopy(catalog.CATALOG)
+    spec = {"version": "invented-search-v1", "name_fields": ["invented_name", "invented_fallback"],
+            "position_weight": 0.1}
+    body["master_search"] = spec
+    if change == "missing_version": spec.pop("version")
+    elif change == "empty_fields": spec["name_fields"] = []
+    elif change == "duplicate_fields": spec["name_fields"] *= 2
+    elif change == "bad_field": spec["name_fields"] = [1]
+    elif change == "bad_weight": spec["position_weight"] = 0
+    elif change == "boolean_weight": spec["position_weight"] = True
+    elif change == "unknown": spec["invented"] = True
+    write(tmp_path, body)
+    if change == "valid":
+        assert catalog.load(tmp_path)["master_search"] == spec
+    else:
+        with pytest.raises(ValueError, match="Master search"):
+            catalog.load(tmp_path)
+
+
 def test_invented_kind_profile_and_approval_floor_are_loaded_without_engine_edits(tmp_path):
     body = copy.deepcopy(catalog.CATALOG)
     body["kinds"].append("invented-kind")

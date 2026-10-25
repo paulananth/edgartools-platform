@@ -4,6 +4,7 @@ pub mod bookkeeping;
 mod opaque;
 pub mod reference;
 pub mod silver;
+pub mod text_search;
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde_json::value::{to_raw_value, RawValue};
 use sha2::{Digest, Sha256};
@@ -362,6 +363,7 @@ mod python {
         m.add_function(wrap_pyfunction!(encode_reference_search, m)?)?;
         m.add_function(wrap_pyfunction!(reference_query_matches, m)?)?;
         m.add_function(wrap_pyfunction!(prepare_reference_search, m)?)?;
+        m.add_function(wrap_pyfunction!(prepare_text_search, m)?)?;
         m.add_function(wrap_pyfunction!(completion_storage_contract, m)?)?;
         m.add_function(wrap_pyfunction!(select_latest_capture, m)?)?;
         m.add_function(wrap_pyfunction!(select_verified_units, m)?)?;
@@ -416,6 +418,11 @@ mod python {
     #[pyfunction]
     fn prepare_reference_search(py: Python<'_>, raw: String) -> PyResult<String> {
         py.allow_threads(|| super::reference::prepare_reference_search(&raw))
+            .map_err(PyValueError::new_err)
+    }
+    #[pyfunction]
+    fn prepare_text_search(py: Python<'_>, raw: String) -> PyResult<String> {
+        py.allow_threads(|| super::text_search::prepare_text_search(&raw))
             .map_err(PyValueError::new_err)
     }
     #[pyfunction]

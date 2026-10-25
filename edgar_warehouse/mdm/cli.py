@@ -1,7 +1,7 @@
 """CLI subcommand: `edgar-warehouse mdm ...`, MDM only.
 
-Seven commands: migrate, check-connectivity, counts, prepare-clean-company,
-prepare-capture, name-census and force-publish. The legacy MDM commands and their tables are
+Commands: migrate, check-connectivity, counts, prepare-clean-company,
+prepare-capture, name-census, force-publish and rebuild-name-index. The legacy MDM commands and their tables are
 deleted (platform validation slice 2a).
 """
 from __future__ import annotations
@@ -86,6 +86,12 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     force.add_argument("--run-id", help="Run again with the same pages (a stopped command)")
     force.add_argument("--step", default="graph-publication", help="The publish target's step name")
     force.set_defaults(handler=_logged_handler("force-publish", _clean("force_publish")))
+
+    rebuild = mdm_sub.add_parser("rebuild-name-index", help="Owner-only resumable name-index rebuild")
+    rebuild.add_argument("--limit", type=int, help="Stop after this many masters; retain resumable progress")
+    rebuild.add_argument("--page-size", type=int, default=200, help="Masters per owner transaction (1 to 1000)")
+    rebuild.add_argument("--restart", action="store_true", help="Restart overtaken progress from the beginning")
+    rebuild.set_defaults(handler=_logged_handler("rebuild-name-index", _clean("rebuild_name_index")))
 
     counts = mdm_sub.add_parser("counts", help="Print MDM entity and record counts")
     counts.set_defaults(handler=_logged_handler("counts", _clean("counts")))

@@ -477,13 +477,22 @@ class Context:
         words = args.search.strip()
         if not words:
             raise ContextError("--search needs some words.", f"{PROG} {args.subject} --search \"<words>\"")
-        with self.engine.connect() as conn:
+        with self.engine.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
             from edgar_warehouse.mdm.clean.prepared_registry import installed
-            if installed(conn) is not None:
-                raise ContextError("Name search is not installed for prepared MDM storage.",
-                                   f"{PROG} {args.subject} <entity_id> or {PROG} {args.subject} <namespace>:<value>")
-            rows = conn.execute(text("SELECT * FROM mdm.entity_search(:w, :k, :n)"),
-                                {"w": words, "k": args.subject, "n": args.limit}).mappings().all()
+            adapter = installed(conn)
+            if adapter is not None:
+                from edgar_warehouse.mdm.clean.master_search import configuration, search
+                from edgar_warehouse.mdm.clean.store import Conflict
+                if configuration() is None:
+                    raise ContextError("Name search is not installed for prepared MDM storage.",
+                                       f"{PROG} {args.subject} <entity_id> or {PROG} {args.subject} <namespace>:<value>")
+                try:
+                    rows = search(adapter, conn, args.subject, words, args.limit)
+                except Conflict as error:
+                    raise ContextError(str(error), "edgar-warehouse mdm rebuild-name-index --limit 20 (owner)") from None
+            else:
+                rows = conn.execute(text("SELECT * FROM mdm.entity_search(:w, :k, :n)"),
+                                    {"w": words, "k": args.subject, "n": args.limit}).mappings().all()
             trust = _latest(conn)
         matches = [{"name": r["name"], "kind": r["kind"], "entity_id": r["entity_id"], "status": r["status"],
                     "matched_by": r["matched_by"]} for r in rows]
@@ -640,6 +649,10 @@ class Context:
 
 
 def _name(body: dict):
+    from edgar_warehouse.mdm.clean.master_search import configuration, configured_name
+    spec = configuration()
+    if spec is not None:
+        return configured_name(body, spec)
     fields = body.get("fields", {})
     for name in ("name", "legal_name", "display_name"):
         value = fields.get(name, {}).get("value")

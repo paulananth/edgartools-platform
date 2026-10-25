@@ -30,6 +30,7 @@ from sqlalchemy import (
     case,
     cast,
     create_engine,
+    delete,
     event,
     func,
     inspect,
@@ -1185,6 +1186,81 @@ class Adapter:
                     "recorded_at": int(row["origin_recorded_at"]),
                 }}
         return found
+
+    def maintain_lookups(self, connection, *, expected_generation, changes, batch=None):
+        """Owner-only derived-index maintenance; no batch, history or delivery.
+
+        Direct table privileges remain with the owner. The destination gate
+        fences authoritative reads and optimistic versions in this transaction.
+        The caller must take that gate before preparing changes from records.
+        """
+        if self.protocol != 5:
+            raise AdapterError("Lookup maintenance requires governed storage")
+        counter(expected_generation)
+        gate = self.tables["gate"]
+        observed = connection.scalar(select(gate.c.generation).where(gate.c.id == 1).with_for_update())
+        if observed != expected_generation:
+            raise AdapterError("stale_generation")
+        ledger = self.tables["migration"]
+        count, ready = connection.execute(select(func.count(), func.min(ledger.c.complete))).one()
+        if count != 5 or ready != 1:
+            raise AdapterError("storage_not_initialized")
+        provenance = self.tables["batch"]
+        query = select(provenance.c.batch_key, provenance.c.batch_bytes, provenance.c.generation).where(
+            provenance.c.batch_key == key(batch) if batch is not None else provenance.c.generation == observed)
+        if batch is None and self.engine.dialect.name == "mysql":
+            query = query.with_hint(provenance, f"FORCE INDEX ({self.prefix}_generation_unique)", dialect_name="mysql")
+        origin = connection.execute(query).first()
+        if (origin is None or origin.generation != observed
+                or hashlib.sha256(bytes(origin.batch_bytes)).hexdigest() != origin.batch_key
+                or batch is not None and bytes(origin.batch_bytes) != batch.encode()):
+            raise AdapterError("Lookup maintenance requires current batch provenance")
+        batch_key = origin.batch_key
+        entries = list(changes)
+        if len({(entry.type, entry.id) for entry in entries}) != len(entries):
+            raise AdapterError("Duplicate lookup maintenance key")
+        old = self.read([(entry.type, entry.id) for entry in entries], lookup=True, connection=connection)
+        table = self.tables["lookup"]
+        for entry in entries:
+            entry.wire()
+            held = old.get((entry.type, entry.id))
+            if (held["version"] if held else 0) != entry.expected_version:
+                raise AdapterError("stale_object_version")
+        # Bound statement size without turning each reference into a round trip.
+        for offset in range(0, len(entries), 200):
+            chunk = entries[offset:offset + 200]
+            removed = [entry for entry in chunk if entry.removed]
+            if removed:
+                selections = [select(self._bound_key(entry.type).label("type_key"),
+                                     self._bound_key(entry.id).label("id_key")) for entry in removed]
+                wanted = (union_all(*selections) if len(selections) > 1 else selections[0]).subquery("wanted")
+                connection.execute(delete(table).where(table.c.type_key == wanted.c.type_key,
+                                                       table.c.id_key == wanted.c.id_key))
+            rows = []
+            for entry in chunk:
+                if entry.removed:
+                    continue
+                body = document(entry.body)
+                rows.append({"type_key": key(entry.type), "id_key": key(entry.id),
+                    "type_bytes": entry.type.encode(), "id_bytes": entry.id.encode(),
+                    "body": body, "body_hash": hashlib.sha256(body).hexdigest(),
+                    "batch_key": batch_key, "version": entry.expected_version + 1, "generation": observed})
+            if rows:
+                if self.engine.dialect.name == "postgresql":
+                    from sqlalchemy.dialects.postgresql import insert as bulk_insert
+                    statement = bulk_insert(table).values(rows)
+                    statement = statement.on_conflict_do_update(
+                        index_elements=[table.c.type_key, table.c.id_key],
+                        set_={name: statement.excluded[name] for name in rows[0]
+                              if name not in {"type_key", "id_key", "type_bytes", "id_bytes"}})
+                else:
+                    from sqlalchemy.dialects.mysql import insert as bulk_insert
+                    statement = bulk_insert(table).values(rows)
+                    statement = statement.on_duplicate_key_update(**{
+                        name: statement.inserted[name] for name in rows[0]
+                        if name not in {"type_key", "id_key", "type_bytes", "id_bytes"}})
+                connection.execute(statement)
+        return {"generation": observed, "changed": len(entries)}
 
     def claim_outbox(self, batch: str, consumer: str, owner: str, *, seconds=300):
         for value in (batch, consumer, owner):

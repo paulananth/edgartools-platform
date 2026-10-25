@@ -1,4 +1,4 @@
-"""The `mdm` command offers five MDM commands, each bound to one
+"""The `mdm` commands are each bound to one
 function (platform validation slice 2a)."""
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ PREPARE = ["--capture", "c", "--documents", "d", "--population", "p", "--catalog
     (["mdm", "name-census", *CENSUS], "name_census"),
     (["mdm", "prepare-clean-company", *PREPARE], "prepare_clean_company"),
     (["mdm", "force-publish", "--consumer", "graph", "--output", "o"], "force_publish"),
+    (["mdm", "rebuild-name-index", "--limit", "1"], "rebuild_name_index"),
 ])
 def test_each_command_runs_its_function(monkeypatch, argv, function):
     called = []
@@ -27,7 +28,7 @@ def test_each_command_runs_its_function(monkeypatch, argv, function):
     assert args.handler(args) == 0 and called == [argv[1]]
 
 
-def test_only_the_five_clean_commands_are_offered():
+def test_retired_commands_stay_unavailable():
     parser = build_parser()
     for retired in ("mastering", "apply-decisions", "bronze-receipts", "correction-batch", "export"):
         with pytest.raises(SystemExit):

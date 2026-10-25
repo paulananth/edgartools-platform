@@ -61,7 +61,7 @@ fn optional_text(row: &Object, name: &str) -> Result<Option<String>, String> {
     }
 }
 
-fn query_groups(words: &str) -> Vec<Vec<String>> {
+pub(crate) fn query_groups(words: &str) -> Vec<Vec<String>> {
     let mut terms = Vec::new();
     let mut token = String::new();
     let mut quoted = false;
@@ -99,7 +99,7 @@ fn query_groups(words: &str) -> Vec<Vec<String>> {
     groups.into_iter().filter(|g| !g.is_empty()).collect()
 }
 
-fn search_token(term: &str) -> String {
+pub(crate) fn search_token(term: &str) -> String {
     use sha2::{Digest, Sha256};
     format!("{:x}", Sha256::digest(term.as_bytes()))
 }
@@ -122,7 +122,7 @@ pub fn compile_reference_query(words: &str) -> String {
     groups.join(" ")
 }
 
-fn lexemes(value: &str) -> Vec<String> {
+pub(crate) fn lexemes(value: &str) -> Vec<String> {
     let mut found = Vec::new();
     // Keep compound words as well as their components, and dotted tokens as
     // units, matching the existing simple-parser word/compound behavior.
@@ -160,7 +160,7 @@ pub fn reference_query_matches(words: &str, label: &str) -> bool {
     }))
 }
 
-fn cover_density(words: &str, label: &str, weight: f64) -> f64 {
+pub(crate) fn cover_density(words: &str, label: &str, weight: f64) -> f64 {
     // Minimal positive covers, with intervening non-query tokens discounted.
     // Formula reference: PostgreSQL 16 tsrank.c calc_rank_cd / Cover:
     // https://github.com/postgres/postgres/blob/REL_16_STABLE/src/backend/utils/adt/tsrank.c

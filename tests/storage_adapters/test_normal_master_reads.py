@@ -17,6 +17,8 @@ def test_normal_master_reads(case, kind, database_factory, configured_root):
     if os.environ.get("SKILL_ADAPTER_TEST_ENGINE") == "mssql":
         pytest.skip("SQL Server full normal workflow is deferred")
     body = files.load(configured_root / "mastering/engine-v1.yaml")
+    if case == "context_search_gap":
+        body.pop("master_search", None)
     if kind not in body["kinds"]:
         body["kinds"].append(kind)
     for declared in ("invented-kind", kind):

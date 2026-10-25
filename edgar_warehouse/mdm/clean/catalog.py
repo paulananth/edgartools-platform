@@ -23,8 +23,21 @@ def load(root=None):
 def _validate(body):
     expected = {"version", "kinds", "profiles", "accepted_bars", "legacy_relationships", "legacy_ultimate_type",
                 "reference_tables", "legacy_jurisdiction_table", "pair_comparisons", "legacy_pair_comparison"}
-    if not isinstance(body, dict) or set(body) != expected or not isinstance(body["version"], str) or not body["version"]:
+    if (not isinstance(body, dict) or not expected <= set(body)
+        or set(body) - expected - {"master_search"}
+        or not isinstance(body["version"], str) or not body["version"]):
         raise ValueError("Mastering engine catalog must name its version and configured sections")
+    if "master_search" in body:
+        search = body["master_search"]
+        if (not isinstance(search, dict) or set(search) != {"version", "name_fields", "position_weight"}
+            or not isinstance(search["version"], str) or not search["version"].strip()
+            or not isinstance(search["name_fields"], list) or not search["name_fields"]
+            or any(not isinstance(field, str) or not field or field.strip() != field
+                   for field in search["name_fields"])
+            or len(set(search["name_fields"])) != len(search["name_fields"])
+            or type(search["position_weight"]) not in (int, float)
+            or not math.isfinite(search["position_weight"]) or not 0 < search["position_weight"] <= 1):
+            raise ValueError("Master search needs versioned name fields and a position weight")
     kinds = body["kinds"]
     if (not isinstance(kinds, list) or not kinds or not all(isinstance(k, str) and k.strip() == k and k for k in kinds)
         or len(set(kinds)) != len(kinds)):
