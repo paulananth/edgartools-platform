@@ -236,9 +236,11 @@ moved nothing (a lease from a stopped worker has not expired yet).
 (`bookkeeping resume` resets only the run's state, not such a unit.)
 
 An open run is driven by the steps it was frozen with, so a later rules
-version never changes a run already under way. A blocked run frozen under a
-retired rules version is reported and left as it is: the Change Journal loads
-its documents again under the active rules.
+version never changes a run already under way. Two kinds of run are reported
+and left as they are, and their documents load again in a new run (the Change
+Journal never recorded them): a blocked run frozen under a retired rules
+version, and an open run pinned to other worker code, which no later checkout
+can finish ("Pinned worker runtime changed; start a new run").
 
 ### Fit the load into the window
 

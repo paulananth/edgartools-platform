@@ -61,6 +61,7 @@ class Loader:
                  say=lambda line: print(line, file=sys.stderr, flush=True)):
         self.source, self.target, self.say = source, target, say
         self.reading = target_of(source, target)
+        self.runtimes: dict[str, str] = {}
         env = duties(stores)
         self.root = manifest_root(env) / "load" / source / target
         self.commands = Commands(env, (self.root / "reports").as_uri(), deadline=time.monotonic() + minutes * 60,
@@ -70,23 +71,37 @@ class Loader:
         listed = json.loads(self.commands("worker", "bookkeeping", "runs", "--state", state, "--limit", "1000"))
         return [r for r in listed if (r.get("name"), r.get("target")) == (self.source, self.target)]
 
-    def open_runs(self) -> tuple[list[str], list[str]]:
-        """Runs of this source and target that are not finished, oldest first, and the blocked
-        runs left as they are. A blocked run under the active rules version stops the load: its
-        documents would otherwise be submitted again. One under a retired version stays as it
-        is: the Change Journal loads its documents again under the active rules anyway."""
+    def runtime(self, profile: str) -> str:
+        """This checkout's worker runtime digest for a profile, the one a run pins on first use."""
+        if profile not in self.runtimes:
+            self.runtimes[profile] = json.loads(self.commands("worker", "workers", "describe", profile))["runtime"]
+        return self.runtimes[profile]
+
+    def open_runs(self) -> tuple[list[str], dict[str, str]]:
+        """Runs of this source and target to finish first, oldest first, and the runs left as they
+        are, each with why. A blocked run under the active rules version stops the load: its
+        documents would otherwise be submitted again. A blocked run under a retired version, or
+        an open run pinned to other worker code (which this checkout cannot finish), stays as it
+        is: the Change Journal loads its documents again in a new run."""
         listed = json.loads(self.commands("worker", "rules", "status", "--source", self.source))
         active = next((v["version"] for v in listed if v.get("status") == "active"), None)
-        superseded = []
+        left = {}
         for run in self.mine("blocked"):
             version = self.commands.status(str(run["run_id"]))["run"]["submission"].get("rule_version")
             if version == active:
                 raise RunStopped(f"Run {run['run_id']} of {self.source} {self.target} is blocked: read "
                                  f"bookkeeping status {run['run_id']}, and recover it (bookkeeping RECOVERY.md) "
                                  "before loading more")
-            superseded.append(str(run["run_id"]))
-        found = [r for state in OPEN for r in self.mine(state)]
-        return [str(r["run_id"]) for r in sorted(found, key=lambda r: str(r["created_at"]))], superseded
+            left[str(run["run_id"])] = f"blocked under retired rules version {version}"
+        unfinished = []
+        for run in sorted((r for state in OPEN for r in self.mine(state)), key=lambda r: str(r["created_at"])):
+            pinned = self.commands.status(str(run["run_id"]))["run"].get("runtimes") or {}
+            other = sorted(p for p, digest in pinned.items() if not p.startswith("verify:") and digest != self.runtime(p))
+            if other:
+                left[str(run["run_id"])] = f"pinned to other worker code ({', '.join(other)})"
+            else:
+                unfinished.append(str(run["run_id"]))
+        return unfinished, left
 
     def drive(self, run_id: str) -> dict:
         """Drive a run by the steps it was frozen with, which a later rules version cannot change."""
@@ -102,9 +117,9 @@ class Loader:
 
     def load(self, *, capture: Path, capture_run: str, as_of: str, facts: list[str], run_files: list[str]) -> dict:
         result = {"source": self.source, "target": self.target, "finished_open_runs": [], "bundles": []}
-        unfinished, result["blocked_under_retired_rules"] = self.open_runs()
-        for run_id in result["blocked_under_retired_rules"]:
-            self.say(f"Run {run_id} stays blocked: it was frozen under a retired rules version")
+        unfinished, result["left_as_they_are"] = self.open_runs()
+        for run_id, why in result["left_as_they_are"].items():
+            self.say(f"Run {run_id} is left as it is: {why}")
         for run_id in unfinished:
             self.say(f"Finishing run {run_id}, left open before")
             self.drive(run_id)

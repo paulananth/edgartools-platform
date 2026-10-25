@@ -39,12 +39,14 @@ def test_bundles_hold_at_most_the_sources_limit_in_key_order():
 class Recorded:
     """The platform's commands, answered from invented state, and every call kept."""
 
-    def __init__(self, open_runs=(), processed=(), versions=None):
+    def __init__(self, open_runs=(), processed=(), versions=None, pinned=None):
         self.calls, self.open, self.processed, self.submitted = [], list(open_runs), set(processed), 0
-        self.versions = versions or {}
+        self.versions, self.pinned = versions or {}, pinned or {}
 
     def __call__(self, duty, *args):
         self.calls.append(args[:2])
+        if args[:2] == ("workers", "describe"):
+            return json.dumps({"profile": args[2], "runtime": "this-checkout"})
         if args[:2] == ("rules", "status"):
             return json.dumps([{"version": "example-2", "status": "active"}, {"version": "example-1", "status": "retired"}])
         if args[:2] == ("bookkeeping", "runs"):
@@ -63,7 +65,9 @@ class Recorded:
 
     def status(self, run_id):
         return {"run": {"submission": {"rules": {"uri": f"file:///frozen/{run_id}", "sha256": "2" * 64},
-                                       "rule_version": self.versions.get(run_id, "example-2")}}}
+                                       "rule_version": self.versions.get(run_id, "example-2")},
+                        "runtimes": self.pinned.get(run_id, {"source.read": "this-checkout",
+                                                             "verify:source.read": "this-checkout"})}}
 
     def drive(self, run_id, steps):
         self.calls.append(("drive", run_id, tuple(step["name"] for step in steps)))
@@ -127,7 +131,7 @@ def test_a_blocked_run_under_retired_rules_stays_as_it_is_and_the_load_goes_on(t
     result = loader(tmp_path, monkeypatch, commands).load(
         capture=folder, capture_run="capture-1", as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
 
-    assert result["blocked_under_retired_rules"] == ["old-rules-1"]
+    assert result["left_as_they_are"] == {"old-rules-1": "blocked under retired rules version example-1"}
     assert not [c for c in commands.calls if c[:2] == ("drive", "old-rules-1")]
     assert [b["run_id"] for b in result["bundles"]] == ["new-1"]
 
@@ -137,3 +141,17 @@ def test_a_target_the_source_does_not_declare_is_refused(monkeypatch):
 
     with pytest.raises(driving.RunStopped, match="declares no `missing` target"):
         loading.target_of("example", "missing")
+
+
+def test_an_open_run_pinned_to_other_worker_code_is_left_and_its_documents_load_anew(tmp_path, monkeypatch):
+    commands = Recorded(open_runs=[("other-code-1", "example", "by_letter", "running")],
+                        pinned={"other-code-1": {"source.read": "this-checkout", "source.combine": "older-code",
+                                                 "verify:source.combine": "older-code"}})
+    folder = capture(tmp_path / "c", "letters/a.json")
+
+    result = loader(tmp_path, monkeypatch, commands).load(
+        capture=folder, capture_run="capture-1", as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
+
+    assert result["left_as_they_are"] == {"other-code-1": "pinned to other worker code (source.combine)"}
+    assert result["finished_open_runs"] == []
+    assert [b["run_id"] for b in result["bundles"]] == ["new-1"]
