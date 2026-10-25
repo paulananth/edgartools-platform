@@ -139,8 +139,13 @@ submits one source.
    ```
    Exit 0 and status `configured` means its `target` is a declared Bookkeeping
    target whose steps have workers. Exit 3 with `source_target_not_configured`
-   means the source is not wired: report that and stop. Do not invent a target
-   or submit a different source to stand in for it. A successful check does
+   means stop only when that source's `source.yaml` declares no Bookkeeping
+   target. The inventory holds one `target`. A source that declares several,
+   and whose sequence comment names them in order, is wired: run those
+   targets in that order. OpenFIGI is `answers_cusip`, `answers_isin`,
+   `mastering_cusip`, then `mastering_isin` (the comment on its sequence
+   line). Do not add a second inventory field, and do not submit another
+   source in its place. A successful check does
    not install, approve or start a run. Detail is in
    `docs/specs/source-sequencing.md` in the repository.
 2. **Install that source only.** Save its document into the Rules database.
@@ -194,17 +199,51 @@ What a run needs, in order, learned on the Securities runs (ticket 120):
 2. **Submit.** `rules run` with that manifest only submits: it freezes the
    active rules version, the manifest and each step's worker profile, and
    returns the run id. Nothing works yet.
-3. **Drive each step in its declared order.** For each step:
-   - Workers (`workers work <operation> <run> --limit N`) can run in
-     parallel: a unit is leased, so two workers never take the same one.
-   - Use **one verifier** (`workers verify ... --reports <folder>`).
-     Verifying takes no lease, so two verifiers can both verify the same
-     unit, and the second is refused.
-   - Repeat until `bookkeeping status <run>` shows every unit of the step
-     `verified`. A unit `waiting` failed its checks: stop and read its error.
+3. **Drive each step in its declared order.** Fit the load into the window
+   below before the first worker, and again when a one-worker driver is
+   already going. A unit `waiting` failed its checks: stop and read its error.
 4. **Finalize.** `bookkeeping finalize <run>` checks the whole run again and
    marks it `complete`. On a large run this is not instant (Securities, 2026
    Q2: 16 minutes).
+
+### Fit a load into the window
+
+The operator names the window. A plan that does not fit it is not the plan
+(operator, 2026-10-24: "10 hours will never fly must be within 1-2 hours").
+
+Do this before starting, from counts, not from a bundle count times a guessed
+bundle time:
+
+1. Count the documents the Change Journal has not processed, and the bundle
+   size (`execution.max_artifacts`, 512 for OpenFIGI). Bundles of one target
+   that do not read each other are one wave, not a queue.
+2. On one submitted bundle, count units by step. The wide step has many units
+   and reads one file each (`source.read`). The narrow step is one unit for
+   the whole bundle (`mdm.merge`). More workers do not shorten a narrow step.
+   OpenFIGI's merge of 49,082 records took 50 minutes, and that time stands
+   no matter how many readers ran first.
+3. Workers on the wide step: `cores - 2`, at least 2 when one worker would
+   miss the window, and never more than the units still pending. On the
+   8-core laptop that ran ticket 120, that is 6 readers. One verifier for
+   the run, never two. One worker on the narrow step.
+4. The bound is (wide units / readers) × the last measured time per unit,
+   plus the narrow step once per bundle, plus `finalize`. Bundles in one wave
+   share the readers. A target that reads another target still waits
+   (`mastering_isin` after every `mastering_cusip` run). If that sum exceeds
+   the window, say so and do not start. Do not drop files to make it fit.
+5. A one-worker driver already on the run is the mistake. Leave its run.
+   Start the extra `workers work <wide operation> <run> --limit 100` beside
+   it. Do not submit the bundle again. The lease keeps them off the same unit.
+   A profile shared by several steps still runs one step at a time: verify
+   the earlier step before more workers of that profile start. Workers that
+   lose the row lock park the unit (`Lease or prerequisite contention;
+   retry on resume`). `bookkeeping resume` does not reopen that unit. The
+   next `workers work` of the same profile claims it again, once the earlier
+   step is verified and no live lease holds it. Do not submit the bundle again.
+
+The serial plan that missed the window: 3,837 CUSIP files and 3,877 ISIN
+files, 512 a bundle, one reader, CUSIP then ISIN. The first CUSIP bundle had
+512 request units and 32 answer units. Readers are the part that divides.
 
 While a run is live:
 - **Do not change worker code** (`edgar_warehouse/workers/*`). A run pins its
@@ -253,8 +292,10 @@ it.
    [refining-rules](../refining-rules/SKILL.md). Routine deliveries reuse applicable
    qualification and approval; missing version evidence is reconciled, not invented.
 3. **Size the work.** Measure usable CPU, memory, disk, database connection budget
-   and competing work at the actual execution host/container. Use prior verified
-   measurements and current supported bounds to choose concurrency and bundle size.
+   and competing work at the actual execution host/container. Fit the load into
+   the window under **Submit and drive one run** before choosing a one-worker
+   queue. Use prior verified measurements and current supported bounds to choose
+   concurrency and bundle size.
    Account for verifier costs too. Unknown estimates start conservatively; exhausted
    resources wait. Size divides the whole backlog into work, never drops records.
    A proof is not this step: [Choose the cheapest proof](../mdm-engineering/SKILL.md#choose-the-cheapest-proof)

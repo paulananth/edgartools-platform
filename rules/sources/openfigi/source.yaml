@@ -36,7 +36,7 @@ acquisition:
       family: openfigi
       datasets:
       - openfigi.security.v1
-      - openfigi.security_isin.v1
+      - openfigi.security_isin.v2
       scope:
       - batch
       capabilities:
@@ -784,7 +784,7 @@ bookkeeping:
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, mdm.prepared]
           input:
-            keys: {table: security, record_column: record, dataset: openfigi.security_isin.v1}
+            keys: {table: security, record_column: record, dataset: openfigi.security_isin.v2}
             readings: {record: {all: record}}
         - name: merge
           operation: mdm.merge
@@ -986,7 +986,9 @@ mdm:
           composite_figi: composite_figi
           share_class_figi: share_class_figi
           openfigi_ticker: ticker
-  openfigi.security_isin.v1:
+  # v2 because company-on already held v1, and this contract also issues a CUSIP.
+  # An identifier cannot be added on an existing source code (2026-10-24).
+  openfigi.security_isin.v2:
     contract:
       provider: OpenFIGI
       family: openfigi
