@@ -64,17 +64,33 @@ try:
             assert unchanged["field_provenance"] == updated["field_provenance"]
             assert g["normal"].read_origins([("entity", root)])[("entity", root)]["origin"] == origin
     if case == "alias":
+        from argparse import Namespace
+        from edgar_warehouse.context import Context
+
         other = s["later_identity"]("later")
         before = reader.entity(other)
+        args = Namespace(subject=g["KIND"], key=other, search=None, as_at=None,
+                         as_of=None, detail="full", page=None)
+        before_at = before["projection"]["recorded_at"]
+        assert Context(runtime).answer(args)["entity_id"] == other
         verdict = s["merge"](root, other)
         merged = reader.entity(other)
         assert merged["requested_id"] == other and merged["canonical_id"] == root
         assert merged["identity"] == reader.entity(root)["identity"]
         assert reader.entity(other, generation=before["generation"]) == before
+        redirected = Context(runtime).answer(args)
+        assert redirected["entity_id"] == root and redirected["merged_from"] == other
+        historical = Context(runtime).answer(Namespace(**{**vars(args), "as_at": before_at}))
+        assert historical["entity_id"] == other
+        assert historical["trust"]["generation"] == before["projection"]["generation"]
         s["apply"](decisions=[decision("reverse", actor="fixture", reason="invented reversal",
             at="2026-02-02T00:00:00Z", target=verdict["decision_id"])])
         assert reader.entity(other)["canonical_id"] == other
         assert reader.entity(other, generation=merged["generation"]) == merged
+        assert Context(runtime).answer(args)["entity_id"] == other
+        past_merge = Context(runtime).answer(Namespace(**{**vars(args),
+            "as_at": merged["projection"]["recorded_at"]}))
+        assert past_merge["entity_id"] == root and past_merge["merged_from"] == other
     if case == "profile":
         policy = {**g["policy"], "version": "invented-profile-reader",
                   "profile_fields": {"invented-role": {"invented_metric": {
@@ -188,6 +204,19 @@ try:
             assert json.loads(output.getvalue()) == expected
         adapter = g["normal"]
         assert_index_lookup(runtime, adapter.type_count_statement(["entity"]), adapter.tables["current"].name)
+    if case == "publication_gap":
+        from pathlib import Path
+        from edgar_warehouse.cli import main
+        from edgar_warehouse.mdm.clean.store import Conflict
+
+        os.environ["MDM_DATABASE_URL"] = os.environ["READ_RUNTIME_URL"]
+        os.environ["MDM_APPLICATION_ROLE"] = os.environ["READ_RUNTIME_ROLE"]
+        output = Path(os.environ["EDGAR_RULES_ROOT"]) / "invented-publication"
+        generation = g["normal"].generation()
+        with pytest.raises(Conflict, match="Forced publication requires its qualified prepared-store workflow"):
+            main(["mdm", "force-publish", "--consumer", "invented-export", "--output", str(output)])
+        assert not output.exists()
+        assert g["normal"].generation() == generation
     if case == "pages":
         import json
         from sqlalchemy import text

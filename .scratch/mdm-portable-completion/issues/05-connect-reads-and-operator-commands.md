@@ -18,6 +18,7 @@ Can installed consumers and operators use normal engine-selected MDM read and in
 - [ ] Connect counts, connectivity, health, inspection and supported publication commands to selected-engine storage; preserve authorization and bounded exact-key plans.
 - [ ] Verify original JSON, large numbers, Unicode and opaque identifiers survive transport; keep errors and public evidence free of source values.
 - [x] Qualify existing applied-event recording time and generation-pinned pages without a storage extension — 2026-10-24 20:04 ET; recording/business-time boundaries and metadata key plans pass on both engines; all 13 supported protocol/engine migration fingerprint sets match current main.
+- [x] Qualify installed assessment/save, current/history provenance, Context, master lookup, merge/reversal and pinned pages for two configured kinds and sources — 2026-10-24 20:52 ET; two cases per engine pass outside the checkout using the independently built five-wheel runtime 8e15a9ee.
 - [ ] Qualify the normal installed consumer/context and actual Silver-facing lookup on both engines, with original provenance, aliases, historical detail boundaries and bounded plans.
 - [x] Qualify current/historical entity, original producer, alias, profile, detail, plan, unknown-key and inspection cases locally for two configured kinds — 2026-10-24 19:19 ET; 18 cases per engine passed before the recording-time join, with current/producer and key-plan checks rerun after that join.
 - [x] Qualify indexed generation-pinned snapshot paging across later merges and future identities — 2026-10-24 19:19 ET; two cases per engine pass. Pages use stable storage-key order and original IDs as cursors; no new schema or ID length cap.
@@ -30,7 +31,7 @@ Can installed consumers and operators use normal engine-selected MDM read and in
 - [x] Qualify populated review/relationship pages for both configured kinds on each engine — 2026-10-24 20:41 ET; four cases per engine pass, covering cycle reviews, historical endpoints and retained retirement markers.
 - [ ] Qualify the latest 405-field provenance query for both configured kinds on each engine.
 - [ ] Finish prepared master-name search with indexed completeness and a governed populated rebuild; current native-only search is an explicit capability gap.
-- [ ] Learning → skill: update its owning skill on a separate branch/PR, or record none.
+- [x] Learning → skill — 2026-10-24 20:52 ET; mdm-engineering retained-read provenance and metadata guidance is published separately in draft PR #1165; earlier 80 affected checks pass. Its rebased check and landing remain pending.
 
 ## Acceptance evidence
 
@@ -323,3 +324,51 @@ installed PostgreSQL proof has started; its result is not yet observed.
 Reader runtime files remain byte-identical to 8e15a9ee; this continuation
 changes test coverage and the ticket evidence only. Draft PR #1164 publishes
 the reader checkpoint; the final-head rebase and qualification are pending.
+
+## Installed reader and refusal checkpoint — 2026-10-24 20:52 ET
+
+The expanded normal installed proof passes for two invented kinds and two
+sources on both engines. It uses the independently built 8e15a9ee five-wheel
+installation, isolated Python outside the checkout, the normal restricted
+runtime, and owner migrations. Module paths prove that Context, ContractReader,
+MdmIds, the source library and bundled adapter come from that installation.
+Checks cover assessment/save and unchanged replay, original provenance, field
+revision/history, merge/reversal, Context redirection, Silver-facing IDs and
+pinned pages. This is reader qualification, not the full 18-family worker
+workflow. Its initial explicit identity fixture was correctly refused below
+the retained publication floor; deriving a later floor fixes only the fixture.
+
+Two additional local Context alias cases pass per engine, covering before,
+merged, historical and reversed lookup by original master ID. Forced
+publication was found to reach native SQL on prepared storage. With the
+correct restricted test role, the old route produced a PostgreSQL privilege
+error and MySQL syntax error. The new route refuses explicitly before any
+publication or output artifact. Two refusal cases per engine pass; seven CLI
+units include retained legacy routing (unit proof, not a new native database
+publication qualification). Actual portable publication remains ticket 06.
+
+The installed proof above qualifies runtime 8e15a9ee. The later CLI refusal
+adds five lines and has separate local proof; it does not change reader
+functions. Name search, installed historical detail/relationship transport
+and final-head rebase/CI still keep this ticket incomplete. The second-kind
+latest bulk proof and earlier scheduled jobs remain unobserved.
+
+### Standards
+
+No schema or grant changes. Restricted roles are used; unsupported force
+publication now refuses before writes. Source-neutral fixtures and counts
+only. The guard briefly reported a moving-main worktree overlap; live
+inspection showed that worktree clean at current main, and the repeated
+guard passed without an ownership override. No other worktree was edited.
+
+### Spec
+
+Installed master reads and the real Silver-facing lookup are verified for
+two configured kinds/sources per engine. Qualified refusal does not implement
+search or publication. Tickets 05–07 remain incomplete.
+
+### GoF
+
+Retain the existing adapter boundary and force-publication handler. A single
+capability check prevents an unsupported native route; no new hierarchy,
+policy algorithm or alternate publication implementation is introduced.

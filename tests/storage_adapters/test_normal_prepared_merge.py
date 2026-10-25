@@ -86,7 +86,7 @@ import source_contract
 from sqlalchemy import func, select
 from edgar_warehouse.database_connections import engine_from_env, storage_adapter
 from edgar_warehouse.mdm.clean import prepared
-from edgar_warehouse.mdm.clean.evidence import assertion
+from edgar_warehouse.mdm.clean.evidence import assertion, decision
 from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.record_reads import RecordReader
 from edgar_warehouse.mdm.clean.store import Store, migrate, register_policy, register_dataset
@@ -152,9 +152,53 @@ def counts():
 before=counts()
 assert stage.apply(**{**command,"run_id":str(uuid4())})["duplicate"]
 assert api.generation()==1 and counts()==before
+position=1
+def save(**parts):
+    global position
+    position+=1
+    return stage.apply(batch_id="invented-installed-reader-"+str(position),run_id=str(uuid4()),
+        policy_digest=pin,consumer="invented-proof",expected_checkpoint=position-1,
+        checkpoint=position,as_of="2026-03-01T00:00:00Z",**parts)
+updated_record=assertion(source_code="invented.authority",record_key="one",publication_key="two",
+    revision=2,effective_at="2026-01-02T00:00:00Z",kind="invented-kind",
+    identifiers={"invented_number":"171"},fields={"invented_amount":10**80+2})
+save(assertions=[updated_record])
+updated=reader.entity(pointer["entity_id"])
+assert updated["identity"]["fields"]["invented_amount"]["value"]==10**80+2
+assert updated["field_provenance"]["invented_amount"]["evidence"]==updated_record
+assert reader.entity(pointer["entity_id"],generation=1)==read
+other_record=assertion(source_code="invented.authority",record_key="two",publication_key="one",
+    revision=1,effective_at="2026-01-01T00:00:00Z",kind="invented-kind",
+    identifiers={},fields={"invented_amount":10**80+3})
+other_id=str(uuid4())
+from datetime import datetime, timedelta
+floor=RecordReader(api).publications(["invented-kind"])["invented-kind"]["published_at"]
+identity={"entity_id":other_id,"kind":"invented-kind",
+    "published_at":(datetime.fromisoformat(floor)+timedelta(microseconds=1)).isoformat()}
+bind=decision("bind",actor="fixture",reason="invented installed identity",at="2026-01-01T00:00:00Z",
+    subject=other_record["subject"],entity_id=other_id,evidence=[other_record["assertion_id"]])
+save(assertions=[other_record],identities=[identity],decisions=[bind])
+other_before=reader.entity(other_id)
+merge=decision("merge",actor="fixture",reason="invented installed duplicate",at="2026-02-01T00:00:00Z",
+    left=pointer["entity_id"],right=other_id)
+save(decisions=[merge])
+merged=reader.entity(other_id)
+assert merged["canonical_id"]==pointer["entity_id"]
+assert reader.entity(other_id,generation=other_before["generation"])==other_before
+assert MdmIds(runtime)("invented.authority","invented-kind",{"one","two"})=={
+    "one":pointer["entity_id"],"two":pointer["entity_id"]}
+alias_args=Namespace(subject="invented-kind",key=other_id,search=None,as_of=None,as_at=None,detail="full",page=None)
+assert Context(runtime).answer(alias_args)["merged_from"]==other_id
+save(decisions=[decision("reverse",actor="fixture",reason="invented installed reversal",
+    at="2026-02-02T00:00:00Z",target=merge["decision_id"])])
+assert reader.entity(other_id)["canonical_id"]==other_id
+assert reader.entity(other_id,generation=merged["generation"])==merged
+assert MdmIds(runtime)("invented.authority","invented-kind",{"two"})=={"two":other_id}
+assert reader.snapshot_page("entity",generation=1,limit=1)==page
 print(json.dumps({"independent_install":True,"preview_rolled_back":True,
-                  "assessment_applied":True,"duplicate_unchanged":True,"identities":1,
-                  "master_reads":True,"context":True,"silver_lookup":True}))
+                  "assessment_applied":True,"duplicate_unchanged":True,"identities":2,
+                  "master_reads":True,"context":True,"silver_lookup":True,
+                  "history_alias_reversal":True,"pinned_page":True}))
 '''.replace("invented-kind", kind).replace("invented.authority", source_code)
     with database_factory() as (owner, runtime, role):
         if owner.dialect.name == "mssql":
@@ -174,5 +218,6 @@ print(json.dumps({"independent_install":True,"preview_rolled_back":True,
         assert result.returncode == 0, "installed normal save failed; private diagnostic retained"
         proof = json.loads(result.stdout.splitlines()[-1])
         assert proof == {"independent_install": True, "preview_rolled_back": True,
-                         "assessment_applied": True, "duplicate_unchanged": True, "identities": 1,
-                         "master_reads": True, "context": True, "silver_lookup": True}
+                         "assessment_applied": True, "duplicate_unchanged": True, "identities": 2,
+                         "master_reads": True, "context": True, "silver_lookup": True,
+                         "history_alias_reversal": True, "pinned_page": True}

@@ -128,6 +128,11 @@ def force_publish(args) -> int:
     mdm = engine_from_env("MDM_DATABASE_URL")
     pages, after = [], {"object_type": "", "object_id": ""}
     try:
+        with mdm.connect() as conn:
+            if _inspection_adapter(conn) is not None:
+                from .store import Conflict
+
+                raise Conflict("Forced publication requires its qualified prepared-store workflow")
         while after is not None:
             with mdm.begin() as conn:
                 page = conn.scalar(text(
