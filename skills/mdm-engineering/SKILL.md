@@ -74,6 +74,9 @@ or run-control operations. Report unsupported operations until qualified;
 changing a skill, deleting a dialect check or creating empty tables does not
 implement the adapter.
 
+For public and historical consumers, follow
+[retained read provenance](references/storage-adapters.md#retained-read-provenance).
+
 ### Prove the same behavior on every engine
 
 For database-support work, run the same pinned fixtures, contracts and policies

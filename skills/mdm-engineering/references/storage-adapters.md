@@ -81,6 +81,12 @@ MySQL native JSON may round a configuration integer, changing its fingerprint.
 Keep its canonical JSON in validated text with binary Unicode collation;
 read back the original values before accepting its digest.
 
+Qualify metadata queries over those bodies too. An unrelated large integer can
+make a native JSON parser refuse a scalar lookup even when storage retained the
+original bytes. Extract metadata without narrowing other values; qualify the
+chosen engine's JSON text or client parsing with exact large-number cases.
+Bound client reads by indexed keys and report any full-body transfer cost.
+
 Recovery distinguishes an interrupted first installation from damage to an
 initialized registry. A checksummed pending marker fences registry calls;
 existing transactions drain before it is published. Retry the same build to
@@ -219,6 +225,24 @@ It supplies no second matching/identity/survivorship algorithm and accepts
 no authority to approve or activate a source. Test/report those integrations
 separately; passing this helper does not make a refused application command
 supported.
+
+### Retained read provenance
+
+Read the source pointer, immutable evidence, canonical master and related rows
+in one caller-held snapshot. Commit a competing save between those probes:
+the first answer must remain coherent, and the next must see the new state.
+
+Keep each object's projection generation, original producer and destination
+recording time. Check existing committed event metadata before adding storage.
+A different observer's replay, and a new batch with unchanged objects, must
+preserve that object's original provenance even when global generation moves.
+
+Pin pages to their requested generation, document cursor ordering, and retain
+alias and retirement markers. Verify earlier pages after later merges and
+object creation. Exercise the normal consumer and actual downstream master-ID
+lookup from an independent installation with restricted roles. A legacy table
+returning no rows does not prove a selected-store command works: identify any
+uninstalled route explicitly and keep its qualification open.
 
 ## Native registry integration
 
