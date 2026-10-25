@@ -1,7 +1,7 @@
 # Connect master reads and operator commands
 
 Type: task
-Status: claimed
+Status: resolved
 Assignee: Codex
 Claimed: 2026-10-24 09:55 ET
 Parent: [Complete portable MDM and retire PostgreSQL business logic](../map.md)
@@ -36,8 +36,8 @@ Can installed consumers and operators use normal engine-selected MDM read and in
   - [x] Add owner-controlled bounded/resumable populated rebuilding without business history or publication changes — 2026-10-25 12:19 ET; interruption, resume, overtaking and explicit restart pass on both engines; 401-reference maintenance uses three insert statements and three mixed update/delete statements.
   - [x] Qualify indexed Context searches and rebuild interruption/retry across both configured kinds/sources on PostgreSQL/MySQL — 2026-10-25 12:19 ET; 20 local search cases per engine pass; latest bulk maintenance adds two passing cases per engine.
   - [x] Qualify the independent installed search and actual owner rebuild on both engines — 2026-10-25 12:26 ET; two installed cases per engine pass outside the checkout, including gap refusal, bounded resume, unchanged business counts/generation and zero-work repeat.
-  - [ ] Finish final source review and CI for the published search checkpoint.
-- [x] Learning → skill — 2026-10-25 12:26 ET; separate PR #1165 now includes search coverage, bounded owner rebuild, overtaking/restart and batched-maintenance lessons, with 91 affected documentation checks passing; retained reader learning completed 2026-10-24 20:52 ET; mdm-engineering retained-read provenance and metadata guidance is published separately in draft PR #1165; earlier 80 affected checks pass. Its rebased check and landing remain pending.
+  - [x] Finish final source review and CI for the published search checkpoint — 2026-10-25 13:00 ET; PR #1164 head dab40c6f passes all nine CI checks, including all three retained storage adapter jobs; Standards/Spec/GoF review is recorded below.
+- [x] Learning → skill — 2026-10-25 13:00 ET; separate PR #1165 documents retained-read provenance, search completeness, coverage gaps, bounded owner rebuilding, explicit restart and batched maintenance. All 91 affected guide checks pass; the skill PR is stacked on #1164 because its documented command depends on that implementation.
 
 ## Acceptance evidence
 
@@ -470,3 +470,19 @@ missed-generation refusal, the actual owner CLI in two bounded pages,
 unchanged business counts/generation and zero-work repeat. Independent local
 checkout helper success is not substituted for this evidence. Final PR CI
 remains pending; the ticket is incomplete until that last part is checked.
+
+
+## Resolution — 2026-10-25 13:00 ET
+
+All checklist parts are verified. PR #1164 head dab40c6f passes all nine CI
+checks and is ready for review, with an independently qualified ca2f6f75
+runtime (the later commit changes evidence only). Operator approval to merge
+#1164 is pending. Skill PR #1165 must follow that implementation: its earlier
+base lacked the newly documented command, which the installed doctor
+correctly refused. The skill branch now inherits the implementation; its
+installed doctor and final CI are separate gates before its merge.
+
+This resolution closes master reads/search implementation and qualification.
+It does not close worker publication/recovery, the full installed matrix,
+old active SQL retirement, or activation. The reader implementation remains
+unchanged while its named merge approval is pending.
