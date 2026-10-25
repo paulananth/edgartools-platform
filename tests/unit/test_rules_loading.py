@@ -2,6 +2,7 @@
 
 Every name below is invented: the command knows no source or store by name."""
 import json
+import threading
 
 import pytest
 
@@ -41,6 +42,7 @@ class Recorded:
 
     def __init__(self, open_runs=(), processed=(), versions=None, pinned=None):
         self.calls, self.open, self.processed, self.submitted = [], list(open_runs), set(processed), 0
+        self.deadline = float("inf")
         self.versions, self.pinned = versions or {}, pinned or {}
 
     def __call__(self, duty, *args):
@@ -74,7 +76,7 @@ class Recorded:
         return {"run": {"state": "complete"}, "counts": {"verified": 2}}
 
 
-def loader(tmp_path, monkeypatch, commands):
+def loader(tmp_path, monkeypatch, commands, at_a_time=1):
     for duty in driving.DUTIES:
         (tmp_path / f"{duty}.env").write_text("export BOOKKEEPING_MANIFEST_ROOT=file://%s/m\n" % tmp_path)
     monkeypatch.setattr(loading.files, "source", lambda name: READING)
@@ -82,7 +84,7 @@ def loader(tmp_path, monkeypatch, commands):
     frozen = {"body": {"bookkeeping": {"targets": {"by_letter": {"steps": [{"name": "read"}]}}}}}
     monkeypatch.setattr(loading, "Artifacts", lambda: type("Frozen", (), {"json": lambda self, ref: frozen})())
     found = loading.Loader(source="example", target="by_letter", stores=tmp_path, workers=2, minutes=1,
-                           say=lambda line: None)
+                           at_a_time=at_a_time, say=lambda line: None)
     found.commands = commands
     return found
 
@@ -155,3 +157,85 @@ def test_an_open_run_pinned_to_other_worker_code_is_left_and_its_documents_load_
     assert result["left_as_they_are"] == {"other-code-1": "pinned to other worker code (source.combine)"}
     assert result["finished_open_runs"] == []
     assert [b["run_id"] for b in result["bundles"]] == ["new-1"]
+
+
+class Overlapping(Recorded):
+    """Each run takes a moment to drive; counts how many were driven at the same time."""
+
+    def __init__(self, stop=None, together=None, **kwargs):
+        super().__init__(**kwargs)
+        self.lock, self.now, self.most, self.stop = threading.Lock(), 0, 0, stop
+        self.together = threading.Barrier(together) if together else None
+
+    def __call__(self, duty, *args):
+        if args[:2] == ("rules", "run"):
+            bundle = args[args.index("--input-manifest") + 1]
+            with self.lock:
+                self.submitted += 1
+            return json.dumps({"run": {"run_id": f"run-for-{bundle}"}})
+        if args[:2] == ("mdm", "prepare-capture"):
+            where = args[args.index("--output") + 1]
+            return json.dumps({"scope": {"documents": 2}, "manifest": {"uri": where, "sha256": "1" * 64}})
+        return super().__call__(duty, *args)
+
+    def drive(self, run_id, steps):
+        with self.lock:
+            self.now += 1
+            self.most = max(self.most, self.now)
+        if self.together:
+            self.together.wait(timeout=5)  # returns only when that many runs are driven at once
+        with self.lock:
+            self.now -= 1
+        if self.stop and self.stop in run_id:
+            raise driving.RunStopped(f"step read: unit x failed in {run_id}")
+        return {"run": {"state": "complete"}, "counts": {"verified": 2}}
+
+
+def test_bundles_of_one_target_load_at_once_and_report_in_order(tmp_path, monkeypatch):
+    commands = Overlapping(together=3)
+    folder = capture(tmp_path / "c", *(f"letters/{n}.json" for n in range(6)))
+
+    result = loader(tmp_path, monkeypatch, commands, at_a_time=3).load(
+        capture=folder, capture_run="capture-1", as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
+
+    assert commands.most == 3
+    assert [b["bundle"] for b in result["bundles"]] == [1, 2, 3]
+    assert all(b["run_id"].endswith(f"bundle-00{b['bundle']}/manifest") for b in result["bundles"])
+
+
+def test_a_bundle_that_stops_does_not_stop_the_others_and_is_named(tmp_path, monkeypatch):
+    commands = Overlapping(stop="bundle-002")
+    folder = capture(tmp_path / "c", *(f"letters/{n}.json" for n in range(6)))
+
+    with pytest.raises(driving.RunStopped,
+                       match=r"1 of 3 did not finish: bundle 2: step read: unit x failed in run-for-.*bundle-002"):
+        loader(tmp_path, monkeypatch, commands, at_a_time=1).load(
+            capture=folder, capture_run="capture-1", as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
+    assert commands.submitted == 3  # bundle 3, still queued when bundle 2 stopped, was loaded
+
+
+def test_any_failure_is_named_with_its_bundle(tmp_path, monkeypatch):
+    commands = Overlapping()
+    commands.drive = lambda run_id, steps: {}["run"] if "bundle-001" in run_id else {"run": {"state": "complete"}}
+    folder = capture(tmp_path / "c", *(f"letters/{n}.json" for n in range(4)))
+
+    with pytest.raises(driving.RunStopped, match=r"1 of 2 did not finish: bundle 1: 'run'"):
+        loader(tmp_path, monkeypatch, commands, at_a_time=2).load(
+            capture=folder, capture_run="capture-1", as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
+
+
+def test_after_the_deadline_no_bundle_starts_and_they_are_named_once(tmp_path, monkeypatch):
+    commands = Overlapping()
+    folder = capture(tmp_path / "c", *(f"letters/{n}.json" for n in range(6)))
+    found = loader(tmp_path, monkeypatch, commands, at_a_time=2)
+    commands.deadline = 0  # already passed
+
+    with pytest.raises(driving.RunStopped, match=r"1 of 3 did not finish: the deadline passed before 3 started "
+                                                 r"\(bundle 1, bundle 2, bundle 3\)"):
+        found.load(capture=folder, capture_run="capture-1", as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
+    assert ("mdm", "prepare-capture") not in commands.calls
+
+
+def test_at_least_one_bundle_at_a_time(tmp_path, monkeypatch):
+    with pytest.raises(driving.RunStopped, match="At least one bundle"):
+        loader(tmp_path, monkeypatch, Recorded(), at_a_time=0)
