@@ -191,13 +191,14 @@ earlier filing date of a folded holding does not move the "issued by" start
 earlier, and its different LEI does not unsettle the issuer (the engine has no
 "earliest of" yet; ticket 127).
 
-**An SEC filer reaches its Securities only through GLEIF.** An N-PORT
+**ISSUED_BY reaches an SEC filer's Securities only through GLEIF.** An N-PORT
 holding names its issuer by LEI, and SEC filings almost never state one: 1 of
 1,602 Form 4 issuers' submissions carries an LEI (2026-10-23, ticket 24). So
 "ISSUED_BY" reaches an SEC Company only where its GLEIF record joined it by
 the SEC-GLEIF name rules (the Companies-only proof: 2,764 issuers on their SEC
-filer's Company, ticket 22). Measure a lookup from a CIK to its Securities
-through MDM's links, never through the filing's own LEI.
+filer's Company, ticket 22). Measure that lookup through MDM's links, never
+through the filing's own LEI. A Form 4 class attaches by the filed trading
+symbol through OpenFIGI's ticker (ticket 24), not through this link.
 
 **Share-class FIGI does not join records** (operator, 2026-10-20: "Lookup
 only for now (Recommended)"). Before proposing it, count the ISIN-only
