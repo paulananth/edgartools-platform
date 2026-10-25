@@ -98,8 +98,14 @@ class LocalStores:
         path = folder / "identity.json"
         if path.exists():
             value = json.loads(path.read_text())
-            if value["owner"] != self.owner:
-                raise ValueError("Environment belongs to another worktree; use your own name")
+            owner = value["owner"]
+            if owner != self.owner:
+                # A deleted checkout cannot refresh a moved port. Adopt the copy.
+                # A checkout that still exists keeps it.
+                if not (Path(owner).is_absolute() and not Path(owner).is_dir()):
+                    raise ValueError("Environment belongs to another worktree; use your own name")
+                value["owner"] = self.owner
+                private_write(path, json.dumps(value))
             return value
         if not create:
             raise ValueError("Environment does not exist")
@@ -123,8 +129,12 @@ class LocalStores:
             found = self.resource(kind, resource)
             if found:
                 labels = found.get("Config", {}).get("Labels", {}) if kind == "container" else found.get("Labels", {})
-                if (labels or {}).get(LABEL) != identity["owner"]:
-                    raise ValueError("Resource ownership differs; refusing to change it")
+                label = (labels or {}).get(LABEL)
+                if label != identity["owner"]:
+                    # The container keeps the label from creation. A gone checkout
+                    # no longer matches the adopted identity.
+                    if not (isinstance(label, str) and Path(label).is_absolute() and not Path(label).is_dir()):
+                        raise ValueError("Resource ownership differs; refusing to change it")
         return container, volume
 
     def url(self, name: str, database="postgres", user="postgres"):

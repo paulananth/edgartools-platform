@@ -111,7 +111,9 @@ edgar-warehouse rules activate --source <name> --version <v>
 ```
 
 Use `--merge <name>` for merge rules. It needs `RULES_DATABASE_URL` and
-`RULES_MDM_ACTIVATION_DATABASE_URL` (the MDM governance login). It registers
+`RULES_MDM_ACTIVATION_DATABASE_URL` (the MDM governance login), both from
+the shared store's private `governance.env`. A refused connection is a
+moved port ([LOCAL-TESTING](../data-platform/LOCAL-TESTING.md)). It registers
 the approved version in MDM and records the handoff receipt.
 
 **Which MDM database.** The one the MDM runs read and write: the governance

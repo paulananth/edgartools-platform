@@ -208,14 +208,10 @@ Every step says what differs for each target.
   | `OPENMETADATA_URL`, `OPENMETADATA_TOKEN` | — | catalog publish |
 
   A command that stops with `KeyError: 'RULES_DATABASE_URL'` means the
-  variable is not set. Ask the operator to set it outside the chat. Never
-  paste it.
-
-  No Rules Database is live yet (operator, 2026-10-06: "There is no login").
-  Until one is, do not ask for these variables: record each approval on the
-  ticket with the operator's exact words and the ET time, and note that the
-  database record waits. The walk then needs only Docker (or a local
-  PostgreSQL 16) for **test**.
+  variable is not set. Source the shared store's private `worker.env` for
+  rules commands and `governance.env` for switch-on. Never print either
+  file. A refused connection is a moved port
+  ([LOCAL-TESTING](../data-platform/LOCAL-TESTING.md)).
 
 ## The log
 

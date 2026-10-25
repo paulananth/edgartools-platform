@@ -191,6 +191,9 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
 
 def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
     root = tmp_path / "stores"
+    # The owner paths have to exist. A missing checkout is adopted.
+    (tmp_path / "first-worktree").mkdir()
+    (tmp_path / "second-worktree").mkdir()
     first = local.LocalStores(root, tmp_path / "first-worktree")
     second = local.LocalStores(root, tmp_path / "second-worktree")
     one, two = "one-" + uuid4().hex[:10], "two-" + uuid4().hex[:10]
