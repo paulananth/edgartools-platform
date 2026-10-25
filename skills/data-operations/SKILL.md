@@ -234,6 +234,11 @@ bundle time:
 5. A one-worker driver already on the run is the mistake. Leave its run.
    Start the extra `workers work <wide operation> <run> --limit 100` beside
    it. Do not submit the bundle again. The lease keeps them off the same unit.
+   A profile shared by several steps still runs one step at a time: verify
+   the earlier step before more workers of that profile start. Workers that
+   lose the row lock park the unit (`Lease or prerequisite contention;
+   retry on resume`). `bookkeeping resume <run>` reopens those units. Drive
+   them again. Do not submit the bundle again.
 
 The serial plan that missed the window: 3,837 CUSIP files and 3,877 ISIN
 files, 512 a bundle, one reader, CUSIP then ISIN. The first CUSIP bundle had
