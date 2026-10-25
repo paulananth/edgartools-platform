@@ -7,7 +7,7 @@
 # Switched on (operator, 2026-10-15 06:27 ET, in their words: "merge 985 when green agreed for the rest"):
 # the matching rule activates on its Identifier Contract, verified on the
 # Proving Run's cohort (rules/merge/policy.yaml, automatic_rules).
-version: security-2026-10-23.openfigi-first
+version: security-2026-10-24.isin-source-code
 defaults:
   # The first listed wins each field. Operator, 2026-10-18 (ticket 84): "make
   # openfigi priority 1 and 13f last", then "Name only (Recommended)". OpenFIGI
@@ -17,7 +17,7 @@ defaults:
   # of 385,382 and 13F for 59.9% of 29,942.
   sources:
   - openfigi.security.v1
-  - openfigi.security_isin.v1
+  - openfigi.security_isin.v2
   - sec.nport.security.v2
   - sec.thirteenf.information_table.security.v1
   allow_unknown_effective: true
@@ -117,9 +117,9 @@ rules:
 # FIGI (operator, 2026-10-24: "resolve using figi"): both ISINs are kept.
 # FIGI still does not join two Securities.
 - rule_id: openfigi-isin-security-cusip
-  version: 2026-10-23.1
+  version: 2026-10-24.1
   family: binding
-  source: openfigi.security_isin.v1
+  source: openfigi.security_isin.v2
   applies_to_verdict: security
   emits:
   - bind
@@ -132,9 +132,9 @@ rules:
     args:
       namespace: cusip
 - rule_id: openfigi-security-isin
-  version: 2026-10-23.1
+  version: 2026-10-24.1
   family: binding
-  source: openfigi.security_isin.v1
+  source: openfigi.security_isin.v2
   applies_to_verdict: security
   emits:
   - bind
@@ -156,7 +156,7 @@ identifiers:
     # Ticket 120, OpenFIGI first: an ISIN answer carries the one CUSIP whose
     # answer shares a listing FIGI with it, so it is named here (a feed maps
     # only an identifier it is named as issuing; operator, 2026-09-29).
-    - openfigi.security_isin.v1
+    - openfigi.security_isin.v2
     # rules/identifiers/cusip.yaml (ticket 81): 9 characters, the check digit
     # verified, upper-cased.
     normalizer: normalize_identifier@cusip-v1
@@ -183,7 +183,7 @@ identifiers:
     authority: ISIN (ISO 6166), issued by each country's numbering agency
     sources:
     - sec.nport.security.v2
-    - openfigi.security_isin.v1
+    - openfigi.security_isin.v2
     # rules/identifiers/isin.yaml (ticket 81): 12 characters, the check digit
     # verified, upper-cased.
     normalizer: normalize_identifier@isin-v1

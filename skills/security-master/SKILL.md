@@ -18,7 +18,10 @@ and what must never happen to it?**
 Rules marked **live** are in `rules/` and proved. Rules marked **switched on
 in the files** are in `policy.yaml`; a new run uses them. The OpenFIGI-first
 rules (ticket 120) are switched on in the files (2026-10-24 19:27 ET, "switch
-on ticket 120"). They are not activated in the company-on Rules database.
+on ticket 120") and in the company-on Rules database. The ISIN dataset is
+`openfigi.security_isin.v2`: v1 was already registered, and the contract now
+also issues a CUSIP, which cannot be added on an existing source code
+(2026-10-24, "complete ticket 120 using skills to turn on additional rules").
 
 ## Hard stops
 
@@ -42,7 +45,7 @@ CUSIP). Each source keeps its own record on it; MDM merges them.
 |---|---|---|---|
 | SEC N-PORT | `sec.nport.security.v2` | Yes (decided) | CUSIP, ISIN (FIGI-agreed), issuer name as filed, title of class, issuer LEI, "issued by" link |
 | SEC 13F | `sec.thirteenf.information_table.security.v1` | Yes (live) | CUSIP, name and title as filed, a filed FIGI |
-| OpenFIGI | `openfigi.security.v1` (CUSIP), `openfigi.security_isin.v1` (ISIN) | Yes, and first (switched on in the files 2026-10-24 19:27 ET, "switch on ticket 120") | All ten OpenFIGI fields and every listing; an ISIN answer also carries the one CUSIP sharing a listing FIGI with it |
+| OpenFIGI | `openfigi.security.v1` (CUSIP), `openfigi.security_isin.v2` (ISIN) | Yes, and first (switched on in the files 2026-10-24 19:27 ET, "switch on ticket 120") | All ten OpenFIGI fields and every listing; an ISIN answer also carries the one CUSIP sharing a listing FIGI with it |
 
 The ranking that fills a field: OpenFIGI first, then N-PORT, then 13F
 (operator, 2026-10-18: "make openfigi priority 1 and 13f last"; ticket 84).
@@ -68,7 +71,7 @@ The ranking that fills a field: OpenFIGI first, then N-PORT, then 13F
 ## How a Security is merged (live)
 
 The rules are `rules/merge/kinds/security.yaml` (version
-`security-2026-10-23.openfigi-first`), one file of the Mastering Policy
+`security-2026-10-24.isin-source-code`), one file of the Mastering Policy
 (`rules/merge/policy.yaml`). A record passes three stages in the Merge Stage.
 
 ### 1. Matching: which Security a record joins
@@ -85,8 +88,8 @@ their Identifier Contract is verified (`policy.yaml`, `automatic_rules`,
 | `nport-security-cusip` | N-PORT | CUSIP | creates one | 2026-10-17 21:03 ET ("Switch on all six (Recommended)"); v2 version 2026-10-20.1 decided |
 | `nport-security-isin` | N-PORT | its ISIN (FIGI-agreed on a CUSIP's record; the key of an ISIN-only one) | creates one | same; it replaces `nport-isin-security-isin` (retired with `sec.nport.security_isin.v1`) |
 | `openfigi-security-cusip` | OpenFIGI (CUSIP asked) | CUSIP | creates one (version 2026-10-23.1) | switched on 2026-10-24 19:27 ET ("switch on ticket 120"); version 2026-10-17.1 (waits) was on from 2026-10-17 13:12 ET |
-| `openfigi-isin-security-cusip` | OpenFIGI (ISIN asked) | the CUSIP sharing a listing FIGI with it | joins that Security (2026-10-23.1) | switched on 2026-10-24 19:27 ET ("switch on ticket 120") |
-| `openfigi-security-isin` | OpenFIGI (ISIN asked) | ISIN | creates one (version 2026-10-23.1) | switched on 2026-10-24 19:27 ET ("switch on ticket 120"); version 2026-10-17.1 (waits) was on from 2026-10-18 13:22 ET |
+| `openfigi-isin-security-cusip` | OpenFIGI (ISIN asked) | the CUSIP sharing a listing FIGI with it | joins that Security (2026-10-24.1) | switched on 2026-10-24 19:27 ET ("switch on ticket 120") |
+| `openfigi-security-isin` | OpenFIGI (ISIN asked) | ISIN | creates one (version 2026-10-24.1) | switched on 2026-10-24 19:27 ET ("switch on ticket 120"); version 2026-10-17.1 (waits) was on from 2026-10-18 13:22 ET |
 
 - **Records that may create go first** in a batch, so a record that may only
   join finds the Security created in the same batch. One identifier
@@ -124,7 +127,7 @@ it; the priority decides only where several give it. For each field
 2. **Otherwise the highest-priority source wins**, in the order of
    `defaults.sources`:
    1. `openfigi.security.v1`
-   2. `openfigi.security_isin.v1`
+   2. `openfigi.security_isin.v2`
    3. `sec.nport.security.v2`
    4. `sec.thirteenf.information_table.security.v1`
 

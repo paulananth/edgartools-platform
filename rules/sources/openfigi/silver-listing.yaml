@@ -104,7 +104,7 @@ links:
 - columns:
   - id
   kind: security
-  source_code: openfigi.security_isin.v1
+  source_code: openfigi.security_isin.v2
   to_part: security
   source_key: id
   mdm_id_column: security_mdm_id_by_isin

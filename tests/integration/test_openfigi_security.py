@@ -43,7 +43,7 @@ from tests.support import source_chain as chain
 from tests.support.rules_authority import register_dataset
 
 FOLDER = files.ROOT / "sources" / "openfigi"
-CODE, ISIN_CODE = "openfigi.security.v1", "openfigi.security_isin.v1"
+CODE, ISIN_CODE = "openfigi.security.v1", "openfigi.security_isin.v2"
 THIRTEENF = "sec.thirteenf.information_table.security.v1"
 NPORT_ISIN = "sec.nport.security.v2"  # its ISIN-only Securities (ticket 120: one Dataset Contract)
 # Invented CUSIPs and ISINs, check digits valid.

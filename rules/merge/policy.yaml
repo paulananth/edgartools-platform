@@ -331,13 +331,13 @@ automatic_rules:
 - kind: security
   family: binding
   rule_id: openfigi-isin-security-cusip
-  rule_version: 2026-10-23.1
+  rule_version: 2026-10-24.1
   verdict: bind
   activation: deterministic
 # openfigi-security-isin: switched on by operator, 2026-10-24 19:27 ET, in their words: switch on ticket 120. It activates on the isin Identifier Contract (kinds/security.yaml); evidence: 120-openfigi-first-proof.json (sha256 d81756e22c1325574d9680cbbb2e189cddf90b95340317f38efef13baa6bb4bf): 353,491 CUSIP Securities created; ISIN bundle 1 added 20,574 Securities (47,442 ISIN stage rows); 0 identifiers on two Securities; 3 ISINs set aside for two or more CUSIPs
 - kind: security
   family: binding
   rule_id: openfigi-security-isin
-  rule_version: 2026-10-23.1
+  rule_version: 2026-10-24.1
   verdict: bind
   activation: deterministic
