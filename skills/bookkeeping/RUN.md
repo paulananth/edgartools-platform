@@ -6,6 +6,11 @@ and finished by `bookkeeping finalize`. A step whose worker profile has no
 worker yet (no key in `PROFILES`, `edgar_warehouse/workers/__init__.py`) is a
 blocker to report, never a reason to run it some other way.
 
+For one source's target over a captured delivery, `edgar-warehouse load` does
+every step below in one command and is safe to rerun
+([data-operations, Load a capture](../data-operations/SKILL.md#load-a-capture)).
+The steps here are what it runs, for diagnosing a run by hand.
+
 Load the source/feed plan and validation evidence. Check their hashes against
 the intended Rules body, processing versions and frozen manifest; resolve every
 declared feed member. Confirm the requested environment, target and bound.

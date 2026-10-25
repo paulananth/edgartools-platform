@@ -736,7 +736,9 @@ loads `quality` into each contract), and the data-quality skill's `QUALITY.md`.
    ([bookkeeping SPEC](../bookkeeping/SPEC.md));
    a target with any other step is refused. The same
    manifest for a real run comes from `edgar-warehouse mdm prepare-capture
-   --source <name> --target <target>`, with the same `--fact` and `--file`.
+   --source <name> --target <target>`, with the same `--fact` and `--file`;
+   `edgar-warehouse load` prepares, submits and drives every bundle of a
+   capture that way ([data-operations](../data-operations/SKILL.md#load-a-capture)).
 
    Otherwise, write it as a pytest file that uses the MDM fixtures, and it gets
    its own disposable PostgreSQL 16:

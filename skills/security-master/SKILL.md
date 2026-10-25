@@ -18,7 +18,7 @@ and what must never happen to it?**
 Rules marked **live** are in `rules/` and proved. Rules marked **switched on
 in the files** are in `policy.yaml`; a new run uses them. The OpenFIGI-first
 rules (ticket 120) are switched on in the files (2026-10-24 19:27 ET, "switch
-on ticket 120") and in the company-on Rules database. The ISIN dataset is
+on ticket 120") and in the operator's Rules database. The ISIN dataset is
 `openfigi.security_isin.v2`: v1 was already registered, and the contract now
 also issues a CUSIP, which cannot be added on an existing source code
 (2026-10-24, "complete ticket 120 using skills to turn on additional rules").

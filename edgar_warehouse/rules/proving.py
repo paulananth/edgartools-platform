@@ -24,9 +24,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import shlex
-import subprocess
-import sys
 import time
 from pathlib import Path
 from uuid import uuid4
@@ -36,36 +33,12 @@ from sqlalchemy import create_engine, text
 from edgar_warehouse.mdm.clean.store import digest
 
 from . import files
+from .driving import Commands, RunStopped, duties, manifest_root
 
 TARGET = "mastering"
-DUTIES = ("worker", "verifier", "governance")
 
-
-class TestRunError(ValueError):
-    """A test run that cannot start or did not complete, with the reason."""
-
-
-def duties(stores: Path) -> dict[str, dict[str, str | None]]:
-    """Each duty's connection settings, from the local stores' private env files, line by
-    line: a key the file unsets is None, so no login leaks in from the caller's shell."""
-    found = {}
-    for duty in DUTIES:
-        path = stores / f"{duty}.env"
-        if not path.is_file():
-            raise TestRunError(f"{path} is missing: start the stores with infra/scripts/local-test-stores.py up <name>")
-        values = {}
-        for number, line in enumerate(path.read_text().splitlines(), 1):
-            try:
-                parts = shlex.split(line)
-                if parts and parts[0] == "unset":
-                    values.update(dict.fromkeys(parts[1:]))
-                elif parts and parts[0] == "export":
-                    key, _, value = parts[1].partition("=")
-                    values[key] = value
-            except (ValueError, IndexError):
-                raise TestRunError(f"{path} line {number} is not an export or unset line") from None
-        found[duty] = values
-    return found
+# A test run's stop is the run driver's: one error the command line reports.
+TestRunError = RunStopped
 
 
 def sandbox_authority(source: str, code: str, contract: dict, capture_sha256: str) -> dict:
@@ -150,50 +123,6 @@ def quality(folder: Path, mdm) -> dict:
         assertions += found["assertions"]
         deferred += found["deferred"]
     return quality_counts(assertions, deferred)
-
-
-class _Commands:
-    """The platform's own commands, each run as its duty's login in its own process."""
-
-    def __init__(self, env: dict[str, dict[str, str | None]], reports: str, *, deadline: float, log: Path):
-        self.env, self.reports, self.deadline, self.log = env, reports, deadline, log
-
-    def __call__(self, duty: str, *args: str) -> str:
-        environment = {**os.environ, **self.env[duty]}
-        environment = {key: value for key, value in environment.items() if value is not None}
-        # The platform's command in its own process, on this interpreter: the same code.
-        command = [sys.executable, "-c", "from edgar_warehouse.cli import main; raise SystemExit(main())"]
-        try:
-            done = subprocess.run([*command, *args], env=environment, capture_output=True, text=True,
-                                  timeout=max(1.0, self.deadline - time.monotonic()))
-        except subprocess.TimeoutExpired:
-            raise TestRunError(f"{' '.join(args[:3])} did not finish before the deadline") from None
-        if done.returncode not in (0, 3):
-            # Its message can hold a login or an address: it goes to a private file, never the screen.
-            self.log.parent.mkdir(parents=True, exist_ok=True)
-            with os.fdopen(os.open(self.log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "a") as out:
-                out.write(f"$ {' '.join(args)}\n{done.stderr}\n")
-            raise TestRunError(f"{' '.join(args[:3])} failed with status {done.returncode}; its message is in {self.log}")
-        return done.stdout
-
-    def status(self, run_id: str) -> dict:
-        return json.loads(self("worker", "bookkeeping", "status", run_id, "--limit", "1000"))
-
-    def drive(self, run_id: str, steps: list[dict]) -> dict:
-        """Each step's worker, then its verifier, in step order, until nothing is left."""
-        for step in steps:
-            profile = step["operation"]
-            while time.monotonic() < self.deadline:
-                self("worker", "workers", "work", profile, run_id, "--limit", "100")
-                self("verifier", "workers", "verify", profile, run_id, "--reports", self.reports, "--limit", "100")
-                items = [i for i in self.status(run_id)["items"] if i["step"] == step["name"]]
-                if items and all(i["state"] == "verified" for i in items):
-                    break
-                if any(i["state"] == "waiting" for i in items):
-                    raise TestRunError(f"step {step['name']} is waiting: a unit failed its checks")
-            else:
-                raise TestRunError(f"step {step['name']} did not finish before the deadline")
-        return json.loads(self("worker", "bookkeeping", "finalize", run_id))
 
 
 def recording(source: str, version: str, document: dict, sandbox: str):
@@ -295,10 +224,9 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
         rules = Rules(rules_engine)
         name, sandbox_version = f"rules-test.{source}.{uuid4().hex[:8]}", "1"
         body = {"source": name, "bookkeeping": document["bookkeeping"]}
-        manifest_root = env["worker"]["BOOKKEEPING_MANIFEST_ROOT"]
-        root = Path(manifest_root.removeprefix("file://")) / name
+        root = manifest_root(env) / name
         journal = ChangeJournal(journal_engine)
-        commands = _Commands(env, (root / "reports").as_uri(), deadline=time.monotonic() + minutes * 60,
+        commands = Commands(env, (root / "reports").as_uri(), deadline=time.monotonic() + minutes * 60,
                              log=stores / "rules-test-errors.log")
         passes = []
         for number, force in ((1, False), (2, True)):
