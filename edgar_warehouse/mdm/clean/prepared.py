@@ -31,16 +31,19 @@ def _refusals(operation):
         raise Conflict(str(error)) from None
 
 
+def authority(store):
+    """Refresh the worker's external proof separately from immutable effects."""
+    return None if store.lease_authority is None else store.lease_authority.current().proof
+
+
 def commit(store, request, run_id):
-    if store.lease_authority is not None:
-        raise Conflict("Prepared worker authority requires its qualified destination integration")
     if not isinstance(request, Admission):
         raise Conflict("Prepared admission requires the normal Merge Stage preparation")
-    api = storage_adapter().Adapter(store.engine, prefix=PREFIX, protocol=5)
+    api = storage_adapter().Adapter(store.engine, prefix=PREFIX, protocol=store.protocol)
     lease = _refusals(lambda: api.claim(request.batch.scope, "merge-stage"))
     return _refusals(lambda: api.apply(
         request.batch, lease, proposal_body=request.proposal,
-        proposal_key=request.proposal_key, observer=run_id,
+        proposal_key=request.proposal_key, observer=run_id, authority=authority(store),
     ))
 
 
@@ -53,7 +56,7 @@ def proposal_body(body):
 
 
 def record(store, body, run_id, *, intent=None):
-    api = storage_adapter().Adapter(store.engine, prefix=PREFIX, protocol=5)
+    api = storage_adapter().Adapter(store.engine, prefix=PREFIX, protocol=store.protocol)
     key = _refusals(lambda: api.record_proposal(
         body["command"]["batch_id"], proposal_body(body), run_id,
         outcome=body["outcome"],
@@ -124,10 +127,8 @@ def execute(stage, *, command, assertions, decisions, identities, deferred,
         prepare_record_history, prepare_record_lookups, prepare_scope_lookups,
     )
 
-    if stage.store.lease_authority is not None:
-        raise Conflict("Prepared worker authority requires its qualified destination integration")
     api_module = storage_adapter()
-    api = api_module.Adapter(stage.store.engine, prefix=PREFIX, protocol=5)
+    api = api_module.Adapter(stage.store.engine, prefix=PREFIX, protocol=stage.store.protocol)
     with stage.store.engine.connect() as conn:
         generation = api.generation(connection=conn)
         previous = api.read_batch(command["batch_id"], connection=conn)
@@ -212,7 +213,7 @@ def execute(stage, *, command, assertions, decisions, identities, deferred,
                 required_pins=required, assessment={"input_hash": input_hash, "effects": effects},
                 expected_generation=generation, expected_checkpoint=command["expected_checkpoint"],
                 checkpoint=command["checkpoint"], consumers=consumers, payload=payload,
-                payloads=payloads, governed=True, publish_inputs=True, indexes=indexes,
+                payloads=payloads, governed=True, workflow=stage.store.protocol >= 6, publish_inputs=True, indexes=indexes,
                 objects=tuple(api_module.Effect(*key, p["body"],
                     expected_version=versions[key]["version"] if key in versions else 0)
                     for p, key in zip(request["projections"], keys)),
@@ -231,7 +232,7 @@ def execute(stage, *, command, assertions, decisions, identities, deferred,
     if duplicate:
         original = json.loads(bytes(previous["intent"]))
         lease = _refusals(lambda: api.claim(bytes.fromhex(original["scope"]).decode(), "merge-stage"))
-        return _refusals(lambda: api.replay(command["batch_id"], lease, observer=run_id))
+        return _refusals(lambda: api.replay(command["batch_id"], lease, observer=run_id, authority=authority(stage.store)))
     admission = Admission(batch, proposal=None if assessment_id else proposal_body(candidate),
                           proposal_key=assessment_id)
     return stage.store.commit(None, admission, run_id)

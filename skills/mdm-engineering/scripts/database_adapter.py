@@ -357,9 +357,12 @@ class PreparedBatch:
     indexes: tuple[IndexChange, ...] | None = None
     publish_inputs: bool = False
     governed: bool = False
+    workflow: bool = False
     required_pins: dict[str, str] | None = None
 
     def intent(self) -> str:
+        if type(self.workflow) is not bool or self.workflow and not self.governed:
+            raise AdapterError("Workflow requests require governed admission")
         if type(self.governed) is not bool:
             raise AdapterError("Governed admission must be a boolean")
         if self.required_pins is not None and not self.governed:
@@ -432,7 +435,7 @@ class PreparedBatch:
             # The observing/root run is admission provenance, not immutable
             # business intent. Redelivery may observe the original batch.
             result.pop("run")
-            result["version"] = "5"
+            result["version"] = "6" if self.workflow else "5"
             result["required_pins"] = document(self.required_pins or {}).hex()
             result["publish_inputs"] = self.publish_inputs
             result.setdefault("indexes", [])
@@ -490,6 +493,7 @@ ERRORS = frozenset(
         "unsupported_index_changes",
         "scope_lease_expired_before_save",
         "unknown_publication",
+        "earlier_publication_pending",
         "publication_already_leased",
         "stale_or_invalid_publication_receipt",
         "publication_lease_expired",
@@ -502,8 +506,43 @@ ERRORS = frozenset(
         "proposal_not_ready",
         "assessed_effects_changed",
         "unregistered_frozen_pins",
+        "invalid_metadata_mode",
+        "invalid_metadata",
+        "metadata_digest_collision",
+        "metadata_mode_changed",
+        "immutable_metadata_changed",
+        "stale_metadata_version",
     }
 )
+
+
+def authority_wire(authority):
+    if not isinstance(authority, list) or not authority:
+        raise AdapterError("A nonempty destination authority proof is required")
+    proofs, resources = [], set()
+    for item in authority:
+        try:
+            if set(item) != {"resource", "token", "run_id", "attempt", "expires_at"}:
+                raise ValueError
+            resource = item["resource"]
+            key(resource)
+            if resource in resources:
+                raise ValueError
+            resources.add(resource)
+            expires = datetime.fromisoformat(item["expires_at"].replace("Z", "+00:00"))
+            if expires.tzinfo is None:
+                raise ValueError
+            offset = expires.astimezone(UTC) - datetime(1970,1,1,tzinfo=UTC)
+            micros = (offset.days * 86400 + offset.seconds) * 1000000 + offset.microseconds
+            from uuid import UUID
+            proofs.append({"resource": resource.encode().hex(),
+                "token": counter(item["token"], positive=True),
+                "run": str(UUID(item["run_id"])).encode().hex(),
+                "attempt": str(UUID(item["attempt"])).encode().hex(),
+                "expires": counter(micros, positive=True)})
+        except (ValueError, TypeError, KeyError, AttributeError, OverflowError):
+            raise AdapterError("Invalid destination authority proof") from None
+    return sorted(proofs, key=lambda proof: proof["resource"])
 
 
 class Adapter:
@@ -516,7 +555,7 @@ class Adapter:
         with engine.connect() as conn:
             self.schema = inspect(conn).default_schema_name
         self.prefix = prefix
-        if type(protocol) is not int or protocol not in (1, 2, 3, 4, 5):
+        if type(protocol) is not int or protocol not in (1, 2, 3, 4, 5, 6):
             raise AdapterError("Unsupported storage protocol")
         if protocol >= 4 and engine.dialect.name == "mssql":
             raise AdapterError("Destination authority is not yet qualified for SQL Server")
@@ -526,7 +565,9 @@ class Adapter:
         self.commit_guards = commit_guards(engine.dialect, self.tables, prefix)
         self.migration_guards = migration_guards(engine.dialect, self.tables, prefix) if protocol >= 2 else []
 
-    def _rpc(self, operation, values):
+    def _rpc(self, operation, values, *, authority=None):
+        if authority is not None:
+            values = {**values, "authority": authority_wire(authority)}
         name = self.routines[operation][0]
         statement = (
             f"SELECT * FROM {name}(:wire)"
@@ -630,7 +671,7 @@ class Adapter:
                                   observer=observer, authority=authority)
 
     def preview(self, batch: PreparedBatch, *, proposal_body):
-        if self.protocol != 5 or not batch.governed:
+        if self.protocol < 5 or not batch.governed:
             raise AdapterError("Destination preview requires governed admission")
         return self._apply_intent(
             batch.intent(), Lease(batch.scope, "preview", 1, 0),
@@ -655,32 +696,7 @@ class Adapter:
             if proposal_body is not None:
                 values["proposal_body"] = document(proposal_body).hex()
         if authority is not None:
-            if not isinstance(authority, list) or not authority:
-                raise AdapterError("A nonempty destination authority proof is required")
-            proofs, resources = [], set()
-            for item in authority:
-                try:
-                    if set(item) != {"resource", "token", "run_id", "attempt", "expires_at"}:
-                        raise ValueError
-                    resource = item["resource"]
-                    key(resource)
-                    if resource in resources:
-                        raise ValueError
-                    resources.add(resource)
-                    expires = datetime.fromisoformat(item["expires_at"].replace("Z", "+00:00"))
-                    if expires.tzinfo is None:
-                        raise ValueError
-                    offset = expires.astimezone(UTC) - datetime(1970,1,1,tzinfo=UTC)
-                    micros = (offset.days * 86400 + offset.seconds) * 1000000 + offset.microseconds
-                    from uuid import UUID
-                    proofs.append({"resource": resource.encode().hex(),
-                        "token": counter(item["token"], positive=True),
-                        "run": str(UUID(item["run_id"])).encode().hex(),
-                        "attempt": str(UUID(item["attempt"])).encode().hex(),
-                        "expires": counter(micros, positive=True)})
-                except (ValueError, TypeError, KeyError, AttributeError, OverflowError):
-                    raise AdapterError("Invalid destination authority proof") from None
-            values["authority"] = sorted(proofs, key=lambda proof: proof["resource"])
+            values["authority"] = authority_wire(authority)
         result = self._rpc(
             operation,
             values,
@@ -747,13 +763,13 @@ class Adapter:
         Already-entered calls remain fenced by the durable pending marker until
         the complete registry and its approved references become visible together.
         """
-        if self.protocol != 5 or not isinstance(pins, dict) or not pins:
+        if self.protocol < 5 or not isinstance(pins, dict) or not pins:
             raise AdapterError("Governed activation requires approved references")
         if set(exclusive) - set(pins):
             raise AdapterError("Exclusive activation must name an approved reference")
         ledger = self.tables["migration"]
         installed = {int(row.version): row for row in connection.execute(select(ledger))}
-        if set(installed) != set(range(1, 6)) or any(
+        if set(installed) != set(range(1, self.protocol + 1)) or any(
             installed[version].checksum not in _migration_checksums(
                 Adapter(self.engine, prefix=self.prefix, protocol=version)
             ) for version in installed
@@ -769,11 +785,11 @@ class Adapter:
 
     def enable_runtime(self, runtime_role: str, *, runtime_host="%"):
         """Owner grants execution only after governed activation has committed."""
-        if self.protocol != 5:
+        if self.protocol < 5:
             raise AdapterError("Explicit runtime activation requires governed storage")
         with self.engine.begin() as connection:
             installed = list(connection.execute(select(self.tables["migration"])))
-            if {int(row.version) for row in installed} != set(range(1, 6)) or any(
+            if {int(row.version) for row in installed} != set(range(1, self.protocol + 1)) or any(
                 row.complete != 1 for row in installed
             ):
                 raise AdapterError("storage_not_initialized")
@@ -811,7 +827,7 @@ class Adapter:
             )
         return cast(literal(key(value)), String(64))
 
-    def lookup_statement(self, keys, *, immutable=False, lookup=False):
+    def lookup_statement(self, keys, *, immutable=False, lookup=False, metadata=False):
         if not keys:
             raise AdapterError("A nonempty lookup key collection is required")
 
@@ -826,7 +842,9 @@ class Adapter:
         ).subquery("wanted")
         if lookup and (immutable or self.protocol < 3):
             raise AdapterError("Selected storage protocol has no lookup entries")
-        table = self.tables["lookup" if lookup else "evidence" if immutable else "current"]
+        if metadata and (immutable or lookup or self.protocol < 6):
+            raise AdapterError("Execution metadata requires protocol 6")
+        table = self.tables["metadata" if metadata else "lookup" if lookup else "evidence" if immutable else "current"]
         condition = (table.c.type_key == wanted.c.type_key) & (
             table.c.id_key == wanted.c.id_key
         )
@@ -851,17 +869,17 @@ class Adapter:
         return {
             "body": body,
             "body_hash": row["body_hash"],
-            **{name: int(row[name]) for name in ("version", "generation") if name in row},
+            **{name: int(row[name]) for name in ("version", "generation", "recorded_at") if name in row},
         }
 
-    def read(self, keys, *, immutable=False, lookup=False, connection=None) -> dict[tuple[str, str], dict]:
+    def read(self, keys, *, immutable=False, lookup=False, metadata=False, connection=None) -> dict[tuple[str, str], dict]:
         unique = list(dict.fromkeys(keys))
         found = {}
         # Divide the complete list below the engine's bound-parameter limit.
         for start in range(0, len(unique), 400):
             with self.engine.connect() if connection is None else nullcontext(connection) as conn:
                 rows = (
-                    conn.execute(self.lookup_statement(unique[start : start + 400], immutable=immutable, lookup=lookup))
+                    conn.execute(self.lookup_statement(unique[start : start + 400], immutable=immutable, lookup=lookup, metadata=metadata))
                     .mappings()
                     .all()
                 )
@@ -875,11 +893,13 @@ class Adapter:
                 found[identity] = self._read_record(row)
         return found
 
-    def type_statement(self, type: str, *, after: str | None = None, lookup=False):
+    def type_statement(self, type: str, *, after: str | None = None, lookup=False, metadata=False):
         """One bounded seek of an opaque type's primary-key prefix."""
         if lookup and self.protocol < 3:
             raise AdapterError("Selected storage protocol has no lookup entries")
-        table = self.tables["lookup" if lookup else "current"]
+        if metadata and (lookup or self.protocol < 6):
+            raise AdapterError("Execution metadata requires protocol 6")
+        table = self.tables["metadata" if metadata else "lookup" if lookup else "current"]
         statement = select(table).where(table.c.type_key == self._bound_key(type))
         if after is not None:
             statement = statement.where(table.c.id_key > after)
@@ -889,7 +909,7 @@ class Adapter:
             statement = statement.with_hint(table, hint, dialect_name=self.engine.dialect.name)
         return statement
 
-    def iter_type(self, type: str, *, lookup=False, connection=None):
+    def iter_type(self, type: str, *, lookup=False, metadata=False, connection=None):
         """Read a keyed index's opaque entries without a table scan or size cap.
 
         A native caller gives each lookup key its own opaque type. It must not
@@ -899,7 +919,7 @@ class Adapter:
         after = None
         while True:
             with self.engine.connect() if connection is None else nullcontext(connection) as conn:
-                rows = conn.execute(self.type_statement(type, after=after, lookup=lookup)).mappings().all()
+                rows = conn.execute(self.type_statement(type, after=after, lookup=lookup, metadata=metadata)).mappings().all()
             for row in rows:
                 identity = (bytes(row["type_bytes"]).decode(), bytes(row["id_bytes"]).decode())
                 if identity[0] != type or key(identity[1]) != row["id_key"]:
@@ -1194,7 +1214,7 @@ class Adapter:
         fences authoritative reads and optimistic versions in this transaction.
         The caller must take that gate before preparing changes from records.
         """
-        if self.protocol != 5:
+        if self.protocol < 5:
             raise AdapterError("Lookup maintenance requires governed storage")
         counter(expected_generation)
         gate = self.tables["gate"]
@@ -1203,7 +1223,7 @@ class Adapter:
             raise AdapterError("stale_generation")
         ledger = self.tables["migration"]
         count, ready = connection.execute(select(func.count(), func.min(ledger.c.complete))).one()
-        if count != 5 or ready != 1:
+        if count != self.protocol or ready != 1:
             raise AdapterError("storage_not_initialized")
         provenance = self.tables["batch"]
         query = select(provenance.c.batch_key, provenance.c.batch_bytes, provenance.c.generation).where(
@@ -1262,7 +1282,91 @@ class Adapter:
                 connection.execute(statement)
         return {"generation": observed, "changed": len(entries)}
 
-    def claim_outbox(self, batch: str, consumer: str, owner: str, *, seconds=300):
+    def batch_statement(self, batches, *, outboxes=False):
+        """Exact batch seeks, optionally followed by its outbox primary-key prefix."""
+        names = list(dict.fromkeys(batches))
+        if not names:
+            raise AdapterError("A nonempty batch key collection is required")
+        parts = [select(self._bound_key(name).label("batch_key")) for name in names]
+        wanted = (union_all(*parts) if len(parts) > 1 else parts[0]).subquery("wanted")
+        batch = self.tables["batch"]
+        if outboxes:
+            table = self.tables["outbox"]
+            columns = [*table.c, batch.c.batch_bytes, batch.c.generation]
+            source = table.join(batch, table.c.batch_key == batch.c.batch_key)
+        else:
+            table, columns, source = batch, list(batch.c), batch
+        condition = table.c.batch_key == wanted.c.batch_key
+        if self.engine.dialect.name == "postgresql":
+            probe = select(*columns).select_from(source).where(condition).offset(0).lateral("probe")
+            return select(probe).select_from(wanted.join(probe, true()))
+        return (select(*columns).select_from(wanted.join(source, condition))
+                .prefix_with("STRAIGHT_JOIN", dialect="mysql")
+                .with_hint(table, "FORCE INDEX (PRIMARY)", dialect_name="mysql"))
+
+    def read_batches(self, batches, *, outboxes=False, connection=None):
+        names, found = list(dict.fromkeys(batches)), []
+        for offset in range(0, len(names), 400):
+            chunk = names[offset:offset + 400]
+            with self.engine.connect() if connection is None else nullcontext(connection) as conn:
+                rows = conn.execute(self.batch_statement(chunk, outboxes=outboxes)).mappings().all()
+            for row in rows:
+                name = bytes(row["batch_bytes"]).decode()
+                if name not in chunk or key(name) != row["batch_key"]:
+                    raise AdapterError("Batch key digest collision")
+                if outboxes and hashlib.sha256(bytes(row["payload"])).hexdigest() != row["payload_hash"]:
+                    raise AdapterError("Publication bytes differ from retained digest")
+                found.append(dict(row))
+        return found
+
+    def observed_batches(self, observer, *, connection=None):
+        if self.protocol < 6:
+            raise AdapterError("Indexed observer lookup requires protocol 6")
+        event, batch = self.tables["proposal_event"], self.tables["batch"]
+        query = (select(event.c.observer_bytes, batch.c.batch_bytes)
+                 .select_from(event.join(batch, event.c.batch_key == batch.c.batch_key))
+                 .where(event.c.observer_key == self._bound_key(observer),
+                        event.c.event.in_(("applied", "duplicate"))))
+        if self.engine.dialect.name == "mysql":
+            query = query.prefix_with("STRAIGHT_JOIN", dialect="mysql").with_hint(
+                event, f"FORCE INDEX ({self.prefix}_proposal_observer)", dialect_name="mysql")
+        with self.engine.connect() if connection is None else nullcontext(connection) as conn:
+            rows = conn.execute(query).all()
+        if any(bytes(row.observer_bytes).decode() != observer for row in rows):
+            raise AdapterError("Observer key digest collision")
+        return {bytes(row.batch_bytes).decode() for row in rows}
+
+    def next_publication(self, consumer, *, connection=None):
+        outbox, batch = self.tables["outbox"], self.tables["batch"]
+        query = (select(batch.c.batch_bytes)
+                 .select_from(outbox.join(batch, outbox.c.batch_key == batch.c.batch_key))
+                 .where(outbox.c.consumer_key == self._bound_key(consumer), outbox.c.verified == 0)
+                 .order_by(batch.c.generation).limit(1))
+        if self.engine.dialect.name == "mysql":
+            query = query.prefix_with("STRAIGHT_JOIN", dialect="mysql").with_hint(
+                outbox, f"FORCE INDEX ({self.prefix}_outbox_status)", dialect_name="mysql")
+        with self.engine.connect() if connection is None else nullcontext(connection) as conn:
+            result = conn.scalar(query)
+        return None if result is None else bytes(result).decode()
+
+    def retain_metadata(self, type, id, body, *, expected_version=0, immutable=False, authority=None, expected_generation=None):
+        """Destination-owned opaque CAS/immutable metadata; no business generation."""
+        if self.protocol < 6:
+            raise AdapterError("Execution metadata requires protocol 6")
+        key(type)
+        key(id)
+        if type.__class__ is not str or immutable.__class__ is not bool:
+            raise AdapterError("Invalid execution metadata")
+        values = {"type": type.encode().hex(), "id": id.encode().hex(),
+                  "body": document(body).hex(), "expected_version": counter(expected_version),
+                  "immutable": int(immutable)}
+        if authority is not None:
+            values["authority"] = authority_wire(authority)
+        if expected_generation is not None:
+            values["expected_generation"] = counter(expected_generation)
+        return int(self._rpc("retain_metadata", values)["stored_version"])
+
+    def claim_outbox(self, batch: str, consumer: str, owner: str, *, seconds=300, authority=None):
         for value in (batch, consumer, owner):
             key(value)
         row = self._rpc(
@@ -1273,6 +1377,7 @@ class Adapter:
                 "owner": owner.encode().hex(),
                 "seconds": counter(seconds, positive=True),
             },
+            authority=authority,
         )
         if row["verified"]:
             return None
@@ -1287,7 +1392,7 @@ class Adapter:
         }
 
     def ack_outbox(
-        self, batch: str, consumer: str, owner: str, fence: int, receipt: str
+        self, batch: str, consumer: str, owner: str, fence: int, receipt: str, *, authority=None
     ):
         if not re.fullmatch("[0-9a-f]{64}", receipt):
             raise AdapterError("A verified SHA-256 receipt is required")
@@ -1300,7 +1405,18 @@ class Adapter:
                 "fence": counter(fence, positive=True),
                 "receipt": receipt,
             },
+            authority=authority,
         )
+
+
+    def release_outbox(self, batch, consumer, owner, fence, *, authority=None):
+        if self.protocol < 6:
+            raise AdapterError("Publication release requires protocol 6")
+        for value in (batch, consumer, owner):
+            key(value)
+        return self._rpc("release_outbox", {"batch":batch.encode().hex(),
+            "consumer":consumer.encode().hex(), "owner":owner.encode().hex(),
+            "fence":counter(fence, positive=True)}, authority=authority)
 
 
 @contextmanager
@@ -1845,11 +1961,11 @@ def migrate(
     engine, *, runtime_role: str, runtime_host="%", prefix="skill_merge", protocol=1,
     runtime_execute=True, defer_ready=False,
 ) -> dict:
-    if type(protocol) is not int or protocol not in (1, 2, 3, 4, 5):
+    if type(protocol) is not int or protocol not in (1, 2, 3, 4, 5, 6):
         raise AdapterError("Unsupported storage protocol")
-    if type(defer_ready) is not bool or defer_ready and (protocol != 5 or runtime_execute):
+    if type(defer_ready) is not bool or defer_ready and (protocol < 5 or runtime_execute):
         raise AdapterError("Deferred activation requires governed storage without runtime execution")
-    if type(runtime_execute) is not bool or not runtime_execute and engine.dialect.name != "mysql" and protocol != 5:
+    if type(runtime_execute) is not bool or not runtime_execute and engine.dialect.name != "mysql" and protocol < 5:
         raise AdapterError("Deferred runtime execution is qualified only for MySQL")
     builds = {version: Adapter(engine, prefix=prefix, protocol=version) for version in range(1, protocol + 1)}
     checksums = {version: hashlib.sha256("\n".join(_migration_statements(build)).encode()).hexdigest()
@@ -1999,14 +2115,15 @@ def storage_version(conn, *, prefix="mdm_store") -> int:
     return int(conn.scalar(select(func.max(ledger.c.version))) or 0)
 
 
-def migrate_registry(engine, *, runtime_role, configuration, kinds, runtime_host="%", prepared=False):
+def migrate_registry(engine, *, runtime_role, configuration, kinds, runtime_host="%", prepared=False, prepared_protocol=5, runtime_execute=True):
     """Install the native governed registry through its owning command."""
     if __package__:
         from .registry_migration import migrate as migrate_native
     else:
         from registry_migration import migrate as migrate_native
     return migrate_native(engine, runtime_role=runtime_role, runtime_host=runtime_host,
-                          configuration=configuration, kinds=kinds, prepared=prepared)
+                          configuration=configuration, kinds=kinds, prepared=prepared,
+                          prepared_protocol=prepared_protocol, runtime_execute=runtime_execute)
 
 
 def verify_native_registry(conn):

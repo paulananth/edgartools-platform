@@ -434,9 +434,17 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
     routines = {}
 
     def save(operation, lines, variables, returns):
-        routines[operation] = d.wrap(
-            prefix, operation, "\n".join(lines), variables, returns
-        )
+        body = "\n".join(lines)
+        if protocol >= 6:
+            # Version 6 retains version-5 bytes/producer semantics. Older
+            # committed requests remain replayable; fresh effects require 6.
+            version = d.field("version", d.v("intent"))
+            for first in (1, 2, 3, 4):
+                old = "(" + ",".join("'" + str(n) + "'" for n in range(first, 6)) + ")"
+                body = body.replace(old, old[:-1] + ",'6')")
+            body = body.replace(version + "='5'", version + " IN ('5','6')")
+            body = body.replace(version + "<>'5'", version + " NOT IN ('5','6')")
+        routines[operation] = d.wrap(prefix, operation, body, variables, returns)
 
     lease_vars = {
         "generation": "int",
@@ -645,6 +653,7 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
     )
     if protocol >= 5:
         lines.extend([
+            *([d.guard(f"{f('version')}<>'6'", "unsupported_request_version")] if protocol >= 6 else []),
             d.guard(f"{f('version')}<>'5'", "proposal_required"),
             approved_command_pins(d),
             d.guard(f"{d.field('proposal_key')} IS NOT NULL AND {d.field('proposal_body')} IS NOT NULL", "invalid_proposal"),
@@ -839,8 +848,13 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
         "expires": "int",
     }
     target = f"{n['outbox']} o WHERE o.batch_key={v('batch_key')} AND o.consumer_key={v('consumer_key')}"
+    authority_start, authority_finish = ([], "")
+    if protocol >= 6:
+        variables["authority_ready"] = "int"
+        authority_start, authority_finish = authority_checks(d)
     initialize = [
         d.lock(),
+        *authority_start,
         d.assign("batch_key", d.hash(d.decode(d.field("batch")))),
         d.assign("consumer_key", d.hash(d.decode(d.field("consumer")))),
         d.assign("owner_key", d.hash(d.decode(d.field("owner")))),
@@ -859,7 +873,12 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
     lines = initialize + [
         d.number_guard("seconds", positive=True),
         d.guard(f"{d.integer(d.field('seconds'))}>3600", "invalid_lease_duration"),
-        d.if_(f"EXISTS(SELECT 1 FROM {target} AND o.verified=1)", d.finish(outputs)),
+        d.if_(f"EXISTS(SELECT 1 FROM {target} AND o.verified=1)", (authority_finish + "\n" if protocol >= 6 else "") + d.finish(outputs)),
+        *([d.guard(
+            f"EXISTS(SELECT 1 FROM {n['outbox']} earlier JOIN {n['batch']} b ON b.batch_key=earlier.batch_key "
+            f"WHERE earlier.consumer_key={v('consumer_key')} AND earlier.verified=0 "
+            f"AND b.generation<(SELECT held.generation FROM {n['batch']} held WHERE held.batch_key={v('batch_key')}))",
+            "earlier_publication_pending")] if protocol >= 6 else []),
         d.guard(
             f"EXISTS(SELECT 1 FROM {target} AND o.owner_key<>{v('owner_key')} AND o.expires>{d.now})",
             "publication_already_leased",
@@ -873,7 +892,7 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
             },
             f"o.batch_key={v('batch_key')} AND o.consumer_key={v('consumer_key')}",
         ),
-        d.finish(outputs),
+        (authority_finish + "\n" if protocol >= 6 else "") + d.finish(outputs),
     ]
     save(
         "claim_outbox",
@@ -895,16 +914,51 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
         ),
         d.if_(
             f"EXISTS(SELECT 1 FROM {target} AND o.verified=1)",
-            d.finish([("verified", d.integer("1"))]),
+            (authority_finish + "\n" if protocol >= 6 else "") + d.finish([("verified", d.integer("1"))]),
         ),
         d.guard(
             f"EXISTS(SELECT 1 FROM {target} AND o.verified=0 AND o.expires<={d.now})",
             "publication_lease_expired",
         ),
         f"UPDATE {n['outbox']} SET verified=1 WHERE batch_key={v('batch_key')} AND consumer_key={v('consumer_key')};",
-        d.finish([("verified", d.integer("1"))]),
+        (authority_finish + "\n" if protocol >= 6 else "") + d.finish([("verified", d.integer("1"))]),
     ]
     save("ack_outbox", lines, variables, {"verified": "int"})
+    if protocol >= 6:
+        save("release_outbox", initialize + [d.number_guard("fence", positive=True),
+            d.guard(f"NOT EXISTS(SELECT 1 FROM {target} AND o.owner_key={v('owner_key')} AND o.fence={d.integer(d.field('fence'))} AND o.verified=0 AND o.expires>{d.now})", "stale_or_invalid_publication_receipt"),
+            f"UPDATE {n['outbox']} SET owner_key=NULL,expires=NULL WHERE batch_key={v('batch_key')} AND consumer_key={v('consumer_key')};",
+            authority_finish, d.finish([("released", d.integer("1"))])], variables, {"released":"int"})
+    if protocol >= 6:
+        table = n["metadata"]
+        variables = {"generation": "int", "authority_ready": "int", "metadata_version": "int",
+                     "type_key": "key", "id_key": "key", "body": "bytes"}
+        start, finish = authority_checks(d)
+        target = f"{table} o WHERE o.type_key={v('type_key')} AND o.id_key={v('id_key')}"
+        lines = [d.lock(), *start,
+            d.if_(f"{d.field('expected_generation')} IS NOT NULL", "\n".join([
+                d.number_guard("expected_generation"),
+                d.guard(f"{v('generation')}<>{d.integer(d.field('expected_generation'))}", "stale_generation")])),
+            d.number_guard("expected_version"), d.number_guard("immutable"),
+            d.guard(f"{d.field('immutable')} NOT IN ('0','1')", "invalid_metadata_mode"),
+            d.assign("type_key", d.hash(d.decode(d.field("type")))),
+            d.assign("id_key", d.hash(d.decode(d.field("id")))),
+            d.assign("body", d.decode(d.field("body"))),
+            d.guard(f"{v('body')} IS NULL OR {v('type_key')} IS NULL OR {v('id_key')} IS NULL", "invalid_metadata"),
+            d.guard(f"EXISTS(SELECT 1 FROM {target} AND (o.type_bytes<>{d.decode(d.field('type'))} OR o.id_bytes<>{d.decode(d.field('id'))}))", "metadata_digest_collision"),
+            d.guard(f"EXISTS(SELECT 1 FROM {target} AND o.immutable<>{d.integer(d.field('immutable'))})", "metadata_mode_changed"),
+            d.assign("metadata_version", f"(SELECT o.version FROM {target})"),
+            d.if_(f"EXISTS(SELECT 1 FROM {target} AND o.body={v('body')})",
+                  finish + "\n" + d.finish([("stored_version", v("metadata_version"))])),
+            d.guard(f"EXISTS(SELECT 1 FROM {target} AND o.immutable=1)", "immutable_metadata_changed"),
+            d.guard(f"COALESCE({v('metadata_version')},0)<>{d.integer(d.field('expected_version'))}", "stale_metadata_version"),
+            d.if_(f"{v('metadata_version')} IS NOT NULL", d.update_row("metadata",
+                {"body":v("body"), "body_hash":d.hash(v("body")), "version":"o.version+1", "recorded_at":d.now},
+                f"o.type_key={v('type_key')} AND o.id_key={v('id_key')}")),
+            f"INSERT INTO {table}(type_key,id_key,type_bytes,id_bytes,body,body_hash,version,immutable,recorded_at) "
+            f"SELECT {v('type_key')},{v('id_key')},{d.decode(d.field('type'))},{d.decode(d.field('id'))},{v('body')},{d.hash(v('body'))},1,{d.integer(d.field('immutable'))},{d.now} WHERE {v('metadata_version')} IS NULL;",
+            finish, d.finish([("stored_version", f"COALESCE({v('metadata_version')},0)+1")])]
+        save("retain_metadata", lines, variables, {"stored_version":"int"})
     return routines
 
 
@@ -918,7 +972,7 @@ def migration_guards(dialect, tables, prefix):
     d = SQL(dialect, tables)
     quote = dialect.identifier_preparer.quote
     definitions = []
-    for table in ("gate", "lease", "outbox") + (("pin", "proposal", "proposal_event") if "proposal" in tables else ()):
+    for table in ("gate", "lease", "outbox") + (("pin", "proposal", "proposal_event") if "proposal" in tables else ()) + (("metadata",) if "metadata" in tables else ()):
         suffix = "_migration_guard" if table in {"gate", "lease", "outbox"} else "_guard"
         name = prefix + "_" + table + suffix
         qualified = f"{quote(d.schema)}.{quote(name)}"

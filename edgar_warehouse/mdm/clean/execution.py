@@ -36,7 +36,7 @@ def runtime_files() -> list[Path]:
     from edgar_warehouse.mdm.clean import (
         activation, adapters, assessment, binding, cascade, catalog, classification,
         correction, evidence, identifier_types, identity, matching, merge,
-        name_census, names, prepared, prepared_registry, primitives, quality, relationships, run, schema, scope, store, survivorship,
+        name_census, names, prepared, prepared_registry, prepared_publication, prepared_runs, master_reads, master_search, record_reads, primitives, quality, relationships, run, schema, scope, store, survivorship,
     )
     from edgar_warehouse.rules import files, source_engine
     from edgar_warehouse.workers import source_mapping
@@ -46,7 +46,7 @@ def runtime_files() -> list[Path]:
     # the separately tracked complete environment/reproducibility fingerprint.
     modules = (activation, adapters, assessment, binding, cascade, catalog, classification, config,
                correction, destinations, evidence, files, identifier_types,
-               identity, limits, matching, merge, name_census, names, prepared, prepared_registry, primitives, quality,
+               identity, limits, matching, merge, name_census, names, prepared, prepared_registry, prepared_publication, prepared_runs, master_reads, master_search, record_reads, primitives, quality,
                relationships, run, schema, scope, source_mapping, store, survivorship)
     adapter = store.storage_adapter()
     adapter_files = [Path(getfile(adapter)).with_name(name) for name in
@@ -285,21 +285,25 @@ def execute_manifest(
     coordinator = RunCoordinator(store)
     handled = 0
     committed = []
-    with store.engine.connect() as conn:
-        observed = set(
-            conn.scalars(
-                text(
-                    "SELECT batch_id FROM mdm.run_batch WHERE run_id=CAST(:run AS uuid)"
-                ),
-                {"run": run_id},
+    if store.prepared:
+        from .prepared_runs import batches
+        observed, retained = batches(store, run_id, [b["batch_id"] for b in manifest["batches"]])
+    else:
+        with store.engine.connect() as conn:
+            observed = set(
+                conn.scalars(
+                    text(
+                        "SELECT batch_id FROM mdm.run_batch WHERE run_id=CAST(:run AS uuid)"
+                    ),
+                    {"run": run_id},
+                )
             )
-        )
-        retained = set(
-            conn.scalars(
-                text("SELECT batch_id FROM mdm.batch WHERE batch_id=ANY(:ids)"),
-                {"ids": [b["batch_id"] for b in manifest["batches"]]},
+            retained = set(
+                conn.scalars(
+                    text("SELECT batch_id FROM mdm.batch WHERE batch_id=ANY(:ids)"),
+                    {"ids": [b["batch_id"] for b in manifest["batches"]]},
+                )
             )
-        )
     mapping_versions = pinned_mapping_versions(store, manifest, coordinator.scope(run_id))
     if not preview:
         coordinator.start(

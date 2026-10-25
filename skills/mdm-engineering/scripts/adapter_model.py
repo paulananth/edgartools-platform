@@ -274,6 +274,22 @@ def model(prefix: str, schema: str | None = None, *, protocol=1) -> tuple[MetaDa
             ForeignKeyConstraint(["batch_key"], [f"{schema + '.' if schema else ''}{prefix}_batch.batch_key"]),
             CheckConstraint("event IN ('ready', 'rejected', 'observed', 'applied', 'superseded', 'duplicate')"),
         )
+    if protocol >= 6:
+        # Opaque execution metadata has its own versions, not business generations.
+        table(
+            "metadata",
+            Column("type_key", key, primary_key=True),
+            Column("id_key", key, primary_key=True),
+            Column("type_bytes", binary, nullable=False),
+            Column("id_bytes", binary, nullable=False),
+            Column("body", binary, nullable=False),
+            Column("body_hash", key, nullable=False),
+            Column("version", BigInteger, nullable=False),
+            Column("recorded_at", BigInteger, nullable=False),
+            Column("immutable", Integer, nullable=False),
+            CheckConstraint("version > 0"),
+            CheckConstraint("immutable IN (0, 1)"),
+        )
     table(
         "outbox",
         Column("batch_key", key, primary_key=True),
@@ -303,4 +319,7 @@ def model(prefix: str, schema: str | None = None, *, protocol=1) -> tuple[MetaDa
         tables["history"].c.type_key,
         tables["history"].c.id_key,
     )
+    if protocol >= 6:
+        Index(f"{prefix}_proposal_observer", tables["proposal_event"].c.observer_key,
+              tables["proposal_event"].c.batch_key, tables["proposal_event"].c.event)
     return metadata, tables

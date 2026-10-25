@@ -29,9 +29,9 @@ CHECK = "mdm.published"
 
 def runtime_files() -> list[Path]:
     from edgar_warehouse.mdm.clean import journal_delivery, payloads, publication, store
-    from edgar_warehouse.rules import source_engine
 
-    return [Path(m.__file__) for m in (journal_delivery, payloads, publication, store)] + source_engine.runtime_files()
+    from edgar_warehouse.mdm.clean import execution
+    return [Path(m.__file__) for m in (journal_delivery, payloads, publication, store)] + execution.runtime_files()
 
 
 def _keys(envelope: dict) -> tuple[str, str]:
@@ -60,6 +60,9 @@ def _publisher(envelope: dict, artifacts, store, consumer: str):
 
 
 def receipt(store, batch_id: str, consumer: str) -> bytes:
+    if store.prepared:
+        from edgar_warehouse.mdm.clean.prepared_publication import receipt as prepared_receipt
+        return prepared_receipt(store, batch_id, consumer)
     with store.engine.connect() as conn:
         row = conn.execute(text("SELECT payload_hash, verified_at FROM mdm.outbox WHERE batch_id=:b AND consumer=:c"),
                            {"b": batch_id, "c": consumer}).mappings().first()
@@ -91,6 +94,8 @@ def execute(envelope: dict, artifacts) -> dict:
     store = _store(restricted=True, envelope=envelope)
     try:
         found = receipt_if_unchanged(store, batch_id, consumer)
+        if found is not None and store.prepared:
+            store.deliver_one(consumer, envelope["claim"]["attempt"], None, batch_id=batch_id)
         if found is None:
             publisher = _publisher(envelope, artifacts, store, consumer)
             # False when it is already delivered (a lost acknowledgement) or not
@@ -111,12 +116,16 @@ def verify(envelope: dict, artifacts) -> tuple[dict, list]:
         expected = receipt(store, batch_id, consumer)
         if json.loads(expected).get("unchanged"):
             return _same(envelope, artifacts, expected)
-        with store.engine.connect() as conn:
-            row = conn.execute(text("SELECT * FROM mdm.outbox_input WHERE batch_id=:b AND consumer=:c"),
-                               {"b": batch_id, "c": consumer}).mappings().one()
-        from edgar_warehouse.mdm.clean.payloads import prepare
-
-        payload = prepare(row)
+        if store.prepared:
+            from edgar_warehouse.mdm.clean.prepared_publication import retained
+            _, row = retained(store, batch_id, consumer)
+            payload = json.loads(bytes(row["payload"]))
+        else:
+            with store.engine.connect() as conn:
+                row = conn.execute(text("SELECT * FROM mdm.outbox_input WHERE batch_id=:b AND consumer=:c"),
+                                   {"b": batch_id, "c": consumer}).mappings().one()
+            from edgar_warehouse.mdm.clean.payloads import prepare
+            payload = prepare(row)
         publisher = _publisher(envelope, artifacts, store, consumer)
         publisher.verify(f"{consumer}/{batch_id}", payload, json.loads(expected)["payload_hash"])
     finally:

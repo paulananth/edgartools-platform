@@ -355,6 +355,14 @@ fn projection_entries(
                 )?);
             }
             "review" => {
+                let flag = |name: &str| -> Result<bool, String> {
+                    object.body.get(name).filter(|raw| raw.get() != "null")
+                        .map(|raw| values::read_value::<bool>(raw)).transpose()
+                        .map(|value| value.unwrap_or(false))
+                };
+                if flag("waiting_for_end")? && !flag("retired")? {
+                    groups.insert(lookup_type("waiting_reviews", &[])?);
+                }
                 // Generated reviews are addressed by the projection envelope.
                 // Older transports also carry an explicit identity; when present
                 // it must agree, without adding a field to retained review bytes.
@@ -477,4 +485,25 @@ pub fn prepare_scope_lookups(raw: &str) -> Result<String, String> {
     changes.sort_by(|a, b| (&a.record_type, &a.id).cmp(&(&b.record_type, &b.id)));
     serde_json::to_string(&(publications, changes))
         .map_err(|_| "Cannot serialize scope lookup changes".into())
+}
+
+#[cfg(test)]
+mod waiting_index_tests {
+    use super::*;
+
+    #[test]
+    fn waiting_reviews_leave_the_index_when_retired_or_resolved() {
+        let projection = |waiting: bool, retired: bool| -> Projection {
+            serde_json::from_str(&format!(
+                r#"{{"type":"review","id":"invented-review","body":{{"waiting_for_end":{waiting},"retired":{retired}}}}}"#
+            )).unwrap()
+        };
+        let group = lookup_type("waiting_reviews", &[]).unwrap();
+        let active = projection_entries(&[projection(true, false)]).unwrap();
+        assert!(active.contains_key(&(group.clone(), "invented-review".into())));
+        for object in [projection(false, false), projection(true, true)] {
+            assert!(!projection_entries(&[object]).unwrap()
+                .contains_key(&(group.clone(), "invented-review".into())));
+        }
+    }
 }

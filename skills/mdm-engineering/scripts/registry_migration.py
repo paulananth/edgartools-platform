@@ -247,12 +247,14 @@ def require_ready(conn, configuration=None):
     return state["configuration"]
 
 
-def migrate(engine, *, runtime_role, configuration, kinds, runtime_host="%", prepared=False):
+def migrate(engine, *, runtime_role, configuration, kinds, runtime_host="%", prepared=False, prepared_protocol=5, runtime_execute=True):
     """Install MySQL governance and a read-only future prepared-effect store."""
     if engine.dialect.name != "mysql":
         raise api.AdapterError(
             "Native registry installation is qualified for MySQL only"
         )
+    if type(prepared_protocol) is not int or prepared_protocol not in (5, 6) or type(runtime_execute) is not bool:
+        raise api.AdapterError("Invalid prepared protocol or runtime grant selection")
     if type(prepared) is not bool:
         raise api.AdapterError("Prepared store selection must be a boolean")
     if (
@@ -297,7 +299,7 @@ def migrate(engine, *, runtime_role, configuration, kinds, runtime_host="%", pre
         principal = SimpleNamespace(schema=database, tables={}, routines={})
         api._grants(conn, principal, runtime_role, runtime_host, runtime_execute=False)
         held_tables = set(inspect(conn).get_table_names())
-        _, prepared_tables = api.model(PREFIX, database, protocol=5 if prepared else 4)
+        _, prepared_tables = api.model(PREFIX, database, protocol=prepared_protocol if prepared else 4)
         if held_tables - set(tables) - {t.name for t in prepared_tables.values()}:
             raise api.AdapterError("Native database contains unrelated storage")
         if ledger.name not in held_tables:
@@ -379,7 +381,7 @@ def migrate(engine, *, runtime_role, configuration, kinds, runtime_host="%", pre
             runtime_role=runtime_role,
             runtime_host=runtime_host,
             prefix=PREFIX,
-            protocol=5 if prepared else 4,
+            protocol=prepared_protocol if prepared else 4,
             runtime_execute=False,
             defer_ready=prepared,
         )
@@ -433,11 +435,11 @@ def migrate(engine, *, runtime_role, configuration, kinds, runtime_host="%", pre
                 )
             final.execute(ledger.update().values(complete=1, initialized=1))
             if prepared:
-                api.Adapter(engine, prefix=PREFIX, protocol=5).activate(
+                api.Adapter(engine, prefix=PREFIX, protocol=prepared_protocol).activate(
                     final, {"catalog": configuration_key}, exclusive=("catalog",)
                 )
-        if prepared:
-            api.Adapter(engine, prefix=PREFIX, protocol=5).enable_runtime(
+        if prepared and runtime_execute:
+            api.Adapter(engine, prefix=PREFIX, protocol=prepared_protocol).enable_runtime(
                 runtime_role, runtime_host=runtime_host
             )
     return {

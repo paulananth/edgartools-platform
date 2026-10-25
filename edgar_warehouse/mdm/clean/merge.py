@@ -132,7 +132,7 @@ class MergeStage:
         if command.get("preview"):
             return self._execute(**command, automatic=self.propose(**command))
         if getattr(self.store, "prepared", False):
-            api = storage_adapter().Adapter(self.store.engine, prefix="mdm_store", protocol=5)
+            api = storage_adapter().Adapter(self.store.engine, prefix="mdm_store", protocol=self.store.protocol)
             if api.read_batch(command["batch_id"]) is not None:
                 return self._execute(**command, automatic=binding.nothing())
         for attempt in range(3):

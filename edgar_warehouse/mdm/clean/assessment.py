@@ -34,7 +34,7 @@ def load(conn, key: str) -> dict:
     api = storage_adapter()
     if api.storage_version(conn) >= 5:
         import json
-        held = api.Adapter(conn.engine, prefix="mdm_store", protocol=5).read_proposal(key, connection=conn)
+        held = api.Adapter(conn.engine, prefix="mdm_store", protocol=api.storage_version(conn)).read_proposal(key, connection=conn)
         if held is None:
             raise Conflict("Unknown identity assessment")
         return json.loads(bytes(held["body"]))
@@ -58,7 +58,7 @@ def stale(exc) -> bool:
 def supersede(store, key: str, run_id: str) -> None:
     if getattr(store, "prepared", False):
         from .store import storage_adapter
-        storage_adapter().Adapter(store.engine, prefix="mdm_store", protocol=5).supersede_proposal(key, run_id)
+        storage_adapter().Adapter(store.engine, prefix="mdm_store", protocol=store.protocol).supersede_proposal(key, run_id)
         return
     # Outside the rolled-back master transaction. A concurrent successful
     # application wins; the SQL capability never supersedes an applied proposal.
