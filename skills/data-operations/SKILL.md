@@ -237,8 +237,9 @@ bundle time:
    A profile shared by several steps still runs one step at a time: verify
    the earlier step before more workers of that profile start. Workers that
    lose the row lock park the unit (`Lease or prerequisite contention;
-   retry on resume`). `bookkeeping resume <run>` reopens those units. Drive
-   them again. Do not submit the bundle again.
+   retry on resume`). `bookkeeping resume` does not reopen that unit. The
+   next `workers work` of the same profile claims it again, once the earlier
+   step is verified and no live lease holds it. Do not submit the bundle again.
 
 The serial plan that missed the window: 3,837 CUSIP files and 3,877 ISIN
 files, 512 a bundle, one reader, CUSIP then ISIN. The first CUSIP bundle had
