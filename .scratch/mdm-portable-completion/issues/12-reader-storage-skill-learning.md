@@ -14,6 +14,8 @@ Blocked by: 05 qualification and implementation landing
 - [x] Validate guide references, genericity and affected skill checks; review Standards, Spec and GoF — 2026-10-24 20:15 ET; 80 affected checks pass and the new reference anchor resolves.
 - [x] Publish this skill change on its own PR after its implementation evidence is qualified — 2026-10-24 20:56 ET; draft PR #1165 links reader PR #1164, whose two-kind/source installed reader checks pass on both engines.
 - [ ] Observe rebased skill checks, reconcile implementation landing and follow named merge approval for #1165.
+- [x] Add source-neutral configured name search, coverage gaps, bounded owner rebuild and driver statement-count guidance — 2026-10-25 12:24 ET; 91 affected guide/genericity/command checks pass.
+- [ ] Qualify the documented command against the new independent installed search checkpoint before final readiness.
 - [x] Learning → skill — 2026-10-24 20:56 ET; mdm-engineering points to storage-adapters.md, Retained-read provenance, for original metadata bytes, applied producer/time, coherent snapshots, stable page cursors and explicit unsupported routes.
 
 ## Evidence boundary
@@ -59,3 +61,31 @@ files match the local qualified files byte for byte. A later forced-publication
 refusal is separately qualified locally and remains an unimplemented workflow.
 The original 80 skill checks passed; the rebased result awaits its scheduled
 observation. Full workflow support and name search remain unclaimed.
+
+
+## Search guidance checkpoint — 2026-10-25 12:24 ET
+
+Implementation PR #1164 now publishes ca2f6f75. Local search/rebuild cases pass
+for two configured kinds on PostgreSQL/MySQL, including stale coverage, owner
+permissions, interruption and explicit restart. New bulk maintenance proof
+checks 401 inserted references and mixed updates/deletes in three driver
+statements each. The guide records the bounded owner command, readiness and
+zero-work retry checks, and the independent-install completion boundary.
+Ninety-one affected documentation checks pass. Installed search and final
+CI remain pending; no full worker publication support is claimed.
+
+### Standards
+
+Separate skill branch and PR; generic terminology and invented examples only.
+Overlap guard and whitespace pass. No runtime or migration changes here.
+
+### Spec
+
+Documents the demonstrated coverage and rebuild gaps and the exact normal
+owner command. Keeps qualification, activation and worker publication separate.
+
+### GoF
+
+Retains the existing adapter and shared-function boundary. Documentation adds
+no classes or alternate computation; maintenance statement counts expose the
+measured cost that the implementation removed.

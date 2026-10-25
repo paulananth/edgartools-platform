@@ -244,6 +244,39 @@ lookup from an independent installation with restricted roles. A legacy table
 returning no rows does not prove a selected-store command works: identify any
 uninstalled route explicitly and keep its qualification open.
 
+### Governed name-index rebuilding
+
+Configure name-field priority and rank weight in the shared engine catalog.
+Use shared word/literal preparation and ranking; retrieve candidates through
+indexed groups in bounded pages, then verify each against its authoritative
+current master in the same snapshot. Prove candidate completeness for short,
+stop, negative-only, punctuation and Unicode queries, including more results
+than one page and word matches arriving after literal candidates.
+
+Normal saves commit derived references and complete-generation coverage with
+their business effects. A missing generation or changed configuration leaves
+search unavailable until coverage is rebuilt; a later writer must preserve
+that gap. Retain original evidence, business history, delivery and generation
+when repairing only derived references.
+
+For governed prepared storage, use owner credentials for a bounded first pass:
+
+```bash
+edgar-warehouse mdm rebuild-name-index --limit 20
+```
+
+A report with `ready: false` retains progress. Quiesce normal writers, then run
+the same command to resume, or omit `--limit` to finish in bounded transactions.
+If another save overtakes progress, inspect that run and use explicit
+`--restart` for a new quiescent pass. Verify `ready: true`, normal restricted-role
+search, unchanged business counts/generation and a zero-work repeat. Owner
+maintenance takes the destination gate and checks batch provenance and row
+versions; runtime grants stay unchanged. Count driver statements on multi-page
+insert/update/delete cases so an executemany loop cannot hide per-reference
+round trips. Independently qualify the installed command on each selected
+engine before declaring it available. This command does not qualify worker
+publication or authorize activation.
+
 ## Native registry integration
 
 The existing registrar now delegates immutable policy retention and versioned
