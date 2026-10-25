@@ -19,7 +19,7 @@ Can installed consumers and operators use normal engine-selected MDM read and in
 - [ ] Verify original JSON, large numbers, Unicode and opaque identifiers survive transport; keep errors and public evidence free of source values.
 - [x] Qualify existing applied-event recording time and generation-pinned pages without a storage extension — 2026-10-24 20:04 ET; recording/business-time boundaries and metadata key plans pass on both engines; all 13 supported protocol/engine migration fingerprint sets match current main.
 - [x] Qualify installed assessment/save, current/history provenance, Context, master lookup, merge/reversal and pinned pages for two configured kinds and sources — 2026-10-24 20:52 ET; two cases per engine pass outside the checkout using the independently built five-wheel runtime 8e15a9ee.
-- [ ] Qualify the normal installed consumer/context and actual Silver-facing lookup on both engines, with original provenance, aliases, historical detail boundaries and bounded plans.
+- [x] Qualify the normal installed consumer/context and actual Silver-facing lookup on both engines, with original provenance, aliases and historical detail/relationship boundaries — 2026-10-24 20:54 ET; two configured-kind/source cases per engine pass outside the checkout. Indexed plans have separate local two-kind proof; installed reader/adapter files are unchanged from that qualified checkpoint.
 - [x] Qualify current/historical entity, original producer, alias, profile, detail, plan, unknown-key and inspection cases locally for two configured kinds — 2026-10-24 19:19 ET; 18 cases per engine passed before the recording-time join, with current/producer and key-plan checks rerun after that join.
 - [x] Qualify indexed generation-pinned snapshot paging across later merges and future identities — 2026-10-24 19:19 ET; two cases per engine pass. Pages use stable storage-key order and original IDs as cursors; no new schema or ID length cap.
 - [x] Prove 405-field original provenance without per-field query transport — 2026-10-24 19:19 ET; one case per engine passes with fewer than 30 read queries. The second configured kind and latest recording-time join remain to qualify.
@@ -372,3 +372,19 @@ search or publication. Tickets 05–07 remain incomplete.
 Retain the existing adapter boundary and force-publication handler. A single
 capability check prevents an unsupported native route; no new hierarchy,
 policy algorithm or alternate publication implementation is introduced.
+
+## Installed detail, relationship and operator transport — 2026-10-24 20:54 ET
+
+The same two cases per engine now also pass configured detail-row revisions
+and original large integers, historical relationship pages, original source
+evidence, retirement markers and retrospective Context answers after removal.
+They execute the actual installed CLI for counts, connectivity and historical
+relationships as the restricted runtime. Expected counts are two masters and
+one retained relationship; five migration markers are ready. These cases use
+the completed independent five-wheel installation, not checkout modules.
+
+No reader or adapter runtime changed during these test extensions. The only
+runtime difference after 8e15a9ee is the separately proved five-line forced
+publication refusal. Master-name search and final integration/landing remain
+open; full worker/recovery/activation readiness is not inferred. Skill learning
+is draft PR #1165 and this implementation is draft PR #1164.
