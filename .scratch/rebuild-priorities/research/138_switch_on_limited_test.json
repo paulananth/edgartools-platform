@@ -1,0 +1,51 @@
+{
+ "at": "2026-10-26 12:24 ET",
+ "groupings_identical_in_both_orders": true,
+ "kind": "limited test before the switch-on (operator: \"Do limited testing and switch on\")",
+ "not_exercised": "no filed CUSIP and ISIN on two Securities occurred in this slice; part A2b is proved by its tests (#1183)",
+ "orders": {
+  "cusip_first": {
+   "binds": 9483,
+   "binds_withholding": 0,
+   "identifiers_on_two_or_more": {},
+   "merged_away": 1,
+   "open_reviews": {},
+   "records": {
+    "nport": 3000,
+    "openfigi_cusip": 2662,
+    "openfigi_isin": 3821
+   },
+   "rule_merges": 1,
+   "second_pass_changed": false,
+   "securities": 4250
+  },
+  "isin_first": {
+   "binds": 9483,
+   "binds_withholding": 0,
+   "identifiers_on_two_or_more": {},
+   "merged_away": 1,
+   "open_reviews": {},
+   "records": {
+    "nport": 3000,
+    "openfigi_cusip": 2662,
+    "openfigi_isin": 3821
+   },
+   "rule_merges": 1,
+   "second_pass_changed": false,
+   "securities": 4250
+  }
+ },
+ "path": "OpenFIGI: the configured requests, answers, reduce, line-counts, lines, listing, combine and record contracts, mdm.prepare and openfigi.security.v3; then the Merge Stage on PostgreSQL with OpenFIGI's three rules and N-PORT's two Security rules on",
+ "slice": {
+  "capture": "OpenFIGI 2026q2-nport answers and N-PORT 2026q2 holdings",
+  "cusips_asked": 3000,
+  "listing_figis": 19113,
+  "nport_cusips": 3000,
+  "nport_cusips_with_a_filed_isin": 2980,
+  "nport_cusips_with_two_or_more": 30,
+  "nport_records": "shaped as sec.nport.security.v2 makes them (a CUSIP with every filed ISIN), built from the filings",
+  "openfigi_cusip_answer_files": 30,
+  "openfigi_isin_answer_files_sharing_a_figi": 40
+ },
+ "ticket": "138"
+}

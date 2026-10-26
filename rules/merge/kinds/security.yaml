@@ -199,8 +199,8 @@ identifiers:
       max_per_10k: 5
   # A listing's FIGI (ticket 138; operator, 2026-10-25): it matches like a
   # CUSIP or an ISIN, and only it shows two Securities are one. One Security
-  # holds a FIGI for each listing, so no reverse limit. It waits for its
-  # verification on ticket 138's proof and the operator's switch-on.
+  # holds a FIGI for each listing, so no reverse limit. Verified on ticket
+  # 138's limited test and switched on 2026-10-26 12:24 ET.
   figi:
     authority: FIGI (Object Management Group standard), issued by Bloomberg as its Registration Authority
     sources:
@@ -219,6 +219,11 @@ identifiers:
     compatibility:
       field: kind
       predicate: kind_equal@1
+    verification:
+      corpus_sha256: a1ac543735547058302a7c3f633fdc87aa21979d13198a0fb74dc962cf4b3175
+      approved_by: operator
+      approved_at: "2026-10-26T16:24:52Z"
+      reason: "ticket 138 limited test (.scratch/rebuild-priorities/research/138_switch_on_limited_test.json), approved in the operator's words: Do limited testing and switch on. 30 OpenFIGI CUSIP answer files and the 40 ISIN files sharing their FIGIs, with N-PORT's 3,000 CUSIPs: in both load orders 4,250 Securities, the same records each, 1 merge by a shared FIGI, 0 identifiers on two Securities, 0 open reviews, a second pass changed nothing"
     tolerance:
       unit: items
       warm_up_decisions: 10000

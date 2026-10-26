@@ -46,9 +46,11 @@ def with_rules_on(policy: dict, kind: str, *rule_ids: str) -> dict:
     test only: each joins `automatic_rules` as a deterministic binding at its declared version."""
     body = _copy(policy)
     declared = {r["rule_id"]: r for r in body["kinds"][kind]["rules"]}
+    # A rule the policy already switches on stays as it is (ticket 138's switch-on).
+    active = {(a["kind"], a["rule_id"]) for a in body["automatic_rules"]}
     body["automatic_rules"] = [*body["automatic_rules"], *(
         {"kind": kind, "family": "binding", "rule_id": rule_id, "rule_version": declared[rule_id]["version"],
-         "verdict": "bind", "activation": "deterministic"} for rule_id in rule_ids)]
+         "verdict": "bind", "activation": "deterministic"} for rule_id in rule_ids if (kind, rule_id) not in active)]
     return body
 
 

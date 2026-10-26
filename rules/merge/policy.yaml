@@ -317,5 +317,45 @@ automatic_rules:
 # Ticket 138 retired the three rules above with the two OpenFIGI targets
 # (operator, 2026-10-25: "there should be one processing with all the
 # identifier"): their switch-ons of 2026-10-24 19:27 ET ("switch on ticket
-# 120") ended with them. OpenFIGI's rules on openfigi.security.v3 wait for
-# their own switch-on, after ticket 138's merge part (A2) and its proof.
+# 120") ended with them.
+# openfigi-security-cusip, openfigi-security-isin, openfigi-security-figi
+# ("FIGI merges Securities"), nport-security-cusip ("Filed CUSIP binds
+# first") and nport-security-isin: switched on by operator, 2026-10-26
+# 12:24 ET, in their words: Do limited testing and switch on. Ticket 138:
+# one Security per security, looked up by any of its CUSIP, ISIN or listing
+# FIGIs, else created; FIGIs reaching two Securities merge them, the oldest
+# surviving; a filed CUSIP and ISIN on two Securities bind by the CUSIP.
+# They activate on their verified Identifier Contracts (kinds/security.yaml:
+# cusip and isin, the N-PORT Proving Run; figi, the limited test,
+# .scratch/rebuild-priorities/research/138_switch_on_limited_test.json,
+# sha256 a1ac5437...3175).
+- kind: security
+  family: binding
+  rule_id: openfigi-security-cusip
+  rule_version: 2026-10-25.1
+  verdict: bind
+  activation: deterministic
+- kind: security
+  family: binding
+  rule_id: openfigi-security-isin
+  rule_version: 2026-10-25.1
+  verdict: bind
+  activation: deterministic
+- kind: security
+  family: binding
+  rule_id: openfigi-security-figi
+  rule_version: 2026-10-26.1
+  verdict: bind
+  activation: deterministic
+- kind: security
+  family: binding
+  rule_id: nport-security-cusip
+  rule_version: 2026-10-26.2
+  verdict: bind
+  activation: deterministic
+- kind: security
+  family: binding
+  rule_id: nport-security-isin
+  rule_version: 2026-10-26.1
+  verdict: bind
+  activation: deterministic
