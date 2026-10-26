@@ -171,7 +171,8 @@ def consolidations(conn, entities: set[str]) -> list[dict]:
         bodies = (conn.related_decisions(want) if isinstance(conn, RecordReader) else [r["body"] for r in rows(
             conn,
             """SELECT body FROM mdm.decision
-            WHERE decision_id IN (SELECT id FROM mdm.decisions_naming(CAST(:keys AS text[])) id)""",
+            WHERE decision_id IN (SELECT id FROM mdm.decisions_naming(CAST(:keys AS text[])) id)
+              AND operation IN ('merge', 'exclude', 'reverse', 'revoke')""",
             keys=sorted(want),
         )])
         for body in bodies:
@@ -272,10 +273,11 @@ def propose(
             "refused": sorted(correction.refused(conn, set(subjects), decisions)), "as_of": as_of,
             "consolidations": merges,
         })
-        if merged := _merged(proposed):
-            # Re-checked under the lock by the same read: a merge or exclusion
-            # stored since makes it stale.
-            proposed["consolidations"] = [d["decision_id"] for d in consolidations(conn, merged)]
+        if _merged(proposed):
+            # Re-checked under the lock by the very read the planner was given:
+            # a merge or exclusion stored since makes it stale.
+            proposed["consolidation_masters"] = sorted(reaching)
+            proposed["consolidation_ids"] = [d["decision_id"] for d in merges]
         return proposed
     except ValueError as error:
         raise Conflict(str(error)) from None
@@ -310,8 +312,8 @@ def proposal_is_stale(conn, policy: dict, automatic: dict, released: set[str] = 
 
     # A merge rests on the consolidations its masters had (part A2a): one
     # stored since (a merge it must name, a Match Exclusion) makes it stale.
-    merged = _merged(automatic)
-    if merged and [d["decision_id"] for d in consolidations(conn, merged)] != automatic.get("consolidations", []):
+    if _merged(automatic) and [d["decision_id"] for d in consolidations(
+            conn, set(automatic["consolidation_masters"]))] != automatic["consolidation_ids"]:
         return True
     # A value proposed for a master is stale once another master holds it;
     # held by that master already, it is consistent.

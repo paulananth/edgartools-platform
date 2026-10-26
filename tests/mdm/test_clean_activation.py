@@ -406,8 +406,8 @@ class TestAnIdentifierRule:
             ({"on_no_match": "guess"}, "on_no_match"),
             # Ticket 138 part A2a: what a record reaching several masters does.
             ({"on_several": "guess"}, "on_several"),
-            # A merge only by values a master may hold any number of (listing FIGIs).
-            ({"on_several": "merge"}, "any number of values"),
+            # A merge only by an identifier stated to consolidate (a listing FIGI).
+            ({"on_several": "merge"}, "consolidates: true"),
             ({"emits": ["bind", "consolidate"]}, "exactly bind"),
             ({"applies_to_verdict": "person"}, "sits in kind company"),
             # Record tests may narrow a binding rule (ticket 97), never stand for its identifier.

@@ -55,6 +55,7 @@ RULE = {
 }
 CONTRACT = {
     "normalizer": "normalize_identifier@figi-v2",
+    "consolidates": True,
     "sources": [SOURCE],
     "claim": {"forward": 1, "reverse": None},
 }

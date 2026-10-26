@@ -71,6 +71,7 @@ if case in ("list_join", "rule_merge"):
 if case == "rule_merge":
     # Ticket 138 part A2a: values that lead to two masters merge them.
     rule["on_several"] = "merge"
+    contract["consolidates"] = True
 rules = [rule, join]
 policy = {
     "version": "invented-read-phase",

@@ -414,22 +414,16 @@ def check_binding_rule(kind: str, rule: dict, kinds: dict) -> None:
     several = rule.get("on_several", "review")
     if several not in ON_SEVERAL:
         raise Conflict(f"Binding rule {rule_id}: on_several is one of {sorted(ON_SEVERAL)}")
-    if several == "merge" and _reverse_limit(kinds, namespaces[0]) is not None:
+    contract = ((kinds.get(kind) or {}).get("identifiers") or {}).get(namespaces[0]) or {}
+    if several == "merge" and contract.get("consolidates") is not True:
+        # Only an identifier stated to consolidate merges masters (ticket 138:
+        # a listing FIGI); a filed CUSIP and ISIN never merge two Securities.
         raise Conflict(
-            f"Binding rule {rule_id} merges only by an identifier a master may hold any "
-            f"number of values of (its Identifier Contract's claim.reverse null): {namespaces[0]}"
+            f"Binding rule {rule_id} merges only by an identifier whose Identifier Contract "
+            f"states consolidates: true: {namespaces[0]}"
         )
     if rule["on_no_match"] == "mint":
         _check_minting_source(kind, rule, namespaces[0], kinds)
-
-
-def _reverse_limit(kinds: dict, namespace: str):
-    """The Identifier Contract's `claim.reverse` for the namespace, wherever declared."""
-    for block in kinds.values():
-        contract = (block.get("identifiers") or {}).get(namespace)
-        if contract is not None:
-            return (contract.get("claim") or {}).get("reverse", 1)
-    return 1
 
 
 def _check_minting_source(kind: str, rule: dict, namespace: str, kinds: dict) -> None:
@@ -487,6 +481,8 @@ def _check_contract(namespace: str, contract: dict) -> None:
     reverse = (contract.get("claim") or {}).get("reverse")
     if reverse is not None and (type(reverse) is not int or reverse < 1):
         raise Conflict(f"{where} states a reverse claim that is not a count")
+    if "consolidates" in contract and type(contract["consolidates"]) is not bool:
+        raise Conflict(f"{where} states consolidates as true or false")
     compatibility = contract.get("compatibility") or {}
     if (
         not compatibility.get("field")

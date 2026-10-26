@@ -202,6 +202,11 @@ identifiers:
     # rules/identifiers/figi.yaml (ticket 107): 12 characters, the check
     # digit verified, upper-cased.
     normalizer: normalize_identifier@figi-v2
+    # A listing FIGI consolidates: values leading to two Securities merge them
+    # (ticket 138 part A2a; operator, 2026-10-25: "consolidate them
+    # automatically, the oldest id survives, then bind"). A CUSIP or ISIN
+    # never does ("cusip is a seperate than isin it can never be merges").
+    consolidates: true
     claim:
       forward: 1
       reverse: null

@@ -347,8 +347,8 @@ Its decision and measurement:
 - `on_several` says what a record does when its values lead to two or more
   masters: `review` (the default) sends it to review; `merge` merges them,
   the oldest surviving, then binds the record (ticket 138 part A2a). Only a
-  rule on an identifier a master may hold any number of values of
-  (`claim.reverse: null`, a listing FIGI) may merge. A pair a steward split
+  rule on an identifier whose Identifier Contract states `consolidates:
+  true` (a listing FIGI) may merge; a CUSIP or ISIN never does. A pair a steward split
   or excluded goes to review; so does a record whose other identifiers lead
   to another master, and a record in review merges nothing. The merge is a
   rule's decision (`actor: rule:<id>@<version>`), naming every live merge

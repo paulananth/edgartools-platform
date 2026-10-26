@@ -21,9 +21,48 @@ struct Inputs {
     released: BTreeSet<String>,
     normalizers: IndexMap<String, bool>,
 }
+/// What a matching rule does when a record's values reach no master, or
+/// several: read once from the rule, each value checked (`activation.py`
+/// holds the same lists).
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum OnNoMatch {
+    Mint,
+    Wait,
+}
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+enum OnSeveral {
+    #[default]
+    Review,
+    Merge,
+}
+#[derive(Serialize, Deserialize, Clone, Copy)]
+struct Outcomes {
+    on_no_match: OnNoMatch,
+    #[serde(default)]
+    on_several: OnSeveral,
+}
+impl Outcomes {
+    fn read(rule: &Object) -> Result<Self, String> {
+        let on_several = if values::has_value(rule, "on_several") {
+            values::write_value(&read_rule_text(rule, "on_several")?)?
+        } else {
+            values::write_value(&"review")?
+        };
+        Ok(Self {
+            on_no_match: values::read_value(&values::write_value(&read_rule_text(rule, "on_no_match")?)?)
+                .map_err(|_| "A matching rule's on_no_match is mint or wait")?,
+            on_several: values::read_value(&on_several)
+                .map_err(|_| "A matching rule's on_several is review or merge")?,
+        })
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 struct Match {
     rule: Object,
+    outcomes: Outcomes,
     namespace: String,
     value: String,
     raw: String,
@@ -263,14 +302,13 @@ pub fn plan_record_matches(raw: &str) -> Result<String, String> {
             if raws.is_empty() {
                 continue;
             }
-            if read_rule_text(rule, "on_no_match")? == "mint" {
+            let outcomes = Outcomes::read(rule)?;
+            if outcomes.on_no_match == OnNoMatch::Mint {
                 kinds.insert(read_rule_text(record, "kind")?);
             }
             let kept: Object = rule
                 .iter()
-                .filter(|(key, _)| {
-                    ["rule_id", "version", "on_no_match", "on_several"].contains(&key.as_str())
-                })
+                .filter(|(key, _)| ["rule_id", "version"].contains(&key.as_str()))
                 .map(|(key, value)| (key.clone(), value.clone()))
                 .collect();
             let source = read_rule_text(record, "source_code")?;
@@ -286,6 +324,7 @@ pub fn plan_record_matches(raw: &str) -> Result<String, String> {
                     .insert(raw.clone());
                 applicable.entry(subject.clone()).or_default().push(Match {
                     rule: kept.clone(),
+                    outcomes,
                     namespace: namespace.clone(),
                     value,
                     raw,
@@ -452,6 +491,24 @@ fn prepare_decision_time(raw: &str) -> Result<String, String> {
     ))
 }
 
+/// A record's place in the batch: it finds a held master, else a rule may
+/// create one from it, else it only waits.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+enum Phase {
+    Finds,
+    Creates,
+    Waits,
+}
+fn phase(found: &BTreeMap<(String, String), IndexMap<String, String>>, items: &[Match]) -> Phase {
+    if items.iter().any(|item| found.contains_key(&(item.namespace.clone(), item.value.clone()))) {
+        Phase::Finds
+    } else if items.iter().any(|item| item.outcomes.on_no_match == OnNoMatch::Mint) {
+        Phase::Creates
+    } else {
+        Phase::Waits
+    }
+}
+
 pub fn link_matching_records(raw: &str) -> Result<String, String> {
     let input: PreparedInputs =
         serde_json::from_str(raw).map_err(|_| "Invalid prepared record matches")?;
@@ -500,17 +557,7 @@ pub fn link_matching_records(raw: &str) -> Result<String, String> {
     // held master binds before any record creates one, so a value it adds is
     // found by the rest of the batch and no new master shadows a stored one.
     // Then the records a rule may create from, then those that only wait.
-    subjects.sort_by_cached_key(|(subject, items)| {
-        (
-            !items.iter().any(|item| {
-                found.contains_key(&(item.namespace.clone(), item.value.clone()))
-            }),
-            !items.iter().any(|item| {
-                read_rule_text(&item.rule, "on_no_match").ok().as_deref() == Some("mint")
-            }),
-            *subject,
-        )
-    });
+    subjects.sort_by_cached_key(|(subject, items)| (phase(&found, items), *subject));
     for (subject, items) in subjects {
         let record = &input.plan.records[subject];
         let kind = read_rule_text(record, "kind")?;
@@ -519,7 +566,7 @@ pub fn link_matching_records(raw: &str) -> Result<String, String> {
         let mut merging: BTreeSet<String> = BTreeSet::new();
         let mut problem = None;
         for item in items {
-            let merges = read_rule_text(&item.rule, "on_several").ok().as_deref() == Some("merge");
+            let merges = item.outcomes.on_several == OnSeveral::Merge;
             if let Some(held) = found.get(&(item.namespace.clone(), item.value.clone())) {
                 let held: IndexMap<String, &String> = held
                     .iter()
@@ -603,15 +650,11 @@ pub fn link_matching_records(raw: &str) -> Result<String, String> {
             let selected = if merging.is_empty() {
                 matched.last()
             } else {
-                matched.iter().rev().find(|item| {
-                    read_rule_text(&item.rule, "on_several").ok().as_deref() == Some("merge")
-                })
+                matched.iter().rev().find(|item| item.outcomes.on_several == OnSeveral::Merge)
             };
             (entity, (*selected.ok_or("Missing matched rule")?).clone())
         } else {
-            let Some(item) = items.iter().find(|item| {
-                read_rule_text(&item.rule, "on_no_match").ok().as_deref() == Some("mint")
-            }) else {
+            let Some(item) = items.iter().find(|item| item.outcomes.on_no_match == OnNoMatch::Mint) else {
                 continue;
             };
             let entity = ids.next().ok_or("Not enough allocated record identities")?;
@@ -702,10 +745,7 @@ pub fn link_matching_records(raw: &str) -> Result<String, String> {
                 "reason".into(),
                 values::write_value(&format!("identifier_match {}", selected.namespace))?,
             ),
-            (
-                "at".into(),
-                values::write_value(&prepare_decision_time(&input.as_of)?)?,
-            ),
+            ("at".into(), values::write_value(&at)?),
             ("subject".into(), values::write_value(subject)?),
             ("entity_id".into(), values::write_value(&entity)?),
             (
