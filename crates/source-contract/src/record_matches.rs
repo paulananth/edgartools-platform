@@ -21,9 +21,48 @@ struct Inputs {
     released: BTreeSet<String>,
     normalizers: IndexMap<String, bool>,
 }
+/// What a matching rule does when a record's values reach no master, or
+/// several: read once from the rule, each value checked (`activation.py`
+/// holds the same lists).
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum OnNoMatch {
+    Mint,
+    Wait,
+}
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+enum OnSeveral {
+    #[default]
+    Review,
+    Merge,
+}
+#[derive(Serialize, Deserialize, Clone, Copy)]
+struct Outcomes {
+    on_no_match: OnNoMatch,
+    #[serde(default)]
+    on_several: OnSeveral,
+}
+impl Outcomes {
+    fn read(rule: &Object) -> Result<Self, String> {
+        let on_several = if values::has_value(rule, "on_several") {
+            values::write_value(&read_rule_text(rule, "on_several")?)?
+        } else {
+            values::write_value(&"review")?
+        };
+        Ok(Self {
+            on_no_match: values::read_value(&values::write_value(&read_rule_text(rule, "on_no_match")?)?)
+                .map_err(|_| "A matching rule's on_no_match is mint or wait")?,
+            on_several: values::read_value(&on_several)
+                .map_err(|_| "A matching rule's on_several is review or merge")?,
+        })
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 struct Match {
     rule: Object,
+    outcomes: Outcomes,
     namespace: String,
     value: String,
     raw: String,
@@ -263,12 +302,13 @@ pub fn plan_record_matches(raw: &str) -> Result<String, String> {
             if raws.is_empty() {
                 continue;
             }
-            if read_rule_text(rule, "on_no_match")? == "mint" {
+            let outcomes = Outcomes::read(rule)?;
+            if outcomes.on_no_match == OnNoMatch::Mint {
                 kinds.insert(read_rule_text(record, "kind")?);
             }
             let kept: Object = rule
                 .iter()
-                .filter(|(key, _)| ["rule_id", "version", "on_no_match"].contains(&key.as_str()))
+                .filter(|(key, _)| ["rule_id", "version"].contains(&key.as_str()))
                 .map(|(key, value)| (key.clone(), value.clone()))
                 .collect();
             let source = read_rule_text(record, "source_code")?;
@@ -284,6 +324,7 @@ pub fn plan_record_matches(raw: &str) -> Result<String, String> {
                     .insert(raw.clone());
                 applicable.entry(subject.clone()).or_default().push(Match {
                     rule: kept.clone(),
+                    outcomes,
                     namespace: namespace.clone(),
                     value,
                     raw,
@@ -354,6 +395,87 @@ struct PreparedInputs {
     new_ids: Vec<String>,
     refused: BTreeSet<(String, String, String)>,
     as_of: String,
+    /// The stored merges, Match Exclusions and their reversals about the
+    /// masters the batch's records reach (part A2a): what a new merge rests
+    /// on, and which pairs never merge again.
+    #[serde(default)]
+    consolidations: Vec<Object>,
+}
+
+/// Each master's consolidation component (its live merges, stored and this
+/// batch's), and the pairs a steward keeps apart.
+struct Consolidations {
+    parent: BTreeMap<String, String>,
+    merges: BTreeMap<String, Vec<String>>,
+    exclusions: Vec<(String, String)>,
+}
+
+impl Consolidations {
+    fn read(decisions: &[Object]) -> Result<Self, String> {
+        let mut targeted: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
+        for body in decisions {
+            let op = read_rule_text(body, "operation")?;
+            if op == "reverse" || op == "revoke" {
+                targeted
+                    .entry(read_rule_text(body, "target")?)
+                    .or_default()
+                    .push((op, read_rule_text(body, "decision_id")?));
+            }
+        }
+        let revoked = |id: &str| targeted.get(id).is_some_and(|by| !by.is_empty());
+        let mut found = Self { parent: BTreeMap::new(), merges: BTreeMap::new(), exclusions: Vec::new() };
+        for body in decisions {
+            let op = read_rule_text(body, "operation")?;
+            let id = read_rule_text(body, "decision_id")?;
+            if op == "merge" {
+                let pair = (read_rule_text(body, "left")?, read_rule_text(body, "right")?);
+                if !revoked(&id) {
+                    found.join(&pair.0, &pair.1, id);
+                } else if targeted[&id]
+                    .iter()
+                    .any(|(by, reversal)| by == "reverse" && !revoked(reversal))
+                {
+                    // A reversed merge keeps its pair apart (replay's rule).
+                    found.exclusions.push(pair);
+                }
+            } else if op == "exclude" && !revoked(&id) {
+                found.exclusions.push((read_rule_text(body, "left")?, read_rule_text(body, "right")?));
+            }
+        }
+        Ok(found)
+    }
+    fn root(&self, key: &str) -> String {
+        let mut key = key.to_owned();
+        while let Some(next) = self.parent.get(&key).filter(|next| **next != key) {
+            key = next.clone();
+        }
+        key
+    }
+    fn join(&mut self, left: &str, right: &str, merge: String) {
+        let (left, right) = (self.root(left), self.root(right));
+        let mut ids = self.merges.remove(&left).unwrap_or_default();
+        if left != right {
+            ids.extend(self.merges.remove(&right).unwrap_or_default());
+            self.parent.insert(right, left.clone());
+        }
+        ids.push(merge);
+        self.merges.insert(left, ids);
+    }
+    /// Every live merge a merge of these two components must name.
+    fn depends(&self, left: &str, right: &str) -> Vec<String> {
+        let mut ids: BTreeSet<String> = BTreeSet::new();
+        for key in [left, right] {
+            ids.extend(self.merges.get(&self.root(key)).into_iter().flatten().cloned());
+        }
+        ids.into_iter().collect()
+    }
+    fn excluded(&self, entities: &[String]) -> bool {
+        let roots: Vec<String> = entities.iter().map(|e| self.root(e)).collect();
+        self.exclusions.iter().any(|(left, right)| {
+            let (left, right) = (self.root(left), self.root(right));
+            left != right && roots.contains(&left) && roots.contains(&right)
+        })
+    }
 }
 
 fn prepare_decision_time(raw: &str) -> Result<String, String> {
@@ -367,6 +489,24 @@ fn prepare_decision_time(raw: &str) -> Result<String, String> {
         "{}{fraction}+00:00",
         time.format("%Y-%m-%dT%H:%M:%S")
     ))
+}
+
+/// A record's place in the batch: it finds a held master, else a rule may
+/// create one from it, else it only waits.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+enum Phase {
+    Finds,
+    Creates,
+    Waits,
+}
+fn phase(found: &BTreeMap<(String, String), IndexMap<String, String>>, items: &[Match]) -> Phase {
+    if items.iter().any(|item| found.contains_key(&(item.namespace.clone(), item.value.clone()))) {
+        Phase::Finds
+    } else if items.iter().any(|item| item.outcomes.on_no_match == OnNoMatch::Mint) {
+        Phase::Creates
+    } else {
+        Phase::Waits
+    }
 }
 
 pub fn link_matching_records(raw: &str) -> Result<String, String> {
@@ -402,34 +542,42 @@ pub fn link_matching_records(raw: &str) -> Result<String, String> {
     }
     let mut ids = input.new_ids.into_iter();
     let mut floors = BTreeMap::new();
+    let mut consolidations = Consolidations::read(&input.consolidations)?;
+    // A master this batch merged away answers as the master it merged into.
+    let mut moved: BTreeMap<String, String> = BTreeMap::new();
+    let resolve = |moved: &BTreeMap<String, String>, entity: &String| {
+        let mut entity = entity.clone();
+        while let Some(next) = moved.get(&entity) {
+            entity = next.clone();
+        }
+        entity
+    };
     let mut subjects: Vec<_> = input.plan.applicable.iter().collect();
     // Look up first, then master (ticket 138): every record that finds a
     // held master binds before any record creates one, so a value it adds is
     // found by the rest of the batch and no new master shadows a stored one.
     // Then the records a rule may create from, then those that only wait.
-    subjects.sort_by_cached_key(|(subject, items)| {
-        (
-            !items.iter().any(|item| {
-                found.contains_key(&(item.namespace.clone(), item.value.clone()))
-            }),
-            !items.iter().any(|item| {
-                read_rule_text(&item.rule, "on_no_match").ok().as_deref() == Some("mint")
-            }),
-            *subject,
-        )
-    });
+    subjects.sort_by_cached_key(|(subject, items)| (phase(&found, items), *subject));
     for (subject, items) in subjects {
         let record = &input.plan.records[subject];
         let kind = read_rule_text(record, "kind")?;
         let mut matches: IndexMap<String, Vec<&Match>> = IndexMap::new();
+        // The masters reached through a rule that merges what it reaches.
+        let mut merging: BTreeSet<String> = BTreeSet::new();
         let mut problem = None;
         for item in items {
+            let merges = item.outcomes.on_several == OnSeveral::Merge;
             if let Some(held) = found.get(&(item.namespace.clone(), item.value.clone())) {
-                if held.len() > 1 {
+                let held: IndexMap<String, &String> = held
+                    .iter()
+                    .map(|(entity, held_kind)| (resolve(&moved, entity), held_kind))
+                    .collect();
+                if held.len() > 1 && !merges {
                     problem = Some(("ambiguous_identifier", item.namespace.clone()));
                     break;
                 }
-                for (entity, held_kind) in held {
+                for (entity, held_kind) in &held {
+                    let held_kind = *held_kind;
                     if held_kind != &kind {
                         problem = Some(("incompatible_identifier_kind", item.namespace.clone()));
                         break;
@@ -439,23 +587,32 @@ pub fn link_matching_records(raw: &str) -> Result<String, String> {
                         break;
                     }
                     matches.entry(entity.clone()).or_default().push(item);
+                    if merges {
+                        merging.insert(entity.clone());
+                    }
                 }
                 if problem.is_some() {
                     break;
                 }
             }
         }
+        // Two or more masters reached through a merging rule's values are one
+        // (part A2a): they merge, unless a steward keeps them apart. Any other
+        // master the record reaches is still a conflict, so nothing merges.
+        let merging: Vec<String> = if merging.len() > 1 { merging.into_iter().collect() } else { Vec::new() };
+        let reached = matches
+            .values()
+            .filter_map(|items| items.last().map(|item| item.namespace.clone()))
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>()
+            .join(",");
         if problem.is_none() && matches.len() > 1 {
-            problem = Some((
-                "conflicting_identifiers",
-                matches
-                    .values()
-                    .filter_map(|items| items.last().map(|item| item.namespace.clone()))
-                    .collect::<BTreeSet<_>>()
-                    .into_iter()
-                    .collect::<Vec<_>>()
-                    .join(","),
-            ));
+            if merging.is_empty() || matches.keys().any(|entity| !merging.contains(entity)) {
+                problem = Some(("conflicting_identifiers", reached));
+            } else if consolidations.excluded(&merging) {
+                problem = Some(("excluded_consolidation", reached));
+            }
         }
         if let Some((reason, namespace)) = problem {
             result.get_mut("reviews").unwrap().push(Object::from([
@@ -470,27 +627,34 @@ pub fn link_matching_records(raw: &str) -> Result<String, String> {
             continue;
         }
         let created = matches.is_empty();
-        let (entity, selected) = if let Some((entity, matched)) = matches.into_iter().next() {
-            for item in &matched {
-                if stored
-                    .get(&(item.namespace.clone(), item.value.clone()))
-                    .is_some_and(|held| held.contains_key(&entity))
-                {
-                    result.get_mut("joins").unwrap().push(Object::from([
-                        ("entity_id".into(), values::write_value(&entity)?),
-                        ("namespace".into(), values::write_value(&item.namespace)?),
-                        ("raw".into(), values::write_value(&item.raw)?),
-                    ]));
+        let (entity, selected) = if !matches.is_empty() {
+            // The master it binds to: the one it reaches, else the first of
+            // those it merges (replay keeps the oldest; any of them is it).
+            let entity = merging.first().unwrap_or(matches.keys().next().unwrap()).clone();
+            // One join per master reached, by its stored holding.
+            for (reached, matched) in &matches {
+                for item in matched {
+                    let Some(held) = stored.get(&(item.namespace.clone(), item.value.clone())) else {
+                        continue;
+                    };
+                    for holder in held.keys().filter(|holder| &resolve(&moved, holder) == reached) {
+                        result.get_mut("joins").unwrap().push(Object::from([
+                            ("entity_id".into(), values::write_value(holder)?),
+                            ("namespace".into(), values::write_value(&item.namespace)?),
+                            ("raw".into(), values::write_value(&item.raw)?),
+                        ]));
+                    }
                 }
             }
-            (
-                entity,
-                (*matched.last().ok_or("Missing matched rule")?).clone(),
-            )
+            let matched = &matches[&entity];
+            let selected = if merging.is_empty() {
+                matched.last()
+            } else {
+                matched.iter().rev().find(|item| item.outcomes.on_several == OnSeveral::Merge)
+            };
+            (entity, (*selected.ok_or("Missing matched rule")?).clone())
         } else {
-            let Some(item) = items.iter().find(|item| {
-                read_rule_text(&item.rule, "on_no_match").ok().as_deref() == Some("mint")
-            }) else {
+            let Some(item) = items.iter().find(|item| item.outcomes.on_no_match == OnNoMatch::Mint) else {
                 continue;
             };
             let entity = ids.next().ok_or("Not enough allocated record identities")?;
@@ -529,6 +693,30 @@ pub fn link_matching_records(raw: &str) -> Result<String, String> {
         {
             continue;
         }
+        let actor = format!("rule:{rule_id}@{version}");
+        let at = prepare_decision_time(&input.as_of)?;
+        for other in merging.iter().filter(|other| **other != entity) {
+            // No survivor named: replay keeps the oldest. It names every live
+            // merge either side rests on, this batch's too, and replay applies
+            // it after them.
+            let mut merge = Object::from([
+                ("operation".into(), values::write_value(&"merge")?),
+                ("actor".into(), values::write_value(&actor)?),
+                ("reason".into(), values::write_value(&format!("identifier_match {}", selected.namespace))?),
+                ("at".into(), values::write_value(&at)?),
+                ("left".into(), values::write_value(&entity)?),
+                ("right".into(), values::write_value(other)?),
+                ("depends_on".into(), values::write_value(&consolidations.depends(&entity, other))?),
+                ("evidence".into(), values::write_value(&vec![read_rule_text(record, "assertion_id")?])?),
+                ("rule_id".into(), values::write_value(&rule_id)?),
+                ("rule_version".into(), values::write_value(&version)?),
+            ]);
+            let hash = values::calculate_content_hash(&values::write_value(&merge)?)?;
+            merge.insert("decision_id".into(), values::write_value(&hash)?);
+            consolidations.join(&entity, other, hash);
+            moved.insert(other.clone(), entity.clone());
+            result.get_mut("decisions").unwrap().push(merge);
+        }
         // Every identifier no master held, from the source that issues it, is
         // the master's from now on (the value a new master was created by
         // too): a later record in this batch sharing any one of them finds
@@ -552,18 +740,12 @@ pub fn link_matching_records(raw: &str) -> Result<String, String> {
         }
         let mut decision = Object::from([
             ("operation".into(), values::write_value(&"bind")?),
-            (
-                "actor".into(),
-                values::write_value(&format!("rule:{rule_id}@{version}"))?,
-            ),
+            ("actor".into(), values::write_value(&actor)?),
             (
                 "reason".into(),
                 values::write_value(&format!("identifier_match {}", selected.namespace))?,
             ),
-            (
-                "at".into(),
-                values::write_value(&prepare_decision_time(&input.as_of)?)?,
-            ),
+            ("at".into(), values::write_value(&at)?),
             ("subject".into(), values::write_value(subject)?),
             ("entity_id".into(), values::write_value(&entity)?),
             (

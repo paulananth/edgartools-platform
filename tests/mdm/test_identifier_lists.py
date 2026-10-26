@@ -55,6 +55,7 @@ RULE = {
 }
 CONTRACT = {
     "normalizer": "normalize_identifier@figi-v2",
+    "consolidates": True,
     "sources": [SOURCE],
     "claim": {"forward": 1, "reverse": None},
 }
@@ -77,23 +78,27 @@ def record(key: str, *figis: str, source: str = SOURCE) -> dict:
     )
 
 
-def match(records, held=None, decisions=(), bound=None, refused=()):
-    """Plan, then link: `held` maps a FIGI to the Security holding it;
-    `bound` a stored record's subject to its Security."""
+def match(records, held=None, decisions=(), bound=None, refused=(), policy=None, consolidations=()):
+    """Plan, then link: `held` maps a value (a FIGI, or a (namespace, value)
+    pair) to the Security holding it, or to a list of them; `bound` a stored
+    record's subject to its Security; `consolidations` the stored merges and
+    Match Exclusions about the Securities reached."""
     bound = bound or {}
     plan = plan_record_matches({
-        "policy": POLICY, "assertions": list(records), "decisions": list(decisions),
+        "policy": policy or POLICY, "assertions": list(records), "decisions": list(decisions),
         "identities": [], "bound": sorted(bound), "bound_entities": bound,
         "released": [], "normalizers": NORMALIZERS,
     })
-    found = [
-        {"namespace": "figi", "value": value, "records": {entity: "security"}}
-        for value, entity in (held or {}).items()
-        if value in plan["wanted"].get("figi", ())
-    ]
+    found = []
+    for key, entities in (held or {}).items():
+        namespace, value = key if isinstance(key, tuple) else ("figi", key)
+        if value in plan["wanted"].get(namespace, ()):
+            entities = [entities] if isinstance(entities, str) else entities
+            found.append({"namespace": namespace, "value": value, "records": {e: "security" for e in entities}})
     return plan, link_matching_records({
         "plan": plan, "found": found, "suspended": [], "newest": {},
         "new_ids": [str(uuid4()) for _ in plan["applicable"]], "refused": list(refused), "as_of": AS_OF,
+        "consolidations": list(consolidations),
     })
 
 
@@ -160,11 +165,121 @@ def test_a_refused_bind_gives_its_values_to_no_security():
     assert all(raw != F2 or entity != HELD for entity, raw in given(result, "mints"))
 
 
-def test_values_on_two_securities_wait_for_review_until_merge_is_built():
-    # Part A2 makes this `on_several: merge`, the oldest surviving.
+def test_values_on_two_securities_wait_for_review_under_a_rule_that_does_not_merge():
+    # `on_several` absent: review, as before ticket 138's part A2a.
     _, result = match([record("one", F1, F2)], held={F1: HELD, F2: OTHER})
     assert result["decisions"] == [] and result["identities"] == []
     assert [r["reason"] for r in result["reviews"]] == ["conflicting_identifiers"]
+
+
+# Part A2a (operator, 2026-10-25: two Securities reached through a listing
+# FIGI "consolidate them automatically, the oldest id survives, then bind").
+THIRD = "00000000-0000-0000-0000-00000000000c"
+FOURTH = "00000000-0000-0000-0000-00000000000d"
+MERGING = {**RULE, "rule_id": "fixture-security-figi-merge", "on_several": "merge"}
+MERGE_POLICY = {
+    "automatic_rules": [{"kind": "security", "family": "binding", "rule_id": MERGING["rule_id"],
+                         "rule_version": MERGING["version"], "verdict": "bind"}],
+    "kinds": {"security": {"rules": [MERGING], "identifiers": {"figi": CONTRACT}}},
+}
+
+
+def merges(result):
+    return [(d["left"], d["right"], d["depends_on"]) for d in result["decisions"] if d["operation"] == "merge"]
+
+
+def binds(result):
+    return [(d["subject"], d["entity_id"]) for d in result["decisions"] if d["operation"] == "bind"]
+
+
+def stored(operation, left, right, **more):
+    from edgar_warehouse.mdm.clean.evidence import decision
+    return decision(operation, actor="steward", reason="fixture", at="2026-01-01T00:00:00Z",
+                    left=left, right=right, **more)
+
+
+def test_a_merge_rule_merges_the_securities_its_values_reach_then_binds():
+    one = record("one", F1, F2)
+    _, result = match([one], held={F1: HELD, F2: OTHER}, policy=MERGE_POLICY)
+    assert result["reviews"] == [] and result["identities"] == []
+    # No survivor is named: replay keeps the oldest.
+    assert merges(result) == [(HELD, OTHER, [])]
+    (merge,) = [d for d in result["decisions"] if d["operation"] == "merge"]
+    assert "survivor" not in merge
+    assert (merge["actor"], merge["evidence"]) == (f"rule:{MERGING['rule_id']}@{MERGING['version']}",
+                                                   [one["assertion_id"]])
+    assert binds(result) == [(one["subject"], HELD)]
+    # One join per Security reached, so a value moved since is caught at save.
+    assert given(result, "joins") == {(HELD, F1), (OTHER, F2)}
+    assert result["mints"] == []
+
+
+def test_one_value_held_by_two_securities_merges_them_under_a_merge_rule():
+    _, result = match([record("one", F1)], held={F1: [HELD, OTHER]}, policy=MERGE_POLICY)
+    assert merges(result) == [(HELD, OTHER, [])]
+    assert result["reviews"] == []
+
+
+def test_one_value_held_by_two_securities_is_ambiguous_under_a_rule_that_does_not_merge():
+    _, result = match([record("one", F1)], held={F1: [HELD, OTHER]})
+    assert [r["reason"] for r in result["reviews"]] == ["ambiguous_identifier"]
+    assert result["decisions"] == []
+
+
+def test_a_merge_names_every_live_merge_its_securities_already_rest_on():
+    earlier = stored("merge", HELD, THIRD)
+    reversed_merge = stored("merge", OTHER, FOURTH)
+    reversal = stored("reverse", None, None, target=reversed_merge["decision_id"])
+    _, result = match([record("one", F1, F2)], held={F1: HELD, F2: OTHER}, policy=MERGE_POLICY,
+                      consolidations=[earlier, reversed_merge, reversal])
+    assert merges(result) == [(HELD, OTHER, [earlier["decision_id"]])]
+
+
+def test_an_excluded_pair_goes_to_review_and_nothing_is_proposed():
+    for exclusion in ([stored("exclude", OTHER, HELD)],
+                      # A reversed merge of the pair is a Match Exclusion too.
+                      [m := stored("merge", HELD, OTHER), stored("reverse", None, None, target=m["decision_id"])]):
+        _, result = match([record("one", F1, F2)], held={F1: HELD, F2: OTHER}, policy=MERGE_POLICY,
+                          consolidations=exclusion)
+        assert [r["reason"] for r in result["reviews"]] == ["excluded_consolidation"]
+        assert result["decisions"] == [] and result["joins"] == [] and result["mints"] == []
+
+
+def test_merges_in_one_batch_chain_and_never_repeat():
+    first, second, again = record("one", F1, F2), record("two", F2, F3), record("three", F1, F2)
+    _, result = match([first, second, again], held={F1: HELD, F2: OTHER, F3: THIRD}, policy=MERGE_POLICY)
+    # Records are taken in subject order: two merges join the three, whichever comes first.
+    (one, two) = [d for d in result["decisions"] if d["operation"] == "merge"]
+    pairs = [{one["left"], one["right"]}, {two["left"], two["right"]}]
+    assert pairs[0] | pairs[1] == {HELD, OTHER, THIRD} and pairs[0] != pairs[1]
+    # The later merge rests on the earlier one: replay applies it after.
+    assert two["depends_on"] == [one["decision_id"]] and one["depends_on"] == []
+    # A record reaching only masters already merged in the batch merges nothing again.
+    assert {subject for subject, _ in binds(result)} == {r["subject"] for r in (first, second, again)}
+    assert {entity for _, entity in binds(result)} <= {HELD, OTHER, THIRD}
+    assert result["reviews"] == []
+
+
+CUSIP = "ZZ0000013"
+CUSIP_RULE = {**RULE, "rule_id": "fixture-security-cusip",
+              "when": [{"primitive": "identifier_match@1", "args": {"namespace": "cusip"}},
+                       {"primitive": "identifier_cardinality@1", "args": {"namespace": "cusip"}}]}
+BOTH_POLICY = {
+    "automatic_rules": [{"kind": "security", "family": "binding", "rule_id": r["rule_id"],
+                         "rule_version": r["version"], "verdict": "bind"} for r in (CUSIP_RULE, MERGING)],
+    "kinds": {"security": {"rules": [CUSIP_RULE, MERGING], "identifiers": {
+        "figi": CONTRACT, "cusip": {**CONTRACT, "normalizer": "normalize_identifier@cusip-v1"}}}},
+}
+
+
+def test_a_record_whose_other_identifier_leads_elsewhere_goes_to_review_and_merges_nothing():
+    # Its FIGIs reach two Securities, its CUSIP a third: review (part A2b
+    # binds it by the CUSIP); a reviewed record merges nothing.
+    one = assertion(source_code=SOURCE, record_key="one", publication_key="p1", revision=1, effective_at=None,
+                    kind="security", fields={}, identifiers={"cusip": CUSIP, "figi": [F1, F2]})
+    _, result = match([one], held={F1: HELD, F2: OTHER, ("cusip", CUSIP): THIRD}, policy=BOTH_POLICY)
+    assert [r["reason"] for r in result["reviews"]] == ["conflicting_identifiers"]
+    assert result["decisions"] == [] and result["joins"] == [] and result["mints"] == []
 
 
 def test_a_caller_bound_list_holds_each_value():

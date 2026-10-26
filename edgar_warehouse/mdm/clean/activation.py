@@ -352,6 +352,9 @@ def declared_namespaces(kinds: dict) -> frozenset[str]:
 
 
 ON_NO_MATCH = frozenset({"mint", "wait"})
+# What a record reaching two or more masters does (ticket 138 part A2a):
+# `review` (the default) or `merge` them, the oldest surviving.
+ON_SEVERAL = frozenset({"review", "merge"})
 # Company compatibility is kind equality only: Q9 says a name change never
 # revokes a binding, and a name-similarity test is fuzzy matching (ticket 08).
 COMPATIBILITY = frozenset({"kind_equal@1"})
@@ -408,6 +411,17 @@ def check_binding_rule(kind: str, rule: dict, kinds: dict) -> None:
         )
     if not any(t["primitive"] == "identifier_match@1" for t in tests):
         raise Conflict(f"Binding rule {rule_id} does not match an identifier")
+    several = rule.get("on_several", "review")
+    if several not in ON_SEVERAL:
+        raise Conflict(f"Binding rule {rule_id}: on_several is one of {sorted(ON_SEVERAL)}")
+    contract = ((kinds.get(kind) or {}).get("identifiers") or {}).get(namespaces[0]) or {}
+    if several == "merge" and contract.get("consolidates") is not True:
+        # Only an identifier stated to consolidate merges masters (ticket 138:
+        # a listing FIGI); a filed CUSIP and ISIN never merge two Securities.
+        raise Conflict(
+            f"Binding rule {rule_id} merges only by an identifier whose Identifier Contract "
+            f"states consolidates: true: {namespaces[0]}"
+        )
     if rule["on_no_match"] == "mint":
         _check_minting_source(kind, rule, namespaces[0], kinds)
 
@@ -467,6 +481,8 @@ def _check_contract(namespace: str, contract: dict) -> None:
     reverse = (contract.get("claim") or {}).get("reverse")
     if reverse is not None and (type(reverse) is not int or reverse < 1):
         raise Conflict(f"{where} states a reverse claim that is not a count")
+    if "consolidates" in contract and type(contract["consolidates"]) is not bool:
+        raise Conflict(f"{where} states consolidates as true or false")
     compatibility = contract.get("compatibility") or {}
     if (
         not compatibility.get("field")
