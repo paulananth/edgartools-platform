@@ -83,6 +83,14 @@ master file is reference data plus a master attribute that holds its codes.
   fund) is a profile on a kind (`PROFILE_KINDS`), never a kind.
 - No kind fits: say why the part is master data, propose a name and a
   definition, and ask the operator. Stop.
+- **One kind, however many identifiers.** Two identifier schemes for one
+  thing (a national number and an international number) are two identifiers
+  of one master, never two kinds, two contracts or two loads. A provider
+  asked once per scheme still describes one thing: each answer is a record of
+  the same kind that carries every identifier it has, and the Merge Stage
+  puts them on one master. Pairing two schemes in a source's own rules, or
+  loading one scheme after the other so the second can read the first, is the
+  smell to remove.
 
 ### 3. Identity or cross-reference
 
@@ -106,6 +114,25 @@ for identifier table"). For each identifier, decide which it is:
   cross-reference (`cross_references`) and the matching ones apart
   (`identifiers`), one value per kind. The one table, with a list of values
   for one kind, is decided and not built; see the Examples.
+- **Know the identifier's level.** Some identifiers name a thing at several
+  levels (one trading line, one country group, the thing worldwide). Match on
+  the level that every source's records carry and that pairs them; a level
+  most records lack pairs nothing however unique it is. For each level,
+  count the records that carry it and the pairs it makes, before choosing.
+- **Read a clash before deciding.** For each value the data gives to two or
+  more masters, compare those masters (name, type): the same means one thing
+  under two identifiers (a renumbered one), different means the identifier is
+  not unique at that level. Different on more than a handful: lookup only, or
+  matching that sends a clash to review. Report both counts.
+- **Who may join masters.** A source whose job is to answer by identifier
+  (an identifier service) may show that two masters are one, by an
+  identifier both share. A pair of identifiers a transaction source reports
+  together never merges two masters: the record binds by its identifiers in a
+  declared order (the strongest first), adds the others only when no master
+  holds them, and never moves an identifier from one master to another.
+- **The result must not depend on load order.** The same records give the
+  same masters and the same identifiers on each, whichever source or bundle
+  arrives first. Prove it by running every order (section 9).
 - **No identifier at all:** an id made from the name (`name_id@1`) is the last
   resort, as a cross-reference too (data-profiling, "An id from a name").
 - A new identity namespace changes how records merge: an operator ruling.
@@ -172,6 +199,14 @@ links to masters (the source key and the MDM id, with the overlap measured),
 the time columns, and the load mode. The spec is advice; this skill does not
 build the table.
 
+- **A transaction row links to its master by the master id only.** The
+  identifiers it reported are found through the Cross-reference.
+- **A fact every row repeats about the master** (a category, a country, a
+  currency the instrument is in) is a master field as well: the value most
+  rows report, none on a tie, with each row keeping its own in silver. Ask
+  before taking a fact that describes the holder's view (a valuation level, a
+  position) to the master: that one stays on the row.
+
 ### 7. Time
 
 Keep two times apart: **business time** (`--as-of`: when it was true) and
@@ -183,6 +218,45 @@ version has its own `valid_from`; publishing the next one closes its
 `valid_to` at the new one's `valid_from`. A code's own dates are business
 time.
 
+### 8. A child part: its key
+
+A part that a master has many of (its listings, its offices, its lines)
+is a child table on the master id, with a key of its own.
+
+- **Ask what the provider's unit is.** It can be finer than the business
+  unit: a thing listed once per venue can still come as one record per
+  trading line (a line per currency). Count the business key's repeats in
+  the data before proposing it; if it repeats, find what tells the repeats
+  apart.
+- **A column read from another column is a guess, not a key.** A value
+  taken from a code's suffix, or a default where the source states none, is
+  a column and an index; prove it unique before it is any part of a key.
+- **Prefer the provider's own identifier of its unit** when it has one and
+  the data shows it unique: nothing is dropped, and the business key becomes
+  an index.
+- **Say what one row is, in one sentence,** and give the count of rows the
+  key would drop or merge (zero, or the operator decides).
+
+### 9. Prove the model on the data before building
+
+A decision read from code or a glossary is not proof: the untested case is
+where a gap hides. Before a build starts:
+
+1. **Pick the archetypes by shape, at run time:** the common case; a
+   look-alike that must stay apart (two things sharing a name or an issuer);
+   a case that carries only the weaker identifier; the case with the most
+   rows (the most lines, the most reports).
+2. **Run the decided rules in memory** over the captured files for those
+   cases: a short program outside the repository, reading the captures,
+   printing counts and shapes only. Run every load order.
+3. **Report per case:** masters formed, the identifier kinds each holds and
+   their counts, what each source's records did (bind, mint, merge), and
+   whether every order gave the same result.
+4. **Then measure the whole population** for each rule the cases exercised:
+   the records it would merge, drop, set aside or leave with one identifier.
+   A count above a handful is the operator's question, with the count and a
+   recommendation, before the build.
+
 ## Workflow
 
 1. **Name the part.** If the operator has not said which part, ask and stop.
@@ -191,7 +265,9 @@ time.
    approved: hand off to data-profiling.
 3. **Read what the platform already says** (above) and ask what is held.
 4. **Decide with the rules above,** one part at a time. Mark every unknown,
-   with the failing test that left it unknown.
+   with the failing test that left it unknown. Measure every proposed key and
+   every identifier's uniqueness on the data before proposing it; a key or a
+   matching identifier goes to the operator with its repeat count.
 5. **Write the decision in plain words:** class; kind, code set or silver
    table; identity and cross-references; for a code set, where each field
    goes, its usage and hints; for a relationship, the type, its ends, its
@@ -200,7 +276,9 @@ time.
    a new identity namespace, a second type for one fact, or which of two
    fields is the identity. Give the recommendation. Only the part it decides
    waits; carry on with the parts it does not touch.
-7. **Hand off** (the list above). Do not restate that skill's steps.
+7. **Prove the model on the data** (section 9) when it changes how records
+   join or what a row is, before any build starts.
+8. **Hand off** (the list above). Do not restate that skill's steps.
 
 ## Reviewing the model itself
 
@@ -216,6 +294,14 @@ Asked to review the model, check:
   carry with no code set behind them.
 - **Code sets that cannot be checked:** a crosswalk to a code set RDM does not
   hold.
+- **One kind split by identifier:** two contracts, targets or loads for one
+  kind that differ only by the identifier asked; a source's rules that pair
+  two identifiers of one master, or read another run to do it.
+- **A key the data repeats:** a child table or record key whose values
+  repeat in the captured data, or that rests on a column read from another.
+- **A master in review for holding many values:** a kind whose Identifier
+  Contract lets one master hold many values (`reverse` open) but whose
+  masters are set to review when they do.
 
 Report each with its evidence and the decision it needs; rulings are the
 operator's.
@@ -255,3 +341,36 @@ Examples only; nothing above depends on them.
 - **Who decides is not who owns:** an adviser's discretion (discretionary or
   non-discretionary, Form ADV Item 5.F) is on its link; ownership is
   `BENEFICIAL_OWNER_OF`.
+- **The Security model (ticket 138, 2026-10-25): every rule above, measured.**
+  Counts from the 2026-10-15 OpenFIGI capture and the 2026 Q2 N-PORT
+  holdings; the security-master skill states the rulings.
+  - *One kind, many identifiers.* OpenFIGI had been loaded as a CUSIP target
+    and an ISIN target, the ISIN one reading the CUSIP runs, and N-PORT paired
+    them again in seven steps. One target, one record per answer with every
+    identifier, replaced them.
+  - *The identifier's level.* A FIGI exists per trading line, per country
+    (composite) and worldwide (share class). Of 380,047 ISIN answers, any
+    shared listing FIGI pairs 350,867 with one CUSIP answer; the composite
+    pairs 9,184 and the share class 9,032, because 343,236 of 353,491 CUSIP
+    answers carry no composite. The listing FIGI matches; the other two are
+    lookup only.
+  - *Reading a clash.* 80 composite FIGIs sit on two or more CUSIPs: 71 with
+    the same name and type, 9 different; share class 13 and 2. Ticker and
+    exchange: 17,941 pairs on two or more CUSIPs (55,057 CUSIPs), so lookup
+    only.
+  - *Who may join.* 154 filed CUSIP and ISIN pairs (241 holdings) lead to two
+    Securities; they bind by the CUSIP and merge nothing. 24,543 pairs have
+    only one side known to OpenFIGI, so a filing adds the other identifier
+    when no Security holds it.
+  - *A child key.* "(master id, exchange code)" repeats: OpenFIGI gives a FIGI
+    per trading line, and multi-currency venues carry a line per currency
+    (90% of 292,567 same-venue groups have currency-suffixed tickers). The
+    currency, read from the ticker, still repeats on 71,974 of 2,184,699
+    lines, so the listing FIGI is the key and (master id, exchange, currency)
+    an index.
+  - *Proving it.* Apple (the common case), an ADR and its ordinary share
+    (look-alikes that must stay apart: two Securities, one issuer), and a
+    European stock (ISIN only) gave the same masters in all three load orders.
+  - *A master fact from transaction rows.* N-PORT reports an asset category,
+    issuer type, country and currency on each holding; the Security takes the
+    most-reported value, each holding keeps its own.

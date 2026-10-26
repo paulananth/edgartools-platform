@@ -31,6 +31,10 @@ a contract or starts a load, and reviews the model itself. In scope:
 - **Transaction parts:** the silver spec data-profiling wrote (grain, key,
   links to masters, time columns, load mode), as advice.
 - **Time:** business time and recorded time kept apart for every part.
+- **Child parts:** a part a master has many of, on the master id, with a key
+  proven unique on the data (the provider's own unit first).
+- **Proving the model:** archetype cases run in memory over the captures in
+  every load order, then the whole population counted, before a build.
 - **Reviewing the model:** overlapping or unnoted inverse types, names that
   hide their contents, reference data outside RDM, crosswalks to code sets RDM
   does not hold.
