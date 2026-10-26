@@ -44,7 +44,8 @@ the value, matching or lookup only, the source, first seen, last seen.
 
 | Identifier | Role |
 |---|---|
-| CUSIP, ISIN, each listing FIGI, composite FIGI, share-class FIGI | matching, from any source (a FIGI 13F or N-PORT files too) |
+| CUSIP, ISIN, each listing FIGI | matching, from any source (a FIGI 13F or N-PORT files too) |
+| composite FIGI, share-class FIGI | lookup only: 9 composite and 2 share-class FIGIs are on CUSIPs whose names or types differ ("Lookup only", 2026-10-25) |
 | SEDOL, CINS, LoanX | matching, each under its verified Identifier Contract (ticket 125) |
 | ticker, ticker + exchange, Bloomberg ID | lookup only: 17,941 (ticker, exchange) pairs are on two or more CUSIPs (55,057 CUSIPs, 2026-10-15 capture) |
 
@@ -54,9 +55,18 @@ FIGI). The Merge Stage looks up each matching identifier:
 
 | Found | Then |
 |---|---|
-| no Security | mint a new master id |
-| one Security | bind to it; its new identifiers go into the Cross-reference |
-| two Securities | consolidate them automatically, the oldest id survives, then bind |
+| no Security | mint a new master id with all its identifiers |
+| one Security | bind to it; its identifiers that no Security holds go into the Cross-reference |
+| two Securities, by a listing FIGI | consolidate them automatically, the oldest id survives, then bind |
+
+The same three steps for every source, in this order: look up CUSIP, then
+ISIN, then FIGI; bind to the first Security found. A filed CUSIP and ISIN
+never merge two Securities ("cusip is a seperate than isin it can never be
+merges"): a holding whose CUSIP and ISIN lead to two Securities binds by the
+CUSIP ("bind by CUSIP if matches if not then try isin"). Its other
+identifiers are added only when no Security holds them ("add idintifiers from
+other sources if not found in openfigi"), so an identifier never moves. On
+2026 Q2, 154 filed pairs (241 holdings) lead to two Securities.
 
 A wrong consolidation is split by a steward; both ids return and a Match
 Exclusion stops the same records merging again. The Identifier Contract's

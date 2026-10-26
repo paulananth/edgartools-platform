@@ -75,6 +75,51 @@ Blocked by: none. Replaces the two-target design of [120](120-switch-on-securiti
   among the Securities of the Form 4's issuer Company; one found attaches,
   none or two go to review; ticket 24); N-PORT's other identifiers: "SEDOL,
   CINS, LoanX match; Bloomberg ID lookup" (ticket 125).
+- Asked to test it on Apple, one ADR and one European security (about 19:55
+  ET), then: "cusip is a seperate than isin it can never be merges using+"
+  (a filed CUSIP and ISIN never merge two Securities); a holding whose CUSIP
+  and ISIN lead to two Securities: "bind by CUSIP if matches if not then try
+  isin and try to bind"; is the filed other identifier added: "i assume that
+  openfigi will have both cusip and isin they both must be in the cross
+  reference" (read as: not added from a filing; OpenFIGI gives both); a
+  filed pair neither of which is held: "Both" (mint with both); composite
+  and share-class FIGI: "Lookup only" (2026-10-25 20:08 ET). So only the
+  listing FIGI shows two Securities are one; "all match" is replaced.
+
+## Spike on the real captures (2026-10-25 20:08 ET)
+
+The decided rules in memory (`spike138.py`, scratchpad, not in the repo)
+over the real OpenFIGI answers and the 2026 Q2 N-PORT holdings, three
+securities picked at run time by shape, each in three orders (CUSIP answers
+first, ISIN answers first, N-PORT first). Counts only:
+
+| Case | Masters | Holds | N-PORT holdings |
+|---|---|---|---|
+| Apple | 1 | CUSIP, 301 listing FIGIs | 2,072 bind by CUSIP |
+| An ADR and its ordinary share | 2, apart in every order | ADR: CUSIP, ISIN, 127 FIGIs; ordinary: ISIN, 165 FIGIs | 63 by CUSIP, 377 by ISIN |
+| A European common stock | 1 | ISIN, 297 listing FIGIs | 418 bind by ISIN; 4 filed CUSIPs not added |
+
+Every N-PORT filed CUSIP + ISIN pair (382,605 pairs, 3,518,266 holdings):
+350,873 already one Security by OpenFIGI's FIGI; 24,543 with only one side
+answered by OpenFIGI; 7,035 neither; 154 (241 holdings) would have merged
+two Securities, which the 20:08 ruling now prevents. FIGI clashes: of 80
+composite FIGIs on two or more CUSIPs, 71 same name and type, 9 differ; of
+15 share-class FIGIs, 13 same, 2 differ.
+
+Gap: OpenFIGI was asked Apple's CUSIP, not its ISIN, so Apple's Security
+gets no ISIN unless N-PORT runs first (then it mints with both): the result
+depends on the order for the 24,543 one-side pairs. Needs a ruling.
+
+Ruling: "add idintifiers from other sources if not found in openfigi"; on
+the data model page: "cusip or figi or isin for lookup" (13F), "use the same
+language on all source steps". So every source does the same three steps:
+look up CUSIP, then ISIN, then FIGI; bind to the first Security found and add
+the record's other identifiers that no Security holds; none found, mint with
+all its identifiers. A filing never moves an identifier and never merges two
+Securities. Re-run: Apple 1 Security with CUSIP, ISIN and 301 FIGIs; the ADR
+and its ordinary share 2 (the ordinary gains 3 filed CUSIPs); the European
+stock 1 (4 filed CUSIPs added, 2 of them CINS, none answered by OpenFIGI);
+every case the same in all three orders.
 
 These replace, for Security: the 2026-10-14 "FIGI ... lookup only" ruling,
 the 2026-09-26 "cross reference id for lookup ... only" ruling (the listing
