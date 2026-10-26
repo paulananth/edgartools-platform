@@ -1,5 +1,6 @@
 """Normal configured worker and publication paths on selected storage."""
 import copy
+from contextlib import ExitStack
 import os
 import subprocess
 import sys
@@ -11,7 +12,7 @@ from tests.mdm.test_configured_pair_comparison import configured_root  # noqa: F
 
 
 @pytest.mark.parametrize("kind", ["invented-kind", "invented-other-kind"])
-@pytest.mark.parametrize("case", ["authority", "publication", "merge_worker"])
+@pytest.mark.parametrize("case", ["authority", "publication", "merge_worker", "journal", "forced"])
 def test_normal_worker_publication(kind, case, database_factory, configured_root):
     if os.environ.get("SKILL_ADAPTER_TEST_ENGINE") == "mssql":
         pytest.skip("SQL Server normal workflow remains deferred")
@@ -21,9 +22,18 @@ def test_normal_worker_publication(kind, case, database_factory, configured_root
     body["accepted_bars"][kind] = copy.deepcopy(body["accepted_bars"]["company"])
     body["pair_comparisons"]["invented-comparison"]["eligibility_kind"] = kind
     (configured_root / "mastering/engine-v1.yaml").write_text(files.dumps(body))
-    with database_factory() as (owner, runtime, role):
+    with ExitStack() as stack:
+        owner, runtime, role = stack.enter_context(database_factory())
+        journal = {}
+        if case == "journal":
+            journal_owner, journal_runtime, journal_role = stack.enter_context(database_factory())
+            journal = {
+                "READ_JOURNAL_OWNER_URL": journal_owner.url.render_as_string(hide_password=False),
+                "READ_JOURNAL_RUNTIME_URL": journal_runtime.url.render_as_string(hide_password=False),
+                "READ_JOURNAL_ROLE": journal_role,
+            }
         result = subprocess.run([sys.executable, "-m", "tests.storage_adapters.worker_publication_scenarios"],
-            env={**os.environ, "EDGAR_RULES_ROOT": str(configured_root), "READ_PREPARED":"1",
+            env={**os.environ, **journal, "EDGAR_RULES_ROOT": str(configured_root), "READ_PREPARED":"1",
                  "READ_KIND":kind, "READ_WORKER_CASE":case, "READ_RUNTIME_ROLE":role,
                  "READ_OWNER_URL":owner.url.render_as_string(hide_password=False),
                  "READ_RUNTIME_URL":runtime.url.render_as_string(hide_password=False)},

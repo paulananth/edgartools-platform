@@ -607,7 +607,18 @@ class Store:
 
     def run_status(self, run_id: str) -> dict:
         """Observation for Bookkeeping; never declares an empty run complete."""
-        if self.prepared or self.engine.dialect.name != "postgresql":
+        if self.prepared:
+            from .prepared_publication import adapter, publication_rows
+
+            api = adapter(self)
+            with self.engine.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
+                observed = api.observed_batches(run_id, connection=conn)
+                _, publications = publication_rows(api,observed,connection=conn)
+            batches = len({row["batch_key"] for row in publications})
+            pending = sum(not row["verified"] for row in publications)
+            return {"batches": batches, "pending": pending,
+                    "publication_complete": batches > 0 and pending == 0}
+        if self.engine.dialect.name != "postgresql":
             raise Conflict("Normal run observation is not yet qualified for this engine")
         with self.engine.connect() as conn:
             result = rows(

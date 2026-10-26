@@ -58,7 +58,9 @@ def stale(exc) -> bool:
 def supersede(store, key: str, run_id: str) -> None:
     if getattr(store, "prepared", False):
         from .store import storage_adapter
-        storage_adapter().Adapter(store.engine, prefix="mdm_store", protocol=store.protocol).supersede_proposal(key, run_id)
+        from .prepared import authority, _refusals
+        api = storage_adapter().Adapter(store.engine, prefix="mdm_store", protocol=store.protocol)
+        _refusals(lambda: api.supersede_proposal(key, run_id, authority=authority(store)))
         return
     # Outside the rolled-back master transaction. A concurrent successful
     # application wins; the SQL capability never supersedes an applied proposal.

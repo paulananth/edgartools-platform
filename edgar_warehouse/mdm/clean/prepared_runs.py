@@ -5,7 +5,7 @@ import json
 from uuid import uuid4
 
 from .prepared import authority, _refusals
-from .prepared_publication import adapter
+from .prepared_publication import adapter, publication_rows
 from .prepared_registry import WAITING_INDEX
 from .quality import run_checks
 from .record_reads import RecordReader
@@ -88,7 +88,7 @@ def receipt(store, manifest, run_id, manifest_digest):
 
 def waiting(api, conn):
     marker = api.read([("derived-index",WAITING_INDEX)], metadata=True, connection=conn)
-    if not marker:
+    if (not marker or RecordReader._body(marker["derived-index",WAITING_INDEX]) != {"version":WAITING_INDEX}):
         raise Conflict("Waiting-review index owner qualification is incomplete")
     count, earliest, keys = 0, [], []
     def collect(keys):
@@ -133,7 +133,8 @@ def reconcile(store, run_id):
             reviews.update(item["object_id"] for item in effects["projections"] if item["object_type"] == "review")
         latest = api.read_origins([("review",key) for key in sorted(reviews)],connection=conn)
         required = observed | {row["origin"]["batch"] for row in latest.values()}
-        pending = sum(not row["verified"] for row in api.read_batches(sorted(required),outboxes=True,connection=conn))
+        _, publications = publication_rows(api,required,connection=conn)
+        pending = sum(not row["verified"] for row in publications)
         unresolved = sum(RecordReader._body(row).get("open") is True and
                          RecordReader._body(row).get("blocking") is not False for row in latest.values())
         waiting_count, waiting_rows = waiting(api,conn)

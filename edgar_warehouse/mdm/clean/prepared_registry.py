@@ -74,7 +74,10 @@ def finish_indexes(engine):
 
     api = storage_adapter().Adapter(engine, prefix=PREFIX, protocol=PROTOCOL)
     marker = ("derived-index", WAITING_INDEX)
-    if api.read([marker], metadata=True):
+    held = api.read([marker], metadata=True).get(marker)
+    if held is not None:
+        if RecordReader._body(held) != {"version":WAITING_INDEX}:
+            raise Conflict("Waiting-review index marker differs from this build")
         return
     generation, after = api.generation(), ""
     while True:

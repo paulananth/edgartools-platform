@@ -39,6 +39,7 @@ from sqlalchemy import (
     select,
     text,
     true,
+    tuple_,
     union_all,
     update,
 )
@@ -494,6 +495,7 @@ ERRORS = frozenset(
         "scope_lease_expired_before_save",
         "unknown_publication",
         "earlier_publication_pending",
+        "invalid_publication_context",
         "publication_already_leased",
         "stale_or_invalid_publication_receipt",
         "publication_lease_expired",
@@ -613,7 +615,9 @@ class Adapter:
                     pass
             raise AdapterError(code) from None
 
-    def claim(self, scope: str, owner: str, *, seconds=300) -> Lease:
+    def claim(self, scope: str, owner: str, *, seconds=300, authority=None) -> Lease:
+        if authority is not None and self.protocol < 6:
+            raise AdapterError("Fenced scope claims require protocol 6")
         key(scope)
         key(owner)
         row = self._rpc(
@@ -623,6 +627,7 @@ class Adapter:
                 "owner": owner.encode().hex(),
                 "seconds": counter(seconds, positive=True),
             },
+            authority=authority,
         )
         return Lease(scope, owner, int(row["fence"]), int(row["expires"]))
 
@@ -707,7 +712,7 @@ class Adapter:
         }
 
     def record_proposal(self, batch: str, body, observer: str, *,
-                        outcome: str, expected_generation: int, intent=None) -> str:
+                        outcome: str, expected_generation: int, intent=None, authority=None) -> str:
         if self.protocol < 5:
             raise AdapterError("Selected storage protocol has no governed admission")
         key(batch)
@@ -716,15 +721,15 @@ class Adapter:
             "batch": batch.encode().hex(), "body": document(body).hex(),
             "observer": observer.encode().hex(), "outcome": outcome,
             "expected_generation": counter(expected_generation), "intent": intent,
-        })["proposal_key"]
+        },authority=authority)["proposal_key"]
 
-    def supersede_proposal(self, proposal_key: str, observer: str) -> None:
+    def supersede_proposal(self, proposal_key: str, observer: str, *, authority=None) -> None:
         if self.protocol < 5:
             raise AdapterError("Selected storage protocol has no governed admission")
         key(proposal_key)
         key(observer)
         self._rpc("supersede_proposal", {"proposal_key": proposal_key,
-                  "observer": observer.encode().hex()})
+                  "observer": observer.encode().hex()},authority=authority)
 
     def read_proposal(self, proposal_key: str, *, connection=None):
         if self.protocol < 5:
@@ -908,6 +913,32 @@ class Adapter:
             hint = "FORCE INDEX (PRIMARY)" if self.engine.dialect.name == "mysql" else "WITH (FORCESEEK)"
             statement = statement.with_hint(table, hint, dialect_name=self.engine.dialect.name)
         return statement
+
+    def snapshot_statement(self, *, after=None, limit=1000):
+        """Bounded primary-key pagination for an explicit whole-store export."""
+        if type(limit) is not int or not 1 <= limit <= 10001:
+            raise AdapterError("Invalid snapshot page size")
+        table = self.tables["current"]
+        query = select(table).order_by(table.c.type_key, table.c.id_key).limit(limit)
+        if after is not None:
+            if not isinstance(after, tuple) or len(after) != 2:
+                raise AdapterError("Invalid snapshot cursor")
+            query = query.where(tuple_(table.c.type_key, table.c.id_key) >
+                                tuple_(self._bound_key(after[0]), self._bound_key(after[1])))
+        if self.engine.dialect.name == "mysql":
+            query = query.with_hint(table, "FORCE INDEX (PRIMARY)", dialect_name="mysql")
+        return query
+
+    def snapshot_page(self, *, after=None, limit=1000, connection=None):
+        with self.engine.connect() if connection is None else nullcontext(connection) as conn:
+            rows = conn.execute(self.snapshot_statement(after=after,limit=limit)).mappings().all()
+        result = []
+        for row in rows:
+            identity = (bytes(row["type_bytes"]).decode(),bytes(row["id_bytes"]).decode())
+            if key(identity[0]) != row["type_key"] or key(identity[1]) != row["id_key"]:
+                raise AdapterError("object_digest_collision")
+            result.append((identity,self._read_record(row)))
+        return result
 
     def iter_type(self, type: str, *, lookup=False, metadata=False, connection=None):
         """Read a keyed index's opaque entries without a table scan or size cap.
@@ -1314,10 +1345,32 @@ class Adapter:
                 name = bytes(row["batch_bytes"]).decode()
                 if name not in chunk or key(name) != row["batch_key"]:
                     raise AdapterError("Batch key digest collision")
-                if outboxes and hashlib.sha256(bytes(row["payload"])).hexdigest() != row["payload_hash"]:
-                    raise AdapterError("Publication bytes differ from retained digest")
+                if outboxes:
+                    if key(bytes(row["consumer_bytes"]).decode()) != row["consumer_key"]:
+                        raise AdapterError("Publication consumer digest collision")
+                    if hashlib.sha256(bytes(row["payload"])).hexdigest() != row["payload_hash"]:
+                        raise AdapterError("Publication bytes differ from retained digest")
+                else:
+                    raw = bytes(row["intent"])
+                    if hashlib.sha256(raw).hexdigest() != row["request_hash"]:
+                        raise AdapterError("Batch intent differs from retained digest")
+                    try:
+                        assessment = bytes.fromhex(json.loads(raw)["assessment"])
+                    except (KeyError,TypeError,ValueError):
+                        raise AdapterError("Invalid retained batch intent") from None
+                    if assessment != bytes(row["assessment"]):
+                        raise AdapterError("Batch assessment differs from retained intent")
                 found.append(dict(row))
         return found
+
+    def generation_batch(self, generation, *, connection=None):
+        """Seek one batch through the unique destination generation index."""
+        counter(generation,positive=True)
+        table = self.tables["batch"]
+        query = select(table.c.batch_bytes).where(table.c.generation == generation)
+        with self.engine.connect() if connection is None else nullcontext(connection) as conn:
+            name = conn.scalar(query)
+            return None if name is None else self.read_batches([bytes(name).decode()],connection=conn)[0]
 
     def observed_batches(self, observer, *, connection=None):
         if self.protocol < 6:
@@ -1335,6 +1388,21 @@ class Adapter:
         if any(bytes(row.observer_bytes).decode() != observer for row in rows):
             raise AdapterError("Observer key digest collision")
         return {bytes(row.batch_bytes).decode() for row in rows}
+
+    def publication_context(self, batch, consumer, *, connection=None):
+        if self.protocol < 6:
+            raise AdapterError("Publication context requires protocol 6")
+        table = self.tables["outbox_context"]
+        query = select(table.c.body,table.c.body_hash).where(
+            table.c.batch_key == self._bound_key(batch),table.c.consumer_key == self._bound_key(consumer))
+        with self.engine.connect() if connection is None else nullcontext(connection) as conn:
+            row = conn.execute(query).first()
+        if row is None:
+            return None
+        body = bytes(row.body)
+        if hashlib.sha256(body).hexdigest() != row.body_hash:
+            raise AdapterError("Publication context differs from retained digest")
+        return body
 
     def next_publication(self, consumer, *, connection=None):
         outbox, batch = self.tables["outbox"], self.tables["batch"]
@@ -1366,7 +1434,7 @@ class Adapter:
             values["expected_generation"] = counter(expected_generation)
         return int(self._rpc("retain_metadata", values)["stored_version"])
 
-    def claim_outbox(self, batch: str, consumer: str, owner: str, *, seconds=300, authority=None):
+    def claim_outbox(self, batch: str, consumer: str, owner: str, *, seconds=300, authority=None, context=None):
         for value in (batch, consumer, owner):
             key(value)
         row = self._rpc(
@@ -1376,6 +1444,7 @@ class Adapter:
                 "consumer": consumer.encode().hex(),
                 "owner": owner.encode().hex(),
                 "seconds": counter(seconds, positive=True),
+                **({"context":document({} if context is None else context).hex()} if self.protocol >= 6 else {}),
             },
             authority=authority,
         )
@@ -1384,6 +1453,9 @@ class Adapter:
         payload = bytes.fromhex(row["payload_hex"])
         if hashlib.sha256(payload).hexdigest() != row["payload_hash"]:
             raise AdapterError("Publication bytes differ from retained digest")
+        if self.protocol >= 6:
+            if self.publication_context(batch, consumer) is None:
+                raise AdapterError("Publication context is missing")
         return {
             "payload": payload,
             "payload_hash": row["payload_hash"],
@@ -2023,6 +2095,13 @@ def migrate(
                     barrier.execute(update(ledger).values(complete=0))
                     barrier.execute(insert(ledger).values(version=version, checksum=checksums[version], complete=0))
             adapter.metadata.create_all(conn)
+            if version >= 6:
+                previous_indexes = {index.name for table in builds[version-1].tables.values()
+                                    for index in table.indexes}
+                for table in build.tables.values():
+                    for index in table.indexes:
+                        if index.name not in previous_indexes:
+                            index.create(conn,checkfirst=True)
             if version >= 5:
                 _verify_migration_guards(conn, build, install=True)
             gate = adapter.tables["gate"]

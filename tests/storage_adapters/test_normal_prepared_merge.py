@@ -135,7 +135,7 @@ record=assertion(source_code="invented.authority",record_key="one",publication_k
 command={"batch_id":"invented-installed-save","run_id":str(uuid4()),"policy_digest":pin,
     "consumer":"invented-proof","expected_checkpoint":0,"checkpoint":1,
     "as_of":"2026-03-01T00:00:00Z","assertions":[record]}
-api=storage_adapter().Adapter(runtime,prefix="mdm_store",protocol=5)
+api=storage_adapter().Adapter(runtime,prefix="mdm_store",protocol=6)
 assert stage.apply(**{**command,"preview":True})["preview"] and api.generation()==0
 assessment=stage.assess(**command,automatic=stage.propose(**command))
 producer=str(uuid4())
@@ -250,7 +250,7 @@ from edgar_warehouse.cli import main
 os.environ["MDM_DATABASE_URL"]=os.environ["READ_RUNTIME_URL"]
 os.environ["MDM_APPLICATION_ROLE"]=os.environ["READ_RUNTIME_ROLE"]
 for arguments,expected in [(["mdm","counts"],{"entity":2,"relationship":1}),
-    (["mdm","check-connectivity"],{"sql":True,"migrations":5})]:
+    (["mdm","check-connectivity"],{"sql":True,"migrations":6})]:
     output=io.StringIO()
     with redirect_stdout(output):
         status=main(arguments)

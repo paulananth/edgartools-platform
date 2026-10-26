@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import UTC
+from datetime import UTC, datetime, timedelta
+import json
 
 from sqlalchemy import text
 
@@ -32,22 +33,36 @@ class JournalPublisher:
             raise ValueError(
                 "Journal publication requires its original journal/batch key"
             )
-        with self.owner_engine.connect() as conn:
-            row = (
-                conn.execute(
-                    text("""SELECT * FROM mdm.outbox_input
-                WHERE batch_id=:b AND consumer='journal'"""),
-                    {"b": batch},
-                )
-                .mappings()
-                .one()
-            )
-        try:
-            committed = prepare(row)
-        except Conflict as exc:
-            raise JournalConflict(
-                "MDM publication disagrees with committed local evidence"
-            ) from exc
+        from .prepared_registry import installed
+        origin = self.origin
+        with self.owner_engine.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
+            api = installed(conn)
+            if api is not None:
+                rows = api.read_batches([batch], outboxes=True, connection=conn)
+                matches = [row for row in rows if bytes(row["consumer_bytes"]).decode() == consumer]
+                if len(matches) != 1:
+                    raise JournalConflict("MDM holds no unambiguous Journal publication")
+                row = matches[0]
+                retained = api.publication_context(batch, consumer, connection=conn)
+                if retained is None:
+                    raise JournalConflict("MDM publication has no retained delivery origin")
+                origin = json.loads(retained)
+                if set(origin) != {"run_id","source","feed"} or not all(origin.values()):
+                    raise JournalConflict("MDM publication has an invalid retained delivery origin")
+                committed = json.loads(bytes(row["payload"]))
+                metadata = api.batch_metadata(int(row["generation"]), limit=1, connection=conn)
+                if not metadata or metadata[0]["generation"] != row["generation"]:
+                    raise JournalConflict("MDM publication has no original recording time")
+                occurred = (datetime(1970,1,1,tzinfo=UTC)
+                            + timedelta(microseconds=metadata[0]["recorded_at"])).isoformat()
+            else:
+                row = conn.execute(text("""SELECT * FROM mdm.outbox_input
+                    WHERE batch_id=:b AND consumer='journal'"""), {"b":batch}).mappings().one()
+                try:
+                    committed = prepare(row)
+                except Conflict as exc:
+                    raise JournalConflict("MDM publication disagrees with committed local evidence") from exc
+                occurred = row["created_at"].astimezone(UTC).isoformat()
         if (
             committed != payload
             or row["payload_hash"] != expected_hash
@@ -58,11 +73,11 @@ class JournalPublisher:
         return envelope(
             producer="mdm",
             event_key=key,
-            run_id=self.origin["run_id"],
-            source=self.origin["source"],
-            feed=self.origin["feed"],
+            run_id=origin["run_id"],
+            source=origin["source"],
+            feed=origin["feed"],
             event_type="mdm.committed",
-            occurred_at=row["created_at"].astimezone(UTC).isoformat(),
+            occurred_at=occurred,
             scope={"batch_id": batch, "generation": str(payload["generation"])},
             evidence=[{"uri": f"mdm-outbox:///{key}", "sha256": expected_hash}],
         )

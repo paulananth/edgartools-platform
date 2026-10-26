@@ -197,26 +197,36 @@ try:
         os.environ["MDM_DATABASE_URL"] = os.environ["READ_RUNTIME_URL"]
         os.environ["MDM_APPLICATION_ROLE"] = os.environ["READ_RUNTIME_ROLE"]
         for command, expected in (("counts", {"entity": 1}),
-                                  ("check-connectivity", {"sql": True, "migrations": 5})):
+                                  ("check-connectivity", {"sql": True, "migrations": 6})):
             output = io.StringIO()
             with redirect_stdout(output):
                 assert main(["mdm", command]) == 0
             assert json.loads(output.getvalue()) == expected
         adapter = g["normal"]
         assert_index_lookup(runtime, adapter.type_count_statement(["entity"]), adapter.tables["current"].name)
-    if case == "publication_gap":
+    if case == "forced_publication":
+        import io
+        import json
+        from contextlib import redirect_stdout
         from pathlib import Path
         from edgar_warehouse.cli import main
-        from edgar_warehouse.mdm.clean.store import Conflict
 
         os.environ["MDM_DATABASE_URL"] = os.environ["READ_RUNTIME_URL"]
         os.environ["MDM_APPLICATION_ROLE"] = os.environ["READ_RUNTIME_ROLE"]
         output = Path(os.environ["EDGAR_RULES_ROOT"]) / "invented-publication"
         generation = g["normal"].generation()
-        with pytest.raises(Conflict, match="Forced publication requires its qualified prepared-store workflow"):
-            main(["mdm", "force-publish", "--consumer", "invented-export", "--output", str(output)])
-        assert not output.exists()
-        assert g["normal"].generation() == generation
+        args = ["mdm", "force-publish", "--consumer", "invented-export", "--output", str(output)]
+        capture = io.StringIO()
+        with redirect_stdout(capture):
+            assert main(args) == 0
+        report = json.loads(capture.getvalue())
+        assert output.exists() and report["forced"] and report["records"] > 0
+        assert g["normal"].generation() == generation+report["pages"]
+        retry = io.StringIO()
+        with redirect_stdout(retry):
+            assert main([*args,"--run-id",report["run_id"]]) == 0
+        assert json.loads(retry.getvalue()) == report
+        assert g["normal"].generation() == generation+report["pages"]
     if case == "pages":
         import json
         from sqlalchemy import text

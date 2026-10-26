@@ -401,7 +401,7 @@ try:
             result = stage.apply(**command)
             assert result["generation"] == sequence + 1
             assert stage.apply(**{**command, "run_id": str(uuid4())})["duplicate"]
-            normal = api.Adapter(runtime, prefix="mdm_store", protocol=5)
+            normal = api.Adapter(runtime, prefix="mdm_store", protocol=6)
             reader = RecordReader(normal, routes=matching.candidate_routes())
             subject = other_target["subject"] if case == "name_held_value" else other["subject"]
             saved = reader.current([subject])[subject]
@@ -620,7 +620,7 @@ try:
                 if case == "no_identity_stale":
                     incoming = [holder]
                     command["assertions"] = incoming
-                normal = api.Adapter(runtime, prefix="mdm_store", protocol=5)
+                normal = api.Adapter(runtime, prefix="mdm_store", protocol=6)
 
                 def counts():
                     with runtime.connect() as conn:

@@ -434,6 +434,10 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
     routines = {}
 
     def save(operation, lines, variables, returns):
+        if protocol >= 6 and operation in {"record_proposal","supersede_proposal"}:
+            start, finish = authority_checks(d)
+            variables = {**variables,"authority_ready":"int"}
+            lines = [lines[0],*start,*lines[1:-1],finish+"\n"+lines[-1]]
         body = "\n".join(lines)
         if protocol >= 6:
             # Version 6 retains version-5 bytes/producer semantics. Older
@@ -455,8 +459,13 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
         "fence": "int",
         "expires": "int",
     }
+    scope_authority_start, scope_authority_finish = ([], "")
+    if protocol >= 6:
+        lease_vars["authority_ready"] = "int"
+        scope_authority_start, scope_authority_finish = authority_checks(d)
     lines = [
         d.lock(),
+        *scope_authority_start,
         d.assign("scope", d.decode(d.field("scope"))),
         d.assign("scope_key", d.hash(v("scope"))),
         d.assign("owner_key", d.hash(d.decode(d.field("owner")))),
@@ -478,6 +487,7 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
         d.assign("expires", f"{d.now}+{d.integer(d.field('seconds'))}*1000000"),
         f"UPDATE {n['lease']} SET owner_key={v('owner_key')},fence={v('fence')},expires={v('expires')} WHERE scope_key={v('scope_key')};",
         f"INSERT INTO {n['lease']}(scope_key,scope_bytes,owner_key,fence,expires) SELECT {v('scope_key')},{v('scope')},{v('owner_key')},{v('fence')},{v('expires')} WHERE NOT EXISTS(SELECT 1 FROM {n['lease']} l WHERE l.scope_key={v('scope_key')});",
+        *([scope_authority_finish] if protocol >= 6 else []),
         d.finish(
             [
                 ("fence", v("fence")),
@@ -870,6 +880,8 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
             f"CAST((SELECT o.payload_hash FROM {target}) AS {'text' if d.name == 'postgresql' else 'CHAR(64)' if d.name == 'mysql' else 'VARCHAR(MAX)'})",
         ),
     ]
+    if protocol >= 6:
+        variables["publication_context"] = "bytes"
     lines = initialize + [
         d.number_guard("seconds", positive=True),
         d.guard(f"{d.integer(d.field('seconds'))}>3600", "invalid_lease_duration"),
@@ -883,6 +895,9 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
             f"EXISTS(SELECT 1 FROM {target} AND o.owner_key<>{v('owner_key')} AND o.expires>{d.now})",
             "publication_already_leased",
         ),
+        *([d.assign("publication_context", d.decode(d.field("context"))),
+           d.guard(f"{v('publication_context')} IS NULL OR OCTET_LENGTH({v('publication_context')})=0", "invalid_publication_context"),
+           f"INSERT INTO {n.get('outbox_context')}(batch_key,consumer_key,body,body_hash) SELECT {v('batch_key')},{v('consumer_key')},{v('publication_context')},{d.hash(v('publication_context'))} WHERE NOT EXISTS(SELECT 1 FROM {n.get('outbox_context')} c WHERE c.batch_key={v('batch_key')} AND c.consumer_key={v('consumer_key')});"] if protocol >= 6 else []),
         d.update_row(
             "outbox",
             {
@@ -972,7 +987,7 @@ def migration_guards(dialect, tables, prefix):
     d = SQL(dialect, tables)
     quote = dialect.identifier_preparer.quote
     definitions = []
-    for table in ("gate", "lease", "outbox") + (("pin", "proposal", "proposal_event") if "proposal" in tables else ()) + (("metadata",) if "metadata" in tables else ()):
+    for table in ("gate", "lease", "outbox") + (("pin", "proposal", "proposal_event") if "proposal" in tables else ()) + (("metadata", "outbox_context") if "metadata" in tables else ()):
         suffix = "_migration_guard" if table in {"gate", "lease", "outbox"} else "_guard"
         name = prefix + "_" + table + suffix
         qualified = f"{quote(d.schema)}.{quote(name)}"

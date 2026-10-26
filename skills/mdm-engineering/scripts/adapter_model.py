@@ -290,6 +290,18 @@ def model(prefix: str, schema: str | None = None, *, protocol=1) -> tuple[MetaDa
             CheckConstraint("version > 0"),
             CheckConstraint("immutable IN (0, 1)"),
         )
+        table(
+            "outbox_context",
+            Column("batch_key", key, primary_key=True),
+            Column("consumer_key", key, primary_key=True),
+            Column("body", binary, nullable=False),
+            Column("body_hash", key, nullable=False),
+            ForeignKeyConstraint(
+                ["batch_key", "consumer_key"],
+                [f"{schema + '.' if schema else ''}{prefix}_outbox.batch_key",
+                 f"{schema + '.' if schema else ''}{prefix}_outbox.consumer_key"],
+            ),
+        )
     table(
         "outbox",
         Column("batch_key", key, primary_key=True),

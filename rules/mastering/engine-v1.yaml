@@ -1,6 +1,6 @@
 # Shared engine vocabulary and legacy compatibility, delivered with the build.
 # Changing this contract requires qualification; it does not approve or activate rules.
-version: engine-catalog-worker-publication-v1
+version: engine-catalog-master-search-v1
 master_search:
   version: master-name-word-literal-v1
   name_fields:

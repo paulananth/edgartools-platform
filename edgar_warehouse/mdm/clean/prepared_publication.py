@@ -14,6 +14,25 @@ def adapter(store):
     return api
 
 
+def publication_rows(api, batches, *, connection):
+    """Refuse missing delivery intent instead of reporting false completion."""
+    names = set(batches)
+    commands = api.read_batches(sorted(names), connection=connection)
+    if len(commands) != len(names):
+        raise Conflict("Unknown publication batch")
+    publications = api.read_batches(sorted(names),outboxes=True,connection=connection)
+    found = {}
+    for row in publications:
+        found.setdefault(row["batch_key"],set()).add(bytes(row["consumer_bytes"]).decode())
+    for command in commands:
+        intent = json.loads(bytes(command["intent"]))
+        consumers = {bytes.fromhex(item["consumer"]).decode() for item in intent["consumers"]}
+        expected = consumers if command["changed"] else set()
+        if found.get(command["batch_key"],set()) != expected:
+            raise Conflict("Required consumer publications differ from the retained batch")
+    return commands, publications
+
+
 def retained(store, batch, consumer, *, connection=None):
     if connection is None:
         with store.engine.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
@@ -21,7 +40,7 @@ def retained(store, batch, consumer, *, connection=None):
     api = installed(connection)
     if api is None or api.protocol < 6:
         raise Conflict("Worker publication requires the protocol-6 owner migration")
-    rows = api.read_batches([batch], connection=connection)
+    rows, publications = publication_rows(api,[batch],connection=connection)
     if len(rows) != 1:
         raise Conflict("Unknown publication batch")
     command = rows[0]
@@ -29,7 +48,6 @@ def retained(store, batch, consumer, *, connection=None):
     consumers = {bytes.fromhex(item["consumer"]).decode() for item in intent["consumers"]}
     if consumer not in consumers:
         raise Conflict("Consumer differs from the frozen publication contract")
-    publications = api.read_batches([batch], outboxes=True, connection=connection)
     selected = [row for row in publications if bytes(row["consumer_bytes"]).decode() == consumer]
     if not selected:
         if publications:
@@ -65,7 +83,7 @@ def deliver(store, consumer, worker, publisher, *, lease_seconds=300, batch_id=N
             immutable=True, authority=authority(store)))
         return False
     claim = _refusals(lambda: api.claim_outbox(batch_id, consumer, worker,
-        seconds=lease_seconds, authority=authority(store)))
+        seconds=lease_seconds, authority=authority(store), context=getattr(publisher,"origin",{})))
     if claim is None:
         return False
     key, payload = consumer+"/"+batch_id, json.loads(claim["payload"])

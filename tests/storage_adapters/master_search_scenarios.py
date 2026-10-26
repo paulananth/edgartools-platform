@@ -302,7 +302,7 @@ from edgar_warehouse.mdm.clean.store import Store,migrate,storage_adapter
 owner,runtime=engine_from_env("READ_OWNER_URL"),engine_from_env("READ_RUNTIME_URL")
 try:
     migrate(owner,application_role=os.environ["READ_RUNTIME_ROLE"],prepared=True)
-    api=storage_adapter().Adapter(runtime,prefix="mdm_store",protocol=5)
+    api=storage_adapter().Adapter(runtime,prefix="mdm_store",protocol=6)
     def names(words):
         return Context(runtime).answer(Namespace(subject=KIND,key=None,search=words,limit=20,
             as_of=None,as_at=None,detail="full",page=None))["matches"]

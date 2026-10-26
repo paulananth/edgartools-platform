@@ -33,14 +33,20 @@ def _refusals(operation):
 
 def authority(store):
     """Refresh the worker's external proof separately from immutable effects."""
-    return None if store.lease_authority is None else store.lease_authority.current().proof
+    if store.lease_authority is None:
+        return None
+    proof = store.lease_authority.current().proof
+    if not isinstance(proof, list) or not proof:
+        raise Conflict("A worker requires a nonempty destination authority proof")
+    return proof
 
 
 def commit(store, request, run_id):
     if not isinstance(request, Admission):
         raise Conflict("Prepared admission requires the normal Merge Stage preparation")
     api = storage_adapter().Adapter(store.engine, prefix=PREFIX, protocol=store.protocol)
-    lease = _refusals(lambda: api.claim(request.batch.scope, "merge-stage"))
+    proof = authority(store)
+    lease = _refusals(lambda: api.claim(request.batch.scope, "merge-stage", authority=proof))
     return _refusals(lambda: api.apply(
         request.batch, lease, proposal_body=request.proposal,
         proposal_key=request.proposal_key, observer=run_id, authority=authority(store),
@@ -61,7 +67,7 @@ def record(store, body, run_id, *, intent=None):
         body["command"]["batch_id"], proposal_body(body), run_id,
         outcome=body["outcome"],
         expected_generation=body.get("observed_generation", api.generation()),
-        intent=intent,
+        intent=intent, authority=authority(store),
     ))
     return {"assessment_id": key, **body}
 
@@ -231,7 +237,8 @@ def execute(stage, *, command, assertions, decisions, identities, deferred,
                 return result
     if duplicate:
         original = json.loads(bytes(previous["intent"]))
-        lease = _refusals(lambda: api.claim(bytes.fromhex(original["scope"]).decode(), "merge-stage"))
+        proof = authority(stage.store)
+        lease = _refusals(lambda: api.claim(bytes.fromhex(original["scope"]).decode(), "merge-stage", authority=proof))
         return _refusals(lambda: api.replay(command["batch_id"], lease, observer=run_id, authority=authority(stage.store)))
     admission = Admission(batch, proposal=None if assessment_id else proposal_body(candidate),
                           proposal_key=assessment_id)
