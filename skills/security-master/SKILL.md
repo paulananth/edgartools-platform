@@ -30,9 +30,9 @@ then master", "mastering must create an unique id and the unique id joins with
 all the other tables cross refrence and silver"). Built so far: a record
 carries lists of identifiers (part A1), OpenFIGI's one load with every
 listing FIGI as an identifier and one master id in silver (part B1),
-N-PORT's pairing by FIGI removed (part B2). Still to build: the CUSIP-first
-bind and the merge by a shared FIGI (A2), the Listing currency (B3), then the
-switch-on. The
+N-PORT's pairing by FIGI removed (part B2), each listing's currency (part
+B3). Still to build: the CUSIP-first bind and the merge by a shared FIGI
+(A2), then the switch-on. The
 sections below say where 138 changes what runs.
 
 **One master id.** Mastering mints one master id for each Security. The
@@ -368,6 +368,19 @@ id, exchange, currency) still repeats on 71,974 of 2,184,699 lines, so it is
 an index, not the key ("Listing FIGI as key; exchange + currency as
 columns", 2026-10-25). The listing FIGI also matches through the
 Cross-reference; ticker and ticker + exchange are lookup only there.
+
+**The currency rule (built, part B3).** The codes are the RDM code set
+`nport-filed-currencies` (the 80 three-letter codes N-PORT holdings file,
+"N-PORT's filed codes (Recommended)", 2026-10-26), embedded in OpenFIGI's
+source extract. A line's code is its ticker's last three letters when they
+are one of those codes and something is left before them; its root is the
+rest, else the whole ticker. A line gets its code as its currency only where
+its exchange gives the identifier two or more lines, one root and every
+ticker different: so the root alone as a line beside coded lines gets none,
+and a repeated code, two roots or a single line give none (a single line's
+ticker ends in a code by chance 121,414 times). Lines without an exchange
+code form one group. Steps: `line-counts.yaml`, `lines.yaml`, `listing.yaml`.
+The (master id, exchange, currency) index waits for its first reader.
 
 Operator, 2026-10-20: "Maybe create a security detail table and keep it in
 the mdm", then "Detail rows set in config (Recommended)".

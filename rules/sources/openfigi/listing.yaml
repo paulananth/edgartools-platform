@@ -1,0 +1,40 @@
+# Every listing as a Security's detail row (ticket 120), with its currency
+# (ticket 138 part B3), read over lines.yaml's pieces; combine.yaml collects
+# them by the identifier asked. A line's currency is its ticker's code
+# (source.yaml's `code`: the last three letters, a code N-PORT holdings
+# file) only where its exchange gives the identifier two or more lines, one
+# root and every ticker different (operator, 2026-10-25: "Listing FIGI as
+# key; exchange + currency as columns", the currency read from the ticker's
+# suffix, blank where none). So the root alone, as a line beside coded lines,
+# gets none; a repeated code, two roots or one line give none.
+execution: {profile: source.read, workers: 1, max_artifacts: 512}
+read:
+  format: json
+  limits: {max_bytes: 16777216, max_records: 10000000}
+  tables:
+    listings:
+      each: tables.lines
+      columns:
+        id: {text: {path: id}}
+        detail:
+          object:
+            omit_nulls: true
+            fields:
+              figi: {value: {path: detail.figi}}
+              exchange: {value: {path: detail.exchange}}
+              ticker: {value: {path: detail.ticker}}
+              composite_figi: {value: {path: detail.composite_figi}}
+              description: {value: {path: detail.description}}
+              currency:
+                choose:
+                  condition: {equal: {left: {value: {path: lines}}, right: {const: {value: 1}}}}
+                  then: {value: {path: NO_SUCH_FIELD}}
+                  else:
+                    choose:
+                      condition: {equal: {left: {value: {path: roots}}, right: {const: {value: 1}}}}
+                      then:
+                        choose:
+                          condition: {equal: {left: {value: {path: tickers}}, right: {value: {path: lines}}}}
+                          then: {value: {path: code}}
+                          else: {value: {path: NO_SUCH_FIELD}}
+                      else: {value: {path: NO_SUCH_FIELD}}

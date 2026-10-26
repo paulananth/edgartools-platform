@@ -182,7 +182,10 @@ frozen units.
   skipping null keys. A mismatch rejects the whole combination. `where`
   selects rows whose columns equal the declared exact values; `{}` selects
   all rows. Missing check/filter columns fail. Each mapping has at most
-  32 entries.
+  32 entries. `where` never compares two columns: to keep a row by its
+  group's counts (two counts equal, a count above one), join the counts onto
+  each row in a combine, then decide in a source extract over its pieces with
+  `choose` and `equal` (OpenFIGI's `lines.yaml` and `listing.yaml`, ticket 138).
 - Group keys are exact text or integers, with no conversion: integer `1`
   and text `"1"` are different identities; boolean/structured keys fail.
   Null group keys are skipped. Group `value` is a column or `.` for the

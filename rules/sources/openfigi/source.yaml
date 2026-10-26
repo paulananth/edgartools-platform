@@ -102,6 +102,172 @@ read:
         exchange: KS
       MX:
         exchange: MM
+    # The RDM code set nport-filed-currencies, version 1 (ticket 138 part B3;
+    # operator, 2026-10-26: "N-PORT's filed codes (Recommended)"), as
+    # published in rules/reference/published/nport-filed-currencies/1: the
+    # three-letter currency codes N-PORT holdings file. A test holds this
+    # table equal to it.
+    currency:
+      AED:
+        code: AED
+      ALL:
+        code: ALL
+      AMD:
+        code: AMD
+      AOA:
+        code: AOA
+      ARS:
+        code: ARS
+      AUD:
+        code: AUD
+      AZN:
+        code: AZN
+      BAM:
+        code: BAM
+      BDT:
+        code: BDT
+      BHD:
+        code: BHD
+      BOB:
+        code: BOB
+      BRL:
+        code: BRL
+      BWP:
+        code: BWP
+      CAD:
+        code: CAD
+      CHF:
+        code: CHF
+      CLP:
+        code: CLP
+      CNY:
+        code: CNY
+      COP:
+        code: COP
+      CRC:
+        code: CRC
+      CZK:
+        code: CZK
+      DKK:
+        code: DKK
+      DOP:
+        code: DOP
+      EGP:
+        code: EGP
+      EUR:
+        code: EUR
+      GBP:
+        code: GBP
+      GEL:
+        code: GEL
+      GHS:
+        code: GHS
+      HKD:
+        code: HKD
+      HUF:
+        code: HUF
+      IDR:
+        code: IDR
+      ILS:
+        code: ILS
+      INR:
+        code: INR
+      ISK:
+        code: ISK
+      JMD:
+        code: JMD
+      JOD:
+        code: JOD
+      JPY:
+        code: JPY
+      KES:
+        code: KES
+      KGS:
+        code: KGS
+      KRW:
+        code: KRW
+      KWD:
+        code: KWD
+      KZT:
+        code: KZT
+      LKR:
+        code: LKR
+      MAD:
+        code: MAD
+      MNT:
+        code: MNT
+      MUR:
+        code: MUR
+      MXN:
+        code: MXN
+      MYR:
+        code: MYR
+      MZN:
+        code: MZN
+      NAD:
+        code: NAD
+      NGN:
+        code: NGN
+      NOK:
+        code: NOK
+      NZD:
+        code: NZD
+      OMR:
+        code: OMR
+      PEN:
+        code: PEN
+      PHP:
+        code: PHP
+      PKR:
+        code: PKR
+      PLN:
+        code: PLN
+      PYG:
+        code: PYG
+      QAR:
+        code: QAR
+      RON:
+        code: RON
+      RSD:
+        code: RSD
+      RUB:
+        code: RUB
+      SAR:
+        code: SAR
+      SEK:
+        code: SEK
+      SGD:
+        code: SGD
+      THB:
+        code: THB
+      TND:
+        code: TND
+      TRY:
+        code: TRY
+      TWD:
+        code: TWD
+      TZS:
+        code: TZS
+      UAH:
+        code: UAH
+      UGX:
+        code: UGX
+      USD:
+        code: USD
+      UYU:
+        code: UYU
+      UZS:
+        code: UZS
+      VND:
+        code: VND
+      XOF:
+        code: XOF
+      ZAR:
+        code: ZAR
+      ZMW:
+        code: ZMW
+      ZWD:
+        code: ZWD
   lookup_sets:
     asked:
       max_values: 51200
@@ -330,6 +496,168 @@ read:
             path: figi
             null_if:
             - ""
+        # The Listing currency (ticket 138 part B3; operator, 2026-10-25:
+        # "Listing FIGI as key; exchange + currency as columns", the currency
+        # read from the ticker's suffix, blank where none). Per line: the
+        # ticker's last three letters when they are a code N-PORT holdings
+        # file (`code`), and the ticker without them (`root`), else the whole
+        # ticker; `line_group` names the identifier asked and the exchange
+        # (no exchange code is its own group, as measured). line-counts.yaml
+        # counts each group's lines, roots and tickers; listing.yaml gives a
+        # line its code only where the group qualifies.
+        line_group:
+          concat:
+          - member_value:
+              lookup: asked
+              key:
+                concat:
+                - context:
+                    name: batch
+                - const:
+                    value: ':'
+                - context:
+                    name: answer
+              on_many: error
+          - const:
+              value: ' '
+          - coalesce:
+              skip: "null"
+              values:
+              - text:
+                  path: exchCode
+                  null_if:
+                  - ""
+              - const:
+                  value: ""
+        ticker:
+          coalesce:
+            skip: "null"
+            values:
+            - text:
+                path: ticker
+                null_if:
+                - ""
+            - const:
+                value: ""
+        code:
+          choose:
+            # A ticker that is only three letters has no root: it is a plain ticker.
+            condition:
+              equal:
+                left:
+                  transform:
+                    value:
+                      coalesce:
+                        skip: "null"
+                        values:
+                        - text:
+                            path: ticker
+                            null_if:
+                            - ""
+                        - const:
+                            value: ""
+                    transforms:
+                    - drop_last: 3
+                right:
+                  const:
+                    value: ""
+            then:
+              value:
+                path: NO_SUCH_FIELD
+            else:
+              lookup:
+                reference: currency
+                column: code
+                on_missing: "null"
+                key:
+                  transform:
+                    value:
+                      coalesce:
+                        skip: "null"
+                        values:
+                        - text:
+                            path: ticker
+                            null_if:
+                            - ""
+                        - const:
+                            value: ""
+                    transforms:
+                    - keep_last: 3
+        root:
+          choose:
+            condition:
+              equal:
+                left:
+                  choose:
+                    # A ticker that is only three letters has no root: it is a plain ticker.
+                    condition:
+                      equal:
+                        left:
+                          transform:
+                            value:
+                              coalesce:
+                                skip: "null"
+                                values:
+                                - text:
+                                    path: ticker
+                                    null_if:
+                                    - ""
+                                - const:
+                                    value: ""
+                            transforms:
+                            - drop_last: 3
+                        right:
+                          const:
+                            value: ""
+                    then:
+                      value:
+                        path: NO_SUCH_FIELD
+                    else:
+                      lookup:
+                        reference: currency
+                        column: code
+                        on_missing: "null"
+                        key:
+                          transform:
+                            value:
+                              coalesce:
+                                skip: "null"
+                                values:
+                                - text:
+                                    path: ticker
+                                    null_if:
+                                    - ""
+                                - const:
+                                    value: ""
+                            transforms:
+                            - keep_last: 3
+                right:
+                  value:
+                    path: NO_SUCH_FIELD
+            then:
+              coalesce:
+                skip: "null"
+                values:
+                - text:
+                    path: ticker
+                    null_if:
+                    - ""
+                - const:
+                    value: ""
+            else:
+              transform:
+                value:
+                  coalesce:
+                    skip: "null"
+                    values:
+                    - text:
+                        path: ticker
+                        null_if:
+                        - ""
+                    - const:
+                        value: ""
+                transforms:
+                - drop_last: 3
         detail:
           object:
             omit_nulls: true
@@ -673,13 +1001,37 @@ bookkeeping:
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.combined]
           input: {contract: reduce.yaml, readings: {answers: {all: answers}}}
-        - name: combine
+        # The Listing currency (ticket 138 part B3): each identifier and
+        # exchange's lines, roots and tickers counted; each line beside its
+        # group's counts; each listing's detail row with its currency.
+        - name: line_counts
           operation: source.combine
-          requires: [reduce, answers]
+          requires: [answers]
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.combined]
-          input: {contract: combine.yaml, readings: {counts: {step: reduce}, answers: {all: answers}}}
+          input: {contract: line-counts.yaml, readings: {answers: {all: answers}}}
+        - name: lines
+          operation: source.combine
+          requires: [line_counts, answers]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input: {contract: lines.yaml, readings: {counts: {step: line_counts}, answers: {all: answers}}}
+        - name: listing
+          operation: source.read
+          requires: [lines]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          input: {contract: listing.yaml, pieces: {step: lines}}
+        - name: combine
+          operation: source.combine
+          requires: [reduce, answers, listing]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input: {contract: combine.yaml, readings: {counts: {step: reduce}, answers: {all: answers}, listings: {all: listing}}}
         - name: record
           operation: source.read
           requires: [combine]
