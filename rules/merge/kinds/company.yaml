@@ -1,7 +1,7 @@
 # Company merge rules: source priority, field rules, the classification rule and
 # the declared SEC-to-GLEIF name rules. Rules are data (operator, 2026-09-24):
 # adding a kind is a new file here, not an edit to a source.
-version: company-2026-09-25.13
+version: company-2026-10-25.one-value-per-identifier
 defaults:
   # Shared fields (operator, 2026-09-24): `name` and `address` are one field
   # each across sources, SEC first. SEC fills `address` from its business
@@ -718,7 +718,10 @@ identifiers:
     normalizer: normalize_identifier@sec-cik-v1
     claim:
       forward: 1
-      reverse: null
+      # One value per master (ticket 138): what the engine has always enforced
+      # (a second value sends the master to review), now stated, since the
+      # engine reads this limit and a Security's identifiers have none.
+      reverse: 1
     compatibility:
       field: kind
       predicate: kind_equal@1
@@ -744,7 +747,10 @@ identifiers:
     normalizer: normalize_identifier@crd-v1
     claim:
       forward: 1
-      reverse: null
+      # One value per master (ticket 138): what the engine has always enforced
+      # (a second value sends the master to review), now stated, since the
+      # engine reads this limit and a Security's identifiers have none.
+      reverse: 1
     compatibility:
       field: kind
       predicate: kind_equal@1
@@ -766,7 +772,10 @@ identifiers:
     normalizer: normalize_identifier@lei-v1
     claim:
       forward: 1
-      reverse: null
+      # One value per master (ticket 138): what the engine has always enforced
+      # (a second value sends the master to review), now stated, since the
+      # engine reads this limit and a Security's identifiers have none.
+      reverse: 1
     compatibility:
       field: kind
       predicate: kind_equal@1
@@ -788,7 +797,10 @@ identifiers:
     normalizer: normalize_identifier@crd-v1
     claim:
       forward: 1
-      reverse: null
+      # One value per master (ticket 138): what the engine has always enforced
+      # (a second value sends the master to review), now stated, since the
+      # engine reads this limit and a Security's identifiers have none.
+      reverse: 1
     compatibility:
       field: kind
       predicate: kind_equal@1

@@ -18,7 +18,7 @@ from .binding import bound, in_review, nothing, survivors
 from .evidence import decision
 from .name_census import VERSION as CENSUS_VERSION
 from .names import REFERENCE_TABLES
-from .store import Conflict, rows
+from .store import Conflict, identifier_values, rows
 
 FAMILY = "name_binding"
 
@@ -206,13 +206,12 @@ def _held_identifiers(conn, source: str, namespace: str, entities: set[str], rel
     if isinstance(conn, RecordReader):
         for record in conn.current(conn.members(entities)).values():
             if record["source_code"] == source and record["subject"] not in released:
-                value = (record.get("identifiers") or {}).get(namespace)
-                if value is not None:
-                    held[record["entity_id"]].add(value)
+                held[record["entity_id"]].update(
+                    identifier_values((record.get("identifiers") or {}).get(namespace)))
         return held
     for r in rows(
         conn,
-        """SELECT s.entity_id::text AS entity_id, s.reading->'identifiers'->>:namespace AS value
+        """SELECT s.entity_id::text AS entity_id, s.reading->'identifiers'->:namespace AS value
         FROM unnest(CAST(:entities AS uuid[])) k(id) CROSS JOIN LATERAL (
             SELECT entity_id,reading,source_code,subject FROM mdm.stage_record
             WHERE entity_id=k.id AND entity_id IS NOT NULL OFFSET 0
@@ -224,7 +223,7 @@ def _held_identifiers(conn, source: str, namespace: str, entities: set[str], rel
         source=source,
         released=sorted(released),
     ):
-        held[r["entity_id"]].add(r["value"])
+        held[r["entity_id"]].update(identifier_values(r["value"]))
     return held
 
 

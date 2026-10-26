@@ -293,7 +293,9 @@ class Context:
             """SELECT DISTINCT coalesce(e.canonical_id, s.entity_id::text)
                  FROM mdm.stage_record s
                  LEFT JOIN mdm.current_entity e ON e.object_id = s.entity_id::text
-                WHERE s.reading -> 'identifiers' @> jsonb_build_object(CAST(:ns AS text), CAST(:v AS text))
+                WHERE (s.reading -> 'identifiers' @> jsonb_build_object(CAST(:ns AS text), CAST(:v AS text))
+                       OR s.reading -> 'identifiers' @> jsonb_build_object(CAST(:ns AS text),
+                                                                         jsonb_build_array(CAST(:v AS text))))
                   AND s.entity_id IS NOT NULL AND (CAST(:k AS text) IS NULL OR s.kind = :k)"""),
             {"ns": namespace, "v": value, "k": kind})}
         if not found and adapter is None:

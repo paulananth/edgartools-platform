@@ -6,7 +6,7 @@
 # its LEI. Switched on (ticket 79; operator, 2026-10-17 21:03 ET: "Switch on
 # all six (Recommended)"), verified on the part 3 Proving Run
 # (.scratch/onboarding/sec.nport/fund-proving-run.json).
-version: fund_structure-2026-10-15.1
+version: fund_structure-2026-10-25.one-value-per-identifier
 defaults:
   sources:
   - sec.nport.fund.v1
@@ -54,7 +54,10 @@ identifiers:
     normalizer: normalize_identifier@sec_series_id-v1
     claim:
       forward: 1
-      reverse: null
+      # One value per master (ticket 138): what the engine has always enforced
+      # (a second value sends the master to review), now stated, since the
+      # engine reads this limit and a Security's identifiers have none.
+      reverse: 1
     compatibility:
       field: kind
       predicate: kind_equal@1
@@ -74,7 +77,10 @@ identifiers:
     normalizer: normalize_identifier@lei-v1
     claim:
       forward: 1
-      reverse: null
+      # One value per master (ticket 138): what the engine has always enforced
+      # (a second value sends the master to review), now stated, since the
+      # engine reads this limit and a Security's identifiers have none.
+      reverse: 1
     compatibility:
       field: kind
       predicate: kind_equal@1

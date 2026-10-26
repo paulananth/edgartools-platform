@@ -2,7 +2,7 @@
 
 Priority: 138. Map: [Rebuild priorities](../map.md). Opened 2026-10-25 15:31 ET.
 
-Type: task. Status: in progress (Claude, branch `claude/t138-one-openfigi-load`).
+Type: task. Status: in progress (Claude, branch `claude/t138-mdm-build`; parts after A1 on fresh branches).
 Blocked by: none. Replaces the two-target design of [120](120-switch-on-securities.md)'s
 "OpenFIGI first" part; the rest of 120's load waits for this.
 
@@ -237,7 +237,9 @@ security); every listing FIGI misses none.
 - [x] Skills say the decided process (security-master, data-modeling, mdm-engineering), marked decided, not built (2026-10-25 19:57 ET): skill tests 80 passed (genericity, role skills); architecture and skill commands 349 passed before the genericity fix
 - [ ] Follow-up tickets: Company, Person, Fund onto the one cross-reference; steward split with a Match Exclusion
 - [x] GoF consult on matching and binding (2026-10-25 20:45 ET): one identifier reader; conflict outcomes as rule data; `master_records.rs` reads `reverse`
-- [ ] Engine: a record's identifier may be a list; matching and binding look up each value; one Security joins, two go to review
+- [ ] Engine part A1 (this branch, 2026-10-25 22:11 ET): a record's identifier may be a list; matching, the holder lookup (both stores), the lookup index and the master read each value through one reader; every identifier a mint or bind adds goes into the batch's found set and into `mints`, so a second record or a concurrent bundle sharing any FIGI finds it; `master_records.rs` reads the contract's `reverse` (Company, Person and Fund identifiers state `reverse: 1`, the limit the engine enforces today; Security's stay unbounded) and the ISIN `shared_figi` exception goes
+- [ ] Engine part A2 (own branch, after A1): `on_conflict: first` (a filed CUSIP and ISIN on two Securities bind by the CUSIP; the identifiers another Security holds are withheld on the bind decision and never indexed or projected for this one) and `on_several: merge` (one record's listing FIGIs on two Securities consolidate them, the oldest surviving). Merge is not optional: without it the 11 ISIN answers sharing FIGIs with two CUSIP answers give a different result by bundle order
+- [ ] Switch-on of the FIGI Identifier Contract and its matching rule: needs the operator's words
 - [ ] Rules: OpenFIGI one target and one contract (`openfigi.security.v3`), every listing FIGI as identifier `figi`; Security kind declares `figi`; one OpenFIGI matching rule
 - [ ] Rules: N-PORT's FIGI pairing chain removed; N-PORT and 13F join by any identifier, else create
 - [ ] Silver: `openfigi_listing` one MDM id column

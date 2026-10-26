@@ -65,6 +65,21 @@ pub(crate) fn has_value(body: &Object, key: &str) -> bool {
     body.get(key).is_some_and(|raw| has_content(raw))
 }
 
+/// The values one identifier holds: a text value, or a nonempty list of them
+/// (an OpenFIGI answer's FIGI for each listing). `null` holds none.
+pub(crate) fn read_identifier_values(raw: &RawValue) -> Result<Vec<String>, String> {
+    if raw.get() == "null" {
+        return Ok(Vec::new());
+    }
+    if let Ok(value) = read_value::<String>(raw) {
+        return Ok(vec![value]);
+    }
+    match read_value::<Vec<String>>(raw) {
+        Ok(values) if !values.is_empty() => Ok(values),
+        _ => Err("An identifier holds a text value or a nonempty list of them".into()),
+    }
+}
+
 /// Canonical JSON keeps number lexemes supplied by the transport, sorting object keys only.
 pub(crate) fn write_sorted_json(raw: &RawValue) -> Result<String, String> {
     match raw.get().as_bytes().first() {

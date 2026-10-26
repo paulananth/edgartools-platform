@@ -462,6 +462,11 @@ def _check_contract(namespace: str, contract: dict) -> None:
     forward = (contract.get("claim") or {}).get("forward")
     if type(forward) is not int or forward < 1:
         raise Conflict(f"{where} states no forward claim")
+    # How many values one master may hold: a count, or null for any number
+    # (a Security's listing FIGIs, ticket 138).
+    reverse = (contract.get("claim") or {}).get("reverse")
+    if reverse is not None and (type(reverse) is not int or reverse < 1):
+        raise Conflict(f"{where} states a reverse claim that is not a count")
     compatibility = contract.get("compatibility") or {}
     if (
         not compatibility.get("field")

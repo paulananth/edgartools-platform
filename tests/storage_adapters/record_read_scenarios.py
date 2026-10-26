@@ -65,6 +65,9 @@ contract = {
     "sources": [PRIMARY],
     "normalizer": "normalize_identifier@crd-v1",
 }
+if case == "list_join":
+    # A master may hold every value of the list (ticket 138: no reverse limit).
+    contract["claim"] = {"forward": 1, "reverse": None}
 rules = [rule, join]
 policy = {
     "version": "invented-read-phase",
@@ -337,6 +340,10 @@ def propose(items=(), journal=(), at=AS_OF):
 
 try:
     holder = record("one")
+    if case == "list_join":
+        # A holder that carries a list (ticket 138): the joining record's one
+        # value is the list's second, so each value is indexed and read.
+        holder = record("one", identifiers={NAMESPACE: ["170", "171"]})
     master, bind = identity(holder)
     other = record("two", SECONDARY)
     if case.startswith(("name_", "cascade_")):

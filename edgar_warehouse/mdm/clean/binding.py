@@ -29,7 +29,7 @@ from . import correction
 from .activation import declared_namespaces
 from .evidence import instant
 from .primitives import normalizer
-from .store import rows
+from .store import Conflict, identifier_values, rows
 from .record_reads import RecordReader
 
 
@@ -73,7 +73,7 @@ def holders(conn, policy: dict, wanted: dict[str, set[str]], released: set[str] 
         found_rows = (conn.holders(namespace, values, _issuers(policy, namespace), released)
                       if isinstance(conn, RecordReader) else rows(
             conn,
-            """SELECT s.reading->'identifiers'->>:namespace AS value,
+            """SELECT DISTINCT s.reading->'identifiers'->:namespace AS value,
                       s.entity_id::text AS entity_id, i.kind
             FROM unnest(CAST(:wanted AS jsonb[])) AS w(doc) CROSS JOIN LATERAL (
                 SELECT reading, entity_id, subject, source_code FROM mdm.stage_record
@@ -81,17 +81,23 @@ def holders(conn, policy: dict, wanted: dict[str, set[str]], released: set[str] 
             JOIN mdm.master_entity i ON i.entity_id = s.entity_id
             WHERE s.source_code = ANY(:sources) AND NOT s.subject = ANY(:released)""",
             namespace=namespace,
-            wanted=[json.dumps({namespace: v}) for v in sorted(values)],
+            # A value is carried alone or in a list (a FIGI per listing).
+            wanted=[json.dumps({namespace: held})
+                    for v in sorted(values) for held in (v, [v])],
             sources=_issuers(policy, namespace),
             released=sorted(released),
         ))
         merged = survivors(conn, {r["entity_id"] for r in found_rows})
+        portable = isinstance(conn, RecordReader)
+        normals = {_normal(policy, namespace, v) for v in values}
         for row in found_rows:
-            key = (namespace, _normal(policy, namespace, row["value"]))
-            if isinstance(conn,RecordReader) and key[1] not in values:
-                from .store import Conflict
-                raise Conflict("Identifier reference differs from retained reading")
-            found[key][merged.get(row["entity_id"], row["entity_id"])] = row["kind"]
+            # A Stage row returns its whole list; only the values asked count.
+            for raw in [row["value"]] if portable else identifier_values(row["value"]):
+                key = (namespace, _normal(policy, namespace, raw))
+                if portable and key[1] not in values:
+                    raise Conflict("Identifier reference differs from retained reading")
+                if key[1] in normals:
+                    found[key][merged.get(row["entity_id"], row["entity_id"])] = row["kind"]
     return found
 
 
@@ -200,7 +206,6 @@ def propose(
     `released`: the records this batch unbinds (ticket 13)."""
     from edgar_warehouse.rules.source_engine import plan_record_matches, link_matching_records
     from .identifier_types import TYPES
-    from .store import Conflict
 
     subjects = sorted({record["subject"] for record in assertions})
     try:

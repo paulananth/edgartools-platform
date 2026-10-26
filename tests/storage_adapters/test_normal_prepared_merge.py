@@ -17,7 +17,8 @@ CASES = ["join", "issuer_only", "corrected", "released", "quarantine",
                                   "stale_assessment", "preview", "collision", "rollback",
                                   "unchanged", "occurrence", "deferred", "competing", "mint_competing", "no_identity_stale",
                                   "name_holder_first", "name_candidate_first", "name_held_value",
-                                  "cascade_holder_first", "cascade_candidate_first", "links", "hierarchy", "details"]
+                                  "cascade_holder_first", "cascade_candidate_first", "links", "hierarchy", "details",
+                                  "list_join"]
 KINDS = ["invented-kind", "invented-other-kind"]
 if os.environ.get("SKILL_ADAPTER_TEST_ENGINE") == "mssql":
     CASES, KINDS = ["deferred"], ["invented-kind"]

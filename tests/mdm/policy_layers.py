@@ -130,6 +130,19 @@ def without_p2_p3_deleted(policy: dict) -> dict:
     return body
 
 
+def without_one_value_per_identifier(policy: dict) -> dict:
+    """Rebuild priorities ticket 138: each Company identifier states the one
+    value per Company the engine always enforced (`claim.reverse: 1`), since
+    the engine now reads the limit and a Security's identifiers have none.
+    Peeled, the policy is the one before."""
+    body = _copy(policy)
+    company = body["kinds"]["company"]
+    company["version"] = "company-2026-09-25.13"
+    for contract in company["identifiers"].values():
+        contract["claim"]["reverse"] = None
+    return body
+
+
 def without_holds_removed(policy: dict) -> dict:
     """Rebuild priorities ticket 25 (operator, 2026-10-22: "Agreed Remove HOLDS
     from MDM's relationship types"): a holding is a silver row, not a
@@ -276,6 +289,8 @@ def without_place_codes(policy: dict) -> dict:
 # Newest first: each layer, and Company's policy digest with it and every
 # layer after it still on.
 LAYERS = [
+    # Recorded under the standing rule on its tests (2026-10-25, ticket 138).
+    (without_one_value_per_identifier, "81abb7cc110debcac75ddf846f92bab112938758d6bc225e6ebbf70c0ac72189"),
     # Removed: "Agreed Remove HOLDS from MDM's relationship types" (2026-10-22, ticket 25).
     (without_holds_removed, "0b8f20457f7775d8c6bc14badc4e9ee7a08147e198b42bc409bdc2e14741dd89"),
     # Recorded under the standing rule on its tests (2026-10-19, ticket 113).

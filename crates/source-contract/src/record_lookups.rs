@@ -114,17 +114,18 @@ fn collect_entries(
             "unbound"
         };
         for (namespace, raw) in values::read_object(record, "normalized_identifiers")? {
-            let value: String = values::read_value(&raw)?;
-            let group = lookup_type(
-                "identifier_records",
-                &[
-                    namespace,
-                    value,
-                    values::read_text(record, "source_code")?,
-                    state.into(),
-                ],
-            )?;
-            entries.insert((group, subject.clone()), pointer.clone());
+            for value in values::read_identifier_values(&raw)? {
+                let group = lookup_type(
+                    "identifier_records",
+                    &[
+                        namespace.clone(),
+                        value,
+                        values::read_text(record, "source_code")?,
+                        state.into(),
+                    ],
+                )?;
+                entries.insert((group, subject.clone()), pointer.clone());
+            }
         }
         for (namespace, raw) in values::read_object(record, "cross_references")? {
             if raw.get() == "null" {
@@ -264,16 +265,20 @@ pub fn prepare_record_lookups(raw: &str) -> Result<String, String> {
         );
         let mut normalized = Object::new();
         for (namespace, raw) in values::read_object(record, "identifiers")? {
-            if raw.get() == "null" {
-                continue;
-            }
-            let value = prepare_identifier_value(
-                &contracts,
-                &namespace,
-                &values::read_value::<String>(&raw)?,
-                &input.normalizers,
-            )?;
-            normalized.insert(namespace, values::write_value(&value)?);
+            let found = values::read_identifier_values(&raw)?
+                .iter()
+                .map(|value| {
+                    prepare_identifier_value(&contracts, &namespace, value, &input.normalizers)
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            // A list stays a list, in the record's order, so each value
+            // pairs with its carried form; one value stays one value.
+            let value = match found.as_slice() {
+                [] => continue,
+                [one] if !raw.get().trim_start().starts_with('[') => values::write_value(one)?,
+                _ => values::write_value(&found)?,
+            };
+            normalized.insert(namespace, value);
         }
         record.insert(
             "normalized_identifiers".into(),
