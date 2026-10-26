@@ -2,15 +2,18 @@
 # (ticket 138 part B3), read over lines.yaml's pieces; combine.yaml collects
 # them by the identifier asked. A line's currency is its ticker's code
 # (source.yaml's `code`: the last three letters, a code N-PORT holdings
-# file) only where its exchange gives the identifier two or more lines, one
-# root and every ticker different (operator, 2026-10-25: "Listing FIGI as
-# key; exchange + currency as columns", the currency read from the ticker's
-# suffix, blank where none). So the root alone, as a line beside coded lines,
-# gets none; a repeated code, two roots or one line give none.
-execution: {profile: source.read, workers: 1, max_artifacts: 512}
+# file). The operator ruled the currency is read from the ticker's suffix,
+# blank where none (2026-10-25: "Listing FIGI as key; exchange + currency as
+# columns"). Which lines are read was measured on the 2026 Q2 capture and
+# chosen on ticket 138 ("B3 rule measured"): only where the line's exchange
+# gives the identifier two or more lines, one root and every ticker
+# different. So the root alone, as a line beside coded lines, gets none; a
+# repeated code, two roots or one line give none. Limits are the engine's
+# ceilings (operator, 2026-10-22: "No limit on production").
+execution: {profile: source.read, workers: 1, max_artifacts: 512, max_input_bytes: 17179869184}
 read:
   format: json
-  limits: {max_bytes: 16777216, max_records: 10000000}
+  limits: {max_bytes: 17179869184, max_records: 100000000}
   tables:
     listings:
       each: tables.lines

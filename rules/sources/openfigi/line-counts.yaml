@@ -2,23 +2,23 @@
 # exchange (`line_group`, source.yaml's `details`), how many lines OpenFIGI
 # gave, how many roots and how many tickers. listing.yaml reads a line's
 # currency only where there are two or more lines, one root and every ticker
-# different (measured on the 2026 Q2 capture: 530,521 of 2,184,699 lines).
+# different (measured and chosen on ticket 138, "B3 rule measured").
 # Its own reduction, apart from reduce.yaml, so each keeps its own bounds. Run
 # over every answers reading of both kinds asked. Pin canonical JSON of this
 # file as the source.combine contract.
 execution:
   profile: source.combine
 reduce:
-  # 2,184,699 listings on the 2026 Q2 capture (both kinds asked), about 1.9
-  # million groups: three groups give about 5.7 million keys and output rows;
-  # roots and tickers about 4.1 million members.
-  max_rows: 10000000
+  # The engine's ceilings (operator, 2026-10-22: "No limit on production").
+  # The 2026 Q2 capture gives 2,184,699 listings (both kinds asked): three
+  # groups of about 1.9 million keys each, under the 10 million ceiling.
+  max_rows: 40000000
   max_input_bytes: 17179869184
-  max_state_bytes: 2147483648
-  max_keys: 8000000
-  max_members: 8000000
-  max_output_rows: 8000000
-  max_output_bytes: 2147483648
+  max_state_bytes: 17179869184
+  max_keys: 10000000
+  max_members: 10000000
+  max_output_rows: 10000000
+  max_output_bytes: 17179869184
   groups:
     line_lines: {source: [answers], table: details, keys: [line_group], mode: count, count: lines, sample: null, sample_limit: 0}
     line_roots: {source: [answers], table: details, keys: [line_group], mode: members, member: root, count: roots, sample: root_sample, sample_limit: 0}

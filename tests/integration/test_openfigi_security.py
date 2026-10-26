@@ -445,6 +445,10 @@ CURRENCY_CASES = {
     "XG": [("BBGZ000CY141", "EXKXYZ", None), ("BBGZ000CY150", "EXKUSD", None)],
     # No exchange code: the lines without one are one group, as measured.
     None: [("BBGZ000CY169", "EXMUSD", "USD"), ("BBGZ000CY178", "EXMEUR", "EUR")],
+    # Two plain lines.
+    "XH": [("BBGZ000CY187", "EXN", None), ("BBGZ000CY196", "EXP", None)],
+    # A plain line that is not the coded lines' root.
+    "XF": [("BBGZ000CY203", "EXQX", None), ("BBGZ000CY212", "EXQUSD", None)],
 }
 
 
@@ -465,3 +469,12 @@ def test_the_currency_table_in_the_reading_is_the_published_code_set():
     codes = {row["code"] for row in map(json.loads, published.read_text().splitlines())}
     embedded = files.source("openfigi")["read"]["references"]["currency"]
     assert {code: row["code"] for code, row in embedded.items()} == {c: c for c in codes} and len(codes) == 80
+
+
+def test_a_listing_detail_row_keeps_every_field_the_source_extract_gives_it():
+    """listing.yaml rebuilds each detail row to add its currency: it keeps every field of
+    source.yaml's `detail`, so a field added there is never dropped on the way to MDM."""
+    given = files.source("openfigi")["read"]["tables"]["details"]["columns"]["detail"]["object"]["fields"]
+    kept = files.load(FOLDER / "listing.yaml")["read"]["tables"]["listings"]["columns"]["detail"]["object"]["fields"]
+    assert set(kept) == set(given) | {"currency"}
+    assert all(kept[name] == {"value": {"path": f"detail.{name}"}} for name in given)

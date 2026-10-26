@@ -108,166 +108,86 @@ read:
     # three-letter currency codes N-PORT holdings file. A test holds this
     # table equal to it.
     currency:
-      AED:
-        code: AED
-      ALL:
-        code: ALL
-      AMD:
-        code: AMD
-      AOA:
-        code: AOA
-      ARS:
-        code: ARS
-      AUD:
-        code: AUD
-      AZN:
-        code: AZN
-      BAM:
-        code: BAM
-      BDT:
-        code: BDT
-      BHD:
-        code: BHD
-      BOB:
-        code: BOB
-      BRL:
-        code: BRL
-      BWP:
-        code: BWP
-      CAD:
-        code: CAD
-      CHF:
-        code: CHF
-      CLP:
-        code: CLP
-      CNY:
-        code: CNY
-      COP:
-        code: COP
-      CRC:
-        code: CRC
-      CZK:
-        code: CZK
-      DKK:
-        code: DKK
-      DOP:
-        code: DOP
-      EGP:
-        code: EGP
-      EUR:
-        code: EUR
-      GBP:
-        code: GBP
-      GEL:
-        code: GEL
-      GHS:
-        code: GHS
-      HKD:
-        code: HKD
-      HUF:
-        code: HUF
-      IDR:
-        code: IDR
-      ILS:
-        code: ILS
-      INR:
-        code: INR
-      ISK:
-        code: ISK
-      JMD:
-        code: JMD
-      JOD:
-        code: JOD
-      JPY:
-        code: JPY
-      KES:
-        code: KES
-      KGS:
-        code: KGS
-      KRW:
-        code: KRW
-      KWD:
-        code: KWD
-      KZT:
-        code: KZT
-      LKR:
-        code: LKR
-      MAD:
-        code: MAD
-      MNT:
-        code: MNT
-      MUR:
-        code: MUR
-      MXN:
-        code: MXN
-      MYR:
-        code: MYR
-      MZN:
-        code: MZN
-      NAD:
-        code: NAD
-      NGN:
-        code: NGN
-      NOK:
-        code: NOK
-      NZD:
-        code: NZD
-      OMR:
-        code: OMR
-      PEN:
-        code: PEN
-      PHP:
-        code: PHP
-      PKR:
-        code: PKR
-      PLN:
-        code: PLN
-      PYG:
-        code: PYG
-      QAR:
-        code: QAR
-      RON:
-        code: RON
-      RSD:
-        code: RSD
-      RUB:
-        code: RUB
-      SAR:
-        code: SAR
-      SEK:
-        code: SEK
-      SGD:
-        code: SGD
-      THB:
-        code: THB
-      TND:
-        code: TND
-      TRY:
-        code: TRY
-      TWD:
-        code: TWD
-      TZS:
-        code: TZS
-      UAH:
-        code: UAH
-      UGX:
-        code: UGX
-      USD:
-        code: USD
-      UYU:
-        code: UYU
-      UZS:
-        code: UZS
-      VND:
-        code: VND
-      XOF:
-        code: XOF
-      ZAR:
-        code: ZAR
-      ZMW:
-        code: ZMW
-      ZWD:
-        code: ZWD
+      AED: {code: AED}
+      ALL: {code: ALL}
+      AMD: {code: AMD}
+      AOA: {code: AOA}
+      ARS: {code: ARS}
+      AUD: {code: AUD}
+      AZN: {code: AZN}
+      BAM: {code: BAM}
+      BDT: {code: BDT}
+      BHD: {code: BHD}
+      BOB: {code: BOB}
+      BRL: {code: BRL}
+      BWP: {code: BWP}
+      CAD: {code: CAD}
+      CHF: {code: CHF}
+      CLP: {code: CLP}
+      CNY: {code: CNY}
+      COP: {code: COP}
+      CRC: {code: CRC}
+      CZK: {code: CZK}
+      DKK: {code: DKK}
+      DOP: {code: DOP}
+      EGP: {code: EGP}
+      EUR: {code: EUR}
+      GBP: {code: GBP}
+      GEL: {code: GEL}
+      GHS: {code: GHS}
+      HKD: {code: HKD}
+      HUF: {code: HUF}
+      IDR: {code: IDR}
+      ILS: {code: ILS}
+      INR: {code: INR}
+      ISK: {code: ISK}
+      JMD: {code: JMD}
+      JOD: {code: JOD}
+      JPY: {code: JPY}
+      KES: {code: KES}
+      KGS: {code: KGS}
+      KRW: {code: KRW}
+      KWD: {code: KWD}
+      KZT: {code: KZT}
+      LKR: {code: LKR}
+      MAD: {code: MAD}
+      MNT: {code: MNT}
+      MUR: {code: MUR}
+      MXN: {code: MXN}
+      MYR: {code: MYR}
+      MZN: {code: MZN}
+      NAD: {code: NAD}
+      NGN: {code: NGN}
+      NOK: {code: NOK}
+      NZD: {code: NZD}
+      OMR: {code: OMR}
+      PEN: {code: PEN}
+      PHP: {code: PHP}
+      PKR: {code: PKR}
+      PLN: {code: PLN}
+      PYG: {code: PYG}
+      QAR: {code: QAR}
+      RON: {code: RON}
+      RSD: {code: RSD}
+      RUB: {code: RUB}
+      SAR: {code: SAR}
+      SEK: {code: SEK}
+      SGD: {code: SGD}
+      THB: {code: THB}
+      TND: {code: TND}
+      TRY: {code: TRY}
+      TWD: {code: TWD}
+      TZS: {code: TZS}
+      UAH: {code: UAH}
+      UGX: {code: UGX}
+      USD: {code: USD}
+      UYU: {code: UYU}
+      UZS: {code: UZS}
+      VND: {code: VND}
+      XOF: {code: XOF}
+      ZAR: {code: ZAR}
+      ZMW: {code: ZMW}
+      ZWD: {code: ZWD}
   lookup_sets:
     asked:
       max_values: 51200
