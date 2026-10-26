@@ -233,6 +233,7 @@ jobs:
     env:
       SKILL_ADAPTER_TEST_ENGINE: ${{ matrix.engine }}
       MDM_WORKFLOW_SHARD: ${{ matrix.group }}
+      PYTEST_DEBUG_TEMPROOT: ${{ runner.temp }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -245,6 +246,14 @@ jobs:
           uv pip install 'PyMySQL[rsa]>=1.1,<2'
       - name: Qualify independently installed normal callers
         run: uv run --no-sync pytest tests/installed_workflow/ -q --tb=short
+      - name: Retain counts and outcomes only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installed-mdm-${{ matrix.engine }}-${{ matrix.group }}
+          path: ${{ runner.temp }}/pytest-of-*/**/installed-workflow-outcome.json
+          retention-days: 7
+          if-no-files-found: warn
       - name: Stop this job's disposable test servers
         if: always()
         run: |

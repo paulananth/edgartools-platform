@@ -90,13 +90,16 @@ def fault(table, *, delay=False):
 if case.startswith("fault_"):
     table = case.removeprefix("fault_")
     before, generation = frame(), api.generation()
-    record = g["record"]("one", revision=2, fields={"invented_value":10**80+3})
+    record = g["record"]("one", revision=2, fields={"invented_value":10**80+3},
+                         details={"invented_rows":[{"key":"invented-detail", "amount":10**80+4}]})
     with fault(table):
         with pytest.raises(Conflict):
             save(assertions=[record])
         assert frame() == before and api.generation() == generation
     assert save(assertions=[record])["generation"] == generation+1
     assert entity()["fields"]["invented_value"]["value"] == 10**80+3
+    assert entity()["details"]["invented_rows"] == [
+        {"key":"invented-detail", "amount":10**80+4, "sources":[g["PRIMARY"]]}]
 elif case == "late_expiry":
     stage = MergeStage(Store(runtime, lease_authority=SimpleNamespace(current=lambda:SimpleNamespace(proof=proof(api, micros=1000000)))))
     before, generation = frame(), api.generation()
@@ -135,8 +138,11 @@ elif case in {"held_transaction", "invalid_wire"}:
             assert refused.value.orig.args[0] == 1568
     else:
         for invalid in ([],{},[{"token":"1"}]):
-            with pytest.raises(DBAPIError), runtime.begin() as conn:
+            with pytest.raises(DBAPIError) as refused, runtime.begin() as conn:
                 conn.execute(text(statement),{"wire":json.dumps({**wire,"authority":invalid})}).all()
+            message = (refused.value.orig.diag.message_primary if owner.dialect.name == "postgresql"
+                       else refused.value.orig.args[1])
+            assert message == "invalid_destination_authority"
     assert frame() == before
 elif case.startswith("upgrade"):
     # Add real waiting reviews through the normal predecessor MergeStage.
@@ -161,6 +167,8 @@ elif case.startswith("upgrade"):
                 migrate(owner,application_role=os.environ["READ_RUNTIME_ROLE"],prepared=True)
         finally:
             event.remove(owner,"before_cursor_execute",interrupted)
+        with pytest.raises((Conflict, module.AdapterError)):
+            MergeStage(Store(runtime)).apply(**g["command"])
         assert frame(names) == before
     migrate(owner,application_role=os.environ["READ_RUNTIME_ROLE"],prepared=True)
     api = module.Adapter(runtime,prefix="mdm_store",protocol=6)

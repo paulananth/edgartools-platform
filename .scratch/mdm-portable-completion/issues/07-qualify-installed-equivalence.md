@@ -80,3 +80,40 @@ current Merge Stage/Store surfaces supports the existing Adapter/facade seam.
 This specification introduces no alternate policy interpreter, store hierarchy
 or test-only writer. Implementation/harness code receives its own consult and
 three-axis review before execution.
+
+## Current qualification checkpoint
+
+Rebased without conflicts onto main through the identifier-list changes in
+#1175–#1177. Five committed packages at 658492dc were independently rebuilt;
+package file-manifest hashes are retained privately. Both configured kinds
+pass 36 targeted boundary cases per engine: 18 upgrade, exact-value, profile,
+identifier-order and authority checks, and 18 durable-group rollback checks.
+These development-harness results are historical until final-revision CI passes.
+PR #1178 owns the complete 160-case matrix per engine. Eight required CI jobs
+retain only per-case counts/outcomes, with private raw diagnostics excluded.
+Skill lessons are separately reviewed in PR #1179; eight affected genericity
+checks pass locally.
+
+### Standards — implementation review
+
+Fresh dedicated branch and overlap guards; tests and CI only, no runtime,
+migration, source or hosted-store changes. Local invocations remain bounded
+below five minutes. Four affected architecture checks pass. Public artifacts
+contain counts and invented test vocabulary. Final CI and complete slot
+accounting remain required.
+
+### Spec — implementation review
+
+The manifest enumerates all 18 families and two configured kinds, including
+normal worker arrival order and separate worker/verifier processes. Both
+engines use the same installed runtime and fixture scenarios. Refusal tests
+accept a valid control first and assert the intended destination error. Every
+case checks the five installed package revisions and runtime import paths.
+Full qualification remains open until every final-revision case passes.
+
+### GoF — implementation review
+
+Available gof-refactor-reviewer applied to the fixture, caller history and
+resulting diff. Retain existing Store/facade/Adapter interfaces and scenario
+functions. The case dispatch is test enumeration; no repeated production
+variation justifies a new class hierarchy or alternate writer.

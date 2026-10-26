@@ -1,6 +1,6 @@
 # Independent installed MDM workflow qualification
 
-Status: preparation started; execution incomplete.
+Status: installed harness implemented in PR #1178; complete execution remains open.
 
 The operator selected this gate through Lavish on 2026-10-23. This matrix
 extends the [caller inventory](caller-inventory.md). It defines 18 proof
@@ -12,7 +12,7 @@ SQL Server retains adapter checks; its full workflow remains later.
 
 - Install all five committed bundle wheels into an isolated environment. Run
   Python with `-I` from outside the checkout. Check imported module locations
-  and installed revision before opening a target. Record commit, wheel hashes,
+  and installed revision before opening a target. Record commit, installed package file-manifest hashes,
   migration/catalog pins and configured policy/contract fingerprints privately;
   publish revision, counts, outcome and elapsed ET time only.
 - Use the same immutable invented fixture/configuration on both engines. Cover
@@ -50,7 +50,8 @@ SQL Server retains adapter checks; its full workflow remains later.
 
 Paths under `clean/` are relative to `edgar_warehouse/mdm/`; other paths are
 relative to `edgar_warehouse/`. These are existing caller surfaces, not new
-procedures. Some remain PostgreSQL-specific until their owning tickets land.
+procedures. The prerequisite normal-save, reader and worker implementations are merged;
+this ticket qualifies their complete installed path.
 
 ## Caller and outcome matrix
 
@@ -79,23 +80,33 @@ Each family expands into named manifest cases before its execution. Record a
 case per affected configured source/kind, arrival order, temporal boundary and
 fault location; a single family success flag is insufficient evidence.
 
-## Remaining execution dependencies
+## Execution state
 
-Normal governed storage is merged (#1152/#1153). Read-phase implementation and
-skill learning are in #1156/#1155. Its independent installed smoke proves that
-read API and native index preparation only.
+Normal governed storage (#1152/#1153), authoritative saves (#1159), public
+readers (#1164/#1165) and worker recovery (#1171/#1173) are merged. The
+qualification branch rebased onto the newer identifier-list changes through
+#1177; results from its earlier installed build remain historical evidence.
 
-The current default MySQL Store still refuses normal writes. Ticket 04 must
-connect authoritative atomic save, ticket 05 the public/operator readers and
-real master links, and ticket 06 the normal worker/authority/publication path.
-Their qualification gates remain intact. The installed workflow harness must
-call those normal operations after they exist; this matrix does not invent a
-new command or bypass the gate.
+The harness enumerates every case in `tests/installed_workflow/test_mdm_workflow.py`.
+Each case runs with both invented kinds on PostgreSQL and MySQL. Four required
+CI groups per engine partition the matrix without omitting a surface. Independent
+worker/verifier processes run in the workers group. Tests check all five package
+revisions and all runtime/native imports against the committed installation.
+Full completion requires all cases on the final revision, final CI and cleanup.
 
 ## Evidence record
 
 For each case: target engine, immutable configuration pin, installed revision,
 normal entry point, expected outcome, actual counts/outcome, elapsed time,
 private evidence location and resource-cleanup outcome. Use explicit
-`not_run`, `failed` or `passed` states. This preparation records no new passing
-workflow cases.
+`not_run`, `failed` or `passed` states. Historical targeted boundary results do not close final-revision slots;
+final case counts and failures are recorded below after execution.
+
+## Development checkpoint
+
+At 2026-10-26 06:26 ET, the isolated five-package build at 658492dc passes
+36 targeted cases on each engine across both invented kinds. All nine durable
+groups reject injected writes atomically and accept the same request after
+fault removal. The remaining complete installed matrix is 160 cases per engine
+(54 merge, 52 readers/links/search, 36 boundaries, 18 workers). PR #1178 retains
+per-case outcome artifacts; only final-revision results close the 36 slots.

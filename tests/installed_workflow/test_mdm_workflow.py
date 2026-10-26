@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 # just a family-level success flag. Ordinary saves seed only through MergeStage.
 CASES = {
     "merge": {
-        "join": ["Q02", "Q04"], "issuer_only": ["Q04"], "newest": ["Q04"],
+        "join": ["Q02", "Q04"], "list_join": ["Q04"], "issuer_only": ["Q04"], "newest": ["Q04"],
         "corrected": ["Q06", "Q09"], "released": ["Q09"], "quarantine": ["Q09"],
         "lifted": ["Q09"], "retired": ["Q09"], "assessment": ["Q11"],
         "stale_assessment": ["Q11"], "preview": ["Q12"], "collision": ["Q12"],
@@ -167,8 +167,12 @@ def test_installed_separate_workers(kind, proof_install, database_factory, confi
     from tests.storage_adapters.test_installed_worker import test_installed_worker_recovery
 
     python, root, _ = proof_install
+    started = time.monotonic()
     test_installed_worker_recovery(kind, (python, root), database_factory, configured_root)
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     (configured_root / "installed-workflow-outcome.json").write_text(json.dumps({
         "case":"separate-worker-processes", "kind":kind, "revision":revision,
-        "families":["Q01","Q04","Q15","Q16"], "installed":True, "passed":True}))
+        "families":["Q01","Q04","Q15","Q16"], "installed":True, "passed":True,
+        "engine":os.environ["SKILL_ADAPTER_TEST_ENGINE"], "cleanup_verified":True,
+        "elapsed_seconds":round(time.monotonic()-started,3),
+        "configuration_sha256":hashlib.sha256((configured_root / "mastering/engine-v1.yaml").read_bytes()).hexdigest()}))
