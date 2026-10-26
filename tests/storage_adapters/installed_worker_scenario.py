@@ -45,7 +45,7 @@ for database in (owner,jowner):
                 conn.exec_driver_sql(f"GRANT USAGE ON SCHEMA {quote(schema)} TO {quote(reader_role)}")
                 conn.exec_driver_sql(f"GRANT SELECT ON ALL TABLES IN SCHEMA {quote(schema)} TO {quote(reader_role)}")
         else:
-            conn.exec_driver_sql(f"GRANT SELECT ON {quote(database.url.database)}.* TO '{reader_role}'@'%'")
+            conn.execute(text(f"GRANT SELECT ON {quote(database.url.database)}.* TO '{reader_role}'@'%'"))
 api = storage_adapter().Adapter(runtime,prefix="mdm_store",protocol=6)
 primary,secondary = SPEC["sources"]
 rule = {"rule_id":"invented-bind","version":"1","family":"binding",
