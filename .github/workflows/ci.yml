@@ -233,7 +233,6 @@ jobs:
     env:
       SKILL_ADAPTER_TEST_ENGINE: ${{ matrix.engine }}
       MDM_WORKFLOW_SHARD: ${{ matrix.group }}
-      PYTEST_DEBUG_TEMPROOT: ${{ runner.temp }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -245,6 +244,8 @@ jobs:
           uv sync --frozen --extra mdm --extra mdm-runtime
           uv pip install 'PyMySQL[rsa]>=1.1,<2'
       - name: Qualify independently installed normal callers
+        env:
+          PYTEST_DEBUG_TEMPROOT: ${{ runner.temp }}
         run: uv run --no-sync pytest tests/installed_workflow/ -q --tb=short
       - name: Retain counts and outcomes only
         if: always()

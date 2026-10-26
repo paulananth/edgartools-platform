@@ -30,4 +30,7 @@ def test_installed_workflow_matrix_has_no_missing_family_or_unrun_surface():
     job = ci["installed-workflow"]
     assert set(job["strategy"]["matrix"]["group"]) == set(groups)
     assert job["env"]["MDM_WORKFLOW_SHARD"] == "${{ matrix.group }}"
+    assert "PYTEST_DEBUG_TEMPROOT" not in job["env"], "runner context belongs to the test step"
+    step = next(step for step in job["steps"] if step.get("name") == "Qualify independently installed normal callers")
+    assert step["env"]["PYTEST_DEBUG_TEMPROOT"] == "${{ runner.temp }}"
     assert "installed-workflow" in ci["ci-gate"]["needs"]
