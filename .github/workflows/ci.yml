@@ -221,10 +221,37 @@ jobs:
           docker ps -aq --filter 'name=skill-adapter-proof-' | xargs -r docker stop --time 5
 
   # ── Gate: all checks must pass before merge ────────────────────────────────
+  installed-workflow:
+    name: Installed MDM workflow (${{ matrix.engine }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [postgresql, mysql]
+    env:
+      SKILL_ADAPTER_TEST_ENGINE: ${{ matrix.engine }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v4
+      - name: Install shared engine and selected database clients
+        run: |
+          uv sync --frozen --extra mdm --extra mdm-runtime
+          uv pip install 'PyMySQL[rsa]>=1.1,<2'
+      - name: Qualify independently installed normal callers
+        run: uv run --no-sync pytest tests/installed_workflow/ -q --tb=short
+      - name: Stop this job's disposable test servers
+        if: always()
+        run: |
+          docker ps -aq --filter 'name=skill-adapter-proof-' | xargs -r docker stop --time 5
+
   ci-gate:
     name: CI gate
     if: always()
-    needs: [unit, mdm, integration, engine, shellcheck, storage-adapters, reference-storage, silver-storage]
+    needs: [unit, mdm, integration, engine, shellcheck, storage-adapters, reference-storage, silver-storage, installed-workflow]
     runs-on: ubuntu-latest
     steps:
       - name: Check all jobs passed
@@ -238,6 +265,7 @@ jobs:
             "${{ needs.storage-adapters.result }}" \
             "${{ needs.reference-storage.result }}" \
             "${{ needs.silver-storage.result }}" \
+            "${{ needs.installed-workflow.result }}" \
           )
           for r in "${results[@]}"; do
             if [[ "$r" != "success" ]]; then

@@ -3,9 +3,9 @@
 Type: task
 Status: claimed
 Assignee: Codex
-Claimed: 2026-10-23 20:37 ET
+Claimed: 2026-10-25 22:43 ET; resumed by Codex on a fresh main worktree
 Parent: [Complete portable MDM and retire PostgreSQL business logic](../map.md)
-Blocked by: 05, 06
+Blocked by: none; reader #1164/#1165 and worker #1171/#1173 implementations and guidance merged
 
 ## Question
 
@@ -19,6 +19,8 @@ Does the independently installed normal workflow prove equivalent complete behav
 - [ ] Cover invented vocabulary, identity uniqueness, held-back records, relationships, history/details, concurrency, stale work, interruption, recovery, populated upgrades and unchanged replay.
 - [ ] Record counts and outcomes tied to the tested revision; run affected tests only, below the local five-minute cap per run; retain SQL Server adapter checks without claiming full qualification.
 - [ ] Review Standards, Spec and GoF and resolve material findings; ensure the tested code is the installed code.
+- [ ] Expand installed cases for populated upgrade, every durable-effect rollback boundary, exact values and field/profile/kind transitions; retain explicit failures for unsupported behavior.
+- [ ] Freeze per-case results and all 18 family outcomes on both engines; qualify final CI and update the diagram without implying source activation.
 - [ ] Learning → skill: update its owning skill on a separate branch/PR, or record none.
 
 ## Acceptance evidence
@@ -46,6 +48,16 @@ against the caller inventory and current definitions; the execution parts
 remain unchecked.
 
 ## Preparation review
+
+Resumed from merged main 36e6008d in `codex/mdm-full-workflow-proof-20261025`,
+preserving the earlier matrix commit. The available GoF reviewer and the
+histories of the installed worker and bundle fixtures support retaining the
+existing facade and normal scenarios. The new harness copies test scaffolding
+outside the checkout and uses isolated Python; every runtime/native import and
+all five wheel revisions must resolve to the independently installed bundle.
+No alternate merge or owner-seeded identity path is introduced. Installed
+qualification gets its own bounded PostgreSQL/MySQL CI jobs, preserving the
+existing storage suites and their budgets.
 
 ### Standards
 
