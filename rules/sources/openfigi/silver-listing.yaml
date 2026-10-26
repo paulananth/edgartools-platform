@@ -14,9 +14,8 @@
 # Profiling found every listing with a ticker and a market sector, so both are
 # never empty: a delivery without one is refused, not landed.
 # Rows are the source extract's `listings` table, with OpenFIGI's own field
-# names, without `figi_ticker` (a helper for reduce.yaml). An identifier is a
-# CUSIP or an ISIN, so each row fills one MDM id: the one whose Dataset
-# Contract staged that identifier.
+# names, without `figi_ticker` (a helper for reduce.yaml). Each row carries
+# the master id of the Security its identifier asked joined.
 # Append only: a refresh asks only identifiers not yet captured (operator,
 # 2026-10-15: "Open figi rarely changes do not download again"), so a
 # delivered row that changes a landed one is refused, never overwritten.
@@ -93,21 +92,16 @@ columns:
 key:
 - id
 - figi
+# One MDM id (ticket 138; operator, 2026-10-25: "master_id only"): the
+# Security the identifier asked joined, through the one OpenFIGI contract.
 links:
 - columns:
   - id
   kind: security
-  source_code: openfigi.security.v1
+  source_code: openfigi.security.v3
   to_part: security
   source_key: id
-  mdm_id_column: security_mdm_id_by_cusip
-- columns:
-  - id
-  kind: security
-  source_code: openfigi.security_isin.v2
-  to_part: security
-  source_key: id
-  mdm_id_column: security_mdm_id_by_isin
+  mdm_id_column: security_mdm_id
 time:
   as_of: null
   as_at: loaded_at

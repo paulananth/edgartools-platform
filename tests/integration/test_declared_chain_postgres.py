@@ -24,7 +24,7 @@ from tests.support.bookkeeping_protocol import drive
 from tests.support.memory_journal import MemoryJournal
 
 WORKERS = {"source.read": source_read, "source.combine": source_combine, "mdm.prepare": mdm_prepare}
-TARGET = "mastering_cusip"
+TARGET = "mastering"
 
 
 def declared(monkeypatch, groups=3, target=TARGET):
@@ -38,19 +38,23 @@ def declared(monkeypatch, groups=3, target=TARGET):
     return body
 
 
-def capture(root, rewrite=True, word="cusip"):
-    """One kind's invented files, each answer's receipt naming its request's sha256 (`rewrite=False`:
-    the receipts only, for the files as they are)."""
-    kind = figi.KINDS[word][0]
-    names = figi.capture(root, word) if rewrite else sorted(
-        p.name for p in (root / kind).glob("*.json") if not p.name.endswith(".request.json"))
+def capture(root, rewrite=True, words=("cusip", "isin")):
+    """The invented files of each kind, each answer's receipt naming its request's sha256
+    (`rewrite=False`: the receipts only, for the files as they are)."""
+    keys = []
+    root.mkdir(parents=True, exist_ok=True)
     with (root / "receipts.jsonl").open("w") as out:
-        for name in names:
-            answer, request = root / kind / name, root / kind / name.replace(".json", ".request.json")
-            out.write(json.dumps({"file": f"{kind}/{name}", "sha256": hashlib.sha256(answer.read_bytes()).hexdigest(),
-                                  "bytes": answer.stat().st_size, "status": 200,
-                                  "request_sha256": hashlib.sha256(request.read_bytes()).hexdigest()}) + "\n")
-    return [f"{kind}/{name}" for name in names]
+        for word in words:
+            kind = figi.KINDS[word][0]
+            names = figi.capture(root, word) if rewrite else sorted(
+                p.name for p in (root / kind).glob("*.json") if not p.name.endswith(".request.json"))
+            for name in names:
+                answer, request = root / kind / name, root / kind / name.replace(".json", ".request.json")
+                out.write(json.dumps({"file": f"{kind}/{name}", "sha256": hashlib.sha256(answer.read_bytes()).hexdigest(),
+                                      "bytes": answer.stat().st_size, "status": 200,
+                                      "request_sha256": hashlib.sha256(request.read_bytes()).hexdigest()}) + "\n")
+                keys.append(f"{kind}/{name}")
+    return keys
 
 
 def comparable(record):
@@ -61,16 +65,15 @@ def comparable(record):
                                                                        "consumer", "publication"))}}
 
 
-STEPS = {"requests": 8, "answers": 3, "reduce": 1, "combine": 1, "record": 1, "prepare": 1, "merge": 1, "processed": 1}
-# Ticket 120, OpenFIGI first: the CUSIP target also writes `figi_ids`; the ISIN target reads every
-# complete CUSIP run's `figi_ids` (`figi_cusips`) and puts each ISIN's CUSIPs on its row (`attach`).
-EXTRA = {"mastering_cusip": {"figi_ids": 1}, "mastering_isin": {"figi_cusips": 1, "attach": 1}}
+# One target over both kinds asked (ticket 138): 8 CUSIP and 8 ISIN request files, their 16
+# answers in groups of 3, then one reduce, combine, record and prepare; no step pairs them.
+STEPS = {"requests": 16, "answers": 6, "reduce": 1, "combine": 1, "record": 1, "prepare": 1, "merge": 1, "processed": 1}
 
 
-def run_target(databases, tmp_path, body, word, target):
-    """Write `target`'s manifest over one kind's invented files and drive it to complete in
-    Bookkeeping under the source's own name (another run reads it by that name), without MDM."""
-    keys = capture(tmp_path / "capture", word=word)
+def run_target(databases, tmp_path, body, target=TARGET):
+    """Write `target`'s manifest over both kinds' invented files and drive it to complete in
+    Bookkeeping under the source's own name, without MDM."""
+    keys = capture(tmp_path / "capture")
     listed = tmp_path / "documents.json"
     listed.write_text(json.dumps(keys))
     book = Bookkeeping(databases.runtime)
@@ -84,7 +87,7 @@ def run_target(databases, tmp_path, body, word, target):
     declared_target["steps"] = declared_target["steps"][:-2]  # no MDM here: the merge and the journal are Person's tests'
     rules_body = {"source": "openfigi", "bookkeeping": {"version": 2, "targets": {target: declared_target}}}
     steps = book.artifacts.json(report["manifest"])["steps"]
-    assert {step: len(units) for step, units in steps.items()} == STEPS | EXTRA[target]
+    assert {step: len(units) for step, units in steps.items()} == STEPS
     del steps["merge"], steps["processed"]
     manifest = book.artifacts.put(tmp_path.as_uri() + "/submitted", {"version": 2, "steps": steps})
     version = uuid4().hex
@@ -99,27 +102,20 @@ def run_target(databases, tmp_path, body, word, target):
     return state, book
 
 
-@pytest.mark.parametrize("word, target, found_count, refused_count", [
-    ("cusip", "mastering_cusip", 5, 8), ("isin", "mastering_isin", 3, 8)])
-def test_the_declared_chain_gives_the_hand_built_chains_records(databases, tmp_path, monkeypatch, word, target,
-                                                                found_count, refused_count):
-    by_hand, refused_by_hand = figi.prepared_records(tmp_path / "hand", word)
-    body = declared(monkeypatch, target=target)
-    if word == "isin":
-        # The CUSIP target completes first, as the source sequence orders it.
-        declared(monkeypatch, target="mastering_cusip")
-        run_target(databases, tmp_path / "cusip", files.source("openfigi"), "cusip", "mastering_cusip")
-    code = figi.KINDS[word][2]
-    state, book = run_target(databases, tmp_path, body, word, target)
+def test_the_declared_chain_gives_the_hand_built_chains_records(databases, tmp_path, monkeypatch):
+    by_hand, refused_by_hand = figi.prepared_records(tmp_path / "hand")
+    body = declared(monkeypatch)
+    state, book = run_target(databases, tmp_path, body)
 
     prepared = tmp_path / "bundle" / "prepare" / "manifest.json"
     refused: dict[str, str] = {}
     found = chain.records(book.artifacts, tmp_path / "bundle" / "prepare",
                           {"uri": prepared.as_uri(), "sha256": hashlib.sha256(prepared.read_bytes()).hexdigest()},
-                          code, body["mdm"][code]["contract"], refused=refused, key="id")
+                          figi.CODE, body["mdm"][figi.CODE]["contract"], refused=refused, key="id")
     assert {r["provenance"]["record_key"]: comparable(r) for r in found} == {
         r["provenance"]["record_key"]: comparable(r) for r in by_hand}
     assert refused == refused_by_hand
-    assert len(found) == len(by_hand) == found_count and len(refused) == refused_count
-    # 8 requests, 3 answers groups, reduce, combine, record, prepare, and the target's own steps above.
-    assert state["counts"] == {"verified": 15 + sum(EXTRA[target].values())}
+    # 5 CUSIP and 4 ISIN answers found; 8 not found of each kind, and BROKEN's bad FIGI.
+    assert len(found) == len(by_hand) == 9 and len(refused) == 16
+    # 16 requests, 6 answers groups, reduce, combine, record, prepare.
+    assert state["counts"] == {"verified": 26}

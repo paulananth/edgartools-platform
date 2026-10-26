@@ -1,22 +1,22 @@
-"""Real PG16: OpenFIGI answers join the Securities they were asked for (ticket 80).
+"""Real PG16: OpenFIGI answers master the Securities, in one load (ticket 138).
 
 Invented answer files through the real chain (requests.yaml, the streamed
-answers reading, reduce.yaml, combine.yaml, record.yaml,
-mdm.prepare and the CUSIP and ISIN Dataset Contracts), then the Merge Stage beside a
-13F Security:
+answers reading over both folders, reduce.yaml, combine.yaml, record.yaml,
+mdm.prepare and the one Dataset Contract), then the Merge Stage:
 - an equity keeps its one share class, and its US composite with that
   composite's ticker, never another country's; two US composites give
   neither; a single listing that is its own US composite gives both FIGIs;
-- a bond's only listing gives its FIGI and its ticker, spaces kept;
+- a record carries the identifier asked, CUSIP or ISIN, and every listing's
+  FIGI, each an identifier; a FIGI failing its check sets the record aside;
 - an identifier OpenFIGI did not find is set aside (`not_found_by_openfigi`);
-- a record joins the Security that holds its CUSIP, or creates one (ticket 120,
-  OpenFIGI first; it replaced "OpenFIGI never creates a Security"); an ISIN
-  answer carries the one CUSIP sharing a listing FIGI with it and joins that
-  Security, and one sharing FIGIs with two CUSIPs is set aside;
-- every listing lands in silver (`silver-listing.yaml`) with the MDM id of
+- a record joins the Security holding any of its identifiers, or creates
+  one: a CUSIP answer and an ISIN answer sharing a listing FIGI make one
+  Security, whichever comes first; an ISIN answer whose FIGIs lead to two
+  Securities waits for review until ticket 138's merge part;
+- every listing lands in silver (`silver-listing.yaml`) with the master id of
   the Security its identifier joined, or none while it waits.
-OpenFIGI first's three rules are switched on in a copy of the repo's policy.
-Invented values only.
+OpenFIGI's three rules are switched on in a copy of the repo's policy, its
+FIGI contract given a fixture verification there. Invented values only.
 """
 
 from __future__ import annotations
@@ -43,17 +43,19 @@ from tests.support import source_chain as chain
 from tests.support.rules_authority import register_dataset
 
 FOLDER = files.ROOT / "sources" / "openfigi"
-CODE, ISIN_CODE = "openfigi.security.v1", "openfigi.security_isin.v2"
+CODE = "openfigi.security.v3"
 THIRTEENF = "sec.thirteenf.information_table.security.v1"
 NPORT_ISIN = "sec.nport.security.v2"  # its ISIN-only Securities (ticket 120: one Dataset Contract)
 # Invented CUSIPs and ISINs, check digits valid.
 EQUITY, BOND, MISSING, UNHELD, SOLE, DOUBLE = "ZZ0000013", "ZZ0000021", "ZZ0000039", "ZZ0000047", "ZZ0000120", "ZZ0000138"
+# An answer one of whose listings gives a FIGI failing its check digit.
+BROKEN = "ZZ0000146"
 # More asked and never found, one to a file, so each of the 8 readings has a file.
 OTHERS = ["ZZ0000054", "ZZ0000062", "ZZ0000070", "ZZ0000088", "ZZ0000096", "ZZ0000104", "ZZ0000112"]
 # A Japanese ISIN with no US listing: its Japanese composite is its primary listing (ticket 120).
 HOME = "JP0000000091"
-# Ticket 120, OpenFIGI first: an ISIN sharing a listing FIGI with one CUSIP answer (EQUITY's US
-# composite) carries that CUSIP; one sharing FIGIs with two (SOLE's and DOUBLE's) is set aside.
+# An ISIN sharing a listing FIGI with one CUSIP answer (EQUITY's US composite) is that
+# Security; one sharing FIGIs with two (SOLE's and DOUBLE's) leads to two (ticket 138).
 SHARED, TWICE = "ZZ0000000099", "ZZ0000000107"
 ISIN, ISIN_OTHERS = "ZZ0000000016", ["ZZ0000000024", "ZZ0000000032", "ZZ0000000040", "ZZ0000000057",
                                       "ZZ0000000065", "ZZ0000000073", "ZZ0000000081"]
@@ -67,40 +69,42 @@ def listing(figi, ticker, exchange, composite, share_class, sector="Equity", nam
 
 
 NOT_FOUND = {"warning": "No identifier found."}
-# Invented FIGIs, named for what they stand for, not valid FIGIs: most hold a vowel or a
-# wrong check digit, so silver flags them `figi_valid`. Only the rows asserted below matter.
+# Invented FIGIs with valid check digits (each is an identifier, ticket 138), named for
+# what they stand for; BROKEN's second is the one that fails.
 ANSWERS = {
     # A US composite and a German one, one share class: the US composite and its ticker only.
-    EQUITY: {"data": [listing("BBGZZ0000US1", "EXA", "US", "BBGZZ0000US1", "BBGZZ00000SC"),
-                      listing("BBGZZ0000UN1", "EXA", "UN", "BBGZZ0000US1", "BBGZZ00000SC"),
-                      listing("BBGZZ0000GR1", "EXB", "GR", "BBGZZ0000GR1", "BBGZZ00000SC"),
-                      listing("BBGZZ0000GY1", "EXB", "GY", "BBGZZ0000GR1", "BBGZZ00000SC")]},
-    BOND: {"data": [listing("BBGZZ000BND6", "EXA 5 01/01/30", "NOT LISTED", None, None, sector="Corp")]},
+    EQUITY: {"data": [listing("BBGZ0000VS14", "EXA", "US", "BBGZ0000VS14", "BBGZ00000SC6"),
+                      listing("BBGZ0000VN15", "EXA", "UN", "BBGZ0000VS14", "BBGZ00000SC6"),
+                      listing("BBGZ0000GR13", "EXB", "GR", "BBGZ0000GR13", "BBGZ00000SC6"),
+                      listing("BBGZ0000GY18", "EXB", "GY", "BBGZ0000GR13", "BBGZ00000SC6")]},
+    BOND: {"data": [listing("BBGZ000BND67", "EXA 5 01/01/30", "NOT LISTED", None, None, sector="Corp")]},
     MISSING: NOT_FOUND,
     # A listing that states no name gives the record none (ticket 84).
-    UNHELD: {"data": [listing("BBGZZ000BND2", "EXC 4 01/01/31", "NOT LISTED", None, None, sector="Corp", name=None)]},
+    UNHELD: {"data": [listing("BBGZ000BND21", "EXC 4 01/01/31", "NOT LISTED", None, None, sector="Corp", name=None)]},
     # One listing that is its own US composite: its FIGI as both, one ticker.
-    SOLE: {"data": [listing("BBGZZ0000US2", "EXD", "US", "BBGZZ0000US2", "BBGZZ0000SC2")]},
+    SOLE: {"data": [listing("BBGZ0000VS23", "EXD", "US", "BBGZ0000VS23", "BBGZ0000SC22")]},
     # Two US composites (two share classes too): no composite and no ticker.
-    DOUBLE: {"data": [listing("BBGZZ0000US3", "EXE", "US", "BBGZZ0000US3", "BBGZZ0000SC3"),
-                      listing("BBGZZ0000US4", "EXF", "US", "BBGZZ0000US4", "BBGZZ0000SC4", name="OTHER CORP")]},
-    ISIN: {"data": [listing("BBGZZ0000US5", "EXG", "US", "BBGZZ0000US5", "BBGZZ0000SC5"),
-                    listing("BBGZZ0000LN5", "EXG", "LN", "BBGZZ0000LN5", "BBGZZ0000SC5")]},
+    DOUBLE: {"data": [listing("BBGZ0000VS32", "EXE", "US", "BBGZ0000VS32", "BBGZ0000SC31"),
+                      listing("BBGZ0000VS41", "EXF", "US", "BBGZ0000VS41", "BBGZ0000SC40", name="OTHER CORP")]},
+    ISIN: {"data": [listing("BBGZ0000VS50", "EXG", "US", "BBGZ0000VS50", "BBGZ0000SC59"),
+                    listing("BBGZ0000LN52", "EXG", "LN", "BBGZ0000LN52", "BBGZ0000SC59")]},
     # Its Japanese and German composites state different names: Japan's, from its ISIN, is primary.
-    HOME: {"data": [listing("BBGZZ0000JP6", "EXH", "JP", "BBGZZ0000JP6", "BBGZZ0000SC6", name="HOME CORP"),
-                    listing("BBGZZ0000GR6", "EXI", "GR", "BBGZZ0000GR6", "BBGZZ0000SC6", name="OTHER CORP")]},
-    SHARED: {"data": [listing("BBGZZ0000US1", "EXA", "US", "BBGZZ0000US1", "BBGZZ00000SC"),
-                      listing("BBGZZ0000LN9", "EXA", "LN", "BBGZZ0000LN9", "BBGZZ00000SC")]},
-    TWICE: {"data": [listing("BBGZZ0000US2", "EXD", "US", "BBGZZ0000US2", "BBGZZ0000SC2"),
-                     listing("BBGZZ0000US3", "EXE", "US", "BBGZZ0000US3", "BBGZZ0000SC3")]},
+    HOME: {"data": [listing("BBGZ0000JP69", "EXH", "JP", "BBGZ0000JP69", "BBGZ0000SC68", name="HOME CORP"),
+                    listing("BBGZ0000GR68", "EXI", "GR", "BBGZ0000GR68", "BBGZ0000SC68", name="OTHER CORP")]},
+    SHARED: {"data": [listing("BBGZ0000VS14", "EXA", "US", "BBGZ0000VS14", "BBGZ00000SC6"),
+                      listing("BBGZ0000LN98", "EXA", "LN", "BBGZ0000LN98", "BBGZ00000SC6")]},
+    TWICE: {"data": [listing("BBGZ0000VS23", "EXD", "US", "BBGZ0000VS23", "BBGZ0000SC22"),
+                     listing("BBGZ0000VS32", "EXE", "US", "BBGZ0000VS32", "BBGZ0000SC31")]},
+    BROKEN: {"data": [listing("BBGZ0000BK13", "EXJ", "US", "BBGZ0000BK13", None),
+                      listing("BBGZZ0000US1", "EXJ", "UN", "BBGZ0000BK13", None)]},
 }
-KINDS = {"cusip": ("id_cusip", [[EQUITY, BOND, MISSING, UNHELD, SOLE, DOUBLE], *[[o] for o in OTHERS]], CODE),
-         "isin": ("id_isin", [[ISIN, HOME, SHARED, TWICE], *[[o] for o in ISIN_OTHERS]], ISIN_CODE)}
+KINDS = {"cusip": ("id_cusip", [[EQUITY, BOND, MISSING, UNHELD, SOLE, DOUBLE, BROKEN], *[[o] for o in OTHERS]]),
+         "isin": ("id_isin", [[ISIN, HOME, SHARED, TWICE], *[[o] for o in ISIN_OTHERS]])}
 
 
 def capture(root: Path, word: str) -> list[str]:
     """Eight request and answer files of one kind, as OpenFIGI's mapping takes and gives them."""
-    kind, jobs, _ = KINDS[word]
+    kind, jobs = KINDS[word]
     (root / kind).mkdir(parents=True, exist_ok=True)
     names = []
     for number, asked in enumerate(jobs):
@@ -115,7 +119,7 @@ def capture(root: Path, word: str) -> list[str]:
 def answer_readings(store: Artifacts, root: Path, word: str) -> list[str]:
     """One kind's eight answers readings (requests.yaml, then the streamed answers reading)."""
     capture_root = root / "capture"
-    kind, _, _ = KINDS[word]
+    kind, _ = KINDS[word]
     name_list = capture(capture_root, word)
 
     def ref(path: Path) -> dict:
@@ -138,18 +142,17 @@ def answer_readings(store: Artifacts, root: Path, word: str) -> list[str]:
             "max_input_bytes": 1 << 20, "max_input_rows": 1000}}})
         readings.append(chain.read(store, where / "answers", answers_body, [{
             "input": ref(answer), "lookups": lookups,
-            "context": context(where / "an", answer, {"batch": batch, "id_type": word})}], 3))
+            "context": context(where / "an", answer, {"batch": batch, "id_type": kind})}], 3))
     return readings
 
 
-def prepared_records(root: Path, word: str = "cusip", listings: list | None = None) -> tuple[list[dict], dict[str, str]]:
-    """One kind's records (`cusip` or `isin`), and each refused identifier with its reason;
-    `listings`, when given, also gets every listing row of the source extract. The ISIN
-    target's records come through its OpenFIGI-first steps (ticket 120): the CUSIP answers'
-    `figi_ids`, then `figi_cusips` and `attach`."""
+def prepared_records(root: Path, words: tuple[str, ...] = ("cusip", "isin"),
+                     listings: list | None = None) -> tuple[list[dict], dict[str, str]]:
+    """The records of one run over the answers of `words` (both kinds by
+    default, ticket 138), and each refused identifier with its reason;
+    `listings`, when given, also gets every listing row of the source extract."""
     store = Artifacts()
-    _, _, code = KINDS[word]
-    readings = answer_readings(store, root, word)
+    readings = [reading for word in words for reading in answer_readings(store, root / word, word)]
     if listings is not None:
         for reading in readings:
             for artifact in store.json(reading)["artifacts"]:
@@ -157,13 +160,6 @@ def prepared_records(root: Path, word: str = "cusip", listings: list | None = No
                     listings += store.json(part["receipt"])["tables"]["listings"]
     counts = chain.combine(store, root / "reduce", FOLDER / "reduce.yaml", {"answers": readings})
     combined = chain.combine(store, root / "combine", FOLDER / "combine.yaml", {"counts": counts, "answers": readings})
-    if word == "isin":
-        figi_ids = chain.combine(store, root / "figi_ids", FOLDER / "figi-ids.yaml",
-                                 {"answers": answer_readings(store, root, "cusip")})
-        rows = chain.combine(store, root / "figi_cusips", FOLDER / "isin-figi-cusips.yaml",
-                             {"answers": readings, "cusips": figi_ids})
-        combined = chain.combine(store, root / "attach", FOLDER / "isin-attach.yaml",
-                                 {"security": combined, "rows": rows})
     piece_root = root / "record"
     piece_root.mkdir(parents=True, exist_ok=True)
     pieces = [store.put(piece_root.as_uri(), {"tables": a["tables"]}) for a in store.json(combined)["artifacts"]]
@@ -171,194 +167,206 @@ def prepared_records(root: Path, word: str = "cusip", listings: list | None = No
         {"input": p, "context": store.put(piece_root.as_uri(), {"version": 1, "input": p, "values": {}})}
         for p in pieces], 2)
     prepared = chain.prepare(store, root / "mdm", records, {
-        "table": "security", "record_column": "record", "dataset": code, "policy": "0" * 64,
+        "table": "security", "record_column": "record", "dataset": CODE, "policy": "0" * 64,
         "consumer": "check", "batch_id": "check-openfigi", "as_of": "2026-10-17T00:00:00+00:00"})
     refused: dict[str, str] = {}
-    out = chain.records(store, root / "mdm", prepared, code, files.source("openfigi")["mdm"][code]["contract"],
+    out = chain.records(store, root / "mdm", prepared, CODE, files.source("openfigi")["mdm"][CODE]["contract"],
                         refused=refused, key="id")
     return out, refused
 
 
-OPENFIGI_FIRST = ("openfigi-security-cusip", "openfigi-isin-security-cusip", "openfigi-security-isin")
+OPENFIGI = ("openfigi-security-cusip", "openfigi-security-isin", "openfigi-security-figi")
 
 
 def policy_body() -> dict:
-    """The repo's policy with OpenFIGI first's three rules switched on, in this copy only
-    (a Proving Run activation, ticket 120): they wait for the operator's switch-on."""
+    """The repo's policy with OpenFIGI's three rules switched on, in this copy only (a
+    Proving Run activation): they, and the FIGI contract's verification, wait for the
+    operator's switch-on."""
     body = copy.deepcopy(files.policy())
-    rules = {r["rule_id"]: r for r in body["kinds"]["security"]["rules"]}
-    body["automatic_rules"] = [a for a in body["automatic_rules"] if a["rule_id"] not in OPENFIGI_FIRST] + [
+    block = body["kinds"]["security"]
+    block["identifiers"]["figi"]["verification"] = {
+        "corpus_sha256": "f" * 64, "approved_by": "fixture", "approved_at": "2026-10-25T00:00:00Z",
+        "reason": "fixture verification: shape only, not a measurement"}
+    rules = {r["rule_id"]: r for r in block["rules"]}
+    body["automatic_rules"] = [a for a in body["automatic_rules"] if a["rule_id"] not in OPENFIGI] + [
         {"kind": "security", "family": "binding", "rule_id": rule_id, "rule_version": rules[rule_id]["version"],
-         "verdict": "bind", "activation": "deterministic"} for rule_id in OPENFIGI_FIRST]
+         "verdict": "bind", "activation": "deterministic"} for rule_id in OPENFIGI]
     return body
 
 
+def figis(word: str) -> list[str]:
+    return sorted({row["figi"] for row in ANSWERS[word]["data"]})
+
+
 def test_each_identifier_carries_only_its_single_levels(tmp_path):
-    records, refused = prepared_records(tmp_path)
+    records, refused = prepared_records(tmp_path, ("cusip",))
     found = {r["provenance"]["record_key"]: r.get("cross_references", {}) for r in records}
     assert found == {
-        EQUITY: {"composite_figi": "BBGZZ0000US1", "share_class_figi": "BBGZZ00000SC", "openfigi_ticker": "EXA"},
-        BOND: {"figi": "BBGZZ000BND6", "openfigi_ticker": "EXA 5 01/01/30"},
-        UNHELD: {"figi": "BBGZZ000BND2", "openfigi_ticker": "EXC 4 01/01/31"},
-        SOLE: {"figi": "BBGZZ0000US2", "composite_figi": "BBGZZ0000US2", "share_class_figi": "BBGZZ0000SC2",
-               "openfigi_ticker": "EXD"},
+        EQUITY: {"composite_figi": "BBGZ0000VS14", "share_class_figi": "BBGZ00000SC6", "openfigi_ticker": "EXA"},
+        BOND: {"openfigi_ticker": "EXA 5 01/01/30"},
+        UNHELD: {"openfigi_ticker": "EXC 4 01/01/31"},
+        SOLE: {"composite_figi": "BBGZ0000VS23", "share_class_figi": "BBGZ0000SC22", "openfigi_ticker": "EXD"},
         DOUBLE: {},
     }
-    assert refused == {cusip: "not_found_by_openfigi" for cusip in (MISSING, *OTHERS)}
-    # A CUSIP answer carries only its own CUSIP (ticket 120: the FIGI's CUSIP is the ISIN target's).
-    assert {r["provenance"]["record_key"]: r["identifiers"] for r in records} == {c: {"cusip": c} for c in found}
+    # A FIGI failing its check digit sets its answer aside, as a bad CUSIP would.
+    assert refused == {BROKEN: "invalid_figi", **{cusip: "not_found_by_openfigi" for cusip in (MISSING, *OTHERS)}}
+    # The CUSIP asked and every listing's FIGI (ticket 138): the FIGIs are identifiers.
+    assert {r["provenance"]["record_key"]: r["identifiers"] for r in records} == {
+        c: {"cusip": c, "figi": figis(c)} for c in found}
     # OpenFIGI's name, only where its listings state one (ticket 84): DOUBLE's two names give none.
     names = {r["provenance"]["record_key"]: r["fields"]["name_of_issuer"].get("value") for r in records}
     assert names == {EQUITY: "EXAMPLE CORP", BOND: "EXAMPLE CORP", UNHELD: None, SOLE: "EXAMPLE CORP", DOUBLE: None}
 
 
+def test_an_isin_answer_carries_its_isin_and_every_listing_figi(tmp_path):
+    """No pairing in the rules (ticket 138: "why do you need to read cusip results in isin
+    they are not related"): the ISIN answer's record carries its own identifiers only."""
+    records, refused = prepared_records(tmp_path, ("isin",))
+    assert {r["provenance"]["record_key"]: r["identifiers"] for r in records} == {
+        i: {"isin": i, "figi": figis(i)} for i in (ISIN, HOME, SHARED, TWICE)}
+    assert refused == {isin: "not_found_by_openfigi" for isin in ISIN_OTHERS}
+    assert {r["provenance"]["record_key"]: r["cross_references"] for r in records if r["provenance"]["record_key"] != TWICE} == {
+        ISIN: {"composite_figi": "BBGZ0000VS50", "share_class_figi": "BBGZ0000SC59", "openfigi_ticker": "EXG"},
+        HOME: {"share_class_figi": "BBGZ0000SC68", "composite_figi": "BBGZ0000JP69", "openfigi_ticker": "EXH"},
+        SHARED: {"share_class_figi": "BBGZ00000SC6", "composite_figi": "BBGZ0000VS14", "openfigi_ticker": "EXA"}}
+
+
 def bound(database, source_code: str, key: str) -> str | None:
+    """The Security a staged record is bound to, through its survivor."""
     with database.application.connect() as conn:
-        return conn.scalar(text("SELECT entity_id::text FROM mdm.stage_record WHERE source_code = :s "
-                                "AND record_key = :k"), {"s": source_code, "k": key})
+        return conn.scalar(text("SELECT coalesce(e.canonical_id, s.entity_id::text) FROM mdm.stage_record s "
+                                "LEFT JOIN mdm.current_entity e ON e.object_id = s.entity_id::text "
+                                "WHERE s.source_code = :s AND s.record_key = :k"), {"s": source_code, "k": key})
 
 
-def staged(database, source_code: str, key: str) -> int:
-    """How many staged records the source holds under this key: a waiting record is staged, unbound."""
-    with database.application.connect() as conn:
-        return conn.scalar(text("SELECT count(*) FROM mdm.stage_record WHERE source_code = :s AND record_key = :k"),
-                           {"s": source_code, "k": key})
+def securities(database) -> dict:
+    return {k: v for k, v in core.documents(database, "entity").items()
+            if v["kind"] == "security" and v.get("status") != "alias"}
 
 
-def test_a_record_joins_the_security_holding_its_cusip_or_creates_it(database, tmp_path):
-    """Ticket 120, OpenFIGI first (operator, 2026-10-23: "make the seurities run should process
-    openfigi first"): a CUSIP answer joins the Security holding its CUSIP, or creates one."""
-    records, _ = prepared_records(tmp_path)
+def load(database, batches: list[tuple[str, list[dict]]], *registered: str):
     core.register_reading(database, THIRTEENF, core.contract_body())
+    core.register_reading(database, NPORT_ISIN, core.contract_body())
     with database.admin.begin() as conn:
         register_dataset(conn, CODE, database.registry, files.mdm_contract("openfigi", CODE))
         policy = register_policy(conn, policy_body())
     stage = MergeStage(Store(database.application))
-    nport.apply(stage, policy, "13f", [core.source(key=cusip, source_code=THIRTEENF, kind="security",
-                                                   fields={"name_of_issuer": "Example Corp.", "title_of_class": "COM"},
-                                                   identifiers={"cusip": cusip}) for cusip in (EQUITY, BOND)], 1)
-    nport.apply(stage, policy, "openfigi", records, 2)
-    securities = {k: v for k, v in core.documents(database, "entity").items() if v["kind"] == "security"}
+    for number, (name, records) in enumerate(batches, 1):
+        nport.apply(stage, policy, name, records, number)
+    return stage, policy
+
+
+def test_a_record_joins_the_security_holding_its_cusip_or_creates_it(database, tmp_path):
+    """A CUSIP answer joins the Security holding its CUSIP (13F's here), or creates one."""
+    records, _ = prepared_records(tmp_path, ("cusip",))
+    load(database, [
+        ("13f", [core.source(key=cusip, source_code=THIRTEENF, kind="security",
+                             fields={"name_of_issuer": "Example Corp.", "title_of_class": "COM"},
+                             identifiers={"cusip": cusip}) for cusip in (EQUITY, BOND)]),
+        ("openfigi", records)])
     # EQUITY and BOND joined 13F's; UNHELD, SOLE and DOUBLE each created one.
-    assert len(securities) == 5
+    assert len(securities(database)) == 5
     for cusip in (EQUITY, BOND):
         assert bound(database, CODE, cusip) == bound(database, THIRTEENF, cusip) is not None
-    assert len({bound(database, CODE, c) for c in (EQUITY, BOND, UNHELD, SOLE, DOUBLE)} - {None}) == 5
-    # OpenFIGI ranks first for the name, 13F last; OpenFIGI states no title, so the filed one stays (ticket 84).
-    joined = securities[bound(database, CODE, EQUITY)]["fields"]
-    assert (joined["name_of_issuer"]["value"], joined["title_of_class"]["value"]) == ("EXAMPLE CORP", "COM")
+    # OpenFIGI ranks first for the name; it states no title, so the filed one stays (ticket 84).
+    joined = securities(database)[bound(database, CODE, EQUITY)]
+    assert (joined["fields"]["name_of_issuer"]["value"], joined["fields"]["title_of_class"]["value"]) == (
+        "EXAMPLE CORP", "COM")
+    # The Security holds its CUSIP and every listing FIGI (no reverse limit).
+    assert joined["status"] == "accepted" and joined["identifiers"] == {"cusip": [EQUITY], "figi": figis(EQUITY)}
     with database.application.connect() as conn:
-        (row,) = conn.execute(text("SELECT * FROM mdm.cross_reference_lookup('composite_figi', 'BBGZZ0000US1')")).all()
+        (row,) = conn.execute(text("SELECT * FROM mdm.cross_reference_lookup('composite_figi', 'BBGZ0000VS14')")).all()
     assert row._mapping["record_key"] == EQUITY
 
 
-def test_an_isin_answer_carries_the_one_cusip_sharing_its_figi(tmp_path):
-    """Ticket 120 (operator, 2026-10-23: an ISIN answer finds its Security by the FIGI it shares
-    with a CUSIP answer, "agreed"): one CUSIP is carried; none, none; two set it aside."""
-    records, refused = prepared_records(tmp_path, "isin")
-    assert {r["provenance"]["record_key"]: r["identifiers"] for r in records} == {
-        ISIN: {"isin": ISIN}, HOME: {"isin": HOME}, SHARED: {"isin": SHARED, "cusip": EQUITY}}
-    assert refused == {TWICE: "isin_shares_figi_with_several_cusips",
-                       **{isin: "not_found_by_openfigi" for isin in ISIN_OTHERS}}
-
-
-def test_openfigi_creates_the_securities_and_an_isin_joins_its_cusips(database, tmp_path):
-    """OpenFIGI first, end to end in the Merge Stage: the CUSIP answers create five Securities;
-    SHARED joins EQUITY's by the CUSIP it carries; ISIN and HOME create their own; then an
-    N-PORT record filing EQUITY's CUSIP and SHARED's ISIN joins EQUITY's, creating none."""
-    cusips, _ = prepared_records(tmp_path / "cusip")
-    isins, _ = prepared_records(tmp_path / "isin", "isin")
-    core.register_reading(database, NPORT_ISIN, core.contract_body())
-    with database.admin.begin() as conn:
-        for code in (CODE, ISIN_CODE):
-            register_dataset(conn, code, database.registry, files.mdm_contract("openfigi", code))
-        policy = register_policy(conn, policy_body())
-    stage = MergeStage(Store(database.application))
-    nport.apply(stage, policy, "openfigi-cusip", cusips, 1)
-    nport.apply(stage, policy, "openfigi-isin", isins, 2)
+def test_isin_answers_first_make_one_security_of_every_answer_sharing_a_figi(database, tmp_path):
+    """Ticket 138 ("first lookup if not exists then master"): SHARED's ISIN answer shares
+    EQUITY's US composite listing, so they are one Security; TWICE creates one, and SOLE's
+    and DOUBLE's CUSIP answers join it by the FIGIs they share. ISIN and HOME create their
+    own. Then N-PORT filing EQUITY's CUSIP and SHARED's ISIN joins that Security."""
+    records, _ = prepared_records(tmp_path)
+    isins = [r for r in records if r["identifiers"].get("isin")]
+    cusips = [r for r in records if r["identifiers"].get("cusip")]
+    stage, policy = load(database, [("openfigi-isin", isins), ("openfigi-cusip", cusips)])
     equity = bound(database, CODE, EQUITY)
-    assert equity is not None and bound(database, ISIN_CODE, SHARED) == equity
-    assert len({bound(database, ISIN_CODE, i) for i in (ISIN, HOME, SHARED)} | {equity}) == 3
-    count = lambda: len({k for k, v in core.documents(database, "entity").items() if v["kind"] == "security"})
-    assert count() == 7
+    assert equity is not None and bound(database, CODE, SHARED) == equity
+    assert securities(database)[equity]["identifiers"] == {
+        "cusip": [EQUITY], "isin": [SHARED], "figi": sorted({*figis(EQUITY), *figis(SHARED)})}
+    assert bound(database, CODE, SOLE) == bound(database, CODE, DOUBLE) == bound(database, CODE, TWICE) is not None
+    # EQUITY and SHARED; TWICE, SOLE and DOUBLE; BOND, UNHELD, ISIN, HOME.
+    assert len(securities(database)) == 6
     nport.apply(stage, policy, "nport", [core.source(key=EQUITY, source_code=NPORT_ISIN, kind="security",
                                                      fields={"name_of_issuer": "EXAMPLE CORP"},
                                                      identifiers={"cusip": EQUITY, "isin": SHARED})], 3)
-    assert bound(database, NPORT_ISIN, EQUITY) == equity and count() == 7
+    assert bound(database, NPORT_ISIN, EQUITY) == equity and len(securities(database)) == 6
 
 
-def test_an_isin_record_carries_its_levels_and_joins_the_security_holding_it(database, tmp_path):
-    records, refused = prepared_records(tmp_path, "isin")
-    assert {r["provenance"]["record_key"]: r["cross_references"] for r in records} == {
-        ISIN: {"composite_figi": "BBGZZ0000US5", "share_class_figi": "BBGZZ0000SC5", "openfigi_ticker": "EXG"},
-        HOME: {"share_class_figi": "BBGZZ0000SC6", "composite_figi": "BBGZZ0000JP6", "openfigi_ticker": "EXH"},
-        SHARED: {"share_class_figi": "BBGZZ00000SC", "composite_figi": "BBGZZ0000US1", "openfigi_ticker": "EXA"}}
-    assert set(refused) == {TWICE, *ISIN_OTHERS}
-    core.register_reading(database, NPORT_ISIN, core.contract_body())
-    with database.admin.begin() as conn:
-        register_dataset(conn, ISIN_CODE, database.registry, files.mdm_contract("openfigi", ISIN_CODE))
-        policy = register_policy(conn, policy_body())
-    stage = MergeStage(Store(database.application))
-    nport.apply(stage, policy, "nport", [core.source(key=ISIN, source_code=NPORT_ISIN, kind="security",
-                                                     fields={"name_of_issuer": "EXAMPLE CORP"},
-                                                     identifiers={"isin": ISIN})], 1)
-    nport.apply(stage, policy, "openfigi", [r for r in records if r["provenance"]["record_key"] == ISIN], 2)
-    assert bound(database, ISIN_CODE, ISIN) == bound(database, NPORT_ISIN, ISIN) is not None
-    assert len({k for k, v in core.documents(database, "entity").items() if v["kind"] == "security"}) == 1
+def test_cusip_answers_first_leave_an_isin_on_two_securities_in_review_until_merge_is_built(database, tmp_path):
+    """The other order: SOLE and DOUBLE are two Securities before TWICE comes, so TWICE's
+    FIGIs lead to two and it waits for review (`conflicting_identifiers`): 7 Securities,
+    not 6. Ticket 138's merge part (A2) consolidates them, and both orders then agree."""
+    records, _ = prepared_records(tmp_path)
+    cusips = [r for r in records if r["identifiers"].get("cusip")]
+    isins = [r for r in records if r["identifiers"].get("isin")]
+    load(database, [("openfigi-cusip", cusips), ("openfigi-isin", isins)])
+    assert bound(database, CODE, SHARED) == bound(database, CODE, EQUITY) is not None
+    assert len(securities(database)) == 7 and bound(database, CODE, TWICE) is None
+    twice = next(x["subject"] for x in isins if x["provenance"]["record_key"] == TWICE)
+    reviews = [v for v in core.documents(database, "review").values() if v.get("open")]
+    assert "conflicting_identifiers" in [r["reason"] for r in reviews if r.get("subject") == twice]
+
+
+def test_an_isin_record_joins_the_security_holding_its_isin(database, tmp_path):
+    records, _ = prepared_records(tmp_path, ("isin",))
+    load(database, [
+        ("nport", [core.source(key=ISIN, source_code=NPORT_ISIN, kind="security",
+                               fields={"name_of_issuer": "EXAMPLE CORP"}, identifiers={"isin": ISIN})]),
+        ("openfigi", [r for r in records if r["provenance"]["record_key"] == ISIN])])
+    assert bound(database, CODE, ISIN) == bound(database, NPORT_ISIN, ISIN) is not None
+    assert len(securities(database)) == 1
 
 
 def test_every_listing_lands_in_silver_with_the_security_its_identifier_joined(database, tmp_path):
     rows: list[dict] = []
-    records, _ = prepared_records(tmp_path / "cusip", listings=rows)
-    isin_records, _ = prepared_records(tmp_path / "isin", "isin", listings=rows)
-    core.register_reading(database, THIRTEENF, core.contract_body())
-    core.register_reading(database, NPORT_ISIN, core.contract_body())
-    with database.admin.begin() as conn:
-        for code in (CODE, ISIN_CODE):
-            register_dataset(conn, code, database.registry, files.mdm_contract("openfigi", code))
-        policy = register_policy(conn, policy_body())
-    stage = MergeStage(Store(database.application))
+    records, _ = prepared_records(tmp_path, listings=rows)
     # The Securities' own records are keyed apart from the identifier, so only
     # OpenFIGI's Dataset Contract finds a listing's Security by its identifier.
-    nport.apply(stage, policy, "13f", [core.source(key="13F-ROW-1", source_code=THIRTEENF, kind="security",
-                                                   fields={"name_of_issuer": "EXAMPLE CORP"},
-                                                   identifiers={"cusip": EQUITY})], 1)
-    nport.apply(stage, policy, "nport", [core.source(key="NPORT-ROW-1", source_code=NPORT_ISIN, kind="security",
-                                                     fields={"name_of_issuer": "EXAMPLE CORP"},
-                                                     identifiers={"isin": ISIN})], 2)
-    nport.apply(stage, policy, "openfigi", records + isin_records, 3)
+    load(database, [
+        ("13f", [core.source(key="13F-ROW-1", source_code=THIRTEENF, kind="security",
+                             fields={"name_of_issuer": "EXAMPLE CORP"}, identifiers={"cusip": EQUITY})]),
+        ("nport", [core.source(key="NPORT-ROW-1", source_code=NPORT_ISIN, kind="security",
+                               fields={"name_of_issuer": "EXAMPLE CORP"}, identifiers={"isin": ISIN})]),
+        ("openfigi", records)])
     rows = [{k: v for k, v in row.items() if k != "figi_ticker"} for row in rows]
     with silver_database(database.admin) as (owner, runtime):
         silver.migrate(owner, runtime_role=RUNTIME)
         spec = spec_file(FOLDER / "silver-listing.yaml", None)
         assert silver.register(owner, spec, runtime_role=RUNTIME)["created"] is True
         sink, ids = PostgresSink(runtime), MdmIds(database.application)
-        assert land(sink, spec["table"], copy.deepcopy(rows), ids)["inserted"] == 17
+        assert land(sink, spec["table"], copy.deepcopy(rows), ids)["inserted"] == 19
         again = land(sink, spec["table"], copy.deepcopy(rows), ids)  # the same delivery changes nothing
         assert (again["inserted"], again["changed"]) == (0, 0)
         with runtime.connect() as conn:
             landed = {(r["id"], r["figi"]): r for r in conn.execute(text(
                 "SELECT * FROM silver.openfigi_listing")).mappings()}
-    # The answers' 9 CUSIP and 8 ISIN listings, each once; unfound identifiers give none.
-    assert len(landed) == len(rows) == 17
-    equity, isin = bound(database, CODE, EQUITY), bound(database, ISIN_CODE, ISIN)
+    # The answers' 11 CUSIP and 8 ISIN listings, each once; unfound identifiers give none.
+    assert len(landed) == len(rows) == 19
+    equity, isin = bound(database, CODE, EQUITY), bound(database, CODE, ISIN)
     assert equity == bound(database, THIRTEENF, "13F-ROW-1") is not None
     assert isin == bound(database, NPORT_ISIN, "NPORT-ROW-1") is not None
-    assert {k[1]: (r["security_mdm_id_by_cusip"], r["security_mdm_id_by_isin"])
-            for k, r in landed.items() if k[0] in (EQUITY, ISIN)} == {
-        **{f: (equity, None) for f in ("BBGZZ0000US1", "BBGZZ0000UN1", "BBGZZ0000GR1", "BBGZZ0000GY1")},
-        **{f: (None, isin) for f in ("BBGZZ0000US5", "BBGZZ0000LN5")}}
-    assert landed[(EQUITY, "BBGZZ0000GR1")]["ticker"] == "EXB"
-    # A FIGI off its declared shape (a vowel among its eight) is flagged and still lands;
-    # so is one of the right shape whose check digit is wrong (ticket 107: GR's is 8).
-    assert landed[(EQUITY, "BBGZZ0000US1")]["quality"] == ["figi_valid"]
-    assert "figi_valid" in landed[(EQUITY, "BBGZZ0000GR1")]["quality"]
-    assert landed[(BOND, "BBGZZ000BND6")]["quality"] is None
-    # OpenFIGI first (ticket 120): UNHELD created its own Security, so its listing has its MDM id.
-    assert landed[(UNHELD, "BBGZZ000BND2")]["security_mdm_id_by_cusip"] == bound(database, CODE, UNHELD) is not None
-    # SHARED joined EQUITY's Security by the CUSIP sharing its FIGI; TWICE waits, so none.
-    assert landed[(SHARED, "BBGZZ0000LN9")]["security_mdm_id_by_isin"] == equity
-    assert landed[(TWICE, "BBGZZ0000US2")]["security_mdm_id_by_isin"] is None
+    # One master id a row (ticket 138: "master_id only"); SHARED's listings are EQUITY's Security.
+    assert {k[1]: r["security_mdm_id"] for k, r in landed.items() if k[0] in (EQUITY, ISIN, SHARED)} == {
+        **{f: equity for f in (*figis(EQUITY), *figis(SHARED))}, **{f: isin for f in figis(ISIN)}}
+    assert landed[(EQUITY, "BBGZ0000GR13")]["ticker"] == "EXB"
+    # Every FIGI but BROKEN's second passes its check; that one is flagged and still lands,
+    # its answer set aside in MDM, so no master id.
+    assert {k for k, r in landed.items() if r["quality"]} == {(BROKEN, "BBGZZ0000US1")}
+    assert landed[(BROKEN, "BBGZZ0000US1")]["security_mdm_id"] is None
+    assert landed[(UNHELD, "BBGZ000BND21")]["security_mdm_id"] == bound(database, CODE, UNHELD) is not None
+    # TWICE's FIGIs are SOLE's and DOUBLE's: in one batch, whether it joins them or
+    # waits for review depends on which comes first until the merge part; its
+    # listing carries whichever master it has.
+    assert landed[(TWICE, "BBGZ0000VS23")]["security_mdm_id"] == bound(database, CODE, TWICE)
 
 
 def test_a_securitys_fields_are_the_agreed_or_the_primary_listings_and_every_listing_is_a_detail_row(tmp_path):
@@ -367,7 +375,7 @@ def test_a_securitys_fields_are_the_agreed_or_the_primary_listings_and_every_lis
     set in config"): a field the listings agree on; else the one US composite's; else the
     ISIN country's composite's (rules/reference/published/openfigi-country-composite); else none.
     Every listing is a detail row keyed by its FIGI."""
-    records, _ = prepared_records(tmp_path / "cusip")
+    records, _ = prepared_records(tmp_path, ("cusip",))
     by_key = {r["provenance"]["record_key"]: r for r in records}
     equity = by_key[EQUITY]
     assert {k: equity["fields"][k]["value"] for k in ("name_of_issuer", "security_type", "security_type2",
@@ -377,21 +385,21 @@ def test_a_securitys_fields_are_the_agreed_or_the_primary_listings_and_every_lis
     # The share class FIGI is a cross-reference only, never a field too (ticket 129, "Fix 4").
     assert "share_class_figi" not in equity["fields"]
     assert [(r["key"], r["exchange"], r["ticker"]) for r in equity["details"]["listings"]] == [
-        ("BBGZZ0000GR1", "GR", "EXB"), ("BBGZZ0000GY1", "GY", "EXB"), ("BBGZZ0000UN1", "UN", "EXA"),
-        ("BBGZZ0000US1", "US", "EXA")]
-    assert equity["details"]["listings"][3] == {"key": "BBGZZ0000US1", "exchange": "US", "ticker": "EXA",
-                                                "composite_figi": "BBGZZ0000US1", "description": "EXA"}
+        ("BBGZ0000GR13", "GR", "EXB"), ("BBGZ0000GY18", "GY", "EXB"), ("BBGZ0000VN15", "UN", "EXA"),
+        ("BBGZ0000VS14", "US", "EXA")]
+    assert equity["details"]["listings"][3] == {"key": "BBGZ0000VS14", "exchange": "US", "ticker": "EXA",
+                                                "composite_figi": "BBGZ0000VS14", "description": "EXA"}
     # Two US composites and two names: no primary listing, so no name; the type they share stays.
     double = by_key[DOUBLE]
     assert double["fields"]["name_of_issuer"].get("value") is None
     assert double["fields"]["security_type"]["value"] == "Common Stock"
     assert len(double["details"]["listings"]) == 2
 
-    isin_records, _ = prepared_records(tmp_path / "isin", "isin")
+    isin_records, _ = prepared_records(tmp_path / "isins", ("isin",))
     home = {r["provenance"]["record_key"]: r for r in isin_records}[HOME]
     # No US listing; the names differ; Japan's composite, from the ISIN's country, gives the name.
     assert home["fields"]["name_of_issuer"]["value"] == "HOME CORP"
-    assert [r["key"] for r in home["details"]["listings"]] == ["BBGZZ0000GR6", "BBGZZ0000JP6"]
+    assert [r["key"] for r in home["details"]["listings"]] == ["BBGZ0000GR68", "BBGZ0000JP69"]
 
 
 def test_the_country_table_in_the_reading_is_the_published_code_set():

@@ -7,7 +7,7 @@
 # Switched on (operator, 2026-10-15 06:27 ET, in their words: "merge 985 when green agreed for the rest"):
 # the matching rule activates on its Identifier Contract, verified on the
 # Proving Run's cohort (rules/merge/policy.yaml, automatic_rules).
-version: security-2026-10-24.isin-source-code
+version: security-2026-10-25.one-openfigi-load
 defaults:
   # The first listed wins each field. Operator, 2026-10-18 (ticket 84): "make
   # openfigi priority 1 and 13f last", then "Name only (Recommended)". OpenFIGI
@@ -15,11 +15,13 @@ defaults:
   # title as filed. Measured (rank_sources.py over the three sources' rows):
   # OpenFIGI states one name for 99.7% of its 353,491 CUSIPs, N-PORT for 62.4%
   # of 385,382 and 13F for 59.9% of 29,942.
+  # Ticket 138 (operator, 2026-10-25: "this should be second source", then
+  # "Load and priority"): OpenFIGI, then 13F, then N-PORT, replacing "make
+  # openfigi priority 1 and 13f last" (2026-10-18).
   sources:
-  - openfigi.security.v1
-  - openfigi.security_isin.v2
-  - sec.nport.security.v2
+  - openfigi.security.v3
   - sec.thirteenf.information_table.security.v1
+  - sec.nport.security.v2
   allow_unknown_effective: true
 rules:
 # Tier A: the issued CUSIP. A record joins the one Security that holds its
@@ -78,52 +80,23 @@ rules:
   - primitive: identifier_cardinality@1
     args:
       namespace: isin
-# OpenFIGI (ticket 80; operator, 2026-10-17: "(c) MDM + silver listings
-# (Recommended)"): each record is an identifier the platform asked. Ticket 120,
-# OpenFIGI first (operator, 2026-10-23: "Securities should be driven from
-# openfigi", "make the seurities run should process openfigi first", then
-# "agreed"): OpenFIGI's records now create the Securities, replacing the
-# 2026-10-17 ruling that OpenFIGI never creates one. Its CUSIP answers run first
-# and create each Security; an ISIN answer joins the Security of the one CUSIP
-# answer that shares a listing FIGI with it (the agreement N-PORT already uses
-# to pair them, "Use FIGI to add pairs too", 2026-10-15; the ISIN contract
-# carries that CUSIP), or creates its own when none does; two or more set it
-# aside for review. N-PORT and 13F then join, and still create the Securities
-# OpenFIGI did not find. Measured (2026-10-15 capture): 353,491 CUSIP answers
-# found; of 380,047 ISIN answers found, 350,867 share a FIGI with one CUSIP
-# answer, 29,169 with none, 11 with two or more. The earlier versions were
-# switched on 2026-10-17 13:12 ET ("Switch on CUSIP rule (Recommended)") and
-# 2026-10-18 13:22 ET ("Switch it on (Recommended)"); these wait for their own
-# switch-on.
+# OpenFIGI (ticket 138; operator, 2026-10-25: "there should be one processing
+# with all the identifier and this is the first load", "first lookup if not
+# exists then master"): one record per identifier asked, CUSIP or ISIN, with
+# every listing's FIGI. It joins the Security holding any of them, else
+# creates one; a CUSIP answer and an ISIN answer of one security meet by a
+# shared listing FIGI. One rule per identifier kind, since a matching rule
+# names one; all three mint. They replace the ticket 120 rules
+# (openfigi-security-cusip 2026-10-23.1, openfigi-isin-security-cusip and
+# openfigi-security-isin 2026-10-24.1) and wait for their switch-on.
 - rule_id: openfigi-security-cusip
-  version: 2026-10-23.1
+  version: 2026-10-25.1
   family: binding
-  source: openfigi.security.v1
+  source: openfigi.security.v3
   applies_to_verdict: security
   emits:
   - bind
   on_no_match: mint
-  when:
-  - primitive: identifier_match@1
-    args:
-      namespace: cusip
-  - primitive: identifier_cardinality@1
-    args:
-      namespace: cusip
-# The ISIN answer joins the Security that holds the CUSIP it carries; with
-# none, it waits here and the next rule may create its Security by its ISIN.
-# Its CUSIP and ISIN held by two Securities defers to review, never binds.
-# One CUSIP offered two ISINs stays one Security when those answers share a
-# FIGI (operator, 2026-10-24: "resolve using figi"): both ISINs are kept.
-# FIGI still does not join two Securities.
-- rule_id: openfigi-isin-security-cusip
-  version: 2026-10-24.1
-  family: binding
-  source: openfigi.security_isin.v2
-  applies_to_verdict: security
-  emits:
-  - bind
-  on_no_match: wait
   when:
   - primitive: identifier_match@1
     args:
@@ -132,9 +105,9 @@ rules:
     args:
       namespace: cusip
 - rule_id: openfigi-security-isin
-  version: 2026-10-24.1
+  version: 2026-10-25.1
   family: binding
-  source: openfigi.security_isin.v2
+  source: openfigi.security.v3
   applies_to_verdict: security
   emits:
   - bind
@@ -146,17 +119,28 @@ rules:
   - primitive: identifier_cardinality@1
     args:
       namespace: isin
+- rule_id: openfigi-security-figi
+  version: 2026-10-25.1
+  family: binding
+  source: openfigi.security.v3
+  applies_to_verdict: security
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: figi
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: figi
 identifiers:
   cusip:
     authority: CUSIP Global Services (ANSI X9.6)
     sources:
     - sec.thirteenf.information_table.security.v1
     - sec.nport.security.v2
-    - openfigi.security.v1
-    # Ticket 120, OpenFIGI first: an ISIN answer carries the one CUSIP whose
-    # answer shares a listing FIGI with it, so it is named here (a feed maps
-    # only an identifier it is named as issuing; operator, 2026-09-29).
-    - openfigi.security_isin.v2
+    - openfigi.security.v3
     # rules/identifiers/cusip.yaml (ticket 81): 9 characters, the check digit
     # verified, upper-cased.
     normalizer: normalize_identifier@cusip-v1
@@ -183,7 +167,7 @@ identifiers:
     authority: ISIN (ISO 6166), issued by each country's numbering agency
     sources:
     - sec.nport.security.v2
-    - openfigi.security_isin.v2
+    - openfigi.security.v3
     # rules/identifiers/isin.yaml (ticket 81): 12 characters, the check digit
     # verified, upper-cased.
     normalizer: normalize_identifier@isin-v1
@@ -199,6 +183,27 @@ identifiers:
       approved_by: operator
       approved_at: "2026-10-18T01:03:32Z"
       reason: "ticket 79 part 1, N-PORT 2026q2 Security Proving Run with 13F first, approved in the operator's words: Switch on all six (Recommended). 423,562 Securities, 393,645 CUSIPs and 380,790 ISINs held, 0 on two Securities, a second pass changed nothing"
+    tolerance:
+      unit: items
+      warm_up_decisions: 10000
+      max_per_10k: 5
+  # A listing's FIGI (ticket 138; operator, 2026-10-25): it matches like a
+  # CUSIP or an ISIN, and only it shows two Securities are one. One Security
+  # holds a FIGI for each listing, so no reverse limit. It waits for its
+  # verification on ticket 138's proof and the operator's switch-on.
+  figi:
+    authority: FIGI (Object Management Group standard), issued by Bloomberg as its Registration Authority
+    sources:
+    - openfigi.security.v3
+    # rules/identifiers/figi.yaml (ticket 107): 12 characters, the check
+    # digit verified, upper-cased.
+    normalizer: normalize_identifier@figi-v2
+    claim:
+      forward: 1
+      reverse: null
+    compatibility:
+      field: kind
+      predicate: kind_equal@1
     tolerance:
       unit: items
       warm_up_decisions: 10000

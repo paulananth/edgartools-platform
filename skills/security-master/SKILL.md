@@ -23,14 +23,18 @@ on ticket 120") and in the operator's Rules database. The ISIN dataset is
 also issues a CUSIP, which cannot be added on an existing source code
 (2026-10-24, "complete ticket 120 using skills to turn on additional rules").
 
-## The mastering process (decided 2026-10-25, ticket 138; not built)
+## The mastering process (decided 2026-10-25, ticket 138; being built)
 
 The operator replaced the per-kind design on 2026-10-25 ("secutiy is the kind
 cusip and isin are diffrant identifiers of the same securities", "there
 should be one processing with all the identifier", "first lookup if not exists
 then master", "mastering must create an unique id and the unique id joins with
-all the other tables cross refrence and silver"). Until ticket 138 is built,
-the sections below it describe what runs today; each says where 138 changes it.
+all the other tables cross refrence and silver"). Built so far: a record
+carries lists of identifiers (part A1), OpenFIGI's one load with every
+listing FIGI as an identifier and one master id in silver (part B1). Still to
+build: the CUSIP-first bind and the merge by a shared FIGI (A2), N-PORT's
+pairing removed (B2), the Listing currency (B3), then the switch-on. The
+sections below say where 138 changes what runs.
 
 **One master id.** Mastering mints one master id for each Security. The
 Cross-reference, the Source Stage and every silver table join on it; silver
@@ -400,24 +404,24 @@ Each waits with an open review. 2026 Q2: 1,769 `invalid_cusip_checksum` and
 
 ## Run order
 
-Ticket 138 (decided): OpenFIGI's one load, its bundles in parallel; then any
-source that adds fields (N-PORT, 13F), in any order. Until it is built, the
-order switched on in the files is:
-
-OpenFIGI first (switched on in the files, ticket 120; operator, 2026-10-23):
+Ticket 138 (built in the files, part B1; its OpenFIGI rules wait for their
+switch-on after the merge part A2):
 
 1. N-PORT's read decides which identifiers OpenFIGI is asked (the capture).
 2. GLEIF `umbrellas` (sub-fund pairs; read only).
-3. OpenFIGI `answers_cusip`, `answers_isin` (the captured answers; read only).
+3. OpenFIGI `answers_cusip`, `answers_isin` (read only, by N-PORT's FIGI
+   pairing until part B2 removes it).
 4. N-PORT funds.
-5. OpenFIGI `mastering_cusip`: creates a Security per CUSIP answer, and
-   writes `figi_ids`.
-6. OpenFIGI `mastering_isin`: joins each ISIN answer to its CUSIP's Security,
-   or creates one. It reads every complete `mastering_cusip` run, so step 5
-   completes first.
-7. Securities `mastering` (N-PORT): one run over the quarter; joins what
-   OpenFIGI made and creates the rest.
-8. 13F.
+5. OpenFIGI `mastering`: one target over the CUSIP and the ISIN answers
+   together, every bundle in parallel. Each record carries the identifier
+   asked and every listing's FIGI; it joins the Security holding any of
+   them, else creates one.
+6. 13F, then Securities `mastering` (N-PORT): each looks up first, then
+   creates.
+
+Inside one batch the Merge Stage binds every record that finds a held
+Security before any record creates one, so a value it adds is found by the
+rest of the batch.
 
 `rules/source-sequence.yaml` holds the order; a source reads another
 finished run by `{run: {source, target, step}}` (Bookkeeping SPEC).

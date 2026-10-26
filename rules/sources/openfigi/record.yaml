@@ -6,13 +6,11 @@
 # security-level field is the one value the listings state, else the US
 # composite's, else the ISIN country's composite's (operator, 2026-10-20:
 # "Use the primary exchange listing", "US, else the ISIN's country"), else
-# none; every listing is kept (`listings`, ticket 120). Run once per
-# kind asked; mdm.prepare reads its table `security` with that kind's contract.
-# In the ISIN target (ticket 120, OpenFIGI first; operator, 2026-10-23:
-# "agreed"), it reads isin-attach.yaml's pieces instead: `figi_cusips` lists
-# every CUSIP sharing a listing FIGI with the ISIN; the record keeps them
-# (space-separated) and, when there is exactly one, that CUSIP. A CUSIP answer's
-# row has no `figi_cusips`, so its record gains neither.
+# none; every listing is kept (`listings`, ticket 120). Both kinds asked in
+# one run (ticket 138): the identifier asked is the record's `cusip` or `isin`
+# by its `id_type`, and every listing's FIGI is in `figis`, each an
+# identifier of the one Security, so a CUSIP answer and an ISIN answer of one
+# security meet in MDM by a shared FIGI, with no pairing in these rules.
 execution: {profile: source.read, workers: 1, max_artifacts: 512}
 read:
   format: json
@@ -27,6 +25,18 @@ read:
             fields:
               id: {text: {path: id}}
               found: {value: {path: found}}
+              # The identifier asked, under its own kind (ticket 138).
+              cusip:
+                choose:
+                  condition: {equal: {left: {text: {path: id_type}}, right: {const: {value: id_cusip}}}}
+                  then: {text: {path: id}}
+                  else: {value: {path: NO_SUCH_FIELD}}
+              isin:
+                choose:
+                  condition: {equal: {left: {text: {path: id_type}}, right: {const: {value: id_isin}}}}
+                  then: {text: {path: id}}
+                  else: {value: {path: NO_SUCH_FIELD}}
+              figis: {value: {path: figis}}
               name:
                 coalesce:
                   skip: "null"
@@ -109,10 +119,6 @@ read:
                       - {join: {path: us_composite.us_composite_sample, item_path: figi_ticker, separator: "", max_items: 1, null_if_empty: true}}
                       - {join: {path: home_composite.home_composite_sample, item_path: figi_ticker, separator: "", max_items: 1, null_if_empty: true}}
                   transforms: [{regex_replace: {pattern: " .*", with: ""}}]
-              listing_figi:
-                transform:
-                  value: {join: {path: listing.listing_sample, item_path: figi_ticker, separator: "", max_items: 1, null_if_empty: true}}
-                  transforms: [{regex_replace: {pattern: " .*", with: ""}}]
               ticker:
                 transform:
                   value:
@@ -123,16 +129,3 @@ read:
                       - {join: {path: home_composite.home_composite_sample, item_path: figi_ticker, separator: "", max_items: 1, null_if_empty: true}}
                       - {join: {path: listing.listing_sample, item_path: figi_ticker, separator: "", max_items: 1, null_if_empty: true}}
                   transforms: [{regex_replace: {pattern: "^[^ ]+ ", with: ""}}]
-              # Ticket 120: every CUSIP sharing a listing FIGI with this ISIN, then the one CUSIP.
-              figi_cusips: {join: {path: figi_cusips, item_path: ".", item_type: text, separator: " ", max_items: 100000, null_if_empty: true}}
-              figi_cusip:
-                choose:
-                  condition:
-                    equal:
-                      left:
-                        transform:
-                          value: {join: {path: figi_cusips, item_path: ".", item_type: text, separator: " ", max_items: 100000, null_if_empty: true}}
-                          transforms: [{regex_replace: {pattern: "^.* .*$", with: ""}}]
-                      right: {const: {value: ""}}
-                  then: {value: {path: NO_SUCH_FIELD}}
-                  else: {join: {path: figi_cusips, item_path: ".", item_type: text, separator: " ", max_items: 100000, null_if_empty: true}}

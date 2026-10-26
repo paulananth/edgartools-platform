@@ -3,25 +3,30 @@
 # (Recommended)", 08:50 ET). The capture of 2026-10-15 is reused, never asked
 # again (operator, 2026-10-15: "Open figi rarely changes do not download
 # again"). Rulings it rests on (operator):
-# - "FIGI, ticker and SEDOL are lookup only" (2026-10-14): every FIGI and the
-#   ticker are cross-references of a Security, never joined on.
-# - "(c) MDM + silver listings (Recommended)" (2026-10-17): one record per
-#   identifier asked joins the Security that holds it and never creates one;
-#   it carries only levels with one value; every listing lands in silver.
+# - "secutiy is the kind cusip and isin are diffrant identifiers of the same
+#   securities", "there should be one processing with all the identifier and
+#   this is the first load", "first lookup if not exists then master"
+#   (2026-10-25, ticket 138): one target over both kinds asked; each record
+#   carries the identifier asked and every listing's FIGI as identifiers, so
+#   it joins the Security holding any of them, else creates one. The
+#   composite and share-class FIGIs and the ticker stay lookup only ("Lookup
+#   only", 2026-10-25); this replaces "FIGI, ticker and SEDOL are lookup only"
+#   (2026-10-14) for the listing FIGI.
+# - "(c) MDM + silver listings (Recommended)" (2026-10-17): every listing
+#   lands in silver; the record carries the levels with one value.
 # - "US composite (Recommended)" (2026-10-17): the share-class FIGI when there
 #   is one, the US composite FIGI and its ticker when there is one, and the
-#   FIGI and ticker of the only listing when there is one.
+#   ticker of the only listing when there is one.
 # The run, in order: requests.yaml gives the pair set `asked` (batch and
 # position to the identifier); this reading streams each answer file, one
 # answer a record (`wrapper: null`, ticket 104), its position the context
-# `answer`, so its listings name their identifier. Then, once per kind asked
-# (the CUSIPs for the first contract, the ISINs for the second; one target
-# each, below), over every answers reading of that kind: reduce.yaml gives each identifier's answer and counts its
+# `answer`, so its listings name their identifier. Then, over every answers
+# reading of both kinds (one target, below): reduce.yaml gives each identifier's answer and counts its
 # listings, share classes and US composites, streamed; combine.yaml joins the
 # levels that are single onto each answer; record.yaml
 # makes one flat record per identifier, which mdm.prepare reads (table
 # `security`). The context names each file's `batch` ("id_cusip/00000") and
-# its `id_type`. A select that gives null excludes its row (`value: {path:
+# its `id_type`, the folder ("id_cusip" or "id_isin", OpenFIGI's idType). A select that gives null excludes its row (`value: {path:
 # NO_SUCH_FIELD}`, the null idiom of the engine). The `listings` table keeps
 # OpenFIGI's field names, and lands in silver (silver-listing.yaml). Stream bounds hold for a whole reading of up to 512 files: each
 # file is at least one piece, and an ISIN file projects about 1.4 MB (measured
@@ -319,6 +324,13 @@ read:
               - context:
                   name: answer
             on_many: error
+        # The listing's FIGI alone: every one is an identifier of the
+        # Security (ticket 138), gathered by combine.yaml.
+        figi:
+          text:
+            path: figi
+            null_if:
+            - ""
         detail:
           object:
             omit_nulls: true
@@ -407,7 +419,7 @@ read:
                     name: id_type
                 right:
                   const:
-                    value: isin
+                    value: id_isin
             then:
               choose:
                 condition:
@@ -465,7 +477,7 @@ read:
                   name: id_type
               right:
                 const:
-                  value: isin
+                  value: id_isin
           then:
             choose:
               condition:
@@ -621,7 +633,11 @@ bookkeeping:
   # files, each with its request beside it.
   version: 2
   targets:
-    mastering_cusip:
+    # One target over both kinds asked (ticket 138; operator, 2026-10-25:
+    # "there should be one processing with all the identifier"): the CUSIP
+    # and the ISIN answers are read together, every bundle in parallel, with
+    # no order between them; `id_type` is the folder, OpenFIGI's own idType.
+    mastering:
       steps:
         # Each request file alone, read beside its answer (its sha256 is in the
         # answer's receipt), so each answer's pair set comes from its own request.
@@ -634,7 +650,7 @@ bookkeeping:
           units: {each: file}
           input:
             contract: requests.yaml
-            files: "id_cusip/*"
+            files: "id_*/*"
             beside: {path: "{dir}/{base}.request.json", sha256: request_sha256}
             context: {batch: "{dir}/{base}"}
         # The answers, 16 files a unit (one composed slot each), each tied to the
@@ -647,8 +663,8 @@ bookkeeping:
           checks: [input.hash, output.receipt, source.output]
           units: {groups: 16}
           input:
-            files: "id_cusip/*"
-            context: {batch: "{dir}/{base}", id_type: cusip}
+            files: "id_*/*"
+            context: {batch: "{dir}/{base}", id_type: "{dir}"}
             lookups:
               asked: {from: requests, table: asked, column: key, value_column: id, max_input_bytes: 1048576, max_input_rows: 1000}
         - name: reduce
@@ -665,16 +681,6 @@ bookkeeping:
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.combined]
           input: {contract: combine.yaml, readings: {counts: {step: reduce}, answers: {all: answers}}}
-        # Each listing FIGI and the CUSIP asked, for the ISIN target (ticket
-        # 120, OpenFIGI first): one unit a run, so the ISIN target reads every
-        # complete run's.
-        - name: figi_ids
-          operation: source.combine
-          requires: [answers]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.combined]
-          input: {contract: figi-ids.yaml, readings: {answers: {all: answers}}}
         - name: record
           operation: source.read
           requires: [combine]
@@ -689,102 +695,7 @@ bookkeeping:
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, mdm.prepared]
           input:
-            keys: {table: security, record_column: record, dataset: openfigi.security.v1}
-            readings: {record: {all: record}}
-        - name: merge
-          operation: mdm.merge
-          requires: [prepare]
-          key: "{batch_id}"
-          leases: ["mdm:consumer:{consumer}"]
-          checks: [input.hash, output.receipt, mdm.committed]
-        - name: processed
-          operation: journal.record
-          requires: [merge]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, journal.recorded]
-      checks: [manifest.hash, work.accounting, journal.delivered]
-    mastering_isin:
-      steps:
-        # Each request file alone, read beside its answer (its sha256 is in the
-        # answer's receipt), so each answer's pair set comes from its own request.
-        - name: requests
-          operation: source.read
-          requires: []
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          units: {each: file}
-          input:
-            contract: requests.yaml
-            files: "id_isin/*"
-            beside: {path: "{dir}/{base}.request.json", sha256: request_sha256}
-            context: {batch: "{dir}/{base}"}
-        # The answers, 16 files a unit (one composed slot each), each tied to the
-        # identifier it was asked for by position, through its request's pairs.
-        - name: answers
-          operation: source.read
-          requires: [requests]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          units: {groups: 16}
-          input:
-            files: "id_isin/*"
-            context: {batch: "{dir}/{base}", id_type: isin}
-            lookups:
-              asked: {from: requests, table: asked, column: key, value_column: id, max_input_bytes: 1048576, max_input_rows: 1000}
-        - name: reduce
-          operation: source.combine
-          requires: [answers]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.combined]
-          input: {contract: reduce.yaml, readings: {answers: {all: answers}}}
-        - name: combine
-          operation: source.combine
-          requires: [reduce, answers]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.combined]
-          input: {contract: combine.yaml, readings: {counts: {step: reduce}, answers: {all: answers}}}
-        # Ticket 120 (OpenFIGI first; operator, 2026-10-23: "agreed"): each
-        # ISIN listing with the CUSIPs whose answers give its FIGI, from every
-        # complete CUSIP run (so the CUSIP target runs first), then every
-        # ISIN's CUSIPs on its row.
-        - name: figi_cusips
-          operation: source.combine
-          requires: [answers]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.combined]
-          input:
-            contract: isin-figi-cusips.yaml
-            readings:
-              answers: {all: answers}
-              cusips: {run: {source: openfigi, target: mastering_cusip, step: figi_ids}}
-        - name: attach
-          operation: source.combine
-          requires: [combine, figi_cusips]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.combined]
-          input: {contract: isin-attach.yaml, readings: {security: {step: combine}, rows: {step: figi_cusips}}}
-        - name: record
-          operation: source.read
-          requires: [attach]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          input: {contract: record.yaml, pieces: {step: attach}}
-        - name: prepare
-          operation: mdm.prepare
-          requires: [record]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, mdm.prepared]
-          input:
-            keys: {table: security, record_column: record, dataset: openfigi.security_isin.v2}
+            keys: {table: security, record_column: record, dataset: openfigi.security.v3}
             readings: {record: {all: record}}
         - name: merge
           operation: mdm.merge
@@ -876,137 +787,30 @@ bookkeeping:
           checks: [input.hash, output.receipt, journal.recorded]
       checks: [manifest.hash, work.accounting, journal.delivered]
 mdm:
-  openfigi.security.v1:
+  # One contract for both kinds asked (ticket 138): it replaces
+  # openfigi.security.v1 (CUSIPs) and openfigi.security_isin.v2 (ISINs). A new
+  # source code, since a Rules database holds both and an identifier cannot be
+  # added on an existing one (2026-10-24).
+  openfigi.security.v3:
     contract:
       provider: OpenFIGI
       family: openfigi
-      schema_version: openfigi-security-v2
-      record_key: the CUSIP asked, upper-cased; one record per CUSIP asked
+      schema_version: openfigi-security-v4
+      record_key: the CUSIP or ISIN asked, upper-cased; one record per identifier asked
       publication_key: the capture's mapping answer files and the reduce, combine and record
         contracts
       effective_time: 'none: an answer states no date'
       semantics: patch
-      completeness: the CUSIPs asked of OpenFIGI; no retirement by absence
+      completeness: the CUSIPs and ISINs asked of OpenFIGI; no retirement by absence
       nonblocking_deferred_reasons:
       - invalid_cusip
       - invalid_cusip_checksum
-      - missing_record_identity
-      - not_found_by_openfigi
-      adapter:
-        reading:
-          source: openfigi
-          read:
-            format: json
-            limits:
-              max_bytes: 1048576
-              max_records: 1
-            assertions:
-            - test:
-                test:
-                  path: .
-                  kind: object
-              reason: Mapped input must be an object
-            tables:
-              mapped:
-                each: .
-                checks:
-                - check: required
-                  column: _found
-                  reason: not_found_by_openfigi
-                  on_fail: defer
-                columns:
-                  _found:
-                    text:
-                      path: found
-                      null_if:
-                      - not found
-                  fields:
-                    object:
-                      fields:
-                        # OpenFIGI's own name, the one it states for the
-                        # identifier (ticket 84; operator, 2026-10-18: "Name
-                        # only (Recommended)"); kept only when its listings
-                        # state one name (combine.yaml).
-                        name_of_issuer:
-                          value:
-                            path: name
-                        # The other security-level fields (ticket 120; operator,
-                        # 2026-10-20: "all fields from open figi must be in the
-                        # security master"): the one value the listings state, else
-                        # the primary listing's (record.yaml).
-                        security_type:
-                          value:
-                            path: security_type
-                        security_type2:
-                          value:
-                            path: security_type2
-                        market_sector:
-                          value:
-                            path: market_sector
-                        # No share_class_figi field: it is the Security's
-                        # cross-reference below (lookup only), one place, not
-                        # two (ticket 129; operator, 2026-10-22: "Fix 4").
-                  matching:
-                    object:
-                      fields: {}
-                  # Every listing, one detail row per FIGI (ticket 120).
-                  details:
-                    object:
-                      fields:
-                        listings:
-                          value:
-                            path: listings
-          input_fields:
-          - id
-          - found
-          - name
-          - share_class_figi
-          - composite_figi
-          - listing_figi
-          - ticker
-          - security_type
-          - security_type2
-          - market_sector
-          - listings
-        version: openfigi-security-v3
-        retain_deferred: true
-        source_record_provenance: true
-        kind: security
-        record_key:
-        - id
-        record_key_format: cusip
-        identifiers:
-          cusip: id
-        identifier_formats:
-          cusip: cusip
-        detail_keys:
-          listings: figi
-        cross_references:
-          figi: listing_figi
-          composite_figi: composite_figi
-          share_class_figi: share_class_figi
-          openfigi_ticker: ticker
-  # v2 because a Rules database already held v1, and this contract also issues a CUSIP.
-  # An identifier cannot be added on an existing source code (2026-10-24).
-  openfigi.security_isin.v2:
-    contract:
-      provider: OpenFIGI
-      family: openfigi
-      schema_version: openfigi-security-isin-v3
-      record_key: the ISIN asked, upper-cased; one record per ISIN asked
-      publication_key: the capture's mapping answer files and the reduce, combine and record
-        contracts
-      effective_time: 'none: an answer states no date'
-      semantics: patch
-      completeness: the ISINs asked of OpenFIGI; no retirement by absence
-      nonblocking_deferred_reasons:
       - invalid_isin
       - invalid_isin_checksum
+      - invalid_figi
+      - invalid_figi_checksum
       - missing_record_identity
       - not_found_by_openfigi
-      # Not listed, so blocking: an ISIN sharing a listing FIGI with two or
-      # more CUSIP answers waits for review (ticket 120; operator, 2026-10-23,
-      # "agreed").
       adapter:
         reading:
           source: openfigi
@@ -1029,24 +833,7 @@ mdm:
                   column: _found
                   reason: not_found_by_openfigi
                   on_fail: defer
-                - check: absent
-                  column: _several_cusips
-                  reason: isin_shares_figi_with_several_cusips
-                  on_fail: defer
                 columns:
-                  # The CUSIPs sharing a listing FIGI with this ISIN (record.yaml),
-                  # kept only when there are two or more.
-                  _several_cusips:
-                    choose:
-                      condition:
-                        equal:
-                          left:
-                            transform:
-                              value: {value: {path: figi_cusips}}
-                              transforms: [{regex_replace: {pattern: "^[^ ]*$", with: ""}}]
-                          right: {const: {value: ""}}
-                      then: {value: {path: NO_SUCH_FIELD}}
-                      else: {value: {path: figi_cusips}}
                   _found:
                     text:
                       path: found
@@ -1091,37 +878,38 @@ mdm:
           input_fields:
           - id
           - found
+          - cusip
+          - isin
+          - figis
           - name
           - share_class_figi
           - composite_figi
-          - listing_figi
           - ticker
           - security_type
           - security_type2
           - market_sector
           - listings
-          - figi_cusip
-          - figi_cusips
-        version: openfigi-security-isin-v4
+        version: openfigi-security-v4
         retain_deferred: true
         source_record_provenance: true
         kind: security
         record_key:
         - id
-        record_key_format: isin
-        # The ISIN asked, and the one CUSIP whose answer shares a listing FIGI
-        # with it (ticket 120): the CUSIP finds the Security OpenFIGI's CUSIP
-        # answer created (rules/merge/kinds/security.yaml).
+        # The identifier asked, a CUSIP or an ISIN; every listing's FIGI. Each
+        # value is checked by its identifier type.
         identifiers:
-          isin: id
-          cusip: figi_cusip
-        identifier_formats:
-          isin: isin
           cusip: cusip
+          isin: isin
+          figi: figis
+        identifier_formats:
+          cusip: cusip
+          isin: isin
+          figi: figi
         detail_keys:
           listings: figi
+        # Lookup only (operator, 2026-10-25: composite and share-class FIGI
+        # "Lookup only"); the listing FIGIs are identifiers above.
         cross_references:
-          figi: listing_figi
           composite_figi: composite_figi
           share_class_figi: share_class_figi
           openfigi_ticker: ticker

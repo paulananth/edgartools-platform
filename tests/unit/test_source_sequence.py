@@ -141,9 +141,10 @@ def test_default_inventory_accounts_for_each_committed_source(capsys):
     expected_sources = {path.parent.name for path in (files.ROOT / "sources").glob("*/source.yaml")}
     assert set(result["sources"]) == expected_sources
     assert result["order"] == ["sec.submissions.company", "gleif", "sec.nport.registrant", "sec.submissions.person",
-                               "sec.nport.fund", "sec.nport.security"]
+                               "sec.nport.fund", "openfigi", "sec.nport.security"]
+    # OpenFIGI is one target since ticket 138, so it is configured, not blocked.
     assert {name for name, item in result["sources"].items() if item["status"] == "blocked"} == {
-        "iapd.adv", "sec.ownership", "sec.thirteenf.information_table", "openfigi", "sec.company-facts",
+        "iapd.adv", "sec.ownership", "sec.thirteenf.information_table", "sec.company-facts",
     }
 
 
@@ -160,7 +161,8 @@ def test_each_committed_source_can_be_checked_on_its_own(capsys, name):
     result = json.loads(capsys.readouterr().out)
     assert set(result["sources"]) == {name}
     assert code == (0 if name in {"sec.submissions.company", "gleif", "sec.submissions.person",
-                                  "sec.nport.registrant", "sec.nport.fund", "sec.nport.security"} else 3)
+                                  "sec.nport.registrant", "sec.nport.fund", "sec.nport.security",
+                                  "openfigi"} else 3)
 
 
 def test_malformed_source_is_reported_without_leaking_its_values(tmp_path, capsys):
