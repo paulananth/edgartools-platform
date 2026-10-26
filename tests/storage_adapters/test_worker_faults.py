@@ -76,3 +76,32 @@ def test_worker_commit_faults(case,adapters,storage_api):
                     conn.execute(text(f"CALL {name}(:wire)"),{"wire":json.dumps(wire)}).all()
     assert frame() == before and api.generation() == api.checkpoint(request.scope) == 1
     assert api.apply(request,lease,proposal_body={"command":"invented-next"},authority=proof(api))["changed"]
+
+
+@pytest.mark.parametrize("case",["input_only","index_only"])
+def test_worker_publication_boundary(case,adapters,storage_api):
+    if os.environ.get("SKILL_ADAPTER_TEST_ENGINE") == "mssql":
+        pytest.skip("Full SQL Server workflow remains deferred")
+    owner,old,role = adapters
+    storage_api.migrate(owner.engine,runtime_role=role,prefix=owner.prefix,protocol=6)
+    api = storage_api.Adapter(old.engine,prefix=old.prefix,protocol=6)
+    original = batch(storage_api,governed=True,workflow=True,indexes=(),publish_inputs=True,
+        objects=(storage_api.Effect("invented","one",{"value":1}),))
+    with owner.engine.begin() as conn:
+        for name,value in original.pins.items():
+            api.admit_pin(conn,name,value)
+    lease = api.claim(original.scope,"invented-worker",authority=proof(api))
+    api.apply(original,lease,proposal_body={"command":"invented-first"},authority=proof(api))
+    before = api.read([("invented","one")])
+    request = replace(original,batch="invented-next",expected_generation=1,objects=(),
+        expected_checkpoint=1,checkpoint=2,
+        evidence=original.evidence+((storage_api.Effect("invented-input","two",{"revision":2}),)
+                                    if case == "input_only" else ()),
+        indexes=(storage_api.IndexChange("invented-lookup","one",{"pointer":"opaque"}),)
+                 if case == "index_only" else ())
+    result = api.apply(request,lease,proposal_body={"command":"invented-next"},authority=proof(api))
+    publications = api.read_batches([request.batch],outboxes=True)
+    assert len(publications) == (len(request.consumers) if case == "input_only" else 0)
+    assert result["changed"] == (case == "input_only") and api.read([("invented","one")]) == before
+    assert api.replay(request.batch,lease,observer="invented-retry",authority=proof(api))["duplicate"]
+    assert api.generation() == 2 and api.read_batches([request.batch],outboxes=True) == publications

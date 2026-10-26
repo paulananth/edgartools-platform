@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 
-os.environ["READ_CASE"] = "join"
+os.environ["READ_CASE"] = "details" if os.environ["READ_WORKER_CASE"] == "mapping_freeze" else "join"
 g = runpy.run_module("tests.storage_adapters.record_read_scenarios")
 
 from edgar_warehouse.mdm.clean.merge import MergeStage
@@ -150,6 +150,16 @@ if os.environ["READ_WORKER_CASE"] == "merge_worker":
     assert final["checks"][g["PRIMARY"]]["records"] == 1
     assert final["checks"][g["SECONDARY"]]["records"] == 1
     assert api.generation() == before+2
+    observed_envelope = {**envelope,"effect_key":"9"*64,"output":(folder/"observer.json").as_uri()}
+    with patch.object(MergeStage,"_prepare",side_effect=AssertionError("observer prepared another merge")):
+        observed_candidate = mdm_merge.execute(observed_envelope,artifacts)
+    assert mdm_merge.verify({**observed_envelope,"candidate":observed_candidate},artifacts) == ({"mdm.committed":True},[])
+    observer_root = mdm_merge.mdm_run(observed_envelope)
+    assert observer_root != root_run and api.generation() == before+2
+    observed_report = coordinator.reconcile(observer_root)
+    assert observed_report["end_to_end_complete"] and observed_report["checks"] == {}
+    assert all(row["run_key"] == storage_adapter().key(root_run)
+               for row in api.read_batches([batch["batch_id"] for batch in manifest["batches"]]))
 if os.environ["READ_WORKER_CASE"] == "journal":
     import json
     from pathlib import Path
@@ -260,4 +270,147 @@ if os.environ["READ_WORKER_CASE"] == "forced":
     with pytest.raises(Conflict,match="differs from its original"):
         page(stage.store,"invented-export",run_id,1,{"object_type":"","object_id":""},2)
     assert api.generation() == generation
+if os.environ["READ_WORKER_CASE"] == "mapping_freeze":
+    import json
+    from pathlib import Path
+    from unittest.mock import patch
+    from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+    from edgar_warehouse.mdm.clean.run import RunCoordinator
+    from edgar_warehouse.mdm.clean.record_reads import RecordReader
+    from edgar_warehouse.workers import mdm_merge
+    from tests.support.reading import reading
+    os.environ["MDM_DATABASE_URL"] = os.environ["READ_RUNTIME_URL"]
+    os.environ["MDM_APPLICATION_ROLE"] = os.environ["READ_RUNTIME_ROLE"]
+    contract = {"provider":"fixture","family":"fixture","schema_version":"1",
+        "record_key":"key","publication_key":"version","effective_time":"effective_at","semantics":"patch",
+        "adapter":{"version":"invented-first","kind":g["KIND"],"record_key":["key"],
+                   "reading":reading({"invented_value":"first"})}}
+    def register(body):
+        with g["owner"].begin() as conn:
+            g["register_dataset"](conn,g["PRIMARY"],str(uuid4()),body)
+    register(contract)
+    artifacts = Artifacts()
+    folder = Path(os.environ["EDGAR_RULES_ROOT"])/"invented-mapping"
+    raw = artifacts.put_bytes((folder/"records.jsonl").as_uri(),
+        (json.dumps({"key":"one","first":"original","second":"corrected"})+"\n").encode())
+    def batch(n):
+        return {"batch_id":"invented-pinned-"+str(n),"stage":"mastering","consumer":"invented-pinned",
+            "expected_checkpoint":n-1,"checkpoint":n,"input":{"path":"records.jsonl","sha256":raw["sha256"],
+                "source_code":g["PRIMARY"],"record_count":1,"publication":{"publication_key":"invented-"+str(n),
+                "revision":n+10,"effective_at":g["AT"],"observed_at":g["AS_OF"]}}}
+    manifest = {"contract_version":2,"policy_digest":g["seed_pin"],"as_of":g["AS_OF"],"batches":[batch(1),batch(2)]}
+    reference = artifacts.put_bytes((folder/"manifest.json").as_uri(),json.dumps(manifest).encode())
+    current = proof(api,micros=120000000)
+    envelope = {"effect_key":"b"*64,"checks":["mdm.committed"],"input":reference,
+        "claim":{"proof":current,"run_id":current[0]["run_id"],"attempt":current[0]["attempt"]},
+        "output":(folder/"receipt.json").as_uri()}
+    corrected = {**contract,"adapter":{**contract["adapter"],"version":"invented-second",
+                                            "reading":reading({"invented_value":"second"})}}
+    original = RunCoordinator.execute
+    def interrupted(self,*args,**kwargs):
+        original(self,*args,**kwargs)
+        register(corrected)
+        raise RuntimeError("invented mapping interruption")
+    before = api.generation()
+    with patch.object(RunCoordinator,"execute",interrupted):
+        with pytest.raises(RuntimeError,match="invented mapping interruption"):
+            mdm_merge.execute(envelope,artifacts)
+    assert api.generation() == before+1
+    root = mdm_merge.mdm_run(envelope)
+    assert RunCoordinator(stage.store).scope(root)["mapping_versions"] == {g["PRIMARY"]:2}
+    candidate = mdm_merge.execute(envelope,artifacts)
+    assert mdm_merge.verify({**envelope,"candidate":candidate},artifacts) == ({"mdm.committed":True},[])
+    def current_evidence():
+        reader = RecordReader(api)
+        pointer = reader.current([g["holder"]["subject"]])[g["holder"]["subject"]]
+        key = ("source-reading",pointer["assertion_id"])
+        return reader.inputs([key])[key]
+    evidence = current_evidence()
+    assert evidence["mapping_version"] == 2 and evidence["fields"]["invented_value"]["value"] == "original"
+    later = {**manifest,"batches":[batch(3)]}
+    reference = artifacts.put_bytes((folder/"later.json").as_uri(),json.dumps(later).encode())
+    next_envelope = {**envelope,"effect_key":"e"*64,"input":reference,"output":(folder/"later-receipt.json").as_uri()}
+    mdm_merge.execute(next_envelope,artifacts)
+    evidence = current_evidence()
+    assert evidence["mapping_version"] == 3 and evidence["fields"]["invented_value"]["value"] == "corrected"
+    assert api.generation() == before+3
+if os.environ["READ_WORKER_CASE"] == "review_recovery":
+    import json
+    from pathlib import Path
+    from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+    from edgar_warehouse.mdm.clean.evidence import subject_key
+    from edgar_warehouse.mdm.clean.publication import LocalContractSink
+    from edgar_warehouse.mdm.clean.run import RunCoordinator
+    from edgar_warehouse.workers import mdm_merge
+    os.environ["MDM_DATABASE_URL"] = os.environ["READ_RUNTIME_URL"]
+    os.environ["MDM_APPLICATION_ROLE"] = os.environ["READ_RUNTIME_ROLE"]
+    policy = {**g["inactive"],"version":"invented-waiting-policy","relationships":{
+        "version":"invented-waiting","types":{"invented_link":{"from":[g["KIND"]],"to":[g["KIND"]]}}}}
+    with g["owner"].begin() as conn:
+        pin = g["register_policy"](conn,policy)
+    waiting = g["record"]("one",revision=2,relationships=[{"type":"invented_link",
+        "target_subject":subject_key(g["PRIMARY"],"future"),"valid_from":g["AT"],"valid_to":None,"scope":"invented"}])
+    artifacts = Artifacts()
+    folder = Path(os.environ["EDGAR_RULES_ROOT"])/"invented-review"
+    manifest = {"contract_version":2,"policy_digest":pin,"as_of":g["AS_OF"],"batches":[{
+        "batch_id":"invented-waiting","stage":"mastering","consumer":"invented-waiting",
+        "expected_checkpoint":0,"checkpoint":1,"assertions":[waiting]}]}
+    reference = artifacts.put_bytes((folder/"manifest.json").as_uri(),json.dumps(manifest).encode())
+    current = proof(api,micros=120000000)
+    envelope = {"effect_key":"f"*64,"checks":["mdm.committed"],"input":reference,
+        "claim":{"proof":current,"run_id":current[0]["run_id"],"attempt":current[0]["attempt"]},
+        "output":(folder/"receipt.json").as_uri()}
+    candidate = mdm_merge.execute(envelope,artifacts)
+    assert mdm_merge.verify({**envelope,"candidate":candidate},artifacts) == ({"mdm.committed":True},[])
+    root = mdm_merge.mdm_run(envelope)
+    coordinator = RunCoordinator(stage.store)
+    report = coordinator.reconcile(root)
+    assert report["waiting_links"] == 1 and report["unresolved_reviews"] == 0
+    assert len(report["waiting_link_list"]) == 1 and not report["end_to_end_complete"]
+    sink = LocalContractSink(folder/"delivered")
+    while stage.store.deliver_one("invented-export","invented-worker",sink):
+        pass
+    assert coordinator.reconcile(root)["end_to_end_complete"]
+    target = g["record"]("future",identifiers={g["NAMESPACE"]:"393"})
+    identity,decision = g["identity"](target,at="2026-03-02T00:00:00+00:00")
+    stage.apply(**{**command,"batch_id":"invented-resolution","run_id":str(uuid4()),"policy_digest":pin,
+        "as_of":"2026-04-01T00:00:00+00:00","assertions":[target],"identities":[identity],"decisions":[decision]})
+    corrected = coordinator.reconcile(root)
+    assert corrected["waiting_links"] == 0 and corrected["waiting_link_list"] == []
+    assert corrected["pending_publications"] == 1 and not corrected["end_to_end_complete"]
+    assert stage.store.deliver_one("invented-export","invented-worker",sink)
+    assert coordinator.reconcile(root)["end_to_end_complete"]
+if os.environ["READ_WORKER_CASE"] == "held_review":
+    import json
+    from pathlib import Path
+    from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+    from edgar_warehouse.mdm.clean.evidence import deferred_record
+    from edgar_warehouse.mdm.clean.publication import LocalContractSink
+    from edgar_warehouse.mdm.clean.run import RunCoordinator
+    from edgar_warehouse.workers import mdm_merge
+    os.environ["MDM_DATABASE_URL"] = os.environ["READ_RUNTIME_URL"]
+    os.environ["MDM_APPLICATION_ROLE"] = os.environ["READ_RUNTIME_ROLE"]
+    held = deferred_record(source_code=g["SECONDARY"],publication_key="invented-held",record_locator="held",
+        schema_version="1",reason="invented_missing_key",raw_record={"invented_amount":7},
+        provenance={"object":"invented/held.json"})
+    artifacts = Artifacts()
+    folder = Path(os.environ["EDGAR_RULES_ROOT"])/"invented-held"
+    manifest = {"contract_version":2,"policy_digest":g["seed_pin"],"as_of":g["AS_OF"],"batches":[{
+        "batch_id":"invented-held","stage":"mastering","consumer":"invented-held",
+        "expected_checkpoint":0,"checkpoint":1,"deferred":[held]}]}
+    reference = artifacts.put_bytes((folder/"manifest.json").as_uri(),json.dumps(manifest).encode())
+    current = proof(api,micros=120000000)
+    envelope = {"effect_key":"7"*64,"checks":["mdm.committed"],"input":reference,
+        "claim":{"proof":current,"run_id":current[0]["run_id"],"attempt":current[0]["attempt"]},
+        "output":(folder/"receipt.json").as_uri()}
+    candidate = mdm_merge.execute(envelope,artifacts)
+    assert mdm_merge.verify({**envelope,"candidate":candidate},artifacts) == ({"mdm.committed":True},[])
+    sink = LocalContractSink(folder/"delivered")
+    while stage.store.deliver_one("invented-export","invented-worker",sink):
+        pass
+    report = RunCoordinator(stage.store).reconcile(mdm_merge.mdm_run(envelope))
+    assert report["pending_publications"] == 0 and report["unresolved_reviews"] == 1
+    assert not report["end_to_end_complete"] and report["checks"][g["SECONDARY"]]["set_aside"] == 1
+    retained = api.read([("deferred-record",held["deferred_id"])],immutable=True)
+    assert json.loads(bytes(retained["deferred-record",held["deferred_id"]]["body"])) == held
 print("normal worker publication proof passed")

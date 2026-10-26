@@ -569,6 +569,9 @@ class Adapter:
 
     def _rpc(self, operation, values, *, authority=None):
         if authority is not None:
+            minimum = 4 if operation in {"apply","preview"} else 6
+            if self.protocol < minimum:
+                raise AdapterError("Selected storage protocol cannot enforce authority for this operation")
             values = {**values, "authority": authority_wire(authority)}
         name = self.routines[operation][0]
         statement = (

@@ -25,7 +25,8 @@ def test_populated_worker_upgrade(interrupt,database_factory,storage_api):
         five = storage_api.Adapter(runtime,prefix="mdm_store",protocol=5)
         request = batch(storage_api,governed=True,indexes=(),
             pins={"catalog":digest(catalog.CATALOG),"policy":pin},
-            objects=(storage_api.Effect("review","invented-waiting",{"waiting_for_end":True}),))
+            objects=tuple(storage_api.Effect("review","invented-waiting-"+str(n),{"waiting_for_end":True})
+                          for n in range(201)))
         lease = five.claim(request.scope,"invented-worker")
         five.apply(request,lease,proposal_body={"command":"invented-previous"})
         def frame():
@@ -51,7 +52,7 @@ def test_populated_worker_upgrade(interrupt,database_factory,storage_api):
         assert six.generation() == 1 and frame() == before
         with runtime.connect() as conn:
             count, rows = waiting(six,conn)
-            assert count == 1 and len(rows) == 1
+            assert count == 201 and len(rows) == 100
         assert six.replay(request.batch,lease,observer="invented-after-upgrade")["duplicate"]
         assert frame() == before
         stale = replace(request,batch="invented-old-writer",expected_generation=1,

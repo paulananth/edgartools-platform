@@ -28,6 +28,9 @@
   "mysql5": [
     "a11158cb450f9c9f3cd8dcc36e391846c9ef2e295fd51856717dd1405879f3a1"
   ],
+  "mysql6": [
+    "7e1d91d48c8178a6bb71813cc53c755ce31e28691f25add89b462de1d4140221"
+  ],
   "postgresql1": [
     "83f98aa5d191dd7e9121b43c33b9f720f60f3a968e2fe2e40458f9ea64f00192"
   ],
@@ -42,5 +45,8 @@
   ],
   "postgresql5": [
     "edc54818dc159d76a2bdd04761f90651c38bb23412552613649dfb583e7e985e"
+  ],
+  "postgresql6": [
+    "d29f8e3d28187005e755ce0bb9cb4eae944172676cf26443eabe7da7c9ae6b44"
   ]
 }

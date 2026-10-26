@@ -12,7 +12,7 @@ from tests.mdm.test_configured_pair_comparison import configured_root  # noqa: F
 
 
 @pytest.mark.parametrize("kind", ["invented-kind", "invented-other-kind"])
-@pytest.mark.parametrize("case", ["authority", "publication", "merge_worker", "journal", "forced"])
+@pytest.mark.parametrize("case", ["authority", "publication", "merge_worker", "journal", "forced", "mapping_freeze", "review_recovery", "held_review"])
 def test_normal_worker_publication(kind, case, database_factory, configured_root):
     if os.environ.get("SKILL_ADAPTER_TEST_ENGINE") == "mssql":
         pytest.skip("SQL Server normal workflow remains deferred")
