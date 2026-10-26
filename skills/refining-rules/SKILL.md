@@ -214,10 +214,10 @@ For example: a cascade pass, a name rule, or records waiting for review.
    but it has no command yet (2026-10-23): log the records it would move, and
    ask before coding the command.
 6. Update what a rule change moves, in the same branch: the whole policy's
-   digest pinned in `tests/integration/fixtures/company-mastering-records.json`
-   (`policy_digest`; the failing test prints the new one), the kind's Mapping
-   Document (`rules mapdoc write`), and the policy layers in
-   `tests/mdm/policy_layers.py` when a Company block changes. The
+   digest pinned as `policy_digest` in the mastering-records fixture under
+   `tests/integration/fixtures/` (the failing test prints the new one), the
+   kind's Mapping Document (`rules mapdoc write`), and the policy layers in
+   `tests/mdm/policy_layers.py` when a kind they peel changes. The
    installed-bundle test (`tests/engine/test_data_skill_bundle_postgres.py`)
    builds from the last commit, so it agrees only after the change is
    committed.
