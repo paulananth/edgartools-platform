@@ -344,6 +344,15 @@ Its decision and measurement:
 - `emits` is `bind` (Source Record Binding), `consolidate` (Identity
   Consolidation) or `review`. Tier C (fuzzy) emits `review` and is
   refused if it tries to emit `bind` on `name_similarity` alone (§10).
+- `on_several` says what a record does when its values lead to two or more
+  masters: `review` (the default) sends it to review; `merge` merges them,
+  the oldest surviving, then binds the record (ticket 138 part A2a). Only a
+  rule on an identifier a master may hold any number of values of
+  (`claim.reverse: null`, a listing FIGI) may merge. A pair a steward split
+  or excluded goes to review; so does a record whose other identifiers lead
+  to another master, and a record in review merges nothing. The merge is a
+  rule's decision (`actor: rule:<id>@<version>`), naming every live merge
+  either side rests on (`depends_on`); replay applies it after them.
 - A binding rule may not call `select_by_source_rank` (§3).
 - A `name_binding` rule (company mastering ticket 08) is measured, not
   deterministic: it only joins a waiting record to the Company another

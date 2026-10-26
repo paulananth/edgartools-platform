@@ -352,6 +352,9 @@ def declared_namespaces(kinds: dict) -> frozenset[str]:
 
 
 ON_NO_MATCH = frozenset({"mint", "wait"})
+# What a record reaching two or more masters does (ticket 138 part A2a):
+# `review` (the default) or `merge` them, the oldest surviving.
+ON_SEVERAL = frozenset({"review", "merge"})
 # Company compatibility is kind equality only: Q9 says a name change never
 # revokes a binding, and a name-similarity test is fuzzy matching (ticket 08).
 COMPATIBILITY = frozenset({"kind_equal@1"})
@@ -408,8 +411,25 @@ def check_binding_rule(kind: str, rule: dict, kinds: dict) -> None:
         )
     if not any(t["primitive"] == "identifier_match@1" for t in tests):
         raise Conflict(f"Binding rule {rule_id} does not match an identifier")
+    several = rule.get("on_several", "review")
+    if several not in ON_SEVERAL:
+        raise Conflict(f"Binding rule {rule_id}: on_several is one of {sorted(ON_SEVERAL)}")
+    if several == "merge" and _reverse_limit(kinds, namespaces[0]) is not None:
+        raise Conflict(
+            f"Binding rule {rule_id} merges only by an identifier a master may hold any "
+            f"number of values of (its Identifier Contract's claim.reverse null): {namespaces[0]}"
+        )
     if rule["on_no_match"] == "mint":
         _check_minting_source(kind, rule, namespaces[0], kinds)
+
+
+def _reverse_limit(kinds: dict, namespace: str):
+    """The Identifier Contract's `claim.reverse` for the namespace, wherever declared."""
+    for block in kinds.values():
+        contract = (block.get("identifiers") or {}).get(namespace)
+        if contract is not None:
+            return (contract.get("claim") or {}).get("reverse", 1)
+    return 1
 
 
 def _check_minting_source(kind: str, rule: dict, namespace: str, kinds: dict) -> None:

@@ -65,9 +65,12 @@ contract = {
     "sources": [PRIMARY],
     "normalizer": "normalize_identifier@crd-v1",
 }
-if case == "list_join":
+if case in ("list_join", "rule_merge"):
     # A master may hold every value of the list (ticket 138: no reverse limit).
     contract["claim"] = {"forward": 1, "reverse": None}
+if case == "rule_merge":
+    # Ticket 138 part A2a: values that lead to two masters merge them.
+    rule["on_several"] = "merge"
 rules = [rule, join]
 policy = {
     "version": "invented-read-phase",
@@ -340,6 +343,34 @@ def propose(items=(), journal=(), at=AS_OF):
 
 try:
     holder = record("one")
+    if case == "rule_merge":
+        first, second = record("one", identifiers={NAMESPACE: "170"}), record("two", identifiers={NAMESPACE: "171"})
+        older, first_bind = identity(first)
+        newer, second_bind = identity(second, "2026-01-02T00:00:00+00:00")
+        save([first, second], [older, newer], [first_bind, second_bind])
+        both = record("three", identifiers={NAMESPACE: ["170", "171"]})
+        proposed = propose([both])
+        (merge,) = [d for d in proposed["decisions"] if d["operation"] == "merge"]
+        assert {merge["left"], merge["right"]} == {older["entity_id"], newer["entity_id"]}
+        assert merge["actor"] == "rule:invented-bind@1" and "survivor" not in merge
+        assert proposed["reviews"] == []
+        if not mysql or prepared_mode:
+            MergeStage(Store(runtime)).apply(
+                batch_id="invented-rule-merge", run_id=str(uuid4()), policy_digest=pin,
+                consumer="invented-rule-merge", expected_checkpoint=0, checkpoint=1, as_of=AS_OF,
+                assertions=[both])
+            # The newer master is merged into the older; the record binds to them.
+            with runtime.connect() as conn:
+                reader = RecordReader(api.Adapter(runtime, prefix="mdm_store", protocol=6),
+                                      connection=conn, routes=matching.candidate_routes()) if prepared_mode else conn
+                merged = binding.survivors(reader, {newer["entity_id"]})
+                held = binding.bound(reader, [both["subject"]])
+            assert merged == {newer["entity_id"]: older["entity_id"]}
+            assert held[both["subject"]] in (older["entity_id"], newer["entity_id"])
+            # Nothing more to merge: the same record again proposes no merge.
+            assert not [d for d in propose([both])["decisions"] if d["operation"] == "merge"]
+        print("normal read phase passed")
+        raise SystemExit(0)
     if case == "list_join":
         # A holder that carries a list (ticket 138): the joining record's one
         # value is the list's second, so each value is indexed and read.

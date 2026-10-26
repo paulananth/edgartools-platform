@@ -159,6 +159,37 @@ def in_review(conn, entity_ids: set[str]) -> set[str]:
     }
 
 
+def consolidations(conn, entities: set[str]) -> list[dict]:
+    """The stored merges and Match Exclusions about `entities`, through every
+    merge they rest on, with the reversals and revocations of each (ticket
+    138 part A2a): what a rule's merge must name, and which pairs a steward
+    keeps apart. One indexed read per round of new keys."""
+    found: dict[str, dict] = {}
+    keys, asked = set(entities), set()
+    while want := keys - asked:
+        asked |= want
+        bodies = (conn.related_decisions(want) if isinstance(conn, RecordReader) else [r["body"] for r in rows(
+            conn,
+            """SELECT body FROM mdm.decision
+            WHERE decision_id IN (SELECT id FROM mdm.decisions_naming(CAST(:keys AS text[])) id)""",
+            keys=sorted(want),
+        )])
+        for body in bodies:
+            operation = body["operation"]
+            if operation in ("merge", "exclude"):
+                keys |= {body["left"], body["right"]}
+            elif operation not in ("reverse", "revoke"):
+                continue
+            found[body["decision_id"]] = body
+            keys.add(body["decision_id"])
+    return sorted(found.values(), key=lambda d: d["decision_id"])
+
+
+def _merged(automatic: dict) -> set[str]:
+    """The masters a rule's proposal merges."""
+    return {e for d in automatic.get("decisions") or [] if d["operation"] == "merge" for e in (d["left"], d["right"])}
+
+
 def _contracts(policy: dict, namespace: str) -> list[tuple[dict, dict]]:
     """Every kind's Identifier Contract for the namespace, with its kind block.
 
@@ -220,18 +251,32 @@ def propose(
             return nothing()
         found = holders(conn, policy, {name: set(values) for name, values in plan["wanted"].items()}, released)
         suspended = in_review(conn, {entity for held in found.values() for entity in held})
+        # A record reaching two or more masters may merge them (part A2a):
+        # what those masters already rest on, read once for the batch.
+        reaching: set[str] = set()
+        for items in plan["applicable"].values():
+            entities = {e for i in items for e in found.get((i["namespace"], i["value"]), {})}
+            if len(entities) > 1:
+                reaching |= entities
+        merges = consolidations(conn, reaching) if reaching else []
         newest = conn.newest(plan["kinds"]) if isinstance(conn,RecordReader) else {}
         if not isinstance(conn,RecordReader):
             for kind in plan["kinds"]:
                 at=conn.scalar(text("SELECT max(published_at) FROM mdm.master_entity WHERE kind=:kind"), {"kind": kind})
                 newest[kind]=str(at) if at is not None else None
-        return link_matching_records({
+        proposed = link_matching_records({
             "plan": plan,
             "found": [{"namespace": name, "value": value, "records": held} for (name, value), held in found.items()],
             "suspended": sorted(suspended), "newest": newest,
             "new_ids": [str(uuid4()) for _ in plan["applicable"]],
             "refused": sorted(correction.refused(conn, set(subjects), decisions)), "as_of": as_of,
+            "consolidations": merges,
         })
+        if merged := _merged(proposed):
+            # Re-checked under the lock by the same read: a merge or exclusion
+            # stored since makes it stale.
+            proposed["consolidations"] = [d["decision_id"] for d in consolidations(conn, merged)]
+        return proposed
     except ValueError as error:
         raise Conflict(str(error)) from None
 
@@ -263,6 +308,11 @@ def proposal_is_stale(conn, policy: dict, automatic: dict, released: set[str] = 
             (m["namespace"], _normal(policy, m["namespace"], m["raw"])), {}
         )
 
+    # A merge rests on the consolidations its masters had (part A2a): one
+    # stored since (a merge it must name, a Match Exclusion) makes it stale.
+    merged = _merged(automatic)
+    if merged and [d["decision_id"] for d in consolidations(conn, merged)] != automatic.get("consolidations", []):
+        return True
     # A value proposed for a master is stale once another master holds it;
     # held by that master already, it is consistent.
     if any(set(held(m)) - {m["entity_id"]} for m in mints):

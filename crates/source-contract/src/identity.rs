@@ -69,7 +69,32 @@ pub fn replay(
         .enumerate()
         .filter(|(_, d)| d.at <= clock)
         .collect();
-    ordered.sort_by(|(_, a), (_, b)| (a.at, &a.id).cmp(&(b.at, &b.id)));
+    // At one time, a merge comes after the merges it depends on (one batch
+    // may make several, ticket 138 part A2a); otherwise by id.
+    let at_once: HashMap<&str, &Decision> = ordered.iter().map(|(_, d)| (d.id.as_str(), *d)).collect();
+    fn depth<'a>(d: &'a Decision, all: &HashMap<&str, &'a Decision>, seen: &mut HashMap<&'a str, usize>) -> usize {
+        if let Some(found) = seen.get(d.id.as_str()) {
+            return *found;
+        }
+        seen.insert(&d.id, 0);
+        let found = d
+            .depends
+            .iter()
+            .filter_map(|id| all.get(id.as_str()).filter(|other| other.at == d.at))
+            .map(|other| 1 + depth(other, all, seen))
+            .max()
+            .unwrap_or(0);
+        seen.insert(&d.id, found);
+        found
+    }
+    let mut seen = HashMap::new();
+    let depths: HashMap<&str, usize> = ordered
+        .iter()
+        .map(|(_, d)| (d.id.as_str(), if d.op == "merge" { depth(d, &at_once, &mut seen) } else { 0 }))
+        .collect();
+    ordered.sort_by(|(_, a), (_, b)| {
+        (a.at, depths[a.id.as_str()], &a.id).cmp(&(b.at, depths[b.id.as_str()], &b.id))
+    });
     let by_id: HashMap<_, _> = ordered.iter().map(|(_, d)| (d.id.as_str(), *d)).collect();
     let mut revoked = HashSet::new();
     let mut revoked_at = HashMap::new();

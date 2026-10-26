@@ -31,8 +31,8 @@ all the other tables cross refrence and silver"). Built so far: a record
 carries lists of identifiers (part A1), OpenFIGI's one load with every
 listing FIGI as an identifier and one master id in silver (part B1),
 N-PORT's pairing by FIGI removed (part B2), each listing's currency (part
-B3). Still to build: the CUSIP-first bind and the merge by a shared FIGI
-(A2), then the switch-on. The
+B3), the merge by a shared FIGI (part A2a: the FIGI rule's `on_several:
+merge`). Still to build: the CUSIP-first bind (A2b), then the switch-on. The
 sections below say where 138 changes what runs.
 
 **One master id.** Mastering mints one master id for each Security. The
@@ -118,7 +118,7 @@ it in their own tickets ("Security now, others next tickets").
 |---|---|
 | Join two Securities on a ticker, a ticker and exchange, or a Bloomberg ID | Lookup only (2026-10-25, ticket 138). Today FIGI is lookup only too; ticket 138 makes it matching |
 | Let one identifier sit on two Securities | Every proof counts `identifiers_on_two_masters`; it must be 0 |
-| Let an OpenFIGI ISIN answer create a second Security for an issue its CUSIP answer already made | It joins that Security by a shared listing FIGI in MDM; FIGIs leading to two Securities wait for review until ticket 138's merge part (A2) |
+| Let an OpenFIGI ISIN answer create a second Security for an issue its CUSIP answer already made | It joins that Security by a shared listing FIGI in MDM; FIGIs leading to two Securities merge them, the oldest surviving (built, A2a; a pair a steward split stays apart and goes to review) |
 | Let a filed CUSIP and ISIN merge two Securities | Never: the record binds by its CUSIP, else an ISIN; an ISIN another Security holds is not added (2026-10-25, ticket 138) |
 | Fill a security-level field by guessing between disagreeing listings | Take the primary listing's value, else leave it blank (decided) |
 | Fold OpenFIGI's values into N-PORT's record | OpenFIGI keeps its own record on the same Security (decided) |
@@ -183,7 +183,7 @@ their Identifier Contract is verified (`policy.yaml`, `automatic_rules`,
 | `nport-security-isin` | N-PORT | an ISIN (each filed with a CUSIP; the key of an ISIN-only one) | creates one | same; it replaces `nport-isin-security-isin` (retired with `sec.nport.security_isin.v1`) |
 | `openfigi-security-cusip` | OpenFIGI (CUSIP asked) | CUSIP | creates one (version 2026-10-25.1) | waits for its switch-on (ticket 138); version 2026-10-23.1 was on from 2026-10-24 19:27 ET |
 | `openfigi-security-isin` | OpenFIGI (ISIN asked) | ISIN | creates one (version 2026-10-25.1) | waits for its switch-on (ticket 138); version 2026-10-24.1 was on from 2026-10-24 19:27 ET |
-| `openfigi-security-figi` | OpenFIGI | every listing FIGI | creates one (version 2026-10-25.1) | waits for its switch-on and the FIGI contract's verification (ticket 138); it replaces `openfigi-isin-security-cusip` |
+| `openfigi-security-figi` | OpenFIGI | every listing FIGI | creates one; FIGIs reaching two or more Securities merge them (version 2026-10-26.1, "FIGI merges Securities") | waits for its switch-on and the FIGI contract's verification (ticket 138); it replaces `openfigi-isin-security-cusip` |
 
 - **Look up first, then create, in a batch** (ticket 138): every record that
   finds a held Security binds first, then records that may create, then

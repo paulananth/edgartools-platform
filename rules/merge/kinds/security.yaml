@@ -7,7 +7,7 @@
 # Switched on (operator, 2026-10-15 06:27 ET, in their words: "merge 985 when green agreed for the rest"):
 # the matching rule activates on its Identifier Contract, verified on the
 # Proving Run's cohort (rules/merge/policy.yaml, automatic_rules).
-version: security-2026-10-25.one-openfigi-load
+version: security-2026-10-26.figi-merges-securities
 defaults:
   # The first listed wins each field. Operator, 2026-10-18 (ticket 84): "make
   # openfigi priority 1 and 13f last", then "Name only (Recommended)". OpenFIGI
@@ -119,13 +119,18 @@ rules:
     args:
       namespace: isin
 - rule_id: openfigi-security-figi
-  version: 2026-10-25.1
+  # "FIGI merges Securities" (ticket 138 part A2a; operator, 2026-10-25: two
+  # Securities reached through a listing FIGI "consolidate them automatically,
+  # the oldest id survives, then bind"; a pair a steward split stays apart,
+  # "Steward splits + exclusion").
+  version: 2026-10-26.1
   family: binding
   source: openfigi.security.v3
   applies_to_verdict: security
   emits:
   - bind
   on_no_match: mint
+  on_several: merge
   when:
   - primitive: identifier_match@1
     args:

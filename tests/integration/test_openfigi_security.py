@@ -26,6 +26,7 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
 from sqlalchemy import text
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
@@ -292,41 +293,49 @@ def test_a_record_joins_the_security_holding_its_cusip_or_creates_it(database, t
     assert row._mapping["record_key"] == EQUITY
 
 
-def test_isin_answers_first_make_one_security_of_every_answer_sharing_a_figi(database, tmp_path):
-    """Ticket 138 ("first lookup if not exists then master"): SHARED's ISIN answer shares
-    EQUITY's US composite listing, so they are one Security; TWICE creates one, and SOLE's
-    and DOUBLE's CUSIP answers join it by the FIGIs they share. ISIN and HOME create their
-    own. Then N-PORT filing EQUITY's CUSIP and SHARED's ISIN joins that Security."""
+def grouping(database, records) -> list[list[str]]:
+    """The record keys each Security holds, through its survivor."""
+    groups: dict[str, list[str]] = {}
+    for record in records:
+        key = record["provenance"]["record_key"]
+        groups.setdefault(bound(database, CODE, key), []).append(key)
+    return sorted(sorted(keys) for keys in groups.values())
+
+
+@pytest.mark.parametrize("order", ["isin_first", "cusip_first"])
+def test_openfigi_answers_in_either_order_make_the_same_securities(database, tmp_path, order):
+    """Ticket 138 ("first lookup if not exists then master"; part A2a, the FIGI rule
+    merges): SHARED's ISIN answer shares EQUITY's US composite listing, so they are one
+    Security; TWICE's FIGIs are SOLE's and DOUBLE's, so the three are one. ISIN answers
+    first, TWICE creates it and SOLE and DOUBLE join it; CUSIP answers first, SOLE and
+    DOUBLE are two Securities when TWICE comes, and TWICE merges them, the oldest
+    surviving. Either way the same Securities, holding the same records."""
     records, _ = prepared_records(tmp_path)
     isins = [r for r in records if r["identifiers"].get("isin")]
     cusips = [r for r in records if r["identifiers"].get("cusip")]
-    stage, policy = load(database, [("openfigi-isin", isins), ("openfigi-cusip", cusips)])
+    first, second = (isins, cusips) if order == "isin_first" else (cusips, isins)
+    stage, policy = load(database, [("openfigi-1", first), ("openfigi-2", second)])
+    assert grouping(database, records) == sorted([
+        sorted([EQUITY, SHARED]), sorted([SOLE, DOUBLE, TWICE]),
+        [BOND], [UNHELD], [BROKEN], [ISIN], [HOME]])
+    assert None not in {bound(database, CODE, r["provenance"]["record_key"]) for r in records}
+    assert len(securities(database)) == 7
     equity = bound(database, CODE, EQUITY)
-    assert equity is not None and bound(database, CODE, SHARED) == equity
     assert securities(database)[equity]["identifiers"] == {
         "cusip": [EQUITY], "isin": [SHARED], "figi": sorted({*figis(EQUITY), *figis(SHARED)})}
-    assert bound(database, CODE, SOLE) == bound(database, CODE, DOUBLE) == bound(database, CODE, TWICE) is not None
-    # EQUITY and SHARED; TWICE, SOLE and DOUBLE; BOND, UNHELD, BROKEN, ISIN, HOME.
-    assert len(securities(database)) == 7
+    merged = securities(database)[bound(database, CODE, TWICE)]
+    assert merged["identifiers"] == {"cusip": sorted([SOLE, DOUBLE]), "isin": [TWICE],
+                                     "figi": sorted({*figis(SOLE), *figis(DOUBLE)})}
+    assert not [v for v in core.documents(database, "review").values() if v.get("open")]
+    if order == "cusip_first":
+        # The merged-away Security points at its survivor, the one created first.
+        entities = core.documents(database, "entity")
+        aliases = [e for e in entities.values() if e["kind"] == "security" and e.get("status") == "alias"]
+        assert [a["canonical_id"] for a in aliases] == [merged["entity_id"]]
     nport.apply(stage, policy, "nport", [core.source(key=EQUITY, source_code=NPORT_ISIN, kind="security",
                                                      fields={"name_of_issuer": "EXAMPLE CORP"},
                                                      identifiers={"cusip": EQUITY, "isin": SHARED})], 3)
     assert bound(database, NPORT_ISIN, EQUITY) == equity and len(securities(database)) == 7
-
-
-def test_cusip_answers_first_leave_an_isin_on_two_securities_in_review_until_merge_is_built(database, tmp_path):
-    """The other order: SOLE and DOUBLE are two Securities before TWICE comes, so TWICE's
-    FIGIs lead to two and it waits for review (`conflicting_identifiers`): 8 Securities,
-    not 7. Ticket 138's merge part (A2) consolidates them, and both orders then agree."""
-    records, _ = prepared_records(tmp_path)
-    cusips = [r for r in records if r["identifiers"].get("cusip")]
-    isins = [r for r in records if r["identifiers"].get("isin")]
-    load(database, [("openfigi-cusip", cusips), ("openfigi-isin", isins)])
-    assert bound(database, CODE, SHARED) == bound(database, CODE, EQUITY) is not None
-    assert len(securities(database)) == 8 and bound(database, CODE, TWICE) is None
-    twice = next(x["subject"] for x in isins if x["provenance"]["record_key"] == TWICE)
-    reviews = [v for v in core.documents(database, "review").values() if v.get("open")]
-    assert "conflicting_identifiers" in [r["reason"] for r in reviews if r.get("subject") == twice]
 
 
 def test_an_isin_record_joins_the_security_holding_its_isin(database, tmp_path):
@@ -349,7 +358,9 @@ def test_every_listing_lands_in_silver_with_the_security_its_identifier_joined(d
                              fields={"name_of_issuer": "EXAMPLE CORP"}, identifiers={"cusip": EQUITY})]),
         ("nport", [core.source(key="NPORT-ROW-1", source_code=NPORT_ISIN, kind="security",
                                fields={"name_of_issuer": "EXAMPLE CORP"}, identifiers={"isin": ISIN})]),
-        ("openfigi", records)])
+        # CUSIP answers first: TWICE's ISIN answer merges SOLE's and DOUBLE's Securities.
+        ("openfigi-cusip", [r for r in records if r["identifiers"].get("cusip")]),
+        ("openfigi-isin", [r for r in records if r["identifiers"].get("isin")])])
     rows = [{k: v for k, v in row.items() if k != "figi_ticker"} for row in rows]
     with silver_database(database.admin) as (owner, runtime):
         silver.migrate(owner, runtime_role=RUNTIME)
@@ -376,10 +387,11 @@ def test_every_listing_lands_in_silver_with_the_security_its_identifier_joined(d
     assert {k for k, r in landed.items() if r["quality"]} == {(BROKEN, "BBGZZ0000US1")}
     assert landed[(BROKEN, "BBGZZ0000US1")]["security_mdm_id"] == bound(database, CODE, BROKEN) is not None
     assert landed[(UNHELD, "BBGZ000BND21")]["security_mdm_id"] == bound(database, CODE, UNHELD) is not None
-    # TWICE's FIGIs are SOLE's and DOUBLE's: in one batch, whether it joins them or
-    # waits for review depends on which comes first until the merge part; its
-    # listing carries whichever master it has.
-    assert landed[(TWICE, "BBGZ0000VS23")]["security_mdm_id"] == bound(database, CODE, TWICE)
+    # TWICE's FIGIs are SOLE's and DOUBLE's: it merged their Securities (part A2a), so
+    # every listing of the three carries the survivor's id, never the merged-away one.
+    survivor = bound(database, CODE, TWICE)
+    assert survivor in securities(database)
+    assert {r["security_mdm_id"] for k, r in landed.items() if k[0] in (SOLE, DOUBLE, TWICE)} == {survivor}
 
 
 def test_a_securitys_fields_are_the_agreed_or_the_primary_listings_and_every_listing_is_a_detail_row(tmp_path):
