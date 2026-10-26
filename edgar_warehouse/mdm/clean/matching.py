@@ -202,8 +202,8 @@ def _held_identifiers(conn, source: str, namespace: str, entities: set[str], rel
     held: dict[str, set] = defaultdict(set)
     if not entities:
         return held
-    from .binding import withheld
     from .record_reads import RecordReader
+    from .withholding import given, withheld
     if isinstance(conn, RecordReader):
         records = [r for r in conn.current(conn.members(entities)).values()
                    if r["source_code"] == source and r["subject"] not in released]
@@ -211,8 +211,7 @@ def _held_identifiers(conn, source: str, namespace: str, entities: set[str], rel
         for record in records:
             # A value its bind withholds is not its master's (ticket 138 part A2b).
             held[record["entity_id"]].update(
-                v for v in identifier_values((record.get("identifiers") or {}).get(namespace))
-                if (namespace, v) not in kept_back.get(record["subject"], ()))
+                given(kept_back, record["subject"], namespace, (record.get("identifiers") or {}).get(namespace)))
         return held
     found = rows(
         conn,
@@ -230,8 +229,7 @@ def _held_identifiers(conn, source: str, namespace: str, entities: set[str], rel
     )
     kept_back = withheld(conn, {r["subject"] for r in found})
     for r in found:
-        held[r["entity_id"]].update(
-            v for v in identifier_values(r["value"]) if (namespace, v) not in kept_back.get(r["subject"], ()))
+        held[r["entity_id"]].update(given(kept_back, r["subject"], namespace, r["value"]))
     return held
 
 

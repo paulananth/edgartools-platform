@@ -30,6 +30,7 @@ from .evidence import instant
 from .primitives import normalizer
 from .store import Conflict, containment_docs, identifier_values, rows
 from .record_reads import RecordReader
+from .withholding import given, withheld
 
 
 def nothing() -> dict:
@@ -92,9 +93,7 @@ def holders(conn, policy: dict, wanted: dict[str, set[str]], released: set[str] 
         kept_back = {} if portable else withheld(conn, {r["subject"] for r in found_rows})
         for row in found_rows:
             # A Stage row returns its whole list; only the values asked count.
-            for raw in [row["value"]] if portable else identifier_values(row["value"]):
-                if (namespace, raw) in kept_back.get(row.get("subject"), ()):
-                    continue
+            for raw in [row["value"]] if portable else given(kept_back, row["subject"], namespace, row["value"]):
                 key = (namespace, _normal(policy, namespace, raw))
                 if portable and key[1] not in values:
                     raise Conflict("Identifier reference differs from retained reading")
@@ -162,38 +161,6 @@ def in_review(conn, entity_ids: set[str]) -> set[str]:
             ids=sorted(entity_ids),
         )
     }
-
-
-def withheld_by(decisions) -> dict[str, set[tuple[str, str]]]:
-    """The values each record's live bind withholds from its master (ticket
-    138 part A2b: a filed CUSIP and ISIN on two Securities bind by the CUSIP;
-    the ISIN stays the other Security's). A revoked bind withholds nothing."""
-    decisions = list(decisions)
-    revoked = {d["target"] for d in decisions if d["operation"] == "revoke"}
-    found: dict[str, set[tuple[str, str]]] = defaultdict(set)
-    for d in decisions:
-        if d["operation"] == "bind" and d["decision_id"] not in revoked:
-            for w in d.get("withheld") or ():
-                found[d["subject"]].add((w["namespace"], w["raw"]))
-    return dict(found)
-
-
-def withheld(conn, subjects) -> dict[str, set[tuple[str, str]]]:
-    """`withheld_by` over the stored binds and revocations of `subjects`, one
-    indexed read per subject on either store."""
-    subjects = sorted(set(subjects))
-    if not subjects:
-        return {}
-    if isinstance(conn, RecordReader):
-        return withheld_by(d for d in conn.related_decisions(subjects)
-                           if d["operation"] in ("bind", "revoke") and d.get("subject") in subjects)
-    return withheld_by(r["body"] for r in rows(
-        conn,
-        """SELECT d.body FROM unnest(CAST(:subjects AS text[])) k(key) CROSS JOIN LATERAL (
-            SELECT body FROM mdm.decision WHERE body->>'subject' = k.key
-              AND operation IN ('bind', 'revoke') OFFSET 0) d""",
-        subjects=subjects,
-    ))
 
 
 def consolidations(conn, entities: set[str]) -> list[dict]:
@@ -284,7 +251,7 @@ def propose(
             "bound_entities": {subject: merged.get(entity, entity) for subject, entity in held.items()},
             # What each bound record's bind withholds, stored or in this batch (part A2b).
             "withheld": {subject: [{"namespace": n, "raw": r} for n, r in sorted(values)]
-                         for subject, values in {**withheld(conn, held), **withheld_by(decisions)}.items()},
+                         for subject, values in withheld(conn, held, decisions, as_of).items()},
             "released": sorted(released),
             "normalizers": {kind.normalizer_name: kind.upper for kind in TYPES.values()},
         })
@@ -355,6 +322,18 @@ def proposal_is_stale(conn, policy: dict, automatic: dict, released: set[str] = 
     if _merged(automatic) and [d["decision_id"] for d in consolidations(
             conn, set(automatic["consolidation_masters"]))] != automatic["consolidation_ids"]:
         return True
+    # A bind withholds a value only while another master holds it (part
+    # A2b): withheld from one no other master holds now, it is stale.
+    held_back = [(d["entity_id"], w) for d in automatic.get("decisions") or []
+                 if d["operation"] == "bind" for w in d.get("withheld") or ()]
+    if held_back:
+        asked: dict[str, set[str]] = defaultdict(set)
+        for _, w in held_back:
+            asked[w["namespace"]].add(w["raw"])
+        others = holders(conn, policy, asked, released)
+        if any(not set(others.get((w["namespace"], _normal(policy, w["namespace"], w["raw"])), {})) - {entity}
+               for entity, w in held_back):
+            return True
     # A value proposed for a master is stale once another master holds it;
     # held by that master already, it is consistent.
     if any(set(held(m)) - {m["entity_id"]} for m in mints):

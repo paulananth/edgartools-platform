@@ -7,6 +7,7 @@ import json
 from edgar_warehouse.rules.source_engine import plan_affected_records
 
 from .store import Conflict, identifier_values
+from .withholding import given, withheld
 
 
 def read_affected_records(
@@ -213,7 +214,6 @@ class RecordReader:
             raise Conflict("Identifier carrier has no current source record")
         readings = self._readings(pointers)
         # A value its bind withholds does not make it this master's (part A2b).
-        from .binding import withheld
         kept_back = {} if cross_reference else withheld(self, subjects)
         selected = {}
         for group, member in entries:
@@ -235,7 +235,7 @@ class RecordReader:
                 # value; normalization locates its index without rewriting it.
                 if raw not in identifier_values(reading.get("identifiers", {}).get(namespace)):
                     continue
-                if (namespace, raw) in kept_back.get(member, ()):
+                if not given(kept_back, member, namespace, raw):
                     continue
             if pointer.get("entity_id") and (kind is None or pointer["kind"] == kind):
                 selected[pointer["entity_id"]] = pointer["kind"]
@@ -470,7 +470,6 @@ class RecordReader:
             ):
                 raise Conflict("Identifier reference differs from its indexed scope")
         # A value a record's bind withholds is not its master's (ticket 138 part A2b).
-        from .binding import withheld
         kept_back = withheld(self, set(readings))
         return [
             {
@@ -480,7 +479,7 @@ class RecordReader:
             }
             for subject in readings
             for raw, _ in pairs[subject]
-            if (namespace, raw) not in kept_back.get(subject, ())
+            if given(kept_back, subject, namespace, raw)
         ]
 
     def publications(self, kinds):

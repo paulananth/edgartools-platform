@@ -230,3 +230,11 @@ mod tests {
         );
     }
 }
+
+/// A value a bind keeps from its master, since another master holds it
+/// (ticket 138 part A2b).
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct Withheld {
+    pub(crate) namespace: String,
+    pub(crate) raw: String,
+}

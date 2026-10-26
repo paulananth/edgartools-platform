@@ -360,7 +360,10 @@ Its decision and measurement:
   ISIN bind by the CUSIP). The bind lists them under `withheld`; a withheld
   value is never its master's: not in the master, the holder lookups, the
   agent lookup, or name matching's held values. A value no master holds is
-  not withheld; it becomes the bound master's as usual.
+  not withheld; it becomes the bound master's as usual. Withholding is
+  decided at the bind: the save re-checks that another master still holds
+  each withheld value, and the value stays withheld until a steward revokes
+  the bind. The lookup index keeps the value; every reader drops it.
 - A binding rule may not call `select_by_source_rank` (§3).
 - A `name_binding` rule (company mastering ticket 08) is measured, not
   deterministic: it only joins a waiting record to the Company another

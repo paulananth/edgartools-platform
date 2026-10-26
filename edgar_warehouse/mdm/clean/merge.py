@@ -18,7 +18,7 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
-from . import assessment, binding, correction, limits, matching, relationships
+from . import assessment, binding, correction, limits, matching, relationships, withholding
 from . import scope as scoping
 from .activation import check_policy
 from .evidence import PROFILE_KINDS, instant, validate_assertion, validate_deferred
@@ -531,7 +531,8 @@ class MergeStage:
                 "claims": claims, "policy": policy, "overrides": state.overrides,
                 "decisions": decisions, "as_of": as_of, "policy_digest": policy_digest,
                 # What each record's live bind withholds, stored or in this batch (part A2b).
-                "withheld": {subject: sorted(values) for subject, values in binding.withheld_by(all_d.values()).items()},
+                "withheld": {subject: [{"namespace": n, "raw": r} for n, r in sorted(values)]
+                             for subject, values in withholding.withheld_by(all_d.values(), as_of).items()},
                 "profile_kinds": {role: sorted(kinds) for role, kinds in PROFILE_KINDS.items()},
             })
         except ValueError as error:

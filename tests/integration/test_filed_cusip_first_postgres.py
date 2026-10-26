@@ -9,7 +9,10 @@ holding filing only that ISIN finds its own Security. Invented values only.
 
 from __future__ import annotations
 
+from edgar_warehouse.mdm.clean import binding
 from edgar_warehouse.mdm.clean.evidence import decision
+from edgar_warehouse.mdm.clean.store import Store
+from edgar_warehouse.rules import files
 from tests.integration import test_clean_mdm_postgres as core
 from tests.integration import test_nport_link_start as nport
 from tests.integration import test_openfigi_security as figi
@@ -65,3 +68,18 @@ def test_a_filed_cusip_and_isin_on_two_securities_bind_by_the_cusip(database):
                 expected_checkpoint=5, checkpoint=6, as_of=later, assertions=[holding("isin-after", isin=ISIN)])
     assert figi.bound(database, NPORT, "isin-after") is None
     assert "ambiguous_identifier" in [r["reason"] for r in reviews(database)]
+
+
+def test_a_bind_withholding_a_value_no_other_security_holds_is_stale(database):
+    """Re-checked under the lock: a value is withheld only while another Security holds
+    it; if that Security lost it since the proposal, the proposal is assessed again."""
+    stage, policy = figi.load(database, [("nport-1", [holding("by-cusip", cusip=CUSIP), holding("by-isin", isin=ISIN)])])
+    both = holding("both", cusip=CUSIP, isin=ISIN)
+    proposed = stage.propose(policy_digest=policy, assertions=[both], decisions=[], identities=[],
+                             as_of="2026-10-16T00:00:00+00:00")
+    body = figi.policy_body()
+    with database.application.connect() as conn:
+        assert not binding.proposal_is_stale(conn, body, proposed)
+        (bind,) = proposed["decisions"]
+        bind["withheld"] = [{"namespace": "isin", "raw": "ZZ0000000024"}]  # no Security holds it
+        assert binding.proposal_is_stale(conn, body, proposed)

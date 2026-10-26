@@ -298,9 +298,9 @@ class Context:
                 WHERE s.entity_id IS NOT NULL AND (CAST(:k AS text) IS NULL OR s.kind = :k)"""),
             {"docs": containment_docs(namespace, value), "k": kind}).all()
             # A value its bind withholds does not make it this master's (ticket 138 part A2b).
-            from edgar_warehouse.mdm.clean.binding import withheld
+            from edgar_warehouse.mdm.clean.withholding import given, withheld
             kept_back = withheld(conn, {r[1] for r in carriers})
-            found = {r[0]: "identifier" for r in carriers if (namespace, value) not in kept_back.get(r[1], ())}
+            found = {r[0]: "identifier" for r in carriers if given(kept_back, r[1], namespace, value)}
         if not found and adapter is None:
             found = {r[0]: "cross_reference" for r in conn.execute(text(
                 """SELECT DISTINCT entity_id FROM mdm.cross_reference_lookup(:ns, :v)

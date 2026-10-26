@@ -58,12 +58,7 @@ struct Outcomes {
     #[serde(default)]
     on_conflict: OnConflict,
 }
-/// A value a bind keeps from its master, since another master holds it.
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct Withheld {
-    namespace: String,
-    raw: String,
-}
+use crate::record_values::Withheld;
 impl Outcomes {
     fn read(rule: &Object) -> Result<Self, String> {
         let outcome = |name: &str| -> Result<_, String> {
@@ -642,12 +637,12 @@ pub fn link_matching_records(raw: &str) -> Result<String, String> {
         // value reaches; the values the others hold are withheld.
         let mut first = None;
         if problem.is_none() && merging.is_empty() && matches.len() > 1 {
-            let reached: Vec<&String> = matches
+            let firsts: Vec<&String> = matches
                 .iter()
                 .filter(|(_, items)| items.iter().any(|item| item.outcomes.on_conflict == OnConflict::First))
                 .map(|(entity, _)| entity)
                 .collect();
-            if let [only] = reached[..] {
+            if let [only] = firsts[..] {
                 first = Some(only.clone());
             }
         }

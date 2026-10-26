@@ -22,7 +22,7 @@ struct Command {
     /// The values each record's live bind withholds from its master (ticket
     /// 138 part A2b): another master holds them.
     #[serde(default)]
-    withheld: BTreeMap<String, BTreeSet<(String, String)>>,
+    withheld: BTreeMap<String, BTreeSet<values::Withheld>>,
 }
 
 fn decision_changes_record(
@@ -212,7 +212,8 @@ pub fn prepare_master_records(raw: &str) -> Result<String, String> {
             }
             for (namespace, raw) in values::read_object(claim, "identifiers")? {
                 for value in values::read_identifier_values(&raw)? {
-                    if withheld.get(subject).is_some_and(|kept| kept.contains(&(namespace.clone(), value.clone()))) {
+                    let kept_back = values::Withheld { namespace: namespace.clone(), raw: value.clone() };
+                    if withheld.get(subject).is_some_and(|kept| kept.contains(&kept_back)) {
                         continue;
                     }
                     identifiers.entry(namespace.clone()).or_default().insert(value);
