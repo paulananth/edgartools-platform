@@ -161,8 +161,9 @@ Today's keys and identifiers. Ticket 138 replaces the identifier part with
 - **Cross-references (lookup only):** the only listing's FIGI, the composite
   FIGI and ticker (the US composite's, else the ISIN country's composite's),
   the share-class FIGI. `mdm.cross_reference_lookup` finds a Security by them.
-  Every listing's FIGI is also found through `mdm.detail_version` (its key,
-  indexed). No rule matches on any of them.
+  No rule matches on any of them. Every listing's FIGI is an identifier
+  (OpenFIGI, part B1), and a listing's (exchange code, ticker) finds its
+  Security through the venue lookup (the listings section).
 
 ## How a Security is merged (live)
 
@@ -382,14 +383,50 @@ ticker different: so the root alone as a line beside coded lines gets none,
 and a repeated code, two roots or a single line give none (a single line's
 ticker ends in a code by chance 121,414 times). Lines without an exchange
 code form one group. Steps: `line-counts.yaml`, `lines.yaml`, `listing.yaml`.
-The (master id, exchange, currency) index waits for its first reader.
+
+**What listings are for: resolving a venue's key to its Security (decided
+2026-10-26; being built, ticket 138).** Operator, 18:58 ET: "Listing table is
+inside mdm primary use is the resolution of securities trading in different
+exchanges or venues". So the lookups run from a venue's key to the Security,
+never from a Security to its listings; the (master id, exchange, currency)
+index is dropped.
+
+- **Where they live** ("1", Index on the Security, 19:05 ET): the listings
+  stay inside the Security's record; MDM keeps a lookup from (exchange code,
+  ticker) and from (MIC, ticker) to the Security on every store (PostgreSQL, MySQL). It follows the
+  Security's own history and merges: a merged-away or retired Security leaves
+  it; a listing a later answer drops leaves it. No new kind of row.
+- **The venue is its ISO 10383 MIC** (operator, 19:12 ET: "The exchange code
+  is wrong why are we not using MIC codes"). OpenFIGI states only Bloomberg's
+  exchange code (UN, UW, US), never a MIC, so each listing keeps that code as
+  given and gets its MIC beside it from an RDM code set ("MIC beside, from
+  RDM", 19:14 ET); the lookup is MIC + ticker. A composite (US, GR, CN) is no
+  venue and has no MIC; it is found by its exchange code. The code set is
+  OpenFIGI's own: one filter request per active MIC, recording the exchange
+  codes each answer gives ("Ask OpenFIGI by MIC", 19:20 ET); no vendor's
+  table is used.
+- **A listing FIGI** finds its Security through the identifier index, since
+  every listing FIGI is the Security's identifier (part A2a); no second lookup.
+- **Every match, never one picked.** On OpenFIGI's 2026 Q2 answers, 1,073,151
+  (exchange code, ticker) pairs over 1,392,524 listings reach one Security
+  each, but 7 reach two or more (the market sector separates none of them),
+  1,815 reach two or more listings, and 317,558 listings have no exchange
+  code or ticker. The answer names every Security a pair reaches.
+- **Lookup only.** An exchange code and ticker never take part in matching:
+  a reused ticker would merge two Securities.
+- **Security-only, by decision.** Operator, 19:10 ET: "this is not generic
+  anymore which is fine this must be added to security master skills". The
+  venue lookup is the Security's own; it is documented here, not in the
+  generic MDM skills.
 
 Operator, 2026-10-20: "Maybe create a security detail table and keep it in
 the mdm", then "Detail rows set in config (Recommended)".
 
-- One MDM detail table for every kind: a Dataset Contract states its detail
-  lists in configuration (OpenFIGI: `listings`, keyed by FIGI). No
-  Security-only table, no Security-only code.
+- A Dataset Contract states its detail lists in configuration (OpenFIGI:
+  `listings`, keyed by FIGI), and a master's record carries them. On
+  installed stores no separate detail table is written (migration 028 retired
+  what kept `mdm.detail_version`); the venue lookup above is the one
+  Security-only part (2026-10-26).
 - A Security's CUSIP and ISIN answers make **one set of listings, joined by
   FIGI**; each row records which answer gave it ("One set, joined by FIGI").
 - Each load replaces a Security's listings. **A listing a later answer drops
