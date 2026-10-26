@@ -110,6 +110,14 @@ checkpoint before admitting all effects atomically. Preview executes the same
 validation and write assembly, then rolls back every effect. Prove both a valid
 preview and a destination refusal without lasting business writes.
 
+For an added index on an existing table, install the index explicitly in the
+pending migration step: table creation alone does not add it. Verify populated
+upgrade, interruption and retry before opening runtime execution. Keep an
+existing function's return signature stable, or qualify an explicit replacement
+and its grants; replacing its body alone cannot change that signature. A storage
+protocol change that leaves the mastering catalog unchanged keeps that catalog's
+existing approval. Freeze earlier migration fingerprints independently.
+
 Keep the observing run outside assessed business intent. Materialize actual
 producer metadata in publication at admission, preserve its exact bytes/hash,
 and retain the original producer on replay from a different observing run.
@@ -153,6 +161,32 @@ migration overlap. PostgreSQL uses a deferred commit check; MySQL owns its
 transaction and refuses a caller-held transaction. Test malformed direct
 requests and excess column grants as well as Python API validation. Freeze
 historical protocol fingerprints before adding a new protocol.
+
+### Qualify execution and delivery recovery
+
+Retain root-run scope, mapping pins, attempt observations and reports as execution
+metadata. Enforce immutable scope, report CAS and any generation freshness at the
+destination, using its clock. Execution bookkeeping must not create a business
+batch or advance its generation. Read receipts and quality profiles from the
+original producing run when another run observes a committed batch.
+
+Keep refreshed worker authority separate from retained delivery context. Preserve
+the first delivery's origin and the original batch's recording time when a retry
+comes from another run; its immutable downstream event must remain identical.
+Qualify interruption after downstream commit but before local acknowledgement,
+then replacement-run retry with one downstream event and unchanged business data.
+
+Enforce generation order per consumer and acknowledge only the current claim's
+verified bytes and fence. Release failed delivery only while that claim remains
+owned. Validate authority on an already-delivered retry as well. Reconciliation
+compares actual delivery intent with the batch's frozen consumer set; a missing
+required row is a refusal, while a retained unchanged batch may require no row.
+
+Run the installed worker and verifier in separate processes with separate logins.
+Give the verifier SELECT-only storage access and prove its write is denied; a
+Python read-only flag is not database authorization evidence. Qualify the committed
+five-wheel installation outside the checkout, including zero-work replay and
+normal command paths. Keep worker qualification separate from source activation.
 
 Use `PreparedBatch.publish_inputs=True` (CLI input `publish_inputs: true`) when
 new immutable inputs require publication even if current master effects stay
