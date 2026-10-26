@@ -119,14 +119,40 @@ authoritative content before approval freezes it.
 
 ## Cross-reference completion
 
-Decided (operator, 2026-10-25, ticket 138; not built): the cross-reference
-becomes the one table of every identifier, each row the master id, the
-identifier kind, the value, matching or lookup only, the source, first and
-last seen. A record may carry a list of values for one kind; the Merge Stage
-looks up every matching value: none mints, one binds, two consolidate
-automatically (the oldest id survives; a steward split adds a Match
-Exclusion). Security first, then the other kinds. Until built, the rest of
-this section holds.
+Decided (operator, 2026-10-25, ticket 138): the cross-reference becomes the
+one table of every identifier, each row the master id, the identifier kind,
+the value, matching or lookup only, the source, first and last seen. Built
+for Security (switched on 2026-10-26): a record may carry a list of values
+for one kind; the Merge Stage looks up every matching value: none mints, one
+binds, two consolidate automatically where the rule says so (below). The one
+table for the other kinds is still to build; until then the rest of this
+section holds.
+
+**What a matching rule does with several masters is data on the rule.**
+`on_several: merge` merges the masters a record's values reach, the oldest
+surviving, only by an identifier whose Identifier Contract states
+`consolidates: true` (a listing FIGI; never a CUSIP or ISIN). `on_conflict:
+first` binds to the one master the rule's value reaches and lists the
+values another master holds as the bind's `withheld`. Otherwise: review. A
+record in review merges nothing.
+
+**A rule's merge** is a `merge` decision (`actor: rule:<id>@<version>`, no
+survivor named). It names every live merge either side rests on
+(`depends_on`), stored or made earlier in the batch; replay applies a merge
+after those it depends on, even at the same time. The planner reads the
+stored merges, Match Exclusions and their reversals about the masters
+reached once per batch; the save repeats that read under the lock, and a
+change makes the proposal stale. An excluded pair goes to review.
+
+**Which values a record gives its master** is decided in one place,
+`edgar_warehouse/mdm/clean/withholding.py`. Every reader that answers
+"which master holds this value" or "which values does this master hold"
+runs its own query, then asks it: both stores' holder lookups, the portable
+carrier read, name matching's held values, the agent lookup, the planner's
+re-delivered records and the master projection. A new rule about which
+values count changes that module, never the seven readers (ticket 138 had
+to edit all seven twice before it existed). The lookup index keeps a
+withheld value; the readers drop it.
 
 MDM owns source-record identity bindings, canonical master redirects and
 lookup-only cross-references. Keep those roles distinct: a cross-reference

@@ -213,7 +213,15 @@ For example: a cascade pass, a name rule, or records waiting for review.
    those records (`correction.correction_batch`: revoke, quarantine, lift),
    but it has no command yet (2026-10-23): log the records it would move, and
    ask before coding the command.
-6. Continue with **approve**, using "Switch one declared matching rule on"
+6. Update what a rule change moves, in the same branch: the whole policy's
+   digest pinned in `tests/integration/fixtures/company-mastering-records.json`
+   (`policy_digest`; the failing test prints the new one), the kind's Mapping
+   Document (`rules mapdoc write`), and the policy layers in
+   `tests/mdm/policy_layers.py` when a Company block changes. The
+   installed-bundle test (`tests/engine/test_data_skill_bundle_postgres.py`)
+   builds from the last commit, so it agrees only after the change is
+   committed.
+7. Continue with **approve**, using "Switch one declared matching rule on"
    in APPROVE.md. A rule short of its bar stays off, and its records go to
    review.
 
@@ -236,6 +244,17 @@ record.
 Follow [APPROVE.md](../data-onboarding/APPROVE.md). A new version applies
 to new batches only. Running the feed is the Bookkeeping skill's **run**
 mode.
+
+When the operator asks for a limited test before a switch-on (ticket 138,
+2026-10-26: "Do limited testing and switch on"): take a slice of the real
+capture that holds the cases the rule changes (for a merge rule, the answers
+sharing values with the slice), run it through the configured contracts and
+the Merge Stage on a disposable store in every load order the feeds allow,
+and a second pass. Write the counts only (records bound, masters, merges,
+identifiers on two masters, open reviews, whether the orders give the same
+masters, whether the second pass changed anything) to a file under
+`.scratch/`; its sha256 is the new Identifier Contract's
+`verification.corpus_sha256`. Say which case the slice did not hold.
 
 ## When a command is missing
 
