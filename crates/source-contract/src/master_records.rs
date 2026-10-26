@@ -41,58 +41,24 @@ fn decision_changes_record(
     Ok(false)
 }
 
-const FIGI_REFERENCES: &[&str] = &["share_class_figi", "composite_figi", "figi"];
-
-/// The records that assert these identifier values share one FIGI.
-fn shared_figi(
-    claims: &IndexMap<String, Object>,
-    contributors: &IndexMap<String, BTreeMap<String, Vec<String>>>,
-    namespace: &str,
-    candidates: &BTreeSet<String>,
-) -> Result<bool, String> {
-    let mut subjects = Vec::new();
-    for value in candidates {
-        if let Some(found) = contributors.get(namespace).and_then(|rows| rows.get(value)) {
-            subjects.extend(found.iter().cloned());
-        }
+/// How many values of a namespace one master of the kind may hold: the
+/// contract's `claim.reverse`, `null` for any number. A namespace no contract
+/// declares, or a claim that states no reverse, holds one.
+fn read_reverse_limit(policy: &Object, kind: &str, namespace: &str) -> Result<usize, String> {
+    let kinds = values::read_object(policy, "kinds")?;
+    let Some(block) = kinds.get(kind) else {
+        return Ok(1);
+    };
+    let block: Object = values::read_value(block)?;
+    let Some(contract) = values::read_object(&block, "identifiers")?.get(namespace).cloned() else {
+        return Ok(1);
+    };
+    let claim = values::read_object(&values::read_value(&contract)?, "claim")?;
+    match claim.get("reverse") {
+        None => Ok(1),
+        Some(raw) if raw.get() == "null" => Ok(usize::MAX),
+        Some(raw) => values::read_value(raw),
     }
-    subjects.sort();
-    subjects.dedup();
-    if subjects.is_empty() {
-        return Ok(false);
-    }
-    for reference in FIGI_REFERENCES {
-        let mut token: Option<String> = None;
-        let mut agreed = true;
-        for subject in &subjects {
-            let Some(claim) = claims.get(subject) else {
-                agreed = false;
-                break;
-            };
-            let refs = values::read_object(claim, "cross_references")?;
-            let Some(raw) = refs.get(*reference) else {
-                agreed = false;
-                break;
-            };
-            let text: String = values::read_value(raw)?;
-            if text.is_empty() {
-                agreed = false;
-                break;
-            }
-            match &token {
-                None => token = Some(text),
-                Some(held) if held == &text => {}
-                Some(_) => {
-                    agreed = false;
-                    break;
-                }
-            }
-        }
-        if agreed && token.is_some() {
-            return Ok(true);
-        }
-    }
-    Ok(false)
 }
 
 /// Keep one row per detail key, with the approved source order and all contributors.
@@ -228,7 +194,6 @@ pub fn prepare_master_records(raw: &str) -> Result<String, String> {
         let mut members = groups.entry(record.clone()).or_default().clone();
         members.sort();
         let mut identifiers: IndexMap<String, BTreeSet<String>> = IndexMap::new();
-        let mut contributors: IndexMap<String, BTreeMap<String, Vec<String>>> = IndexMap::new();
         let mut conflicts = Vec::new();
         for subject in &members {
             let Some(claim) = claims.get(subject) else {
@@ -241,24 +206,15 @@ pub fn prepare_master_records(raw: &str) -> Result<String, String> {
                 ]));
             }
             for (namespace, raw) in values::read_object(claim, "identifiers")? {
-                let value: String = values::read_value(&raw)?;
-                contributors
-                    .entry(namespace.clone())
-                    .or_default()
-                    .entry(value.clone())
-                    .or_default()
-                    .push(subject.clone());
-                identifiers.entry(namespace).or_default().insert(value);
+                for value in values::read_identifier_values(&raw)? {
+                    identifiers.entry(namespace.clone()).or_default().insert(value);
+                }
             }
         }
         for (namespace, candidates) in &identifiers {
-            if candidates.len() <= 1 {
-                continue;
-            }
-            // One CUSIP offered two ISINs stays one Security when those
-            // records share a FIGI (operator, 2026-10-24: "resolve using
-            // figi"). FIGI still does not join two Securities.
-            if namespace == "isin" && shared_figi(&claims, &contributors, namespace, candidates)? {
+            // The Identifier Contract's reverse claim: how many values of the
+            // namespace one master may hold (none stated: any number).
+            if candidates.len() <= read_reverse_limit(&policy, &kind, namespace)? {
                 continue;
             }
             conflicts.push(Object::from([
@@ -371,7 +327,7 @@ pub fn prepare_master_records(raw: &str) -> Result<String, String> {
 mod tests {
     use super::*;
 
-    fn command(namespace: &str, left_figi: &str, right_figi: &str) -> String {
+    fn command(reverse: &str) -> String {
         format!(
             r#"{{
               "identities": {{"e1": {{"entity_id": "e1", "kind": "security"}}}},
@@ -379,12 +335,11 @@ mod tests {
               "bindings": {{"s1": "e1", "s2": "e1"}},
               "quarantined": {{}},
               "claims": {{
-                "s1": {{"kind": "security", "identifiers": {{"{namespace}": "LEFT"}},
-                        "cross_references": {{"share_class_figi": "{left_figi}"}}}},
-                "s2": {{"kind": "security", "identifiers": {{"{namespace}": "RIGHT"}},
-                        "cross_references": {{"share_class_figi": "{right_figi}"}}}}
+                "s1": {{"kind": "security", "identifiers": {{"isin": ["LEFT", "MIDDLE"]}}}},
+                "s2": {{"kind": "security", "identifiers": {{"isin": "RIGHT"}}}}
               }},
-              "policy": {{"kinds": {{"security": {{"version": "t", "defaults": {{"sources": []}}}}}}}},
+              "policy": {{"kinds": {{"security": {{"version": "t", "defaults": {{"sources": []}},
+                "identifiers": {{"isin": {{"claim": {{"forward": 1, "reverse": {reverse}}}}}}}}}}}}},
               "overrides": [],
               "decisions": [{{"operation": "bind", "entity_id": "e1"}}],
               "as_of": "2026-10-24T00:00:00Z",
@@ -395,27 +350,21 @@ mod tests {
     }
 
     #[test]
-    fn two_isins_that_share_a_figi_stay_on_one_security() {
-        let prepared = prepare_master_records(&command("isin", "BBG000000001", "BBG000000001"))
-            .expect("shared figi");
-        assert!(prepared.contains("\"isin\":[\"LEFT\",\"RIGHT\"]"));
+    fn a_master_holds_every_value_when_the_contract_sets_no_reverse_limit() {
+        let prepared = prepare_master_records(&command("null")).expect("no limit");
+        assert!(prepared.contains("\"isin\":[\"LEFT\",\"MIDDLE\",\"RIGHT\"]"));
         assert!(!prepared.contains("authoritative_identifier_conflict"));
     }
 
     #[test]
-    fn two_isins_without_one_figi_are_still_refused() {
-        let error = prepare_master_records(&command("isin", "BBG000000001", "BBG000000002"))
-            .expect_err("different figi");
-        assert_eq!(
-            error,
-            "Identity decision has unresolved authoritative identifier or kind conflict"
-        );
+    fn a_master_within_its_reverse_limit_is_accepted() {
+        let prepared = prepare_master_records(&command("3")).expect("within the limit");
+        assert!(!prepared.contains("authoritative_identifier_conflict"));
     }
 
     #[test]
-    fn two_cusips_are_not_resolved_by_a_shared_figi() {
-        let error = prepare_master_records(&command("cusip", "BBG000000001", "BBG000000001"))
-            .expect_err("cusip");
+    fn a_master_over_its_reverse_limit_is_refused() {
+        let error = prepare_master_records(&command("2")).expect_err("over the limit");
         assert_eq!(
             error,
             "Identity decision has unresolved authoritative identifier or kind conflict"

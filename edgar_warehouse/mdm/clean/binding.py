@@ -19,7 +19,6 @@ same record keeps its Company without any lookup.
 
 from __future__ import annotations
 
-import json
 from collections import defaultdict
 from uuid import uuid4
 
@@ -29,7 +28,7 @@ from . import correction
 from .activation import declared_namespaces
 from .evidence import instant
 from .primitives import normalizer
-from .store import rows
+from .store import Conflict, containment_docs, identifier_values, rows
 from .record_reads import RecordReader
 
 
@@ -73,7 +72,7 @@ def holders(conn, policy: dict, wanted: dict[str, set[str]], released: set[str] 
         found_rows = (conn.holders(namespace, values, _issuers(policy, namespace), released)
                       if isinstance(conn, RecordReader) else rows(
             conn,
-            """SELECT s.reading->'identifiers'->>:namespace AS value,
+            """SELECT DISTINCT s.reading->'identifiers'->:namespace AS value,
                       s.entity_id::text AS entity_id, i.kind
             FROM unnest(CAST(:wanted AS jsonb[])) AS w(doc) CROSS JOIN LATERAL (
                 SELECT reading, entity_id, subject, source_code FROM mdm.stage_record
@@ -81,17 +80,21 @@ def holders(conn, policy: dict, wanted: dict[str, set[str]], released: set[str] 
             JOIN mdm.master_entity i ON i.entity_id = s.entity_id
             WHERE s.source_code = ANY(:sources) AND NOT s.subject = ANY(:released)""",
             namespace=namespace,
-            wanted=[json.dumps({namespace: v}) for v in sorted(values)],
+            wanted=[doc for v in sorted(values) for doc in containment_docs(namespace, v)],
             sources=_issuers(policy, namespace),
             released=sorted(released),
         ))
         merged = survivors(conn, {r["entity_id"] for r in found_rows})
+        portable = isinstance(conn, RecordReader)
+        normals = {_normal(policy, namespace, v) for v in values}
         for row in found_rows:
-            key = (namespace, _normal(policy, namespace, row["value"]))
-            if isinstance(conn,RecordReader) and key[1] not in values:
-                from .store import Conflict
-                raise Conflict("Identifier reference differs from retained reading")
-            found[key][merged.get(row["entity_id"], row["entity_id"])] = row["kind"]
+            # A Stage row returns its whole list; only the values asked count.
+            for raw in [row["value"]] if portable else identifier_values(row["value"]):
+                key = (namespace, _normal(policy, namespace, raw))
+                if portable and key[1] not in values:
+                    raise Conflict("Identifier reference differs from retained reading")
+                if key[1] in normals:
+                    found[key][merged.get(row["entity_id"], row["entity_id"])] = row["kind"]
     return found
 
 
@@ -200,13 +203,16 @@ def propose(
     `released`: the records this batch unbinds (ticket 13)."""
     from edgar_warehouse.rules.source_engine import plan_record_matches, link_matching_records
     from .identifier_types import TYPES
-    from .store import Conflict
 
     subjects = sorted({record["subject"] for record in assertions})
     try:
+        held = bound(conn, subjects)
+        merged = survivors(conn, set(held.values()))
         plan = plan_record_matches({
             "policy": policy, "assertions": assertions, "decisions": decisions,
-            "identities": identities, "bound": list(bound(conn, subjects)),
+            "identities": identities, "bound": list(held),
+            # A re-delivered record's values are its master's (its survivor's).
+            "bound_entities": {subject: merged.get(entity, entity) for subject, entity in held.items()},
             "released": sorted(released),
             "normalizers": {kind.normalizer_name: kind.upper for kind in TYPES.values()},
         })
@@ -235,7 +241,8 @@ def proposal_is_stale(conn, policy: dict, automatic: dict, released: set[str] = 
 
     Run at apply, under the Merge Stage lock, since a concurrent run may have
     committed since the proposal was assessed. Stale, and re-assessed, when:
-    - an identifier proposed for a new Company is now held;
+    - an identifier proposed for a master (a new one, or one a record joins
+      or re-delivers with a value no master held) is now held by another;
     - an identifier a join rested on is no longer held by exactly that
       Company (another Company acquired it, or the Company was merged away);
     - an identity of a new Company's kind has since been published at or
@@ -256,7 +263,9 @@ def proposal_is_stale(conn, policy: dict, automatic: dict, released: set[str] = 
             (m["namespace"], _normal(policy, m["namespace"], m["raw"])), {}
         )
 
-    if any(held(m) for m in mints):
+    # A value proposed for a master is stale once another master holds it;
+    # held by that master already, it is consistent.
+    if any(set(held(m)) - {m["entity_id"]} for m in mints):
         return True
     if any(set(held(j)) != {j["entity_id"]} for j in joins):
         return True

@@ -6,7 +6,7 @@ import json
 
 from edgar_warehouse.rules.source_engine import plan_affected_records
 
-from .store import Conflict
+from .store import Conflict, identifier_values
 
 
 def read_affected_records(
@@ -223,13 +223,14 @@ class RecordReader:
             else:
                 family, keys = self._group_keys(group, 4)
                 if (family != "identifier_records" or keys[0] != namespace
-                        or keys[1] != pointer.get("normalized_identifiers", {}).get(namespace)
+                        or keys[1] not in identifier_values(
+                            pointer.get("normalized_identifiers", {}).get(namespace))
                         or keys[2] != pointer["source_code"] or keys[3] != "bound"
                         or not pointer.get("entity_id")):
                     raise Conflict("Identifier carrier differs from its indexed value")
                 # Match the original query contract: lookup takes the carried
                 # value; normalization locates its index without rewriting it.
-                if reading.get("identifiers", {}).get(namespace) != raw:
+                if raw not in identifier_values(reading.get("identifiers", {}).get(namespace)):
                     continue
             if pointer.get("entity_id") and (kind is None or pointer["kind"] == kind):
                 selected[pointer["entity_id"]] = pointer["kind"]
@@ -436,15 +437,18 @@ class RecordReader:
             for pointer in pointers.values()
             if pointer.get("entity_id")
         )
-        if any(
-            not pointer.get("entity_id")
-            or (
-                pointer.get("source_code"),
-                (pointer.get("normalized_identifiers") or {}).get(namespace),
-            )
-            not in wanted
-            for pointer in pointers.values()
-        ):
+        # Each record's carried values beside their normalized forms, in one
+        # order (`prepare_record_lookups` keeps a list's order).
+        pairs = {}
+        for subject, pointer in pointers.items():
+            carried = identifier_values((readings[subject].get("identifiers") or {}).get(namespace))
+            normal = identifier_values((pointer.get("normalized_identifiers") or {}).get(namespace))
+            if len(carried) != len(normal):
+                raise Conflict("Identifier reference differs from current source record")
+            pairs[subject] = [(raw, value) for raw, value in zip(carried, normal)
+                              if (pointer.get("source_code"), value) in wanted]
+        if any(not pointer.get("entity_id") or not pairs[subject]
+               for subject, pointer in pointers.items()):
             raise Conflict("Identifier reference differs from current source record")
         for group, member in entries:
             if member not in subjects:
@@ -456,19 +460,18 @@ class RecordReader:
                 pointer.get("source_code") != source
                 or not pointer.get("entity_id")
                 or state != "bound"
-                or (pointer.get("normalized_identifiers") or {}).get(name) != value
-                or not isinstance(
-                    (readings[member].get("identifiers") or {}).get(name), str
-                )
+                or name != namespace
+                or value not in {normal for _, normal in pairs[member]}
             ):
                 raise Conflict("Identifier reference differs from its indexed scope")
         return [
             {
-                "value": (record.get("identifiers") or {}).get(namespace),
+                "value": raw,
                 "entity_id": pointers[subject]["entity_id"],
                 "kind": identities["identity", pointers[subject]["entity_id"]]["kind"],
             }
-            for subject, record in readings.items()
+            for subject in readings
+            for raw, _ in pairs[subject]
         ]
 
     def publications(self, kinds):

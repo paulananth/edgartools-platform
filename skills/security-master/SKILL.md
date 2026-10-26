@@ -39,7 +39,7 @@ survives and the other points to it; silver is re-pointed.
 
 **The Cross-reference holds every identifier** ("cross_refrence table must
 hold all the identifiers", "no need for identifier table"). No other
-identifiers or listings table. Each row: the master id, the identifier kind,
+identifiers table; the Listing table (below) holds listings, not identifiers. Each row: the master id, the identifier kind,
 the value, matching or lookup only, the source, first seen, last seen.
 
 | Identifier | Role |
@@ -82,8 +82,8 @@ CUSIPs, the old one with its last-seen date).
   the 2026-10-15 capture, of 380,047 ISIN answers found, 350,867 share a
   listing FIGI with one CUSIP answer's Security, 29,169 mint their own and 11
   consolidate. The ISIN target, `figi_ids`, `figi_cusips`, `attach` and
-  `answers_cusip` / `answers_isin` go. MDM keeps no listings; each listing
-  stays in silver's `openfigi_listing`.
+  `answers_cusip` / `answers_isin` go. Each listing
+  stays in the Listing table ("need a separate table for listing").
 - **13F adds fields, second**, the same way: look up first, then mint.
 - **N-PORT adds fields.** A holding's record looks up its CUSIP, ISIN or other
   issued identifier; it mints only when none is found. Its seven pairing steps
@@ -359,12 +359,20 @@ countries, and for 25 of 36 countries tried the home composite never appears
 in the answers, which is why the code set holds 11. A Security OpenFIGI did
 not find (5%) keeps its N-PORT and 13F fields only.
 
-## The listings detail table (today; removed by ticket 138)
+## The listings detail table (decided; kept by ticket 138)
 
-Operator, 2026-10-25: "we don't need this table". Ticket 138 removes
-OpenFIGI's listings from MDM: each listing stays in silver's
-`openfigi_listing`, and its FIGI, ticker and ticker + exchange go into the
-Cross-reference. Until it is built:
+Operator, 2026-10-25: "changing my mind need a separate table for listing
+ie figi, exchange, ticker, exchange" (replacing "we don't need this table").
+One row per trading line, keyed by its listing FIGI, with its master id,
+exchange code, currency, ticker and composite FIGI. A security is listed once
+per exchange, but OpenFIGI gives a FIGI per trading line: on multi-currency
+venues one stock has a line per currency, its ticker the same root plus a
+currency code (90% of 292,567 same-exchange groups). OpenFIGI states no
+currency, so it is read from the ticker's suffix (blank where none); (master
+id, exchange, currency) still repeats on 71,974 of 2,184,699 lines, so it is
+an index, not the key ("Listing FIGI as key; exchange + currency as
+columns", 2026-10-25). The listing FIGI also matches through the
+Cross-reference; ticker and ticker + exchange are lookup only there.
 
 Operator, 2026-10-20: "Maybe create a security detail table and keep it in
 the mdm", then "Detail rows set in config (Recommended)".

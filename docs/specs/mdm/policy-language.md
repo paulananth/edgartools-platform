@@ -366,7 +366,7 @@ where MDM's *"Exclusivity is policy-specific"*
 | `authority` | issuer of the value | SEC/EDGAR | FINRA/IARD |
 | `normalizer` | `name@version` | `normalize_identifier@sec-cik-v1` | `normalize_identifier@crd-v1` |
 | `claim.forward` | one value → at most N identities | **1** | **1** |
-| `claim.reverse` | one identity → at most N values | unbounded (cross-reference ids) | unbounded; duplicates measured ~12/10k |
+| `claim.reverse` | one identity → at most N values (`null`: any number) | **1** | **1**; duplicates measured ~12/10k |
 | `compatibility` | the second handle the runtime veto compares: `field`, `predicate@version` | `owner_name`, `name_compatible@lenient-v1` | `name`, same |
 | `verification` | the measurement that earned activation: counts, bound, corpus hash, who/when | 0/72,981 decisions, Wilson UB 0.53/10k; reverse 0/16,677 same-issuer pairs | research 16 figures; forward only |
 | `tolerance` | §9.3 | `{unit: items, warm_up_decisions: 10000, max_per_10k: 5}` | same |
@@ -380,10 +380,14 @@ rules differ in contract, not just namespace.
 Evidence: [research 07](../../../.scratch/mastering-policy-language/research/07-owner-cik-cardinality-and-deterministic-binding.md),
 [ticket 06](../../../.scratch/mastering-policy-language/issues/06-decide-how-a-deterministic-rule-activates.md).
 
-Reverse-direction hits (an identity would acquire a second value) are
-reported as **consolidation candidates**, never vetoed — an identity holds
-any number of cross-reference ids. Collapsing them is Identity
-Consolidation with its own evidence.
+`claim.reverse` is enforced (ticket 138): a master holding more values of
+the namespace than the count goes to review
+(`authoritative_identifier_conflict`); `null` lets it hold any number. The
+Company, Person and Fund contracts state `1`, the limit the engine always
+applied; a Security's CUSIP, ISIN and FIGI state `null`, since one Security
+holds a FIGI for each listing and may carry two CUSIPs over time. A record
+may carry a namespace as one value or as a nonempty list; matching, the
+lookup index and the master read each value.
 
 ## 8. Survivorship and projection
 

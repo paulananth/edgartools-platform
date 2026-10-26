@@ -4,7 +4,7 @@
 # person-cik 17:12 ET, each "Approved"). The classification rule's proof (in
 # policy.yaml and pending-proofs.yaml) is tied to this exact version, so any edit
 # to its steps or lists is a new version that must be measured again.
-version: person-2026-10-13.1
+version: person-2026-10-25.one-value-per-identifier
 defaults:
   sources:
   - sec.submissions.person.v1
@@ -442,7 +442,10 @@ identifiers:
     normalizer: normalize_identifier@sec-cik-v1
     claim:
       forward: 1
-      reverse: null
+      # One value per master (ticket 138): what the engine has always enforced
+      # (a second value sends the master to review), now stated, since the
+      # engine reads this limit and a Security's identifiers have none.
+      reverse: 1
     compatibility:
       field: kind
       predicate: kind_equal@1

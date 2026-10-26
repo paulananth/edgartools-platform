@@ -14,6 +14,10 @@ struct Inputs {
     decisions: Vec<Object>,
     identities: Vec<Object>,
     bound: Vec<String>,
+    /// Each stored bound record's master: a re-delivered record's identifiers
+    /// are its master's, so a later record in the batch finds them.
+    #[serde(default)]
+    bound_entities: BTreeMap<String, String>,
     released: BTreeSet<String>,
     normalizers: IndexMap<String, bool>,
 }
@@ -23,6 +27,10 @@ struct Match {
     namespace: String,
     value: String,
     raw: String,
+    /// The record's source issues the namespace (its contract's `sources`),
+    /// so the record establishes the value for its master.
+    #[serde(default)]
+    issued: bool,
 }
 #[derive(Serialize, Deserialize)]
 struct Holder {
@@ -199,6 +207,11 @@ pub fn plan_record_matches(raw: &str) -> Result<String, String> {
             caller.insert(subject, read_rule_text(decision, "entity_id")?);
         }
     }
+    for (subject, entity) in &input.bound_entities {
+        if !input.released.contains(subject) && !caller.contains_key(subject) {
+            caller.insert(subject.clone(), entity.clone());
+        }
+    }
     let mut applicable: BTreeMap<String, Vec<Match>> = BTreeMap::new();
     let mut wanted: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     let mut kinds = BTreeSet::new();
@@ -243,33 +256,40 @@ pub fn plan_record_matches(raw: &str) -> Result<String, String> {
             }
             let namespace = read_matching_namespace(rule)?;
             let identifiers = values::read_object(record, "identifiers")?;
-            let Some(raw) = identifiers
-                .get(&namespace)
-                .filter(|raw| raw.get() != "null")
-            else {
+            let Some(raw) = identifiers.get(&namespace) else {
                 continue;
             };
-            let raw: String = values::read_value(raw)?;
-            let value = prepare_identifier_value(&contracts, &namespace, &raw, &input.normalizers)?;
-            wanted
-                .entry(namespace.clone())
-                .or_default()
-                .insert(raw.clone());
+            let raws = values::read_identifier_values(raw)?;
+            if raws.is_empty() {
+                continue;
+            }
             if read_rule_text(rule, "on_no_match")? == "mint" {
                 kinds.insert(read_rule_text(record, "kind")?);
             }
-            applicable.entry(subject.clone()).or_default().push(Match {
-                rule: rule
-                    .iter()
-                    .filter(|(key, _)| {
-                        ["rule_id", "version", "on_no_match"].contains(&key.as_str())
-                    })
-                    .map(|(key, value)| (key.clone(), value.clone()))
-                    .collect(),
-                namespace,
-                value,
-                raw,
-            });
+            let kept: Object = rule
+                .iter()
+                .filter(|(key, _)| ["rule_id", "version", "on_no_match"].contains(&key.as_str()))
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect();
+            let source = read_rule_text(record, "source_code")?;
+            let issued = issuers
+                .get(&namespace)
+                .is_some_and(|sources| sources.contains(&source));
+            for raw in raws {
+                let value =
+                    prepare_identifier_value(&contracts, &namespace, &raw, &input.normalizers)?;
+                wanted
+                    .entry(namespace.clone())
+                    .or_default()
+                    .insert(raw.clone());
+                applicable.entry(subject.clone()).or_default().push(Match {
+                    rule: kept.clone(),
+                    namespace: namespace.clone(),
+                    value,
+                    raw,
+                    issued,
+                });
+            }
         }
     }
     let kinds_by_id: BTreeMap<_, _> = input
@@ -287,24 +307,32 @@ pub fn plan_record_matches(raw: &str) -> Result<String, String> {
         let Some(entity) = caller.get(&read_rule_text(record, "subject")?) else {
             continue;
         };
+        let source = read_rule_text(record, "source_code")?;
         for (namespace, raw) in values::read_object(record, "identifiers")? {
-            if !issuers.get(&namespace).is_some_and(|sources| {
-                sources.contains(&read_rule_text(record, "source_code").unwrap_or_default())
-            }) {
+            if !issuers
+                .get(&namespace)
+                .is_some_and(|sources| sources.contains(&source))
+            {
                 continue;
             }
-            let raw: String = values::read_value(&raw)?;
-            caller_holders.push(Holder {
-                value: prepare_identifier_value(&contracts, &namespace, &raw, &input.normalizers)?,
-                namespace,
-                records: IndexMap::from([(
-                    entity.clone(),
-                    kinds_by_id
-                        .get(entity)
-                        .cloned()
-                        .unwrap_or(read_rule_text(record, "kind")?),
-                )]),
-            });
+            for raw in values::read_identifier_values(&raw)? {
+                // Looked up too: only a value no master holds is new for it.
+                wanted
+                    .entry(namespace.clone())
+                    .or_default()
+                    .insert(raw.clone());
+                caller_holders.push(Holder {
+                    value: prepare_identifier_value(&contracts, &namespace, &raw, &input.normalizers)?,
+                    namespace: namespace.clone(),
+                    records: IndexMap::from([(
+                        entity.clone(),
+                        kinds_by_id
+                            .get(entity)
+                            .cloned()
+                            .unwrap_or(read_rule_text(record, "kind")?),
+                    )]),
+                });
+            }
         }
     }
     serde_json::to_string(&Plan {
@@ -352,18 +380,26 @@ pub fn link_matching_records(raw: &str) -> Result<String, String> {
             .extend(holder.records);
     }
     let stored = found.clone();
-    for holder in input.plan.caller_holders {
-        found
-            .entry((holder.namespace, holder.value))
-            .or_default()
-            .extend(holder.records);
-    }
     let mut result: BTreeMap<&str, Vec<Object>> =
         ["identities", "decisions", "reviews", "mints", "joins"]
             .into_iter()
             .map(|name| (name, Vec::new()))
             .collect();
-    let mut minted = BTreeMap::new();
+    for holder in input.plan.caller_holders {
+        let key = (holder.namespace, holder.value);
+        // A value the caller's or a re-delivered record gives its master,
+        // which no master held: re-checked under the lock like a rule's.
+        if !stored.contains_key(&key) {
+            for entity in holder.records.keys() {
+                result.get_mut("mints").unwrap().push(Object::from([
+                    ("entity_id".into(), values::write_value(entity)?),
+                    ("namespace".into(), values::write_value(&key.0)?),
+                    ("raw".into(), values::write_value(&key.1)?),
+                ]));
+            }
+        }
+        found.entry(key).or_default().extend(holder.records);
+    }
     let mut ids = input.new_ids.into_iter();
     let mut floors = BTreeMap::new();
     let mut subjects: Vec<_> = input.plan.applicable.iter().collect();
@@ -426,6 +462,7 @@ pub fn link_matching_records(raw: &str) -> Result<String, String> {
             ]));
             continue;
         }
+        let created = matches.is_empty();
         let (entity, selected) = if let Some((entity, matched)) = matches.into_iter().next() {
             for item in &matched {
                 if stored
@@ -449,46 +486,33 @@ pub fn link_matching_records(raw: &str) -> Result<String, String> {
             }) else {
                 continue;
             };
-            let key = (item.namespace.clone(), item.value.clone());
-            if !minted.contains_key(&key) {
-                let entity = ids.next().ok_or("Not enough allocated record identities")?;
-                if !floors.contains_key(&kind) {
-                    let at = values::read_time(&input.as_of)?;
-                    let floor =
-                        if let Some(newest) = input.newest.get(&kind).and_then(Option::as_ref) {
-                            let newest = values::read_time(newest)?;
-                            if at > newest {
-                                input.as_of.clone()
-                            } else {
-                                prepare_decision_time(
-                                    &newest
-                                        .checked_add_signed(Duration::microseconds(1))
-                                        .ok_or("Publication time overflow")?
-                                        .to_rfc3339(),
-                                )?
-                            }
-                        } else {
+            let entity = ids.next().ok_or("Not enough allocated record identities")?;
+            if !floors.contains_key(&kind) {
+                let at = values::read_time(&input.as_of)?;
+                let floor =
+                    if let Some(newest) = input.newest.get(&kind).and_then(Option::as_ref) {
+                        let newest = values::read_time(newest)?;
+                        if at > newest {
                             input.as_of.clone()
-                        };
-                    floors.insert(kind.clone(), floor);
-                }
-                result.get_mut("identities").unwrap().push(Object::from([
-                    ("entity_id".into(), values::write_value(&entity)?),
-                    ("kind".into(), values::write_value(&kind)?),
-                    ("published_at".into(), values::write_value(&floors[&kind])?),
-                ]));
-                result.get_mut("mints").unwrap().push(Object::from([
-                    ("entity_id".into(), values::write_value(&entity)?),
-                    ("namespace".into(), values::write_value(&item.namespace)?),
-                    ("raw".into(), values::write_value(&item.raw)?),
-                ]));
-                found
-                    .entry(key.clone())
-                    .or_default()
-                    .insert(entity.clone(), kind.clone());
-                minted.insert(key.clone(), entity);
+                        } else {
+                            prepare_decision_time(
+                                &newest
+                                    .checked_add_signed(Duration::microseconds(1))
+                                    .ok_or("Publication time overflow")?
+                                    .to_rfc3339(),
+                            )?
+                        }
+                    } else {
+                        input.as_of.clone()
+                    };
+                floors.insert(kind.clone(), floor);
             }
-            (minted[&key].clone(), item.clone())
+            result.get_mut("identities").unwrap().push(Object::from([
+                ("entity_id".into(), values::write_value(&entity)?),
+                ("kind".into(), values::write_value(&kind)?),
+                ("published_at".into(), values::write_value(&floors[&kind])?),
+            ]));
+            (entity, item.clone())
         };
         let rule_id = read_rule_text(&selected.rule, "rule_id")?;
         let version = read_rule_text(&selected.rule, "version")?;
@@ -497,6 +521,27 @@ pub fn link_matching_records(raw: &str) -> Result<String, String> {
             .contains(&(subject.clone(), rule_id.clone(), version.clone()))
         {
             continue;
+        }
+        // Every identifier no master held, from the source that issues it, is
+        // the master's from now on (the value a new master was created by
+        // too): a later record in this batch sharing any one of them finds
+        // it, and the save re-checks each under the lock (a concurrent run
+        // may have taken it).
+        for item in items {
+            let key = (item.namespace.clone(), item.value.clone());
+            let creates = created && key == (selected.namespace.clone(), selected.value.clone());
+            if found.contains_key(&key) || !(item.issued || creates) {
+                continue;
+            }
+            found
+                .entry(key)
+                .or_default()
+                .insert(entity.clone(), kind.clone());
+            result.get_mut("mints").unwrap().push(Object::from([
+                ("entity_id".into(), values::write_value(&entity)?),
+                ("namespace".into(), values::write_value(&item.namespace)?),
+                ("raw".into(), values::write_value(&item.raw)?),
+            ]));
         }
         let mut decision = Object::from([
             ("operation".into(), values::write_value(&"bind")?),

@@ -22,6 +22,26 @@ class Conflict(ValueError):
     """Evidence or a checkpoint disagrees with retained history."""
 
 
+def identifier_values(item: Any) -> list[str]:
+    """The values one identifier holds: a text value, or a nonempty list of
+    them (a FIGI per listing, ticket 138). `None` holds none. The source
+    engine reads them by the same rule (`read_identifier_values`)."""
+    if item is None:
+        return []
+    if isinstance(item, str):
+        return [item]
+    if isinstance(item, list) and item and all(isinstance(one, str) for one in item):
+        return list(item)
+    raise Conflict("An identifier holds a text value or a nonempty list of them")
+
+
+def containment_docs(namespace: str, value: str) -> list[str]:
+    """The JSON documents a stored record's `identifiers` contains when it
+    carries the value, alone or in a list; each is one probe of the GIN
+    index on identifiers (a nested list does not contain a lone value)."""
+    return [json.dumps({namespace: value}), json.dumps({namespace: [value]})]
+
+
 def canonical(value: Any) -> str:
     return json.dumps(
         value,

@@ -114,17 +114,18 @@ fn collect_entries(
             "unbound"
         };
         for (namespace, raw) in values::read_object(record, "normalized_identifiers")? {
-            let value: String = values::read_value(&raw)?;
-            let group = lookup_type(
-                "identifier_records",
-                &[
-                    namespace,
-                    value,
-                    values::read_text(record, "source_code")?,
-                    state.into(),
-                ],
-            )?;
-            entries.insert((group, subject.clone()), pointer.clone());
+            for value in values::read_identifier_values(&raw)? {
+                let group = lookup_type(
+                    "identifier_records",
+                    &[
+                        namespace.clone(),
+                        value,
+                        values::read_text(record, "source_code")?,
+                        state.into(),
+                    ],
+                )?;
+                entries.insert((group, subject.clone()), pointer.clone());
+            }
         }
         for (namespace, raw) in values::read_object(record, "cross_references")? {
             if raw.get() == "null" {
@@ -264,16 +265,16 @@ pub fn prepare_record_lookups(raw: &str) -> Result<String, String> {
         );
         let mut normalized = Object::new();
         for (namespace, raw) in values::read_object(record, "identifiers")? {
-            if raw.get() == "null" {
+            let found = values::read_identifier_values(&raw)?
+                .iter()
+                .map(|value| {
+                    prepare_identifier_value(&contracts, &namespace, value, &input.normalizers)
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            if found.is_empty() {
                 continue;
             }
-            let value = prepare_identifier_value(
-                &contracts,
-                &namespace,
-                &values::read_value::<String>(&raw)?,
-                &input.normalizers,
-            )?;
-            normalized.insert(namespace, values::write_value(&value)?);
+            normalized.insert(namespace, values::write_identifier_values(&found, &raw)?);
         }
         record.insert(
             "normalized_identifiers".into(),

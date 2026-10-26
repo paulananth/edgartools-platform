@@ -65,6 +65,30 @@ pub(crate) fn has_value(body: &Object, key: &str) -> bool {
     body.get(key).is_some_and(|raw| has_content(raw))
 }
 
+/// The values one identifier holds: a text value, or a nonempty list of them
+/// (an OpenFIGI answer's FIGI for each listing). `null` holds none.
+pub(crate) fn read_identifier_values(raw: &RawValue) -> Result<Vec<String>, String> {
+    if raw.get() == "null" {
+        return Ok(Vec::new());
+    }
+    if let Ok(value) = read_value::<String>(raw) {
+        return Ok(vec![value]);
+    }
+    match read_value::<Vec<String>>(raw) {
+        Ok(values) if !values.is_empty() => Ok(values),
+        _ => Err("An identifier holds a text value or a nonempty list of them".into()),
+    }
+}
+
+/// Values written in the shape `like` holds them: one value alone, a list as
+/// a list (in its order, so each pairs with the carried form it came from).
+pub(crate) fn write_identifier_values(values: &[String], like: &RawValue) -> Result<Document, String> {
+    match values {
+        [one] if read_value::<String>(like).is_ok() => write_value(one),
+        _ => write_value(&values),
+    }
+}
+
 /// Canonical JSON keeps number lexemes supplied by the transport, sorting object keys only.
 pub(crate) fn write_sorted_json(raw: &RawValue) -> Result<String, String> {
     match raw.get().as_bytes().first() {

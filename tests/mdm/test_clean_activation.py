@@ -362,7 +362,7 @@ CIK_CONTRACT = {
     "authority": "SEC/EDGAR",
     "sources": ["sec.submissions.company.v1"],
     "normalizer": "normalize_identifier@sec-cik-v1",
-    "claim": {"forward": 1, "reverse": None},
+    "claim": {"forward": 1, "reverse": 1},
     "compatibility": {"field": "kind", "predicate": "kind_equal@1"},
     "verification": {
         "corpus_sha256": "c" * 64,
@@ -577,7 +577,8 @@ class TestTheCompanyPolicy:
         # profiling ticket 04b named the relationship types as their sources do,
         # then gave the calculated ultimate parent its history and let a
         # successor entity end parent links; profiling ticket 07 declared the
-        # Form ADV sources and their three matching rules, switched off.
+        # Form ADV sources and their three matching rules, switched off;
+        # ticket 138 stated each identifier's one value per Company.
         chain = policy_layers.digests(policy_layers.company_part(POLICY))
         assert chain == policy_layers.PINNED
         assert chain[-1] == "983352e81d295a165a1391e82fa8a24a710e6f638361a577f18f541917fd4049"

@@ -273,12 +273,21 @@ def _quality(contract: dict, fields: dict, matching: dict) -> dict | None:
     return apply(contract["quality"], fields, matching)
 
 
-def _named_values(row: dict, paths: dict, formats: dict) -> dict[str, str]:
-    """namespace → path into namespace → formatted value; an empty value is left out."""
+def _named_values(row: dict, paths: dict, formats: dict, *, lists: bool = False) -> dict:
+    """namespace → path into namespace → formatted value; an empty value is left out.
+
+    With `lists`, a path to a list gives each value once, in order (an
+    identifier a record holds several of, such as a FIGI per listing).
+    """
     found = {}
     for namespace, path in paths.items():
         item = value(row, path)
-        if item is not None and str(item).strip():
+        if lists and isinstance(item, list):
+            items = [format_value(one, formats.get(namespace))
+                     for one in item if one is not None and str(one).strip()]
+            if items:
+                found[namespace] = list(dict.fromkeys(items))
+        elif item is not None and str(item).strip():
             found[namespace] = format_value(item, formats.get(namespace))
     return found
 
@@ -327,7 +336,8 @@ def normalize(
         raise UnsupportedRecord("unsupported_identity_kind")
     key = record_key(row, mapping["record_key"])
     key = format_value(key, mapping.get("record_key_format"))
-    identifiers = _named_values(row, mapping.get("identifiers", {}), mapping.get("identifier_formats", {}))
+    identifiers = _named_values(row, mapping.get("identifiers", {}), mapping.get("identifier_formats", {}),
+                                lists=True)
     # Lookup-only ids (profiling ticket 03): kept with the record, never bound.
     cross_references = _named_values(
         row, mapping.get("cross_references", {}), mapping.get("cross_reference_formats", {})
