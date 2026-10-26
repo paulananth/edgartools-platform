@@ -33,4 +33,6 @@ def test_installed_workflow_matrix_has_no_missing_family_or_unrun_surface():
     assert "PYTEST_DEBUG_TEMPROOT" not in job["env"], "runner context belongs to the test step"
     step = next(step for step in job["steps"] if step.get("name") == "Qualify independently installed normal callers")
     assert step["env"]["PYTEST_DEBUG_TEMPROOT"] == "${{ runner.temp }}"
+    upload = next(step for step in job["steps"] if step.get("name") == "Retain counts and outcomes only")
+    assert "!${{ runner.temp }}/pytest-of-*/**/*current/**" in upload["with"]["path"], "Exclude pytest's current-directory symlink aliases"
     assert "installed-workflow" in ci["ci-gate"]["needs"]

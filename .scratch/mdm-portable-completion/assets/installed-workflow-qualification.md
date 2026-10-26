@@ -1,6 +1,6 @@
 # Independent installed MDM workflow qualification
 
-Status: installed harness implemented in PR #1178; complete execution remains open.
+Status: qualified on PostgreSQL and MySQL; PR #1178 awaits named merge approval.
 
 The operator selected this gate through Lavish on 2026-10-23. This matrix
 extends the [caller inventory](caller-inventory.md). It defines 18 proof
@@ -80,7 +80,7 @@ Each family expands into named manifest cases before its execution. Record a
 case per affected configured source/kind, arrival order, temporal boundary and
 fault location; a single family success flag is insufficient evidence.
 
-## Execution state
+## Execution state before final qualification
 
 Normal governed storage (#1152/#1153), authoritative saves (#1159), public
 readers (#1164/#1165) and worker recovery (#1171/#1173) are merged. The
@@ -102,7 +102,7 @@ private evidence location and resource-cleanup outcome. Use explicit
 `not_run`, `failed` or `passed` states. Historical targeted boundary results do not close final-revision slots;
 final case counts and failures are recorded below after execution.
 
-## Development checkpoint
+## Development checkpoint (historical)
 
 At 2026-10-26 06:26 ET, the isolated five-package build at 658492dc passes
 36 targeted cases on each engine across both invented kinds. All nine durable
@@ -110,3 +110,46 @@ groups reject injected writes atomically and accept the same request after
 fault removal. The remaining complete installed matrix is 160 cases per engine
 (54 merge, 52 readers/links/search, 36 boundaries, 18 workers). PR #1178 retains
 per-case outcome artifacts; only final-revision results close the 36 slots.
+
+## Qualified installed result
+
+2026-10-26 06:52 ET — [CI and case artifacts](https://github.com/paulananth/edgartools-platform/actions/runs/40307681836): **320 cases passed**,
+160 on each engine, across both configured kinds. All 21 CI checks pass.
+The artifacts retain every expected case exactly once, identical per-case
+configuration hashes on both engines, one installed revision and verified
+cleanup. The tested merge commit contains PR head `d11505350226f03050429725d006e79b457d6e4d`;
+installed revision: `cc8b30407e5ab397151e7518f33c9359e9abb068`.
+
+| CI group | PostgreSQL passed | MySQL passed |
+| --- | ---: | ---: |
+| Merge | 54 | 54 |
+| Readers, links and search | 52 | 52 |
+| Upgrade and failure boundaries | 36 | 36 |
+| Workers and independent verifier | 18 | 18 |
+| Total | 160 | 160 |
+
+| Family | PostgreSQL passed cases | MySQL passed cases | Outcome |
+| --- | ---: | ---: | --- |
+| Q01 | 160 | 160 | qualified |
+| Q02 | 2 | 2 | qualified |
+| Q03 | 4 | 4 | qualified |
+| Q04 | 16 | 16 | qualified |
+| Q05 | 10 | 10 | qualified |
+| Q06 | 10 | 10 | qualified |
+| Q07 | 4 | 4 | qualified |
+| Q08 | 6 | 6 | qualified |
+| Q09 | 10 | 10 | qualified |
+| Q10 | 4 | 4 | qualified |
+| Q11 | 6 | 6 | qualified |
+| Q12 | 8 | 8 | qualified |
+| Q13 | 8 | 8 | qualified |
+| Q14 | 18 | 18 | qualified |
+| Q15 | 12 | 12 | qualified |
+| Q16 | 12 | 12 | qualified |
+| Q17 | 34 | 34 | qualified |
+| Q18 | 18 | 18 | qualified |
+
+A case can prove more than one family. Three empty shard-collection placeholders
+per engine are excluded from these counts; every actual matrix case and both
+separate-worker cases passed. These are disposable-store qualification results,
+not source activation or hosted cutover. Full SQL Server qualification remains last.

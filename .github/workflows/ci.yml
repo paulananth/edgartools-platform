@@ -252,7 +252,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: installed-mdm-${{ matrix.engine }}-${{ matrix.group }}
-          path: ${{ runner.temp }}/pytest-of-*/**/installed-workflow-outcome.json
+          path: |
+            ${{ runner.temp }}/pytest-of-*/**/installed-workflow-outcome.json
+            !${{ runner.temp }}/pytest-of-*/**/*current/**
           retention-days: 7
           if-no-files-found: warn
       - name: Stop this job's disposable test servers
