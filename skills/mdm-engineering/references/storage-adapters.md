@@ -144,8 +144,9 @@ the installed configured-worker matrix.
 When a worker’s external resource lease must protect the destination commit,
 explicitly select storage protocol 4 on PostgreSQL or MySQL. SQL Server retains
 protocols 1–3 and refuses protocol 4 until its commit-authority path is qualified.
-The normal application worker must still integrate this capability; helper
-qualification alone establishes neither that integration nor engine support.
+The normal application worker carries external authority through the selected
+PostgreSQL/MySQL owner path. Qualify the installed worker and recovery callers;
+helper qualification alone does not establish complete engine support.
 
 `Adapter.apply(..., authority=proofs)` takes a nonempty list of resource proofs.
 Each names `resource`, positive `token`, UUID `run_id` and `attempt`, and an

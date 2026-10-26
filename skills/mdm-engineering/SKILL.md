@@ -19,8 +19,8 @@ one Merge Stage contract across those engines and the engineering needed to
 support their storage differences. Its executable adapter persists prepared
 effects without interpreting entity or source policy. The application's
 native owner migration installs governed registry storage on PostgreSQL and
-MySQL; normal mastering remains PostgreSQL-only until its portable caller is
-qualified. Read [governed owner installation](references/storage-adapters.md#governed-owner-installation)
+MySQL. Normal saves, readers and worker recovery have separate selected-engine
+qualification gates; complete support requires the full installed caller matrix. Read [governed owner installation](references/storage-adapters.md#governed-owner-installation)
 before installing or recovering that registry. A silver table spec is applied by
 [data-operations](../data-operations/SKILL.md).
 
@@ -283,6 +283,25 @@ stays unchecked, including the delivery's totals until switch-on. A domain
 skill that names a whole-delivery test uses that test only when the claim is
 the delivery's totals or switch-on. Stop the proof's containers when it ends,
 whatever the outcome.
+
+### Independent installed qualification
+
+Install the committed runtime and native libraries outside the checkout. Check
+all package revisions and runtime import paths before and after each scenario.
+Copy required test scaffolding and frozen non-code fixtures into a separate
+harness directory, checking fixture hashes. Keep checkout runtime paths out of
+the isolated caller's import path.
+
+For a refusal or rollback claim, first accept an otherwise identical valid
+request. Inject one fault, assert the specific refusal reason, and compare all
+affected durable state. An arbitrary exception can hide an invalid test request.
+Exercise destination commit checks as well as application validation.
+
+Keep private diagnostics and per-case outcomes in a session-owned directory
+outside automatically rotated test temporary roots. Record engine, configured
+kind, case, revision, configuration pin, elapsed time and verified cleanup.
+Publish counts and outcomes only. A family closes only when every required case
+passes for each selected engine and configured kind on the final revision.
 
 ## Examples
 
