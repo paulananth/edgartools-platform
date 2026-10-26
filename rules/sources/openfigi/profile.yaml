@@ -69,10 +69,7 @@ parts:
     links:
     - source_key: id
       to_part: security
-      mdm_id_column: security_mdm_id_by_cusip
-    - source_key: id
-      to_part: security
-      mdm_id_column: security_mdm_id_by_isin
+      mdm_id_column: security_mdm_id
   quality:
   - check: missing
     column: figi

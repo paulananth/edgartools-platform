@@ -155,7 +155,7 @@ def test_a_redelivered_record_gives_its_new_value_to_its_security():
 def test_a_refused_bind_gives_its_values_to_no_security():
     first = record("one", F1, F2)
     _, result = match([first, record("two", F2)], held={F1: HELD},
-                      refused=[[first["subject"], RULE["rule_id"], RULE["version"]]])
+                      refused=[[first["subject"], rule["rule_id"], rule["version"]] for rule in (RULE, JOIN)])
     assert {d["subject"] for d in result["decisions"]} == {record("two", F2)["subject"]}
     assert all(raw != F2 or entity != HELD for entity, raw in given(result, "mints"))
 
@@ -252,3 +252,16 @@ def test_a_contract_maps_a_list_of_one_identifier_kind_checked_and_once_each():
     assert "figi" not in mapped([None, ""])["identifiers"]
     with pytest.raises(UnsupportedRecord, match="figi"):
         mapped([F1, F1[:-1] + str((int(F1[-1]) + 1) % 10)])
+
+
+def test_a_record_finding_a_held_security_binds_before_any_record_creates_one():
+    # Sorted by subject, "a-isin" would come first and create a Security, and
+    # "b-cusip" would then reach two. Looking up first, the CUSIP record binds
+    # to the held Security and the ISIN record finds it by the FIGI they share.
+    first = assertion(source_code=SOURCE, record_key="a-isin", publication_key="p1", revision=1,
+                      effective_at=None, kind="security", fields={}, identifiers={"figi": [F2, F3]})
+    second = record("b-cusip", F1, F2)
+    ordered = sorted([first, second], key=lambda r: r["subject"])
+    _, result = match(ordered, held={F1: HELD})
+    assert result["identities"] == [] and result["reviews"] == []
+    assert {d["entity_id"] for d in result["decisions"]} == {HELD}

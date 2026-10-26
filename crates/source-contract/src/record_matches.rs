@@ -403,8 +403,15 @@ pub fn link_matching_records(raw: &str) -> Result<String, String> {
     let mut ids = input.new_ids.into_iter();
     let mut floors = BTreeMap::new();
     let mut subjects: Vec<_> = input.plan.applicable.iter().collect();
-    subjects.sort_by_key(|(subject, items)| {
+    // Look up first, then master (ticket 138): every record that finds a
+    // held master binds before any record creates one, so a value it adds is
+    // found by the rest of the batch and no new master shadows a stored one.
+    // Then the records a rule may create from, then those that only wait.
+    subjects.sort_by_cached_key(|(subject, items)| {
         (
+            !items.iter().any(|item| {
+                found.contains_key(&(item.namespace.clone(), item.value.clone()))
+            }),
             !items.iter().any(|item| {
                 read_rule_text(&item.rule, "on_no_match").ok().as_deref() == Some("mint")
             }),

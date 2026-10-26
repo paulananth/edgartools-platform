@@ -219,7 +219,7 @@ security); every listing FIGI misses none.
    listing FIGI). Matching looks each one up: none found, a new master id;
    one Security, it joins; two Securities, they consolidate automatically and
    the oldest id survives, the other id pointing at it.
-4. **OpenFIGI: one target, one Dataset Contract, one matching rule.** It
+4. **OpenFIGI: one target, one Dataset Contract, a matching rule per identifier kind** (built as three, CUSIP, ISIN and FIGI, since a matching rule names one; all create). It
    reads `id_cusip/*` and `id_isin/*` together; its bundles run in parallel
    with no order. The ISIN target, `figi_ids`, `figi_cusips`, `attach`, and
    `answers_cusip` / `answers_isin` are deleted.
@@ -241,15 +241,21 @@ security); every listing FIGI misses none.
 - [x] Three-axis review of A1 (2026-10-25 22:41 ET), acted on: Standards (a test now shows both SQL lookups seek the identifier index, one probe per stored shape, no table scan; the agent lookup uses the same probes; a contract with no `reverse` holds one value), Spec (a re-delivered record's new value is its master's for the rest of the batch and re-checked at save; a value already held by the master it was proposed for is not stale; a refused bind gives its values to no master), GoF (noted for A2 below)
 - [ ] ~~Name matching (`record_pairs.rs`) reads one LEI value~~ deferred: only Company's LEI uses it, one value per Company (`reverse: 1`); move it onto the shared reader when a list kind uses name matching
 - [ ] A re-delivered bound record alone in a batch proposes nothing, so its new value is not re-checked at save; A2 carries it with the identifier ownership work
+- [x] Inside one batch, every record that finds a held master binds before any record creates one (found by B1's silver test: an ISIN answer sorted first created a Security, and the CUSIP answer sharing its FIGI then reached two) (2026-10-25 23:15 ET): `test_a_record_finding_a_held_security_binds_before_any_record_creates_one`
+- [x] Three-axis review of B1 (2026-10-25, acted on): Standards (the sequence comment names OpenFIGI's three targets in order; the sort key computed once), Spec (the acquisition feed lists `openfigi.security.v3`; the security-master skill's live sections say what runs now), GoF (the test reuses `policy_layers.with_rules_on`; one `phase` for the batch order and the create test goes into A2)
+- [ ] A FIGI that 13F or N-PORT files matches like OpenFIGI's (Design 5): the FIGI contract names only OpenFIGI as its source until those feeds map one
+- [ ] Inside one batch, a record that finds a master only through a value another record adds there is still ordered among the creators; A2's merge makes the result the same in any order
+- [ ] Part B2: N-PORT's FIGI pairing chain removed (`cusips_found` to `fold`, `figi-*.yaml`), each CUSIP record carrying every ISIN filed with it, an ISIN-only holding keyed by its ISIN; then OpenFIGI's `answers_cusip` and `answers_isin` targets go
+- [ ] Part B3: the Listing detail row's currency, read from the ticker's suffix against an RDM currency code set (check the set exists), indexed (master id, exchange, currency)
 - [ ] Engine part A2 (own branch, after A1): read each rule's outcomes once into one typed set (`on_no_match`, `on_conflict`, `on_several`) and decide whose `on_conflict` wins when a record's matches come from several rules (GoF review of A1); `on_conflict: first` (a filed CUSIP and ISIN on two Securities bind by the CUSIP; the identifiers another Security holds are withheld on the bind decision and never indexed or projected for this one) and `on_several: merge` (one record's listing FIGIs on two Securities consolidate them, the oldest surviving). Merge is not optional: without it the 11 ISIN answers sharing FIGIs with two CUSIP answers give a different result by bundle order
-- [ ] Switch-on of the FIGI Identifier Contract and its matching rule: needs the operator's words
-- [ ] Rules: OpenFIGI one target and one contract (`openfigi.security.v3`), every listing FIGI as identifier `figi`; Security kind declares `figi`; one OpenFIGI matching rule
+- [ ] Switch-on of the FIGI Identifier Contract and OpenFIGI's three matching rules (and every changed N-PORT and 13F rule): needs the operator's words, and waits for A2 to merge, since until then the result depends on load order (the proof runs both orders and counts the difference)
+- [x] Part B1, rules: OpenFIGI one target `mastering` over `id_*/*` (`id_type` the folder, OpenFIGI's idType) and one contract `openfigi.security.v3` (the CUSIP or ISIN asked and every listing's FIGI as identifiers; composite, share-class FIGI and ticker lookup only); `figi-ids`, `isin-figi-cusips`, `isin-attach` and both old targets deleted; Security kind declares `figi` (no reverse limit, unverified until the switch-on) and three OpenFIGI matching rules, one a namespace, all minting; the ticket 120 switch-ons ended with their rules; sources OpenFIGI, then 13F, then N-PORT (2026-10-25 23:15 ET, branch `claude/t138-openfigi-one-load`): `test_openfigi_security.py` 9 passed (both orders: ISIN answers first 6 Securities, CUSIP answers first 7 with TWICE in review until A2), declared chain 1, read units 29
 - [ ] Rules: N-PORT's FIGI pairing chain removed; N-PORT and 13F join by any identifier, else create
-- [ ] Silver: `openfigi_listing` one MDM id column
+- [x] Silver: `openfigi_listing` one MDM id column `security_mdm_id`, through `openfigi.security.v3` (2026-10-25 23:15 ET): the silver landing test, 19 listings, SHARED's on EQUITY's Security
 - [ ] Listing table in MDM keyed by the listing FIGI: master id, exchange code, currency (from the ticker suffix, RDM currency codes), ticker, composite FIGI; indexed (master id, exchange code, currency)
-- [ ] Two bundles minting one Security at once: the second re-checks every identifier under the lock and binds
-- [ ] Holder lookup on the load's path (`record_reads.py`, `record_lookups.rs`) after #1171 merges
-- [ ] `rules/source-sequence.yaml`: no OpenFIGI order inside the source
+- [x] Two bundles minting one Security at once: every identifier a mint or bind adds is in `mints`, re-checked under the lock; a held one makes the proposal stale and it is assessed again (A1, #1175; `test_a_value_held_by_the_security_it_was_proposed_for_is_not_stale`)
+- [x] Holder lookup on the load's path (`record_reads.py`, `record_lookups.rs`): each list value indexed and read (A1, #1175; the portable-store `list_join` scenario, 365 passed locally)
+- [x] `rules/source-sequence.yaml`: OpenFIGI one target `mastering`, configured; 13F after it, N-PORT after 13F (2026-10-25 23:15 ET): `test_source_sequence.py` 31 passed
 - [ ] Tests: list identifiers join, create, review; every changed rules file's tests
 - [ ] Three-axis review
 - [ ] PR, CI green, merge

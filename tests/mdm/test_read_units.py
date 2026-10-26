@@ -25,12 +25,12 @@ def write(tmp_path, monkeypatch, change=None, tamper=None):
     body = chain.declared(monkeypatch)
     if change:
         change(body["bookkeeping"]["targets"][chain.TARGET]["steps"])
-    keys = chain.capture(tmp_path / "capture")
+    keys = chain.capture(tmp_path / "capture", words=("cusip",))
     if tamper:
         tamper(tmp_path / "capture")
     listed = tmp_path / "documents.json"
     listed.write_text(json.dumps(keys))
-    return write_manifest(source="openfigi", target="mastering_cusip", capture=str(tmp_path / "capture"),
+    return write_manifest(source="openfigi", target="mastering", capture=str(tmp_path / "capture"),
                           documents=str(listed), capture_run="c", output=str(tmp_path / "bundle"),
                           as_of="2026-10-17T00:00:00Z", revision=0, journal=MemoryJournal())
 
@@ -106,12 +106,12 @@ def test_a_changed_request_beside_an_unchanged_answer_is_named_again(tmp_path, m
 
     journal = MemoryJournal()
     chain.declared(monkeypatch)
-    keys = chain.capture(tmp_path / "capture")
+    keys = chain.capture(tmp_path / "capture", words=("cusip",))
     listed = tmp_path / "documents.json"
     listed.write_text(json.dumps(keys))
 
     def written(out):
-        return write_manifest(source="openfigi", target="mastering_cusip", capture=str(tmp_path / "capture"),
+        return write_manifest(source="openfigi", target="mastering", capture=str(tmp_path / "capture"),
                               documents=str(listed), capture_run="c", output=str(tmp_path / out),
                               as_of="2026-10-17T00:00:00Z", revision=0, journal=journal)
     first = written("first")
@@ -123,7 +123,7 @@ def test_a_changed_request_beside_an_unchanged_answer_is_named_again(tmp_path, m
     # Asked again for another identifier, OpenFIGI's "not found" answer is the same bytes; the request is not.
     request = tmp_path / "capture" / "id_cusip" / "00007.request.json"
     request.write_text(json.dumps([{"idType": "ID_CUSIP", "idValue": "ZZ0000146"}]))
-    chain.capture(tmp_path / "capture", rewrite=False)
+    chain.capture(tmp_path / "capture", rewrite=False, words=("cusip",))
     assert written("changed")["scope"]["documents"] == 1
 
 
@@ -150,7 +150,7 @@ def test_a_bundle_larger_than_its_readings_is_not_refused_for_its_bytes(tmp_path
         path = capture / "id_cusip" / "00000.json"
         answers = json.loads(path.read_text())
         path.write_text(json.dumps(answers) + " " * (25 * 1024**2))
-        chain.capture(capture, rewrite=False)
+        chain.capture(capture, rewrite=False, words=("cusip",))
 
     report = write(tmp_path, monkeypatch, tamper=large)
     assert report["manifest"] is not None and report["scope"]["documents"] == 8
