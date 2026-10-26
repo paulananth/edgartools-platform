@@ -304,8 +304,9 @@ def test_source_sequence_runs_from_installed_bundle_without_checkout(installed):
                    "--defer", "gleif", cwd=root)
     assert delayed.returncode == 3, delayed.stderr
     report = json.loads(delayed.stdout)
+    # OpenFIGI is one target since ticket 138, so it is ordered, before Securities.
     assert report["order"] == ["sec.submissions.company", "sec.nport.registrant", "sec.submissions.person",
-                               "sec.nport.fund", "sec.nport.security"]
+                               "sec.nport.fund", "openfigi", "sec.nport.security"]
     assert report["sources"]["gleif"]["status"] == "deferred"
     assert report["runtime_readiness"] == "not_checked"
 
