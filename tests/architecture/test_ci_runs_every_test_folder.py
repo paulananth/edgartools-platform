@@ -31,6 +31,7 @@ def test_storage_families_have_independent_bounded_jobs_and_all_gate_merge() -> 
         "storage-adapters": ("storage_adapters", ["postgresql", "mysql", "mssql"]),
         "reference-storage": ("reference_storage", ["postgresql", "mysql"]),
         "silver-storage": ("silver_storage", ["postgresql", "mysql"]),
+        "installed-workflow": ("installed_workflow", ["postgresql", "mysql"]),
     }
     for name,(folder,engines) in expected.items():
         job = jobs[name]
