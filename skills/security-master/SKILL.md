@@ -363,8 +363,15 @@ not find (5%) keeps its N-PORT and 13F fields only.
 
 Operator, 2026-10-25: "changing my mind need a separate table for listing
 ie figi, exchange, ticker, exchange" (replacing "we don't need this table").
-One row per listing FIGI with its exchange, ticker and composite FIGI, on the
-Security's master id. The listing FIGI also matches through the
+One row per trading line, keyed by its listing FIGI, with its master id,
+exchange code, currency, ticker and composite FIGI. A security is listed once
+per exchange, but OpenFIGI gives a FIGI per trading line: on multi-currency
+venues one stock has a line per currency, its ticker the same root plus a
+currency code (90% of 292,567 same-exchange groups). OpenFIGI states no
+currency, so it is read from the ticker's suffix (blank where none); (master
+id, exchange, currency) still repeats on 71,974 of 2,184,699 lines, so it is
+an index, not the key ("Listing FIGI as key; exchange + currency as
+columns", 2026-10-25). The listing FIGI also matches through the
 Cross-reference; ticker and ticker + exchange are lookup only there.
 
 Operator, 2026-10-20: "Maybe create a security detail table and keep it in

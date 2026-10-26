@@ -141,6 +141,17 @@ another); the ultimate parent is the Company's own parent chain, not the
 Security's. The ADR and its ordinary share are two Securities with one
 issuer (431 of 440 holdings file one LEI); the European stock 409 of 418.
 
+The Listing key (2026-10-25 21:10 ET). Proposed on the page: "pk, (master
+id, exchange code )". Measured: 17,081 answers hold two or more lines on one
+exchange code (292,567 groups, mostly the EU, XV, XW, XO, XA, XG, XH, XF
+venues); in 263,664 groups (90%) every ticker is one root plus a currency
+code: OpenFIGI gives a FIGI per trading line, one per currency. Asked, "pk
+can add currency code and make it unique"; measured, OpenFIGI states no
+currency, and (master id, exchange, currency read from the ticker) still
+repeats on 71,974 of 2,184,699 lines (7,392 securities). Ruling: "Listing
+FIGI as key; exchange + currency as columns". The currency is read from the
+ticker's suffix, blank where none, against a currency code set in RDM.
+
 GoF consult on the build (2026-10-25 20:45 ET): extract one reader of a
 record's identifiers (scalar or list) used at every site; make the conflict
 outcome rule data (`on_conflict: review | first`, `on_several: review |
@@ -230,7 +241,7 @@ security); every listing FIGI misses none.
 - [ ] Rules: OpenFIGI one target and one contract (`openfigi.security.v3`), every listing FIGI as identifier `figi`; Security kind declares `figi`; one OpenFIGI matching rule
 - [ ] Rules: N-PORT's FIGI pairing chain removed; N-PORT and 13F join by any identifier, else create
 - [ ] Silver: `openfigi_listing` one MDM id column
-- [ ] Listing table in MDM (listing FIGI, exchange, ticker, composite FIGI), one row per listing on the Security's master id
+- [ ] Listing table in MDM keyed by the listing FIGI: master id, exchange code, currency (from the ticker suffix, RDM currency codes), ticker, composite FIGI; indexed (master id, exchange code, currency)
 - [ ] Two bundles minting one Security at once: the second re-checks every identifier under the lock and binds
 - [ ] Holder lookup on the load's path (`record_reads.py`, `record_lookups.rs`) after #1171 merges
 - [ ] `rules/source-sequence.yaml`: no OpenFIGI order inside the source
