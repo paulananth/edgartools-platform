@@ -1,0 +1,43 @@
+# Every listing as a Security's detail row (ticket 120), with its currency
+# (ticket 138 part B3), read over lines.yaml's pieces; combine.yaml collects
+# them by the identifier asked. A line's currency is its ticker's code
+# (source.yaml's `code`: the last three letters, a code N-PORT holdings
+# file). The operator ruled the currency is read from the ticker's suffix,
+# blank where none (2026-10-25: "Listing FIGI as key; exchange + currency as
+# columns"). Which lines are read was measured on the 2026 Q2 capture and
+# chosen on ticket 138 ("B3 rule measured"): only where the line's exchange
+# gives the identifier two or more lines, one root and every ticker
+# different. So the root alone, as a line beside coded lines, gets none; a
+# repeated code, two roots or one line give none. Limits are the engine's
+# ceilings (operator, 2026-10-22: "No limit on production").
+execution: {profile: source.read, workers: 1, max_artifacts: 512, max_input_bytes: 17179869184}
+read:
+  format: json
+  limits: {max_bytes: 17179869184, max_records: 100000000}
+  tables:
+    listings:
+      each: tables.lines
+      columns:
+        id: {text: {path: id}}
+        detail:
+          object:
+            omit_nulls: true
+            fields:
+              figi: {value: {path: detail.figi}}
+              exchange: {value: {path: detail.exchange}}
+              ticker: {value: {path: detail.ticker}}
+              composite_figi: {value: {path: detail.composite_figi}}
+              description: {value: {path: detail.description}}
+              currency:
+                choose:
+                  condition: {equal: {left: {value: {path: lines}}, right: {const: {value: 1}}}}
+                  then: {value: {path: NO_SUCH_FIELD}}
+                  else:
+                    choose:
+                      condition: {equal: {left: {value: {path: roots}}, right: {const: {value: 1}}}}
+                      then:
+                        choose:
+                          condition: {equal: {left: {value: {path: tickers}}, right: {value: {path: lines}}}}
+                          then: {value: {path: code}}
+                          else: {value: {path: NO_SUCH_FIELD}}
+                      else: {value: {path: NO_SUCH_FIELD}}

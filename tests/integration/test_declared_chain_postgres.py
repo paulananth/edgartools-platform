@@ -1,7 +1,8 @@
 """A declared chain on real PG16 (ticket 14, slice 2c): requests read each file
 alone beside their answers, answers read in groups with each file's pair set
-from its own request reading, a reduce over every answers reading, a combine,
-the record read over the combine's pieces, and the preparation, all formed by
+from its own request reading, a reduce over every answers reading, the
+Listing currency's line counts, lines and listing read (ticket 138 part B3),
+a combine, the record read over the combine's pieces, and the preparation, all formed by
 the declared writer and run by Bookkeeping's workers. Its records equal the
 hand-built chain's (`test_openfigi_security`) on the same invented files.
 """
@@ -66,8 +67,10 @@ def comparable(record):
 
 
 # One target over both kinds asked (ticket 138): 8 CUSIP and 8 ISIN request files, their 16
-# answers in groups of 3, then one reduce, combine, record and prepare; no step pairs them.
-STEPS = {"requests": 16, "answers": 6, "reduce": 1, "combine": 1, "record": 1, "prepare": 1, "merge": 1, "processed": 1}
+# answers in groups of 3, then one reduce, line counts, lines, listing, combine, record and
+# prepare; no step pairs them.
+STEPS = {"requests": 16, "answers": 6, "reduce": 1, "line_counts": 1, "lines": 1, "listing": 1, "combine": 1,
+         "record": 1, "prepare": 1, "merge": 1, "processed": 1}
 
 
 def run_target(databases, tmp_path, body, target=TARGET):
@@ -117,5 +120,5 @@ def test_the_declared_chain_gives_the_hand_built_chains_records(databases, tmp_p
     assert refused == refused_by_hand
     # 6 CUSIP and 4 ISIN answers found; 8 CUSIPs and 7 ISINs not found.
     assert len(found) == len(by_hand) == 10 and len(refused) == 15
-    # 16 requests, 6 answers groups, reduce, combine, record, prepare.
-    assert state["counts"] == {"verified": 26}
+    # 16 requests, 6 answers groups, reduce, line counts, lines, listing, combine, record, prepare.
+    assert state["counts"] == {"verified": 29}

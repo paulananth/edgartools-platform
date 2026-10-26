@@ -1,0 +1,26 @@
+# The Listing currency (ticket 138 part B3): every listing line of
+# source.yaml's `details`, with its group's counts from line-counts.yaml
+# (lines, roots, tickers), for listing.yaml to decide its currency. Every
+# group is counted, so a line without its counts refuses the run. Pin
+# canonical JSON of this file as the source.combine contract.
+execution:
+  profile: source.combine
+combine:
+  # The engine's ceiling (operator, 2026-10-22: "No limit on production");
+  # every row of every answers reading and of the counts counts.
+  max_rows: 40000000
+  groups:
+    lines: {source: counts, table: line_lines, key: line_group, value: lines, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    roots: {source: counts, table: line_roots, key: line_group, value: roots, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    tickers: {source: counts, table: line_tickers, key: line_group, value: tickers, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+  tables:
+    lines:
+      source: answers
+      table: details
+      checks: {}
+      where: {}
+      joins:
+        lines: {group: lines, key: line_group, on_missing: error, replace: false}
+        roots: {group: roots, key: line_group, on_missing: error, replace: false}
+        tickers: {group: tickers, key: line_group, on_missing: error, replace: false}
+      drop: [figi, line_group, ticker, root, level, us, home]

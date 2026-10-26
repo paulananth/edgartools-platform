@@ -531,6 +531,10 @@ Operations are single-key mappings:
   oracle on every distinct captured value.
 - `pad: {left: " ", right: " "}`: append declared surrounding text.
 - `remove_prefix: "THE "`: remove one exact leading prefix.
+- `keep_last: 3` / `drop_last: 3`: keep, or remove, the last N Unicode
+  characters (`0 <= N <= 1,048,576`). A text shorter than N keeps all of
+  itself, or ends blank. `slice` counts only from the start; these count
+  from the end, which a regex cannot (it refuses lookaround).
 
 Bounds: 1–64 operations; each argument at most 4,096 UTF-8 bytes;
 regex compilation and DFA caches each capped at 1 MiB, nesting at 32;

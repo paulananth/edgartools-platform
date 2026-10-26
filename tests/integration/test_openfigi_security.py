@@ -147,6 +147,15 @@ def answer_readings(store: Artifacts, root: Path, word: str) -> list[str]:
     return readings
 
 
+def read_pieces(store: Artifacts, piece_root: Path, combined: str, contract: str) -> str:
+    """A source extract over a combination's pieces, as the configured run gives them."""
+    piece_root.mkdir(parents=True, exist_ok=True)
+    pieces = [store.put(piece_root.as_uri(), {"tables": a["tables"]}) for a in store.json(combined)["artifacts"]]
+    return chain.read(store, piece_root, files.load(FOLDER / contract), [
+        {"input": p, "context": store.put(piece_root.as_uri(), {"version": 1, "input": p, "values": {}})}
+        for p in pieces], 2)
+
+
 def prepared_records(root: Path, words: tuple[str, ...] = ("cusip", "isin"),
                      listings: list | None = None) -> tuple[list[dict], dict[str, str]]:
     """The records of one run over the answers of `words` (both kinds by
@@ -160,13 +169,12 @@ def prepared_records(root: Path, words: tuple[str, ...] = ("cusip", "isin"),
                 for part in artifact["partitions"]:
                     listings += store.json(part["receipt"])["tables"]["listings"]
     counts = chain.combine(store, root / "reduce", FOLDER / "reduce.yaml", {"answers": readings})
-    combined = chain.combine(store, root / "combine", FOLDER / "combine.yaml", {"counts": counts, "answers": readings})
-    piece_root = root / "record"
-    piece_root.mkdir(parents=True, exist_ok=True)
-    pieces = [store.put(piece_root.as_uri(), {"tables": a["tables"]}) for a in store.json(combined)["artifacts"]]
-    records = chain.read(store, piece_root, files.load(FOLDER / "record.yaml"), [
-        {"input": p, "context": store.put(piece_root.as_uri(), {"version": 1, "input": p, "values": {}})}
-        for p in pieces], 2)
+    line_counts = chain.combine(store, root / "line_counts", FOLDER / "line-counts.yaml", {"answers": readings})
+    lines = chain.combine(store, root / "lines", FOLDER / "lines.yaml", {"counts": line_counts, "answers": readings})
+    listing_rows = read_pieces(store, root / "listing", lines, "listing.yaml")
+    combined = chain.combine(store, root / "combine", FOLDER / "combine.yaml",
+                             {"counts": counts, "answers": readings, "listings": [listing_rows]})
+    records = read_pieces(store, root / "record", combined, "record.yaml")
     prepared = chain.prepare(store, root / "mdm", records, {
         "table": "security", "record_column": "record", "dataset": CODE, "policy": "0" * 64,
         "consumer": "check", "batch_id": "check-openfigi", "as_of": "2026-10-17T00:00:00+00:00"})
@@ -413,3 +421,60 @@ def test_the_country_table_in_the_reading_is_the_published_code_set():
     codes = {row["code"]: row["crosswalk"][0][2] for row in map(json.loads, published.read_text().splitlines())}
     embedded = files.source("openfigi")["read"]["references"]["country_composite"]
     assert {code: row["exchange"] for code, row in embedded.items()} == codes and len(codes) == 11
+
+
+# One invented answer holding every case of the Listing currency rule (ticket 138 part B3):
+# a line's currency is the last three letters of its ticker, a code N-PORT holdings file
+# (rules/reference/published/nport-filed-currencies), read only where one exchange gives
+# the identifier two or more lines, every ticker different and all one root (the root
+# alone, as a line, gets none: "blank where none").
+LINES = "ZZ0000161"
+CURRENCY_CASES = {
+    # exchange: [(FIGI, ticker, currency)]
+    "EU": [("BBGZ000CY016", "EXKUSD", "USD"), ("BBGZ000CY025", "EXKEUR", "EUR"), ("BBGZ000CY034", "EXKGBP", "GBP")],
+    "XV": [("BBGZ000CY043", "EXK", None), ("BBGZ000CY052", "EXKUSD", "USD"), ("BBGZ000CY061", "EXKCHF", "CHF")],
+    # A code repeated.
+    "XW": [("BBGZ000CY070", "EXKUSD", None), ("BBGZ000CY089", "EXKUSD", None)],
+    # Two roots.
+    "XO": [("BBGZ000CY098", "EXKUSD", None), ("BBGZ000CY105", "EXLEUR", None)],
+    # One line ending in a code by chance.
+    "US": [("BBGZ000CY114", "EXKUSD", None)],
+    # A ticker that is only a code has no root: it is a plain ticker.
+    "XA": [("BBGZ000CY123", "EUR", None), ("BBGZ000CY132", "USD", None)],
+    # Letters no holding files are not a code.
+    "XG": [("BBGZ000CY141", "EXKXYZ", None), ("BBGZ000CY150", "EXKUSD", None)],
+    # No exchange code: the lines without one are one group, as measured.
+    None: [("BBGZ000CY169", "EXMUSD", "USD"), ("BBGZ000CY178", "EXMEUR", "EUR")],
+    # Two plain lines.
+    "XH": [("BBGZ000CY187", "EXN", None), ("BBGZ000CY196", "EXP", None)],
+    # A plain line that is not the coded lines' root.
+    "XF": [("BBGZ000CY203", "EXQX", None), ("BBGZ000CY212", "EXQUSD", None)],
+}
+
+
+def test_a_listing_currency_is_its_tickers_code_only_where_its_exchange_lines_differ_by_code(tmp_path, monkeypatch):
+    monkeypatch.setitem(ANSWERS, LINES, {"data": [
+        listing(figi, ticker, exchange, None, None) for exchange, rows in CURRENCY_CASES.items()
+        for figi, ticker, _ in rows]})
+    monkeypatch.setitem(KINDS, "cusip", ("id_cusip", [[LINES], *[[o] for o in OTHERS]]))
+    records, _ = prepared_records(tmp_path, ("cusip",))
+    (record,) = records
+    found = {row["key"]: row.get("currency") for row in record["details"]["listings"]}
+    assert found == {figi: currency for rows in CURRENCY_CASES.values() for figi, _, currency in rows}
+
+
+def test_the_currency_table_in_the_reading_is_the_published_code_set():
+    """The reading embeds RDM's nport-filed-currencies version 1, row for row."""
+    published = Path(files.ROOT / "reference" / "published" / "nport-filed-currencies" / "1" / "canonical.jsonl")
+    codes = {row["code"] for row in map(json.loads, published.read_text().splitlines())}
+    embedded = files.source("openfigi")["read"]["references"]["currency"]
+    assert {code: row["code"] for code, row in embedded.items()} == {c: c for c in codes} and len(codes) == 80
+
+
+def test_a_listing_detail_row_keeps_every_field_the_source_extract_gives_it():
+    """listing.yaml rebuilds each detail row to add its currency: it keeps every field of
+    source.yaml's `detail`, so a field added there is never dropped on the way to MDM."""
+    given = files.source("openfigi")["read"]["tables"]["details"]["columns"]["detail"]["object"]["fields"]
+    kept = files.load(FOLDER / "listing.yaml")["read"]["tables"]["listings"]["columns"]["detail"]["object"]["fields"]
+    assert set(kept) == set(given) | {"currency"}
+    assert all(kept[name] == {"value": {"path": f"detail.{name}"}} for name in given)

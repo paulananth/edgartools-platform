@@ -24,8 +24,9 @@ combine:
     market_sector: {source: counts, table: market_sectors, key: id, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {market_sectors: 1}}
     home_composite: {source: counts, table: home_composites, key: id, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {home_composites: 1}}
     # Every listing of the identifier, as its detail row, by FIGI (operator,
-    # 2026-10-20: "Detail rows set in config (Recommended)").
-    listing_rows: {source: answers, table: details, key: id, value: detail, mode: collect, order_by: [], distinct: true, skip_null_values: true, checks: {}, where: {}}
+    # 2026-10-20: "Detail rows set in config (Recommended)"), with its
+    # currency (listing.yaml, ticket 138 part B3).
+    listing_rows: {source: listings, table: listings, key: id, value: detail, mode: collect, order_by: [], distinct: true, skip_null_values: true, checks: {}, where: {}}
     # Every listing's FIGI, each an identifier of the Security (ticket 138:
     # one Security holds a FIGI for each listing).
     listing_figis: {source: answers, table: details, key: id, value: figi, mode: collect, order_by: [figi], distinct: true, skip_null_values: true, checks: {}, where: {}}
