@@ -128,6 +128,32 @@ N-PORT, replacing the 2026-10-18 "make openfigi priority 1 and 13f last".
 Measured then (ticket 84): N-PORT states one name for 62.4% of its 385,382
 CUSIPs, 13F for 59.9% of 29,942.
 
+On the page (2026-10-25 20:56 ET): "changing my mind need a separate table
+for listing ie figi, exchange, ticker, exchange". The Listing table stays in
+MDM: one row per listing FIGI with its exchange, ticker and composite FIGI,
+on the Security's master id (the 2026-10-20 "Detail rows set in config"
+table; this replaces "we don't need this table"). The listing FIGI still
+matches through the Cross-reference; ticker and ticker + exchange stay
+lookup only. Asked "do we have 1 issuer or ultimate parent issuer one equity
+or 2": Apple is one Security (1 share-class FIGI), "issued by" one Company
+by the issuer LEI N-PORT files (2,061 of 2,072 holdings file one LEI, 11
+another); the ultimate parent is the Company's own parent chain, not the
+Security's. The ADR and its ordinary share are two Securities with one
+issuer (431 of 440 holdings file one LEI); the European stock 409 of 418.
+
+GoF consult on the build (2026-10-25 20:45 ET): extract one reader of a
+record's identifiers (scalar or list) used at every site; make the conflict
+outcome rule data (`on_conflict: review | first`, `on_several: review |
+merge`) beside `on_no_match`. Found: `master_records.rs` sends a master with
+two values of one identifier to review (`authoritative_identifier_conflict`),
+whatever the contract's `reverse` claim says, so a Security with many FIGIs
+or two CUSIPs would wait; the build reads `reverse`.
+
+Overlap (operator, 2026-10-25: "Build the rest now, wait for #1171"):
+Codex's draft #1171 changes `record_reads.py`, `record_lookups.rs`,
+`store.py`, `merge.py`, the path a load takes. The planner, master records,
+contract reader, rules and tests are built now; the holder lookup waits.
+
 These replace, for Security: the 2026-10-14 "FIGI ... lookup only" ruling,
 the 2026-09-26 "cross reference id for lookup ... only" ruling (the listing
 FIGI now joins records; ticker, SEDOL stay lookup only), and ticket 120's
@@ -199,11 +225,14 @@ security); every listing FIGI misses none.
 - [x] Data model page (`.lavish/security-mastering.html`), reviewed with the operator in Lavish (2026-10-25 19:51 ET)
 - [x] Skills say the decided process (security-master, data-modeling, mdm-engineering), marked decided, not built (2026-10-25 19:57 ET): skill tests 80 passed (genericity, role skills); architecture and skill commands 349 passed before the genericity fix
 - [ ] Follow-up tickets: Company, Person, Fund onto the one cross-reference; steward split with a Match Exclusion
-- [ ] GoF consult on matching and binding (`edgar_warehouse/mdm/clean/binding.py`, `matching.py`) before code
+- [x] GoF consult on matching and binding (2026-10-25 20:45 ET): one identifier reader; conflict outcomes as rule data; `master_records.rs` reads `reverse`
 - [ ] Engine: a record's identifier may be a list; matching and binding look up each value; one Security joins, two go to review
 - [ ] Rules: OpenFIGI one target and one contract (`openfigi.security.v3`), every listing FIGI as identifier `figi`; Security kind declares `figi`; one OpenFIGI matching rule
 - [ ] Rules: N-PORT's FIGI pairing chain removed; N-PORT and 13F join by any identifier, else create
 - [ ] Silver: `openfigi_listing` one MDM id column
+- [ ] Listing table in MDM (listing FIGI, exchange, ticker, composite FIGI), one row per listing on the Security's master id
+- [ ] Two bundles minting one Security at once: the second re-checks every identifier under the lock and binds
+- [ ] Holder lookup on the load's path (`record_reads.py`, `record_lookups.rs`) after #1171 merges
 - [ ] `rules/source-sequence.yaml`: no OpenFIGI order inside the source
 - [ ] Tests: list identifiers join, create, review; every changed rules file's tests
 - [ ] Three-axis review
