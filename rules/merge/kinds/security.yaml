@@ -7,7 +7,7 @@
 # Switched on (operator, 2026-10-15 06:27 ET, in their words: "merge 985 when green agreed for the rest"):
 # the matching rule activates on its Identifier Contract, verified on the
 # Proving Run's cohort (rules/merge/policy.yaml, automatic_rules).
-version: security-2026-10-26.figi-merges-securities
+version: security-2026-10-26.filed-cusip-binds-first
 defaults:
   # The first listed wins each field. Operator, 2026-10-18 (ticket 84): "make
   # openfigi priority 1 and 13f last", then "Name only (Recommended)". OpenFIGI
@@ -43,13 +43,19 @@ rules:
     args:
       namespace: cusip
 - rule_id: nport-security-cusip
-  version: 2026-10-26.1
+  # "Filed CUSIP binds first" (ticket 138 part A2b; operator, 2026-10-25:
+  # "bind by CUSIP if matches if not then try isin", "cusip is a seperate than
+  # isin it can never be merges"): a filed CUSIP and ISIN leading to two
+  # Securities bind by the CUSIP; the ISIN the other Security holds is
+  # withheld from this one, never merged.
+  version: 2026-10-26.2
   family: binding
   source: sec.nport.security.v2
   applies_to_verdict: security
   emits:
   - bind
   on_no_match: mint
+  on_conflict: first
   when:
   - primitive: identifier_match@1
     args:
@@ -59,8 +65,8 @@ rules:
       namespace: cusip
 # An N-PORT CUSIP record also joins by an ISIN filed with it; it carries every
 # one (ticket 138, part B2; it replaces "Use FIGI to add pairs too",
-# 2026-10-15). Its CUSIP and an ISIN pointing at two Securities defers to
-# review until ticket 138's part A2 binds it by the CUSIP. A Security
+# 2026-10-15). Its CUSIP and an ISIN pointing at two Securities bind by the
+# CUSIP (the rule above, part A2b). A Security
 # filed with no usable CUSIP, keyed by its ISIN in the same Dataset Contract
 # (ticket 120; operator, 2026-10-20: "One master record"), joins by it too, or
 # is created: this rule replaces nport-isin-security-isin.

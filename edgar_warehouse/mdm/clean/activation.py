@@ -355,6 +355,10 @@ ON_NO_MATCH = frozenset({"mint", "wait"})
 # What a record reaching two or more masters does (ticket 138 part A2a):
 # `review` (the default) or `merge` them, the oldest surviving.
 ON_SEVERAL = frozenset({"review", "merge"})
+# What a record whose values reach two masters, and merge none, does (part
+# A2b): `review` (the default) or bind by `first`, this rule's master,
+# withholding the values the other masters hold.
+ON_CONFLICT = frozenset({"review", "first"})
 # Company compatibility is kind equality only: Q9 says a name change never
 # revokes a binding, and a name-similarity test is fuzzy matching (ticket 08).
 COMPATIBILITY = frozenset({"kind_equal@1"})
@@ -414,6 +418,8 @@ def check_binding_rule(kind: str, rule: dict, kinds: dict) -> None:
     several = rule.get("on_several", "review")
     if several not in ON_SEVERAL:
         raise Conflict(f"Binding rule {rule_id}: on_several is one of {sorted(ON_SEVERAL)}")
+    if rule.get("on_conflict", "review") not in ON_CONFLICT:
+        raise Conflict(f"Binding rule {rule_id}: on_conflict is one of {sorted(ON_CONFLICT)}")
     contract = ((kinds.get(kind) or {}).get("identifiers") or {}).get(namespaces[0]) or {}
     if several == "merge" and contract.get("consolidates") is not True:
         # Only an identifier stated to consolidate merges masters (ticket 138:
