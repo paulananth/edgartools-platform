@@ -452,3 +452,62 @@ def test_a_redelivered_record_gives_its_security_nothing_it_withheld():
         "withheld": {again["subject"]: [{"namespace": "isin", "raw": ISIN_X}]},
         "released": [], "normalizers": NORMALIZERS})
     assert [(h["namespace"], h["value"]) for h in plan["caller_holders"]] == [("cusip", CUSIP)]
+
+
+# Design 5 (operator, 2026-10-26 14:42 ET: "Lookup only"): a FIGI a holding
+# files finds the Security OpenFIGI gave it to, as a cross-reference; it is
+# never that Security's, never merges, and the filed CUSIP wins a conflict.
+ISSUER = "fixture.openfigi"
+FILED_FIGI = {**RULE, "rule_id": "fixture-holding-figi", "source": FILED, "on_no_match": "wait"}
+
+
+def lookup_policy(*rules):
+    policy = filed_policy(*rules)
+    policy["kinds"]["security"]["identifiers"] = {**FILED_CONTRACTS, "figi": {**CONTRACT, "sources": [ISSUER]}}
+    return policy
+
+
+def filed(key, figi_value, **identifiers):
+    return assertion(source_code=FILED, record_key=key, publication_key="p1", revision=1, effective_at=None,
+                     kind="security", fields={}, identifiers=identifiers, cross_references={"figi": figi_value})
+
+
+def test_a_filed_figi_finds_the_security_holding_it_and_never_becomes_its():
+    plan, result = match([filed("one", F1, cusip=CUSIP)], held={F1: HELD},
+                         policy=lookup_policy(FIRST, FILED_FIGI))
+    assert plan["wanted"]["figi"] == [F1]
+    (bind,) = result["decisions"]
+    assert bind["entity_id"] == HELD and bind["rule_id"] == "fixture-holding-figi"
+    # Its unheld CUSIP is the Security's from now on; the FIGI is not given.
+    assert given(result, "mints") == {(HELD, CUSIP)}
+    assert result["reviews"] == [] and result["identities"] == []
+
+
+def test_a_filed_cusip_wins_over_a_filed_figi_leading_elsewhere():
+    _, result = match([filed("one", F1, cusip=CUSIP)], held={("cusip", CUSIP): HELD, F1: OTHER},
+                      policy=lookup_policy(FIRST, FILED_FIGI))
+    assert result["reviews"] == [] and merges(result) == []
+    (bind,) = result["decisions"]
+    assert bind["entity_id"] == HELD
+    assert given(result, "joins") == {(HELD, CUSIP)} and result["mints"] == []
+
+
+def test_a_filed_figi_no_security_holds_creates_nothing_by_it():
+    _, result = match([filed("one", F1, cusip=CUSIP)], policy=lookup_policy(FIRST, FILED_FIGI))
+    (identity,) = result["identities"]
+    assert given(result, "mints") == {(identity["entity_id"], CUSIP)}
+
+
+def test_a_filed_figi_held_by_two_securities_never_merges_them():
+    _, result = match([filed("one", F1, cusip=CUSIP)], held={F1: [HELD, OTHER]},
+                      policy=lookup_policy(FIRST, FILED_FIGI))
+    assert merges(result) == [] and result["decisions"] == []
+    assert [r["reason"] for r in result["reviews"]] == ["ambiguous_identifier"]
+
+
+def test_a_malformed_filed_figi_finds_nothing_and_the_cusip_still_binds():
+    # The engine checks no check digit (the Dataset Contract does): a filer's
+    # malformed FIGI is held by no Security and finds nothing.
+    _, result = match([filed("one", "NOT-A-FIGI", cusip=CUSIP)], held={("cusip", CUSIP): HELD},
+                      policy=lookup_policy(FIRST, FILED_FIGI))
+    assert [d["entity_id"] for d in result["decisions"]] == [HELD] and result["reviews"] == []

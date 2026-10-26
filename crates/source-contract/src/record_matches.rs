@@ -315,8 +315,21 @@ pub fn plan_record_matches(raw: &str) -> Result<String, String> {
                 continue;
             }
             let namespace = read_matching_namespace(rule)?;
+            let source = read_rule_text(record, "source_code")?;
+            let issued = issuers
+                .get(&namespace)
+                .is_some_and(|sources| sources.contains(&source));
+            // A source that does not issue the identifier may file it as a
+            // cross-reference: it finds the master holding it, lookup only,
+            // and is never given to it (Design 5, operator 2026-10-26:
+            // "Lookup only").
             let identifiers = values::read_object(record, "identifiers")?;
-            let Some(raw) = identifiers.get(&namespace) else {
+            let cross_references = values::read_object(record, "cross_references")?;
+            let Some(raw) = identifiers.get(&namespace).or(if issued {
+                None
+            } else {
+                cross_references.get(&namespace)
+            }) else {
                 continue;
             };
             let raws = values::read_identifier_values(raw)?;
@@ -332,10 +345,6 @@ pub fn plan_record_matches(raw: &str) -> Result<String, String> {
                 .filter(|(key, _)| ["rule_id", "version"].contains(&key.as_str()))
                 .map(|(key, value)| (key.clone(), value.clone()))
                 .collect();
-            let source = read_rule_text(record, "source_code")?;
-            let issued = issuers
-                .get(&namespace)
-                .is_some_and(|sources| sources.contains(&source));
             for raw in raws {
                 let value =
                     prepare_identifier_value(&contracts, &namespace, &raw, &input.normalizers)?;

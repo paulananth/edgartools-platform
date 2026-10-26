@@ -31,6 +31,18 @@ Blocked by: none. Replaces the two-target design of [120](120-switch-on-securiti
   its source, first and last seen); a FIGI filed by 13F or N-PORT: "Yes, any
   source's FIGI" (it matches like OpenFIGI's; one that leads elsewhere than
   the filed CUSIP goes to review).
+- Asked (2026-10-26 14:42 ET), after Design 5's measure, "How may a FIGI
+  filed by 13F or N-PORT take part in Security mastering?": "Lookup only
+  (Recommended)". A filed FIGI finds the Security that already holds it
+  (from OpenFIGI) and binds a record with no CUSIP or ISIN match; it never
+  becomes a Security's identifier and never merges; the CUSIP wins on a
+  conflict. It replaces "Yes, any source's FIGI" (2026-10-25). The measure
+  (counts only): N-PORT 2026 Q2 files 21,287 FIGIs, 18,620 of them none
+  OpenFIGI gave, 740 the listing FIGI of the holding's own CUSIP and 41 of
+  another CUSIP's; 13F's 999 sampled filings file 819,532 over 2,953,581
+  holdings, 432,155 share-class FIGIs, 337,558 listing FIGIs (292,577 of
+  the holding's own CUSIP, 21,071 of another CUSIP's) and 48,142 none
+  OpenFIGI gave.
 
 - "no need for identifier table"; then, asked again: two Securities found to
   be one: "Oldest id survives"; silver: "master_id only" (each silver row
@@ -243,7 +255,11 @@ security); every listing FIGI misses none.
 - [ ] A re-delivered bound record alone in a batch proposes nothing, so its new value is not re-checked at save; A2 carries it with the identifier ownership work
 - [x] Inside one batch, every record that finds a held master binds before any record creates one (found by B1's silver test: an ISIN answer sorted first created a Security, and the CUSIP answer sharing its FIGI then reached two) (2026-10-25 23:15 ET): `test_a_record_finding_a_held_security_binds_before_any_record_creates_one`
 - [x] Three-axis review of B1 (2026-10-25, acted on): Standards (the sequence comment names OpenFIGI's three targets in order; the sort key computed once), Spec (the acquisition feed lists `openfigi.security.v3`; the security-master skill's live sections say what runs now), GoF (the test reuses `policy_layers.with_rules_on`; one `phase` for the batch order and the create test goes into A2)
-- [ ] A FIGI that 13F or N-PORT files matches like OpenFIGI's (Design 5): the FIGI contract names only OpenFIGI as its source until those feeds map one
+- [ ] A FIGI that 13F or N-PORT files finds a Security (Design 5, "Lookup only", 2026-10-26 14:42 ET): it stays a cross-reference, never an identifier; the FIGI contract keeps OpenFIGI as its only source
+  - [x] Engine: a matching rule on an identifier its source does not issue reads the record's cross-reference when the record carries no such identifier, finds the holders and never mints; only the issuing source's rule may merge (activation check) (2026-10-26 15:00 ET): planner tests (5: finds, CUSIP wins, creates nothing by it, never merges, a malformed value finds nothing; the engine checks no check digit, the Dataset Contract does), `test_only_the_identifier_issuer_may_merge_by_it`, PostgreSQL `test_a_filed_figi_finds_its_security_and_never_becomes_one_of_its_identifiers`
+  - [x] 13F: `thirteenf-security-figi` ("Filed FIGI finds its Security", `on_no_match: wait`) and `security-cusip` 2026-10-26.1 ("Filed CUSIP wins over a filed FIGI", `on_conflict: first`); the 2026-10-14.1 switch-on ended, both off until the operator's switch-on (2026-10-26 15:00 ET). Measured per record on the 999 sampled filings (one record per CUSIP, its lexically first FIGI, against OpenFIGI's 2026q2-nport answers; counts only): 29,942 records, 18,170 filing a FIGI; 6,473 with a CUSIP OpenFIGI's answers hold, 98 of them with a FIGI on another CUSIP's Security (the CUSIP wins); 11,697 with an unheld CUSIP, 6,150 of them finding a Security by the FIGI, so that CUSIP joins it (the Security then holds two CUSIPs). Whether those 6,150 are right is the switch-on question
+  - [ ] Switch-on of the two 13F rules: a limited test, then the operator's words
+  - [ ] N-PORT: read its filed FIGI as a cross-reference and a FIGI rule, own PR after 13F (a few hundred records at most)
 - [ ] Inside one batch, a record that finds a master only through a value another record adds there is still ordered among the creators; A2's merge makes the result the same in any order
 - [x] Part B2 (2026-10-26 00:20 ET, branch `claude/t138-nport-no-pairing`): N-PORT's FIGI pairing chain removed (`pairs` to `fold`; `combine-pairs`, `figi-*`, `fold` deleted), each CUSIP record carrying every ISIN filed with it (contract adapter v3), an ISIN-only holding keyed by its own ISIN in MDM and silver; OpenFIGI's `answers_cusip` and `answers_isin` targets deleted; a listed value failing its check is left out, the record kept (one bad ISIN filed beside a CUSIP must not set the CUSIP aside): N-PORT tests 26 passed (the CUSIP's record and the ISIN-only record land on one Security through the live N-PORT rules), unit and MDM 1,883
 - [ ] N-PORT's `lease_seconds: 900`, set for the FIGI steps B2 removed, goes once a run shows the default lease holds

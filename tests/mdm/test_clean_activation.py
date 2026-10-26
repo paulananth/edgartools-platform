@@ -462,6 +462,14 @@ class TestAnIdentifierRule:
         with pytest.raises(Conflict, match="does not issue cik"):
             check_policy(binding_policy(rule=rule, activate=False))
 
+    def test_only_the_identifier_issuer_may_merge_by_it(self):
+        # Design 5 (operator, 2026-10-26: "Lookup only"): a value another
+        # source files finds a master and never merges two.
+        rule = {**CIK_RULE, "source": "gleif.level1.v1", "on_no_match": "wait", "on_several": "merge"}
+        contract = {**CIK_CONTRACT, "consolidates": True}
+        with pytest.raises(Conflict, match="merges only from its issuing source"):
+            check_policy(binding_policy(rule=rule, contract=contract, activate=False))
+
     def test_a_rule_that_creates_companies_needs_its_kinds_contract(self):
         rule = {**CIK_RULE, "source": "gleif.level1.v1"}
         with pytest.raises(Conflict, match="no Identifier Contract"):

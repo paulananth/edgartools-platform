@@ -428,6 +428,13 @@ def check_binding_rule(kind: str, rule: dict, kinds: dict) -> None:
             f"Binding rule {rule_id} merges only by an identifier whose Identifier Contract "
             f"states consolidates: true: {namespaces[0]}"
         )
+    if several == "merge" and rule.get("source") not in contract.get("sources", ()):
+        # A value a source files without issuing it is lookup only (Design 5,
+        # operator 2026-10-26: "Lookup only"): it never merges two masters.
+        raise Conflict(
+            f"Binding rule {rule_id} merges only from its issuing source: "
+            f"{rule.get('source')} does not issue {namespaces[0]}"
+        )
     if rule["on_no_match"] == "mint":
         _check_minting_source(kind, rule, namespaces[0], kinds)
 

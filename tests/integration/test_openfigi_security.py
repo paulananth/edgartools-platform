@@ -193,7 +193,8 @@ def policy_body() -> dict:
     Proving Run activation): they, and the FIGI contract's verification, wait for the
     operator's switch-on."""
     # N-PORT's two Security rules wait for their switch-on too (ticket 138 part B2).
-    body = policy_layers.with_rules_on(files.policy(), "security", *OPENFIGI, "nport-security-cusip", "nport-security-isin")
+    body = policy_layers.with_rules_on(files.policy(), "security", *OPENFIGI, "nport-security-cusip", "nport-security-isin",
+                                          "security-cusip", "thirteenf-security-figi")
     body["kinds"]["security"]["identifiers"]["figi"]["verification"] = {
         "corpus_sha256": "f" * 64, "approved_by": "fixture", "approved_at": "2026-10-25T00:00:00Z",
         "reason": "fixture verification: shape only, not a measurement"}
@@ -291,6 +292,27 @@ def test_a_record_joins_the_security_holding_its_cusip_or_creates_it(database, t
     with database.application.connect() as conn:
         (row,) = conn.execute(text("SELECT * FROM mdm.cross_reference_lookup('composite_figi', 'BBGZ0000VS14')")).all()
     assert row._mapping["record_key"] == EQUITY
+
+
+def test_a_filed_figi_finds_its_security_and_never_becomes_one_of_its_identifiers(database, tmp_path):
+    """Design 5 (operator, 2026-10-26 14:42 ET: "Lookup only"): a 13F record's
+    filed FIGI finds the Security OpenFIGI gave it to, and its unheld CUSIP
+    joins that Security; a filed FIGI no Security holds is never given to the
+    Security the record creates."""
+    from edgar_warehouse.mdm.clean.identifier_types import TYPES
+    unheld_figi = next(f"BBG00TSTXX9{d}" for d in "0123456789" if TYPES["figi"].refusal(f"BBG00TSTXX9{d}")[1] is None)
+    records, _ = prepared_records(tmp_path, ("cusip",))
+    load(database, [
+        ("openfigi", records),
+        ("13f", [core.source(key=cusip, source_code=THIRTEENF, kind="security",
+                             fields={"name_of_issuer": "Example Corp.", "title_of_class": "COM"},
+                             identifiers={"cusip": cusip}, cross_references={"figi": filed})
+                 for cusip, filed in (("ZZ0000211", figis(EQUITY)[0]), ("ZZ0000229", unheld_figi))])])
+    found = securities(database)[bound(database, THIRTEENF, "ZZ0000211")]
+    assert bound(database, THIRTEENF, "ZZ0000211") == bound(database, CODE, EQUITY)
+    assert found["identifiers"] == {"cusip": sorted([EQUITY, "ZZ0000211"]), "figi": figis(EQUITY)}
+    created = securities(database)[bound(database, THIRTEENF, "ZZ0000229")]
+    assert created["identifiers"] == {"cusip": ["ZZ0000229"]}
 
 
 def grouping(database, records) -> list[list[str]]:

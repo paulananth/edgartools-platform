@@ -237,17 +237,11 @@ automatic_rules:
   rule_version: 2026-10-13.1
   verdict: bind
   activation: deterministic
-# security-cusip: switched on by operator, 2026-10-15T10:27:01Z, in their words: merge 985 when green agreed for the rest.
-# It activates on the Security CUSIP Identifier Contract (kinds/security.yaml,
-# identifiers.cusip), verified on the SEC 13F Proving Run (sha256
-# 52cb4469...fc80), then re-verified with N-PORT among its sources (ticket 79,
-# sec.nport/proving-run.json, sha256 0832f611...78ae).
-- kind: security
-  family: binding
-  rule_id: security-cusip
-  rule_version: 2026-10-14.1
-  verdict: bind
-  activation: deterministic
+# security-cusip 2026-10-14.1: switched on by operator, 2026-10-15T10:27:01Z, in
+# their words: merge 985 when green agreed for the rest. Its switch-on ended with
+# ticket 138 Design 5: version 2026-10-26.1 ("Filed CUSIP wins over a filed
+# FIGI") and thirteenf-security-figi ("Filed FIGI finds its Security") wait for
+# the operator's switch-on.
 # iapd-adv-crd, iapd-adv-custodian-lei, iapd-adv-custodian-bd: switched on by
 # operator, 2026-10-17 08:31 ET, in their words: Switch on all three
 # (Recommended). They activate on their verified Identifier Contracts

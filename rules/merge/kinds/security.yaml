@@ -7,7 +7,7 @@
 # Switched on (operator, 2026-10-15 06:27 ET, in their words: "merge 985 when green agreed for the rest"):
 # the matching rule activates on its Identifier Contract, verified on the
 # Proving Run's cohort (rules/merge/policy.yaml, automatic_rules).
-version: security-2026-10-26.filed-cusip-binds-first
+version: security-2026-10-26.filed-figi-finds
 defaults:
   # The first listed wins each field. Operator, 2026-10-18 (ticket 84): "make
   # openfigi priority 1 and 13f last", then "Name only (Recommended)". OpenFIGI
@@ -28,13 +28,17 @@ rules:
 # CUSIP, or creates it. A CUSIP failing its check digit never reaches this
 # rule: the Dataset Contract sets it aside (invalid_cusip_checksum).
 - rule_id: security-cusip
-  version: 2026-10-14.1
+  # "Filed CUSIP wins over a filed FIGI" (ticket 138 Design 5; operator,
+  # 2026-10-26: "Lookup only", the CUSIP winning a conflict): a 13F record
+  # whose CUSIP and filed FIGI lead to two Securities binds by the CUSIP.
+  version: 2026-10-26.1
   family: binding
   source: sec.thirteenf.information_table.security.v1
   applies_to_verdict: security
   emits:
   - bind
   on_no_match: mint
+  on_conflict: first
   when:
   - primitive: identifier_match@1
     args:
@@ -42,6 +46,26 @@ rules:
   - primitive: identifier_cardinality@1
     args:
       namespace: cusip
+# "Filed FIGI finds its Security" (ticket 138 Design 5; operator, 2026-10-26
+# 14:42 ET: "Lookup only (Recommended)"): the FIGI a 13F filer states, a
+# cross-reference, finds the Security OpenFIGI gave it to. 13F does not issue
+# FIGIs, so the value is never that Security's; it creates nothing and merges
+# nothing (a filed FIGI held by two Securities goes to review).
+- rule_id: thirteenf-security-figi
+  version: 2026-10-26.1
+  family: binding
+  source: sec.thirteenf.information_table.security.v1
+  applies_to_verdict: security
+  emits:
+  - bind
+  on_no_match: wait
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: figi
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: figi
 - rule_id: nport-security-cusip
   # "Filed CUSIP binds first" (ticket 138 part A2b; operator, 2026-10-25:
   # "bind by CUSIP if matches if not then try isin", "cusip is a seperate than
