@@ -353,6 +353,14 @@ Its decision and measurement:
   to another master, and a record in review merges nothing. The merge is a
   rule's decision (`actor: rule:<id>@<version>`), naming every live merge
   either side rests on (`depends_on`); replay applies it after them.
+- `on_conflict` says what a record does when its values lead to two masters
+  it does not merge: `review` (the default), or `first`: bind to the master
+  this rule's value reaches, if it reaches exactly one, and withhold the
+  values the other masters hold (ticket 138 part A2b: a filed CUSIP and
+  ISIN bind by the CUSIP). The bind lists them under `withheld`; a withheld
+  value is never its master's: not in the master, the holder lookups, the
+  agent lookup, or name matching's held values. A value no master holds is
+  not withheld; it becomes the bound master's as usual.
 - A binding rule may not call `select_by_source_rank` (§3).
 - A `name_binding` rule (company mastering ticket 08) is measured, not
   deterministic: it only joins a waiting record to the Company another

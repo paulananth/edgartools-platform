@@ -19,6 +19,10 @@ struct Command {
     as_of: String,
     policy_digest: String,
     profile_kinds: IndexMap<String, Vec<String>>,
+    /// The values each record's live bind withholds from its master (ticket
+    /// 138 part A2b): another master holds them.
+    #[serde(default)]
+    withheld: BTreeMap<String, BTreeSet<(String, String)>>,
 }
 
 fn decision_changes_record(
@@ -150,6 +154,7 @@ pub fn prepare_master_records(raw: &str) -> Result<String, String> {
         decisions,
         as_of,
         policy_digest,
+        withheld,
         profile_kinds,
     } = command;
     let mut groups: IndexMap<String, Vec<String>> = IndexMap::new();
@@ -207,6 +212,9 @@ pub fn prepare_master_records(raw: &str) -> Result<String, String> {
             }
             for (namespace, raw) in values::read_object(claim, "identifiers")? {
                 for value in values::read_identifier_values(&raw)? {
+                    if withheld.get(subject).is_some_and(|kept| kept.contains(&(namespace.clone(), value.clone()))) {
+                        continue;
+                    }
                     identifiers.entry(namespace.clone()).or_default().insert(value);
                 }
             }

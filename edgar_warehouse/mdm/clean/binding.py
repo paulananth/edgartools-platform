@@ -73,7 +73,7 @@ def holders(conn, policy: dict, wanted: dict[str, set[str]], released: set[str] 
                       if isinstance(conn, RecordReader) else rows(
             conn,
             """SELECT DISTINCT s.reading->'identifiers'->:namespace AS value,
-                      s.entity_id::text AS entity_id, i.kind
+                      s.entity_id::text AS entity_id, i.kind, s.subject
             FROM unnest(CAST(:wanted AS jsonb[])) AS w(doc) CROSS JOIN LATERAL (
                 SELECT reading, entity_id, subject, source_code FROM mdm.stage_record
                 WHERE (reading->'identifiers') @> w.doc OFFSET 0) s
@@ -87,9 +87,14 @@ def holders(conn, policy: dict, wanted: dict[str, set[str]], released: set[str] 
         merged = survivors(conn, {r["entity_id"] for r in found_rows})
         portable = isinstance(conn, RecordReader)
         normals = {_normal(policy, namespace, v) for v in values}
+        # A value a record's bind withholds is not its master's (part A2b);
+        # the portable reader leaves those out itself.
+        kept_back = {} if portable else withheld(conn, {r["subject"] for r in found_rows})
         for row in found_rows:
             # A Stage row returns its whole list; only the values asked count.
             for raw in [row["value"]] if portable else identifier_values(row["value"]):
+                if (namespace, raw) in kept_back.get(row.get("subject"), ()):
+                    continue
                 key = (namespace, _normal(policy, namespace, raw))
                 if portable and key[1] not in values:
                     raise Conflict("Identifier reference differs from retained reading")
@@ -157,6 +162,38 @@ def in_review(conn, entity_ids: set[str]) -> set[str]:
             ids=sorted(entity_ids),
         )
     }
+
+
+def withheld_by(decisions) -> dict[str, set[tuple[str, str]]]:
+    """The values each record's live bind withholds from its master (ticket
+    138 part A2b: a filed CUSIP and ISIN on two Securities bind by the CUSIP;
+    the ISIN stays the other Security's). A revoked bind withholds nothing."""
+    decisions = list(decisions)
+    revoked = {d["target"] for d in decisions if d["operation"] == "revoke"}
+    found: dict[str, set[tuple[str, str]]] = defaultdict(set)
+    for d in decisions:
+        if d["operation"] == "bind" and d["decision_id"] not in revoked:
+            for w in d.get("withheld") or ():
+                found[d["subject"]].add((w["namespace"], w["raw"]))
+    return dict(found)
+
+
+def withheld(conn, subjects) -> dict[str, set[tuple[str, str]]]:
+    """`withheld_by` over the stored binds and revocations of `subjects`, one
+    indexed read per subject on either store."""
+    subjects = sorted(set(subjects))
+    if not subjects:
+        return {}
+    if isinstance(conn, RecordReader):
+        return withheld_by(d for d in conn.related_decisions(subjects)
+                           if d["operation"] in ("bind", "revoke") and d.get("subject") in subjects)
+    return withheld_by(r["body"] for r in rows(
+        conn,
+        """SELECT d.body FROM unnest(CAST(:subjects AS text[])) k(key) CROSS JOIN LATERAL (
+            SELECT body FROM mdm.decision WHERE body->>'subject' = k.key
+              AND operation IN ('bind', 'revoke') OFFSET 0) d""",
+        subjects=subjects,
+    ))
 
 
 def consolidations(conn, entities: set[str]) -> list[dict]:
@@ -245,6 +282,9 @@ def propose(
             "identities": identities, "bound": list(held),
             # A re-delivered record's values are its master's (its survivor's).
             "bound_entities": {subject: merged.get(entity, entity) for subject, entity in held.items()},
+            # What each bound record's bind withholds, stored or in this batch (part A2b).
+            "withheld": {subject: [{"namespace": n, "raw": r} for n, r in sorted(values)]
+                         for subject, values in {**withheld(conn, held), **withheld_by(decisions)}.items()},
             "released": sorted(released),
             "normalizers": {kind.normalizer_name: kind.upper for kind in TYPES.values()},
         })

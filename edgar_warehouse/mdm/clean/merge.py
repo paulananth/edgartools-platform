@@ -530,6 +530,8 @@ class MergeStage:
                 "bindings": state.bindings, "quarantined": state.quarantined,
                 "claims": claims, "policy": policy, "overrides": state.overrides,
                 "decisions": decisions, "as_of": as_of, "policy_digest": policy_digest,
+                # What each record's live bind withholds, stored or in this batch (part A2b).
+                "withheld": {subject: sorted(values) for subject, values in binding.withheld_by(all_d.values()).items()},
                 "profile_kinds": {role: sorted(kinds) for role, kinds in PROFILE_KINDS.items()},
             })
         except ValueError as error:

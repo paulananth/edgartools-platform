@@ -32,7 +32,8 @@ carries lists of identifiers (part A1), OpenFIGI's one load with every
 listing FIGI as an identifier and one master id in silver (part B1),
 N-PORT's pairing by FIGI removed (part B2), each listing's currency (part
 B3), the merge by a shared FIGI (part A2a: the FIGI rule's `on_several:
-merge`). Still to build: the CUSIP-first bind (A2b), then the switch-on. The
+merge`), the CUSIP-first bind (part A2b: N-PORT's CUSIP rule's
+`on_conflict: first`). Still to build: the switch-on. The
 sections below say where 138 changes what runs.
 
 **One master id.** Mastering mints one master id for each Security. The
@@ -179,7 +180,7 @@ their Identifier Contract is verified (`policy.yaml`, `automatic_rules`,
 | Rule | Source | Joins by | No Security holds it | Switched on |
 |---|---|---|---|---|
 | `security-cusip` | 13F | CUSIP | creates one | 2026-10-15 ("merge 985 when green agreed for the rest") |
-| `nport-security-cusip` | N-PORT | CUSIP | creates one | 2026-10-17 21:03 ET ("Switch on all six (Recommended)"); v2 version 2026-10-20.1 decided |
+| `nport-security-cusip` | N-PORT | CUSIP | creates one; a filed CUSIP and ISIN on two Securities bind by the CUSIP, the ISIN withheld from it (version 2026-10-26.2, "Filed CUSIP binds first") | waits for its switch-on (ticket 138); version 2026-10-20.1 was on from 2026-10-17 21:03 ET ("Switch on all six (Recommended)") |
 | `nport-security-isin` | N-PORT | an ISIN (each filed with a CUSIP; the key of an ISIN-only one) | creates one | same; it replaces `nport-isin-security-isin` (retired with `sec.nport.security_isin.v1`) |
 | `openfigi-security-cusip` | OpenFIGI (CUSIP asked) | CUSIP | creates one (version 2026-10-25.1) | waits for its switch-on (ticket 138); version 2026-10-23.1 was on from 2026-10-24 19:27 ET |
 | `openfigi-security-isin` | OpenFIGI (ISIN asked) | ISIN | creates one (version 2026-10-25.1) | waits for its switch-on (ticket 138); version 2026-10-24.1 was on from 2026-10-24 19:27 ET |

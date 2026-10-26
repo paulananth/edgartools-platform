@@ -73,6 +73,17 @@ if case == "rule_merge":
     rule["on_several"] = "merge"
     contract["consolidates"] = True
 rules = [rule, join]
+identifier_contracts = {NAMESPACE: contract}
+if case == "cusip_first":
+    # Ticket 138 part A2b: a record whose two identifiers lead to two masters
+    # binds by the rule that states `first`; the other value is withheld.
+    rule["on_conflict"] = "first"
+    second = {**rule, "rule_id": "invented-second", "when": [
+        {"primitive": "identifier_match@1", "args": {"namespace": "invented_code"}},
+        {"primitive": "identifier_cardinality@1", "args": {"namespace": "invented_code"}}]}
+    del second["on_conflict"]
+    rules.append(second)
+    identifier_contracts["invented_code"] = dict(contract)
 policy = {
     "version": "invented-read-phase",
     "required_consumers": ["invented-export"],
@@ -84,7 +95,7 @@ policy = {
                 "allow_unknown_effective": True,
             },
             "rules": rules,
-            "identifiers": {NAMESPACE: contract},
+            "identifiers": identifier_contracts,
         }
     },
     "automatic_rules": [
@@ -344,6 +355,32 @@ def propose(items=(), journal=(), at=AS_OF):
 
 try:
     holder = record("one")
+    if case == "cusip_first":
+        first, second = record("one", identifiers={NAMESPACE: "170"}), record("two", identifiers={"invented_code": "333"})
+        older, first_bind = identity(first)
+        newer, second_bind = identity(second, "2026-01-02T00:00:00+00:00")
+        save([first, second], [older, newer], [first_bind, second_bind])
+        both = record("three", identifiers={NAMESPACE: "170", "invented_code": "333"})
+        proposed = propose([both])
+        (bind,) = proposed["decisions"]
+        assert (bind["entity_id"], bind["withheld"]) == (older["entity_id"], [{"namespace": "invented_code", "raw": "333"}])
+        assert proposed["reviews"] == []
+        if not mysql or prepared_mode:
+            MergeStage(Store(runtime)).apply(
+                batch_id="invented-cusip-first", run_id=str(uuid4()), policy_digest=pin,
+                consumer="invented-cusip-first", expected_checkpoint=0, checkpoint=1, as_of=AS_OF,
+                assertions=[both])
+            with runtime.connect() as conn:
+                reader = RecordReader(api.Adapter(runtime, prefix="mdm_store", protocol=6),
+                                      connection=conn, routes=matching.candidate_routes()) if prepared_mode else conn
+                held = binding.holders(reader, policy, {"invented_code": {"333"}})
+                assert binding.bound(reader, [both["subject"]])[both["subject"]] == older["entity_id"]
+            # The withheld value stays the newer master's alone.
+            assert {e for found in held.values() for e in found} == {newer["entity_id"]}
+            later = propose([record("four", identifiers={"invented_code": "333"})])
+            assert [d["entity_id"] for d in later["decisions"]] == [newer["entity_id"]] and later["reviews"] == []
+        print("normal read phase passed")
+        raise SystemExit(0)
     if case == "rule_merge":
         first, second = record("one", identifiers={NAMESPACE: "170"}), record("two", identifiers={NAMESPACE: "171"})
         older, first_bind = identity(first)

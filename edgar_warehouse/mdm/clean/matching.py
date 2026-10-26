@@ -202,16 +202,21 @@ def _held_identifiers(conn, source: str, namespace: str, entities: set[str], rel
     held: dict[str, set] = defaultdict(set)
     if not entities:
         return held
+    from .binding import withheld
     from .record_reads import RecordReader
     if isinstance(conn, RecordReader):
-        for record in conn.current(conn.members(entities)).values():
-            if record["source_code"] == source and record["subject"] not in released:
-                held[record["entity_id"]].update(
-                    identifier_values((record.get("identifiers") or {}).get(namespace)))
+        records = [r for r in conn.current(conn.members(entities)).values()
+                   if r["source_code"] == source and r["subject"] not in released]
+        kept_back = withheld(conn, {r["subject"] for r in records})
+        for record in records:
+            # A value its bind withholds is not its master's (ticket 138 part A2b).
+            held[record["entity_id"]].update(
+                v for v in identifier_values((record.get("identifiers") or {}).get(namespace))
+                if (namespace, v) not in kept_back.get(record["subject"], ()))
         return held
-    for r in rows(
+    found = rows(
         conn,
-        """SELECT s.entity_id::text AS entity_id, s.reading->'identifiers'->:namespace AS value
+        """SELECT s.entity_id::text AS entity_id, s.subject, s.reading->'identifiers'->:namespace AS value
         FROM unnest(CAST(:entities AS uuid[])) k(id) CROSS JOIN LATERAL (
             SELECT entity_id,reading,source_code,subject FROM mdm.stage_record
             WHERE entity_id=k.id AND entity_id IS NOT NULL OFFSET 0
@@ -222,8 +227,11 @@ def _held_identifiers(conn, source: str, namespace: str, entities: set[str], rel
         entities=sorted(entities),
         source=source,
         released=sorted(released),
-    ):
-        held[r["entity_id"]].update(identifier_values(r["value"]))
+    )
+    kept_back = withheld(conn, {r["subject"] for r in found})
+    for r in found:
+        held[r["entity_id"]].update(
+            v for v in identifier_values(r["value"]) if (namespace, v) not in kept_back.get(r["subject"], ()))
     return held
 
 

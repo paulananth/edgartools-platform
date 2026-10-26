@@ -289,14 +289,18 @@ class Context:
                     [reader.group("cross_reference_records", namespace, value)], namespace, value,
                     kind=kind, cross_reference=True)}
         else:
-            found = {r[0]: "identifier" for r in conn.execute(text(
-            """SELECT DISTINCT coalesce(e.canonical_id, s.entity_id::text)
+            carriers = conn.execute(text(
+            """SELECT DISTINCT coalesce(e.canonical_id, s.entity_id::text), s.subject
                  FROM unnest(CAST(:docs AS jsonb[])) AS w(doc) CROSS JOIN LATERAL (
-                      SELECT entity_id, kind FROM mdm.stage_record
+                      SELECT entity_id, kind, subject FROM mdm.stage_record
                        WHERE reading -> 'identifiers' @> w.doc OFFSET 0) s
                  LEFT JOIN mdm.current_entity e ON e.object_id = s.entity_id::text
                 WHERE s.entity_id IS NOT NULL AND (CAST(:k AS text) IS NULL OR s.kind = :k)"""),
-            {"docs": containment_docs(namespace, value), "k": kind})}
+            {"docs": containment_docs(namespace, value), "k": kind}).all()
+            # A value its bind withholds does not make it this master's (ticket 138 part A2b).
+            from edgar_warehouse.mdm.clean.binding import withheld
+            kept_back = withheld(conn, {r[1] for r in carriers})
+            found = {r[0]: "identifier" for r in carriers if (namespace, value) not in kept_back.get(r[1], ())}
         if not found and adapter is None:
             found = {r[0]: "cross_reference" for r in conn.execute(text(
                 """SELECT DISTINCT entity_id FROM mdm.cross_reference_lookup(:ns, :v)

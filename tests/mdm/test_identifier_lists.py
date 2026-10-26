@@ -387,3 +387,68 @@ def test_a_record_finding_a_held_security_binds_before_any_record_creates_one():
     _, result = match(ordered, held={F1: HELD})
     assert result["identities"] == [] and result["reviews"] == []
     assert {d["entity_id"] for d in result["decisions"]} == {HELD}
+
+
+# Part A2b (operator, 2026-10-25: "bind by CUSIP if matches if not then try isin";
+# "cusip is a seperate than isin it can never be merges"): a filed CUSIP and ISIN
+# that lead to two Securities bind by the CUSIP; the ISIN the other Security holds is
+# withheld from this one.
+ISIN_X = "ZZ0000000016"
+FILED = "fixture.holdings"
+FIRST = {**CUSIP_RULE, "rule_id": "fixture-holding-cusip", "source": FILED, "on_conflict": "first"}
+BY_ISIN = {**RULE, "rule_id": "fixture-holding-isin", "source": FILED,
+           "when": [{"primitive": "identifier_match@1", "args": {"namespace": "isin"}},
+                    {"primitive": "identifier_cardinality@1", "args": {"namespace": "isin"}}]}
+FILED_CONTRACTS = {"cusip": {**CONTRACT, "normalizer": "normalize_identifier@cusip-v1", "sources": [FILED]},
+                   "isin": {**CONTRACT, "normalizer": "normalize_identifier@isin-v1", "sources": [FILED]}}
+
+
+def filed_policy(*rules):
+    return {
+        "automatic_rules": [{"kind": "security", "family": "binding", "rule_id": r["rule_id"],
+                             "rule_version": r["version"], "verdict": "bind"} for r in rules],
+        "kinds": {"security": {"rules": list(rules), "identifiers": FILED_CONTRACTS}},
+    }
+
+
+def holding(key, **identifiers):
+    return assertion(source_code=FILED, record_key=key, publication_key="p1", revision=1, effective_at=None,
+                     kind="security", fields={}, identifiers=identifiers)
+
+
+def test_a_filed_cusip_and_isin_on_two_securities_bind_by_the_cusip_withholding_the_isin():
+    one = holding("one", cusip=CUSIP, isin=ISIN_X)
+    _, result = match([one], held={("cusip", CUSIP): HELD, ("isin", ISIN_X): OTHER},
+                      policy=filed_policy(FIRST, BY_ISIN))
+    assert result["reviews"] == [] and merges(result) == []
+    (bind,) = result["decisions"]
+    assert (bind["subject"], bind["entity_id"]) == (one["subject"], HELD)
+    assert bind["withheld"] == [{"namespace": "isin", "raw": ISIN_X}]
+    # Only the CUSIP's Security is joined; the ISIN stays the other's.
+    assert given(result, "joins") == {(HELD, CUSIP)} and result["mints"] == []
+
+
+def test_without_on_conflict_first_the_pair_still_goes_to_review():
+    _, result = match([holding("one", cusip=CUSIP, isin=ISIN_X)],
+                      held={("cusip", CUSIP): HELD, ("isin", ISIN_X): OTHER},
+                      policy=filed_policy({**FIRST, "on_conflict": "review"}, BY_ISIN))
+    assert [r["reason"] for r in result["reviews"]] == ["conflicting_identifiers"]
+    assert result["decisions"] == []
+
+
+def test_a_conflict_the_cusip_rule_does_not_reach_stays_in_review():
+    # Two ISINs filed on two Securities, no CUSIP held: nothing binds first.
+    _, result = match([holding("one", cusip=CUSIP, isin=[ISIN_X, "ZZ0000000024"])],
+                      held={("isin", ISIN_X): HELD, ("isin", "ZZ0000000024"): OTHER},
+                      policy=filed_policy(FIRST, BY_ISIN))
+    assert [r["reason"] for r in result["reviews"]] == ["conflicting_identifiers"]
+
+
+def test_a_redelivered_record_gives_its_security_nothing_it_withheld():
+    again = holding("one", cusip=CUSIP, isin=ISIN_X)
+    plan = plan_record_matches({
+        "policy": filed_policy(FIRST, BY_ISIN), "assertions": [again], "decisions": [], "identities": [],
+        "bound": [again["subject"]], "bound_entities": {again["subject"]: HELD},
+        "withheld": {again["subject"]: [{"namespace": "isin", "raw": ISIN_X}]},
+        "released": [], "normalizers": NORMALIZERS})
+    assert [(h["namespace"], h["value"]) for h in plan["caller_holders"]] == [("cusip", CUSIP)]

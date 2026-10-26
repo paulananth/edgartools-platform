@@ -212,6 +212,9 @@ class RecordReader:
         if set(pointers) != subjects:
             raise Conflict("Identifier carrier has no current source record")
         readings = self._readings(pointers)
+        # A value its bind withholds does not make it this master's (part A2b).
+        from .binding import withheld
+        kept_back = {} if cross_reference else withheld(self, subjects)
         selected = {}
         for group, member in entries:
             pointer, reading = pointers[member], readings[member]
@@ -231,6 +234,8 @@ class RecordReader:
                 # Match the original query contract: lookup takes the carried
                 # value; normalization locates its index without rewriting it.
                 if raw not in identifier_values(reading.get("identifiers", {}).get(namespace)):
+                    continue
+                if (namespace, raw) in kept_back.get(member, ()):
                     continue
             if pointer.get("entity_id") and (kind is None or pointer["kind"] == kind):
                 selected[pointer["entity_id"]] = pointer["kind"]
@@ -464,6 +469,9 @@ class RecordReader:
                 or value not in {normal for _, normal in pairs[member]}
             ):
                 raise Conflict("Identifier reference differs from its indexed scope")
+        # A value a record's bind withholds is not its master's (ticket 138 part A2b).
+        from .binding import withheld
+        kept_back = withheld(self, set(readings))
         return [
             {
                 "value": raw,
@@ -472,6 +480,7 @@ class RecordReader:
             }
             for subject in readings
             for raw, _ in pairs[subject]
+            if (namespace, raw) not in kept_back.get(subject, ())
         ]
 
     def publications(self, kinds):

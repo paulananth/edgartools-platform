@@ -157,3 +157,21 @@ def test_the_agent_lookup_finds_a_value_in_a_list_by_one_index_probe_each(databa
     assert len(probes) == 1 and probes[0]["Actual Loops"] == 2
     assert not any(n["Node Type"] == "Seq Scan" and n.get("Relation Name") == "stage_record"
                    for n in nodes)
+
+
+def test_the_values_a_bind_withholds_are_read_by_one_probe_of_the_subject_index_each(database):
+    """Ticket 138 part A2b: each record's live bind is read by its subject, one index probe each."""
+    policy, _ = list_policy_body(database)
+    _seeded(database, policy)
+    with database.admin.begin() as conn:
+        conn.execute(text("ANALYZE mdm.decision"))
+        subjects = [r[0] for r in conn.execute(text(
+            "SELECT body->>'subject' FROM mdm.decision WHERE operation = 'bind' LIMIT 3"))]
+    with database.application.connect() as conn:
+        found, (statement, params) = _captured(
+            conn, "operation IN ('bind', 'revoke')", lambda: binding.withheld(conn, set(subjects)))
+        assert found == {}  # these binds withhold nothing
+        nodes = _plan(conn, statement, params)
+    probes = [n for n in nodes if n.get("Index Name") == "decision_subject"]
+    assert len(probes) == 1 and probes[0]["Actual Loops"] == 3
+    assert not any(n["Node Type"] == "Seq Scan" and n.get("Relation Name") == "decision" for n in nodes)
