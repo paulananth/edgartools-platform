@@ -541,6 +541,9 @@ class Store:
         with engine.connect() as conn:
             self.protocol = storage_adapter().storage_version(conn)
             self.prepared = self.protocol >= 5
+            if self.prepared:
+                from .prepared_registry import installed
+                installed(conn)
         if engine.dialect.name == "mysql" and not self.prepared and not read_only:
             raise ValueError("MDM requires PostgreSQL or a governed prepared store")
         self.engine = engine
