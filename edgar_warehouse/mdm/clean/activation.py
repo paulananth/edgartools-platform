@@ -428,8 +428,20 @@ def check_binding_rule(kind: str, rule: dict, kinds: dict) -> None:
             f"Binding rule {rule_id} merges only by an identifier whose Identifier Contract "
             f"states consolidates: true: {namespaces[0]}"
         )
+    if several == "merge" and rule.get("source") not in _issuing_sources(kind, namespaces[0], kinds):
+        # A value a source files without issuing it is lookup only (Design 5,
+        # operator 2026-10-26: "Lookup only"): it never merges two masters.
+        raise Conflict(
+            f"Binding rule {rule_id} merges only from its issuing source: "
+            f"{rule.get('source')} does not issue {namespaces[0]}"
+        )
     if rule["on_no_match"] == "mint":
         _check_minting_source(kind, rule, namespaces[0], kinds)
+
+
+def _issuing_sources(kind: str, namespace: str, kinds: dict) -> list:
+    """The sources the kind's Identifier Contract names as issuing the namespace."""
+    return ((((kinds.get(kind) or {}).get("identifiers") or {}).get(namespace)) or {}).get("sources") or []
 
 
 def _check_minting_source(kind: str, rule: dict, namespace: str, kinds: dict) -> None:
@@ -445,8 +457,7 @@ def _check_minting_source(kind: str, rule: dict, namespace: str, kinds: dict) ->
         raise Conflict(f"Binding rule {rule_id} creates Companies but names no source")
     # Fail closed: without its own kind's contract naming the issuer, a rule
     # that creates Companies is refused even while it is inactive.
-    contract = ((kinds.get(kind) or {}).get("identifiers") or {}).get(namespace)
-    issuers = (contract or {}).get("sources")
+    issuers = _issuing_sources(kind, namespace, kinds)
     if not issuers:
         raise Conflict(
             f"Binding rule {rule_id} creates Companies, but kind {kind} has no "

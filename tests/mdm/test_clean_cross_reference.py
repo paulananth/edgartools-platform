@@ -76,18 +76,26 @@ def test_a_name_gives_one_name_id_in_every_source_and_keeps_what_tells_names_apa
 
 @pytest.mark.parametrize("adapter, words", [
     ({"cross_references": {"cik": "cik"}}, "also an identifier"),
-    ({"cross_references": {"lei": "lei"}}, "binds records"),
+    ({"cross_references": {"lei": "lei"}}, "this dataset issues"),
     ({"cross_references": {"tax_id": "tax_id"}, "cross_reference_formats": {"tax_id": "nope"}}, "Unknown format"),
     ({"cross_references": {"Tax Id": "tax_id"}}, "lower-case"),
     ({"cross_reference_formats": {"tax_id": "sec_cik"}}, "no cross-reference"),
 ])
 def test_registration_refuses_a_cross_reference_that_could_join_or_cannot_run(adapter, words, monkeypatch):
-    # The namespaces a binding rule may match on are those an Identifier Contract
-    # declares in a registered policy (operator, 2026-10-09: "Read the list from
-    # the rules"); here, CIK and LEI.
-    monkeypatch.setattr(store, "_bound_namespaces", lambda conn: frozenset({"cik", "lei"}))
+    # The namespaces an Identifier Contract in a registered policy names the
+    # dataset as issuing (operator, 2026-10-09: "Read the list from the rules");
+    # here, CIK and LEI.
+    monkeypatch.setattr(store, "_issued_namespaces", lambda conn, code: frozenset({"cik", "lei"}))
     with pytest.raises(ValueError, match=words):
         register_dataset(None, "fixture.primary", contract(**adapter))
+
+
+def test_a_filers_copy_of_an_id_another_source_issues_passes_the_cross_reference_check(monkeypatch):
+    """Design 5 (operator, 2026-10-26: "Lookup only"): 13F files a FIGI that
+    OpenFIGI issues; as a cross-reference it finds, never joins as held."""
+    monkeypatch.setattr(store, "_issued_namespaces", lambda conn, code: frozenset({"cik"}))
+    with pytest.raises(ValueError, match="no Rules source authority|approved frozen"):
+        register_dataset(None, "fixture.primary", contract(cross_references={"figi": "figi"}))
 
 
 def test_a_sources_own_copy_of_a_binding_id_takes_its_own_name():
@@ -95,3 +103,17 @@ def test_a_sources_own_copy_of_a_binding_id_takes_its_own_name():
     namespace (for example `<source>_lei`), which registration accepts."""
     with pytest.raises(ValueError, match="no Rules source authority|approved frozen"):
         register_dataset(None, "fixture.primary", contract(cross_references={"src_lei": "lei"}))
+
+
+def test_the_13f_contract_s_filed_figi_passes_beside_the_committed_policy(monkeypatch):
+    """Spec review (Design 5): 13F's real contract maps its filed FIGI as a
+    cross-reference, and the committed policy's FIGI contract names OpenFIGI
+    alone as issuing it, so registration's check lets it through."""
+    from edgar_warehouse.rules import files
+
+    code = "sec.thirteenf.information_table.security.v1"
+    body = files.mdm_contract("sec.thirteenf.information_table", code)
+    issued = frozenset(n for block in files.policy()["kinds"].values()
+                       for n, c in (block.get("identifiers") or {}).items() if code in c.get("sources", ()))
+    assert "figi" in body["adapter"]["cross_references"] and "figi" not in issued
+    store._check_cross_references(body["adapter"], issued)

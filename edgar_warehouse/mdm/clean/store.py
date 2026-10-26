@@ -308,24 +308,28 @@ def register_policy(conn: Connection, body: dict) -> str:
     return key
 
 
-def _bound_namespaces(conn: Connection | None) -> frozenset[str]:
-    """Every namespace an Identifier Contract declares in any registered
-    policy, the ones a binding rule may name (`activation.declared_namespaces`,
-    the one reading of them). Without a connection, none."""
-    from .activation import declared_namespaces
-
+def _issued_namespaces(conn: Connection | None, code: str) -> frozenset[str]:
+    """Every namespace an Identifier Contract in any registered policy names
+    this dataset as issuing. Without a connection, none."""
     if conn is None:
         return frozenset()
     bodies = storage_adapter().registered_policies(conn)
-    return frozenset().union(*(declared_namespaces(body["kinds"]) for body in bodies if "kinds" in body))
+    return frozenset(
+        namespace
+        for body in bodies
+        for block in (body.get("kinds") or {}).values()
+        for namespace, contract in (block.get("identifiers") or {}).items()
+        if code in (contract.get("sources") or ())
+    )
 
 
-def _check_cross_references(adapter: dict, bound: frozenset[str]) -> None:
-    """Lookup-only ids (profiling ticket 03) must never be able to join records:
-    a namespace that is also one of the contract's identifiers, or one a binding
-    rule may match on (`bound`), is refused, so the operator's "lookup only"
-    holds by construction. Matching reads `identifiers` alone, so a policy
-    registered later that binds on such a name still joins nothing by it."""
+def _check_cross_references(adapter: dict, issued: frozenset[str]) -> None:
+    """A cross-reference is lookup only (profiling ticket 03): it is never a
+    master's identifier. A namespace that is also one of the contract's
+    identifiers is refused, and so is one the dataset itself issues
+    (`issued`), whose value belongs among its identifiers. A namespace another
+    source issues is the filer's copy: a matching rule on it finds the master
+    holding it, never gives it (Design 5, operator 2026-10-26: "Lookup only")."""
     from .activation import NAMESPACE
 
     names = adapter.get("cross_references", {})
@@ -337,8 +341,8 @@ def _check_cross_references(adapter: dict, bound: frozenset[str]) -> None:
             raise ValueError(f"A cross-reference namespace is lower-case words: {namespace!r}")
         if namespace in adapter.get("identifiers", {}):
             raise ValueError(f"Cross-reference {namespace} is also an identifier of this contract")
-        if namespace in bound:
-            raise ValueError(f"Cross-reference {namespace} names a namespace that binds records; use its own name")
+        if namespace in issued:
+            raise ValueError(f"Cross-reference {namespace} names a namespace this dataset issues; map it as an identifier")
     if set(formats) - set(names):
         raise ValueError(f"A format for no cross-reference: {sorted(set(formats) - set(names))}")
 
@@ -400,7 +404,7 @@ def register_dataset(
         raise ValueError("probable_kind_values must map source values to kinds")
     from .adapters import FORMATS
 
-    _check_cross_references(adapter, _bound_namespaces(conn))
+    _check_cross_references(adapter, _issued_namespaces(conn, code))
     _check_details(adapter, prepared=conn is not None and storage_adapter().storage_version(conn) >= 5)
     formats = [
         adapter.get("record_key_format"),
