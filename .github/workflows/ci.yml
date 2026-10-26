@@ -222,15 +222,17 @@ jobs:
 
   # ── Gate: all checks must pass before merge ────────────────────────────────
   installed-workflow:
-    name: Installed MDM workflow (${{ matrix.engine }})
+    name: Installed MDM workflow (${{ matrix.engine }}, ${{ matrix.group }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         engine: [postgresql, mysql]
+        group: [merge, readers, boundaries, workers]
     env:
       SKILL_ADAPTER_TEST_ENGINE: ${{ matrix.engine }}
+      MDM_WORKFLOW_SHARD: ${{ matrix.group }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
