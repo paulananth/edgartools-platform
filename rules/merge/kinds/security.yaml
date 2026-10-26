@@ -43,7 +43,7 @@ rules:
     args:
       namespace: cusip
 - rule_id: nport-security-cusip
-  version: 2026-10-20.1
+  version: 2026-10-26.1
   family: binding
   source: sec.nport.security.v2
   applies_to_verdict: security

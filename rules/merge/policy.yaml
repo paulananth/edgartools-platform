@@ -290,16 +290,12 @@ automatic_rules:
 # (kinds/security.yaml, the part 1 Proving Run), the Company's cik
 # (kinds/company.yaml, the registrant Proving Run) and the Fund's sec_series_id
 # and lei (kinds/fund_structure.yaml, the Fund Proving Run), ticket 79.
-- kind: security
-  family: binding
-  rule_id: nport-security-cusip
-  rule_version: 2026-10-20.1
-  verdict: bind
-  activation: deterministic
-# nport-security-isin 2026-10-20.1's switch-on ended with ticket 138 part B2:
-# its records now carry every ISIN filed with a CUSIP, not one FIGI-agreed
-# ISIN, so version 2026-10-26.1 waits for its own switch-on (with OpenFIGI's
-# rules, after part A2 and its proof).
+# nport-security-cusip and nport-security-isin 2026-10-20.1: their switch-ons
+# ended with ticket 138 part B2. N-PORT's records now carry every ISIN filed
+# with a CUSIP, not one FIGI-agreed ISIN; with the CUSIP rule alone on, a
+# record would bind by its CUSIP and every filed ISIN would ride onto that
+# Security unchecked. Both are version 2026-10-26.1 and wait for their own
+# switch-on (with OpenFIGI's rules, after part A2 and its proof).
 - kind: company
   family: binding
   rule_id: nport-registrant-cik

@@ -124,11 +124,11 @@ def security_records(store, root: Path, holdings, issuer_reading, *, batch_id: s
 
 
 def policy_body() -> dict:
-    # The ADV custodian LEI rule (ticket 76) and N-PORT's CUSIP rule (ticket 79) are on in the
-    # live policy; the issuer LEI rule, and N-PORT's ISIN rule waiting for its switch-on
-    # (ticket 138), are switched on here for the test only.
+    # The ADV custodian LEI rule (ticket 76) is on in the live policy; the issuer LEI rule,
+    # and N-PORT's two Security rules waiting for their switch-on (ticket 138), are
+    # switched on here for the test only.
     body = policy_layers.with_rules_on(files.policy(), "company", "gleif-issuer-lei")
-    return policy_layers.with_rules_on(body, "security", "nport-security-isin")
+    return policy_layers.with_rules_on(body, "security", "nport-security-cusip", "nport-security-isin")
 
 
 def apply(stage, policy, batch, assertions, checkpoint):

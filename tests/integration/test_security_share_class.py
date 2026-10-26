@@ -124,7 +124,8 @@ def test_the_mastered_security_carries_its_class(database, tmp_path):
     records = nport_records(tmp_path)
     with database.admin.begin() as conn:
         register_dataset(conn, nport.CODE, database.registry, files.mdm_contract(nport.NAME, nport.CODE))
-        policy = register_policy(conn, files.policy())
+        # N-PORT's Security rules wait for their switch-on (ticket 138); on here, for the test only.
+        policy = register_policy(conn, nport.policy_body())
     nport.apply(MergeStage(Store(database.application)), policy, "class", records, 1)
     with database.application.connect() as conn:
         rows = conn.execute(text("SELECT body->'identifiers'->'cusip'->>0, body->'fields'->'share_class' "

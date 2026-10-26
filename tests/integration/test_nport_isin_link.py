@@ -105,3 +105,18 @@ def test_a_cusips_record_carries_every_isin_filed_with_it_and_an_isin_only_one_k
     assert set(records) == {ONE, TWO, NONE, CUSIP}
     assert records[CUSIP]["identifiers"] == {"cusip": CUSIP, "isin": [ONE]}
     assert records[ONE]["identifiers"] == {"isin": ONE}
+
+
+def test_under_the_files_policy_nport_binds_no_security_until_its_switch_on(database, tmp_path):
+    """Ticket 138 part B2: N-PORT's two Security rules are new versions waiting for the
+    operator's switch-on, so under the repo's own policy no N-PORT record binds, and no
+    filed ISIN reaches a Security unchecked (the CUSIP rule alone would carry them)."""
+    records = prepared_records(tmp_path)
+    with database.admin.begin() as conn:
+        register_dataset(conn, CODE, database.registry, files.mdm_contract(cusip.NAME, CODE))
+        policy = register_policy(conn, files.policy())
+    cusip.apply(MergeStage(Store(database.application)), policy, "q2", records, 1)
+    assert not [v for v in core.documents(database, "entity").values() if v["kind"] == "security"]
+    with database.application.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM mdm.stage_record WHERE source_code = :s "
+                                "AND entity_id IS NOT NULL"), {"s": CODE}) == 0

@@ -183,8 +183,8 @@ def policy_body() -> dict:
     """The repo's policy with OpenFIGI's three rules switched on, in this copy only (a
     Proving Run activation): they, and the FIGI contract's verification, wait for the
     operator's switch-on."""
-    # N-PORT's ISIN rule waits for its switch-on too (ticket 138 part B2).
-    body = policy_layers.with_rules_on(files.policy(), "security", *OPENFIGI, "nport-security-isin")
+    # N-PORT's two Security rules wait for their switch-on too (ticket 138 part B2).
+    body = policy_layers.with_rules_on(files.policy(), "security", *OPENFIGI, "nport-security-cusip", "nport-security-isin")
     body["kinds"]["security"]["identifiers"]["figi"]["verification"] = {
         "corpus_sha256": "f" * 64, "approved_by": "fixture", "approved_at": "2026-10-25T00:00:00Z",
         "reason": "fixture verification: shape only, not a measurement"}
