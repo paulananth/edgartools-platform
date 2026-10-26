@@ -12,6 +12,7 @@ Parent: [Installed workflow qualification](07-qualify-installed-equivalence.md)
 - [x] Document isolated fixture assets and durable private evidence for concurrent sessions. — 2026-10-26 06:16 ET; missing frozen asset and rotated diagnostics reproduced during qualification.
 - [x] Run affected genericity checks and review Standards, Spec and GoF. — 2026-10-26 06:16 ET; 8 affected genericity checks pass; diff check passes.
 - [x] Exclude test temporary-directory aliases when retaining and counting case outcomes. — 2026-10-26 06:52 ET; CI artifacts contained 320 canonical outcomes plus 356 identical alias copies; 8 affected genericity checks pass.
+- [x] Document governed-storage owner selection and remove the obsolete MySQL refusal claim. — 2026-10-26 07:10 ET; installed owner CLI exposes --prepared-store; normal protocol detection inspected; 8 affected genericity checks pass.
 - [x] Learning → skill: name the updated guidance and its evidence. — 2026-10-26 06:16 ET; mdm-engineering: Independent installed qualification and Worker authority and input publication.
 
 ## Review
