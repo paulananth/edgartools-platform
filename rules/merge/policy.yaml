@@ -237,7 +237,7 @@ automatic_rules:
   rule_version: 2026-10-13.1
   verdict: bind
   activation: deterministic
-# security-cusip 2026-10-14.1: switched on by operator, 2026-10-15T10:27:01Z, in
+# security-cusip 2026-10-14.1: switched on by operator, 2026-10-15 06:27 ET, in
 # their words: merge 985 when green agreed for the rest. Its switch-on ended with
 # ticket 138 Design 5: version 2026-10-26.1 ("Filed CUSIP wins over a filed
 # FIGI") and thirteenf-security-figi ("Filed FIGI finds its Security") wait for

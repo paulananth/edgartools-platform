@@ -190,6 +190,8 @@ mdm:
           cusip: cusip
         identifier_formats:
           cusip: cusip
-        # Lookup only, never joins (approved findings: FIGI is a cross-reference).
+        # Lookup only (approved findings: FIGI is a cross-reference): it finds the
+        # Security OpenFIGI gave it to and is never that Security's (ticket 138
+        # Design 5, operator 2026-10-26: "Lookup only").
         cross_references:
           figi: figi

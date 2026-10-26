@@ -136,6 +136,16 @@ first` binds to the one master the rule's value reaches and lists the
 values another master holds as the bind's `withheld`. Otherwise: review. A
 record in review merges nothing.
 
+**A filer's copy of an identifier it does not issue is lookup only.** A
+source the Identifier Contract does not name in `sources` maps it as a
+cross-reference; a matching rule from that source (`on_no_match: wait`)
+reads the cross-reference, finds the master holding the value and binds to
+it, but the value is never minted, projected or counted as held, and the
+rule may not merge (activation refuses it). A value two masters hold reaches
+both, so the record's own `first` identifier still settles the conflict.
+Registration refuses a cross-reference only on a namespace the dataset
+itself issues (ticket 138 Design 5: 13F's filed FIGI).
+
 **A rule's merge** is a `merge` decision (`actor: rule:<id>@<version>`, no
 survivor named). It names every live merge either side rests on
 (`depends_on`), stored or made earlier in the batch; replay applies a merge
@@ -156,7 +166,7 @@ withheld value; the readers drop it.
 
 MDM owns source-record identity bindings, canonical master redirects and
 lookup-only cross-references. Keep those roles distinct: a cross-reference
-finds records but does not establish sameness. Binding/merging goes through
+finds records but is never a master's identifier and never merges masters. Binding/merging goes through
 approved matching rules or authorized steward decisions, with the kind's
 Identifier Contract enforced.
 RDM owns versioned code-set crosswalks; they do not resolve source records to

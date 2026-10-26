@@ -110,6 +110,23 @@ struct Plan {
 fn read_rule_text(body: &Object, key: &str) -> Result<String, String> {
     values::read_text(body, key)
 }
+/// The Identifier Contract names the source among those issuing the namespace.
+fn issues(issuers: &BTreeMap<String, BTreeSet<String>>, namespace: &str, source: &str) -> bool {
+    issuers.get(namespace).is_some_and(|sources| sources.contains(source))
+}
+/// The value a rule matches on: the record's identifier; a source that does
+/// not issue it may file it as a cross-reference instead, which finds the
+/// master holding it and is never given to it (Design 5, operator
+/// 2026-10-26: "Lookup only").
+fn read_rule_value(record: &Object, namespace: &str, issued: bool) -> Result<Option<values::Document>, String> {
+    if let Some(raw) = values::read_object(record, "identifiers")?.shift_remove(namespace) {
+        return Ok(Some(raw));
+    }
+    if issued {
+        return Ok(None);
+    }
+    Ok(values::read_object(record, "cross_references")?.shift_remove(namespace))
+}
 fn rule_is_approved_for_matching(
     policy: &Object,
     kind: &str,
@@ -315,24 +332,11 @@ pub fn plan_record_matches(raw: &str) -> Result<String, String> {
                 continue;
             }
             let namespace = read_matching_namespace(rule)?;
-            let source = read_rule_text(record, "source_code")?;
-            let issued = issuers
-                .get(&namespace)
-                .is_some_and(|sources| sources.contains(&source));
-            // A source that does not issue the identifier may file it as a
-            // cross-reference: it finds the master holding it, lookup only,
-            // and is never given to it (Design 5, operator 2026-10-26:
-            // "Lookup only").
-            let identifiers = values::read_object(record, "identifiers")?;
-            let cross_references = values::read_object(record, "cross_references")?;
-            let Some(raw) = identifiers.get(&namespace).or(if issued {
-                None
-            } else {
-                cross_references.get(&namespace)
-            }) else {
+            let issued = issues(&issuers, &namespace, &read_rule_text(record, "source_code")?);
+            let Some(raw) = read_rule_value(record, &namespace, issued)? else {
                 continue;
             };
-            let raws = values::read_identifier_values(raw)?;
+            let raws = values::read_identifier_values(&raw)?;
             if raws.is_empty() {
                 continue;
             }
@@ -380,10 +384,7 @@ pub fn plan_record_matches(raw: &str) -> Result<String, String> {
         };
         let source = read_rule_text(record, "source_code")?;
         for (namespace, raw) in values::read_object(record, "identifiers")? {
-            if !issuers
-                .get(&namespace)
-                .is_some_and(|sources| sources.contains(&source))
-            {
+            if !issues(&issuers, &namespace, &source) {
                 continue;
             }
             let subject = read_rule_text(record, "subject")?;
@@ -607,7 +608,9 @@ pub fn link_matching_records(raw: &str) -> Result<String, String> {
                     .iter()
                     .map(|(entity, held_kind)| (resolve(&moved, entity), held_kind))
                     .collect();
-                if held.len() > 1 && !merges {
+                // A lookup-only value two masters hold reaches both, so a
+                // `first` rule's value still settles the conflict.
+                if held.len() > 1 && !merges && item.issued {
                     problem = Some(("ambiguous_identifier", item.namespace.clone()));
                     break;
                 }

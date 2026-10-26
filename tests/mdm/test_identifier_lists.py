@@ -502,7 +502,17 @@ def test_a_filed_figi_held_by_two_securities_never_merges_them():
     _, result = match([filed("one", F1, cusip=CUSIP)], held={F1: [HELD, OTHER]},
                       policy=lookup_policy(FIRST, FILED_FIGI))
     assert merges(result) == [] and result["decisions"] == []
-    assert [r["reason"] for r in result["reviews"]] == ["ambiguous_identifier"]
+    assert [r["reason"] for r in result["reviews"]] == ["conflicting_identifiers"]
+
+
+def test_a_held_cusip_wins_over_a_filed_figi_two_securities_hold():
+    # Spec review: a steward's split leaves one FIGI on two Securities; the
+    # filed CUSIP still decides.
+    third = "00000000-0000-0000-0000-00000000000c"
+    _, result = match([filed("one", F1, cusip=CUSIP)], held={("cusip", CUSIP): HELD, F1: [OTHER, third]},
+                      policy=lookup_policy(FIRST, FILED_FIGI))
+    assert result["reviews"] == [] and merges(result) == []
+    assert [d["entity_id"] for d in result["decisions"]] == [HELD]
 
 
 def test_a_malformed_filed_figi_finds_nothing_and_the_cusip_still_binds():
