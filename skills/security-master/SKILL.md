@@ -84,21 +84,26 @@ CUSIPs, the old one with its last-seen date).
   consolidate. The ISIN target, `figi_ids`, `figi_cusips`, `attach` and
   `answers_cusip` / `answers_isin` go. MDM keeps no listings; each listing
   stays in silver's `openfigi_listing`.
+- **13F adds fields, second**, the same way: look up first, then mint.
 - **N-PORT adds fields.** A holding's record looks up its CUSIP, ISIN or other
   issued identifier; it mints only when none is found. Its seven pairing steps
   (`cusips_found` to `fold`) go.
-- **13F adds fields** the same way: look up first, then mint.
 - **Form 4** finds a class by its trading symbol only among the Securities of
   the filing's issuer Company: one found attaches, none or two go to review
   (ticket 24). The ticker still joins nothing.
 
-**The Security's fields** (Field Survivorship: OpenFIGI, then N-PORT, then 13F):
+**Load order and Field Survivorship:** OpenFIGI, then 13F, then N-PORT
+(operator, 2026-10-25: "this should be second source", then "Load and
+priority"; this replaces "make openfigi priority 1 and 13f last" when ticket
+138 is built).
+
+**The Security's fields** (Field Survivorship: OpenFIGI, then 13F, then N-PORT):
 
 | Field | From |
 |---|---|
-| name | OpenFIGI, N-PORT, 13F |
+| name | OpenFIGI, 13F, N-PORT |
 | security type, security type 2, market sector, security description | OpenFIGI: the one value the listings state, else the US composite's, else the ISIN country's composite's (description is new to MDM, "Same rule as name") |
-| title of class, share class, issuer | N-PORT, 13F; the issuer by N-PORT's issuer LEI |
+| title of class, share class, issuer | 13F, N-PORT; the issuer by N-PORT's issuer LEI |
 | asset category, issuer type, investment country, currency, restricted, derivative category | N-PORT: the value the most holdings file; a tie keeps none ("Most-filed value"); each holding keeps its own in silver |
 
 The one Cross-reference serves every kind; Company, Person and Fund move onto

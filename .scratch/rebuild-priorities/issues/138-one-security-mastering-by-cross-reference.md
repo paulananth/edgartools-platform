@@ -121,6 +121,13 @@ and its ordinary share 2 (the ordinary gains 3 filed CUSIPs); the European
 stock 1 (4 filed CUSIPs added, 2 of them CINS, none answered by OpenFIGI);
 every case the same in all three orders.
 
+On the page, at 13F: "this should be second source, 4b"; asked whether that
+also changes which value wins: "Load and priority" (2026-10-25 20:20 ET).
+13F loads second, and Field Survivorship becomes OpenFIGI, then 13F, then
+N-PORT, replacing the 2026-10-18 "make openfigi priority 1 and 13f last".
+Measured then (ticket 84): N-PORT states one name for 62.4% of its 385,382
+CUSIPs, 13F for 59.9% of 29,942.
+
 These replace, for Security: the 2026-10-14 "FIGI ... lookup only" ruling,
 the 2026-09-26 "cross reference id for lookup ... only" ruling (the listing
 FIGI now joins records; ticker, SEDOL stay lookup only), and ticket 120's
