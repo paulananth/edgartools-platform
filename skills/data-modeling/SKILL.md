@@ -26,7 +26,8 @@ check (data-quality), or approve anything.
 | Approve findings or a code set version, or write words the operator did not say | Ask one question, then wait |
 | Guess a class, a key, a link or a meaning | Leave it unknown and name the failing tests from the findings |
 | Add a kind, or treat a profile as a kind | A missing kind is an operator ruling |
-| Join records on a cross-reference, or merge on similar names | Records join only through a kind's Identifier Contract or a matching rule the operator switched on |
+| Join records on a lookup-only identifier, or merge on similar names | Records join only through a kind's Identifier Contract or a matching rule the operator switched on |
+| Split one kind into loads by the identifier asked, or pair two identifiers of one master in a source's own rules | One record carries every identifier it has; the Merge Stage looks each one up in the Cross-reference and puts them on one master (operator, 2026-10-25) |
 | Name a new relationship type when an existing one, or its inverse, means the same | Use it, or ask the operator why a second type is needed |
 | Write rules, contracts, quality files, or a code set version | Hand off; drafts in RDM go through data-profiling's RDM steps |
 | Request anything from a provider's live service | Use the captured files and this repo |
@@ -85,14 +86,26 @@ master file is reference data plus a master attribute that holds its codes.
 
 ### 3. Identity or cross-reference
 
-- **Identity:** the namespaces the kind's Identifier Contract declares
+The Cross-reference is the one table of every identifier a master carries,
+each joined to the master id and marked matching or lookup only (operator,
+2026-10-25: "cross_refrence table must hold all the identifiers", "no need
+for identifier table"). For each identifier, decide which it is:
+
+- **Matching:** a namespace the kind's Identifier Contract declares
   (`rules/merge/kinds/<kind>.yaml`, `identifiers`): two records with the same
-  value are one entity. Records of two sources also join through the matching
-  rules the operator switched on (`rules/merge/policy.yaml`,
-  `automatic_rules`). Nothing else joins records.
-- **Cross-reference:** every other identifier the part carries. It goes into
-  the MDM cross-reference table through the contract (`cross_references`), for
-  lookup only, and never joins records, even when two records share it.
+  value are one entity. A record looks up each matching identifier first and
+  mints a master only when none is found ("first lookup if not exists then
+  master"). Records of two sources also join through the matching rules the
+  operator switched on (`rules/merge/policy.yaml`, `automatic_rules`).
+  Nothing else joins records.
+- **Lookup only:** an identifier that one value can give to two different
+  masters (a trading symbol, a vendor key). Measure it before you decide:
+  count the values the data gives to two or more masters. It finds records
+  and never joins them, even when two records share it.
+- **Today:** the engine stores only lookup-only identifiers in the
+  cross-reference (`cross_references`) and the matching ones apart
+  (`identifiers`), one value per kind. The one table, with a list of values
+  for one kind, is decided and not built; see the Examples.
 - **No identifier at all:** an id made from the name (`name_id@1`) is the last
   resort, as a cross-reference too (data-profiling, "An id from a name").
 - A new identity namespace changes how records merge: an operator ruling.
@@ -216,6 +229,14 @@ Examples only; nothing above depends on them.
   matching rules switched on in the policy. An EIN mapped by a contract's
   `cross_references` would be a cross-reference, lookup only (no contract maps
   one today).
+- **One kind, many identifiers (ticket 138):** a CUSIP and an ISIN are two
+  identifiers of one Security, not two kinds or two loads. An OpenFIGI answer
+  has no CUSIP or ISIN field; the CUSIP answer and the ISIN answer of one
+  security share their listing FIGIs, so the FIGI, matching in the
+  Cross-reference, puts them on one master id. A ticker and exchange stays
+  lookup only: 17,941 such pairs are on two or more CUSIPs (2026-10-15
+  capture). The one table is built for Security first; the other kinds follow
+  in their own tickets.
 - **A grouping as a crosswalk:** the EDGAR place codes (`DE`, `X1`, `XX`)
   carry a `type` (US, CANADIAN, FOREIGN, UNKNOWN). Parent codes `US` and
   `FOREIGN` would make "FOREIGN" a valid state code, so `type` became its own

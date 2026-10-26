@@ -145,7 +145,9 @@ submits one source.
    and whose sequence comment names them in order, is wired: run those
    targets in that order. OpenFIGI is `answers_cusip`, `answers_isin`,
    `mastering_cusip`, then `mastering_isin` (the comment on its sequence
-   line). Do not add a second inventory field, and do not submit another
+   line). Ticket 138 replaces these with one OpenFIGI target, all bundles at
+   once, then 13F, then N-PORT (decided 2026-10-25, not built; the
+   security-master skill). Do not add a second inventory field, and do not submit another
    source in its place. A successful check does
    not install, approve or start a run. Detail is in
    `docs/specs/source-sequencing.md` in the repository.

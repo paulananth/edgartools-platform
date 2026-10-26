@@ -119,6 +119,15 @@ authoritative content before approval freezes it.
 
 ## Cross-reference completion
 
+Decided (operator, 2026-10-25, ticket 138; not built): the cross-reference
+becomes the one table of every identifier, each row the master id, the
+identifier kind, the value, matching or lookup only, the source, first and
+last seen. A record may carry a list of values for one kind; the Merge Stage
+looks up every matching value: none mints, one binds, two consolidate
+automatically (the oldest id survives; a steward split adds a Match
+Exclusion). Security first, then the other kinds. Until built, the rest of
+this section holds.
+
 MDM owns source-record identity bindings, canonical master redirects and
 lookup-only cross-references. Keep those roles distinct: a cross-reference
 finds records but does not establish sameness. Binding/merging goes through
