@@ -1,7 +1,7 @@
 # Worker storage qualification lessons
 
 Type: task
-Status: claimed
+Status: complete
 Assignee: Codex
 Parent: [Worker authority and publication recovery](06-connect-worker-authority-and-publication.md)
 
@@ -9,7 +9,7 @@ Parent: [Worker authority and publication recovery](06-connect-worker-authority-
 
 - [x] Record populated index installation, stable function returns and unchanged catalog approval in the owning skill — 2026-10-25 20:44 ET; reviewed against the populated upgrade outcomes in #1171.
 - [x] Record immutable delivery origin, durable execution metadata, complete publication accounting and separate verifier privilege proof — 2026-10-25 20:44 ET; reviewed against four independent installed worker cases in #1171.
-- [ ] Check source neutrality, links and the skill diff; publish a separate skill PR.
+- [x] Check source neutrality, links and the skill diff; publish a separate skill PR — 2026-10-25 20:45 ET; eight affected checks pass and PR #1173 publishes the guidance separately. PR readiness and merge retain their CI gate.
 - [x] Learning → skill: `mdm-engineering/references/storage-adapters.md`, owner installation and execution/delivery recovery — 2026-10-25 20:44 ET; eight affected source-neutrality checks pass, and whitespace/link review passes.
 
 ## Evidence
