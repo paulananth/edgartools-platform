@@ -56,15 +56,15 @@ def test_prepared_owner_registry(case, database_factory, storage_api):
                 capture_output=True, text=True, timeout=90,
             )
             assert result.returncode == 0, "prepared owner migration CLI failed"
-            assert json.loads(result.stdout)["prepared_storage"] == 5
+            assert json.loads(result.stdout)["prepared_storage"] == 6
         policy, policy_key, first, second = seed(owner)
-        api = storage_api.Adapter(runtime, prefix="mdm_store", protocol=5)
+        api = storage_api.Adapter(runtime, prefix="mdm_store", protocol=6)
         pins = {"catalog": digest(catalog.CATALOG), "policy": policy_key,
                 mapping_pin("invented.source", first[0]): digest(first[1]),
                 schema_pin("invented.source", "1"): digest(["invented.source", "1"]),
                 mapping_pin("invented.source", second[0]): digest(second[1]),
                 schema_pin("invented.source", "2"): digest(["invented.source", "2"])}
-        b = batch(storage_api, governed=True, pins=pins, indexes=(),
+        b = batch(storage_api, governed=True, workflow=True, pins=pins, indexes=(),
                   objects=(storage_api.Effect("invented-kind", "one", {"value": 1}),))
         lease = api.claim(b.scope, "invented-worker")
         body = {"command": "invented-approved-command"}

@@ -111,9 +111,15 @@ def migrate(engine: Engine, *, application_role: str, application_host: str = "%
     if engine.dialect.name == "mysql":
         from . import catalog
         catalog.assert_current()
-        return storage_adapter().migrate_registry(engine,runtime_role=application_role,
+        from .prepared_registry import PROTOCOL, finish_indexes, PREFIX
+        result = storage_adapter().migrate_registry(engine,runtime_role=application_role,
             runtime_host=application_host,configuration=catalog.CATALOG,kinds=catalog.CATALOG["kinds"],
-            prepared=prepared)
+            prepared=prepared, prepared_protocol=PROTOCOL, runtime_execute=not prepared)
+        if prepared:
+            finish_indexes(engine)
+            storage_adapter().Adapter(engine, prefix=PREFIX, protocol=PROTOCOL).enable_runtime(
+                application_role, runtime_host=application_host)
+        return result
     if engine.dialect.name != "postgresql":
         raise ValueError("MDM requires PostgreSQL 16")
     path = Path(__file__).parents[1] / "migrations" / BASELINE
@@ -513,7 +519,8 @@ class Store:
         if engine.dialect.name not in ("postgresql", "mysql"):
             raise ValueError("MDM requires PostgreSQL")
         with engine.connect() as conn:
-            self.prepared = storage_adapter().storage_version(conn) >= 5
+            self.protocol = storage_adapter().storage_version(conn)
+            self.prepared = self.protocol >= 5
         if engine.dialect.name == "mysql" and not self.prepared and not read_only:
             raise ValueError("MDM requires PostgreSQL or a governed prepared store")
         self.engine = engine
@@ -552,7 +559,11 @@ class Store:
         batch_id: str | None = None,
     ) -> bool:
         if self.prepared:
-            raise Conflict("Prepared publication recovery requires its qualified worker integration")
+            if self.read_only:
+                raise Conflict("A read-only MDM store cannot admit writes or publication")
+            from .prepared_publication import deliver
+            return deliver(self, consumer, worker, publisher,
+                           lease_seconds=lease_seconds, batch_id=batch_id)
         with self.engine.begin() as conn:
             self._authorize(conn)
             claim = conn.scalar(
@@ -596,7 +607,18 @@ class Store:
 
     def run_status(self, run_id: str) -> dict:
         """Observation for Bookkeeping; never declares an empty run complete."""
-        if self.prepared or self.engine.dialect.name != "postgresql":
+        if self.prepared:
+            from .prepared_publication import adapter, publication_rows
+
+            api = adapter(self)
+            with self.engine.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
+                observed = api.observed_batches(run_id, connection=conn)
+                _, publications = publication_rows(api,observed,connection=conn)
+            batches = len({row["batch_key"] for row in publications})
+            pending = sum(not row["verified"] for row in publications)
+            return {"batches": batches, "pending": pending,
+                    "publication_complete": batches > 0 and pending == 0}
+        if self.engine.dialect.name != "postgresql":
             raise Conflict("Normal run observation is not yet qualified for this engine")
         with self.engine.connect() as conn:
             result = rows(

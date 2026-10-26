@@ -19,7 +19,9 @@ if os.environ.get("SKILL_ADAPTER_TEST_ENGINE") == "mssql":
 
 def proof(runtime, *, token=1, micros=30_000_000):
     # Clock comes from the selected destination.
-    from adapter_sql import SQL
+    from importlib import import_module
+    package = runtime.__class__.__module__.rpartition(".")[0]
+    SQL = import_module((package + "." if package else "") + "adapter_sql").SQL
     clock = SQL(runtime.engine.dialect,runtime.tables,protocol=4).now
     with runtime.engine.connect() as conn:
         epoch = int(conn.scalar(text("SELECT "+clock)))

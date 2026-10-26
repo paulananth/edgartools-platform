@@ -86,6 +86,9 @@ def _stage(envelope: dict, artifacts, folder: Path) -> tuple[Path, dict]:
 
 def receipt(store, manifest: dict, run_id: str, manifest_digest: str) -> bytes:
     """What MDM holds for the manifest's batches under this run, read back."""
+    if store.prepared:
+        from edgar_warehouse.mdm.clean.prepared_runs import receipt as prepared_receipt
+        return prepared_receipt(store,manifest,run_id,manifest_digest)
     ids = [b["batch_id"] for b in manifest["batches"]]
     with store.engine.connect() as conn:
         scope = conn.scalar(text("SELECT scope FROM mdm.run WHERE run_id=CAST(:r AS uuid)"),

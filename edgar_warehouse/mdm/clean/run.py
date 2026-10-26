@@ -26,6 +26,9 @@ class RunCoordinator:
         self.mdm = mdm
 
     def scope(self, run_id: str) -> dict | None:
+        if self.mdm.prepared:
+            from .prepared_runs import scope
+            return scope(self.mdm,run_id)
         with self.mdm.engine.connect() as conn:
             return conn.scalar(
                 text("SELECT scope FROM mdm.run WHERE run_id=CAST(:run AS uuid)"),
@@ -41,6 +44,9 @@ class RunCoordinator:
         run's `as_of`), kept with the finished event of a batch this run
         merged, so the run's report sums every batch however many calls ran it.
         """
+        if self.mdm.prepared:
+            from .prepared_runs import execute
+            return execute(self.mdm,run_id,batch_id,action,checks=checks)
         attempt = str(uuid4())
 
         def record(phase, detail):
@@ -78,6 +84,10 @@ class RunCoordinator:
         manifest_digest: str,
         mapping_versions: dict[str, int] | None = None,
     ) -> None:
+        if self.mdm.prepared:
+            from .prepared_runs import start
+            return start(self.mdm,run_id,expected_batches,manifest_digest=manifest_digest,
+                         mapping_versions=mapping_versions)
         if not expected_batches or len(expected_batches) != len(set(expected_batches)):
             raise ValueError("A root run requires a nonempty frozen batch manifest")
         scope = {
@@ -98,6 +108,9 @@ class RunCoordinator:
             )
 
     def reconcile(self, run_id: str) -> dict:
+        if self.mdm.prepared:
+            from .prepared_runs import reconcile
+            return reconcile(self.mdm,run_id)
         scope = self.scope(run_id)
         if scope is None:
             raise Conflict("Root run was not registered")

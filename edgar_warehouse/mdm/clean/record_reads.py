@@ -614,7 +614,7 @@ def for_connection(conn):
     catalog.assert_current()
     api.require_registry(conn, digest(catalog.CATALOG))
     return RecordReader(
-        api.Adapter(conn.engine, prefix="mdm_store", protocol=5 if version >= 5 else 4),
+        api.Adapter(conn.engine, prefix="mdm_store", protocol=version if version >= 5 else 4),
         connection=conn,
         routes=matching.candidate_routes(),
     )

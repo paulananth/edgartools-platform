@@ -220,7 +220,7 @@ class TestTheRunReport:
         coordinator = SimpleNamespace(scope=lambda run: None, start=lambda *a, **k: None, execute=execute,
                                     reconcile=lambda run: {})
         monkeypatch.setattr(execution, "RunCoordinator", lambda store: coordinator)
-        result = execution.execute_manifest(SimpleNamespace(engine=SimpleNamespace(connect=connect)),
+        result = execution.execute_manifest(SimpleNamespace(engine=SimpleNamespace(connect=connect),prepared=False),
                                       path=str(path), run_id=str(uuid4()), stage="mastering", limit=10)
         assert result["quality"] == {"fixed:dc_state_is_empty": 1, "fixed:standard_address": 1,
                                      "fixed:state_from_name_tag": 1}

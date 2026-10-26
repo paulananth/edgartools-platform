@@ -129,16 +129,20 @@ def force_publish(args) -> int:
     pages, after = [], {"object_type": "", "object_id": ""}
     try:
         with mdm.connect() as conn:
-            if _inspection_adapter(conn) is not None:
-                from .store import Conflict
-
-                raise Conflict("Forced publication requires its qualified prepared-store workflow")
+            prepared = _inspection_adapter(conn) is not None
+        if prepared:
+            from .store import Store
+            from .forced_publication import page as forced_page
+            selected = Store(mdm)
         while after is not None:
-            with mdm.begin() as conn:
-                page = conn.scalar(text(
-                    "SELECT mdm.force_publish(:c,CAST(:r AS uuid),:p,:t,:i,:n)"),
-                    {"c": args.consumer, "r": run_id, "p": len(pages) + 1, "t": after["object_type"],
-                     "i": after["object_id"], "n": args.page_size})
+            if prepared:
+                page = forced_page(selected,args.consumer,run_id,len(pages)+1,after,args.page_size)
+            else:
+                with mdm.begin() as conn:
+                    page = conn.scalar(text(
+                        "SELECT mdm.force_publish(:c,CAST(:r AS uuid),:p,:t,:i,:n)"),
+                        {"c": args.consumer, "r": run_id, "p": len(pages) + 1, "t": after["object_type"],
+                         "i": after["object_id"], "n": args.page_size})
             pages.append(page)
             after = page["next"]
     finally:
