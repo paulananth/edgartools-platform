@@ -407,7 +407,7 @@ pub fn link_matching_records(raw: &str) -> Result<String, String> {
     // held master binds before any record creates one, so a value it adds is
     // found by the rest of the batch and no new master shadows a stored one.
     // Then the records a rule may create from, then those that only wait.
-    subjects.sort_by_key(|(subject, items)| {
+    subjects.sort_by_cached_key(|(subject, items)| {
         (
             !items.iter().any(|item| {
                 found.contains_key(&(item.namespace.clone(), item.value.clone()))

@@ -219,7 +219,7 @@ security); every listing FIGI misses none.
    listing FIGI). Matching looks each one up: none found, a new master id;
    one Security, it joins; two Securities, they consolidate automatically and
    the oldest id survives, the other id pointing at it.
-4. **OpenFIGI: one target, one Dataset Contract, one matching rule.** It
+4. **OpenFIGI: one target, one Dataset Contract, a matching rule per identifier kind** (built as three, CUSIP, ISIN and FIGI, since a matching rule names one; all create). It
    reads `id_cusip/*` and `id_isin/*` together; its bundles run in parallel
    with no order. The ISIN target, `figi_ids`, `figi_cusips`, `attach`, and
    `answers_cusip` / `answers_isin` are deleted.
@@ -242,6 +242,9 @@ security); every listing FIGI misses none.
 - [ ] ~~Name matching (`record_pairs.rs`) reads one LEI value~~ deferred: only Company's LEI uses it, one value per Company (`reverse: 1`); move it onto the shared reader when a list kind uses name matching
 - [ ] A re-delivered bound record alone in a batch proposes nothing, so its new value is not re-checked at save; A2 carries it with the identifier ownership work
 - [x] Inside one batch, every record that finds a held master binds before any record creates one (found by B1's silver test: an ISIN answer sorted first created a Security, and the CUSIP answer sharing its FIGI then reached two) (2026-10-25 23:15 ET): `test_a_record_finding_a_held_security_binds_before_any_record_creates_one`
+- [x] Three-axis review of B1 (2026-10-25, acted on): Standards (the sequence comment names OpenFIGI's three targets in order; the sort key computed once), Spec (the acquisition feed lists `openfigi.security.v3`; the security-master skill's live sections say what runs now), GoF (the test reuses `policy_layers.with_rules_on`; one `phase` for the batch order and the create test goes into A2)
+- [ ] A FIGI that 13F or N-PORT files matches like OpenFIGI's (Design 5): the FIGI contract names only OpenFIGI as its source until those feeds map one
+- [ ] Inside one batch, a record that finds a master only through a value another record adds there is still ordered among the creators; A2's merge makes the result the same in any order
 - [ ] Part B2: N-PORT's FIGI pairing chain removed (`cusips_found` to `fold`, `figi-*.yaml`), each CUSIP record carrying every ISIN filed with it, an ISIN-only holding keyed by its ISIN; then OpenFIGI's `answers_cusip` and `answers_isin` targets go
 - [ ] Part B3: the Listing detail row's currency, read from the ticker's suffix against an RDM currency code set (check the set exists), indexed (master id, exchange, currency)
 - [ ] Engine part A2 (own branch, after A1): read each rule's outcomes once into one typed set (`on_no_match`, `on_conflict`, `on_several`) and decide whose `on_conflict` wins when a record's matches come from several rules (GoF review of A1); `on_conflict: first` (a filed CUSIP and ISIN on two Securities bind by the CUSIP; the identifiers another Security holds are withheld on the bind decision and never indexed or projected for this one) and `on_several: merge` (one record's listing FIGIs on two Securities consolidate them, the oldest surviving). Merge is not optional: without it the 11 ISIN answers sharing FIGIs with two CUSIP answers give a different result by bundle order

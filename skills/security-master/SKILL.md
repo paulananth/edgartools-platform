@@ -16,12 +16,10 @@ and what must never happen to it?**
 ## Status of each rule
 
 Rules marked **live** are in `rules/` and proved. Rules marked **switched on
-in the files** are in `policy.yaml`; a new run uses them. The OpenFIGI-first
-rules (ticket 120) are switched on in the files (2026-10-24 19:27 ET, "switch
-on ticket 120") and in the operator's Rules database. The ISIN dataset is
-`openfigi.security_isin.v2`: v1 was already registered, and the contract now
-also issues a CUSIP, which cannot be added on an existing source code
-(2026-10-24, "complete ticket 120 using skills to turn on additional rules").
+in the files** are in `policy.yaml`; a new run uses them. Ticket 138 part B1
+replaced OpenFIGI's ticket 120 rules (switched on 2026-10-24 19:27 ET,
+"switch on ticket 120"; those switch-ons ended with them) with one dataset,
+`openfigi.security.v3`, and three rules that wait for their switch-on.
 
 ## The mastering process (decided 2026-10-25, ticket 138; being built)
 
@@ -136,10 +134,11 @@ CUSIP). Each source keeps its own record on it; MDM merges them.
 |---|---|---|---|
 | SEC N-PORT | `sec.nport.security.v2` | Yes (decided) | CUSIP, ISIN (FIGI-agreed), issuer name as filed, title of class, issuer LEI, "issued by" link |
 | SEC 13F | `sec.thirteenf.information_table.security.v1` | Yes (live) | CUSIP, name and title as filed, a filed FIGI |
-| OpenFIGI | `openfigi.security.v1` (CUSIP), `openfigi.security_isin.v2` (ISIN) | Yes, and first (switched on in the files 2026-10-24 19:27 ET, "switch on ticket 120") | All ten OpenFIGI fields and every listing; an ISIN answer also carries the one CUSIP sharing a listing FIGI with it |
+| OpenFIGI | `openfigi.security.v3` (both kinds asked, ticket 138) | Yes, and first (waits for its switch-on) | All ten OpenFIGI fields and every listing; the CUSIP or ISIN asked and every listing's FIGI as identifiers |
 
-The ranking that fills a field: OpenFIGI first, then N-PORT, then 13F
-(operator, 2026-10-18: "make openfigi priority 1 and 13f last"; ticket 84).
+The ranking that fills a field: OpenFIGI, then 13F, then N-PORT (operator,
+2026-10-25: "this should be second source", then "Load and priority"; it
+replaces "make openfigi priority 1 and 13f last", 2026-10-18).
 `rules/merge/kinds/security.yaml`, `defaults.sources`.
 
 ## Keys and identifiers
@@ -181,13 +180,14 @@ their Identifier Contract is verified (`policy.yaml`, `automatic_rules`,
 | `security-cusip` | 13F | CUSIP | creates one | 2026-10-15 ("merge 985 when green agreed for the rest") |
 | `nport-security-cusip` | N-PORT | CUSIP | creates one | 2026-10-17 21:03 ET ("Switch on all six (Recommended)"); v2 version 2026-10-20.1 decided |
 | `nport-security-isin` | N-PORT | its ISIN (FIGI-agreed on a CUSIP's record; the key of an ISIN-only one) | creates one | same; it replaces `nport-isin-security-isin` (retired with `sec.nport.security_isin.v1`) |
-| `openfigi-security-cusip` | OpenFIGI (CUSIP asked) | CUSIP | creates one (version 2026-10-23.1) | switched on 2026-10-24 19:27 ET ("switch on ticket 120"); version 2026-10-17.1 (waits) was on from 2026-10-17 13:12 ET |
-| `openfigi-isin-security-cusip` | OpenFIGI (ISIN asked) | the CUSIP sharing a listing FIGI with it | joins that Security (2026-10-24.1) | switched on 2026-10-24 19:27 ET ("switch on ticket 120") |
-| `openfigi-security-isin` | OpenFIGI (ISIN asked) | ISIN | creates one (version 2026-10-24.1) | switched on 2026-10-24 19:27 ET ("switch on ticket 120"); version 2026-10-17.1 (waits) was on from 2026-10-18 13:22 ET |
+| `openfigi-security-cusip` | OpenFIGI (CUSIP asked) | CUSIP | creates one (version 2026-10-25.1) | waits for its switch-on (ticket 138); version 2026-10-23.1 was on from 2026-10-24 19:27 ET |
+| `openfigi-security-isin` | OpenFIGI (ISIN asked) | ISIN | creates one (version 2026-10-25.1) | waits for its switch-on (ticket 138); version 2026-10-24.1 was on from 2026-10-24 19:27 ET |
+| `openfigi-security-figi` | OpenFIGI | every listing FIGI | creates one (version 2026-10-25.1) | waits for its switch-on and the FIGI contract's verification (ticket 138); it replaces `openfigi-isin-security-cusip` |
 
-- **Records that may create go first** in a batch, so a record that may only
-  join finds the Security created in the same batch. One identifier
-  value creates one Security per batch.
+- **Look up first, then create, in a batch** (ticket 138): every record that
+  finds a held Security binds first, then records that may create, then
+  those that only join, so a value one record adds is found by the rest. One
+  identifier value creates one Security per batch.
 - **A record never binds when its identifiers disagree.** It opens a review
   instead, with one of these reasons:
   - `ambiguous_identifier`: one value held by two Securities;
@@ -220,10 +220,9 @@ it; the priority decides only where several give it. For each field
    `override_source_disagreement` review. Two overrides at once are refused.
 2. **Otherwise the highest-priority source wins**, in the order of
    `defaults.sources`:
-   1. `openfigi.security.v1`
-   2. `openfigi.security_isin.v2`
+   1. `openfigi.security.v3`
+   2. `sec.thirteenf.information_table.security.v1`
    3. `sec.nport.security.v2`
-   4. `sec.thirteenf.information_table.security.v1`
 
    (operator, 2026-10-18, ticket 84: "make openfigi priority 1 and 13f
    last", then "Name only (Recommended)").
@@ -265,19 +264,13 @@ review ("Held back, never dropped", below).
 FIGI, and neither is offered twice: the CUSIP is offered one ISIN and the
 ISIN one CUSIP (`figi-agree.yaml`, `figi-offers.yaml`, `figi-attach.yaml`).
 
-**OpenFIGI first: an ISIN answer finds its CUSIP's Security by a shared
-listing FIGI** (switched on in the files 2026-10-24 19:27 ET, "switch on
-ticket 120"; operator, 2026-10-23: "make the seurities run should
-process openfigi first", then "agreed"). One CUSIP offered two ISINs stays
-one Security when those answers share a FIGI (2026-10-24: "resolve using
-figi"); both ISINs are kept. FIGI does not join two Securities. The ISIN target reads `figi_ids`
-(each listing FIGI and the CUSIP asked) from every complete CUSIP run
-(`figi-ids.yaml`, `isin-figi-cusips.yaml`, `isin-attach.yaml`); its record
-carries the CUSIP when exactly one shares a FIGI, and the contract sets aside
-two or more (`isin_shares_figi_with_several_cusips`). Every listing FIGI, not
-only the ones a record keeps as cross-references: those would reach 349,761
-of the 350,867 (2026-10-15 capture). The FIGI stays a cross-reference on the
-Security; only the CUSIP it leads to is matched.
+**OpenFIGI: one load, every listing FIGI an identifier** (ticket 138 part B1;
+it replaces ticket 120's ISIN target, which joined an ISIN answer to its
+CUSIP's Security through `figi-ids.yaml`, `isin-figi-cusips.yaml` and
+`isin-attach.yaml`, all deleted). A CUSIP answer and an ISIN answer of one
+security meet in MDM by a shared listing FIGI. Until part A2, an answer whose
+FIGIs lead to two Securities waits for review, and the result can depend on
+the order the bundles load.
 
 **An ISIN-only holding whose ISIN is already on a CUSIP's row is folded into
 that row before MDM (decided)**, so no ISIN reaches MDM twice: `combine.yaml`

@@ -40,8 +40,7 @@ acquisition:
     mapping:
       family: openfigi
       datasets:
-      - openfigi.security.v1
-      - openfigi.security_isin.v2
+      - openfigi.security.v3
       scope:
       - batch
       capabilities:

@@ -37,6 +37,7 @@ from edgar_warehouse.silver_writer.cli import spec_file
 from edgar_warehouse.silver_writer.sink import PostgresSink
 from edgar_warehouse.silver_writer.writer import MdmIds, land
 from tests.integration import test_clean_mdm_postgres as core
+from tests.mdm import policy_layers
 from tests.integration import test_nport_link_start as nport
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
 from tests.support import source_chain as chain
@@ -182,15 +183,10 @@ def policy_body() -> dict:
     """The repo's policy with OpenFIGI's three rules switched on, in this copy only (a
     Proving Run activation): they, and the FIGI contract's verification, wait for the
     operator's switch-on."""
-    body = copy.deepcopy(files.policy())
-    block = body["kinds"]["security"]
-    block["identifiers"]["figi"]["verification"] = {
+    body = policy_layers.with_rules_on(files.policy(), "security", *OPENFIGI)
+    body["kinds"]["security"]["identifiers"]["figi"]["verification"] = {
         "corpus_sha256": "f" * 64, "approved_by": "fixture", "approved_at": "2026-10-25T00:00:00Z",
         "reason": "fixture verification: shape only, not a measurement"}
-    rules = {r["rule_id"]: r for r in block["rules"]}
-    body["automatic_rules"] = [a for a in body["automatic_rules"] if a["rule_id"] not in OPENFIGI] + [
-        {"kind": "security", "family": "binding", "rule_id": rule_id, "rule_version": rules[rule_id]["version"],
-         "verdict": "bind", "activation": "deterministic"} for rule_id in OPENFIGI]
     return body
 
 
@@ -213,6 +209,8 @@ def test_each_identifier_carries_only_its_single_levels(tmp_path):
     # The CUSIP asked and every listing's FIGI (ticket 138): the FIGIs are identifiers.
     assert {r["provenance"]["record_key"]: r["identifiers"] for r in records} == {
         c: {"cusip": c, "figi": figis(c)} for c in found}
+    assert {r["provenance"]["record_key"]: r["identifiers"] for r in records}[EQUITY]["figi"] == [
+        "BBGZ0000GR13", "BBGZ0000GY18", "BBGZ0000VN15", "BBGZ0000VS14"]
     # OpenFIGI's name, only where its listings state one (ticket 84): DOUBLE's two names give none.
     names = {r["provenance"]["record_key"]: r["fields"]["name_of_issuer"].get("value") for r in records}
     assert names == {EQUITY: "EXAMPLE CORP", BOND: "EXAMPLE CORP", UNHELD: None, SOLE: "EXAMPLE CORP", DOUBLE: None}

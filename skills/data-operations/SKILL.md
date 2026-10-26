@@ -146,8 +146,8 @@ submits one source.
    targets in that order. OpenFIGI is `answers_cusip`, `answers_isin`
    (read only, until N-PORT's FIGI pairing goes), then `mastering`: one
    target over both kinds asked, all bundles at once; then 13F, then N-PORT
-   (ticket 138; the security-master skill). Do not add a second inventory field, and do not submit another
-   source in its place. A successful check does
+   (ticket 138; the security-master skill). Do not add a second inventory
+   field, and do not submit another source in its place. A successful check does
    not install, approve or start a run. Detail is in
    `docs/specs/source-sequencing.md` in the repository.
 2. **Install that source only.** Save its document into the Rules database.
