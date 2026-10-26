@@ -28,17 +28,13 @@ rules:
 # CUSIP, or creates it. A CUSIP failing its check digit never reaches this
 # rule: the Dataset Contract sets it aside (invalid_cusip_checksum).
 - rule_id: security-cusip
-  # "Filed CUSIP wins over a filed FIGI" (ticket 138 Design 5; operator,
-  # 2026-10-26: "Lookup only", the CUSIP winning a conflict): a 13F record
-  # whose CUSIP and filed FIGI lead to two Securities binds by the CUSIP.
-  version: 2026-10-26.1
+  version: 2026-10-14.1
   family: binding
   source: sec.thirteenf.information_table.security.v1
   applies_to_verdict: security
   emits:
   - bind
   on_no_match: mint
-  on_conflict: first
   when:
   - primitive: identifier_match@1
     args:
@@ -50,7 +46,9 @@ rules:
 # 14:42 ET: "Lookup only (Recommended)"): the FIGI a 13F filer states, a
 # cross-reference, finds the Security OpenFIGI gave it to. 13F does not issue
 # FIGIs, so the value is never that Security's; it creates nothing and merges
-# nothing (a filed FIGI held by two Securities goes to review).
+# nothing. Off until the operator's switch-on, which brings a version of
+# security-cusip with `on_conflict: first` (the CUSIP wins a conflict; until
+# this rule is on, a 13F record reaches one Security at most).
 - rule_id: thirteenf-security-figi
   version: 2026-10-26.1
   family: binding
