@@ -302,6 +302,8 @@ outside automatically rotated test temporary roots. Record engine, configured
 kind, case, revision, configuration pin, elapsed time and verified cleanup.
 Publish counts and outcomes only. A family closes only when every required case
 passes for each selected engine and configured kind on the final revision.
+Exclude temporary-directory symlink aliases from artifact uploads; count each
+expected engine/kind/case once and refuse missing or contradictory outcomes.
 
 ## Examples
 
