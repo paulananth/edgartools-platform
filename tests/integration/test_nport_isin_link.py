@@ -24,7 +24,6 @@ from edgar_warehouse.mdm.clean.store import Store, register_policy
 from edgar_warehouse.rules import files
 from tests.integration import test_clean_mdm_postgres as core
 from tests.integration import test_nport_link_start as cusip
-from tests.support import source_chain as chain
 from tests.support.rules_authority import register_dataset
 
 
@@ -46,9 +45,8 @@ def policy_body() -> dict:
     return cusip.policy_body()
 
 
-def prepared_records(root: Path, umbrella: tuple[list[str], ...] = (), attached: list[dict] = (),
+def prepared_records(root: Path, umbrella: tuple[list[str], ...] = (),
                      with_cusip: list[str] = WITH_CUSIP) -> list[dict]:
-    """`attached`: the pairs FIGI agrees on, as figi-attach.yaml gives them."""
     store = Artifacts()
     root.mkdir(parents=True, exist_ok=True)
     body = io.BytesIO()
@@ -60,18 +58,7 @@ def prepared_records(root: Path, umbrella: tuple[list[str], ...] = (), attached:
     raw = store.put_bytes((root / "capture.zip").as_uri(), body.getvalue())
     holdings = cusip.read(store, root / "holdings", "source.yaml", raw, cusip.Q2, lookups={"isin": PAIRS})
     issuers = cusip.issuers(store, root, raw, PAIRS, cusip.Q2, umbrella)
-    securities = cusip.combine(store, root / "reduce", "reduce.yaml", {"holdings": holdings})
-    reduced = cusip.combine(store, root / "issuer-reduce", "issuer-reduce.yaml", {"issuers": issuers})
-    attached = store.put(root.as_uri(), {"version": 1, "artifacts": [
-        {"input": raw, "tables": {"attached": list(attached)}, "deferred": []}]})
-    folded = cusip.combine(store, root / "fold", "fold.yaml",
-                           {"securities": securities, "attached": attached, "issuers": reduced})
-    combined = cusip.combine(store, root / "combine", "combine.yaml",
-                             {"securities": securities, "attached": attached, "issuers": reduced, "folded": folded})
-    prepared = chain.prepare(store, root / "mdm", cusip.recorded(store, root / "record", combined), {
-        "table": "security", "record_column": "record", "dataset": CODE, "policy": "0" * 64, "consumer": "check",
-        "batch_id": "check-isin", "as_of": "2026-10-16T00:00:00+00:00"})
-    return chain.records(store, root / "mdm", prepared, CODE, files.source(cusip.NAME)["mdm"][CODE]["contract"])
+    return cusip.security_records(store, root, holdings, issuers, batch_id="check-isin")
 
 
 def test_an_isin_only_security_links_to_its_one_issuer(database, tmp_path):
@@ -110,22 +97,26 @@ def test_an_isin_counts_a_fund_series_as_its_umbrella_trust(tmp_path):
                        CUSIP: [subject_key(cusip.GLEIF, LEI)]}  # its issuer, a sub-fund, counts as the umbrella
 
 
-def test_an_isin_only_holding_of_an_attached_isin_is_its_cusips_security(tmp_path):
-    """Ticket 120 (operator, 2026-10-20: "One master record"): FIGI attaches ONE to the
-    CUSIP one to one, so ONE's ISIN-only holdings are the CUSIP's Security: no record of
-    their own, and the CUSIP's record carries ONE, so no ISIN reaches MDM twice."""
-    pair = {"cusip": CUSIP, "isin": ONE, "cusip_offers": 1, "isin_offers": 1}
-    records = {r["provenance"]["record_key"]: r for r in prepared_records(tmp_path, attached=[pair])}
-    assert set(records) == {TWO, NONE, CUSIP}
-    assert records[CUSIP]["identifiers"] == {"cusip": CUSIP, "isin": ONE}
-    assert records[TWO]["identifiers"] == {"isin": TWO}
+def test_a_cusips_record_carries_every_isin_filed_with_it_and_an_isin_only_one_keeps_its_own(tmp_path):
+    """Ticket 138 (no pairing by FIGI in the rules): holding 9 files the CUSIP with ONE, so
+    the CUSIP's record carries ONE; ONE's ISIN-only holdings keep their own record, and
+    the two meet in MDM by the ISIN."""
+    records = {r["provenance"]["record_key"]: r for r in prepared_records(tmp_path)}
+    assert set(records) == {ONE, TWO, NONE, CUSIP}
+    assert records[CUSIP]["identifiers"] == {"cusip": CUSIP, "isin": [ONE]}
+    assert records[ONE]["identifiers"] == {"isin": ONE}
 
 
-def test_a_folded_holdings_issuer_fills_the_cusips_when_its_own_name_none(tmp_path):
-    """Standards review: the CUSIP's own holding names no issuer LEI; the ISIN-only
-    holdings folded into it (ONE, filed with LEI) give its ISSUED_BY link."""
-    pair = {"cusip": CUSIP, "isin": ONE, "cusip_offers": 1, "isin_offers": 1}
-    no_lei = ["A-1", "9", "Example Corp", "", "Note", CUSIP]
-    records = {r["provenance"]["record_key"]: r for r in prepared_records(tmp_path, attached=[pair], with_cusip=no_lei)}
-    targets = [l["target_subject"] for l in records[CUSIP].get("relationships") or [] if l["type"] == "ISSUED_BY"]
-    assert targets == [subject_key(cusip.GLEIF, LEI)]
+def test_under_the_files_policy_nport_binds_no_security_until_its_switch_on(database, tmp_path):
+    """Ticket 138 part B2: N-PORT's two Security rules are new versions waiting for the
+    operator's switch-on, so under the repo's own policy no N-PORT record binds, and no
+    filed ISIN reaches a Security unchecked (the CUSIP rule alone would carry them)."""
+    records = prepared_records(tmp_path)
+    with database.admin.begin() as conn:
+        register_dataset(conn, CODE, database.registry, files.mdm_contract(cusip.NAME, CODE))
+        policy = register_policy(conn, files.policy())
+    cusip.apply(MergeStage(Store(database.application)), policy, "q2", records, 1)
+    assert not [v for v in core.documents(database, "entity").values() if v["kind"] == "security"]
+    with database.application.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM mdm.stage_record WHERE source_code = :s "
+                                "AND entity_id IS NOT NULL"), {"s": CODE}) == 0

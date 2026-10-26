@@ -169,7 +169,7 @@ class Runs:
         return self.units
 
 
-OTHER = {"source": "openfigi", "target": "answers_cusip", "step": "answers"}
+OTHER = {"source": "openfigi", "target": "mastering", "step": "answers"}
 
 
 def reading_another_run(monkeypatch, selector=OTHER):
@@ -209,7 +209,7 @@ def test_another_run_with_no_or_too_many_verified_units_is_refused(tmp_path, mon
         write_manifest(target="mastering", bookkeeping=runs, **options(tmp_path))
 
 
-@pytest.mark.parametrize("selector", [{"source": "openfigi", "target": "answers_cusip"},
+@pytest.mark.parametrize("selector", [{"source": "openfigi", "target": "mastering"},
                                       {**OTHER, "step": "Answers"}, {**OTHER, "extra": "x"}])
 def test_a_reading_of_another_run_names_source_target_and_step(monkeypatch, selector):
     reading_another_run(monkeypatch, selector)

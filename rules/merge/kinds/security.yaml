@@ -43,7 +43,7 @@ rules:
     args:
       namespace: cusip
 - rule_id: nport-security-cusip
-  version: 2026-10-20.1
+  version: 2026-10-26.1
   family: binding
   source: sec.nport.security.v2
   applies_to_verdict: security
@@ -57,16 +57,15 @@ rules:
   - primitive: identifier_cardinality@1
     args:
       namespace: cusip
-# An N-PORT CUSIP record also joins by its ISIN, carried only when OpenFIGI
-# agrees the CUSIP and ISIN are one security and neither is offered twice
-# (operator, 2026-10-15: "Use FIGI to add pairs too";
-# rules/sources/sec.nport.security/figi-agree.yaml, combine.yaml). Its CUSIP
-# and ISIN pointing at two Securities defers to review, never binds. A Security
+# An N-PORT CUSIP record also joins by an ISIN filed with it; it carries every
+# one (ticket 138, part B2; it replaces "Use FIGI to add pairs too",
+# 2026-10-15). Its CUSIP and an ISIN pointing at two Securities defers to
+# review until ticket 138's part A2 binds it by the CUSIP. A Security
 # filed with no usable CUSIP, keyed by its ISIN in the same Dataset Contract
 # (ticket 120; operator, 2026-10-20: "One master record"), joins by it too, or
 # is created: this rule replaces nport-isin-security-isin.
 - rule_id: nport-security-isin
-  version: 2026-10-20.1
+  version: 2026-10-26.1
   family: binding
   source: sec.nport.security.v2
   applies_to_verdict: security

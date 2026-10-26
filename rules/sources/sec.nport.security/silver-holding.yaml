@@ -63,7 +63,7 @@ columns:
 - name: security_key
   type: VARCHAR
   nullable: true
-  definition: "The Security's record key: the CUSIP, else the CUSIP its ISIN is folded into, else the ISIN; empty when none."
+  definition: "The Security's record key: the CUSIP, else the ISIN; empty when none."
   source: "holding-rows.yaml"
   sensitivity: none
 - name: cusip

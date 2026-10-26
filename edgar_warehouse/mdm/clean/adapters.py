@@ -273,18 +273,29 @@ def _quality(contract: dict, fields: dict, matching: dict) -> dict | None:
     return apply(contract["quality"], fields, matching)
 
 
-def _named_values(row: dict, paths: dict, formats: dict, *, lists: bool = False) -> dict:
+def _named_values(row: dict, paths: dict, formats: dict, *, set_aside: list | None = None) -> dict:
     """namespace → path into namespace → formatted value; an empty value is left out.
 
-    With `lists`, a path to a list gives each value once, in order (an
-    identifier a record holds several of, such as a FIGI per listing).
+    With `set_aside` (a list), a path to a list gives each value once, in
+    order (an identifier a record holds several of, such as a FIGI per
+    listing). A listed value its format refuses is set aside, never dropped
+    (ticket 138): it goes into `set_aside` with its reason, and the record
+    stays, since one bad ISIN filed beside a CUSIP must not set the CUSIP's
+    record aside as a refused single identifier does.
     """
+    lists = set_aside is not None
     found = {}
     for namespace, path in paths.items():
         item = value(row, path)
         if lists and isinstance(item, list):
-            items = [format_value(one, formats.get(namespace))
-                     for one in item if one is not None and str(one).strip()]
+            items = []
+            for one in item:
+                if one is None or not str(one).strip():
+                    continue
+                try:
+                    items.append(format_value(one, formats.get(namespace)))
+                except UnsupportedRecord as refused:
+                    set_aside.append({"namespace": namespace, "value": str(one), "reason": str(refused.reason)})
             if items:
                 found[namespace] = list(dict.fromkeys(items))
         elif item is not None and str(item).strip():
@@ -336,8 +347,9 @@ def normalize(
         raise UnsupportedRecord("unsupported_identity_kind")
     key = record_key(row, mapping["record_key"])
     key = format_value(key, mapping.get("record_key_format"))
+    set_aside: list[dict] = []
     identifiers = _named_values(row, mapping.get("identifiers", {}), mapping.get("identifier_formats", {}),
-                                lists=True)
+                                set_aside=set_aside)
     # Lookup-only ids (profiling ticket 03): kept with the record, never bound.
     cross_references = _named_values(
         row, mapping.get("cross_references", {}), mapping.get("cross_reference_formats", {})
@@ -396,6 +408,10 @@ def normalize(
         provenance["matching"] = matching
     if quality is not None:
         provenance["quality"] = quality
+    if set_aside:
+        # Each listed identifier its format refused, with the reason (ticket
+        # 138): held back from matching, counted, never dropped.
+        provenance["identifiers_set_aside"] = set_aside
     if labelled is not None:
         # Inside the hashed body, so the record explains what labelled it with
         # no lookup elsewhere. Absent means the contract's own table decided,

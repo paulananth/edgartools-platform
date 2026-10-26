@@ -59,9 +59,9 @@ They do not become one identity because they appear in the same filing. The
 current Fund rules leave the subfund relationship for later evidence of its
 start date; they do not infer it from the registrant CIK alone.
 
-[OpenFIGI agreement rules](rules/sources/sec.nport.security/figi-agree.yaml)
-use captured mapping answers to support CUSIP/ISIN agreement for N-PORT
-securities. These are enrichment inputs, not a tenth standalone source definition.
+[OpenFIGI](rules/sources/openfigi/source.yaml) masters Securities from captured
+mapping answers: each answer carries the CUSIP or ISIN asked and every listing's
+FIGI, so N-PORT's and 13F's records join the same Security by any of them.
 
 **These are committed definitions, not a list of live services.** Each feed
 needs its own captured-file tests, applicable proving run, operator approval,
