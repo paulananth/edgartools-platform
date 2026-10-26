@@ -271,14 +271,10 @@ pub fn prepare_record_lookups(raw: &str) -> Result<String, String> {
                     prepare_identifier_value(&contracts, &namespace, value, &input.normalizers)
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            // A list stays a list, in the record's order, so each value
-            // pairs with its carried form; one value stays one value.
-            let value = match found.as_slice() {
-                [] => continue,
-                [one] if !raw.get().trim_start().starts_with('[') => values::write_value(one)?,
-                _ => values::write_value(&found)?,
-            };
-            normalized.insert(namespace, value);
+            if found.is_empty() {
+                continue;
+            }
+            normalized.insert(namespace, values::write_identifier_values(&found, &raw)?);
         }
         record.insert(
             "normalized_identifiers".into(),

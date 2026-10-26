@@ -11,6 +11,10 @@ from __future__ import annotations
 
 import copy
 
+from sqlalchemy import event, text
+
+from edgar_warehouse.context import Context
+from edgar_warehouse.mdm.clean import binding
 from edgar_warehouse.mdm.clean.store import register_policy
 from tests.integration import test_clean_mdm_postgres as core
 from tests.integration.test_clean_identifier_binding import CIK_ISSUED, CIK_MINT, load
@@ -36,6 +40,14 @@ def list_policy(database):
     }
     with database.admin.begin() as conn:
         return register_policy(conn, copy.deepcopy(body))
+
+
+def list_policy_body(database):
+    """The registered body itself, for the readers that take the policy."""
+    digest = list_policy(database)
+    with database.admin.connect() as conn:
+        return digest, conn.execute(text(
+            "SELECT body FROM mdm.policy WHERE digest = :d"), {"d": digest}).scalar()
 
 
 def security(key, *values):
@@ -68,3 +80,80 @@ def test_records_sharing_no_value_make_two_securities(database):
     load(database, policy, "b1", security("left", FIRST), security("right", SECOND, THIRD))
     assert sorted(m["identifiers"]["cik"] for m in masters(database).values()) == [
         [FIRST], [SECOND, THIRD]]
+
+
+def test_a_value_held_by_the_security_it_was_proposed_for_is_not_stale(database):
+    policy, body = list_policy_body(database)
+    load(database, policy, "b1", security("answer", FIRST, SECOND))
+    (master,) = masters(database)
+    proposal = {"joins": [], "identities": [],
+                "mints": [{"entity_id": master, "namespace": "cik", "raw": SECOND}]}
+    with database.application.connect() as conn:
+        assert not binding.proposal_is_stale(conn, body, proposal)
+        proposal["mints"][0]["entity_id"] = "00000000-0000-0000-0000-00000000000b"
+        assert binding.proposal_is_stale(conn, body, proposal)
+
+
+def _seeded(database, policy):
+    """A cohort large enough that a whole-index read would show."""
+    for batch in range(4):
+        items = [security(f"cohort-{batch}-{n}", f"{batch}{n:09d}", f"{batch + 5}{n:09d}")
+                 for n in range(500)]
+        load(database, policy, f"cohort-{batch}", *items, checkpoint=batch + 1)
+    with database.admin.begin() as conn:
+        conn.execute(text("ANALYZE mdm.stage_record"))
+
+
+def _plan(conn, statement, params):
+    plan = conn.exec_driver_sql("EXPLAIN (ANALYZE,FORMAT JSON) " + statement, params).scalar()
+
+    def nodes(node):
+        yield node
+        for child in node.get("Plans", []):
+            yield from nodes(child)
+    return list(nodes(plan[0]["Plan"]))
+
+
+def _captured(conn, marker, call):
+    statements = []
+
+    def capture(conn, cursor, statement, params, context, many):
+        if marker in statement:
+            statements.append((statement, params))
+    event.listen(conn, "before_cursor_execute", capture)
+    try:
+        result = call()
+    finally:
+        event.remove(conn, "before_cursor_execute", capture)
+    return result, statements[-1]
+
+
+def test_each_value_is_one_probe_of_the_identifier_index(database):
+    policy, body = list_policy_body(database)
+    _seeded(database, policy)
+    # One value carried alone, one inside a list: two probes per value.
+    wanted = {"cik": {"0000000007", "5000000009"}}
+    with database.application.connect() as conn:
+        found, (statement, params) = _captured(
+            conn, "unnest(CAST(%(wanted)s", lambda: binding.holders(conn, body, wanted))
+        assert {value for _, value in found} == {"7", "5000000009"}  # normalized
+        nodes = _plan(conn, statement, params)
+    probes = [n for n in nodes if n.get("Index Name") == "stage_record_identifiers"]
+    assert len(probes) == 1 and probes[0]["Actual Loops"] == 4
+    assert not any(n["Node Type"] == "Seq Scan" and n.get("Relation Name") == "stage_record"
+                   for n in nodes)
+
+
+def test_the_agent_lookup_finds_a_value_in_a_list_by_one_index_probe_each(database):
+    policy, _ = list_policy_body(database)
+    _seeded(database, policy)
+    context = Context(database.application)
+    with database.application.connect() as conn:
+        entity, (statement, params) = _captured(
+            conn, "unnest(CAST(%(docs)s", lambda: context._resolve(conn, "security", "cik:5000000009"))
+        nodes = _plan(conn, statement, params)
+    assert entity in masters(database)
+    probes = [n for n in nodes if n.get("Index Name") == "stage_record_identifiers"]
+    assert len(probes) == 1 and probes[0]["Actual Loops"] == 2
+    assert not any(n["Node Type"] == "Seq Scan" and n.get("Relation Name") == "stage_record"
+                   for n in nodes)

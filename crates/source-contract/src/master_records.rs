@@ -43,7 +43,7 @@ fn decision_changes_record(
 
 /// How many values of a namespace one master of the kind may hold: the
 /// contract's `claim.reverse`, `null` for any number. A namespace no contract
-/// declares holds one.
+/// declares, or a claim that states no reverse, holds one.
 fn read_reverse_limit(policy: &Object, kind: &str, namespace: &str) -> Result<usize, String> {
     let kinds = values::read_object(policy, "kinds")?;
     let Some(block) = kinds.get(kind) else {
@@ -55,8 +55,9 @@ fn read_reverse_limit(policy: &Object, kind: &str, namespace: &str) -> Result<us
     };
     let claim = values::read_object(&values::read_value(&contract)?, "claim")?;
     match claim.get("reverse") {
-        Some(raw) if raw.get() != "null" => values::read_value(raw),
-        _ => Ok(usize::MAX),
+        None => Ok(1),
+        Some(raw) if raw.get() == "null" => Ok(usize::MAX),
+        Some(raw) => values::read_value(raw),
     }
 }
 

@@ -267,7 +267,7 @@ class Context:
         from edgar_warehouse.mdm.clean.prepared_registry import installed
         from edgar_warehouse.mdm.clean.record_reads import RecordReader
         from edgar_warehouse.mdm.clean.primitives import prepare_matching_value
-        from edgar_warehouse.mdm.clean.store import storage_adapter
+        from edgar_warehouse.mdm.clean.store import containment_docs, storage_adapter
 
         adapter = installed(conn)
         if adapter is not None:
@@ -291,13 +291,12 @@ class Context:
         else:
             found = {r[0]: "identifier" for r in conn.execute(text(
             """SELECT DISTINCT coalesce(e.canonical_id, s.entity_id::text)
-                 FROM mdm.stage_record s
+                 FROM unnest(CAST(:docs AS jsonb[])) AS w(doc) CROSS JOIN LATERAL (
+                      SELECT entity_id, kind FROM mdm.stage_record
+                       WHERE reading -> 'identifiers' @> w.doc OFFSET 0) s
                  LEFT JOIN mdm.current_entity e ON e.object_id = s.entity_id::text
-                WHERE (s.reading -> 'identifiers' @> jsonb_build_object(CAST(:ns AS text), CAST(:v AS text))
-                       OR s.reading -> 'identifiers' @> jsonb_build_object(CAST(:ns AS text),
-                                                                         jsonb_build_array(CAST(:v AS text))))
-                  AND s.entity_id IS NOT NULL AND (CAST(:k AS text) IS NULL OR s.kind = :k)"""),
-            {"ns": namespace, "v": value, "k": kind})}
+                WHERE s.entity_id IS NOT NULL AND (CAST(:k AS text) IS NULL OR s.kind = :k)"""),
+            {"docs": containment_docs(namespace, value), "k": kind})}
         if not found and adapter is None:
             found = {r[0]: "cross_reference" for r in conn.execute(text(
                 """SELECT DISTINCT entity_id FROM mdm.cross_reference_lookup(:ns, :v)

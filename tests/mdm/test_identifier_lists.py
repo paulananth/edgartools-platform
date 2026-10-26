@@ -77,11 +77,14 @@ def record(key: str, *figis: str, source: str = SOURCE) -> dict:
     )
 
 
-def match(records, held=None, decisions=()):
-    """Plan, then link: `held` maps a FIGI to the Security holding it."""
+def match(records, held=None, decisions=(), bound=None, refused=()):
+    """Plan, then link: `held` maps a FIGI to the Security holding it;
+    `bound` a stored record's subject to its Security."""
+    bound = bound or {}
     plan = plan_record_matches({
         "policy": POLICY, "assertions": list(records), "decisions": list(decisions),
-        "identities": [], "bound": [], "released": [], "normalizers": NORMALIZERS,
+        "identities": [], "bound": sorted(bound), "bound_entities": bound,
+        "released": [], "normalizers": NORMALIZERS,
     })
     found = [
         {"namespace": "figi", "value": value, "records": {entity: "security"}}
@@ -90,7 +93,7 @@ def match(records, held=None, decisions=()):
     ]
     return plan, link_matching_records({
         "plan": plan, "found": found, "suspended": [], "newest": {},
-        "new_ids": [str(uuid4()) for _ in plan["applicable"]], "refused": [], "as_of": AS_OF,
+        "new_ids": [str(uuid4()) for _ in plan["applicable"]], "refused": list(refused), "as_of": AS_OF,
     })
 
 
@@ -137,6 +140,24 @@ def test_a_record_from_a_source_that_does_not_issue_the_identifier_adds_none():
                       held={F1: HELD})
     assert [d["entity_id"] for d in result["decisions"]] == [HELD]
     assert result["mints"] == [] and result["identities"] == []
+
+
+def test_a_redelivered_record_gives_its_new_value_to_its_security():
+    # A stored answer re-captured with one more listing: a later record in
+    # the batch finds the Security by it, and the save re-checks it.
+    again = record("one", F1, F3)
+    _, result = match([again, record("two", F3)], held={F1: HELD}, bound={again["subject"]: HELD})
+    assert [d["entity_id"] for d in result["decisions"]] == [HELD]
+    assert result["identities"] == []
+    assert given(result, "mints") == {(HELD, F3)}
+
+
+def test_a_refused_bind_gives_its_values_to_no_security():
+    first = record("one", F1, F2)
+    _, result = match([first, record("two", F2)], held={F1: HELD},
+                      refused=[[first["subject"], RULE["rule_id"], RULE["version"]]])
+    assert {d["subject"] for d in result["decisions"]} == {record("two", F2)["subject"]}
+    assert all(raw != F2 or entity != HELD for entity, raw in given(result, "mints"))
 
 
 def test_values_on_two_securities_wait_for_review_until_merge_is_built():

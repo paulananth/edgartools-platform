@@ -19,7 +19,6 @@ same record keeps its Company without any lookup.
 
 from __future__ import annotations
 
-import json
 from collections import defaultdict
 from uuid import uuid4
 
@@ -29,7 +28,7 @@ from . import correction
 from .activation import declared_namespaces
 from .evidence import instant
 from .primitives import normalizer
-from .store import Conflict, identifier_values, rows
+from .store import Conflict, containment_docs, identifier_values, rows
 from .record_reads import RecordReader
 
 
@@ -81,9 +80,7 @@ def holders(conn, policy: dict, wanted: dict[str, set[str]], released: set[str] 
             JOIN mdm.master_entity i ON i.entity_id = s.entity_id
             WHERE s.source_code = ANY(:sources) AND NOT s.subject = ANY(:released)""",
             namespace=namespace,
-            # A value is carried alone or in a list (a FIGI per listing).
-            wanted=[json.dumps({namespace: held})
-                    for v in sorted(values) for held in (v, [v])],
+            wanted=[doc for v in sorted(values) for doc in containment_docs(namespace, v)],
             sources=_issuers(policy, namespace),
             released=sorted(released),
         ))
@@ -209,9 +206,13 @@ def propose(
 
     subjects = sorted({record["subject"] for record in assertions})
     try:
+        held = bound(conn, subjects)
+        merged = survivors(conn, set(held.values()))
         plan = plan_record_matches({
             "policy": policy, "assertions": assertions, "decisions": decisions,
-            "identities": identities, "bound": list(bound(conn, subjects)),
+            "identities": identities, "bound": list(held),
+            # A re-delivered record's values are its master's (its survivor's).
+            "bound_entities": {subject: merged.get(entity, entity) for subject, entity in held.items()},
             "released": sorted(released),
             "normalizers": {kind.normalizer_name: kind.upper for kind in TYPES.values()},
         })
@@ -240,7 +241,8 @@ def proposal_is_stale(conn, policy: dict, automatic: dict, released: set[str] = 
 
     Run at apply, under the Merge Stage lock, since a concurrent run may have
     committed since the proposal was assessed. Stale, and re-assessed, when:
-    - an identifier proposed for a new Company is now held;
+    - an identifier proposed for a master (a new one, or one a record joins
+      or re-delivers with a value no master held) is now held by another;
     - an identifier a join rested on is no longer held by exactly that
       Company (another Company acquired it, or the Company was merged away);
     - an identity of a new Company's kind has since been published at or
@@ -261,7 +263,9 @@ def proposal_is_stale(conn, policy: dict, automatic: dict, released: set[str] = 
             (m["namespace"], _normal(policy, m["namespace"], m["raw"])), {}
         )
 
-    if any(held(m) for m in mints):
+    # A value proposed for a master is stale once another master holds it;
+    # held by that master already, it is consistent.
+    if any(set(held(m)) - {m["entity_id"]} for m in mints):
         return True
     if any(set(held(j)) != {j["entity_id"]} for j in joins):
         return True

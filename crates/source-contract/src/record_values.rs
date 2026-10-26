@@ -80,6 +80,15 @@ pub(crate) fn read_identifier_values(raw: &RawValue) -> Result<Vec<String>, Stri
     }
 }
 
+/// Values written in the shape `like` holds them: one value alone, a list as
+/// a list (in its order, so each pairs with the carried form it came from).
+pub(crate) fn write_identifier_values(values: &[String], like: &RawValue) -> Result<Document, String> {
+    match values {
+        [one] if read_value::<String>(like).is_ok() => write_value(one),
+        _ => write_value(&values),
+    }
+}
+
 /// Canonical JSON keeps number lexemes supplied by the transport, sorting object keys only.
 pub(crate) fn write_sorted_json(raw: &RawValue) -> Result<String, String> {
     match raw.get().as_bytes().first() {

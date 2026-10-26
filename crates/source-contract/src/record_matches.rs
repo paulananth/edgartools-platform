@@ -14,6 +14,10 @@ struct Inputs {
     decisions: Vec<Object>,
     identities: Vec<Object>,
     bound: Vec<String>,
+    /// Each stored bound record's master: a re-delivered record's identifiers
+    /// are its master's, so a later record in the batch finds them.
+    #[serde(default)]
+    bound_entities: BTreeMap<String, String>,
     released: BTreeSet<String>,
     normalizers: IndexMap<String, bool>,
 }
@@ -203,6 +207,11 @@ pub fn plan_record_matches(raw: &str) -> Result<String, String> {
             caller.insert(subject, read_rule_text(decision, "entity_id")?);
         }
     }
+    for (subject, entity) in &input.bound_entities {
+        if !input.released.contains(subject) && !caller.contains_key(subject) {
+            caller.insert(subject.clone(), entity.clone());
+        }
+    }
     let mut applicable: BTreeMap<String, Vec<Match>> = BTreeMap::new();
     let mut wanted: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     let mut kinds = BTreeSet::new();
@@ -262,9 +271,10 @@ pub fn plan_record_matches(raw: &str) -> Result<String, String> {
                 .filter(|(key, _)| ["rule_id", "version", "on_no_match"].contains(&key.as_str()))
                 .map(|(key, value)| (key.clone(), value.clone()))
                 .collect();
-            let issued = issuers.get(&namespace).is_some_and(|sources| {
-                sources.contains(&read_rule_text(record, "source_code").unwrap_or_default())
-            });
+            let source = read_rule_text(record, "source_code")?;
+            let issued = issuers
+                .get(&namespace)
+                .is_some_and(|sources| sources.contains(&source));
             for raw in raws {
                 let value =
                     prepare_identifier_value(&contracts, &namespace, &raw, &input.normalizers)?;
@@ -297,13 +307,20 @@ pub fn plan_record_matches(raw: &str) -> Result<String, String> {
         let Some(entity) = caller.get(&read_rule_text(record, "subject")?) else {
             continue;
         };
+        let source = read_rule_text(record, "source_code")?;
         for (namespace, raw) in values::read_object(record, "identifiers")? {
-            if !issuers.get(&namespace).is_some_and(|sources| {
-                sources.contains(&read_rule_text(record, "source_code").unwrap_or_default())
-            }) {
+            if !issuers
+                .get(&namespace)
+                .is_some_and(|sources| sources.contains(&source))
+            {
                 continue;
             }
             for raw in values::read_identifier_values(&raw)? {
+                // Looked up too: only a value no master holds is new for it.
+                wanted
+                    .entry(namespace.clone())
+                    .or_default()
+                    .insert(raw.clone());
                 caller_holders.push(Holder {
                     value: prepare_identifier_value(&contracts, &namespace, &raw, &input.normalizers)?,
                     namespace: namespace.clone(),
@@ -363,17 +380,26 @@ pub fn link_matching_records(raw: &str) -> Result<String, String> {
             .extend(holder.records);
     }
     let stored = found.clone();
-    for holder in input.plan.caller_holders {
-        found
-            .entry((holder.namespace, holder.value))
-            .or_default()
-            .extend(holder.records);
-    }
     let mut result: BTreeMap<&str, Vec<Object>> =
         ["identities", "decisions", "reviews", "mints", "joins"]
             .into_iter()
             .map(|name| (name, Vec::new()))
             .collect();
+    for holder in input.plan.caller_holders {
+        let key = (holder.namespace, holder.value);
+        // A value the caller's or a re-delivered record gives its master,
+        // which no master held: re-checked under the lock like a rule's.
+        if !stored.contains_key(&key) {
+            for entity in holder.records.keys() {
+                result.get_mut("mints").unwrap().push(Object::from([
+                    ("entity_id".into(), values::write_value(entity)?),
+                    ("namespace".into(), values::write_value(&key.0)?),
+                    ("raw".into(), values::write_value(&key.1)?),
+                ]));
+            }
+        }
+        found.entry(key).or_default().extend(holder.records);
+    }
     let mut ids = input.new_ids.into_iter();
     let mut floors = BTreeMap::new();
     let mut subjects: Vec<_> = input.plan.applicable.iter().collect();
@@ -488,6 +514,14 @@ pub fn link_matching_records(raw: &str) -> Result<String, String> {
             ]));
             (entity, item.clone())
         };
+        let rule_id = read_rule_text(&selected.rule, "rule_id")?;
+        let version = read_rule_text(&selected.rule, "version")?;
+        if input
+            .refused
+            .contains(&(subject.clone(), rule_id.clone(), version.clone()))
+        {
+            continue;
+        }
         // Every identifier no master held, from the source that issues it, is
         // the master's from now on (the value a new master was created by
         // too): a later record in this batch sharing any one of them finds
@@ -508,14 +542,6 @@ pub fn link_matching_records(raw: &str) -> Result<String, String> {
                 ("namespace".into(), values::write_value(&item.namespace)?),
                 ("raw".into(), values::write_value(&item.raw)?),
             ]));
-        }
-        let rule_id = read_rule_text(&selected.rule, "rule_id")?;
-        let version = read_rule_text(&selected.rule, "version")?;
-        if input
-            .refused
-            .contains(&(subject.clone(), rule_id.clone(), version.clone()))
-        {
-            continue;
         }
         let mut decision = Object::from([
             ("operation".into(), values::write_value(&"bind")?),

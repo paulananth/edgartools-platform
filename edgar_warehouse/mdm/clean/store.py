@@ -35,6 +35,13 @@ def identifier_values(item: Any) -> list[str]:
     raise Conflict("An identifier holds a text value or a nonempty list of them")
 
 
+def containment_docs(namespace: str, value: str) -> list[str]:
+    """The JSON documents a stored record's `identifiers` contains when it
+    carries the value, alone or in a list; each is one probe of the GIN
+    index on identifiers (a nested list does not contain a lone value)."""
+    return [json.dumps({namespace: value}), json.dumps({namespace: [value]})]
+
+
 def canonical(value: Any) -> str:
     return json.dumps(
         value,
