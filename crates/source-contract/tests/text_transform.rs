@@ -53,3 +53,15 @@ fn literal_data_that_looks_like_a_transform_is_never_compiled() {
     let yaml="read: {format: json, tables: {rows: {each: '.', columns: {v: {const: {value: {text: {transforms: broken}}}}}}}}";
     assert!(Engine::from_yaml(yaml,Steps::new()).is_ok());
 }
+#[test]
+fn keep_last_and_drop_last_count_unicode_characters_from_the_end() {
+    assert_eq!(read("[{keep_last: 3}]", "ABCDUSD").unwrap(), Val::Str("USD".into()));
+    assert_eq!(read("[{drop_last: 3}]", "ABCDUSD").unwrap(), Val::Str("ABCD".into()));
+    assert_eq!(read("[{keep_last: 3}]", "éÉ").unwrap(), Val::Str("éÉ".into()));
+    assert_eq!(read("[{drop_last: 3}]", "éÉ").unwrap(), Val::Str("".into()));
+    assert_eq!(read("[{drop_last: 1}]", "AÉ").unwrap(), Val::Str("A".into()));
+    assert_eq!(read("[{keep_last: 0}]", "AB").unwrap(), Val::Str("".into()));
+    for ops in ["[{keep_last: -1}]", "[{drop_last: x}]", "[{keep_last: 1048577}]", "[{drop_last: {n: 1}}]"] {
+        assert!(Engine::from_yaml(&contract(ops), Steps::new()).is_err(), "{ops}");
+    }
+}

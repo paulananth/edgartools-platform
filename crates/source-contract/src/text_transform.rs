@@ -20,6 +20,8 @@ enum Operation {
     RemovePrefix(String),
     Lines(Recipe),
     Slice(usize, usize),
+    KeepLast(usize),
+    DropLast(usize),
     Tokens(std::collections::HashMap<String, String>),
 }
 
@@ -118,6 +120,11 @@ impl Recipe {
                     if start > end || end > MAX_TEXT as u64 { return Err("slice requires 0 <= start <= end <= 1048576".into()); }
                     Operation::Slice(start as usize, end as usize)
                 }
+                Some(name @ ("keep_last" | "drop_last")) => {
+                    let count = args.as_u64().filter(|n| *n <= MAX_TEXT as u64)
+                        .ok_or("keep_last and drop_last take a character count from 0 to 1048576")? as usize;
+                    if name == "keep_last" { Operation::KeepLast(count) } else { Operation::DropLast(count) }
+                }
                 _ => return Err("unknown text transform operation or argument".into()),
             });
         }
@@ -180,6 +187,9 @@ impl Recipe {
                     out
                 }
                 Operation::Slice(start, end) => chars(value.chars().skip(*start).take(end - start))?,
+                // Both count Unicode characters back from the end; a shorter text keeps all or nothing.
+                Operation::KeepLast(count) => chars(value.chars().skip(value.chars().count().saturating_sub(*count)))?,
+                Operation::DropLast(count) => chars(value.chars().take(value.chars().count().saturating_sub(*count)))?,
                 Operation::Lines(recipe) => {
                     let mut out = String::new();
                     for line in value.split('\n') {
