@@ -91,6 +91,9 @@ struct Match {
     /// so the record establishes the value for its master.
     #[serde(default)]
     issued: bool,
+    /// Read from the record's cross-reference: it finds, never is held.
+    #[serde(default)]
+    lookup_only: bool,
 }
 #[derive(Serialize, Deserialize)]
 struct Holder {
@@ -114,18 +117,19 @@ fn read_rule_text(body: &Object, key: &str) -> Result<String, String> {
 fn issues(issuers: &BTreeMap<String, BTreeSet<String>>, namespace: &str, source: &str) -> bool {
     issuers.get(namespace).is_some_and(|sources| sources.contains(source))
 }
-/// The value a rule matches on: the record's identifier; a source that does
-/// not issue it may file it as a cross-reference instead, which finds the
-/// master holding it and is never given to it (Design 5, operator
-/// 2026-10-26: "Lookup only").
-fn read_rule_value(record: &Object, namespace: &str, issued: bool) -> Result<Option<values::Document>, String> {
+/// The value a rule matches on, and whether it is lookup only: the record's
+/// identifier; else, for a rule written for a source that does not issue it,
+/// the source's cross-reference, which finds the master holding it and is
+/// never given to it (Design 5, operator 2026-10-26: "Lookup only"). A rule
+/// open to every source never reads a cross-reference.
+fn read_rule_value(record: &Object, namespace: &str, filer: bool) -> Result<Option<(values::Document, bool)>, String> {
     if let Some(raw) = values::read_object(record, "identifiers")?.shift_remove(namespace) {
-        return Ok(Some(raw));
+        return Ok(Some((raw, false)));
     }
-    if issued {
+    if !filer {
         return Ok(None);
     }
-    Ok(values::read_object(record, "cross_references")?.shift_remove(namespace))
+    Ok(values::read_object(record, "cross_references")?.shift_remove(namespace).map(|raw| (raw, true)))
 }
 fn rule_is_approved_for_matching(
     policy: &Object,
@@ -333,7 +337,8 @@ pub fn plan_record_matches(raw: &str) -> Result<String, String> {
             }
             let namespace = read_matching_namespace(rule)?;
             let issued = issues(&issuers, &namespace, &read_rule_text(record, "source_code")?);
-            let Some(raw) = read_rule_value(record, &namespace, issued)? else {
+            let filer = !issued && values::has_value(rule, "source");
+            let Some((raw, lookup_only)) = read_rule_value(record, &namespace, filer)? else {
                 continue;
             };
             let raws = values::read_identifier_values(&raw)?;
@@ -363,6 +368,7 @@ pub fn plan_record_matches(raw: &str) -> Result<String, String> {
                     value,
                     raw,
                     issued,
+                    lookup_only,
                 });
             }
         }
@@ -610,7 +616,7 @@ pub fn link_matching_records(raw: &str) -> Result<String, String> {
                     .collect();
                 // A lookup-only value two masters hold reaches both, so a
                 // `first` rule's value still settles the conflict.
-                if held.len() > 1 && !merges && item.issued {
+                if held.len() > 1 && !merges && !item.lookup_only {
                     problem = Some(("ambiguous_identifier", item.namespace.clone()));
                     break;
                 }

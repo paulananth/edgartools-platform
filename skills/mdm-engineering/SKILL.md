@@ -138,8 +138,8 @@ record in review merges nothing.
 
 **A filer's copy of an identifier it does not issue is lookup only.** A
 source the Identifier Contract does not name in `sources` maps it as a
-cross-reference; a matching rule from that source (`on_no_match: wait`)
-reads the cross-reference, finds the master holding the value and binds to
+cross-reference; a matching rule naming that source (`on_no_match: wait`;
+a rule open to every source never does) reads the cross-reference, finds the master holding the value and binds to
 it, but the value is never minted, projected or counted as held, and the
 rule may not merge (activation refuses it). A value two masters hold reaches
 both, so the record's own `first` identifier still settles the conflict.
