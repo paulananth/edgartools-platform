@@ -29,9 +29,10 @@ should be one processing with all the identifier", "first lookup if not exists
 then master", "mastering must create an unique id and the unique id joins with
 all the other tables cross refrence and silver"). Built so far: a record
 carries lists of identifiers (part A1), OpenFIGI's one load with every
-listing FIGI as an identifier and one master id in silver (part B1). Still to
-build: the CUSIP-first bind and the merge by a shared FIGI (A2), N-PORT's
-pairing removed (B2), the Listing currency (B3), then the switch-on. The
+listing FIGI as an identifier and one master id in silver (part B1),
+N-PORT's pairing by FIGI removed (part B2). Still to build: the CUSIP-first
+bind and the merge by a shared FIGI (A2), the Listing currency (B3), then the
+switch-on. The
 sections below say where 138 changes what runs.
 
 **One master id.** Mastering mints one master id for each Security. The

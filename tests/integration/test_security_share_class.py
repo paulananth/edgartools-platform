@@ -60,13 +60,7 @@ def nport_records(root: Path, extra: list[list[str]] = (), pairs: list[list[str]
     raw = store.put_bytes((root / "capture.zip").as_uri(), zipped.read_bytes())
     holdings = nport.read(store, root / "holdings", "source.yaml", raw, nport.Q2, lookups={"isin": list(pairs)})
     issuers = nport.issuers(store, root, raw, list(pairs), nport.Q2)
-    securities = nport.combine(store, root / "reduce", "reduce.yaml", {"holdings": holdings})
-    reduced = nport.combine(store, root / "issuer-reduce", "issuer-reduce.yaml", {"issuers": issuers})
-    combined = nport.combine(store, root / "combine", "combine.yaml", {"securities": securities, "issuers": reduced})
-    prepared = chain.prepare(store, root / "mdm", nport.recorded(store, root / "record", combined), {
-        "table": "security", "record_column": "record", "dataset": nport.CODE, "policy": "0" * 64,
-        "consumer": "check", "batch_id": "check-class", "as_of": "2026-10-16T00:00:00+00:00"})
-    return chain.records(store, root / "mdm", prepared, nport.CODE, files.source(nport.NAME)["mdm"][nport.CODE]["contract"])
+    return nport.security_records(store, root, holdings, issuers, batch_id="check-class")
 
 
 THIRTEENF, THIRTEENF_CODE = "sec.thirteenf.information_table", "sec.thirteenf.information_table.security.v1"

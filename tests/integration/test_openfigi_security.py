@@ -183,7 +183,8 @@ def policy_body() -> dict:
     """The repo's policy with OpenFIGI's three rules switched on, in this copy only (a
     Proving Run activation): they, and the FIGI contract's verification, wait for the
     operator's switch-on."""
-    body = policy_layers.with_rules_on(files.policy(), "security", *OPENFIGI)
+    # N-PORT's ISIN rule waits for its switch-on too (ticket 138 part B2).
+    body = policy_layers.with_rules_on(files.policy(), "security", *OPENFIGI, "nport-security-isin")
     body["kinds"]["security"]["identifiers"]["figi"]["verification"] = {
         "corpus_sha256": "f" * 64, "approved_by": "fixture", "approved_at": "2026-10-25T00:00:00Z",
         "reason": "fixture verification: shape only, not a measurement"}
@@ -211,6 +212,9 @@ def test_each_identifier_carries_only_its_single_levels(tmp_path):
     assert {r["provenance"]["record_key"]: r["identifiers"] for r in records} == {
         **{c: {"cusip": c, "figi": figis(c)} for c in found if c != BROKEN},
         BROKEN: {"cusip": BROKEN, "figi": ["BBGZ0000BK13"]}}
+    # BROKEN's bad FIGI is set aside with its reason, counted, never dropped.
+    assert {r["provenance"]["record_key"]: r["provenance"].get("identifiers_set_aside") for r in records}[BROKEN] == [
+        {"namespace": "figi", "value": "BBGZZ0000US1", "reason": "invalid_figi"}]
     assert {r["provenance"]["record_key"]: r["identifiers"] for r in records}[EQUITY]["figi"] == [
         "BBGZ0000GR13", "BBGZ0000GY18", "BBGZ0000VN15", "BBGZ0000VS14"]
     # OpenFIGI's name, only where its listings state one (ticket 84): DOUBLE's two names give none.

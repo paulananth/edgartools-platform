@@ -24,7 +24,6 @@ from edgar_warehouse.mdm.clean.store import Store, register_policy
 from edgar_warehouse.rules import files
 from tests.integration import test_clean_mdm_postgres as core
 from tests.integration import test_nport_link_start as cusip
-from tests.support import source_chain as chain
 from tests.support.rules_authority import register_dataset
 
 
@@ -59,13 +58,7 @@ def prepared_records(root: Path, umbrella: tuple[list[str], ...] = (),
     raw = store.put_bytes((root / "capture.zip").as_uri(), body.getvalue())
     holdings = cusip.read(store, root / "holdings", "source.yaml", raw, cusip.Q2, lookups={"isin": PAIRS})
     issuers = cusip.issuers(store, root, raw, PAIRS, cusip.Q2, umbrella)
-    securities = cusip.combine(store, root / "reduce", "reduce.yaml", {"holdings": holdings})
-    reduced = cusip.combine(store, root / "issuer-reduce", "issuer-reduce.yaml", {"issuers": issuers})
-    combined = cusip.combine(store, root / "combine", "combine.yaml", {"securities": securities, "issuers": reduced})
-    prepared = chain.prepare(store, root / "mdm", cusip.recorded(store, root / "record", combined), {
-        "table": "security", "record_column": "record", "dataset": CODE, "policy": "0" * 64, "consumer": "check",
-        "batch_id": "check-isin", "as_of": "2026-10-16T00:00:00+00:00"})
-    return chain.records(store, root / "mdm", prepared, CODE, files.source(cusip.NAME)["mdm"][CODE]["contract"])
+    return cusip.security_records(store, root, holdings, issuers, batch_id="check-isin")
 
 
 def test_an_isin_only_security_links_to_its_one_issuer(database, tmp_path):

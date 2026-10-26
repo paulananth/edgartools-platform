@@ -126,7 +126,8 @@ def test_each_row_lands_with_its_holder_and_security_found_by_lookup(database, t
     for code in (SECURITY, FUND, REGISTRANT):  # fixture masters stand in for each contract's records
         core.register_reading(database, code, core.contract_body())
     with database.admin.begin() as conn:
-        policy = register_policy(conn, copy.deepcopy(files.policy()))
+        # N-PORT's ISIN rule waits for its switch-on (ticket 138); on here, for the test only.
+        policy = register_policy(conn, cusip.policy_body())
     stage = MergeStage(Store(database.application))
     cusip.apply(stage, policy, "masters", [
         # The CUSIP's record carries ONE, filed with it; ONE's own record joins it by ONE.

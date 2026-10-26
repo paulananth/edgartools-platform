@@ -103,22 +103,32 @@ def prepared_records(root: Path, period: str, revision: int | None = None,
     raw = store.put_bytes((root / "capture.zip").as_uri(), zipped.read_bytes())
     holdings = read(store, root / "holdings", "source.yaml", raw, period, lookups={"isin": []})
     issuer_reading = issuers(store, root, raw, [], period, umbrella)
+    # The quarter dates nothing in MDM (ticket 113); quarters that follow
+    # one another are revisions of one publication (ticket 101).
+    return security_records(store, root, holdings, issuer_reading, batch_id=f"check-{period[:10]}",
+                            **({} if revision is None else {"publication_key": f"nport:{period[:10]}",
+                                                            "revision": str(revision)}))
+
+
+def security_records(store, root: Path, holdings, issuer_reading, *, batch_id: str, **publication) -> list[dict]:
+    """The Security chain after the holdings and issuer source extracts: reduce.yaml,
+    issuer-reduce.yaml, combine.yaml, record.yaml, mdm.prepare and the contract's records.
+    One place for the steps every N-PORT Security test runs (GoF review, ticket 138)."""
     securities = combine(store, root / "reduce", "reduce.yaml", {"holdings": holdings})
     reduced = combine(store, root / "issuer-reduce", "issuer-reduce.yaml", {"issuers": issuer_reading})
     combined = combine(store, root / "combine", "combine.yaml", {"securities": securities, "issuers": reduced})
     prepared = chain.prepare(store, root / "mdm", recorded(store, root / "record", combined), {
         "table": "security", "record_column": "record", "dataset": CODE, "policy": "0" * 64, "consumer": "check",
-        "batch_id": f"check-{period[:10]}", "as_of": "2026-10-16T00:00:00+00:00",
-        # The quarter dates nothing in MDM (ticket 113); quarters that follow
-        # one another are revisions of one publication (ticket 101).
-        **({} if revision is None else {"publication_key": f"nport:{period[:10]}", "revision": str(revision)})})
+        "batch_id": batch_id, "as_of": "2026-10-16T00:00:00+00:00", **publication})
     return chain.records(store, root / "mdm", prepared, CODE, files.source(NAME)["mdm"][CODE]["contract"])
 
 
 def policy_body() -> dict:
-    # The ADV custodian LEI rule (ticket 76) and the N-PORT Security rules (ticket 79) are on in
-    # the live policy; the issuer LEI rule is switched on here for the test only.
-    return policy_layers.with_rules_on(files.policy(), "company", "gleif-issuer-lei")
+    # The ADV custodian LEI rule (ticket 76) and N-PORT's CUSIP rule (ticket 79) are on in the
+    # live policy; the issuer LEI rule, and N-PORT's ISIN rule waiting for its switch-on
+    # (ticket 138), are switched on here for the test only.
+    body = policy_layers.with_rules_on(files.policy(), "company", "gleif-issuer-lei")
+    return policy_layers.with_rules_on(body, "security", "nport-security-isin")
 
 
 def apply(stage, policy, batch, assertions, checkpoint):

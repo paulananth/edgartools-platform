@@ -296,12 +296,10 @@ automatic_rules:
   rule_version: 2026-10-20.1
   verdict: bind
   activation: deterministic
-- kind: security
-  family: binding
-  rule_id: nport-security-isin
-  rule_version: 2026-10-20.1
-  verdict: bind
-  activation: deterministic
+# nport-security-isin 2026-10-20.1's switch-on ended with ticket 138 part B2:
+# its records now carry every ISIN filed with a CUSIP, not one FIGI-agreed
+# ISIN, so version 2026-10-26.1 waits for its own switch-on (with OpenFIGI's
+# rules, after part A2 and its proof).
 - kind: company
   family: binding
   rule_id: nport-registrant-cik
