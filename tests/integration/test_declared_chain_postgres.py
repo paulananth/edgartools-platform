@@ -115,7 +115,7 @@ def test_the_declared_chain_gives_the_hand_built_chains_records(databases, tmp_p
     assert {r["provenance"]["record_key"]: comparable(r) for r in found} == {
         r["provenance"]["record_key"]: comparable(r) for r in by_hand}
     assert refused == refused_by_hand
-    # 5 CUSIP and 4 ISIN answers found; 8 not found of each kind, and BROKEN's bad FIGI.
-    assert len(found) == len(by_hand) == 9 and len(refused) == 16
+    # 6 CUSIP and 4 ISIN answers found; 8 CUSIPs and 7 ISINs not found.
+    assert len(found) == len(by_hand) == 10 and len(refused) == 15
     # 16 requests, 6 answers groups, reduce, combine, record, prepare.
     assert state["counts"] == {"verified": 26}

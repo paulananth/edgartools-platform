@@ -33,8 +33,9 @@ def classes(records: list[dict]) -> dict[str, str | None]:
     return {r["provenance"]["record_key"]: (r["fields"].get("share_class") or {}).get("value") for r in records}
 
 
-# Invented ISINs, check digits valid; FOLDED is attached to the CUSIP FOLD_INTO.
-ISIN_ONLY, FOLDED, FOLD_INTO = "ZZ0000000016", "ZZ0000000024", "ZZ0000062"
+# Invented ISINs, check digits valid; SECOND is an ISIN-only holding's, and the CUSIP
+# MIXED's own holdings name two letters.
+ISIN_ONLY, SECOND, MIXED = "ZZ0000000016", "ZZ0000000024", "ZZ0000062"
 
 
 def flagged(records: list[dict]) -> list[str]:
@@ -42,10 +43,9 @@ def flagged(records: list[dict]) -> list[str]:
                   if "share_class_one_letter" in ((r["provenance"].get("quality") or {}).get("flags") or []))
 
 
-def nport_records(root: Path, extra: list[list[str]] = (), pairs: list[list[str]] = (),
-                  attached: list[dict] = ()) -> list[dict]:
+def nport_records(root: Path, extra: list[list[str]] = (), pairs: list[list[str]] = ()) -> list[dict]:
     """The N-PORT chain over equity holdings, and one bond tranche titled by class;
-    `pairs` gives a holding its ISIN, `attached` the pairs FIGI agrees on."""
+    `pairs` gives a holding its ISIN."""
     rows = [[f"A-{n}", str(n), "Example Corp", "", title, cusip, "EC"] for n, (cusip, title) in enumerate(TITLES)]
     rows.append(["A-9", "9", "Example Trust", "", "2021-1 CL A", TRANCHE, "ABS-O"])
     rows += extra
@@ -62,11 +62,7 @@ def nport_records(root: Path, extra: list[list[str]] = (), pairs: list[list[str]
     issuers = nport.issuers(store, root, raw, list(pairs), nport.Q2)
     securities = nport.combine(store, root / "reduce", "reduce.yaml", {"holdings": holdings})
     reduced = nport.combine(store, root / "issuer-reduce", "issuer-reduce.yaml", {"issuers": issuers})
-    attached = store.put(root.as_uri(), {"version": 1, "artifacts": [
-        {"input": raw, "tables": {"attached": list(attached)}, "deferred": []}]})
-    folded = nport.combine(store, root / "fold", "fold.yaml", {"securities": securities, "attached": attached, "issuers": reduced})
-    combined = nport.combine(store, root / "combine", "combine.yaml",
-                             {"securities": securities, "attached": attached, "issuers": reduced, "folded": folded})
+    combined = nport.combine(store, root / "combine", "combine.yaml", {"securities": securities, "issuers": reduced})
     prepared = chain.prepare(store, root / "mdm", nport.recorded(store, root / "record", combined), {
         "table": "security", "record_column": "record", "dataset": nport.CODE, "policy": "0" * 64,
         "consumer": "check", "batch_id": "check-class", "as_of": "2026-10-16T00:00:00+00:00"})
@@ -107,19 +103,19 @@ def test_nport_names_the_one_class_its_equity_titles_agree_on(tmp_path):
     assert flagged(records) == [TWO]
 
 
-def test_nport_an_isin_only_security_and_a_folded_one_take_their_own_levels_class(tmp_path):
-    """An ISIN-only equity holding names its Security's class; a CUSIP whose own
-    holdings name two letters gets none, even when a folded holding names one."""
+def test_nport_an_isin_only_security_and_a_cusip_take_their_own_levels_class(tmp_path):
+    """An ISIN-only equity holding names its own record's class; a CUSIP whose own
+    holdings name two letters gets none. Each ISIN-only holding keeps its own record
+    (ticket 138: no fold into a CUSIP's row)."""
     extra = [["A-20", "20", "Example Corp", "", "CL B", "", "EC"],
-             ["A-21", "21", "Example Corp", "", "CL A", FOLD_INTO, "EC"],
-             ["A-22", "22", "Example Corp", "", "CL C", FOLD_INTO, "EC"],
+             ["A-21", "21", "Example Corp", "", "CL A", MIXED, "EC"],
+             ["A-22", "22", "Example Corp", "", "CL C", MIXED, "EC"],
              ["A-23", "23", "Example Corp", "", "CL A", "", "EC"]]
-    pairs = [["20", ISIN_ONLY], ["23", FOLDED]]
-    pair = {"cusip": FOLD_INTO, "isin": FOLDED, "cusip_offers": 1, "isin_offers": 1}
-    records = nport_records(tmp_path, extra, pairs, [pair])
+    pairs = [["20", ISIN_ONLY], ["23", SECOND]]
+    records = nport_records(tmp_path, extra, pairs)
     found = classes(records)
-    assert (found[ISIN_ONLY], found[FOLD_INTO]) == ("B", None) and FOLDED not in found
-    assert flagged(records) == [TWO, FOLD_INTO]
+    assert (found[ISIN_ONLY], found[MIXED], found[SECOND]) == ("B", None, "A")
+    assert flagged(records) == [TWO, MIXED]
 
 
 def test_thirteenf_names_the_one_class_its_titles_agree_on(tmp_path):

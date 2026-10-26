@@ -5,9 +5,13 @@
 #   joins too; ticker, FIGI and SEDOL are lookup only.
 # - "One master record" (2026-10-20, ticket 120; it replaces "Two contracts
 #   (Recommended)", 2026-10-15): sec.nport.security.v2, one record per
-#   Security, keyed by its CUSIP (carrying its ISIN when FIGI agrees on the pair
-#   one to one), else by the ISIN of a holding with no usable CUSIP; an
-#   ISIN-only holding whose ISIN FIGI attaches to a CUSIP is that CUSIP's.
+#   Security, keyed by its CUSIP, else by the ISIN of a holding with no usable
+#   CUSIP.
+# - "first lookup if not exists then master", "cusip is a seperate than isin
+#   it can never be merges", "bind by CUSIP if matches if not then try isin"
+#   (2026-10-25, ticket 138): a CUSIP record carries every ISIN filed with
+#   it, and MDM binds it by the CUSIP, else an ISIN, adding an ISIN only when
+#   no Security holds it; no pairing by FIGI in these rules.
 # - "Registrant yes, issuer later" (2026-10-14): the issuer's name, title and
 #   LEI stay on the Security as filed (the LEI a filed word, not an
 #   identifier: 179,389 holdings carry one failing its check digit).
@@ -17,11 +21,9 @@
 # pair set `isin` (holding to ISIN, ticket 91); this reading streams
 # FUND_REPORTED_HOLDING.tsv once and gives each holding its ISIN with
 # `member_value` (none when the holding has none or several); reduce.yaml
-# groups by CUSIP, by ISIN and by pair; combine-pairs.yaml counts each pair's
-# CUSIPs and ISINs; reduce.yaml's `keys` lists each Security once by its one
-# key; combine.yaml joins the filed words and the one-to-one ISIN onto each,
-# and marks an ISIN-only row folded into a CUSIP's; record.yaml leaves those
-# out; mdm.prepare reads table `security`.
+# groups by CUSIP, by ISIN and by pair; reduce.yaml's `keys` lists each
+# Security once by its one key; combine.yaml joins the filed words and every
+# ISIN filed with a CUSIP onto each; mdm.prepare reads table `security`.
 # A usable CUSIP is filed and not a stand-in (000000000, 999999999:
 # rules/identifiers/cusip.yaml); one failing its check digit stays a CUSIP
 # record and is set aside by the Dataset Contract, counted.
@@ -634,7 +636,8 @@ mdm:
           - isin
           - issuer
           - filed
-        version: sec-nport-security-v2
+        # v3 (ticket 138): a CUSIP's record carries every ISIN filed with it.
+        version: sec-nport-security-v3
         retain_deferred: true
         source_record_provenance: true
         kind: security
@@ -669,15 +672,14 @@ bookkeeping:
   version: 2
   # One quarter's data set (the zip), its period a run fact (ticket 113), one
   # target (`mastering`) for its one Dataset Contract: every Security in one run
-  # (ticket 120; `mastering_isin` retired with sec.nport.security_isin.v1). Two inputs come from other runs
-  # (ticket 120; operator, 2026-10-19: "Read another run (Recommended)"): the
-  # umbrella pair set from GLEIF's `umbrellas` runs, and OpenFIGI's answers
-  # from its `answers_cusip` and `answers_isin` runs, so those run first.
+  # (ticket 120; `mastering_isin` retired with sec.nport.security_isin.v1). One
+  # input comes from another run (ticket 120; operator, 2026-10-19: "Read
+  # another run (Recommended)"): the umbrella pair set from GLEIF's
+  # `umbrellas` runs. OpenFIGI's answers are no longer read (ticket 138).
   targets:
     mastering:
-      # Claiming and reporting a FIGI step recheck the chain behind ~480 OpenFIGI
-      # answer units, 73 s each (measured 2026-10-19): longer than the default
-      # 120 s lease (ticket 120).
+      # Set for the FIGI steps ticket 138 removed (73 s each, measured
+      # 2026-10-19); kept until a run shows the default 120 s lease holds.
       lease_seconds: 900
       heartbeat_seconds: 60
       run:
@@ -742,81 +744,15 @@ bookkeeping:
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.combined]
           input: {contract: issuer-reduce.yaml, readings: {issuers: {step: issuers}}}
-        - name: pairs
-          operation: source.combine
-          requires: [reduce]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.combined]
-          input: {contract: combine-pairs.yaml, readings: {securities: {step: reduce}}}
-        - name: cusips_found
-          operation: source.combine
-          requires: []
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.combined]
-          input:
-            contract: figi-found.yaml
-            readings: {answers: {run: {source: openfigi, target: answers_cusip, step: answers}}}
-        - name: isins_found
-          operation: source.combine
-          requires: []
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.combined]
-          input:
-            contract: figi-found.yaml
-            readings: {answers: {run: {source: openfigi, target: answers_isin, step: answers}}}
-        - name: figi_pairs
-          operation: source.combine
-          requires: [pairs, cusips_found, isins_found]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.combined]
-          input:
-            contract: figi-pairs.yaml
-            readings: {pairs: {step: pairs}, cusips: {step: cusips_found}, isins: {step: isins_found}}
-        - name: agree
-          operation: source.read
-          requires: [figi_pairs]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          input: {contract: figi-agree.yaml, pieces: {step: figi_pairs}}
-        - name: offers
-          operation: source.combine
-          requires: [agree]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.combined]
-          input: {contract: figi-offers.yaml, readings: {agreed: {step: agree}}}
-        - name: attach
-          operation: source.combine
-          requires: [agree, offers]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.combined]
-          input: {contract: figi-attach.yaml, readings: {agreed: {step: agree}, offers: {step: offers}}}
-        # The ISIN-only holdings' facts keyed by the CUSIP their ISIN is attached to
-        # (ticket 120), for combine.yaml's folded rows.
-        - name: fold
-          operation: source.combine
-          requires: [reduce, attach, issuer_reduce]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.combined]
-          input:
-            contract: fold.yaml
-            readings: {securities: {step: reduce}, attached: {step: attach}, issuers: {step: issuer_reduce}}
         - name: combine
           operation: source.combine
-          requires: [reduce, attach, issuer_reduce, fold]
+          requires: [reduce, issuer_reduce]
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.combined]
           input:
             contract: combine.yaml
-            readings: {securities: {step: reduce}, attached: {step: attach}, issuers: {step: issuer_reduce}, folded: {step: fold}}
+            readings: {securities: {step: reduce}, issuers: {step: issuer_reduce}}
         - name: record
           operation: source.read
           requires: [combine]
@@ -828,8 +764,7 @@ bookkeeping:
         # (operator, 2026-10-22: "Why do you need to merge it it's just a
         # lookup"). The filing's series (holding-series.yaml), its
         # registrant (sec.nport.registrant's) and its date name each row's
-        # holder; holding-combine.yaml folds an ISIN into its CUSIP as fold.yaml
-        # does; holding-rows.yaml gives the rows silver-holding.yaml lands.
+        # holder; holding-rows.yaml gives the rows silver-holding.yaml lands.
         - name: registrants
           operation: source.read
           requires: [submissions]
@@ -873,11 +808,11 @@ bookkeeping:
                       max_input_bytes: 17179869184, max_input_rows: 100000000}
         - name: holding_combine
           operation: source.combine
-          requires: [holding, attach]
+          requires: [holding]
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.combined]
-          input: {contract: holding-combine.yaml, readings: {holdings: {step: holding}, attached: {step: attach}}}
+          input: {contract: holding-combine.yaml, readings: {holdings: {step: holding}}}
         - name: holding_rows
           operation: source.read
           requires: [holding_combine]

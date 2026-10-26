@@ -1,7 +1,7 @@
 """N-PORT holdings for silver, each a lookup row (ticket 79).
 
 The real chain on invented holdings: holding.yaml (with each filing's series,
-registrant, date and as-of date), holding-combine.yaml (an ISIN folded into a CUSIP) and
+registrant, date and as-of date), holding-combine.yaml (pieces only, ticket 138) and
 holding-rows.yaml. Each row's `security_key` must be a record key the Security
 contract makes from the same holdings (test_nport_isin_link's chain), so the
 silver writer finds its Security by lookup; the holder is the fund series, or
@@ -47,10 +47,7 @@ def reported_pairs(store, root, raw) -> list[list[str]]:
             for row in store.json(part["receipt"])["tables"]["reported"]]
     rows += [row for artifact in store.json(reading)["artifacts"] for row in artifact.get("tables", {}).get("reported", [])]
     return [[row["accession"], row["as_of"]] for row in rows if row["as_of"]]
-FOLD = {"cusip": isin.CUSIP, "isin": isin.ONE, "cusip_offers": 1, "isin_offers": 1}
-
-
-def holding_rows(root: Path, attached: list[dict] = ()) -> list[dict]:
+def holding_rows(root: Path) -> list[dict]:
     store = Artifacts()
     root.mkdir(parents=True, exist_ok=True)
     body = io.BytesIO()
@@ -69,10 +66,7 @@ def holding_rows(root: Path, attached: list[dict] = ()) -> list[dict]:
     holdings = cusip.read(store, root / "holding", "holding.yaml", raw, cusip.Q2, lookups={
         "isin": isin.PAIRS, "series": pairs, "registrant": REGISTRANTS,
         "filed": cusip.filed_pairs(store, root, raw), "as_of": reported_pairs(store, root, raw)})
-    attached_reading = store.put(root.as_uri(), {"version": 1, "artifacts": [
-        {"input": raw, "tables": {"attached": list(attached)}, "deferred": []}]})
-    combined = cusip.combine(store, root / "combine", "holding-combine.yaml",
-                             {"holdings": holdings, "attached": attached_reading})
+    combined = cusip.combine(store, root / "combine", "holding-combine.yaml", {"holdings": holdings})
     pieces = [store.put(root.as_uri(), {"tables": a["tables"]}) for a in store.json(combined)["artifacts"]]
     reading = chain.read(store, root / "rows", files.load(FOLDER / "holding-rows.yaml"), [
         {"input": p, "context": store.put(root.as_uri(), {"version": 1, "input": p, "values": {}})}
@@ -81,12 +75,12 @@ def holding_rows(root: Path, attached: list[dict] = ()) -> list[dict]:
 
 
 def test_each_holding_names_the_security_record_its_holdings_make(tmp_path):
-    rows = {r["holding_id"]: r for r in holding_rows(tmp_path / "rows", [FOLD])}
-    keys = {r["provenance"]["record_key"] for r in isin.prepared_records(tmp_path / "securities", attached=[FOLD])}
-    # ONE's ISIN-only holdings (4, 5) are the CUSIP's Security (ticket 120); 9 is
-    # filed with the CUSIP itself; TWO and NONE keep their ISINs.
+    rows = {r["holding_id"]: r for r in holding_rows(tmp_path / "rows")}
+    keys = {r["provenance"]["record_key"] for r in isin.prepared_records(tmp_path / "securities")}
+    # Each row is keyed by its CUSIP, else its ISIN (ticket 138: no fold by FIGI):
+    # ONE's ISIN-only holdings (4, 5) by ONE, 9 by the CUSIP filed with ONE.
     assert {h: r["security_key"] for h, r in rows.items()} == {
-        "4": isin.CUSIP, "5": isin.CUSIP, "6": isin.TWO, "7": isin.TWO, "8": isin.NONE, "9": isin.CUSIP}
+        "4": isin.ONE, "5": isin.ONE, "6": isin.TWO, "7": isin.TWO, "8": isin.NONE, "9": isin.CUSIP}
     assert {r["security_key"] for r in rows.values()} <= keys
     assert len(rows) == len(isin.HOLDINGS) + 1  # every filed holding is a row
     # The filed issuer LEI stays on the row, as filed (an LEI is a Company's identifier,
@@ -94,15 +88,8 @@ def test_each_holding_names_the_security_record_its_holdings_make(tmp_path):
     assert rows["4"]["issuer_lei"] == cusip.LEI and rows["8"]["issuer_lei"] is None
 
 
-def test_an_isin_folded_into_no_cusip_keeps_its_own_security(tmp_path):
-    rows = {r["holding_id"]: r for r in holding_rows(tmp_path / "rows")}
-    keys = {r["provenance"]["record_key"] for r in isin.prepared_records(tmp_path / "securities")}
-    assert rows["4"]["security_key"] == rows["5"]["security_key"] == isin.ONE
-    assert {r["security_key"] for r in rows.values()} <= keys
-
-
 def test_the_holder_is_the_series_else_the_registrant(tmp_path):
-    rows = holding_rows(tmp_path / "rows", [FOLD])
+    rows = holding_rows(tmp_path / "rows")
     by_filing = {(r["accession"], r["series_id"], r["registrant_cik"], r["filed"], r["period"]) for r in rows}
     assert by_filing == {("A-1", "S000000001", "0000000001", "2026-06-05", cusip.Q2),
                          ("A-2", None, "0000000002", "2026-05-28", cusip.Q2)}
@@ -112,7 +99,7 @@ def test_each_holding_carries_the_date_its_filing_reports_at(tmp_path):
     """Ticket 79 (operator, 2026-10-22: "Don't we need a as of date for holdings"):
     a holding is true at its filing's REPORT_DATE, beside the filing date; a
     filing stating none gives none."""
-    rows = holding_rows(tmp_path / "rows", [FOLD])
+    rows = holding_rows(tmp_path / "rows")
     assert {(r["accession"], r["as_of"], r["filed"]) for r in rows} == {
         ("A-1", "2026-03-31", "2026-06-05"), ("A-2", None, "2026-05-28")}
 
@@ -135,15 +122,18 @@ def bound(database, source_code: str, key: str) -> str | None:
 def test_each_row_lands_with_its_holder_and_security_found_by_lookup(database, tmp_path):
     """The silver writer finds each MDM id by the row's keys, among the records each
     link's Dataset Contract staged; no holding record goes through the Merge Stage."""
-    rows = holding_rows(tmp_path / "rows", [FOLD])
+    rows = holding_rows(tmp_path / "rows")
     for code in (SECURITY, FUND, REGISTRANT):  # fixture masters stand in for each contract's records
         core.register_reading(database, code, core.contract_body())
     with database.admin.begin() as conn:
         policy = register_policy(conn, copy.deepcopy(files.policy()))
     stage = MergeStage(Store(database.application))
     cusip.apply(stage, policy, "masters", [
+        # The CUSIP's record carries ONE, filed with it; ONE's own record joins it by ONE.
         core.source(key=isin.CUSIP, source_code=SECURITY, kind="security", fields={},
-                    identifiers={"cusip": isin.CUSIP}),
+                    identifiers={"cusip": isin.CUSIP, "isin": [isin.ONE]}),
+        core.source(key=isin.ONE, source_code=SECURITY, kind="security", fields={},
+                    identifiers={"isin": isin.ONE}),
         core.source(key="S000000001", source_code=FUND, kind="fund_structure", fields={},
                     identifiers={"sec_series_id": "S000000001"}),
         core.source(key="0000000001", source_code=REGISTRANT, kind="company", fields={},
@@ -161,7 +151,8 @@ def test_each_row_lands_with_its_holder_and_security_found_by_lookup(database, t
     security, fund = bound(database, SECURITY, isin.CUSIP), bound(database, FUND, "S000000001")
     registrant = bound(database, REGISTRANT, "0000000001")
     assert None not in (security, fund, registrant)
-    # 4 and 5 (ONE, folded) and 9 (the CUSIP) are the CUSIP's Security; A-1's are the fund's.
+    # 4 and 5 (by ONE) and 9 (by the CUSIP) are one Security, found by each key; A-1's are the fund's.
+    assert bound(database, SECURITY, isin.ONE) == security
     assert {h: str(landed[h]["security_mdm_id"]) for h in ("4", "5", "9")} == {"4": security, "5": security, "9": security}
     assert {str(r["fund_mdm_id"]) for h, r in landed.items() if r["accession"] == "A-1"} == {fund}
     assert {str(r["registrant_mdm_id"]) for r in landed.values() if r["accession"] == "A-1"} == {registrant}
@@ -176,7 +167,7 @@ def test_each_row_lands_with_its_holder_and_security_found_by_lookup(database, t
 
 
 def test_a_link_pointed_at_another_dataset_contract_finds_nothing(database, tmp_path):
-    rows = [r for r in holding_rows(tmp_path / "rows", [FOLD]) if r["holding_id"] == "9"]
+    rows = [r for r in holding_rows(tmp_path / "rows") if r["holding_id"] == "9"]
     core.register_reading(database, SECURITY, core.contract_body())
     with database.admin.begin() as conn:
         policy = register_policy(conn, copy.deepcopy(files.policy()))

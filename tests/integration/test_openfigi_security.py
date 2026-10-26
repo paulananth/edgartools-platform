@@ -203,17 +203,20 @@ def test_each_identifier_carries_only_its_single_levels(tmp_path):
         UNHELD: {"openfigi_ticker": "EXC 4 01/01/31"},
         SOLE: {"composite_figi": "BBGZ0000VS23", "share_class_figi": "BBGZ0000SC22", "openfigi_ticker": "EXD"},
         DOUBLE: {},
+        BROKEN: {"composite_figi": "BBGZ0000BK13", "openfigi_ticker": "EXJ"},
     }
-    # A FIGI failing its check digit sets its answer aside, as a bad CUSIP would.
-    assert refused == {BROKEN: "invalid_figi", **{cusip: "not_found_by_openfigi" for cusip in (MISSING, *OTHERS)}}
+    # A listed FIGI failing its check digit is left out; the answer stays (ticket 138).
+    assert refused == {cusip: "not_found_by_openfigi" for cusip in (MISSING, *OTHERS)}
     # The CUSIP asked and every listing's FIGI (ticket 138): the FIGIs are identifiers.
     assert {r["provenance"]["record_key"]: r["identifiers"] for r in records} == {
-        c: {"cusip": c, "figi": figis(c)} for c in found}
+        **{c: {"cusip": c, "figi": figis(c)} for c in found if c != BROKEN},
+        BROKEN: {"cusip": BROKEN, "figi": ["BBGZ0000BK13"]}}
     assert {r["provenance"]["record_key"]: r["identifiers"] for r in records}[EQUITY]["figi"] == [
         "BBGZ0000GR13", "BBGZ0000GY18", "BBGZ0000VN15", "BBGZ0000VS14"]
     # OpenFIGI's name, only where its listings state one (ticket 84): DOUBLE's two names give none.
     names = {r["provenance"]["record_key"]: r["fields"]["name_of_issuer"].get("value") for r in records}
-    assert names == {EQUITY: "EXAMPLE CORP", BOND: "EXAMPLE CORP", UNHELD: None, SOLE: "EXAMPLE CORP", DOUBLE: None}
+    assert names == {EQUITY: "EXAMPLE CORP", BOND: "EXAMPLE CORP", UNHELD: None, SOLE: "EXAMPLE CORP", DOUBLE: None,
+                     BROKEN: "EXAMPLE CORP"}
 
 
 def test_an_isin_answer_carries_its_isin_and_every_listing_figi(tmp_path):
@@ -262,8 +265,8 @@ def test_a_record_joins_the_security_holding_its_cusip_or_creates_it(database, t
                              fields={"name_of_issuer": "Example Corp.", "title_of_class": "COM"},
                              identifiers={"cusip": cusip}) for cusip in (EQUITY, BOND)]),
         ("openfigi", records)])
-    # EQUITY and BOND joined 13F's; UNHELD, SOLE and DOUBLE each created one.
-    assert len(securities(database)) == 5
+    # EQUITY and BOND joined 13F's; UNHELD, SOLE, DOUBLE and BROKEN each created one.
+    assert len(securities(database)) == 6
     for cusip in (EQUITY, BOND):
         assert bound(database, CODE, cusip) == bound(database, THIRTEENF, cusip) is not None
     # OpenFIGI ranks first for the name; it states no title, so the filed one stays (ticket 84).
@@ -291,24 +294,24 @@ def test_isin_answers_first_make_one_security_of_every_answer_sharing_a_figi(dat
     assert securities(database)[equity]["identifiers"] == {
         "cusip": [EQUITY], "isin": [SHARED], "figi": sorted({*figis(EQUITY), *figis(SHARED)})}
     assert bound(database, CODE, SOLE) == bound(database, CODE, DOUBLE) == bound(database, CODE, TWICE) is not None
-    # EQUITY and SHARED; TWICE, SOLE and DOUBLE; BOND, UNHELD, ISIN, HOME.
-    assert len(securities(database)) == 6
+    # EQUITY and SHARED; TWICE, SOLE and DOUBLE; BOND, UNHELD, BROKEN, ISIN, HOME.
+    assert len(securities(database)) == 7
     nport.apply(stage, policy, "nport", [core.source(key=EQUITY, source_code=NPORT_ISIN, kind="security",
                                                      fields={"name_of_issuer": "EXAMPLE CORP"},
                                                      identifiers={"cusip": EQUITY, "isin": SHARED})], 3)
-    assert bound(database, NPORT_ISIN, EQUITY) == equity and len(securities(database)) == 6
+    assert bound(database, NPORT_ISIN, EQUITY) == equity and len(securities(database)) == 7
 
 
 def test_cusip_answers_first_leave_an_isin_on_two_securities_in_review_until_merge_is_built(database, tmp_path):
     """The other order: SOLE and DOUBLE are two Securities before TWICE comes, so TWICE's
-    FIGIs lead to two and it waits for review (`conflicting_identifiers`): 7 Securities,
-    not 6. Ticket 138's merge part (A2) consolidates them, and both orders then agree."""
+    FIGIs lead to two and it waits for review (`conflicting_identifiers`): 8 Securities,
+    not 7. Ticket 138's merge part (A2) consolidates them, and both orders then agree."""
     records, _ = prepared_records(tmp_path)
     cusips = [r for r in records if r["identifiers"].get("cusip")]
     isins = [r for r in records if r["identifiers"].get("isin")]
     load(database, [("openfigi-cusip", cusips), ("openfigi-isin", isins)])
     assert bound(database, CODE, SHARED) == bound(database, CODE, EQUITY) is not None
-    assert len(securities(database)) == 7 and bound(database, CODE, TWICE) is None
+    assert len(securities(database)) == 8 and bound(database, CODE, TWICE) is None
     twice = next(x["subject"] for x in isins if x["provenance"]["record_key"] == TWICE)
     reviews = [v for v in core.documents(database, "review").values() if v.get("open")]
     assert "conflicting_identifiers" in [r["reason"] for r in reviews if r.get("subject") == twice]
@@ -357,9 +360,9 @@ def test_every_listing_lands_in_silver_with_the_security_its_identifier_joined(d
         **{f: equity for f in (*figis(EQUITY), *figis(SHARED))}, **{f: isin for f in figis(ISIN)}}
     assert landed[(EQUITY, "BBGZ0000GR13")]["ticker"] == "EXB"
     # Every FIGI but BROKEN's second passes its check; that one is flagged and still lands,
-    # its answer set aside in MDM, so no master id.
+    # with the master id of BROKEN's Security (its answer kept, that FIGI left out).
     assert {k for k, r in landed.items() if r["quality"]} == {(BROKEN, "BBGZZ0000US1")}
-    assert landed[(BROKEN, "BBGZZ0000US1")]["security_mdm_id"] is None
+    assert landed[(BROKEN, "BBGZZ0000US1")]["security_mdm_id"] == bound(database, CODE, BROKEN) is not None
     assert landed[(UNHELD, "BBGZ000BND21")]["security_mdm_id"] == bound(database, CODE, UNHELD) is not None
     # TWICE's FIGIs are SOLE's and DOUBLE's: in one batch, whether it joins them or
     # waits for review depends on which comes first until the merge part; its

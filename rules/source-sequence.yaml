@@ -39,9 +39,7 @@ sources:
     after: [sec.nport.registrant]
   # OpenFIGI first, one load (ticket 138; operator, 2026-10-25: "there
   # should be one processing with all the identifier and this is the first
-  # load"). Its targets, in order: `answers_cusip`, `answers_isin` (read
-  # only, for N-PORT's FIGI pairing until part B2 removes it), then
-  # `mastering`, which reads the CUSIP and the ISIN answers together, every
+  # load"): `mastering` reads the CUSIP and the ISIN answers together, every
   # bundle in parallel, no order inside it; its records create the
   # Securities. N-PORT's read decides which identifiers OpenFIGI is asked
   # (the capture). Then 13F, then N-PORT ("this should be second source",
@@ -50,10 +48,9 @@ sources:
     target: mastering
     requires: []
     after: [sec.nport.fund]
-  # Its runs read GLEIF's `umbrellas` runs and OpenFIGI's `answers_cusip` and
-  # `answers_isin` runs (ticket 120). This inventory names one target per
-  # source, so those targets are named here. It joins the Securities OpenFIGI
-  # created and creates the rest.
+  # Its runs read GLEIF's `umbrellas` runs (ticket 120); no OpenFIGI run
+  # since ticket 138. It joins the Securities OpenFIGI and 13F created and
+  # creates the rest.
   sec.nport.security:
     target: mastering
     requires: []

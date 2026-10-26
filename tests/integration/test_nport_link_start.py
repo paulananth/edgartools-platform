@@ -71,8 +71,7 @@ def combine(store, root, contract_file, readings):
 
 
 def recorded(store, root, combined):
-    """record.yaml over the combine's pieces (ticket 120): each Security row as its
-    record, a row folded into a CUSIP's Security left out."""
+    """record.yaml over the combine's pieces (ticket 120): each Security row as its record."""
     root.mkdir(parents=True, exist_ok=True)
     pieces = [store.put(root.as_uri(), {"tables": a["tables"]}) for a in store.json(combined)["artifacts"]]
     return chain.read(store, root, files.load(FOLDER / "record.yaml"), [
@@ -106,11 +105,7 @@ def prepared_records(root: Path, period: str, revision: int | None = None,
     issuer_reading = issuers(store, root, raw, [], period, umbrella)
     securities = combine(store, root / "reduce", "reduce.yaml", {"holdings": holdings})
     reduced = combine(store, root / "issuer-reduce", "issuer-reduce.yaml", {"issuers": issuer_reading})
-    attached = store.put(root.as_uri(), {"version": 1, "artifacts": [
-        {"input": raw, "tables": {"attached": []}, "deferred": []}]})
-    folded = combine(store, root / "fold", "fold.yaml", {"securities": securities, "attached": attached, "issuers": reduced})
-    combined = combine(store, root / "combine", "combine.yaml",
-                       {"securities": securities, "attached": attached, "issuers": reduced, "folded": folded})
+    combined = combine(store, root / "combine", "combine.yaml", {"securities": securities, "issuers": reduced})
     prepared = chain.prepare(store, root / "mdm", recorded(store, root / "record", combined), {
         "table": "security", "record_column": "record", "dataset": CODE, "policy": "0" * 64, "consumer": "check",
         "batch_id": f"check-{period[:10]}", "as_of": "2026-10-16T00:00:00+00:00",

@@ -46,9 +46,8 @@ def policy_body() -> dict:
     return cusip.policy_body()
 
 
-def prepared_records(root: Path, umbrella: tuple[list[str], ...] = (), attached: list[dict] = (),
+def prepared_records(root: Path, umbrella: tuple[list[str], ...] = (),
                      with_cusip: list[str] = WITH_CUSIP) -> list[dict]:
-    """`attached`: the pairs FIGI agrees on, as figi-attach.yaml gives them."""
     store = Artifacts()
     root.mkdir(parents=True, exist_ok=True)
     body = io.BytesIO()
@@ -62,12 +61,7 @@ def prepared_records(root: Path, umbrella: tuple[list[str], ...] = (), attached:
     issuers = cusip.issuers(store, root, raw, PAIRS, cusip.Q2, umbrella)
     securities = cusip.combine(store, root / "reduce", "reduce.yaml", {"holdings": holdings})
     reduced = cusip.combine(store, root / "issuer-reduce", "issuer-reduce.yaml", {"issuers": issuers})
-    attached = store.put(root.as_uri(), {"version": 1, "artifacts": [
-        {"input": raw, "tables": {"attached": list(attached)}, "deferred": []}]})
-    folded = cusip.combine(store, root / "fold", "fold.yaml",
-                           {"securities": securities, "attached": attached, "issuers": reduced})
-    combined = cusip.combine(store, root / "combine", "combine.yaml",
-                             {"securities": securities, "attached": attached, "issuers": reduced, "folded": folded})
+    combined = cusip.combine(store, root / "combine", "combine.yaml", {"securities": securities, "issuers": reduced})
     prepared = chain.prepare(store, root / "mdm", cusip.recorded(store, root / "record", combined), {
         "table": "security", "record_column": "record", "dataset": CODE, "policy": "0" * 64, "consumer": "check",
         "batch_id": "check-isin", "as_of": "2026-10-16T00:00:00+00:00"})
@@ -110,22 +104,11 @@ def test_an_isin_counts_a_fund_series_as_its_umbrella_trust(tmp_path):
                        CUSIP: [subject_key(cusip.GLEIF, LEI)]}  # its issuer, a sub-fund, counts as the umbrella
 
 
-def test_an_isin_only_holding_of_an_attached_isin_is_its_cusips_security(tmp_path):
-    """Ticket 120 (operator, 2026-10-20: "One master record"): FIGI attaches ONE to the
-    CUSIP one to one, so ONE's ISIN-only holdings are the CUSIP's Security: no record of
-    their own, and the CUSIP's record carries ONE, so no ISIN reaches MDM twice."""
-    pair = {"cusip": CUSIP, "isin": ONE, "cusip_offers": 1, "isin_offers": 1}
-    records = {r["provenance"]["record_key"]: r for r in prepared_records(tmp_path, attached=[pair])}
-    assert set(records) == {TWO, NONE, CUSIP}
-    assert records[CUSIP]["identifiers"] == {"cusip": CUSIP, "isin": ONE}
-    assert records[TWO]["identifiers"] == {"isin": TWO}
-
-
-def test_a_folded_holdings_issuer_fills_the_cusips_when_its_own_name_none(tmp_path):
-    """Standards review: the CUSIP's own holding names no issuer LEI; the ISIN-only
-    holdings folded into it (ONE, filed with LEI) give its ISSUED_BY link."""
-    pair = {"cusip": CUSIP, "isin": ONE, "cusip_offers": 1, "isin_offers": 1}
-    no_lei = ["A-1", "9", "Example Corp", "", "Note", CUSIP]
-    records = {r["provenance"]["record_key"]: r for r in prepared_records(tmp_path, attached=[pair], with_cusip=no_lei)}
-    targets = [l["target_subject"] for l in records[CUSIP].get("relationships") or [] if l["type"] == "ISSUED_BY"]
-    assert targets == [subject_key(cusip.GLEIF, LEI)]
+def test_a_cusips_record_carries_every_isin_filed_with_it_and_an_isin_only_one_keeps_its_own(tmp_path):
+    """Ticket 138 (no pairing by FIGI in the rules): holding 9 files the CUSIP with ONE, so
+    the CUSIP's record carries ONE; ONE's ISIN-only holdings keep their own record, and
+    the two meet in MDM by the ISIN."""
+    records = {r["provenance"]["record_key"]: r for r in prepared_records(tmp_path)}
+    assert set(records) == {ONE, TWO, NONE, CUSIP}
+    assert records[CUSIP]["identifiers"] == {"cusip": CUSIP, "isin": [ONE]}
+    assert records[ONE]["identifiers"] == {"isin": ONE}

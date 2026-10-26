@@ -1,7 +1,7 @@
 # Each holding's silver row (ticket 79), read over holding-combine.yaml's pieces:
 # the row as filed, with `security_key`, the record key of the Security it is
-# (source.yaml, record.yaml): its CUSIP; else, for an ISIN-only holding, the
-# CUSIP its ISIN is folded into (ticket 120); else its ISIN. A holding with none
+# (source.yaml, record.yaml): its CUSIP, else its ISIN (ticket 138: no fold
+# by FIGI; MDM finds the one Security for either). A holding with none
 # of these has no Security (source.yaml makes none) and an empty key. The
 # holder is the fund series (`series_id`), or the registrant (`registrant_cik`)
 # for a filing that names no series; silver-holding.yaml links all three.
@@ -26,7 +26,6 @@ read:
             skip: "null"
             values:
             - {value: {path: cusip}}
-            - {value: {path: folded_cusip}}
             - {value: {path: isin}}
         cusip: {value: {path: cusip}}
         isin: {value: {path: isin}}

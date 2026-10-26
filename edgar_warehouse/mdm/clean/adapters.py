@@ -277,14 +277,23 @@ def _named_values(row: dict, paths: dict, formats: dict, *, lists: bool = False)
     """namespace → path into namespace → formatted value; an empty value is left out.
 
     With `lists`, a path to a list gives each value once, in order (an
-    identifier a record holds several of, such as a FIGI per listing).
+    identifier a record holds several of, such as a FIGI per listing). A
+    listed value its format refuses is left out (ticket 138): one bad ISIN
+    filed beside a CUSIP must not set aside the CUSIP's record, as a refused
+    single identifier does.
     """
     found = {}
     for namespace, path in paths.items():
         item = value(row, path)
         if lists and isinstance(item, list):
-            items = [format_value(one, formats.get(namespace))
-                     for one in item if one is not None and str(one).strip()]
+            items = []
+            for one in item:
+                if one is None or not str(one).strip():
+                    continue
+                try:
+                    items.append(format_value(one, formats.get(namespace)))
+                except UnsupportedRecord:
+                    continue
             if items:
                 found[namespace] = list(dict.fromkeys(items))
         elif item is not None and str(item).strip():

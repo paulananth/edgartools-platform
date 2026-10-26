@@ -2,10 +2,9 @@
 # over the combine's pieces, for mdm.prepare (`record_column: record`), as the
 # Dataset Contract sec.nport.security.v2 reads it (ticket 120; operator,
 # 2026-10-20: "One master record"): its key; its CUSIP when the key is one;
-# its ISIN (the key, or the one FIGI agrees on for a CUSIP); and its filed
-# facts, the CUSIP's or the ISIN-only holding's, else those of the ISIN-only
-# holdings folded into it. A row folded into a CUSIP's Security is left out. The combine's output comes in pieces of at most 8 MiB,
-# one artifact each (2026 Q2: more than one), as figi-agree.yaml reads them.
+# its ISIN (the key), or every ISIN filed with a CUSIP (ticket 138); and its
+# filed facts, the CUSIP's or the ISIN-only holding's. The combine's output
+# comes in pieces of at most 8 MiB, one artifact each (2026 Q2: more than one).
 execution: {profile: source.read, workers: 1, max_artifacts: 512}
 read:
   format: json
@@ -13,8 +12,6 @@ read:
   tables:
     security:
       each: tables.security
-      # A row folded into a CUSIP's Security is that Security's, already a row.
-      select: {test: {path: folded_into, kind: missing}}
       columns:
         record:
           object:
@@ -38,17 +35,14 @@ read:
                   values:
                   - {value: {path: name}}
                   - {value: {path: isin_name}}
-                  - {value: {path: folded_name}}
               title:
                 coalesce:
                   skip: "null"
                   values:
                   - {value: {path: title}}
                   - {value: {path: isin_title}}
-                  - {value: {path: folded_title}}
-              # The class from the level whose letters `classes` reads, so a
-              # Security its own holdings disagree on never takes a folded
-              # holding's letter (ticket 130).
+              # The class from the level whose letters `classes` reads
+              # (ticket 130).
               class:
                 choose:
                   condition: {test: {path: classes, kind: present}}
@@ -57,32 +51,28 @@ read:
                     choose:
                       condition: {test: {path: isin_classes, kind: present}}
                       then: {value: {path: isin_class}}
-                      else: {value: {path: folded_class}}
+                      else: {value: {path: NO_SUCH_FIELD}}
               classes:
                 coalesce:
                   skip: "null"
                   values:
                   - {value: {path: classes}}
                   - {value: {path: isin_classes}}
-                  - {value: {path: folded_classes}}
               lei:
                 coalesce:
                   skip: "null"
                   values:
                   - {value: {path: lei}}
                   - {value: {path: isin_lei}}
-                  - {value: {path: folded_lei}}
               issuer:
                 coalesce:
                   skip: "null"
                   values:
                   - {value: {path: issuer}}
                   - {value: {path: isin_issuer}}
-                  - {value: {path: folded_issuer}}
               filed:
                 coalesce:
                   skip: "null"
                   values:
                   - {value: {path: filed}}
                   - {value: {path: isin_filed}}
-                  - {value: {path: folded_filed}}

@@ -250,8 +250,10 @@ def test_a_contract_maps_a_list_of_one_identifier_kind_checked_and_once_each():
     body = mapped([F2.lower(), F1, None, " ", F2])
     assert body["identifiers"] == {"figi": [F2, F1]}
     assert "figi" not in mapped([None, ""])["identifiers"]
+    # A listed value failing its check is left out; the record stays.
+    assert mapped([F1, F1[:-1] + str((int(F1[-1]) + 1) % 10)])["identifiers"] == {"figi": [F1]}
     with pytest.raises(UnsupportedRecord, match="figi"):
-        mapped([F1, F1[:-1] + str((int(F1[-1]) + 1) % 10)])
+        mapped(F1[:-1] + str((int(F1[-1]) + 1) % 10))
 
 
 def test_a_record_finding_a_held_security_binds_before_any_record_creates_one():
