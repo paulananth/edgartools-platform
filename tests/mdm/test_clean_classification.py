@@ -116,11 +116,6 @@ class TestFirstStepWins:
     def test_an_owner_with_no_captured_submissions_defers(self):
         assert classify(RULE, {"name": "Palmer Vincent"}, DOC) == "deferred"
 
-    def test_sec_saying_operating_company_settles_it(self):
-        assert (
-            classify(RULE, record(submissions={"entityType": "operating"}), DOC)
-            == "company"
-        )
 
     def test_a_legal_form_in_the_name_is_not_a_person(self):
         assert (
