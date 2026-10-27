@@ -1,6 +1,6 @@
 # Shared engine vocabulary and legacy compatibility, delivered with the build.
 # Changing this contract requires qualification; it does not approve or activate rules.
-version: engine-catalog-master-search-v1
+version: engine-catalog-listing-venue-v1
 master_search:
   version: master-name-word-literal-v1
   name_fields:
@@ -8,6 +8,19 @@ master_search:
   - legal_name
   - display_name
   position_weight: 0.1
+# A lookup from a detail row's key to every current master holding it (ticket
+# 138, the Listing; operator, 2026-10-26: "Listing table is inside mdm primary
+# use is the resolution of securities trading in different exchanges or
+# venues", then "1": an index on the Security). A listing is found by its
+# venue's MIC and ticker, and by OpenFIGI's exchange code and ticker, which
+# also finds a composite (no MIC). Lookup only: never read by matching.
+detail_lookups:
+  version: security-listing-venue-v1
+  kind: security
+  detail: listings
+  keys:
+    mic: [mic, ticker]
+    exchange: [exchange, ticker]
 kinds:
 - branch
 - company

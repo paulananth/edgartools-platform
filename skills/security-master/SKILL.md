@@ -395,12 +395,22 @@ index is dropped.
   stay inside the Security's record; MDM keeps a lookup from (exchange code,
   ticker) and from (MIC, ticker) to the Security on every store (PostgreSQL, MySQL). It follows the
   Security's own history and merges: a merged-away or retired Security leaves
-  it; a listing a later answer drops leaves it. No new kind of row.
+  it; a listing a later answer drops leaves it. No new kind of row. Built as
+  configuration: `detail_lookups` in `rules/mastering/engine-v1.yaml` (kind
+  `security`, detail `listings`, keys `mic` and `exchange`, each with
+  `ticker`); the engine's `detail_lookups.py` names no kind or field and
+  shares the name lookup's coverage and owner rebuild (`master_index.py`).
+  A listing with a MIC is found by both keys, so a caller holding OpenFIGI's
+  code needs no crosswalk.
 - **The venue is its ISO 10383 MIC** (operator, 19:12 ET: "The exchange code
   is wrong why are we not using MIC codes"). OpenFIGI states only Bloomberg's
   exchange code (UN, UW, US), never a MIC, so each listing keeps that code as
   given and gets its MIC beside it from an RDM code set ("MIC beside, from
-  RDM", 19:14 ET); the lookup is MIC + ticker. A composite (US, GR, CN) is no
+  RDM", 19:14 ET); the lookup is MIC + ticker. The code set is RDM's
+  `iso-10383-mic` (every active MIC, segments under their operating MIC; its
+  crosswalk gives 246 MICs their OpenFIGI code), embedded in OpenFIGI's
+  source extract as `read.references.mic`; London's LN to XLON was set by
+  hand (2026-10-27: no code holds a majority of XLON's answers). A composite (US, GR, CN) is no
   venue and has no MIC; it is found by its exchange code. The code set is
   OpenFIGI's own: one filter request per active MIC, recording the exchange
   codes each answer gives ("Ask OpenFIGI by MIC", 19:20 ET); no vendor's
