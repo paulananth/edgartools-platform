@@ -1,8 +1,7 @@
 # Governed caller retirement
 
-Baseline: main `790a2ca6`, after routine-retirement PR #1180. Qualification in
-this note is local and bounded. Independent installed qualification and CI
-remain open until their final-revision results are recorded.
+Baseline: main `790a2ca6`, after routine-retirement PR #1180. Development results below are bounded. The final independently installed
+qualification and all CI results are recorded in the final section.
 
 ## Implementation
 
@@ -58,8 +57,8 @@ entire request above the former 16 MiB cap, alongside its 805-key bulk case.
 - PostgreSQL: eight and MySQL: six selected storage checks pass, covering the
   former size cap, populated worker upgrade, candidate reindexing and registration
   scope; PostgreSQL additionally exercises registrar rights, rollback and drift.
-- Final installed workflow and full CI: pending. These local results are not
-  substituted for those gates.
+- Final installed workflow and full CI: passed at the committed repair revision;
+  see the final qualification section. Local results were not substituted.
 
 ## Counts
 
@@ -77,8 +76,11 @@ storage enforcement, outside that legacy-business inventory.
 
 Own fresh branch/worktree, affected testmon cohorts under five minutes, private
 diagnostics, no provider requests, no production changes. Overlap guard reports
-only the two archived Claude paths explicitly assigned to Codex by the operator:
-Proving counts and the retained source-chain test. The archive is untouched.
+the two archived Claude paths explicitly assigned to Codex by the operator
+(Proving counts and the retained source-chain test), plus the execution module
+now also changed by Claude ticket 138. The operator explicitly authorized Codex
+to take over and complete retirement at 2026-10-27 07:30 ET. Both Claude
+worktrees are untouched; this PR publishes only its own tested changes.
 
 ### Spec
 
@@ -119,4 +121,32 @@ regression checks pass. SQL Server's retained adapter checks remain a CI gate.
 
 Unchanged runtime statements were restored to original formatting with an AST
 equality check, reducing unrelated diff churn. Final CI on the repair revision
-remains pending and is required before readiness.
+passes; the final qualification below records the committed installation.
+
+## Final qualification
+
+[CI run 40491799251](https://github.com/paulananth/edgartools-platform/actions/runs/40491799251)
+passes **all 21 checks** on repair head `005284685b39fdaaa1723b990edb1a97563b76db`.
+The independently installed merge revision is
+`0ee6f60e585942bd5db96a831cddad50ba2ac5f5`, whose parents include that PR head.
+The run took **19 minutes 47 seconds** and finished at 2026-10-27 07:11 ET.
+
+| Installed group | PostgreSQL | MySQL |
+| --- | ---: | ---: |
+| Merge | 58 | 58 |
+| Readers, identifiers and search | 52 | 52 |
+| Atomic and upgrade boundaries | 36 | 36 |
+| Workers, verification and publication | 18 | 18 |
+| Total | 164 | 164 |
+
+Every expected engine/kind/case appears exactly once, every outcome passes,
+all cleanup flags are true, and configuration hashes match across engines for
+each case/kind. Both invented kinds cover all 18 qualification families. No
+alias copies or contradictory outcomes were counted. The retained SQL Server
+adapter check also passes; its complete normal workflow remains deferred.
+
+[Counts-only qualification record](caller-retirement-ci.json) retains the
+head, installed revision, outcome totals, family counts and elapsed time.
+There is no provider acquisition, hosted migration, source activation or
+populated native conversion in this qualification. Named merge approval remains
+with the operator.

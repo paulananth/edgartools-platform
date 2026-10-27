@@ -1,6 +1,6 @@
 {
   "baseline": "790a2ca6",
-  "status": "Disposition recorded per retired test; final installed and CI qualification remain separate gates",
+  "status": "Per-test dispositions recorded; retained storage and complete installed workflow qualified by CI run 40491799251 at 00528468",
   "tests": [
     {
       "file": "tests/integration/test_clean_activation_postgres.py",

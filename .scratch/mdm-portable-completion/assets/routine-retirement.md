@@ -41,3 +41,5 @@ Implements the owner-retirement part of ticket 08. No full code-retirement compl
 ### GoF
 
 History shows the owner initialization boundary was extended by #1159 and #1171. Reuse its existing Store/Adapter seam and add one bounded owner operation before runtime admission. A second Store hierarchy or migration framework would increase review and recovery cost. No new pattern or policy interpreter is introduced.
+
+Current caller/test retirement and final CI evidence are recorded in [caller retirement](caller-retirement.md); this document retains the earlier owner-retirement checkpoint.
