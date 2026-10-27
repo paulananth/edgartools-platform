@@ -21,7 +21,7 @@ from edgar_warehouse.control_contract import Blocked
 from .storage import clock, lock_code_set, public_columns, scope, tables, transaction
 
 CODE_COLUMNS = ("code", "label", "definition", "parent_code", "valid_from", "valid_to", "status", "invalid_reason",
-                "value", "unit")
+                "value", "unit", "properties")
 # What a diff compares for a code's value: the value, its unit and its period.
 VALUED = ("value", "unit", "valid_from", "valid_to")
 # A crosswalk target RDM does not hold (an outside standard) carries this version.
@@ -138,6 +138,8 @@ class RDM:
             if codes:
                 # Only a version with values names their columns (one key set per insert).
                 valued = {"value": None, "unit": None} if any("value" in r or "unit" in r for r in codes) else {}
+                if any("properties" in r for r in codes):
+                    valued["properties"] = None
                 code_table = self.tables["code"]
                 conn.execute(code_table.insert(),
                              [{"definition": "", "parent_code": None, "valid_from": None, "valid_to": None,
@@ -349,8 +351,8 @@ class RDM:
             return self._version(conn, code_set, version)
 
     def diff(self, code_set: str, old: str, new: str) -> dict:
-        """What changed between two versions: codes added, removed, relabelled, moved
-        and revalued (a value, its unit or its period)."""
+        """What changed between two versions: codes added, removed, relabelled, moved,
+        revalued (a value, its unit or its period) and with changed properties."""
         before = {r["code"]: r for r in self.codes(code_set, old)}
         after = {r["code"]: r for r in self.codes(code_set, new)}
         both = sorted(before.keys() & after.keys())
@@ -363,7 +365,9 @@ class RDM:
                           for c in both if before[c]["parent_code"] != after[c]["parent_code"]],
                 "revalued": [{"code": c, "from": {k: _plain(before[c][k]) for k in VALUED},
                               "to": {k: _plain(after[c][k]) for k in VALUED}}
-                             for c in both if any(before[c][k] != after[c][k] for k in VALUED)]}
+                             for c in both if any(before[c][k] != after[c][k] for k in VALUED)],
+                "properties_changed": [{"code": c, "from": before[c]["properties"], "to": after[c]["properties"]}
+                                       for c in both if before[c]["properties"] != after[c]["properties"]]}
 
     @staticmethod
     def _version(conn, code_set: str, version: str) -> dict:
