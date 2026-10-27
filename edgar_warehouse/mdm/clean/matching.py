@@ -111,14 +111,9 @@ def compare_pair_test(name: str, left: dict, right: dict, args: dict) -> bool:
 
 HELD_LEI_TEST = "holds_no_other_lei@1"
 PAIR_TESTS = {
-    name: partial(compare_pair_test, name)
-    for name in (
-        "name_census_match@1",
-        "gleif_entity_eligible@1",
-        "jurisdiction_agrees@1",
-        "jurisdictions_do_not_conflict@1",
-        "postal_agrees@1",
-        cascade.TEST,
+    name: partial(compare_pair_test, name) for name in (
+        "name_census_match@1", "gleif_entity_eligible@1", "jurisdiction_agrees@1",
+        "jurisdictions_do_not_conflict@1", "postal_agrees@1", cascade.TEST,
     )
 }
 
@@ -151,7 +146,7 @@ def _stored(conn, source: str, path: tuple, values: list[str]) -> list[dict]:
     if not values:
         return []
     routes = [name for name, held in (conn.routes or {}).items() if tuple(path) == held]
-    return conn.candidates(source, routes, values)
+    return conn.candidates(source,routes,values)
 
 
 def _bindings(
@@ -180,22 +175,13 @@ def _held_identifiers(
         return held
     from .withholding import given, withheld
 
-    records = [
-        r
-        for r in conn.current(conn.members(entities)).values()
-        if r["source_code"] == source and r["subject"] not in released
-    ]
+    records = [r for r in conn.current(conn.members(entities)).values()
+               if r["source_code"] == source and r["subject"] not in released]
     kept_back = withheld(conn, {r["subject"] for r in records})
     for record in records:
         # A value its bind withholds is not its master's (ticket 138 part A2b).
         held[record["entity_id"]].update(
-            given(
-                kept_back,
-                record["subject"],
-                namespace,
-                (record.get("identifiers") or {}).get(namespace),
-            )
-        )
+            given(kept_back, record["subject"], namespace, (record.get("identifiers") or {}).get(namespace)))
     return held
 
 
@@ -311,7 +297,7 @@ def propose(
                         "assertion_id": candidate["assertion_id"],
                     }
                 )
-                targets[candidate["subject"]] = set()
+                targets[candidate["subject"]] = set()  # one review, no binding
                 continue
             # The configured namespace's held-value veto applies only when
             # the rule explicitly asks for it.
@@ -319,7 +305,7 @@ def propose(
             if vetoes and held[entity] - {value}:
                 continue
             if (candidate["subject"], rule["rule_id"], rule["version"]) in refused:
-                continue  # a correction revoked this record's link under this version
+                continue
             result["decisions"].append(
                 decision(
                     "bind",

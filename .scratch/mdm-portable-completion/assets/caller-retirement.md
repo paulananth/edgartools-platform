@@ -11,8 +11,10 @@ master readers, Silver identifiers, run observation and workers use only the
 governed storage contract. The owner CLI installs that contract by default;
 explicit legacy installation and populated native admission are refused.
 The runtime AST check forbids calls to all 34 retired SQL business routines.
-The old git-snapshot parity/benchmark script was removed rather than retaining
-an unmaintained second computation oracle.
+The old git-snapshot parity/benchmark script was removed after retaining 64
+explicit field/identity answer pairs while both implementations agreed. All 128
+individually changed answers fail the maintained-engine assertions; no retired
+implementation is loaded by the new tests.
 
 Proving counts read keyset pages on one repeatable snapshot. Their new hash
 contract is `governed-record-bytes-v1`: hash exact stored publication bytes in
@@ -43,7 +45,7 @@ entire request above the former 16 MiB cap, alongside its 805-key bulk case.
 
 ## Development qualification
 
-- 1,072 affected MDM/unit/architecture checks pass (96 seconds).
+- Final affected MDM/unit/architecture cohort: 1,132 checks pass (91 seconds).
 - PostgreSQL configured kinds, routes, worker/verifier, Proving hash and schema:
   18 checks pass; subsequent full route/retained-plan/transport/fresh-mastering
   cohort: 28 checks pass (source-chain tests passed before a stale count-table
@@ -93,3 +95,28 @@ boundary. Another Store hierarchy would add migration/recovery cost without
 eliminating an actual variation. The only new privileged operation is opaque
 metadata registration, justified by the real registrar failure and covered by
 rights, transaction rollback and function-definition drift checks.
+
+## Committed installation checkpoint and CI repairs
+
+Runtime revision `0e45ce5967e829c507429ac75cd3cd3cf91e072f` was independently
+built as all five wheels outside the checkout. Fourteen targeted installed
+cases pass per engine, across both configured kinds: rule consolidation,
+conflicting identifier order, inspection, interrupted upgrade, an injected
+atomic-write fault, candidate arrival and separate worker/verifier processes.
+All ten installed parse→prepare→master variants and the installed field/census
+publication/recovery case also pass after porting their assertions and verifier
+grants. The actual six-store backup/restore test passes with three retained
+masters and its original Silver IDs and exact integer data.
+
+The first CI run (`40430799658`) exposed stale table/protocol expectations,
+verifier metadata grants and the standalone scenario's successful exit before
+harness receipt emission. These are corrected without dropping their behavioral
+assertions. The four-owner MySQL registration regression then exposed a real
+repeatable-read race: taking the gate lock did not refresh the earlier snapshot.
+The pin duplicate lookup now uses a locking read, preserving collision checks.
+The unchanged concurrency test passes; six targeted PostgreSQL and four MySQL
+regression checks pass. SQL Server's retained adapter checks remain a CI gate.
+
+Unchanged runtime statements were restored to original formatting with an AST
+equality check, reducing unrelated diff churn. Final CI on the repair revision
+remains pending and is required before readiness.

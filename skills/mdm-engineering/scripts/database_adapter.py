@@ -753,7 +753,9 @@ class Adapter:
                            .where(self.tables["gate"].c.id == 1).with_for_update()).scalar_one()
         table = self.tables["pin"]
         wanted = (table.c.name_key == name_key) & (table.c.value_key == value_key)
-        old = connection.execute(select(table).where(wanted)).mappings().first()
+        # A registrar may already hold a repeatable-read snapshot. After the
+        # gate lock, MySQL must read the latest committed pin, not that snapshot.
+        old = connection.execute(select(table).where(wanted).with_for_update()).mappings().first()
         if old and (bytes(old["name_bytes"]) != name.encode() or bytes(old["value_bytes"]) != value.encode()):
             raise AdapterError("Frozen pin digest collision")
         if exclusive:

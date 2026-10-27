@@ -73,20 +73,12 @@ class Scope:
     identities: list[dict] = field(default_factory=list)
     subjects: set[str] = field(default_factory=set)  # the affected masters' records
     masters: set[str] = field(default_factory=set)  # the affected masters
-    replayed: dict[str, str | None] = field(
-        default_factory=dict
-    )  # record -> master, or explicitly unbound
+    replayed: dict[str, str | None] = field(default_factory=dict)  # record -> master, or explicitly unbound
     bound: dict[str, str] = field(default_factory=dict)  # record -> master, as stored
     stored: dict[str, dict] = field(default_factory=dict)  # master -> body, as stored
-    starts: set[str] = field(
-        default_factory=set
-    )  # masters whose outgoing links are whole
-    changed: set[str] = field(
-        default_factory=set
-    )  # masters whose incoming links are whole
-    links: set[str] = field(
-        default_factory=set
-    )  # the links this batch writes or retires
+    starts: set[str] = field(default_factory=set)  # masters whose outgoing links are whole
+    changed: set[str] = field(default_factory=set)  # masters whose incoming links are whole
+    links: set[str] = field(default_factory=set)  # the links this batch writes or retires
     read_subjects: set[str] = field(default_factory=set)
     generation: int | None = None
 
@@ -144,30 +136,19 @@ def identities(conn, assertions: list[dict], decisions: list[dict]) -> Scope:
     """Step 1: the affected masters, whole."""
     from .record_reads import read_affected_records
 
-    frame = read_affected_records(
-        conn.adapter, assertions, decisions, connection=conn.connection
-    )
-    return Scope(
-        readings=frame["readings"],
-        decisions=frame["decisions"],
-        stored_decisions=set(frame["decisions"]),
-        identities=frame["identities"],
-        subjects=frame["subjects"],
-        read_subjects=set(frame["subjects"]),
-        generation=frame["generation"],
-    )
+    frame=read_affected_records(conn.adapter,assertions,decisions,connection=conn.connection)
+    return Scope(readings=frame["readings"],decisions=frame["decisions"],
+                 stored_decisions=set(frame["decisions"]),identities=frame["identities"],
+                 subjects=frame["subjects"],read_subjects=set(frame["subjects"]),
+                 generation=frame["generation"])
 
 
 def retirements(conn, sources=None) -> dict[str, dict]:
     """Every retired source's decision: a handful, read whole."""
     if sources is None:
         raise ValueError("Portable retirements require the affected source keys")
-    return {
-        body["decision_id"]: body
-        for body in conn.retained_groups(
-            conn.group("source_retirements", source) for source in sorted(set(sources))
-        ).values()
-    }
+    return {body["decision_id"]:body for body in conn.retained_groups(
+        conn.group("source_retirements", source) for source in sorted(set(sources))).values()}
 
 
 def stored_masters(conn, ids) -> dict[str, dict]:
@@ -194,13 +175,9 @@ def links(
         scope.read(
             conn,
             subjects=_members(conn, scope.starts),
-            assertion_ids=[
-                e["assertion_id"] for r in cited for e in r["body"].get("evidence", [])
-            ],
+            assertion_ids=[e["assertion_id"] for r in cited for e in r["body"].get("evidence", [])],
         )
-        into = _members(conn, scope.changed) | {
-            s for s, m in scope.replayed.items() if m in scope.changed
-        }
+        into = (_members(conn, scope.changed) | {s for s, m in scope.replayed.items() if m in scope.changed})
         if want := sorted(into - named_into):
             found = [
                 {"body": body}
@@ -219,9 +196,7 @@ def links(
         # decision names) starts at a master it only names (a link record of
         # another source): that master's links are whole too.
         own = [a for a in every if a["subject"] in scope.subjects] + batch
-        grown = {scope.master(start) for a in own for _, start, _ in link_ends(a)} - {
-            None
-        }
+        grown = {scope.master(start) for a in own for _, start, _ in link_ends(a)} - {None}
         # A hierarchy link touching a start or a changed master: walk it whole.
         touched = {
             end
@@ -229,8 +204,7 @@ def links(
             for kind, start, target in link_ends(a)
             if walks_whole(types.get(kind))
             for end in ({scope.master(start), scope.master(target)} - {None})
-            if {scope.master(start), scope.master(target)}
-            & (scope.starts | scope.changed)
+            if {scope.master(start), scope.master(target)} & (scope.starts | scope.changed)
         }
         grown |= _chain(conn, touched - walked, types)
         walked |= touched
@@ -242,14 +216,8 @@ def links(
 def stored_links_and_reviews(conn, scope: Scope) -> list[dict]:
     """The stored links and reviews this batch may rewrite or retire, each
     read through its index."""
-    keys = sorted(
-        scope.masters
-        | scope.starts
-        | scope.changed
-        | scope.read_subjects
-        | scope.subjects
-    )
-    return conn.projections(starts=scope.starts, changed=scope.changed, reviews=keys)
+    keys = sorted(scope.masters | scope.starts | scope.changed | scope.read_subjects | scope.subjects)
+    return conn.projections(starts=scope.starts,changed=scope.changed,reviews=keys)
 
 
 def _members(conn, ids) -> set[str]:
@@ -259,29 +227,16 @@ def _members(conn, ids) -> set[str]:
 def _bind(conn, scope: Scope, readings: list[dict]) -> None:
     """Each record a link names, to its master as stored."""
     named = sorted(
-        {
-            end
-            for a in readings
-            for _, start, target in link_ends(a)
-            for end in (start, target)
-        }
-        - {None}
-        - set(scope.bound)
-        - set(scope.replayed)
+        {end for a in readings for _, start, target in link_ends(a) for end in (start, target)}
+        - {None} - set(scope.bound) - set(scope.replayed)
     )
-    found = conn.bindings(named)
+    found=conn.bindings(named)
     scope.stored.update(stored_masters(conn, set(found.values()) - set(scope.stored)))
     # A merged-away master points at its survivor; read the survivor too.
-    survivors = (
-        {b.get("canonical_id") for b in scope.stored.values()}
-        - set(scope.stored)
-        - {None}
-    )
+    survivors = {b.get("canonical_id") for b in scope.stored.values()} - set(scope.stored) - {None}
     scope.stored.update(stored_masters(conn, survivors))
     # A record whose master is not stored stays unbound (an unresolved end).
-    scope.bound.update(
-        {s: e for s, e in found.items() if scope.root(e) in scope.stored}
-    )
+    scope.bound.update({s: e for s, e in found.items() if scope.root(e) in scope.stored})
 
 
 def _chain(conn, seeds: set[str], types: dict) -> set[str]:

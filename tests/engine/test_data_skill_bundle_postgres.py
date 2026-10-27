@@ -721,6 +721,7 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
     with mdm_admin.begin() as conn:
         conn.exec_driver_sql("GRANT USAGE ON SCHEMA mdm TO bk_verifier")
         conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA mdm TO bk_verifier")
+        conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA public TO bk_verifier")
     mdm_reader = create_engine(mdm_admin.url.set(username="bk_verifier", password="test"))
     pipeline_name = f"parse-and-master-{trial_mode}"
     pipeline = copy.deepcopy({**MASTER, "pipeline": pipeline_name})
@@ -933,8 +934,9 @@ read:
         failed_state = json.loads(cli("bookkeeping", "status", bad_run))
         assert failed_state["counts"].get("verified", 0) == 0
         with mdm_reader.connect() as conn:
-            assert conn.scalar(text("SELECT count(*) FROM mdm.stage_record")) == 0
-            assert conn.scalar(text("SELECT count(*) FROM mdm.current_record")) == 0
+            from edgar_warehouse.mdm.clean.inspection import counts
+            report = counts(mdm_reader)
+            assert report["stage_records"] == report["masters"] == {}
 
     run_id = json.loads(cli("rules", "run", "--pipeline", pipeline_name, "--target", "master",
                             "--input-manifest", units["uri"], "--input-sha256", units["sha256"]))["run"]["run_id"]
@@ -951,7 +953,8 @@ read:
             assert filers["uri"] in rejected.stderr
             assert not (out / "reading.json").exists() and not (out / "reading.json.parts").exists()
             with mdm_reader.connect() as conn:
-                assert conn.scalar(text("SELECT count(*) FROM mdm.stage_record")) == 0
+                from edgar_warehouse.mdm.clean.inspection import counts
+                assert counts(mdm_reader)["stage_records"] == {}
         finally:
             unavailable.rename(captured)
     for profile in profiles:
@@ -1013,13 +1016,14 @@ read:
         assert [row["character"] for row in rows] == ['é', '🦀']
     state = json.loads(cli("bookkeeping", "finalize", run_id))
     assert state["counts"] == {"verified": len(profiles)} and state["run"]["state"] == "complete"
-    with mdm_admin.connect() as conn:
-        names = conn.execute(text("SELECT body->'fields'->'name'->>'value' FROM mdm.current_record "
-                                  "WHERE object_type='stage_record' OR object_type='entity'")).scalars().all()
-        records = conn.scalar(text("SELECT count(*) FROM mdm.stage_record"))
-        if trial_mode == "raw-person":
-            assert conn.scalar(text("SELECT count(*) FROM mdm.current_entity WHERE kind='person'")) == 2
-            assert conn.scalar(text("SELECT count(*) FROM mdm.current_entity WHERE kind='company'")) == 0
+    from edgar_warehouse.mdm.clean.inspection import counts
+    from edgar_warehouse.mdm.clean.consumer import ContractReader
+    report = counts(mdm_reader)
+    names = [item["body"].get("fields", {}).get("name")
+             for item in ContractReader(mdm_reader).snapshot_page("entity")["items"]]
+    records = sum(report["stage_records"].values())
+    if trial_mode == "raw-person":
+        assert report["masters"] == {"person": 2}
 
     mdm_admin.dispose()
     mdm_app.dispose()
@@ -1266,6 +1270,8 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError
 from edgar_warehouse.rules import files, source_engine
 from edgar_warehouse.mdm.clean import adapters, sec_company
+from edgar_warehouse.mdm.clean.inspection import counts as store_counts
+from edgar_warehouse.mdm.clean.record_reads import for_connection
 from edgar_warehouse.mdm.clean.evidence import decision
 from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.publication import LocalContractSink
@@ -1310,9 +1316,11 @@ command={"batch_id":"installed-gleif-fields","run_id":run,"consumer":"installed-
          "as_of":body["as_of"],"assertions":[*sec_readings,*assertions]}
 first=stage.apply(**command)
 with engine.connect() as conn:
-    counts=dict(conn.execute(text("SELECT kind,count(*) FROM mdm.current_entity GROUP BY kind")).all())
+    counts=store_counts(engine)["masters"]
     assert counts=={"company":2,"person":2},counts
-    bindings=dict(conn.execute(text("SELECT subject,entity_id::text FROM mdm.stage_record")).all())
+    reader=for_connection(conn)
+    bindings={subject:row.get("entity_id") for subject,row in reader.current(
+        [record["subject"] for record in [*sec_readings,*assertions]]).items()}
 assert all(bindings[row["subject"]] is None for row in assertions)
 companies=[row for row in sec_readings if row["kind"]=="company"]
 decisions=[decision("bind",actor="steward",reason="offline fixture binding",at=body["as_of"],
@@ -1363,8 +1371,8 @@ census_command={**command,"batch_id":"installed-census-reading","assertions":cen
 census_result=stage.apply(**census_command)
 with engine.connect() as conn:
     for assertion in census_assertions:
-        stored=conn.scalar(text("SELECT body FROM mdm.source_reading WHERE assertion_id=:id"),
-                           {"id":assertion["assertion_id"]})
+        reader=for_connection(conn)
+        stored=reader._readings(reader.current([assertion["subject"]]))[assertion["subject"]]
         assert digest(stored)==digest(assertion)
         assert stored["provenance"]["matching"]["name_census"]["census"]==digest(census)
 class LostAcknowledgement:
@@ -1383,9 +1391,9 @@ assert store.run_status(run)["publication_complete"]
 assert stage.apply(**command)["duplicate"] and stage.apply(**second_command)["duplicate"]
 assert stage.apply(**census_command)["duplicate"]
 with engine.connect() as conn:
-    assert conn.scalar(text("SELECT count(*) FROM mdm.batch"))==3
-    assert conn.scalar(text("SELECT count(*) FROM mdm.master_entity"))==4
-for sql in ("DELETE FROM mdm.source_reading","DELETE FROM mdm.master_entity","CREATE TABLE mdm.bypass(id int)"):
+    assert conn.scalar(text("SELECT count(*) FROM public.mdm_store_batch"))==3
+    assert sum(store_counts(engine)["masters"].values())==4
+for sql in ("DELETE FROM public.mdm_store_evidence","DELETE FROM public.mdm_store_current","CREATE TABLE mdm.bypass(id int)"):
     try:
         with engine.begin() as conn: conn.execute(text(sql))
     except DBAPIError as error: assert error.orig.pgcode=="42501"

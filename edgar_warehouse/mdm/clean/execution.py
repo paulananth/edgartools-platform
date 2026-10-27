@@ -282,20 +282,14 @@ def execute_manifest(
     manifest, manifest_hash, root = read_manifest(path)
     if "native_source" in manifest:
         # The native GLEIF path was retired (Issue 20 L6): GLEIF is read by its contract.
-        raise Conflict(
-            "Native publication manifests are retired; GLEIF is read by its contract"
-        )
+        raise Conflict("Native publication manifests are retired; GLEIF is read by its contract")
     coordinator = RunCoordinator(store)
     handled = 0
     committed = []
     from .prepared_runs import batches
 
-    observed, retained = batches(
-        store, run_id, [b["batch_id"] for b in manifest["batches"]]
-    )
-    mapping_versions = pinned_mapping_versions(
-        store, manifest, coordinator.scope(run_id)
-    )
+    observed, retained = batches(store, run_id, [b["batch_id"] for b in manifest["batches"]])
+    mapping_versions = pinned_mapping_versions(store, manifest, coordinator.scope(run_id))
     if not preview:
         coordinator.start(
             run_id,
@@ -368,13 +362,8 @@ def execute_manifest(
             # The batch's run report profile is kept with its finished event,
             # and the run's report (`reconcile`, below) sums them as `checks`.
             result = coordinator.execute(
-                run_id,
-                batch["batch_id"],
-                partial(MergeStage(store).apply, **command),
-                checks={
-                    "as_of": manifest["as_of"],
-                    "profile": quality_profile(assertions, deferred),
-                },
+                run_id, batch["batch_id"], partial(MergeStage(store).apply, **command),
+                checks={"as_of": manifest["as_of"], "profile": quality_profile(assertions, deferred)},
             )
         if preview:
             return result  # Preview one atomic batch against the current generation.

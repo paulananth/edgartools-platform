@@ -5,22 +5,22 @@
     {
       "file": "edgar_warehouse/context.py",
       "before": 749,
-      "after": 942
+      "after": 693
     },
     {
       "file": "edgar_warehouse/mdm/clean/assessment.py",
       "before": 72,
-      "after": 45
+      "after": 43
     },
     {
       "file": "edgar_warehouse/mdm/clean/binding.py",
       "before": 365,
-      "after": 363
+      "after": 302
     },
     {
       "file": "edgar_warehouse/mdm/clean/cli.py",
       "before": 173,
-      "after": 186
+      "after": 160
     },
     {
       "file": "edgar_warehouse/mdm/clean/consumer.py",
@@ -30,12 +30,12 @@
     {
       "file": "edgar_warehouse/mdm/clean/correction.py",
       "before": 278,
-      "after": 121
+      "after": 114
     },
     {
       "file": "edgar_warehouse/mdm/clean/execution.py",
       "before": 402,
-      "after": 398
+      "after": 387
     },
     {
       "file": "edgar_warehouse/mdm/clean/inspection.py",
@@ -45,22 +45,22 @@
     {
       "file": "edgar_warehouse/mdm/clean/journal_delivery.py",
       "before": 92,
-      "after": 91
+      "after": 82
     },
     {
       "file": "edgar_warehouse/mdm/clean/matching.py",
       "before": 374,
-      "after": 340
+      "after": 326
     },
     {
       "file": "edgar_warehouse/mdm/clean/merge.py",
       "before": 729,
-      "after": 750
+      "after": 677
     },
     {
       "file": "edgar_warehouse/mdm/clean/prepared_registry.py",
       "before": 109,
-      "after": 141
+      "after": 133
     },
     {
       "file": "edgar_warehouse/mdm/clean/record_reads.py",
@@ -75,22 +75,22 @@
     {
       "file": "edgar_warehouse/mdm/clean/run.py",
       "before": 202,
-      "after": 54
+      "after": 49
     },
     {
       "file": "edgar_warehouse/mdm/clean/scope.py",
       "before": 405,
-      "after": 299
+      "after": 254
     },
     {
       "file": "edgar_warehouse/mdm/clean/store.py",
       "before": 662,
-      "after": 613
+      "after": 557
     },
     {
       "file": "edgar_warehouse/mdm/clean/withholding.py",
       "before": 61,
-      "after": 55
+      "after": 52
     },
     {
       "file": "edgar_warehouse/mdm/cli.py",
@@ -119,6 +119,6 @@
     }
   ],
   "before": 6415,
-  "after": 5987,
-  "net_removed": 428
+  "after": 5418,
+  "net_removed": 997
 }

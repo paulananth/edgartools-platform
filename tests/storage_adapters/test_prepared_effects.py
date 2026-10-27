@@ -127,7 +127,10 @@ def test_native_policy_registration_uses_the_selected_engine_and_transaction(nat
         first = register_policy(conn, policy)
         assert register_policy(conn, dict(policy)) == first
         assert storage_api.registered_policies(conn) == [policy]
-        assert MergeStage._check_rule_proposals(conn, first, None, []) == policy
+        # The checker consumes a transaction-bound read context. This registry
+        # case exercises policy retrieval, not a normal mastering installation.
+        from types import SimpleNamespace
+        assert MergeStage._check_rule_proposals(SimpleNamespace(connection=conn), first, None, []) == policy
         version = str(uuid4())
         contract = {"provider": "fixture", "family": "fixture", "schema_version": "1",
                     "record_key": "key", "publication_key": "revision", "effective_time": "effective_at", "semantics": "patch"}

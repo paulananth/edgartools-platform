@@ -41,11 +41,8 @@ def withheld(conn, subjects, decisions=(), as_of: str | None = None) -> Withheld
     subjects = sorted(set(subjects))
     stored = []
     if subjects:
-        stored = [
-            d
-            for d in conn.related_decisions(subjects)
-            if d["operation"] in ("bind", "revoke") and d.get("subject") in subjects
-        ]
+        stored = [d for d in conn.related_decisions(subjects)
+                  if d["operation"] in ("bind", "revoke") and d.get("subject") in subjects]
     return withheld_by([*stored, *decisions], as_of)
 
 

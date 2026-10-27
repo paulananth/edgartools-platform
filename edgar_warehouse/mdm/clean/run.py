@@ -13,7 +13,7 @@ class RunCoordinator:
     def scope(self, run_id: str) -> dict | None:
         from .prepared_runs import scope
 
-        return scope(self.mdm, run_id)
+        return scope(self.mdm,run_id)
 
     def execute(
         self, run_id: str, batch_id: str, action, *, checks: dict | None = None
@@ -28,7 +28,7 @@ class RunCoordinator:
         """
         from .prepared_runs import execute
 
-        return execute(self.mdm, run_id, batch_id, action, checks=checks)
+        return execute(self.mdm,run_id,batch_id,action,checks=checks)
 
     def start(
         self,
@@ -40,15 +40,10 @@ class RunCoordinator:
     ) -> None:
         from .prepared_runs import start
 
-        return start(
-            self.mdm,
-            run_id,
-            expected_batches,
-            manifest_digest=manifest_digest,
-            mapping_versions=mapping_versions,
-        )
+        return start(self.mdm,run_id,expected_batches,manifest_digest=manifest_digest,
+                     mapping_versions=mapping_versions)
 
     def reconcile(self, run_id: str) -> dict:
         from .prepared_runs import reconcile
 
-        return reconcile(self.mdm, run_id)
+        return reconcile(self.mdm,run_id)

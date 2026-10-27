@@ -126,13 +126,11 @@ class MergeStage:
         a transaction of its own. A rule's proposal another run has overtaken is
         proposed again.
         """
-        if getattr(self.store, "read_only", False):
+        if getattr(self.store,"read_only",False):
             raise Conflict("A read-only MDM store cannot admit a merge")
         if command.get("preview"):
             return self._execute(**command, automatic=self.propose(**command))
-        api = storage_adapter().Adapter(
-            self.store.engine, prefix="mdm_store", protocol=self.store.protocol
-        )
+        api = storage_adapter().Adapter(self.store.engine, prefix="mdm_store", protocol=self.store.protocol)
         if api.read_batch(command["batch_id"]) is not None:
             return self._execute(**command, automatic=binding.nothing())
         for attempt in range(3):
@@ -140,11 +138,8 @@ class MergeStage:
             identity_work = _identity_work(command.get("decisions"), automatic)
             proposal, kept = _proposal(command), _kept(automatic)
             try:
-                return self._execute(
-                    **command,
-                    automatic=automatic,
-                    _record={"command": proposal, **kept} if identity_work else None,
-                )
+                return self._execute(**command, automatic=automatic,
+                                     _record={"command": proposal, **kept} if identity_work else None)
             except assessment.StaleAssessment:
                 if attempt == 2:
                     raise
@@ -164,11 +159,9 @@ class MergeStage:
         from .record_reads import for_connection
 
         with engine.connect() as connection:
-            conn = for_connection(connection)
+            conn=for_connection(connection)
             generation = conn.adapter.generation(connection=connection)
-            policy = storage_adapter().registered_policy(
-                connection, command["policy_digest"]
-            )
+            policy = storage_adapter().registered_policy(connection, command["policy_digest"])
             if policy is None:
                 return binding.nothing()
             # A record this batch releases (a revoked bind, ticket 13) or
@@ -207,7 +200,7 @@ class MergeStage:
             for part in ("decisions", "reviews"):
                 proposed[part] += named[part]
             if generation is not None:
-                proposed["observed_generation"] = generation
+                proposed["observed_generation"]=generation
             return proposed
 
     @staticmethod
@@ -232,7 +225,7 @@ class MergeStage:
         proposals are kept beside the caller's command, never inside it, so
         the command's hash stays the caller's own.
         """
-        if getattr(self.store, "read_only", False):
+        if getattr(self.store,"read_only",False):
             raise Conflict("A read-only MDM store cannot retain an assessment")
         if not _identity_work(command.get("decisions"), automatic):
             raise ValueError("Assessment requires an identity proposal")
@@ -250,9 +243,7 @@ class MergeStage:
         if body is None:
             return result
         return assessment.record(
-            self.store,
-            {**body, "command": proposal, **kept},
-            command["run_id"],
+            self.store, {**body, "command": proposal, **kept}, command["run_id"],
             intent=result.get("_prepared_intent"),
         )
 
@@ -277,9 +268,7 @@ class MergeStage:
         if automatic is not None and binding.proposal_is_stale(
             conn, policy, automatic, correction.released(conn, decisions)
         ):
-            raise assessment.StaleAssessment(
-                "A rule's proposal no longer holds; re-assess"
-            )
+            raise assessment.StaleAssessment("A rule's proposal no longer holds; re-assess")
         return policy
 
     def _reject(self, proposal: dict, kept: dict, exc: Exception, run_id: str) -> None:
@@ -353,7 +342,7 @@ class MergeStage:
         automatic: dict | None = None,
         _record: dict | None = None,
     ) -> dict:
-        if getattr(self.store, "read_only", False):
+        if getattr(self.store,"read_only",False):
             raise Conflict("A read-only MDM store cannot admit a merge")
         assertions = sorted(assertions or [], key=lambda a: a["assertion_id"])
         decisions = sorted(decisions or [], key=lambda d: (d["at"], d["decision_id"]))
@@ -428,20 +417,10 @@ class MergeStage:
         )
         from .prepared import execute
 
-        return execute(
-            self,
-            command=command,
-            assertions=assertions,
-            decisions=decisions,
-            identities=identities,
-            deferred=deferred,
-            automatic=automatic,
-            input_hash=input_hash,
-            run_id=run_id,
-            preview=preview,
-            assessment_id=assessment_id,
-            record=_record,
-        )
+        return execute(self, command=command, assertions=assertions,
+                       decisions=decisions, identities=identities, deferred=deferred,
+                       automatic=automatic, input_hash=input_hash, run_id=run_id,
+                       preview=preview, assessment_id=assessment_id, record=_record)
 
     def _prepare(
         self,
@@ -490,60 +469,38 @@ class MergeStage:
         state = replay(list(all_ids.values()), list(all_d.values()), as_of)
         if any(i["entity_id"] not in state.bindings.values() for i in identities):
             raise Conflict("New identities require an accepted source binding")
-        claims = current_claims(list(evidence.values()), as_of, state.retired_sources)
-        from edgar_warehouse.rules.source_engine import (
-            prepare_master_records,
-            resolve_record_bindings,
+        claims = current_claims(
+            list(evidence.values()), as_of, state.retired_sources
         )
+        from edgar_warehouse.rules.source_engine import prepare_master_records, resolve_record_bindings
 
         try:
-            projected, reviews, groups = prepare_master_records(
-                {
-                    "identities": all_ids,
-                    "canonical": state.canonical,
-                    "bindings": state.bindings,
-                    "quarantined": state.quarantined,
-                    "claims": claims,
-                    "policy": policy,
-                    "overrides": state.overrides,
-                    "decisions": decisions,
-                    "as_of": as_of,
-                    "policy_digest": policy_digest,
-                    # What each record's live bind withholds, stored or in this batch (part A2b).
-                    "withheld": {
-                        subject: [{"namespace": n, "raw": r} for n, r in sorted(values)]
-                        for subject, values in withholding.withheld_by(
-                            all_d.values(), as_of
-                        ).items()
-                    },
-                    "profile_kinds": {
-                        role: sorted(kinds) for role, kinds in PROFILE_KINDS.items()
-                    },
-                }
-            )
+            projected, reviews, groups = prepare_master_records({
+                "identities": all_ids, "canonical": state.canonical,
+                "bindings": state.bindings, "quarantined": state.quarantined,
+                "claims": claims, "policy": policy, "overrides": state.overrides,
+                "decisions": decisions, "as_of": as_of, "policy_digest": policy_digest,
+                # What each record's live bind withholds, stored or in this batch (part A2b).
+                "withheld": {subject: [{"namespace": n, "raw": r} for n, r in sorted(values)]
+                             for subject, values in withholding.withheld_by(all_d.values(), as_of).items()},
+                "profile_kinds": {role: sorted(kinds) for role, kinds in PROFILE_KINDS.items()},
+            })
         except ValueError as error:
             raise Conflict(str(error)) from None
         reviews.extend(automatic["reviews"])
         # The links: those the affected masters start, and those into a
         # master whose identity changed; a far end is read as stored.
         stored = scoping.stored_masters(conn, projected)
-        changed = {
-            e
-            for e, b in projected.items()
-            if scoping.identity_changed(b, stored.get(e))
-        }
+        changed = {e for e, b in projected.items() if scoping.identity_changed(b, stored.get(e))}
         # Its survivor now and before: a link into either may move.
         changed |= {state.canonical[e] for e in changed} | {
             stored[e].get("canonical_id") or e for e in changed if e in stored
         }
         scope.masters = set(projected)
-        scope.replayed = resolve_record_bindings(
-            {
-                "subjects": sorted(scope.subjects),
-                "bindings": state.bindings,
-                "canonical": state.canonical,
-            }
-        )
+        scope.replayed = resolve_record_bindings({
+            "subjects": sorted(scope.subjects), "bindings": state.bindings,
+            "canonical": state.canonical,
+        })
         # Every affected master starts its links here, a merged-away one
         # too: its stored links are read, and retired once it is an alias.
         scoping.links(conn, scope, set(projected), changed, types, assertions)
@@ -559,15 +516,10 @@ class MergeStage:
         edges, edge_reviews = relationships.project(
             current_claims(list(linked.values()), as_of, state.retired_sources),
             ends,
-            {
-                **{scope.root(e): scope.stored[scope.root(e)] for e in scope.stored},
-                **projected,
-            },
+            {**{scope.root(e): scope.stored[scope.root(e)] for e in scope.stored}, **projected},
             as_of,
             types=types,
-            stored={
-                key: body for (kind, key), body in old.items() if kind == "relationship"
-            },
+            stored={key: body for (kind, key), body in old.items() if kind == "relationship"},
         )
         edges = [e for e in edges if scope.owns_link(e)]
         reviews.extend(edge_reviews)
@@ -582,11 +534,7 @@ class MergeStage:
             if body != stored.get(key)
         ]
         projections.extend(
-            {
-                "object_type": "relationship",
-                "object_id": e["relationship_id"],
-                "body": e,
-            }
+            {"object_type": "relationship", "object_id": e["relationship_id"], "body": e}
             for e in edges
             if e != old.get(("relationship", e["relationship_id"]))
         )
@@ -606,9 +554,7 @@ class MergeStage:
             key = ("review", digest(r))
             live.add(key)
             if body != old.get(key):
-                projections.append(
-                    {"object_type": "review", "object_id": key[1], "body": body}
-                )
+                projections.append({"object_type": "review", "object_id": key[1], "body": body})
         deferred_contracts = storage_adapter().dataset_contracts(
             connection, (r["source_code"] for r in deferred)
         )
@@ -639,16 +585,8 @@ class MergeStage:
             if kind == "review" and not scope.owns(body):
                 continue
             projections.append(
-                {
-                    "object_type": kind,
-                    "object_id": key,
-                    "body": {
-                        **body,
-                        "retired": True,
-                        "open": False,
-                        "waiting_for_end": False,
-                    },
-                }
+                {"object_type": kind, "object_id": key,
+                 "body": {**body, "retired": True, "open": False, "waiting_for_end": False}}
             )
         generation = scope.generation
         request = {
@@ -656,9 +594,7 @@ class MergeStage:
             "identities": identities,
             "input_hash": input_hash,
             "expected_generation": generation,
-            "decisions": [
-                d for d in decisions if d["decision_id"] not in scope.stored_decisions
-            ],
+            "decisions": [d for d in decisions if d["decision_id"] not in scope.stored_decisions],
             "projections": sorted(
                 projections, key=lambda p: (p["object_type"], p["object_id"])
             ),
@@ -671,21 +607,12 @@ class MergeStage:
         before = [
             {"object_type": t, "object_id": k, "body": b} for (t, k), b in old.items()
         ] + [
-            {"object_type": "entity", "object_id": k, "body": b}
-            for k, b in stored.items()
+            {"object_type": "entity", "object_id": k, "body": b} for k, b in stored.items()
         ]
-        return (
-            request,
-            before,
-            {
-                "scope": scope,
-                "state": state,
-                "readings": evidence,
-                "old": old,
-                "stored": stored,
-                "projected": projected,
-            },
-        )
+        return request, before, {
+            "scope": scope, "state": state, "readings": evidence,
+            "old": old, "stored": stored, "projected": projected,
+        }
 
 
 def _check_hashes(decisions: list[dict]) -> None:

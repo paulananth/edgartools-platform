@@ -106,25 +106,15 @@ def migrate(
         )
     if engine.dialect.name == "mysql":
         from . import catalog
-
         catalog.assert_current()
         from .prepared_registry import PROTOCOL, finish_indexes, PREFIX
-
-        result = storage_adapter().migrate_registry(
-            engine,
-            runtime_role=application_role,
-            runtime_host=application_host,
-            configuration=catalog.CATALOG,
-            kinds=catalog.CATALOG["kinds"],
-            prepared=prepared,
-            prepared_protocol=PROTOCOL,
-            runtime_execute=not prepared,
-        )
+        result = storage_adapter().migrate_registry(engine,runtime_role=application_role,
+            runtime_host=application_host,configuration=catalog.CATALOG,kinds=catalog.CATALOG["kinds"],
+            prepared=prepared, prepared_protocol=PROTOCOL, runtime_execute=not prepared)
         if prepared:
             finish_indexes(engine)
-            storage_adapter().Adapter(
-                engine, prefix=PREFIX, protocol=PROTOCOL
-            ).enable_runtime(application_role, runtime_host=application_host)
+            storage_adapter().Adapter(engine, prefix=PREFIX, protocol=PROTOCOL).enable_runtime(
+                application_role, runtime_host=application_host)
         return result
     if engine.dialect.name != "postgresql":
         raise ValueError("MDM requires PostgreSQL 16")
@@ -142,9 +132,7 @@ def migrate(
         if conn.scalar(text("SELECT to_regclass('mdm.batch')")) and conn.scalar(
             text("SELECT EXISTS(SELECT 1 FROM mdm.batch)")
         ):
-            raise Conflict(
-                "Populated native MDM requires a qualified data migration; use a fresh prepared store"
-            )
+            raise Conflict("Populated native MDM requires a qualified data migration; use a fresh prepared store")
         if conn.scalar(text("SELECT to_regnamespace('mdm_v2')")):
             raise Conflict(
                 "This database holds the retired mdm_v2 schema. Recreate the "
@@ -173,9 +161,7 @@ def migrate(
             # Execute the real SQL file, including PL/pgSQL bodies, atomically.
             conn.execute(text(source))
             conn.execute(
-                text(
-                    "INSERT INTO mdm.migration(name,checksum) VALUES(:name,:checksum)"
-                ),
+                text("INSERT INTO mdm.migration(name,checksum) VALUES(:name,:checksum)"),
                 {"name": path.name, "checksum": checksum},
             )
         for name in MIGRATIONS:
@@ -196,7 +182,6 @@ def migrate(
                 raise Conflict("Installed migration checksum differs")
         if "024_configured_kinds.sql" in MIGRATIONS:
             from .schema import configure_kinds
-
             configure_kinds(conn)
             storage_adapter().verify_native_registry(conn)
         for inherited in ("PUBLIC", application_role, "snowflake_write"):
@@ -339,33 +324,15 @@ def _check_details(adapter: dict) -> None:
     keys = adapter.get("detail_keys")
     if keys is None:
         return
-    if (
-        not isinstance(keys, dict)
-        or not keys
-        or any(
-            not isinstance(name, str)
-            or not NAMESPACE.fullmatch(name)
-            or not isinstance(key, str)
-            or not key
-            for name, key in keys.items()
-        )
-    ):
-        raise ValueError(
-            "detail_keys maps each detail list, lower-case words, to the field that keys its rows"
-        )
+    if not isinstance(keys, dict) or not keys or any(
+            not isinstance(name, str) or not NAMESPACE.fullmatch(name) or not isinstance(key, str) or not key
+            for name, key in keys.items()):
+        raise ValueError("detail_keys maps each detail list, lower-case words, to the field that keys its rows")
     if "kind" not in adapter:
         raise ValueError("Detail lists require a stated kind")
-    columns = (
-        (adapter.get("reading") or {})
-        .get("read", {})
-        .get("tables", {})
-        .get("mapped", {})
-        .get("columns", {})
-    )
+    columns = ((adapter.get("reading") or {}).get("read", {}).get("tables", {}).get("mapped", {}).get("columns", {}))
     if "details" not in columns:
-        raise ValueError(
-            "A contract with detail_keys states its rows in the reading's details column"
-        )
+        raise ValueError("A contract with detail_keys states its rows in the reading's details column")
 
 
 def register_dataset(
@@ -388,10 +355,8 @@ def register_dataset(
         # The reading is the contract's one statement of a record's fields and
         # matching values (Issue 20 L7: the hand-written mapping is gone); a
         # contract without one is refused when it maps a record.
-        raise ValueError(
-            "adapter.fields, adapter.matching and adapter.field_shape are retired; "
-            "the contract's reading states them"
-        )
+        raise ValueError("adapter.fields, adapter.matching and adapter.field_shape are retired; "
+                         "the contract's reading states them")
     if adapter.get("classification") and ("kind" in adapter or "kind_field" in adapter):
         # One writer of the kind: the contract states it when every record is
         # that kind, or names the rule that decides it, never both (ADR 0015).
@@ -425,9 +390,7 @@ def register_dataset(
         # run (operator, 2026-09-28), so its reason must be non-blocking.
         missing = exception_reasons(body["quality"]) - set(reasons)
         if missing:
-            raise ValueError(
-                f"List the quality exceptions as nonblocking_deferred_reasons: {sorted(missing)}"
-            )
+            raise ValueError(f"List the quality exceptions as nonblocking_deferred_reasons: {sorted(missing)}")
     if rules_authority is None:
         raise Conflict("Dataset requires approved frozen Rules source authority")
     from edgar_warehouse.rules.acquisition_authority import registration_authority
@@ -445,7 +408,6 @@ def register_dataset(
         stored = current["body"]
         if stored == pinned and current["registry_version"] == authority_version:
             from .prepared_registry import approve_mapping
-
             approve_mapping(conn, code, current["mapping_version"], pinned)
             return
         if _mapping_of(stored) == _mapping_of(pinned):
@@ -453,15 +415,8 @@ def register_dataset(
                 "Dataset mapping is unchanged; a registry version bump is not a new reading"
             )
         protected_change(stored, pinned)
-        adapter.retain_dataset_reading(
-            conn,
-            code,
-            current["mapping_version"] + 1,
-            pinned,
-            str(UUID(authority_version)),
-        )
+        adapter.retain_dataset_reading(conn, code, current["mapping_version"] + 1, pinned, str(UUID(authority_version)))
         from .prepared_registry import approve_mapping
-
         approve_mapping(conn, code, current["mapping_version"] + 1, pinned)
         return
     adapter.retain_dataset_reading(conn, code, 1, pinned, str(UUID(authority_version)))
@@ -585,29 +540,18 @@ class Store:
             raise Conflict("A read-only MDM store cannot admit writes or publication")
         from .prepared_publication import deliver
 
-        return deliver(
-            self,
-            consumer,
-            worker,
-            publisher,
-            lease_seconds=lease_seconds,
-            batch_id=batch_id,
-        )
+        return deliver(self, consumer, worker, publisher,
+                       lease_seconds=lease_seconds, batch_id=batch_id)
 
     def run_status(self, run_id: str) -> dict:
         """Observation for Bookkeeping; never declares an empty run complete."""
         from .prepared_publication import adapter, publication_rows
 
         api = adapter(self)
-        with self.engine.connect().execution_options(
-            isolation_level="REPEATABLE READ"
-        ) as conn:
+        with self.engine.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
             observed = api.observed_batches(run_id, connection=conn)
-            _, publications = publication_rows(api, observed, connection=conn)
+            _, publications = publication_rows(api,observed,connection=conn)
         batches = len({row["batch_key"] for row in publications})
         pending = sum(not row["verified"] for row in publications)
-        return {
-            "batches": batches,
-            "pending": pending,
-            "publication_complete": batches > 0 and pending == 0,
-        }
+        return {"batches": batches, "pending": pending,
+                "publication_complete": batches > 0 and pending == 0}

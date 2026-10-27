@@ -106,9 +106,7 @@ def counts(args) -> int:
         result = _inspection_adapter(conn).count_types(
             ("entity", "relationship", "review"), connection=conn
         )
-        return {
-            kind: count for kind, count in result.items() if kind == "entity" or count
-        }
+        return {kind: count for kind, count in result.items() if kind == "entity" or count}
 
     return _print_mdm_report(report)
 
@@ -131,46 +129,22 @@ def force_publish(args) -> int:
 
         selected = Store(mdm)
         while after is not None:
-            page = forced_page(
-                selected, args.consumer, run_id, len(pages) + 1, after, args.page_size
-            )
+            page = forced_page(selected,args.consumer,run_id,len(pages)+1,after,args.page_size)
             pages.append(page)
             after = page["next"]
     finally:
         mdm.dispose()
     store = Artifacts()
     root = Path(args.output).resolve().as_uri()
-    units = [
-        {
-            "keys": {"batch_id": page["batch_id"], "consumer": args.consumer},
-            # A page as MDM holds it; whether this call wrote it is not part of it.
-            "input": store.put(
-                f"{root}/pages",
-                {
-                    "version": 1,
-                    "forced": True,
-                    **{k: page[k] for k in ("batch_id", "generation", "records")},
-                },
-            ),
-            "output": f"{root}/published/{n}.json",
-            "cursor": {},
-        }
-        for n, page in enumerate(pages, 1)
-    ]
+    units = [{"keys": {"batch_id": page["batch_id"], "consumer": args.consumer},
+              # A page as MDM holds it; whether this call wrote it is not part of it.
+              "input": store.put(f"{root}/pages", {"version": 1, "forced": True,
+                                                   **{k: page[k] for k in ("batch_id", "generation", "records")}}),
+              "output": f"{root}/published/{n}.json", "cursor": {}}
+             for n, page in enumerate(pages, 1)]
     manifest = store.put(root, {"version": 2, "steps": {args.step: units}})
-    print(
-        json.dumps(
-            {
-                "run_id": run_id,
-                "consumer": args.consumer,
-                "forced": True,
-                "pages": len(pages),
-                "records": sum(page["records"] for page in pages),
-                "manifest": manifest,
-            },
-            sort_keys=True,
-        )
-    )
+    print(json.dumps({"run_id": run_id, "consumer": args.consumer, "forced": True, "pages": len(pages),
+                      "records": sum(page["records"] for page in pages), "manifest": manifest}, sort_keys=True))
     return 0
 
 

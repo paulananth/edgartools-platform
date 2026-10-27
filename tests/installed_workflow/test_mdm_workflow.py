@@ -111,7 +111,13 @@ for name in ("edgar_warehouse", "source_contract", "edgar_control"):
 sys.path.insert(0, os.environ["WORKFLOW_HARNESS"])
 surface = os.environ["WORKFLOW_SURFACE"]
 module = {"merge":"record_read_scenarios", "reader":"master_read_scenarios", "ids":"master_id_scenarios", "search":"master_search_scenarios", "worker":"worker_publication_scenarios"}.get(surface)
-runpy.run_module("tests.storage_adapters." + module if module else "tests.installed_workflow.normal_workflow_cases", run_name="__main__")
+try:
+    runpy.run_module("tests.storage_adapters." + module if module else "tests.installed_workflow.normal_workflow_cases", run_name="__main__")
+except SystemExit as stopped:
+    # These standalone merge scenarios finish after their own complete proof.
+    # Still run installation-path checks and emit the harness outcome below.
+    if surface != "merge" or os.environ["WORKFLOW_CASE"] not in {"merge-rule_merge", "merge-cusip_first"} or stopped.code != 0:
+        raise
 for name, module in tuple(sys.modules.items()):
     if name.split(".")[0] in {"edgar_warehouse", "source_contract", "edgar_control"} and getattr(module, "__file__", None):
         assert pathlib.Path(module.__file__).resolve().is_relative_to(install), name

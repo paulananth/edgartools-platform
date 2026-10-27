@@ -6,11 +6,7 @@ from datetime import UTC, datetime, timedelta
 import json
 
 
-from edgar_warehouse.change_journal.store import (
-    ChangeJournal,
-    JournalConflict,
-    envelope,
-)
+from edgar_warehouse.change_journal.store import ChangeJournal, JournalConflict, envelope
 
 
 class JournalPublisher:
@@ -41,9 +37,7 @@ class JournalPublisher:
         ) as conn:
             api = installed(conn)
             rows = api.read_batches([batch], outboxes=True, connection=conn)
-            matches = [
-                row for row in rows if bytes(row["consumer_bytes"]).decode() == consumer
-            ]
+            matches = [row for row in rows if bytes(row["consumer_bytes"]).decode() == consumer]
             if len(matches) != 1:
                 raise JournalConflict("MDM holds no unambiguous Journal publication")
             row = matches[0]
@@ -51,21 +45,18 @@ class JournalPublisher:
             if retained is None:
                 raise JournalConflict("MDM publication has no retained delivery origin")
             origin = json.loads(retained)
-            if set(origin) != {"run_id", "source", "feed"} or not all(origin.values()):
-                raise JournalConflict(
-                    "MDM publication has an invalid retained delivery origin"
-                )
+            if set(origin) != {"run_id","source","feed"} or not all(origin.values()):
+                raise JournalConflict("MDM publication has an invalid retained delivery origin")
             committed = json.loads(bytes(row["payload"]))
-            metadata = api.batch_metadata(
-                int(row["generation"]), limit=1, connection=conn
-            )
+            metadata = api.batch_metadata(int(row["generation"]), limit=1, connection=conn)
             if not metadata or metadata[0]["generation"] != row["generation"]:
                 raise JournalConflict("MDM publication has no original recording time")
-            occurred = (
-                datetime(1970, 1, 1, tzinfo=UTC)
-                + timedelta(microseconds=metadata[0]["recorded_at"])
-            ).isoformat()
-        if committed != payload or row["payload_hash"] != expected_hash:
+            occurred = (datetime(1970,1,1,tzinfo=UTC)
+                        + timedelta(microseconds=metadata[0]["recorded_at"])).isoformat()
+        if (
+            committed != payload
+            or row["payload_hash"] != expected_hash
+        ):
             raise JournalConflict(
                 "MDM publication disagrees with committed local evidence"
             )

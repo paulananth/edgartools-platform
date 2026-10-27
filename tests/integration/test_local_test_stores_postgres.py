@@ -275,7 +275,8 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
         reader = first.engine(one, "mdm", "mdm_runtime")
         try:
             with reader.connect() as conn:
-                assert conn.scalar(text("SELECT count(*) FROM mdm.current_entity")) == 3
+                from edgar_warehouse.mdm.clean.inspection import counts
+                assert sum(counts(reader)["masters"].values()) == 3
         finally:
             reader.dispose()
         assert expected['silver.silver.visit']['rows'] == 1

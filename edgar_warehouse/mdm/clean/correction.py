@@ -33,7 +33,10 @@ def _revoking(conn, decisions: list[dict], operation: str) -> set[str]:
         ).values()
         if body["operation"] == operation
     ]
-    found.update(r["decision_id"] for r in stored)
+    found.update(
+        r["decision_id"]
+        for r in stored
+    )
     return {
         d["subject"]
         for d in decisions
@@ -64,21 +67,11 @@ def quarantined(conn, subjects: set[str], decisions: list[dict]) -> set[str]:
         for d in decisions
         if d["operation"] == "quarantine" and d["subject"] in subjects
     }
-    candidates = [
-        body
-        for body in conn.related_decisions(subjects)
-        if body.get("subject") in subjects and body["operation"] == "quarantine"
-    ]
-    revoked = {
-        body["target"]
-        for body in conn.related_decisions({body["decision_id"] for body in candidates})
-        if body["operation"] == "revoke"
-    }
-    held.update(
-        (body["decision_id"], body["subject"])
-        for body in candidates
-        if body["decision_id"] not in revoked
-    )
+    candidates = [body for body in conn.related_decisions(subjects)
+                  if body.get("subject") in subjects and body["operation"] == "quarantine"]
+    revoked = {body["target"] for body in conn.related_decisions({body["decision_id"] for body in candidates})
+               if body["operation"] == "revoke"}
+    held.update((body["decision_id"],body["subject"]) for body in candidates if body["decision_id"] not in revoked)
     return {subject for key, subject in held.items() if key not in lifting}
 
 

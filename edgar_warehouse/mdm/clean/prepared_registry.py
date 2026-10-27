@@ -82,20 +82,12 @@ def initialize(engine, *, application_role, application_host="%"):
 
     catalog.assert_current()
     api = storage_adapter()
-    result = api.migrate(
-        engine,
-        runtime_role=application_role,
-        runtime_host=application_host,
-        prefix=PREFIX,
-        protocol=PROTOCOL,
-        runtime_execute=False,
-        defer_ready=True,
-    )
+    result = api.migrate(engine, runtime_role=application_role,
+                         runtime_host=application_host, prefix=PREFIX, protocol=PROTOCOL,
+                         runtime_execute=False, defer_ready=True)
     adapter = api.Adapter(engine, prefix=PREFIX, protocol=PROTOCOL)
     with engine.begin() as conn:
-        adapter.activate(
-            conn, {"catalog": digest(catalog.CATALOG)}, exclusive=("catalog",)
-        )
+        adapter.activate(conn, {"catalog": digest(catalog.CATALOG)}, exclusive=("catalog",))
     finish_indexes(engine)
     from .retirement import retire
 

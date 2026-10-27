@@ -95,45 +95,6 @@ def initialize_database(admin, app):
     return Database(admin, app, policy, version)
 
 
-def request(db, **changes):
-    return {
-        "batch_id": "batch-1",
-        "expected_generation": 0,
-        "consumer": "mastering/company",
-        "expected_checkpoint": 0,
-        "checkpoint": 1,
-        "policy_digest": db.policy,
-        "assertions": [],
-        "identities": [],
-        "decisions": [],
-        "projections": [
-            {
-                "object_type": "review",
-                "object_id": "review-1",
-                "body": {"reason": "needs evidence"},
-            }
-        ],
-        **changes,
-    }
-
-
-class Destination:
-    def __init__(self):
-        self.objects = {}
-        self.fail = True
-
-    def publish(self, key, payload, expected_hash):
-        previous = self.objects.setdefault(key, (payload, expected_hash))
-        assert previous == (payload, expected_hash)
-        if self.fail:
-            self.fail = False
-            raise OSError("external success followed by lost acknowledgement")
-
-    def verify(self, key, payload, expected_hash):
-        assert self.objects[key] == (payload, expected_hash)
-        return expected_hash
-
-
 from edgar_warehouse.mdm.clean.evidence import assertion, decision
 from edgar_warehouse.mdm.clean.merge import MergeStage
 
@@ -194,54 +155,11 @@ def documents(db, kind):
             return found
 
 
-def assessment_command(db, **changes):
-    a = source()
-    identity, binding = identity_and_binding(a)
-    return {
-        "batch_id": "assessed-company",
-        "run_id": str(uuid4()),
-        "policy_digest": db.policy,
-        "consumer": "assessed-company",
-        "expected_checkpoint": 0,
-        "checkpoint": 1,
-        "as_of": AS_OF,
-        "assertions": [a],
-        "identities": [identity],
-        "decisions": [binding],
-        **changes,
-    }
-
-
-def family_metadata(family, publication="p1"):
-    # Synthetic proof checks persistence/fencing, not live source completeness.
-    return {
-        "source_family": "fixture",
-        "publication_family": family,
-        "committed_publication": publication,
-        "continuity_proof": {"rule_version": "fixture-1", "inventory_digest": "a" * 64},
-    }
-
-
 # --- Company mastering ticket 01: a mapping may be corrected ------------------
 # Real PG16 against migration 031. A re-read of one publication under a
 # corrected mapping must add a row beside its predecessor: before the ticket's
 # amendments a changed reading raised on the revision guard and an unchanged
 # one collided on assertion_id, so neither could ever be stored.
-
-
-def reread(a, *, mapping_version, **changes):
-    """The same record and publication, read again under a later mapping."""
-    return assertion(
-        source_code=a["source_code"],
-        record_key=a["record_key"],
-        publication_key=a["publication_key"],
-        revision=a["revision"],
-        effective_at=a["effective_at"],
-        kind=a["kind"],
-        fields=changes.pop("fields", a["fields"]),
-        mapping_version=mapping_version,
-        **changes,
-    )
 
 
 def register_reading(database, code, body):

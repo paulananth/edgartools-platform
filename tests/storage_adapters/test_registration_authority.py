@@ -2,14 +2,16 @@
 
 from contextlib import ExitStack
 import os
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 
 from edgar_warehouse.mdm.clean import registration
-from edgar_warehouse.mdm.clean.prepared_registry import require_installed
-from edgar_warehouse.mdm.clean.store import Conflict, migrate, register_policy
+from edgar_warehouse.mdm.clean.prepared_registry import require_installed, mapping_pin, schema_pin
+from edgar_warehouse.mdm.clean.store import Conflict, migrate, register_policy, current_reading, digest
+from tests.support.rules_authority import register_dataset
 
 CASES = ["rights", "rollback", "definition"] if os.environ.get("SKILL_ADAPTER_TEST_ENGINE") == "postgresql" else ["unsupported"]
 
@@ -38,9 +40,19 @@ def test_configuration_registration_authority(case, database_factory, storage_ap
                 pin = register_policy(conn, body)
             with delegated.begin() as conn:
                 assert register_policy(conn, body) == pin
+            contract = {"provider": "fixture", "family": "fixture", "schema_version": "1",
+                "record_key": "key", "publication_key": "revision", "effective_time": "effective_at", "semantics": "patch"}
+            with delegated.begin() as conn:
+                register_dataset(conn, "invented.source", str(uuid4()), contract)
+                first = current_reading(conn, "invented.source")
+                register_dataset(conn, "invented.source", str(uuid4()), {**contract, "schema_version": "2"})
+                second = current_reading(conn, "invented.source")
             with runtime.connect() as conn:
                 api = require_installed(conn)
-                saved = conn.execute(select(api.tables["pin"])).mappings().all()
+                saved = conn.execute(select(api.tables["pin"]).order_by(*api.tables["pin"].primary_key)).mappings().all()
+                pins = {(bytes(r["name_bytes"]).decode(), bytes(r["value_bytes"]).decode()) for r in saved if r["active"] == 1}
+                assert {(mapping_pin("invented.source", version), digest(value)) for version, value in (first, second)} <= pins
+                assert {(schema_pin("invented.source", schema), digest(["invented.source", schema])) for schema in ("1", "2")} <= pins
                 assert any(bytes(r["name_bytes"]) == b"policy" and bytes(r["value_bytes"]).decode() == pin and r["active"] == 1 for r in saved)
             if case == "rights":
                 for engine, sql in ((runtime, "SELECT public.mdm_store_register_pin('policy',:pin)"),
@@ -53,9 +65,11 @@ def test_configuration_registration_authority(case, database_factory, storage_ap
             elif case == "rollback":
                 with pytest.raises(RuntimeError, match="invented interruption"), delegated.begin() as conn:
                     rejected = register_policy(conn, {**body, "version": "invented-rolled-back"})
+                    register_dataset(conn, "invented.source", str(uuid4()), {**contract, "schema_version": "3"})
                     raise RuntimeError("invented interruption")
                 with owner.connect() as conn:
                     assert storage_api.registered_policy(conn, rejected) is None
+                    assert current_reading(conn, "invented.source") == second
             elif case == "definition":
                 with owner.begin() as conn:
                     conn.execute(text("ALTER FUNCTION public.mdm_store_register_pin(text,text) SECURITY INVOKER"))
@@ -65,7 +79,7 @@ def test_configuration_registration_authority(case, database_factory, storage_ap
                     migrate(owner, application_role=role)
                 return
             with runtime.connect() as conn:
-                assert conn.execute(select(api.tables["pin"])).mappings().all() == saved
+                assert conn.execute(select(api.tables["pin"]).order_by(*api.tables["pin"].primary_key)).mappings().all() == saved
                 assert api.generation(connection=conn) == 0
         finally:
             delegated.dispose()

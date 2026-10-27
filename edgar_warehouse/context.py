@@ -79,27 +79,10 @@ class Store:
 
 # One entry per store (GoF consult, ticket 05 RDM part): silver specs add one.
 STORES = {
-    "MDM": Store(
-        "MDM",
-        "MDM_DATABASE_URL",
-        True,
-        "edgar-warehouse mdm check-connectivity",
-        "edgar_warehouse.context:Context",
-    ),
-    "RDM": Store(
-        "RDM",
-        "RDM_DATABASE_URL",
-        False,
-        "edgar-warehouse rdm migrate",
-        "edgar_warehouse.rdm.context:CodeContext",
-    ),
-    "SILVER": Store(
-        "silver",
-        "SILVER_DATABASE_URL",
-        False,
-        "edgar-warehouse silver migrate",
-        "edgar_warehouse.silver_writer.context:TableContext",
-    ),
+    "MDM": Store("MDM", "MDM_DATABASE_URL", True, "edgar-warehouse mdm check-connectivity", "edgar_warehouse.context:Context"),
+    "RDM": Store("RDM", "RDM_DATABASE_URL", False, "edgar-warehouse rdm migrate", "edgar_warehouse.rdm.context:CodeContext"),
+    "SILVER": Store("silver", "SILVER_DATABASE_URL", False, "edgar-warehouse silver migrate",
+                    "edgar_warehouse.silver_writer.context:TableContext"),
 }
 
 
@@ -294,52 +277,28 @@ class Context:
             for block in policy.get("kinds", {}).values():
                 contract = block.get("identifiers", {}).get(namespace)
                 if contract:
-                    normalized = prepare_matching_value(
-                        contract["normalizer"], value, block
-                    )
+                    normalized = prepare_matching_value(contract["normalizer"], value, block)
                     if normalized:
                         values.add(normalized)
-        groups = [
-            reader.group("identifier_records", namespace, normalized, source, "bound")
-            for source in api.registered_sources(conn)
-            for normalized in sorted(values)
-        ]
-        found = {
-            identity: "identifier"
-            for identity in reader.carrying_entities(
-                groups, namespace, value, kind=kind
-            )
-        }
+        groups = [reader.group("identifier_records", namespace, normalized, source, "bound")
+                  for source in api.registered_sources(conn) for normalized in sorted(values)]
+        found = {identity: "identifier" for identity in reader.carrying_entities(
+            groups, namespace, value, kind=kind)}
         if not found:
-            found = {
-                identity: "cross_reference"
-                for identity in reader.carrying_entities(
-                    [reader.group("cross_reference_records", namespace, value)],
-                    namespace,
-                    value,
-                    kind=kind,
-                    cross_reference=True,
-                )
-            }
+            found = {identity: "cross_reference" for identity in reader.carrying_entities(
+                [reader.group("cross_reference_records", namespace, value)], namespace, value,
+                kind=kind, cross_reference=True)}
         subject = kind or "relationship"
         if not found:
-            raise ContextError(
-                f"No {kind or 'entity'} carries {namespace}:{value}.",
-                f'{PROG} {kind or "company"} --search "<name>"',
-            )
+            raise ContextError(f"No {kind or 'entity'} carries {namespace}:{value}.",
+                               f"{PROG} {kind or 'company'} --search \"<name>\"")
         if len(found) > 1:
             names = self._names(conn, list(found))
-            listed = "; ".join(
-                f"{names.get(i, {}).get('name') or '(no name)'} ({i})"
-                for i in sorted(found)
-            )
+            listed = "; ".join(f"{names.get(i, {}).get('name') or '(no name)'} ({i})" for i in sorted(found))
             raise ContextError(
                 f"{namespace}:{value} is carried by {len(found)} entities: {listed}. "
-                + (
-                    "It is a cross-reference id, lookup only: sharing it does not make them one entity."
-                    if "cross_reference" in found.values()
-                    else "Pick one by its id."
-                ),
+                + ("It is a cross-reference id, lookup only: sharing it does not make them one entity."
+                   if "cross_reference" in found.values() else "Pick one by its id."),
                 f"{PROG} {subject} {sorted(found)[0]}",
             )
         return next(iter(found))
@@ -354,10 +313,8 @@ class Context:
         if not ids:
             return {}
         adapter = installed(conn)
-        return {
-            key: {"name": _name(body), "kind": body["kind"]}
-            for key, body in RecordReader(adapter, connection=conn).masters(ids).items()
-        }
+        return {key: {"name": _name(body), "kind": body["kind"]}
+                for key, body in RecordReader(adapter, connection=conn).masters(ids).items()}
 
     @staticmethod
     def _generation(conn, args) -> int | None:
@@ -368,32 +325,21 @@ class Context:
         adapter = installed(conn)
         if args.as_at or args.as_of:
             flag = "--as-at" if args.as_at else "--as-of"
-            moment = parse_time(
-                args.as_at or args.as_of, flag, f"{PROG} {args.subject} {args.key}"
-            )
+            moment = parse_time(args.as_at or args.as_of, flag, f"{PROG} {args.subject} {args.key}")
             delta = moment - datetime(1970, 1, 1, tzinfo=UTC)
             micros = (delta.days * 86400 + delta.seconds) * 1000000 + delta.microseconds
             cursor = adapter.generation(connection=conn)
             while cursor:
-                rows = adapter.batch_metadata(
-                    cursor,
-                    path=() if args.as_at else ("effects", "as_of"),
-                    connection=conn,
-                )
+                rows = adapter.batch_metadata(cursor, path=() if args.as_at else ("effects", "as_of"), connection=conn)
                 if not rows:
                     break
                 for row in rows:
-                    if (
-                        row["recorded_at"] <= micros
-                        if args.as_at
-                        else datetime.fromisoformat(row["scalar"]) <= moment
-                    ):
+                    if (row["recorded_at"] <= micros if args.as_at
+                            else datetime.fromisoformat(row["scalar"]) <= moment):
                         return row["generation"]
                 cursor = rows[-1]["generation"] - 1
-            raise ContextError(
-                f"MDM holds nothing {flag} {args.as_at or args.as_of}.",
-                f"{PROG} {args.subject} {args.key}",
-            )
+            raise ContextError(f"MDM holds nothing {flag} {args.as_at or args.as_of}.",
+                               f"{PROG} {args.subject} {args.key}")
 
         return None
 
@@ -408,31 +354,21 @@ class Context:
         entity_id = self._resolve(conn, args.subject, args.key)
         generation = self._generation(conn, args)
         try:
-            read = ContractReader(self.engine).entity(
-                entity_id, generation=generation, connection=conn
-            )
+            read = ContractReader(self.engine).entity(entity_id, generation=generation, connection=conn)
         except KeyError:
             raise ContextError(
-                f"No {args.subject} {entity_id} in MDM"
-                + (" at that time." if generation else "."),
-                f'{PROG} {args.subject} --search "<name>"',
+                f"No {args.subject} {entity_id} in MDM" + (" at that time." if generation else "."),
+                f"{PROG} {args.subject} --search \"<name>\"",
             ) from None
         body = read["identity"]
         if body.get("kind") != args.subject:
-            raise ContextError(
-                f"{entity_id} is a {body.get('kind')}, not a {args.subject}.",
-                f"{PROG} {body.get('kind')} {entity_id}",
-            )
+            raise ContextError(f"{entity_id} is a {body.get('kind')}, not a {args.subject}.", f"{PROG} {body.get('kind')} {entity_id}")
         full = args.detail == "full"
         fields = []
         for name, field in sorted(body.get("fields", {}).items()):
             if field.get("cleared"):
                 continue
-            item = {
-                "field": name,
-                "value": field.get("value"),
-                "source": field["winner"].get("source_code"),
-            }
+            item = {"field": name, "value": field.get("value"), "source": field["winner"].get("source_code")}
             if full:
                 item["record_key"] = field["winner"].get("record_key")
                 item["effective_at"] = field["winner"].get("effective_at")
@@ -446,24 +382,11 @@ class Context:
 
         adapter = installed(conn)
         readings = RecordReader(adapter, connection=conn).readings(subjects)
-        records = sorted(
-            (
-                reading["source_code"],
-                reading["record_key"],
-                reading.get("cross_references", {}),
-            )
-            for reading in readings.values()
-        )
+        records = sorted((reading["source_code"], reading["record_key"],
+                          reading.get("cross_references", {})) for reading in readings.values())
         recorded_at = datetime.fromisoformat(read["projection"]["recorded_at"])
         related, related_count, cut = self._walk(
-            conn,
-            canonical,
-            1,
-            self._at(args),
-            "",
-            RELATED_INLINE,
-            generation if args.as_at else None,
-        )
+            conn, canonical, 1, self._at(args), "", RELATED_INLINE, generation if args.as_at else None)
         cross_references: dict[str, set] = {}
         sources: dict[str, list] = {}
         for source_code, record_key, crossed in records:
@@ -480,9 +403,7 @@ class Context:
             "definition": definitions().get("kinds", {}).get(body["kind"], ""),
             "fields": fields,
             "identifiers": body.get("identifiers", {}),
-            "cross_references": {
-                k: sorted(v) for k, v in sorted(cross_references.items())
-            },
+            "cross_references": {k: sorted(v) for k, v in sorted(cross_references.items())},
             "sources": sources if full else sorted(sources),
             "trust": {
                 "generation": projection["generation"],
@@ -494,63 +415,34 @@ class Context:
             },
         }
         if args.as_at:
-            answer["trust"]["current_parts"] = [
-                "cross_references",
-                "sources",
-                "related_names",
-            ]
-            answer["trust"]["note"] = (
-                "Fields, identifiers, status and related links are of that generation; cross-references, "
-                "source records and the related entities' names are as MDM holds them now."
-            )
+            answer["trust"]["current_parts"] = ["cross_references", "sources", "related_names"]
+            answer["trust"]["note"] = ("Fields, identifiers, status and related links are of that generation; cross-references, "
+                                       "source records and the related entities' names are as MDM holds them now.")
         elif generation:
-            answer["trust"]["current_parts"] = [
-                "cross_references",
-                "sources",
-                "related",
-            ]
-            answer["trust"]["note"] = (
-                "Fields, identifiers and status are of that generation; cross-references, source records "
-                "and related links (held at that time) are as MDM holds them now."
-            )
+            answer["trust"]["current_parts"] = ["cross_references", "sources", "related"]
+            answer["trust"]["note"] = ("Fields, identifiers and status are of that generation; cross-references, source records "
+                                       "and related links (held at that time) are as MDM holds them now.")
         if canonical != entity_id:
             answer["merged_from"] = entity_id
         answer["related"] = [_brief_link(link) for link in related]
         answer["related_count"] = f"{related_count}+" if cut else related_count
         answer["truncated"] = False
         answer["next_page"] = None
-        answer["next_step"] = f"{PROG} relationship {canonical}" + (
-            " --detail full" if not full else ""
-        )
+        answer["next_step"] = f"{PROG} relationship {canonical}" + (" --detail full" if not full else "")
         command = f"{PROG} {args.subject} {args.key}" + "".join(
-            f" --{flag} {value}"
-            for flag, value in (
-                ("as-of", args.as_of),
-                ("as-at", args.as_at),
-                ("detail", args.detail),
-            )
-            if value
-        )
+            f" --{flag} {value}" for flag, value in (("as-of", args.as_of), ("as-at", args.as_at), ("detail", args.detail)) if value)
         return fit(answer, "fields", page_offset(args.page), command)
 
     def search(self, args: argparse.Namespace) -> dict:
 
         if args.as_of or args.as_at:
-            raise ContextError(
-                "Search reads current names; look the entity up by its id with --as-of or --as-at.",
-                f"{PROG} {args.subject} --search {shlex.quote(args.search)}",
-            )
+            raise ContextError("Search reads current names; look the entity up by its id with --as-of or --as-at.",
+                               f"{PROG} {args.subject} --search {shlex.quote(args.search)}")
         if not 1 <= args.limit <= SEARCH_MAX:
-            raise ContextError(
-                f"--limit is 1 to {SEARCH_MAX}.",
-                f"{PROG} {args.subject} --search {shlex.quote(args.search)} --limit 5",
-            )
+            raise ContextError(f"--limit is 1 to {SEARCH_MAX}.", f"{PROG} {args.subject} --search {shlex.quote(args.search)} --limit 5")
         words = args.search.strip()
         if not words:
-            raise ContextError(
-                "--search needs some words.",
-                f'{PROG} {args.subject} --search "<words>"',
-            )
+            raise ContextError("--search needs some words.", f"{PROG} {args.subject} --search \"<words>\"")
         with self.engine.connect().execution_options(
             isolation_level="REPEATABLE READ"
         ) as conn:
@@ -563,39 +455,17 @@ class Context:
             from edgar_warehouse.mdm.clean.store import Conflict
 
             if configuration() is None:
-                raise ContextError(
-                    "Name search is not installed for prepared MDM storage.",
-                    f"{PROG} {args.subject} <entity_id> or {PROG} {args.subject} <namespace>:<value>",
-                )
+                raise ContextError("Name search is not installed for prepared MDM storage.",
+                                   f"{PROG} {args.subject} <entity_id> or {PROG} {args.subject} <namespace>:<value>")
             try:
                 rows = search(adapter, conn, args.subject, words, args.limit)
             except Conflict as error:
-                raise ContextError(
-                    str(error),
-                    "edgar-warehouse mdm rebuild-name-index --limit 20 (owner)",
-                ) from None
+                raise ContextError(str(error), "edgar-warehouse mdm rebuild-name-index --limit 20 (owner)") from None
             trust = _latest(conn)
-        matches = [
-            {
-                "name": r["name"],
-                "kind": r["kind"],
-                "entity_id": r["entity_id"],
-                "status": r["status"],
-                "matched_by": r["matched_by"],
-            }
-            for r in rows
-        ]
+        matches = [{"name": r["name"], "kind": r["kind"], "entity_id": r["entity_id"], "status": r["status"],
+                    "matched_by": r["matched_by"]} for r in rows]
         if not matches:
-            print(
-                json.dumps(
-                    {
-                        "event": "context-search-miss",
-                        "kind": args.subject,
-                        "words": words,
-                    }
-                ),
-                file=sys.stderr,
-            )
+            print(json.dumps({"event": "context-search-miss", "kind": args.subject, "words": words}), file=sys.stderr)
         answer = {
             "search": words,
             "kind": args.subject,
@@ -604,18 +474,10 @@ class Context:
             "trust": trust,
             "truncated": False,
             "next_page": None,
-            "next_step": (
-                f"{PROG} {args.subject} <entity_id>"
-                if matches
-                else f"No {args.subject} name matches. Try fewer words, or {PROG} {args.subject} <namespace>:<value>."
-            ),
+            "next_step": (f"{PROG} {args.subject} <entity_id>" if matches
+                          else f"No {args.subject} name matches. Try fewer words, or {PROG} {args.subject} <namespace>:<value>."),
         }
-        return fit(
-            answer,
-            "matches",
-            page_offset(args.page),
-            f"{PROG} {args.subject} --search {shlex.quote(words)} --limit {args.limit}",
-        )
+        return fit(answer, "matches", page_offset(args.page), f"{PROG} {args.subject} --search {shlex.quote(words)} --limit {args.limit}")
 
     # -- Relationships -------------------------------------------------------
 
@@ -655,30 +517,14 @@ class Context:
             if not frontier:
                 break
             reader = RecordReader(adapter, connection=conn)
-            projections = (
-                reader.projections(starts=frontier, changed=frontier)
-                if generation is None
-                else reader.historical_links(
-                    generation, starts=frontier, changed=frontier
-                )
-            )
-            bodies = (
-                item["body"]
-                for item in projections
-                if item["object_type"] == "relationship"
-            )
-            rows = sorted(
-                (body["relationship_id"], body)
-                for body in bodies
+            projections = (reader.projections(starts=frontier, changed=frontier) if generation is None
+                else reader.historical_links(generation, starts=frontier, changed=frontier))
+            bodies = (item["body"] for item in projections if item["object_type"] == "relationship")
+            rows = sorted((body["relationship_id"], body) for body in bodies
                 if not body.get("retired")
                 and (not relationship_type or body["type"] == relationship_type)
-                and (
-                    _period(body, at) is not None
-                    or body.get("derived")
-                    and not body.get("periods")
-                )
-            )
-            rows = rows[: cap - len(links) + 1]
+                and (_period(body, at) is not None or body.get("derived") and not body.get("periods")))
+            rows = rows[:cap - len(links) + 1]
             following = []
             for relationship_id, body in rows:
                 if relationship_id in seen_links:
@@ -687,9 +533,7 @@ class Context:
                     cut = True
                     break
                 seen_links.add(relationship_id)
-                links.append(
-                    {"depth": depth, "relationship_id": relationship_id, "body": body}
-                )
+                links.append({"depth": depth, "relationship_id": relationship_id, "body": body})
                 for end in (body.get("source_id"), body.get("target_id")):
                     if end and end not in seen_entities:
                         seen_entities.add(end)
@@ -697,53 +541,20 @@ class Context:
             if cut:
                 break
             frontier = following
-        names = self._names(
-            conn,
-            sorted(
-                {
-                    e
-                    for link in links
-                    for e in (
-                        link["body"].get("source_id"),
-                        link["body"].get("target_id"),
-                    )
-                    if e
-                }
-            ),
-        )
+        names = self._names(conn, sorted({e for link in links for e in (link["body"].get("source_id"), link["body"].get("target_id")) if e}))
         for link in links:
             body = link["body"]
-            link["from"] = {
-                **names.get(body.get("source_id"), {"name": None, "kind": None}),
-                "entity_id": body.get("source_id"),
-            }
-            link["to"] = {
-                **names.get(body.get("target_id"), {"name": None, "kind": None}),
-                "entity_id": body.get("target_id"),
-            }
+            link["from"] = {**names.get(body.get("source_id"), {"name": None, "kind": None}), "entity_id": body.get("source_id")}
+            link["to"] = {**names.get(body.get("target_id"), {"name": None, "kind": None}), "entity_id": body.get("target_id")}
             link["period"] = _period(body, at)
-        links.sort(
-            key=lambda l: (
-                l["depth"],
-                l["body"].get("type", ""),
-                l["from"]["name"] or "",
-                l["to"]["name"] or "",
-                l["relationship_id"],
-            )
-        )
+        links.sort(key=lambda l: (l["depth"], l["body"].get("type", ""), l["from"]["name"] or "", l["to"]["name"] or "", l["relationship_id"]))
         return links, len(links), cut
 
     def relationships(self, args: argparse.Namespace) -> dict:
         if not args.key:
-            raise ContextError(
-                "Name the entity: its id or <namespace>:<value>.",
-                f"{PROG} relationship <entity_id>",
-            )
+            raise ContextError("Name the entity: its id or <namespace>:<value>.", f"{PROG} relationship <entity_id>")
         if not 1 <= args.hops <= MAX_HOPS:
-            raise ContextError(
-                f"--hops is 1 to {MAX_HOPS}.",
-                f"{PROG} relationship {args.key} --hops 1",
-            )
+            raise ContextError(f"--hops is 1 to {MAX_HOPS}.", f"{PROG} relationship {args.key} --hops 1")
         at = self._at(args)
         with self.engine.connect().execution_options(
             isolation_level="REPEATABLE READ"
@@ -756,37 +567,19 @@ class Context:
 
             if installed(conn) is not None:
                 from edgar_warehouse.mdm.clean.consumer import ContractReader
-
                 try:
-                    entity_id = ContractReader(self.engine).entity(
-                        entity_id, generation=generation, connection=conn
-                    )["canonical_id"]
+                    entity_id = ContractReader(self.engine).entity(entity_id, generation=generation,
+                                                                   connection=conn)["canonical_id"]
                 except KeyError:
-                    raise ContextError(
-                        "No entity at that recording time.",
-                        f"{PROG} <kind> <entity_id>",
-                    ) from None
+                    raise ContextError("No entity at that recording time.", f"{PROG} <kind> <entity_id>") from None
             names = self._names(conn, [entity_id])
             if entity_id not in names:
-                raise ContextError(
-                    f"No entity {entity_id} in MDM.",
-                    f'{PROG} company --search "<name>"',
-                )
-            links, count, cut = self._walk(
-                conn,
-                entity_id,
-                args.hops,
-                at,
-                args.relationship_type,
-                WALK_CAP,
-                generation,
-            )
+                raise ContextError(f"No entity {entity_id} in MDM.", f"{PROG} company --search \"<name>\"")
+            links, count, cut = self._walk(conn, entity_id, args.hops, at, args.relationship_type, WALK_CAP, generation)
             trust = _latest(conn, generation)
             if generation is not None:
                 trust["current_parts"] = ["names"]
-                trust["note"] = (
-                    "Links as MDM had recorded them by --as-at, of those holding now; names are as MDM holds them now."
-                )
+                trust["note"] = "Links as MDM had recorded them by --as-at, of those holding now; names are as MDM holds them now."
             full = args.detail == "full"
             if full:
                 _attach_sources(conn, links)
@@ -799,31 +592,18 @@ class Context:
             "entity_id": entity_id,
             "at": at.isoformat(),
             "hops": args.hops,
-            "definitions": {
-                t: types.get(t, "")
-                for t in sorted({link["body"].get("type") for link in links})
-            },
+            "definitions": {t: types.get(t, "") for t in sorted({link["body"].get("type") for link in links})},
             "related": related,
             "related_count": f"{count}+" if cut else count,
             "trust": trust,
             "truncated": cut,
             "next_page": None,
-            "next_step": (
-                f"Over {WALK_CAP} links: narrow it with --type <TYPE> or --hops 1, or query mdm.relationship_context."
-                if cut
-                else f"{PROG} <kind> <entity_id> for any entity listed"
-            ),
+            "next_step": (f"Over {WALK_CAP} links: narrow it with --type <TYPE> or --hops 1, or query mdm.relationship_context."
+                          if cut else f"{PROG} <kind> <entity_id> for any entity listed"),
         }
         command = f"{PROG} relationship {args.key} --hops {args.hops}" + "".join(
-            f" --{flag} {value}"
-            for flag, value in (
-                ("type", args.relationship_type),
-                ("as-of", args.as_of),
-                ("as-at", args.as_at),
-                ("detail", args.detail),
-            )
-            if value
-        )
+            f" --{flag} {value}" for flag, value in (("type", args.relationship_type), ("as-of", args.as_of),
+                                                     ("as-at", args.as_at), ("detail", args.detail)) if value)
         return fit(answer, "related", page_offset(args.page), command)
 
 
@@ -879,30 +659,18 @@ def _latest(conn, generation: int | None = None) -> dict:
     )
 
     adapter = installed(conn)
-    generation = (
-        adapter.generation(connection=conn) if generation is None else generation
-    )
+    generation = adapter.generation(connection=conn) if generation is None else generation
     if not generation:
         return {"generation": None}
-    metadata = adapter.batch_metadata(
-        generation, limit=1, path=("effects", "as_of"), connection=conn
-    )
-    policy = adapter.batch_metadata(
-        generation, limit=1, path=("effects", "policy_digest"), connection=conn
-    )
+    metadata = adapter.batch_metadata(generation, limit=1, path=("effects", "as_of"), connection=conn)
+    policy = adapter.batch_metadata(generation, limit=1, path=("effects", "policy_digest"), connection=conn)
     if not metadata or metadata[0]["generation"] != generation or not policy:
         raise KeyError("Unknown generation")
     from datetime import timedelta
 
-    recorded = datetime(1970, 1, 1, tzinfo=UTC) + timedelta(
-        microseconds=metadata[0]["recorded_at"]
-    )
-    return {
-        "generation": generation,
-        "recorded_at": recorded.isoformat(),
-        "policy_digest": policy[0]["scalar"],
-        "as_of": metadata[0]["scalar"],
-    }
+    recorded = datetime(1970, 1, 1, tzinfo=UTC) + timedelta(microseconds=metadata[0]["recorded_at"])
+    return {"generation": generation, "recorded_at": recorded.isoformat(),
+            "policy_digest": policy[0]["scalar"], "as_of": metadata[0]["scalar"]}
 
 
 def _attach_sources(conn, links: list[dict]) -> None:
@@ -912,31 +680,14 @@ def _attach_sources(conn, links: list[dict]) -> None:
     )
     from edgar_warehouse.mdm.clean.record_reads import RecordReader
 
-    wanted = {
-        item.get("assertion_id")
-        for link in links
-        for item in link["body"].get("evidence", [])
-        if item.get("assertion_id")
-    }
+    wanted = {item.get("assertion_id") for link in links for item in link["body"].get("evidence", []) if item.get("assertion_id")}
     if not wanted:
         return
     adapter = installed(conn)
-    readings = RecordReader(adapter, connection=conn).inputs(
-        ("source-reading", key) for key in wanted
-    )
-    found = {
-        key: {"source_code": body["source_code"], "record_key": body["record_key"]}
-        for (_, key), body in readings.items()
-    }
+    readings = RecordReader(adapter, connection=conn).inputs(("source-reading", key) for key in wanted)
+    found = {key: {"source_code": body["source_code"], "record_key": body["record_key"]}
+             for (_, key), body in readings.items()}
     for link in links:
-        stated = {
-            (
-                found[i["assertion_id"]]["source_code"],
-                found[i["assertion_id"]]["record_key"],
-            )
-            for i in link["body"].get("evidence", [])
-            if i.get("assertion_id") in found
-        }
-        link["sources"] = [
-            {"source_code": c, "record_key": k} for c, k in sorted(stated)
-        ]
+        stated = {(found[i["assertion_id"]]["source_code"], found[i["assertion_id"]]["record_key"])
+                  for i in link["body"].get("evidence", []) if i.get("assertion_id") in found}
+        link["sources"] = [{"source_code": c, "record_key": k} for c, k in sorted(stated)]

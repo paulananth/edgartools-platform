@@ -84,9 +84,7 @@ def holders(
                 if key[1] not in values:
                     raise Conflict("Identifier reference differs from retained reading")
                 if key[1] in normals:
-                    found[key][merged.get(row["entity_id"], row["entity_id"])] = row[
-                        "kind"
-                    ]
+                    found[key][merged.get(row["entity_id"], row["entity_id"])] = row["kind"]
     return found
 
 
@@ -104,11 +102,8 @@ def survivors(conn, entity_ids: set[str]) -> dict[str, str]:
     """Each merged-away Company's survivor; shared with `matching.py`."""
     if not entity_ids:
         return {}
-    return {
-        identity: body["canonical_id"]
-        for identity, body in conn.masters(entity_ids).items()
-        if body.get("canonical_id")
-    }
+    return {identity:body["canonical_id"] for identity,body in conn.masters(entity_ids).items()
+            if body.get("canonical_id")}
 
 
 def in_review(conn, entity_ids: set[str]) -> set[str]:
@@ -121,11 +116,7 @@ def in_review(conn, entity_ids: set[str]) -> set[str]:
     """
     if not entity_ids:
         return set()
-    return {
-        identity
-        for identity, body in conn.masters(entity_ids).items()
-        if body.get("status") == "review"
-    }
+    return {identity for identity,body in conn.masters(entity_ids).items() if body.get("status") == "review"}
 
 
 def consolidations(conn, entities: set[str]) -> list[dict]:
@@ -196,78 +187,45 @@ def propose(
 ) -> dict:
     """The bindings and new Companies the active identifier rules propose.
     `released`: the records this batch unbinds (ticket 13)."""
-    from edgar_warehouse.rules.source_engine import (
-        plan_record_matches,
-        link_matching_records,
-    )
+    from edgar_warehouse.rules.source_engine import plan_record_matches, link_matching_records
     from .identifier_types import TYPES
 
     subjects = sorted({record["subject"] for record in assertions})
     try:
         held = bound(conn, subjects)
         merged = survivors(conn, set(held.values()))
-        plan = plan_record_matches(
-            {
-                "policy": policy,
-                "assertions": assertions,
-                "decisions": decisions,
-                "identities": identities,
-                "bound": list(held),
-                # A re-delivered record's values are its master's (its survivor's).
-                "bound_entities": {
-                    subject: merged.get(entity, entity)
-                    for subject, entity in held.items()
-                },
-                # What each bound record's bind withholds, stored or in this batch (part A2b).
-                "withheld": {
-                    subject: [{"namespace": n, "raw": r} for n, r in sorted(values)]
-                    for subject, values in withheld(
-                        conn, held, decisions, as_of
-                    ).items()
-                },
-                "released": sorted(released),
-                "normalizers": {
-                    kind.normalizer_name: kind.upper for kind in TYPES.values()
-                },
-            }
-        )
+        plan = plan_record_matches({
+            "policy": policy, "assertions": assertions, "decisions": decisions,
+            "identities": identities, "bound": list(held),
+            # A re-delivered record's values are its master's (its survivor's).
+            "bound_entities": {subject: merged.get(entity, entity) for subject, entity in held.items()},
+            # What each bound record's bind withholds, stored or in this batch (part A2b).
+            "withheld": {subject: [{"namespace": n, "raw": r} for n, r in sorted(values)]
+                         for subject, values in withheld(conn, held, decisions, as_of).items()},
+            "released": sorted(released),
+            "normalizers": {kind.normalizer_name: kind.upper for kind in TYPES.values()},
+        })
         if not plan["applicable"]:
             return nothing()
-        found = holders(
-            conn,
-            policy,
-            {name: set(values) for name, values in plan["wanted"].items()},
-            released,
-        )
-        suspended = in_review(
-            conn, {entity for held in found.values() for entity in held}
-        )
+        found = holders(conn, policy, {name: set(values) for name, values in plan["wanted"].items()}, released)
+        suspended = in_review(conn, {entity for held in found.values() for entity in held})
         # A record reaching two or more masters may merge them (part A2a):
         # what those masters already rest on, read once for the batch.
         reaching: set[str] = set()
         for items in plan["applicable"].values():
-            entities = {
-                e for i in items for e in found.get((i["namespace"], i["value"]), {})
-            }
+            entities = {e for i in items for e in found.get((i["namespace"], i["value"]), {})}
             if len(entities) > 1:
                 reaching |= entities
         merges = consolidations(conn, reaching) if reaching else []
         newest = conn.newest(plan["kinds"])
-        proposed = link_matching_records(
-            {
-                "plan": plan,
-                "found": [
-                    {"namespace": name, "value": value, "records": held}
-                    for (name, value), held in found.items()
-                ],
-                "suspended": sorted(suspended),
-                "newest": newest,
-                "new_ids": [str(uuid4()) for _ in plan["applicable"]],
-                "refused": sorted(correction.refused(conn, set(subjects), decisions)),
-                "as_of": as_of,
-                "consolidations": merges,
-            }
-        )
+        proposed = link_matching_records({
+            "plan": plan,
+            "found": [{"namespace": name, "value": value, "records": held} for (name, value), held in found.items()],
+            "suspended": sorted(suspended), "newest": newest,
+            "new_ids": [str(uuid4()) for _ in plan["applicable"]],
+            "refused": sorted(correction.refused(conn, set(subjects), decisions)), "as_of": as_of,
+            "consolidations": merges,
+        })
         if _merged(proposed):
             # Re-checked under the lock by the very read the planner was given:
             # a merge or exclusion stored since makes it stale.
@@ -309,37 +267,20 @@ def proposal_is_stale(
 
     # A merge rests on the consolidations its masters had (part A2a): one
     # stored since (a merge it must name, a Match Exclusion) makes it stale.
-    if (
-        _merged(automatic)
-        and [
-            d["decision_id"]
-            for d in consolidations(conn, set(automatic["consolidation_masters"]))
-        ]
-        != automatic["consolidation_ids"]
-    ):
+    if _merged(automatic) and [d["decision_id"] for d in consolidations(
+            conn, set(automatic["consolidation_masters"]))] != automatic["consolidation_ids"]:
         return True
     # A bind withholds a value only while another master holds it (part
     # A2b): withheld from one no other master holds now, it is stale.
-    held_back = [
-        (d["entity_id"], w)
-        for d in automatic.get("decisions") or []
-        if d["operation"] == "bind"
-        for w in d.get("withheld") or ()
-    ]
+    held_back = [(d["entity_id"], w) for d in automatic.get("decisions") or []
+                 if d["operation"] == "bind" for w in d.get("withheld") or ()]
     if held_back:
         asked: dict[str, set[str]] = defaultdict(set)
         for _, w in held_back:
             asked[w["namespace"]].add(w["raw"])
         others = holders(conn, policy, asked, released)
-        if any(
-            not set(
-                others.get(
-                    (w["namespace"], _normal(policy, w["namespace"], w["raw"])), {}
-                )
-            )
-            - {entity}
-            for entity, w in held_back
-        ):
+        if any(not set(others.get((w["namespace"], _normal(policy, w["namespace"], w["raw"])), {})) - {entity}
+               for entity, w in held_back):
             return True
     # A value proposed for a master is stale once another master holds it;
     # held by that master already, it is consistent.
@@ -356,8 +297,6 @@ def proposal_is_stale(
         at = earliest.get(i["kind"])
         if at is None or instant(i["published_at"]) < instant(at):
             earliest[i["kind"]] = i["published_at"]
-    newest = conn.newest(earliest)
-    return any(
-        newest[kind] is not None and instant(newest[kind]) >= instant(at)
-        for kind, at in earliest.items()
-    )
+    newest=conn.newest(earliest)
+    return any(newest[kind] is not None and instant(newest[kind])>=instant(at)
+               for kind,at in earliest.items())
