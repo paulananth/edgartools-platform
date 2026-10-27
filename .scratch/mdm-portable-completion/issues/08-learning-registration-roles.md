@@ -1,7 +1,7 @@
 # Qualify configuration registration and verifier duties
 
 Type: task
-Status: claimed
+Status: review
 Parent: [Retire PostgreSQL business routines and caller paths](08-retire-postgresql-business-routines.md)
 Blocked by: none for reusable guidance; implementation is PR #1190
 
@@ -9,8 +9,9 @@ Blocked by: none for reusable guidance; implementation is PR #1190
 
 - [x] Add source-neutral qualification guidance for separate owner, registrar, worker and verifier duties — 2026-10-26 21:14 ET: added to the governed owner installation reference.
 - [x] Verify the guidance against the demonstrated local bootstrap failure and retained restricted-role tests — 2026-10-26 21:14 ET: implementation PR #1190 retains successful registration and rights/rollback/drift checks; guidance requires each actual role path.
-- [ ] Pass genericity checks, three-axis review and overlap guard; publish a separate skill PR.
-- [x] Learning → skill: 2026-10-26 21:14 ET: `mdm-engineering/references/storage-adapters.md`, “Governed owner installation”: owner-only registration does not qualify separate registrar/worker/verifier duties.
+- [x] Pass genericity checks, three-axis review and overlap guard; publish a separate skill PR — 2026-10-26 21:25 ET: both changed references pass genericity, guard passes, review below; published as PR #1191 (CI is a merge gate).
+- [x] Replace retired native reader and test pointers with their maintained governed checks — 2026-10-26 21:25 ET: reader guidance uses governed references; examples point to retained scope, payload and input-batching tests.
+- [x] Learning → skill: 2026-10-26 21:14 ET: `mdm-engineering/references/storage-adapters.md`, “Governed owner installation”: owner-only registration does not qualify separate registrar/worker/verifier duties. `SKILL.md` also replaces retired native-reader and test pointers.
 
 ## Evidence
 
