@@ -7,7 +7,7 @@
 # Switched on (operator, 2026-10-15 06:27 ET, in their words: "merge 985 when green agreed for the rest"):
 # the matching rule activates on its Identifier Contract, verified on the
 # Proving Run's cohort (rules/merge/policy.yaml, automatic_rules).
-version: security-2026-10-26.filed-figi-finds
+version: security-2026-10-27.filed-figi-on
 defaults:
   # The first listed wins each field. Operator, 2026-10-18 (ticket 84): "make
   # openfigi priority 1 and 13f last", then "Name only (Recommended)". OpenFIGI
@@ -27,14 +27,17 @@ rules:
 # Tier A: the issued CUSIP. A record joins the one Security that holds its
 # CUSIP, or creates it. A CUSIP failing its check digit never reaches this
 # rule: the Dataset Contract sets it aside (invalid_cusip_checksum).
+# "13F CUSIP binds first" (ticket 138, with the FIGI rule below): a filed CUSIP
+# and FIGI on two Securities bind by the CUSIP; the FIGI is never merged.
 - rule_id: security-cusip
-  version: 2026-10-14.1
+  version: 2026-10-27.1
   family: binding
   source: sec.thirteenf.information_table.security.v1
   applies_to_verdict: security
   emits:
   - bind
   on_no_match: mint
+  on_conflict: first
   when:
   - primitive: identifier_match@1
     args:
@@ -46,9 +49,8 @@ rules:
 # 14:42 ET: "Lookup only (Recommended)"): the FIGI a 13F filer states, a
 # cross-reference, finds the Security OpenFIGI gave it to. 13F does not issue
 # FIGIs, so the value is never that Security's; it creates nothing and merges
-# nothing. Off until the operator's switch-on, which brings a version of
-# security-cusip with `on_conflict: first` (the CUSIP wins a conflict; until
-# this rule is on, a 13F record reaches one Security at most).
+# nothing. It needs OpenFIGI loaded first: a 13F record read before OpenFIGI
+# answers creates its own Security, which a later answer does not move.
 - rule_id: thirteenf-security-figi
   version: 2026-10-26.1
   family: binding

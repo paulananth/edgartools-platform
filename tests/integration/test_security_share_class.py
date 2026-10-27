@@ -66,11 +66,13 @@ def nport_records(root: Path, extra: list[list[str]] = (), pairs: list[list[str]
 THIRTEENF, THIRTEENF_CODE = "sec.thirteenf.information_table", "sec.thirteenf.information_table.security.v1"
 
 
-def thirteenf_records(root: Path) -> list[dict]:
-    """The 13F chain over one information table: every title is a class's evidence."""
+def thirteenf_records(root: Path, rows: str | None = None) -> list[dict]:
+    """The 13F chain over one information table (`rows`, its infoTable elements):
+    by default every title is a class's evidence."""
     folder = files.ROOT / "sources" / THIRTEENF
-    rows = "".join(f"<infoTable><nameOfIssuer>EXAMPLE CORP</nameOfIssuer><titleOfClass>{title}</titleOfClass>"
-                   f"<cusip>{cusip}</cusip><value>1</value></infoTable>" for cusip, title in TITLES)
+    if rows is None:
+        rows = "".join(f"<infoTable><nameOfIssuer>EXAMPLE CORP</nameOfIssuer><titleOfClass>{title}</titleOfClass>"
+                       f"<cusip>{cusip}</cusip><value>1</value></infoTable>" for cusip, title in TITLES)
     root.mkdir(parents=True, exist_ok=True)
     store = Artifacts()
     body = {"source": THIRTEENF, **files.load(folder / "source.yaml")}

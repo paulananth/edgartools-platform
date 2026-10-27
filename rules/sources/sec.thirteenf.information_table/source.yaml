@@ -114,9 +114,27 @@ read:
             - {"regex_replace": {"pattern": " .*$", "with": ""}}
             - {"regex_replace": {"pattern": "^#[A-Z][A-Z]+$", "with": ""}}
             - {"replace": {"from": "#", "to": ""}}
+    # The filed FIGI only from a row with no put or call (ticket 138; operator,
+    # 2026-10-27: "On, set aside put/call"): an option row names the
+    # underlying's FIGI, so a CUSIP filed only on such rows keeps none and
+    # never finds a Security through it. Measured on the 13F capture: 97 of
+    # 10,681 CUSIPs with a filed FIGI lose it, and 4 keep another one.
     sec_thirteenf_figi:
       each: infoTable
-      select: {test: {path: figi.$, kind: truthy}}
+      select:
+        choose:
+          condition:
+            equal:
+              left:
+                text:
+                  path: putCall.$
+                  default: ""
+                  transforms:
+                  - {"case": "upper"}
+                  - {"regex_replace": {"pattern": "^\\s*(NONE|NAN)?\\s*$", "with": ""}}
+              right: {const: {value: ""}}
+          then: {test: {path: figi.$, kind: truthy}}
+          else: {test: {path: NO_SUCH_COLUMN, kind: present}}
       columns:
         cusip:
           text: {path: cusip.$, default: "", transforms: [{case: upper}]}
