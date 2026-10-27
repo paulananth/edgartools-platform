@@ -83,6 +83,17 @@ MySQL native JSON may round a configuration integer, changing its fingerprint.
 Keep its canonical JSON in validated text with binary Unicode collation;
 read back the original values before accepting its digest.
 
+**Qualify each configured duty.** Run registration with the actual configuration
+registrar, saves with the worker and readback with the separate verifier, from
+the committed installation. An owner-only registration test can hide missing
+metadata permissions. Prove policy, mapping and schema approval commit with
+their immutable references and roll back together. Give a delegated registrar
+only the metadata capability its workflow needs; prove it cannot mutate the
+save gate, masters, history or leases, and that the worker cannot approve its
+own configuration. Verify privileged-function definitions and grants on owner
+reruns. Record delegated registration as unsupported on a selected engine until
+that engine's actual role path passes; another engine's proof does not qualify it.
+
 Recovery distinguishes an interrupted first installation from damage to an
 initialized registry. A checksummed pending marker fences registry calls;
 existing transactions drain before it is published. Retry the same build to
