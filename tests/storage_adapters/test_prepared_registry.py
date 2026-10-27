@@ -13,12 +13,25 @@ from sqlalchemy.exc import DBAPIError
 
 from edgar_warehouse.mdm.clean import catalog
 from edgar_warehouse.mdm.clean.prepared_registry import mapping_pin, schema_pin
-from edgar_warehouse.mdm.clean.store import Conflict, Store, digest, migrate, register_policy
+from edgar_warehouse.mdm.clean.store import (
+    Conflict,
+    Store,
+    digest,
+    migrate,
+    register_policy,
+)
 from tests.storage_adapters.test_governed_mdm_storage import seed
 from tests.storage_adapters.test_prepared_effects import batch
 
 
-CASES = ["registration", "registration_rollback", "rerun", "legacy_refusal", "cli", "interrupted_registry"]
+CASES = [
+    "registration",
+    "registration_rollback",
+    "rerun",
+    "legacy_refusal",
+    "cli",
+    "interrupted_registry",
+]
 if os.environ.get("SKILL_ADAPTER_TEST_ENGINE") == "postgresql":
     CASES.append("native_populated")
 if os.environ.get("SKILL_ADAPTER_TEST_ENGINE") == "mssql":
@@ -26,46 +39,85 @@ if os.environ.get("SKILL_ADAPTER_TEST_ENGINE") == "mssql":
 
 
 @pytest.mark.parametrize("case", CASES)
-def test_prepared_owner_registry(case, database_factory, storage_api):
+def test_prepared_owner_registry(case, database_factory, storage_api, monkeypatch):
     with database_factory() as (owner, runtime, role):
         if case == "deferred":
             with pytest.raises(ValueError, match="PostgreSQL"):
                 migrate(owner, application_role=role, prepared=True)
             return
         if case == "native_populated":
-            from edgar_warehouse.mdm.clean.merge import MergeStage
-            migrate(owner, application_role=role)
+            from edgar_warehouse.mdm.clean import prepared_registry
+
+            # Reconstruct the historical owner schema, with no governed admission.
+            # No retired Python caller is copied into the test harness.
+            with monkeypatch.context() as historical:
+                historical.setattr(
+                    prepared_registry, "initialize", lambda *a, **k: {"migration": 0}
+                )
+                migrate(owner, application_role=role)
             _, pin, _, _ = seed(owner)
-            command = {"batch_id": "invented-native", "run_id": str(uuid4()), "policy_digest": pin,
-                       "consumer": "invented", "expected_checkpoint": 0, "checkpoint": 1,
-                       "as_of": "2026-01-01T00:00:00Z"}
-            stage = MergeStage(Store(runtime))
-            stage.apply(**command)
-            with pytest.raises(Conflict, match="Populated native"):
-                migrate(owner, application_role=role, prepared=True)
-            assert stage.apply(**command)["duplicate"]
+            with owner.begin() as conn:
+                conn.execute(
+                    text("""INSERT INTO mdm.batch
+                    (batch_id,request_hash,run_id,policy_digest,generation,consumer,checkpoint,effects)
+                    VALUES ('invented-retained','invented-hash',CAST(:run AS uuid),:policy,1,'invented',1,'{}')"""),
+                    {"run": str(uuid4()), "policy": pin},
+                )
             with owner.connect() as conn:
+                before = conn.execute(text("SELECT * FROM mdm.batch")).mappings().all()
+                assert storage_api.storage_version(conn) == 0
+            with pytest.raises(Conflict, match="governed storage"):
+                Store(runtime)
+            with pytest.raises(Conflict, match="Populated native"):
+                migrate(owner, application_role=role)
+            with owner.connect() as conn:
+                assert (
+                    conn.execute(text("SELECT * FROM mdm.batch")).mappings().all()
+                    == before
+                )
                 assert storage_api.storage_version(conn) == 0
             return
         migrate(owner, application_role=role, prepared=True)
         if case == "cli":
             result = subprocess.run(
-                [sys.executable, "-c", "from edgar_warehouse.cli import main; raise SystemExit(main())",
-                 "mdm", "migrate", "--application-role", role, "--prepared-store"],
-                env={**os.environ, "MDM_DATABASE_URL": owner.url.render_as_string(hide_password=False)},
-                capture_output=True, text=True, timeout=90,
+                [
+                    sys.executable,
+                    "-c",
+                    "from edgar_warehouse.cli import main; raise SystemExit(main())",
+                    "mdm",
+                    "migrate",
+                    "--application-role",
+                    role,
+                    "--prepared-store",
+                ],
+                env={
+                    **os.environ,
+                    "MDM_DATABASE_URL": owner.url.render_as_string(hide_password=False),
+                },
+                capture_output=True,
+                text=True,
+                timeout=90,
             )
             assert result.returncode == 0, "prepared owner migration CLI failed"
             assert json.loads(result.stdout)["prepared_storage"] == 6
         policy, policy_key, first, second = seed(owner)
         api = storage_api.Adapter(runtime, prefix="mdm_store", protocol=6)
-        pins = {"catalog": digest(catalog.CATALOG), "policy": policy_key,
-                mapping_pin("invented.source", first[0]): digest(first[1]),
-                schema_pin("invented.source", "1"): digest(["invented.source", "1"]),
-                mapping_pin("invented.source", second[0]): digest(second[1]),
-                schema_pin("invented.source", "2"): digest(["invented.source", "2"])}
-        b = batch(storage_api, governed=True, workflow=True, pins=pins, indexes=(),
-                  objects=(storage_api.Effect("invented-kind", "one", {"value": 1}),))
+        pins = {
+            "catalog": digest(catalog.CATALOG),
+            "policy": policy_key,
+            mapping_pin("invented.source", first[0]): digest(first[1]),
+            schema_pin("invented.source", "1"): digest(["invented.source", "1"]),
+            mapping_pin("invented.source", second[0]): digest(second[1]),
+            schema_pin("invented.source", "2"): digest(["invented.source", "2"]),
+        }
+        b = batch(
+            storage_api,
+            governed=True,
+            workflow=True,
+            pins=pins,
+            indexes=(),
+            objects=(storage_api.Effect("invented-kind", "one", {"value": 1}),),
+        )
         lease = api.claim(b.scope, "invented-worker")
         body = {"command": "invented-approved-command"}
         if case == "registration_rollback":
@@ -73,20 +125,29 @@ def test_prepared_owner_registry(case, database_factory, storage_api):
             with pytest.raises(RuntimeError), owner.begin() as conn:
                 new_key = register_policy(conn, rejected)
                 raise RuntimeError("invented interruption")
-            with pytest.raises(storage_api.AdapterError, match="unregistered_frozen_pins"):
-                api.apply(replace(b, pins={**pins, "policy": new_key}), lease,
-                          proposal_body=body)
+            with pytest.raises(
+                storage_api.AdapterError, match="unregistered_frozen_pins"
+            ):
+                api.apply(
+                    replace(b, pins={**pins, "policy": new_key}),
+                    lease,
+                    proposal_body=body,
+                )
             with owner.connect() as conn:
                 assert storage_api.registered_policy(conn, new_key) is None
             assert api.generation() == 0
             return
         if case == "legacy_refusal":
-            with pytest.raises(ValueError, match="prepared owner installation"):
-                migrate(owner, application_role=role)
+            with pytest.raises(
+                Conflict, match="Legacy MDM runtime installation is retired"
+            ):
+                migrate(owner, application_role=role, prepared=False)
             if owner.dialect.name == "postgresql":
                 with pytest.raises(DBAPIError), runtime.begin() as conn:
-                    conn.execute(text("SELECT mdm.save_batch('{}',CAST(:run AS uuid))"),
-                                 {"run": str(uuid4())})
+                    conn.execute(
+                        text("SELECT mdm.save_batch('{}',CAST(:run AS uuid))"),
+                        {"run": str(uuid4())},
+                    )
         api.apply(b, lease, proposal_body=body)
         if case == "interrupted_registry":
             interrupted = []
@@ -113,7 +174,10 @@ def test_prepared_owner_registry(case, database_factory, storage_api):
             migrate(owner, application_role=role, prepared=True)
             assert api.replay(b.batch, lease, observer="after-rerun")["duplicate"]
         with runtime.connect() as conn:
-            active = conn.execute(select(api.tables["pin"].c.value_bytes)
-                                 .where(api.tables["pin"].c.active == 1)).all()
+            active = conn.execute(
+                select(api.tables["pin"].c.value_bytes).where(
+                    api.tables["pin"].c.active == 1
+                )
+            ).all()
             assert len(active) == len(pins)
         assert api.generation() == 1

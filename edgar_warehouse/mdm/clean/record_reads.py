@@ -612,20 +612,14 @@ class RecordReader:
 
 
 def for_connection(conn):
-    """Select the qualified read contract; the normal write gate stays separate."""
-    if conn.dialect.name not in ("postgresql", "mysql"):
-        raise Conflict("Normal MDM reads are qualified for PostgreSQL and MySQL only")
+    """Read through the qualified governed contract on the caller's snapshot."""
     from . import catalog, matching
+    from .prepared_registry import require_installed
     from .store import digest, storage_adapter
 
-    api = storage_adapter()
-    version = api.storage_version(conn)
-    if conn.dialect.name == "postgresql" and version < 5:
-        return conn
+    if conn.dialect.name not in ("postgresql", "mysql"):
+        raise Conflict("Normal MDM reads are qualified for PostgreSQL and MySQL only")
+    adapter = require_installed(conn)
     catalog.assert_current()
-    api.require_registry(conn, digest(catalog.CATALOG))
-    return RecordReader(
-        api.Adapter(conn.engine, prefix="mdm_store", protocol=version if version >= 5 else 4),
-        connection=conn,
-        routes=matching.candidate_routes(),
-    )
+    storage_adapter().require_registry(conn, digest(catalog.CATALOG))
+    return RecordReader(adapter, connection=conn, routes=matching.candidate_routes())

@@ -28,7 +28,7 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
 
 from edgar_warehouse.mdm.clean.store import digest
 
@@ -61,52 +61,15 @@ def sandbox_authority(source: str, code: str, contract: dict, capture_sha256: st
 
 
 def _records_md5(engine) -> str:
-    """The md5 of every current record, then '|', then every current Company row, each list
-    comma-joined in key order: hashed row by row, since one string of them all was killed by the
-    store's memory limit at 383,612 Securities (ticket 120)."""
-    md5 = hashlib.md5()
-    parts = ("SELECT object_type || ':' || object_id || ':' || body::text FROM mdm.current_record "
-             "ORDER BY object_type, object_id",
-             "SELECT c::text FROM mdm.company c WHERE c.to_generation IS NULL ORDER BY c.entity_id")
-    with engine.connect().execution_options(stream_results=True, yield_per=5000) as conn:
-        for number, sql in enumerate(parts):
-            if number:
-                md5.update(b"|")
-            for index, (row,) in enumerate(conn.execute(text(sql))):
-                md5.update((b"," if index else b"") + row.encode())
-    return md5.hexdigest()
+    """The governed current-record byte digest; historical SQL hashes remain historical."""
+    return counts(engine)["current_records_md5"]
 
 
 def counts(engine) -> dict:
-    """What MDM holds, as the Proving Runs count it: masters per kind, staged records per
-    source, waiting and open reviews and set-aside records per reason, decisions, and
-    identifier values on two masters. Counts only."""
-    def grouped(sql):
-        return {str(k): v for k, v in conn.execute(text(sql)).all() if v}
-    with engine.connect() as conn:
-        return {
-            "masters": grouped("SELECT kind, count(*) FROM mdm.master_entity GROUP BY kind"),
-            "stage_records": grouped("SELECT source_code, count(*) FROM mdm.stage_record GROUP BY 1"),
-            "waiting": grouped("SELECT coalesce(reason,'(none)'), count(*) FROM mdm.stage_waiting GROUP BY 1"),
-            "open_reviews": grouped("SELECT coalesce(body->>'reason','(none)'), count(*) FROM mdm.current_record "
-                                    "WHERE object_type='review' AND body->'open'='true'::jsonb GROUP BY 1"),
-            "set_aside": grouped("SELECT coalesce(body->>'reason','(none)'), count(*) FROM mdm.set_aside_record GROUP BY 1"),
-            "decisions": grouped("SELECT operation, count(*) FROM mdm.decision GROUP BY 1"),
-            "changes": grouped("SELECT 'batch_change', count(*) FROM mdm.batch_change "
-                               "UNION ALL SELECT 'outbox', count(*) FROM mdm.outbox"),
-            # Every current record's body, and every current Company row (Companies are kept in
-            # mdm.company, not mdm.current_record), hashed: a rewrite moves it even when no count moves.
-            "current_records_md5": _records_md5(engine),
-            "identifiers_on_two_masters": grouped(
-                "SELECT n, count(*) FROM (SELECT n, v FROM ("
-                "SELECT e.object_id::text AS owner, n, v FROM mdm.current_record e, "
-                "jsonb_each(e.body->'identifiers') i(n, vs), jsonb_array_elements_text(vs) v "
-                "WHERE e.object_type='entity' AND coalesce(e.body->>'status','') <> 'alias' "
-                "UNION ALL SELECT c.entity_id::text, n, v FROM mdm.company c, "
-                "jsonb_each(c.identifiers) i(n, vs), jsonb_array_elements_text(vs) v "
-                "WHERE c.to_generation IS NULL AND c.status <> 'alias') u "
-                "GROUP BY n, v HAVING count(DISTINCT owner) > 1) t GROUP BY n"),
-        }
+    """Count the governed store on one snapshot, through its indexed record pages."""
+    from edgar_warehouse.mdm.clean.inspection import counts as inspect_counts
+
+    return inspect_counts(engine)
 
 
 def quality(folder: Path, mdm) -> dict:
@@ -207,10 +170,10 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
     # Another run a step reads (ticket 120) is one in the test's own stores.
     bookkeeping = Bookkeeping(create_engine(env["worker"]["BOOKKEEPING_DATABASE_URL"]))
     try:
-        with mdm.connect() as conn:
-            if conn.scalar(text("SELECT (SELECT count(*) FROM mdm.stage_record) + (SELECT count(*) FROM mdm.current_record)")):
-                raise TestRunError("The MDM store already holds records: test on fresh stores "
-                                   "(local-test-stores.py copy <name> restores the empty baseline)")
+        held = counts(mdm)
+        if any(held[part] for part in ("masters", "stage_records", "set_aside")):
+            raise TestRunError("The MDM store already holds records: test on fresh stores "
+                               "(local-test-stores.py copy <name> restores the empty baseline)")
         receipts = capture / "receipts.jsonl"
         if not receipts.is_file():
             raise TestRunError(f"{receipts} is missing: a capture names each of its files in receipts.jsonl")

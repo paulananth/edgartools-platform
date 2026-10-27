@@ -18,7 +18,7 @@ from .binding import bound, in_review, nothing, survivors
 from .evidence import decision
 from .name_census import VERSION as CENSUS_VERSION
 from .names import REFERENCE_TABLES
-from .store import Conflict, identifier_values, rows
+from .store import Conflict
 
 FAMILY = "name_binding"
 
@@ -142,46 +142,11 @@ def _stored(conn, source: str, path: tuple, values: list[str]) -> list[dict]:
     declared scalar path removes later entries and non-scalar values before
     any binding proposal is made. Only constant storage expressions reach SQL.
     """
-    import json
-    from .record_reads import RecordReader
 
     if not values:
         return []
-    if isinstance(conn, RecordReader):
-        routes = [name for name, held in (conn.routes or {}).items() if tuple(path) == held]
-        return conn.candidates(source,routes,values)
-    if path[:1] == ("identifiers",):
-        expression, tail = "reading->'identifiers'", path[1:]
-    elif path[:2] == ("provenance", "matching"):
-        expression, tail = "reading->'provenance'->'matching'", path[2:]
-    else:
-        raise Conflict("Unsupported candidate path")
-    wanted = set(values)
-    probes = []
-    for value in sorted(wanted):
-        probe = value
-        for key in reversed(tail):
-            if key == 0:
-                probe = [probe]
-            elif isinstance(key, str):
-                probe = {key: probe}
-            else:
-                raise Conflict("Unsupported candidate array position")
-        probes.append(json.dumps(probe))
-    return [
-        r["reading"]
-        for r in rows(
-            conn,
-            f"""SELECT DISTINCT s.reading FROM unnest(CAST(:probes AS jsonb[])) k(doc)
-            CROSS JOIN LATERAL (
-                SELECT reading, source_code FROM mdm.stage_record
-                WHERE ({expression}) @> k.doc OFFSET 0
-            ) s WHERE s.source_code = :source""",
-            source=source,
-            probes=probes,
-        )
-        if candidate_value(r["reading"], path) in wanted
-    ]
+    routes = [name for name, held in (conn.routes or {}).items() if tuple(path) == held]
+    return conn.candidates(source,routes,values)
 
 
 def _bindings(
@@ -197,39 +162,26 @@ def _bindings(
     return entities
 
 
-def _held_identifiers(conn, source: str, namespace: str, entities: set[str], released: set[str] = frozenset()) -> dict:
+def _held_identifiers(
+    conn,
+    source: str,
+    namespace: str,
+    entities: set[str],
+    released: set[str] = frozenset(),
+) -> dict:
     """Identifiers already held through bound records, excluding releases."""
     held: dict[str, set] = defaultdict(set)
     if not entities:
         return held
-    from .record_reads import RecordReader
     from .withholding import given, withheld
-    if isinstance(conn, RecordReader):
-        records = [r for r in conn.current(conn.members(entities)).values()
-                   if r["source_code"] == source and r["subject"] not in released]
-        kept_back = withheld(conn, {r["subject"] for r in records})
-        for record in records:
-            # A value its bind withholds is not its master's (ticket 138 part A2b).
-            held[record["entity_id"]].update(
-                given(kept_back, record["subject"], namespace, (record.get("identifiers") or {}).get(namespace)))
-        return held
-    found = rows(
-        conn,
-        """SELECT s.entity_id::text AS entity_id, s.subject, s.reading->'identifiers'->:namespace AS value
-        FROM unnest(CAST(:entities AS uuid[])) k(id) CROSS JOIN LATERAL (
-            SELECT entity_id,reading,source_code,subject FROM mdm.stage_record
-            WHERE entity_id=k.id AND entity_id IS NOT NULL OFFSET 0
-        ) s WHERE s.source_code = :source
-          AND s.reading->'identifiers'->>:namespace IS NOT NULL
-          AND NOT s.subject = ANY(:released)""",
-        namespace=namespace,
-        entities=sorted(entities),
-        source=source,
-        released=sorted(released),
-    )
-    kept_back = withheld(conn, {r["subject"] for r in found})
-    for r in found:
-        held[r["entity_id"]].update(given(kept_back, r["subject"], namespace, r["value"]))
+
+    records = [r for r in conn.current(conn.members(entities)).values()
+               if r["source_code"] == source and r["subject"] not in released]
+    kept_back = withheld(conn, {r["subject"] for r in records})
+    for record in records:
+        # A value its bind withholds is not its master's (ticket 138 part A2b).
+        held[record["entity_id"]].update(
+            given(kept_back, record["subject"], namespace, (record.get("identifiers") or {}).get(namespace)))
     return held
 
 
@@ -345,7 +297,7 @@ def propose(
                         "assertion_id": candidate["assertion_id"],
                     }
                 )
-                targets[candidate["subject"]] = set()
+                targets[candidate["subject"]] = set()  # one review, no binding
                 continue
             # The configured namespace's held-value veto applies only when
             # the rule explicitly asks for it.
@@ -353,7 +305,7 @@ def propose(
             if vetoes and held[entity] - {value}:
                 continue
             if (candidate["subject"], rule["rule_id"], rule["version"]) in refused:
-                continue  # a correction revoked this record's link under this version
+                continue
             result["decisions"].append(
                 decision(
                     "bind",

@@ -37,27 +37,30 @@ def test_retired_commands_stay_unavailable():
         parser.parse_args(["mdm", "migrate", "--model", "legacy"])
 
 
-def test_force_publish_keeps_the_legacy_route(monkeypatch, tmp_path, capsys):
+def test_force_publish_uses_the_governed_route(monkeypatch, tmp_path, capsys):
     import json
-    from contextlib import nullcontext
     from types import SimpleNamespace
+    from edgar_warehouse.mdm.clean import forced_publication, store
 
     calls, disposed = [], []
+    engine = SimpleNamespace(dispose=lambda: disposed.append(True))
+    selected = object()
+    monkeypatch.setattr(clean_cli, "engine_from_env", lambda name: engine)
+    monkeypatch.setattr(store, "Store", lambda candidate: selected if candidate is engine else None)
 
-    def page(statement, parameters):
-        assert "mdm.force_publish" in str(statement)
-        calls.append(parameters)
+    def page(actual, consumer, run, number, after, limit):
+        assert actual is selected
+        calls.append((consumer, number))
         return {"batch_id": "invented-forced-page", "generation": 1, "records": 1, "next": None}
 
-    engine = SimpleNamespace(connect=lambda: nullcontext(object()),
-        begin=lambda: nullcontext(SimpleNamespace(scalar=page)),
-        dispose=lambda: disposed.append(True))
-    monkeypatch.setattr(clean_cli, "engine_from_env", lambda name: engine)
-    monkeypatch.setattr(clean_cli, "_inspection_adapter", lambda conn: None)
+    monkeypatch.setattr(forced_publication, "page", page)
     args = build_parser().parse_args(["mdm", "force-publish", "--consumer", "invented-export",
                                      "--output", str(tmp_path / "output")])
     assert clean_cli.force_publish(args) == 0
     report = json.loads(capsys.readouterr().out)
     assert report["pages"] == report["records"] == 1 and report["forced"] is True
-    assert len(calls) == 1 and calls[0]["c"] == "invented-export"
-    assert disposed == [True]
+    assert calls == [("invented-export", 1)] and disposed == [True]
+
+
+def test_owner_migration_defaults_to_governed_storage():
+    assert build_parser().parse_args(["mdm", "migrate"]).prepared_store is True

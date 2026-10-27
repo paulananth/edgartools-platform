@@ -11,11 +11,9 @@ none gets no link. Invented values only.
 from __future__ import annotations
 
 import io
-import json
 import zipfile
 from pathlib import Path
 
-from sqlalchemy import text
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.mdm.clean.evidence import subject_key
@@ -78,10 +76,8 @@ def test_an_isin_only_security_links_to_its_one_issuer(database, tmp_path):
         key=LEI, source_code=cusip.GLEIF, fields={"name": "Example Corp"}, identifiers={"lei": LEI},
         provenance={"matching": {"nport_issuer": True}})], 2)
     cusip.apply(stage, policy, "q2", records, 3)
-    with database.application.connect() as conn:
-        periods = [json.loads(p) if isinstance(p, str) else p for (p,) in conn.execute(text(
-            "SELECT body->'periods' FROM mdm.current_record WHERE object_type='relationship' "
-            "AND body->>'type'='ISSUED_BY'")).all()]
+    periods = [body["periods"] for body in core.documents(database, "relationship").values()
+               if body["type"] == "ISSUED_BY"]
     (only,) = periods
     # ONE's holdings were filed 5 June and 28 May: the link starts at the earlier (ticket 113).
     assert [(p["valid_from"], p["valid_from_basis"]) for p in only] == [(cusip.MAY28, "stated")]
@@ -116,9 +112,7 @@ def test_under_the_files_policy_nport_masters_its_securities(database, tmp_path)
         register_dataset(conn, CODE, database.registry, files.mdm_contract(cusip.NAME, CODE))
         policy = register_policy(conn, files.policy())
     cusip.apply(MergeStage(Store(database.application)), policy, "q2", records, 1)
-    with database.application.connect() as conn:
-        bound = dict(conn.execute(text("SELECT record_key, entity_id::text FROM mdm.stage_record "
-                                       "WHERE source_code = :s AND entity_id IS NOT NULL"), {"s": CODE}).all())
+    bound = core.bindings(database, CODE)
     assert bound[CUSIP] == bound[ONE] and bound[TWO] not in (None, bound[CUSIP])
     securities = [v for v in core.documents(database, "entity").values() if v["kind"] == "security"]
     held = [i for s in securities for i in s.get("identifiers", {}).get("isin", [])]

@@ -28,9 +28,7 @@ and which would grow with the store.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from uuid import UUID
 
-from .store import rows
 
 # A link type walked whole: a parent chain, its cycles, a second parent, an
 # ultimate parent or a succession depend on every link of the hierarchy.
@@ -63,16 +61,6 @@ def link_ends(reading: dict) -> list[tuple[str | None, str, str | None]]:
 
 def identity_changed(new: dict, old: dict | None) -> bool:
     return old is None or any(new.get(k) != old.get(k) for k in LINKED)
-
-
-def _uuids(keys) -> list[str]:
-    found = []
-    for key in keys:
-        try:
-            found.append(str(UUID(key)))
-        except ValueError:
-            pass
-    return sorted(found)
 
 
 @dataclass
@@ -138,109 +126,44 @@ class Scope:
         assertion_ids = sorted(set(assertion_ids) - set(self.readings))
         if not subjects and not assertion_ids:
             return
-        from .record_reads import RecordReader
-        if isinstance(conn, RecordReader):
-            for body in conn.source_readings(subjects, assertion_ids):
-                self.readings[body["assertion_id"]] = body
-            self.read_subjects.update(subjects)
-            return
-        for r in rows(
-            conn,
-            """SELECT r.body FROM unnest(CAST(:subjects AS text[])) k(key) CROSS JOIN LATERAL (
-                 SELECT body FROM mdm.source_reading WHERE body->>'subject' = k.key OFFSET 0) r
-               UNION ALL
-               SELECT r.body FROM unnest(CAST(:ids AS text[])) k(key) CROSS JOIN LATERAL (
-                 SELECT body FROM mdm.source_reading WHERE assertion_id = k.key OFFSET 0) r""",
-            subjects=subjects,
-            ids=assertion_ids,
-        ):
-            self.readings[r["body"]["assertion_id"]] = r["body"]
+        for body in conn.source_readings(subjects, assertion_ids):
+            self.readings[body["assertion_id"]] = body
         self.read_subjects.update(subjects)
+        return
 
 
 def identities(conn, assertions: list[dict], decisions: list[dict]) -> Scope:
     """Step 1: the affected masters, whole."""
-    from .record_reads import RecordReader, read_affected_records
-    if isinstance(conn, RecordReader):
-        frame=read_affected_records(conn.adapter,assertions,decisions,connection=conn.connection)
-        return Scope(readings=frame["readings"],decisions=frame["decisions"],
-                     stored_decisions=set(frame["decisions"]),identities=frame["identities"],
-                     subjects=frame["subjects"],read_subjects=set(frame["subjects"]),
-                     generation=frame["generation"])
-    scope = Scope()
-    keys = {a["subject"] for a in assertions} | {k for d in decisions for k in anchors(d)}
-    retiring = sorted({d["source_code"] for d in decisions if d["operation"] == "retire_source"})
-    if retiring:
-        # Every record of a source being retired is the batch's own work.
-        for r in rows(
-            conn,
-            """SELECT r.body FROM unnest(CAST(:codes AS text[])) k(code) CROSS JOIN LATERAL (
-                SELECT body FROM mdm.source_reading WHERE source_code = k.code OFFSET 0) r""",
-            codes=retiring,
-        ):
-            scope.readings[r["body"]["assertion_id"]] = r["body"]
-            keys.add(r["body"]["subject"])
-    named: set[str] = set()
-    while want := sorted(keys - named):
-        for r in rows(
-            conn,
-            """SELECT body FROM mdm.decision
-            WHERE decision_id IN (SELECT id FROM mdm.decisions_naming(CAST(:keys AS text[])) id)""",
-            keys=want,
-        ):
-            scope.decisions[r["body"]["decision_id"]] = r["body"]
-            keys.update(anchors(r["body"]))
-        named.update(want)
-    scope.stored_decisions = set(scope.decisions)
-    ids = set(_uuids(keys))
-    scope.subjects = keys - ids - set(scope.decisions) - {d["decision_id"] for d in decisions}
-    scope.read(conn, subjects=scope.subjects)
-    scope.identities = rows(
-        conn,
-        """SELECT i.entity_id::text, i.kind, i.published_at::text
-        FROM unnest(CAST(:ids AS uuid[])) k(id) CROSS JOIN LATERAL (
-            SELECT * FROM mdm.master_entity WHERE entity_id = k.id OFFSET 0) i""",
-        ids=sorted(ids),
-    )
-    return scope
+    from .record_reads import read_affected_records
+
+    frame=read_affected_records(conn.adapter,assertions,decisions,connection=conn.connection)
+    return Scope(readings=frame["readings"],decisions=frame["decisions"],
+                 stored_decisions=set(frame["decisions"]),identities=frame["identities"],
+                 subjects=frame["subjects"],read_subjects=set(frame["subjects"]),
+                 generation=frame["generation"])
 
 
 def retirements(conn, sources=None) -> dict[str, dict]:
     """Every retired source's decision: a handful, read whole."""
-    from .record_reads import RecordReader
-    if isinstance(conn, RecordReader):
-        if sources is None:
-            raise ValueError("Portable retirements require the affected source keys")
-        return {body["decision_id"]:body for body in conn.retained_groups(
-            conn.group("source_retirements", source) for source in sorted(set(sources))).values()}
-    if sources is not None:
-        return {r["body"]["decision_id"]:r["body"] for r in rows(conn,
-            """SELECT d.body FROM unnest(CAST(:sources AS text[])) k(key) CROSS JOIN LATERAL (
-               SELECT body FROM mdm.decision WHERE operation='retire_source'
-                 AND body->>'source_code'=k.key OFFSET 0) d""",sources=sorted(set(sources)))}
-    return {
-        r["body"]["decision_id"]: r["body"]
-        for r in rows(conn, "SELECT body FROM mdm.decision WHERE operation='retire_source'")
-    }
+    if sources is None:
+        raise ValueError("Portable retirements require the affected source keys")
+    return {body["decision_id"]:body for body in conn.retained_groups(
+        conn.group("source_retirements", source) for source in sorted(set(sources))).values()}
 
 
 def stored_masters(conn, ids) -> dict[str, dict]:
-    """Masters as stored, by id (`current_entity`: Companies and every kind)."""
-    from .record_reads import RecordReader
-    if isinstance(conn, RecordReader):
-        return conn.masters(ids)
-    return {
-        r["object_id"]: r["body"]
-        for r in rows(
-            conn,
-            """SELECT e.object_id, e.body FROM unnest(CAST(:ids AS text[])) k(id) CROSS JOIN LATERAL (
-                SELECT object_id, body FROM mdm.current_entity WHERE object_id = k.id OFFSET 0) e""",
-            ids=sorted(set(ids)),
-        )
-    }
+    """Masters as stored, by their indexed identifiers."""
+    return conn.masters(ids)
 
 
-def links(conn, scope: Scope, starts: set[str], changed: set[str], types: dict, batch: list[dict]) -> None:
+def links(
+    conn,
+    scope: Scope,
+    starts: set[str],
+    changed: set[str],
+    types: dict,
+    batch: list[dict],
+) -> None:
     """Steps 2-4: read what the links of `starts` (whole outgoing) and of
     `changed` (whole incoming) need, and walk each hierarchy they touch."""
     scope.starts = set(starts)
@@ -248,14 +171,7 @@ def links(conn, scope: Scope, starts: set[str], changed: set[str], types: dict, 
     named_into: set[str] = set()
     walked: set[str] = set()
     while True:
-        from .record_reads import RecordReader
-        cited = (conn.projections(starts=scope.starts) if isinstance(conn,RecordReader) else rows(
-            conn,
-            """SELECT c.body FROM unnest(CAST(:ids AS text[])) k(id) CROSS JOIN LATERAL (
-                SELECT body FROM mdm.current_record
-                WHERE object_type='relationship' AND body->>'source_id' = k.id OFFSET 0) c""",
-            ids=sorted(scope.starts),
-        ))
+        cited = conn.projections(starts=scope.starts)
         scope.read(
             conn,
             subjects=_members(conn, scope.starts),
@@ -263,14 +179,12 @@ def links(conn, scope: Scope, starts: set[str], changed: set[str], types: dict, 
         )
         into = (_members(conn, scope.changed) | {s for s, m in scope.replayed.items() if m in scope.changed})
         if want := sorted(into - named_into):
-            found = ([{"body":body} for body in conn.retained_groups(
-                conn.group("related_readings",key) for key in want).values()]
-                if isinstance(conn,RecordReader) else rows(
-                conn,
-                """SELECT body FROM mdm.source_reading WHERE assertion_id IN (
-                    SELECT id FROM mdm.readings_naming(CAST(:keys AS text[])) id)""",
-                keys=want,
-            ))
+            found = [
+                {"body": body}
+                for body in conn.retained_groups(
+                    conn.group("related_readings", key) for key in want
+                ).values()
+            ]
             for r in found:
                 scope.readings[r["body"]["assertion_id"]] = r["body"]
             named_into.update(want)
@@ -303,46 +217,11 @@ def stored_links_and_reviews(conn, scope: Scope) -> list[dict]:
     """The stored links and reviews this batch may rewrite or retire, each
     read through its index."""
     keys = sorted(scope.masters | scope.starts | scope.changed | scope.read_subjects | scope.subjects)
-    from .record_reads import RecordReader
-    if isinstance(conn,RecordReader):
-        return conn.projections(starts=scope.starts,changed=scope.changed,reviews=keys)
-    found = rows(
-        conn,
-        """SELECT c.* FROM unnest(CAST(:starts AS text[])) k(key) CROSS JOIN LATERAL (
-            SELECT object_type, object_id, body FROM mdm.current_record
-            WHERE object_type='relationship' AND body->>'source_id'=k.key OFFSET 0) c
-        UNION ALL SELECT c.* FROM unnest(CAST(:changed AS text[])) k(key) CROSS JOIN LATERAL (
-            SELECT object_type, object_id, body FROM mdm.current_record
-            WHERE object_type='relationship' AND body->>'target_id'=k.key OFFSET 0) c
-        UNION ALL SELECT c.* FROM unnest(CAST(:keys AS text[])) k(key) CROSS JOIN LATERAL (
-            SELECT object_type, object_id, body FROM mdm.current_record
-            WHERE object_type='review' AND body->>'entity_id'=k.key OFFSET 0) c
-        UNION ALL SELECT c.* FROM unnest(CAST(:keys AS text[])) k(key) CROSS JOIN LATERAL (
-            SELECT object_type, object_id, body FROM mdm.current_record
-            WHERE object_type='review' AND body->>'subject'=k.key OFFSET 0) c
-        UNION ALL SELECT c.* FROM unnest(CAST(:keys AS text[])) k(key) CROSS JOIN LATERAL (
-            SELECT object_type, object_id, body FROM mdm.current_record
-            WHERE object_type='review' AND body->'affected_subjects' ? k.key OFFSET 0) c""",
-        starts=sorted(scope.starts),
-        changed=sorted(scope.changed),
-        keys=keys,
-    )
-    return list({(r["object_type"], r["object_id"]): r for r in found}.values())
+    return conn.projections(starts=scope.starts,changed=scope.changed,reviews=keys)
 
 
 def _members(conn, ids) -> set[str]:
-    from .record_reads import RecordReader
-    if isinstance(conn,RecordReader):
-        return conn.members(ids)
-    return {
-        r["subject"]
-        for r in rows(
-            conn,
-            """SELECT s.subject FROM unnest(CAST(:ids AS uuid[])) k(id) CROSS JOIN LATERAL (
-                SELECT subject FROM mdm.stage_record WHERE entity_id = k.id OFFSET 0) s""",
-            ids=_uuids(ids),
-        )
-    }
+    return conn.members(ids)
 
 
 def _bind(conn, scope: Scope, readings: list[dict]) -> None:
@@ -351,22 +230,7 @@ def _bind(conn, scope: Scope, readings: list[dict]) -> None:
         {end for a in readings for _, start, target in link_ends(a) for end in (start, target)}
         - {None} - set(scope.bound) - set(scope.replayed)
     )
-    from .record_reads import RecordReader
-    if isinstance(conn,RecordReader):
-        # A plain far end is read as stored without replaying its identity.
-        found=conn.bindings(named)
-    else:
-        found = {
-        r["subject"]: r["entity_id"]
-        for r in rows(
-            conn,
-            """SELECT s.subject, s.entity_id::text AS entity_id FROM unnest(CAST(:keys AS text[])) k(key)
-            CROSS JOIN LATERAL (
-                SELECT subject, entity_id FROM mdm.stage_record
-                WHERE subject = k.key AND entity_id IS NOT NULL OFFSET 0) s""",
-            keys=named,
-        )
-        }
+    found=conn.bindings(named)
     scope.stored.update(stored_masters(conn, set(found.values()) - set(scope.stored)))
     # A merged-away master points at its survivor; read the survivor too.
     survivors = {b.get("canonical_id") for b in scope.stored.values()} - set(scope.stored) - {None}
@@ -380,26 +244,11 @@ def _chain(conn, seeds: set[str], types: dict) -> set[str]:
     whole = sorted(k for k, spec in types.items() if walks_whole(spec))
     found, frontier = set(seeds), set(seeds)
     while frontier and whole:
-        from .record_reads import RecordReader
-        step = ([{"s":row["body"]["source_id"],"t":row["body"]["target_id"]}
-                 for row in conn.projections(starts=frontier,changed=frontier)
-                 if row["body"].get("type") in whole and not row["body"].get("retired")]
-                if isinstance(conn,RecordReader) else rows(
-            conn,
-            """SELECT c.s, c.t FROM unnest(CAST(:ids AS text[])) k(id) CROSS JOIN LATERAL (
-                SELECT body->>'source_id' AS s, body->>'target_id' AS t FROM mdm.current_record
-                WHERE object_type='relationship' AND body->>'source_id' = k.id
-                  AND body->>'type' = ANY(CAST(:types AS text[]))
-                  AND body->'retired' IS DISTINCT FROM 'true'::jsonb OFFSET 0) c
-            UNION
-            SELECT c.s, c.t FROM unnest(CAST(:ids AS text[])) k(id) CROSS JOIN LATERAL (
-                SELECT body->>'source_id' AS s, body->>'target_id' AS t FROM mdm.current_record
-                WHERE object_type='relationship' AND body->>'target_id' = k.id
-                  AND body->>'type' = ANY(CAST(:types AS text[]))
-                  AND body->'retired' IS DISTINCT FROM 'true'::jsonb OFFSET 0) c""",
-            ids=sorted(frontier),
-            types=whole,
-        ))
+        step = [
+            {"s": row["body"]["source_id"], "t": row["body"]["target_id"]}
+            for row in conn.projections(starts=frontier, changed=frontier)
+            if row["body"].get("type") in whole and not row["body"].get("retired")
+        ]
         frontier = {x for r in step for x in (r["s"], r["t"])} - found
         found |= frontier
     return found

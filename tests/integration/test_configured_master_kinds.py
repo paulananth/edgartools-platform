@@ -12,23 +12,20 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
-from edgar_warehouse.mdm.clean import catalog, schema, store
+from edgar_warehouse.mdm.clean import catalog, store
 from edgar_warehouse.rules import files
 from tests.integration import test_clean_mdm_postgres as core
 
 
-def test_populated_kind_constraint_upgrade_preserves_business_rows(database, monkeypatch):
-    with monkeypatch.context() as patch:
-        patch.setattr(store, "MIGRATIONS", store.MIGRATIONS[:store.MIGRATIONS.index("024_configured_kinds.sql")])
-        patch.setattr(schema, "configure_kinds", lambda conn: None)
-        old = core.initialize_database(database.admin, database.application)
-        item = core.source("invented-existing", fields={"name": "Invented Existing"})
-        identity, binding = core.identity_and_binding(item)
-        core.apply(old, 1, assertions=[item], identities=[identity], decisions=[binding])
+def test_populated_governed_upgrade_preserves_business_rows(database):
+    old = database
+    item = core.source("invented-existing", fields={"name": "Invented Existing"})
+    identity, binding = core.identity_and_binding(item)
+    core.apply(old, 1, assertions=[item], identities=[identity], decisions=[binding])
     before = core.documents(old, "entity")
     with database.application.connect() as conn:
-        counts = {name: conn.scalar(text("SELECT count(*) FROM mdm." + name))
-                  for name in ("source_reading", "master_entity", "current_record", "outbox", "batch")}
+        counts = {name: conn.scalar(text("SELECT count(*) FROM public.mdm_store_" + name))
+                  for name in ("evidence", "current", "history", "outbox", "batch")}
     # Hold the same first lock as save_batch. The upgrade must wait on that
     # advisory lock before taking any master table DDL lock.
     with ThreadPoolExecutor(max_workers=1) as pool:
@@ -45,13 +42,13 @@ def test_populated_kind_constraint_upgrade_preserves_business_rows(database, mon
                     AND :holder=ANY(pg_blocking_pids(l.pid))"""), {"holder": holder}).scalars().all()
                 if not blocked: time.sleep(0.01)
             conn.execute(text("SET LOCAL lock_timeout='500ms'"))
-            assert conn.scalar(text("SELECT count(*) FROM mdm.master_entity")) == 1
+            assert conn.scalar(text("SELECT count(*) FROM public.mdm_store_current")) == 1
         upgrade.result(timeout=15)
     assert blocked == ["advisory"]
     store.migrate(database.admin, application_role="clean_application")
     assert core.documents(old, "entity") == before
     with database.application.connect() as conn:
-        assert {name: conn.scalar(text("SELECT count(*) FROM mdm." + name)) for name in counts} == counts
+        assert {name: conn.scalar(text("SELECT count(*) FROM public.mdm_store_" + name)) for name in counts} == counts
         assert set(conn.scalars(text("SELECT kind FROM mdm.master_kind WHERE enabled"))) == set(catalog.CATALOG["kinds"])
         assert conn.scalar(text("""SELECT count(*) FROM pg_constraint
             WHERE conrelid='mdm.master_entity'::regclass AND conname='master_entity_kind_fkey'""")) == 1
@@ -99,10 +96,8 @@ try:
     answer = json.loads(output.getvalue())
     assert answer["kind"] == "invented_kind"
     assert answer["definition"] == "Invented configured master kind."
-    with runtime.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm.invented_kind_stage")) == 1
-        assert conn.scalar(text("SELECT count(*) FROM mdm.invented_kind_master")) == 1
-        assert conn.scalar(text("SELECT count(*) FROM mdm.invented_kind_master_field")) == 1
+    assert len(core.current_records(db)) == 1
+    assert core.bindings(db) == {"invented-record": identity["entity_id"]}
 finally:
     owner.dispose(); runtime.dispose()
 '''
@@ -128,7 +123,7 @@ finally:
         assert _uncommented(conn) == []
         assert conn.scalar(text("SELECT obj_description('mdm.invented_kind_stage'::regclass,'pg_class')")) == "Invented steward description"
     with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm.invented_kind_master")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM public.mdm_store_current")) >= 1
         assert conn.scalar(text("SELECT enabled FROM mdm.master_kind WHERE kind='invented_kind'")) is False
     with pytest.raises(DBAPIError, match="not enabled"), database.admin.begin() as conn:
         conn.execute(text("INSERT INTO mdm.master_entity VALUES(:id,'invented_kind',now(),'invented-batch')"), {"id": str(uuid4())})

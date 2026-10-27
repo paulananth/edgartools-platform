@@ -1,8 +1,7 @@
 """The CIK matching rule relies on an SEC record's CIK being its key
 (company mastering ticket 15).
 
-A bound record whose CIK changes would re-key its Company silently (see the
-xfail in tests/integration/test_clean_cik_rule.py). The SEC reading cannot do
+A bound record whose CIK changes would re-key its Company silently. The SEC reading cannot do
 that while its record key and its CIK are one column in one format; a mapping
 that separates them fails here first.
 """

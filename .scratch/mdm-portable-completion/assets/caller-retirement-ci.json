@@ -1,0 +1,67 @@
+{
+  "run": "40491799251",
+  "head": "005284685b39fdaaa1723b990edb1a97563b76db",
+  "installed_revision": "0ee6f60e585942bd5db96a831cddad50ba2ac5f5",
+  "checks": 21,
+  "ignored_identical_alias_copies": 0,
+  "elapsed_seconds": 1187,
+  "engines": {
+    "postgresql": {
+      "passed_cases": 164,
+      "families": 18,
+      "configured_kinds": 2,
+      "cleanup_verified": true,
+      "family_case_counts": {
+        "Q01": 164,
+        "Q02": 2,
+        "Q03": 4,
+        "Q04": 20,
+        "Q05": 10,
+        "Q06": 10,
+        "Q07": 4,
+        "Q08": 6,
+        "Q09": 10,
+        "Q10": 4,
+        "Q11": 6,
+        "Q12": 8,
+        "Q13": 8,
+        "Q14": 18,
+        "Q15": 12,
+        "Q16": 12,
+        "Q17": 34,
+        "Q18": 18
+      }
+    },
+    "mysql": {
+      "passed_cases": 164,
+      "families": 18,
+      "configured_kinds": 2,
+      "cleanup_verified": true,
+      "family_case_counts": {
+        "Q01": 164,
+        "Q02": 2,
+        "Q03": 4,
+        "Q04": 20,
+        "Q05": 10,
+        "Q06": 10,
+        "Q07": 4,
+        "Q08": 6,
+        "Q09": 10,
+        "Q10": 4,
+        "Q11": 6,
+        "Q12": 8,
+        "Q13": 8,
+        "Q14": 18,
+        "Q15": 12,
+        "Q16": 12,
+        "Q17": 34,
+        "Q18": 18
+      }
+    }
+  },
+  "finished_at_et": "2026-10-27 07:11 ET",
+  "recorded_at_et": "2026-10-27 07:23 ET",
+  "every_expected_case_once": true,
+  "identical_configuration_pins": true,
+  "committed_head_in_install": true
+}

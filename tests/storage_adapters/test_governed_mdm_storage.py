@@ -206,11 +206,11 @@ def test_normal_governed_storage(case, database, storage_api, monkeypatch):
             with pytest.raises(DBAPIError), runtime.begin() as conn:
                 conn.execute(text(f"DELETE FROM {table}"))
             if mysql:
-                api = storage_api.Adapter(runtime, prefix="mdm_store", protocol=4)
-                with pytest.raises(
-                    storage_api.AdapterError, match="database_operation_failed"
-                ):
-                    api.claim("unqualified-normal-merge", "writer")
+                # Normal owner installation now admits governed work. Registry
+                # writes above remain forbidden to that same worker.
+                api = storage_api.Adapter(runtime, prefix="mdm_store", protocol=6)
+                lease = api.claim("qualified-normal-merge", "writer")
+                assert lease.scope == "qualified-normal-merge" and lease.fence >= 1
         elif case == "immutable":
             with pytest.raises(DBAPIError), owner.begin() as conn:
                 conn.execute(text(f"UPDATE {table} SET body=body"))
@@ -286,12 +286,13 @@ def test_normal_governed_storage(case, database, storage_api, monkeypatch):
         elif case == "prepared_retention":
             from tests.storage_adapters.test_prepared_effects import batch
 
-            adapter = storage_api.Adapter(owner, prefix="mdm_store", protocol=4)
-            request = batch(
-                storage_api, pins={"policy": digest, "configuration": catalog.CATALOG}
-            )
+            from edgar_warehouse.mdm.clean.store import digest as content_digest
+            adapter = storage_api.Adapter(owner, prefix="mdm_store", protocol=6)
+            request = batch(storage_api, governed=True, workflow=True, indexes=(),
+                pins={"policy": digest, "catalog": content_digest(catalog.CATALOG)})
             lease = adapter.claim(request.scope, "owner-fixture")
-            adapter.apply(request, lease)
+            proposal = {"command": "invented-retained-command"}
+            adapter.apply(request, lease, proposal_body=proposal)
             retained = (
                 "current",
                 "history",
@@ -317,7 +318,7 @@ def test_normal_governed_storage(case, database, storage_api, monkeypatch):
             before = snapshot()
             migrate(owner, application_role=role)
             assert snapshot() == before
-            assert adapter.apply(request, lease)["duplicate"]
+            assert adapter.apply(request, lease, proposal_body=proposal)["duplicate"]
         elif case == "checksum_drift":
             ledger = "registry_migration" if mysql else "mdm.migration"
             predicate = "version=1" if mysql else "name='001_mdm.sql'"

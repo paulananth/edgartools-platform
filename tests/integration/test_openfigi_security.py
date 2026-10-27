@@ -248,10 +248,7 @@ def test_an_isin_answer_carries_its_isin_and_every_listing_figi(tmp_path):
 
 def bound(database, source_code: str, key: str) -> str | None:
     """The Security a staged record is bound to, through its survivor."""
-    with database.application.connect() as conn:
-        return conn.scalar(text("SELECT coalesce(e.canonical_id, s.entity_id::text) FROM mdm.stage_record s "
-                                "LEFT JOIN mdm.current_entity e ON e.object_id = s.entity_id::text "
-                                "WHERE s.source_code = :s AND s.record_key = :k"), {"s": source_code, "k": key})
+    return core.bindings(database, source_code).get(key)
 
 
 def securities(database) -> dict:
@@ -289,9 +286,12 @@ def test_a_record_joins_the_security_holding_its_cusip_or_creates_it(database, t
         "EXAMPLE CORP", "COM")
     # The Security holds its CUSIP and every listing FIGI (no reverse limit).
     assert joined["status"] == "accepted" and joined["identifiers"] == {"cusip": [EQUITY], "figi": figis(EQUITY)}
+    from edgar_warehouse.mdm.clean.record_reads import for_connection
     with database.application.connect() as conn:
-        (row,) = conn.execute(text("SELECT * FROM mdm.cross_reference_lookup('composite_figi', 'BBGZ0000VS14')")).all()
-    assert row._mapping["record_key"] == EQUITY
+        reader = for_connection(conn)
+        subjects = reader.subjects([reader.group("cross_reference_records", "composite_figi", "BBGZ0000VS14")])
+        (reading,) = reader.readings(subjects).values()
+    assert reading["record_key"] == EQUITY
 
 
 def test_a_filed_figi_finds_its_security_and_never_becomes_one_of_its_identifiers(database, tmp_path):

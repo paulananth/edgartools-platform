@@ -15,15 +15,14 @@ from collections import defaultdict
 from types import SimpleNamespace
 from uuid import UUID
 
-from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
-from . import assessment, binding, correction, limits, matching, relationships, withholding
+from . import assessment, binding, correction, matching, relationships, withholding
 from . import scope as scoping
 from .activation import check_policy
 from .evidence import PROFILE_KINDS, instant, validate_assertion, validate_deferred
 from .identity import replay
-from .store import Conflict, Store, canonical, digest, rows, storage_adapter
+from .store import Conflict, Store, digest, storage_adapter
 from .survivorship import PROFILE_IDENTITY, current_claims
 
 
@@ -131,10 +130,9 @@ class MergeStage:
             raise Conflict("A read-only MDM store cannot admit a merge")
         if command.get("preview"):
             return self._execute(**command, automatic=self.propose(**command))
-        if getattr(self.store, "prepared", False):
-            api = storage_adapter().Adapter(self.store.engine, prefix="mdm_store", protocol=self.store.protocol)
-            if api.read_batch(command["batch_id"]) is not None:
-                return self._execute(**command, automatic=binding.nothing())
+        api = storage_adapter().Adapter(self.store.engine, prefix="mdm_store", protocol=self.store.protocol)
+        if api.read_batch(command["batch_id"]) is not None:
+            return self._execute(**command, automatic=binding.nothing())
         for attempt in range(3):
             automatic = self.propose(**command)
             identity_work = _identity_work(command.get("decisions"), automatic)
@@ -158,10 +156,11 @@ class MergeStage:
     @staticmethod
     def propose_on(engine, **command) -> dict:
         """The normal read phase, independently callable before admitting writes."""
-        from .record_reads import for_connection, RecordReader
+        from .record_reads import for_connection
+
         with engine.connect() as connection:
             conn=for_connection(connection)
-            generation=conn.adapter.generation(connection=connection) if isinstance(conn,RecordReader) else None
+            generation = conn.adapter.generation(connection=connection)
             policy = storage_adapter().registered_policy(connection, command["policy_digest"])
             if policy is None:
                 return binding.nothing()
@@ -232,8 +231,11 @@ class MergeStage:
             raise ValueError("Assessment requires an identity proposal")
         proposal, kept = _proposal(command), _kept(automatic)
         try:
-            result = self._execute(**{**command, "preview": True}, automatic=automatic,
-                                   _record={"command": proposal, **kept} if self.store.prepared else None)
+            result = self._execute(
+                **{**command, "preview": True},
+                automatic=automatic,
+                _record=({"command": proposal, **kept}),
+            )
         except (Conflict, DBAPIError) as exc:
             self._reject(proposal, kept, exc, command["run_id"])
             raise
@@ -246,15 +248,16 @@ class MergeStage:
         )
 
     @staticmethod
-    def _check_rule_proposals(conn, policy_digest: str, automatic: dict | None, decisions: list[dict]) -> dict:
+    def _check_rule_proposals(
+        conn, policy_digest: str, automatic: dict | None, decisions: list[dict]
+    ) -> dict:
         """Under the lock, every rule proposal is re-checked: a concurrent run may
         have bound its identifier, given it to another Company, or published a
         newer Company of its kind since it was proposed. Propose again rather
         than mint twice, join the wrong Company, or publish a new Company before
         one already stored. A preview passes no proposals and checks only the
         policy. Returns the policy."""
-        from .record_reads import RecordReader
-        connection = conn.connection if isinstance(conn, RecordReader) else conn
+        connection = conn.connection
         policy = storage_adapter().registered_policy(connection, policy_digest)
         if policy is None:
             raise Conflict("Unknown or unqualified policy")
@@ -347,12 +350,6 @@ class MergeStage:
         deferred = sorted(deferred or [], key=lambda d: d["deferred_id"])
         occurrences = _occurrences(occurrences or [], assertions)
         instant(as_of)
-        if not getattr(self.store, "prepared", False) and (
-            len(assertions) + len(deferred) > limits.BATCH_RECORDS
-            or len(decisions) > limits.BATCH_RECORDS
-            or len(identities) > limits.BATCH_RECORDS
-        ):
-            raise ValueError("Unbounded batch")
         for a in assertions:
             validate_assertion(a)
             # The Stage hashes a profile's identifying values as text (038).
@@ -418,75 +415,28 @@ class MergeStage:
         identities = sorted(
             [*identities, *automatic["identities"]], key=lambda i: i["entity_id"]
         )
-        if getattr(self.store, "prepared", False):
-            from .prepared import execute
-            return execute(self, command=command, assertions=assertions,
-                           decisions=decisions, identities=identities, deferred=deferred,
-                           automatic=automatic, input_hash=input_hash, run_id=run_id,
-                           preview=preview, assessment_id=assessment_id, record=_record)
-        with self.store.engine.begin() as conn:
-            conn.execute(text("SELECT pg_advisory_xact_lock(730234)"))
-            previous = conn.scalar(
-                text("SELECT effects FROM mdm.batch WHERE batch_id=:id"),
-                {"id": batch_id},
-            )
-            if previous is not None:
-                if previous.get("input_hash") != input_hash:
-                    raise Conflict("Batch key reused with different command")
-                if preview:
-                    return {"preview": True, "duplicate": True, "effects": previous}
-                return self.store.commit(conn, previous, run_id)
-            policy = self._check_rule_proposals(
-                conn, policy_digest, None if preview else automatic, decisions
-            )
-            request, before, _ = self._prepare(
-                conn, policy=policy, command=command, assertions=assertions,
-                decisions=decisions, identities=identities, deferred=deferred,
-                automatic=automatic, input_hash=input_hash,
-            )
-            effects = {k: v for k, v in request.items() if k != "expected_generation"}
-            if preview:
-                # Exercise the identical SQL validation/permissions boundary,
-                # through a capability that always rolls back its inner writes.
-                conn.execute(
-                    text("SELECT mdm.preview_batch(:request,CAST(:run AS uuid))"),
-                    {"request": canonical(request), "run": run_id},
-                )
-            candidate = None
-            if (preview or _record is not None) and _identity_work(request["decisions"], None):
-                candidate = {
-                    "version": 1,
-                    "command": command,
-                    "outcome": "ready",
-                    "rule_version": "merge-validation-v1",
-                    "vetoes": [],
-                    "before": sorted(before, key=lambda p: (p["object_type"], p["object_id"])),
-                    "effects": effects,
-                }
-            if preview:
-                conn.rollback()
-                return {
-                    "preview": True,
-                    "duplicate": False,
-                    "effects": request,
-                    "assessment": candidate,
-                }
-            if assessment_id is not None:
-                # The save checks the batch equals the proposal's effects.
-                request["assessment_id"] = assessment_id
-            elif candidate is not None:
-                # The proposal first, then the batch, in one commit (Q13).
-                self.store._authorize(conn)
-                request["assessment_id"] = assessment.record_in(conn, {**candidate, **_record}, run_id)
-            return self.store.commit(conn, request, run_id)
+        from .prepared import execute
 
+        return execute(self, command=command, assertions=assertions,
+                       decisions=decisions, identities=identities, deferred=deferred,
+                       automatic=automatic, input_hash=input_hash, run_id=run_id,
+                       preview=preview, assessment_id=assessment_id, record=_record)
 
-    def _prepare(self, conn, *, policy, command, assertions, decisions,
-                 identities, deferred, automatic, input_hash):
+    def _prepare(
+        self,
+        conn,
+        *,
+        policy,
+        command,
+        assertions,
+        decisions,
+        identities,
+        deferred,
+        automatic,
+        input_hash,
+    ):
         """One affected-record calculation for retained and prepared stores."""
-        from .record_reads import RecordReader
-        portable = isinstance(conn, RecordReader)
-        connection = conn.connection if portable else conn
+        connection = conn.connection
         as_of, policy_digest = command["as_of"], command["policy_digest"]
         types = relationships.types_of(policy)
         # The masters this batch touches, whole; nothing it is only
@@ -499,7 +449,7 @@ class MergeStage:
                 raise Conflict("Evidence collision")
             evidence[a["assertion_id"]] = a
         sources = {a["source_code"] for a in [*scope.readings.values(), *assertions]}
-        all_d = {**scope.decisions, **scoping.retirements(conn, sources if portable else None)}
+        all_d = {**scope.decisions, **scoping.retirements(conn, (sources))}
         all_d.update({d["decision_id"]: d for d in decisions})
         scope.decisions.update({d["decision_id"]: d for d in decisions})
         all_ids = {i["entity_id"]: i for i in scope.identities}
@@ -638,9 +588,7 @@ class MergeStage:
                 {"object_type": kind, "object_id": key,
                  "body": {**body, "retired": True, "open": False, "waiting_for_end": False}}
             )
-        generation = scope.generation if portable else conn.scalar(
-            text("SELECT coalesce(max(generation),0) FROM mdm.batch")
-        )
+        generation = scope.generation
         request = {
             **command,
             "identities": identities,

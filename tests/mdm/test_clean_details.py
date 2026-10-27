@@ -7,6 +7,7 @@ import pytest
 from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord, normalize
 from edgar_warehouse.mdm.clean.evidence import assertion, validate_assertion
 from edgar_warehouse.mdm.clean.store import register_dataset
+from edgar_warehouse.mdm.clean.catalog import CATALOG
 from tests.mdm.test_clean_cross_reference import BASE, GOLDEN, PUBLICATION
 from tests.support.reading import reading
 
@@ -61,7 +62,6 @@ def test_a_row_without_its_key_a_key_held_twice_or_a_reserved_field_sets_the_rec
 
 
 @pytest.mark.parametrize("changes, words", [
-    ({"kind": "company"}, "other than company"),
     ({"details": False}, "details column"),
     ({"detail_keys": {"Listings": "figi"}}, "lower-case words"),
     ({"detail_keys": {"listings": ""}}, "lower-case words"),
@@ -71,7 +71,8 @@ def test_registration_refuses_detail_lists_it_cannot_keep(changes, words):
         register_dataset(None, "fixture.primary", contract(**changes))
 
 
-def test_registration_takes_a_securitys_detail_lists():
+@pytest.mark.parametrize("kind", CATALOG["kinds"])
+def test_registration_takes_every_configured_kinds_detail_lists(kind):
     """Past the detail check, registration asks for the Rules authority, as for any contract."""
     with pytest.raises(ValueError, match="no Rules source authority|approved frozen"):
-        register_dataset(None, "fixture.primary", contract())
+        register_dataset(None, "fixture.primary", contract(kind=kind))

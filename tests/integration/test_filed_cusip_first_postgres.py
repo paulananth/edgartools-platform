@@ -9,10 +9,9 @@ holding filing only that ISIN finds its own Security. Invented values only.
 
 from __future__ import annotations
 
+from edgar_warehouse.mdm.clean.record_reads import for_connection
 from edgar_warehouse.mdm.clean import binding
 from edgar_warehouse.mdm.clean.evidence import decision
-from edgar_warehouse.mdm.clean.store import Store
-from edgar_warehouse.rules import files
 from tests.integration import test_clean_mdm_postgres as core
 from tests.integration import test_nport_link_start as nport
 from tests.integration import test_openfigi_security as figi
@@ -51,10 +50,10 @@ def test_a_filed_cusip_and_isin_on_two_securities_bind_by_the_cusip(database):
 
     # A steward revokes that bind and binds it again, withholding nothing: the ISIN
     # is then that Security's too, so the next holding filing only it is ambiguous.
+    from edgar_warehouse.mdm.clean.record_reads import for_connection
     with database.application.connect() as conn:
-        (bind,) = [r[0] for r in conn.execute(core.text(
-            "SELECT body FROM mdm.decision WHERE operation = 'bind' AND body->>'subject' = :s"),
-            {"s": both["subject"]})]
+        (bind,) = [d for d in for_connection(conn).related_decisions({both["subject"]})
+                   if d["operation"] == "bind" and d["subject"] == both["subject"]]
     assert bind["withheld"] == [{"namespace": "isin", "raw": ISIN}]
     later = "2026-10-17T00:00:00+00:00"  # after the rule's bind
     revoke = decision("revoke", actor="steward", reason="fixture", at="2026-10-16T12:00:00Z",
@@ -79,7 +78,7 @@ def test_a_bind_withholding_a_value_no_other_security_holds_is_stale(database):
                              as_of="2026-10-16T00:00:00+00:00")
     body = figi.policy_body()
     with database.application.connect() as conn:
-        assert not binding.proposal_is_stale(conn, body, proposed)
+        assert not binding.proposal_is_stale(for_connection(conn), body, proposed)
         (bind,) = proposed["decisions"]
         bind["withheld"] = [{"namespace": "isin", "raw": "ZZ0000000024"}]  # no Security holds it
-        assert binding.proposal_is_stale(conn, body, proposed)
+        assert binding.proposal_is_stale(for_connection(conn), body, proposed)

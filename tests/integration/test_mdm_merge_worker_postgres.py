@@ -21,7 +21,7 @@ from sqlalchemy.exc import DBAPIError
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.bookkeeping.clean.database import grant_profile
 from edgar_warehouse.bookkeeping.clean.destinations import migrate_guard
-from edgar_warehouse.mdm.clean.store import register_policy
+from edgar_warehouse.mdm.clean.store import Conflict, register_policy
 from edgar_warehouse.cli import main
 from edgar_warehouse.workers import mdm_merge
 from tests.integration import test_clean_mdm_postgres as core
@@ -67,6 +67,7 @@ def mdm(databases):
         with admin.begin() as conn:
             conn.exec_driver_sql("GRANT USAGE ON SCHEMA mdm TO bk_verifier")
             conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA mdm TO bk_verifier")
+            conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA public TO bk_verifier")
         yield SimpleNamespace(admin=admin, application=app, reader=reader, policy=policy)
     finally:
         admin.dispose()
@@ -78,7 +79,7 @@ def _manifest(policy, tmp_path, store):
     batches = []
     for n, key in enumerate(("acme", "globex"), 1):
         reading = core.source(key=key, fields={"name": key.title()})
-        identity, binding = core.identity_and_binding(reading)
+        identity, binding = core.identity_and_binding(reading, published_at=f"2026-01-{n:02d}T00:00:00+00:00")
         batches.append({"batch_id": f"fixture-{key}", "stage": "mastering", "consumer": f"fixture/{key}",
                         "expected_checkpoint": 0, "checkpoint": 1,
                         "assertions": [reading], "identities": [identity], "decisions": [binding]})
@@ -128,7 +129,7 @@ def test_a_rules_submitted_merge_is_done_by_a_worker_and_checked_by_another_logi
     reports = ("--reports", (tmp_path / "reports").as_uri())
     command("workers", "work", "mdm.merge", run_id, **worker)
     with mdm.admin.connect() as conn:
-        assert set(conn.scalars(text("SELECT batch_id FROM mdm.batch"))) == {b["batch_id"] for b in batches}
+        assert set(conn.scalars(text("SELECT convert_from(batch_bytes,'UTF8') FROM public.mdm_store_batch"))) == {b["batch_id"] for b in batches}
     state = json.loads(command("bookkeeping", "status", run_id))
     assert state["counts"] == {"reported": 1, "pending": 6}  # no unit completes on the worker's word
     command("workers", "verify", "mdm.merge", run_id, *reports, **verifier)
@@ -144,7 +145,7 @@ def test_a_rules_submitted_merge_is_done_by_a_worker_and_checked_by_another_logi
     receipt = json.loads((out / "merge.json").read_bytes())
     assert [b["batch_id"] for b in receipt["batches"]] == ["fixture-acme", "fixture-globex"]
     with mdm.admin.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm.outbox WHERE verified_at IS NULL")) == 0
+        assert conn.scalar(text("SELECT count(*) FROM public.mdm_store_outbox WHERE verified=0")) == 0
     for consumer in ("export", "graph"):
         assert len(list((out / consumer).glob("*.json"))) == 2  # one contract file per batch
     owner = create_engine(databases.admin.url.set(database="change_journal"))
@@ -173,8 +174,8 @@ def test_a_lost_acknowledgement_resumes_the_same_mdm_run_and_merges_once(mdm, tm
     second = mdm_merge.execute(envelope, store)  # the first report was lost
     assert first == second
     with mdm.admin.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 2
-        assert conn.scalar(text("SELECT count(*) FROM mdm.run")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM public.mdm_store_batch")) == 2
+        assert conn.scalar(text("SELECT count(*) FROM public.mdm_store_run")) == 1
     # A receipt that is not what MDM holds is refused by the verifier.
     forged = store.put_bytes((tmp_path / "forged.json").as_uri(), b'{"version":1}')
     monkeypatch.setenv("MDM_DATABASE_URL", mdm.reader.url.render_as_string(hide_password=False))
@@ -189,7 +190,7 @@ def test_a_lost_acknowledgement_resumes_the_same_mdm_run_and_merges_once(mdm, tm
         mdm_merge.verify({**envelope, "input": changed_ref, "candidate": first}, store)
     with mdm.reader.begin() as conn:
         with pytest.raises(DBAPIError, match="permission denied"):
-            conn.exec_driver_sql("DELETE FROM mdm.batch")
+            conn.exec_driver_sql("DELETE FROM public.mdm_store_batch")
 
 
 def test_mdm_refuses_a_merge_whose_lease_has_lapsed(mdm, tmp_path, monkeypatch):
@@ -199,10 +200,10 @@ def test_mdm_refuses_a_merge_whose_lease_has_lapsed(mdm, tmp_path, monkeypatch):
                 "checks": ["mdm.committed"], "claim": {"proof": _proof(-1)}}
     monkeypatch.setenv("MDM_DATABASE_URL", mdm.application.url.render_as_string(hide_password=False))
     monkeypatch.setenv("MDM_APPLICATION_ROLE", "clean_application")
-    with pytest.raises(DBAPIError, match="Expired destination authority"):
+    with pytest.raises(Conflict, match="expired_destination_authority"):
         mdm_merge.execute(envelope, store)
     with mdm.admin.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 0
+        assert conn.scalar(text("SELECT count(*) FROM public.mdm_store_batch")) == 0
     assert not (tmp_path / "receipt.json").exists()
 
 
@@ -240,7 +241,7 @@ mdm_merge.execute(json.loads(os.environ["MERGE_ENVELOPE"]), Artifacts())
             time.sleep(0.05)
         assert committed.exists(), "The worker did not reach its first durable commit before the deadline"
         with mdm.admin.connect() as conn:
-            assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 1
+            assert conn.scalar(text("SELECT count(*) FROM public.mdm_store_batch")) == 1
         worker.kill()
         worker.wait(timeout=10)
     finally:
@@ -251,8 +252,8 @@ mdm_merge.execute(json.loads(os.environ["MERGE_ENVELOPE"]), Artifacts())
     receipt = mdm_merge.execute(envelope, artifacts)
     assert mdm_merge.execute(envelope, artifacts) == receipt
     with mdm.admin.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 2
-        assert conn.scalar(text("SELECT count(*) FROM mdm.run")) == 1
-        assert list(conn.scalars(text("SELECT checkpoint FROM mdm.batch ORDER BY batch_id"))) == [1, 1]
+        assert conn.scalar(text("SELECT count(*) FROM public.mdm_store_batch")) == 2
+        assert conn.scalar(text("SELECT count(*) FROM public.mdm_store_run")) == 1
+        assert list(conn.scalars(text("SELECT position FROM public.mdm_store_batch ORDER BY batch_bytes"))) == [1, 1]
     monkeypatch.setenv("MDM_DATABASE_URL", mdm.reader.url.render_as_string(hide_password=False))
     assert mdm_merge.verify({**envelope, "candidate": receipt}, artifacts) == ({"mdm.committed": True}, [])

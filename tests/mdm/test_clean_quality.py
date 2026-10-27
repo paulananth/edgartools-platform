@@ -12,7 +12,12 @@ from edgar_warehouse.mdm.clean.sec_company import CONTRACT, POLICY, SOURCE_CODE
 from edgar_warehouse.mdm.clean.matching import _read
 from edgar_warehouse.rules import files
 
-PUBLICATION = {"publication_key": "p", "revision": 0, "artifact_sha256": "a" * 64, "member": "m"}
+PUBLICATION = {
+    "publication_key": "p",
+    "revision": 0,
+    "artifact_sha256": "a" * 64,
+    "member": "m",
+}
 
 
 def sec(name="APPLIED MATERIALS INC /DE", state="DC", street="3050 BOWERS AVENUE"):
@@ -183,22 +188,49 @@ class TestTheFiles:
 
 
 class TestTheRunReport:
-    def test_a_run_reports_quality_counts_for_the_batches_it_commits(self, tmp_path, monkeypatch):
+    def test_a_run_reports_quality_counts_for_the_batches_it_commits(
+        self, tmp_path, monkeypatch
+    ):
         import json
-        from contextlib import contextmanager
         from types import SimpleNamespace
         from uuid import uuid4
 
         from edgar_warehouse.mdm.clean import execution
 
-        batches = [{"batch_id": f"b{i}", "stage": "mastering", "consumer": "c",
-                    "expected_checkpoint": i, "checkpoint": i + 1} for i in range(2)]
+        batches = [
+            {
+                "batch_id": f"b{i}",
+                "stage": "mastering",
+                "consumer": "c",
+                "expected_checkpoint": i,
+                "checkpoint": i + 1,
+            }
+            for i in range(2)
+        ]
         path = tmp_path / "manifest.json"
-        path.write_text(json.dumps({"contract_version": 2, "policy_digest": "p", "as_of": "t",
-                                    "batches": batches}))
-        records = {"b0": [read(sec())], "b1": [read(sec(name="SHELL PLC", street="1209 ORANGE STREET"))]}
-        monkeypatch.setattr(execution, "batch_input", lambda batch, *a, **k: {
-            "assertions": records[batch["batch_id"]], "deferred": [], "occurrences": []})
+        path.write_text(
+            json.dumps(
+                {
+                    "contract_version": 2,
+                    "policy_digest": "p",
+                    "as_of": "t",
+                    "batches": batches,
+                }
+            )
+        )
+        records = {
+            "b0": [read(sec())],
+            "b1": [read(sec(name="SHELL PLC", street="1209 ORANGE STREET"))],
+        }
+        monkeypatch.setattr(
+            execution,
+            "batch_input",
+            lambda batch, *a, **k: {
+                "assertions": records[batch["batch_id"]],
+                "deferred": [],
+                "occurrences": [],
+            },
+        )
         duplicate = {"b0": False, "b1": True}  # b1 was committed by an earlier run
 
         class Stage:
@@ -207,9 +239,10 @@ class TestTheRunReport:
 
         monkeypatch.setattr(execution, "MergeStage", Stage)
 
-        @contextmanager
-        def connect():
-            yield SimpleNamespace(scalars=lambda *a, **k: [])
+        from edgar_warehouse.mdm.clean import prepared_runs
+
+        monkeypatch.setattr(prepared_runs, "batches", lambda *a, **k: (set(), set()))
+        monkeypatch.setattr(execution, "pinned_mapping_versions", lambda *a, **k: {})
 
         kept = {}
 
@@ -217,13 +250,25 @@ class TestTheRunReport:
             kept[batch] = checks
             return work()
 
-        coordinator = SimpleNamespace(scope=lambda run: None, start=lambda *a, **k: None, execute=execute,
-                                    reconcile=lambda run: {})
+        coordinator = SimpleNamespace(
+            scope=lambda run: None,
+            start=lambda *a, **k: None,
+            execute=execute,
+            reconcile=lambda run: {},
+        )
         monkeypatch.setattr(execution, "RunCoordinator", lambda store: coordinator)
-        result = execution.execute_manifest(SimpleNamespace(engine=SimpleNamespace(connect=connect),prepared=False),
-                                      path=str(path), run_id=str(uuid4()), stage="mastering", limit=10)
-        assert result["quality"] == {"fixed:dc_state_is_empty": 1, "fixed:standard_address": 1,
-                                     "fixed:state_from_name_tag": 1}
+        result = execution.execute_manifest(
+            SimpleNamespace(prepared=True),
+            path=str(path),
+            run_id=str(uuid4()),
+            stage="mastering",
+            limit=10,
+        )
+        assert result["quality"] == {
+            "fixed:dc_state_is_empty": 1,
+            "fixed:standard_address": 1,
+            "fixed:state_from_name_tag": 1,
+        }
         # Each batch's run report profile goes to the run, which keeps it with
         # the batch's finished event and sums it in its report (rebuild ticket 10).
         assert kept["b0"]["as_of"] == "t"
@@ -341,8 +386,10 @@ def test_a_parent_code_must_agree_with_the_reference_hierarchy(monkeypatch):
 
 # The Person checks (rebuild ticket 10; operator, 2026-10-02, "Proposed set"),
 # in both feeds that master a Person. Every name here is invented.
-PERSON_CONTRACTS = [("sec.submissions.person", "sec.submissions.person.v1"),
-                    ("sec.ownership", "sec.ownership.reporting_owner.v1")]
+PERSON_CONTRACTS = [
+    ("sec.submissions.person", "sec.submissions.person.v1"),
+    ("sec.ownership", "sec.ownership.reporting_owner.v1"),
+]
 
 
 @pytest.mark.parametrize("source, code", PERSON_CONTRACTS)

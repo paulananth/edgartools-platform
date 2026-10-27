@@ -127,7 +127,10 @@ def test_native_policy_registration_uses_the_selected_engine_and_transaction(nat
         first = register_policy(conn, policy)
         assert register_policy(conn, dict(policy)) == first
         assert storage_api.registered_policies(conn) == [policy]
-        assert MergeStage._check_rule_proposals(conn, first, None, []) == policy
+        # The checker consumes a transaction-bound read context. This registry
+        # case exercises policy retrieval, not a normal mastering installation.
+        from types import SimpleNamespace
+        assert MergeStage._check_rule_proposals(SimpleNamespace(connection=conn), first, None, []) == policy
         version = str(uuid4())
         contract = {"provider": "fixture", "family": "fixture", "schema_version": "1",
                     "record_key": "key", "publication_key": "revision", "effective_time": "effective_at", "semantics": "patch"}
@@ -851,8 +854,9 @@ def test_lookup_plan_seeks_the_storage_key_on_every_engine(adapters, storage_api
     assert_index_lookup(owner.engine, statement, owner.tables["current"].name)
 
 
+@pytest.mark.parametrize("over_former_limit", [False, True])
 def test_large_payload_and_chunked_key_lists_preserve_the_complete_request(
-    adapters, storage_api
+    adapters, storage_api, over_former_limit
 ):
     _, runtime, _ = adapters
     objects = tuple(
@@ -862,6 +866,9 @@ def test_large_payload_and_chunked_key_lists_preserve_the_complete_request(
         for i in range(805)
     )
     payload = storage_api.canonical({"text": "\U0001f30d" * 6000})
+    if over_former_limit:
+        payload = storage_api.canonical({"text": "x" * (17 * 1024 * 1024)})
+        assert len(payload) > 16 * 1024 * 1024
     request = batch(storage_api, objects=objects, payload=payload)
     runtime.apply(request, runtime.claim(request.scope, "writer"))
     assert len(runtime.read([(e.type, e.id) for e in objects])) == len(objects)

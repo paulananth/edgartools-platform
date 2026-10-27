@@ -1,0 +1,124 @@
+{
+  "baseline": "790a2ca6",
+  "measure": "Physical source lines, including comments and formatting; not a semantic deletion estimate",
+  "runtime": [
+    {
+      "file": "edgar_warehouse/context.py",
+      "before": 749,
+      "after": 693
+    },
+    {
+      "file": "edgar_warehouse/mdm/clean/assessment.py",
+      "before": 72,
+      "after": 43
+    },
+    {
+      "file": "edgar_warehouse/mdm/clean/binding.py",
+      "before": 365,
+      "after": 302
+    },
+    {
+      "file": "edgar_warehouse/mdm/clean/cli.py",
+      "before": 173,
+      "after": 160
+    },
+    {
+      "file": "edgar_warehouse/mdm/clean/consumer.py",
+      "before": 245,
+      "after": 62
+    },
+    {
+      "file": "edgar_warehouse/mdm/clean/correction.py",
+      "before": 278,
+      "after": 114
+    },
+    {
+      "file": "edgar_warehouse/mdm/clean/execution.py",
+      "before": 402,
+      "after": 387
+    },
+    {
+      "file": "edgar_warehouse/mdm/clean/inspection.py",
+      "before": 0,
+      "after": 80
+    },
+    {
+      "file": "edgar_warehouse/mdm/clean/journal_delivery.py",
+      "before": 92,
+      "after": 82
+    },
+    {
+      "file": "edgar_warehouse/mdm/clean/matching.py",
+      "before": 374,
+      "after": 326
+    },
+    {
+      "file": "edgar_warehouse/mdm/clean/merge.py",
+      "before": 729,
+      "after": 677
+    },
+    {
+      "file": "edgar_warehouse/mdm/clean/prepared_registry.py",
+      "before": 109,
+      "after": 133
+    },
+    {
+      "file": "edgar_warehouse/mdm/clean/record_reads.py",
+      "before": 631,
+      "after": 625
+    },
+    {
+      "file": "edgar_warehouse/mdm/clean/registration.py",
+      "before": 0,
+      "after": 66
+    },
+    {
+      "file": "edgar_warehouse/mdm/clean/run.py",
+      "before": 202,
+      "after": 49
+    },
+    {
+      "file": "edgar_warehouse/mdm/clean/scope.py",
+      "before": 405,
+      "after": 254
+    },
+    {
+      "file": "edgar_warehouse/mdm/clean/store.py",
+      "before": 662,
+      "after": 557
+    },
+    {
+      "file": "edgar_warehouse/mdm/clean/withholding.py",
+      "before": 61,
+      "after": 52
+    },
+    {
+      "file": "edgar_warehouse/mdm/cli.py",
+      "before": 165,
+      "after": 165
+    },
+    {
+      "file": "edgar_warehouse/rules/proving.py",
+      "before": 293,
+      "after": 256
+    },
+    {
+      "file": "edgar_warehouse/silver_writer/writer.py",
+      "before": 118,
+      "after": 98
+    },
+    {
+      "file": "edgar_warehouse/workers/mdm_merge.py",
+      "before": 142,
+      "after": 120
+    },
+    {
+      "file": "edgar_warehouse/workers/mdm_publish.py",
+      "before": 148,
+      "after": 117
+    }
+  ],
+  "before": 6415,
+  "after": 5418,
+  "net_removed": 997
+}

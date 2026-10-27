@@ -204,6 +204,63 @@ try:
             assert json.loads(output.getvalue()) == expected
         adapter = g["normal"]
         assert_index_lookup(runtime, adapter.type_count_statement(["entity"]), adapter.tables["current"].name)
+        import hashlib
+        from edgar_warehouse.mdm.clean.inspection import HASH_CONTRACT, counts
+        from edgar_warehouse.mdm.clean.store import canonical
+
+        report = counts(runtime)
+        assert report["masters"] == {g["KIND"]: 1}
+        assert report["stage_records"] == {s["primary"]: 1, s["secondary"]: 1}
+        assert report["decisions"] == {"bind": 2}
+        assert all(report[name] == {} for name in
+                   ("waiting", "open_reviews", "set_aside", "identifiers_on_two_masters"))
+        assert report["records_hash_contract"] == HASH_CONTRACT
+        expected = hashlib.md5((HASH_CONTRACT + "\n").encode())
+        for object_type in ("entity", "relationship", "review"):
+            keys = adapter.record_keys(object_type)
+            rows = adapter.read([(object_type, key) for key in keys])
+            for key in keys:
+                expected.update(canonical([object_type, key]).encode() + b":" +
+                                bytes(rows[object_type, key]["body"]) + b"\n")
+        assert report["current_records_md5"] == expected.hexdigest()
+        assert counts(runtime) == report
+        from edgar_warehouse.mdm.clean.evidence import deferred_record
+        held = deferred_record(source_code=s["secondary"], publication_key="1",
+            record_locator="invented-inspection-held", schema_version="1",
+            reason="invented_missing_key", raw_record={"invented_amount": 7},
+            provenance={"object": "invented/held.json"})
+        command = dict(batch_id="invented-inspection-held", run_id=str(uuid4()),
+            policy_digest=g["seed_pin"], consumer="invented-inspection-held",
+            expected_checkpoint=0, checkpoint=1, as_of=g["AS_OF"], deferred=[held])
+        s["stage"].apply(**command)
+        waiting = counts(runtime)
+        assert waiting["set_aside"] == waiting["waiting"] == waiting["open_reviews"] == {"invented_missing_key": 1}
+        assert waiting["stage_records"] == report["stage_records"]
+        assert s["stage"].apply(**command)["duplicate"]
+        assert counts(runtime) == waiting
+        for object_type, options, table_name in (
+            ("identity", {"immutable": True}, "evidence"),
+            ("source-record", {"lookup": True}, "lookup")):
+            all_keys = adapter.record_keys(object_type, **options)
+            found, after = [], ""
+            while page := adapter.record_keys(object_type, after=after, limit=1, **options):
+                assert len(page) == 1 and page[0] not in found
+                found.extend(page)
+                after = page[-1]
+            assert found == all_keys
+            query = adapter.record_keys_statement(object_type, after=all_keys[0], limit=1, **options)
+            if runtime.dialect.name == "mysql":
+                from sqlalchemy import text
+                sql = str(query.compile(dialect=runtime.dialect, compile_kwargs={"literal_binds": True}))
+                with runtime.connect() as conn:
+                    plan = json.loads(conn.scalar(text("EXPLAIN FORMAT=JSON " + sql)))
+                block = plan["query_block"]
+                access = block.get("ordering_operation", block)["table"]
+                assert access["table_name"] == adapter.tables[table_name].name
+                assert access["access_type"] == "range" and access["key"] == "PRIMARY"
+                assert access["used_key_parts"] == ["type_key", "id_key"]
+            else:
+                assert_index_lookup(runtime, query, adapter.tables[table_name].name)
     if case == "forced_publication":
         import io
         import json

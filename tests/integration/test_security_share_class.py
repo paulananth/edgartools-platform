@@ -13,9 +13,9 @@ from __future__ import annotations
 import zipfile
 from pathlib import Path
 
-from sqlalchemy import text
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from tests.integration import test_clean_mdm_postgres as core
 from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.store import Store, register_policy
 from edgar_warehouse.rules import files
@@ -127,8 +127,7 @@ def test_the_mastered_security_carries_its_class(database, tmp_path):
         # N-PORT's Security rules wait for their switch-on (ticket 138); on here, for the test only.
         policy = register_policy(conn, nport.policy_body())
     nport.apply(MergeStage(Store(database.application)), policy, "class", records, 1)
-    with database.application.connect() as conn:
-        rows = conn.execute(text("SELECT body->'identifiers'->'cusip'->>0, body->'fields'->'share_class' "
-                                 "FROM mdm.current_record WHERE object_type='entity' AND body->>'kind'='security'")).all()
+    rows = [(body["identifiers"]["cusip"][0], body.get("fields", {}).get("share_class"))
+            for body in core.documents(database, "entity").values() if body["kind"] == "security"]
     mastered = {cusip: (value.get("value") if isinstance(value, dict) else value) for cusip, value in rows}
     assert mastered == {CLASS_A: "A", PLAIN: None, TWO: None, TRANCHE: None, BARE: None}

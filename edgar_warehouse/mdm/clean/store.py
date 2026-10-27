@@ -1,6 +1,6 @@
-"""PostgreSQL transaction boundary and durable publication capabilities.
+"""Governed transaction boundary and durable publication capabilities.
 
-Pure projection code prepares bounded effects; only save_batch may persist
+Pure projection code prepares bounded effects; only the destination capability may persist
 master changes. Network publication always runs outside that transaction.
 """
 
@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from pathlib import Path
 from typing import Any, Protocol
 from uuid import UUID
@@ -33,13 +32,6 @@ def identifier_values(item: Any) -> list[str]:
     if isinstance(item, list) and item and all(isinstance(one, str) for one in item):
         return list(item)
     raise Conflict("An identifier holds a text value or a nonempty list of them")
-
-
-def containment_docs(namespace: str, value: str) -> list[str]:
-    """The JSON documents a stored record's `identifiers` contains when it
-    carries the value, alone or in a list; each is one probe of the GIN
-    index on identifiers (a nested list does not contain a lone value)."""
-    return [json.dumps({namespace: value}), json.dumps({namespace: [value]})]
 
 
 def canonical(value: Any) -> str:
@@ -92,34 +84,14 @@ MIGRATIONS: tuple[str, ...] = (
     "027_candidate_routes.sql",
 )
 
-# The functions the application login may run. It has no table rights beyond
-# SELECT: every change to master data goes through these, and the closure reads
-# a reading's links through `reading_link_subjects`, and finds what a list of
-# keys names through `readings_naming` and `decisions_naming`.
-RUNTIME_FUNCTIONS = (
-    "save_batch(text,uuid)",
-    "preview_batch(text,uuid)",
-    "claim_outbox(text,text,integer)",
-    "claim_outbox_input(text,text,integer,text)",
-    "finish_outbox(text,text,bigint,text,text)",
-    "record_attempt(uuid,uuid,text,text,jsonb)",
-    "start_run(uuid,jsonb)",
-    "finish_run(uuid,jsonb,boolean)",
-    "reading_link_subjects(jsonb)",
-    "readings_naming(text[])",
-    "decisions_naming(text[])",
-    "cross_reference_lookup(text,text)",
-    "entity_name(jsonb)",
-    "relationship_holds(jsonb,timestamp with time zone)",
-    "relationship_chain(text,text,integer,timestamp with time zone)",
-    "entity_search(text,text,integer)",
-    "record_match_proposal(text,uuid)",
-    "supersede_match_proposal(text,uuid)",
-    "force_publish(text,uuid,bigint,text,text,integer)",
-)
 
-
-def migrate(engine: Engine, *, application_role: str, application_host: str = "%", prepared: bool = False) -> dict:
+def migrate(
+    engine: Engine,
+    *,
+    application_role: str,
+    application_host: str = "%",
+    prepared: bool = True,
+) -> dict:
     """Explicit isolated migration with checksum validation.
 
     Role provisioning stays outside this function; deployments provide the
@@ -128,6 +100,10 @@ def migrate(engine: Engine, *, application_role: str, application_host: str = "%
     """
     if type(prepared) is not bool:
         raise ValueError("prepared must be a boolean")
+    if not prepared:
+        raise Conflict(
+            "Legacy MDM runtime installation is retired; use governed storage"
+        )
     if engine.dialect.name == "mysql":
         from . import catalog
         catalog.assert_current()
@@ -153,9 +129,7 @@ def migrate(engine: Engine, *, application_role: str, application_host: str = "%
         # Saves take this lock before touching master tables. Take it before
         # migration DDL too, so table locks cannot invert that order.
         conn.execute(text("SELECT pg_advisory_xact_lock(730234)"))
-        if storage_adapter().storage_version(conn) >= 5 and not prepared:
-            raise Conflict("Governed storage requires prepared owner installation")
-        if prepared and conn.scalar(text("SELECT to_regclass('mdm.batch')")) and conn.scalar(
+        if conn.scalar(text("SELECT to_regclass('mdm.batch')")) and conn.scalar(
             text("SELECT EXISTS(SELECT 1 FROM mdm.batch)")
         ):
             raise Conflict("Populated native MDM requires a qualified data migration; use a fresh prepared store")
@@ -226,10 +200,6 @@ def migrate(engine: Engine, *, application_role: str, application_host: str = "%
         runtime = quote(application_role)
         conn.exec_driver_sql(f"GRANT USAGE ON SCHEMA mdm TO {runtime}")
         conn.exec_driver_sql(f"GRANT SELECT ON ALL TABLES IN SCHEMA mdm TO {runtime}")
-        for signature in (() if prepared else RUNTIME_FUNCTIONS):
-            conn.exec_driver_sql(
-                f"GRANT EXECUTE ON FUNCTION mdm.{signature} TO {runtime}"
-            )
         if conn.scalar(
             text("SELECT has_schema_privilege(:r,'mdm','CREATE')"),
             {"r": application_role},
@@ -347,12 +317,8 @@ def _check_cross_references(adapter: dict, issued: frozenset[str]) -> None:
         raise ValueError(f"A format for no cross-reference: {sorted(set(formats) - set(names))}")
 
 
-def _check_details(adapter: dict, *, prepared=False) -> None:
-    """Detail lists (ticket 120): `detail_keys` maps each list the reading's
-    `details` column gives to the field that keys its rows. A master's body
-    carries them, and mdm.detail_version keeps every row; a Company is kept in
-    mdm.company's columns instead, so a contract that may give Companies states
-    none."""
+def _check_details(adapter: dict) -> None:
+    """A configured detail list names its row key and the reading's details column."""
     from .activation import NAMESPACE
 
     keys = adapter.get("detail_keys")
@@ -362,8 +328,8 @@ def _check_details(adapter: dict, *, prepared=False) -> None:
             not isinstance(name, str) or not NAMESPACE.fullmatch(name) or not isinstance(key, str) or not key
             for name, key in keys.items()):
         raise ValueError("detail_keys maps each detail list, lower-case words, to the field that keys its rows")
-    if "kind" not in adapter or not prepared and adapter["kind"] == "company":
-        raise ValueError("Detail lists are kept for a stated kind other than company (mdm.company holds no lists)")
+    if "kind" not in adapter:
+        raise ValueError("Detail lists require a stated kind")
     columns = ((adapter.get("reading") or {}).get("read", {}).get("tables", {}).get("mapped", {}).get("columns", {}))
     if "details" not in columns:
         raise ValueError("A contract with detail_keys states its rows in the reading's details column")
@@ -405,7 +371,7 @@ def register_dataset(
     from .adapters import FORMATS
 
     _check_cross_references(adapter, _issued_namespaces(conn, code))
-    _check_details(adapter, prepared=conn is not None and storage_adapter().storage_version(conn) >= 5)
+    _check_details(adapter)
     formats = [
         adapter.get("record_key_format"),
         *adapter.get("identifier_formats", {}).values(),
@@ -455,6 +421,7 @@ def register_dataset(
         return
     adapter.retain_dataset_reading(conn, code, 1, pinned, str(UUID(authority_version)))
     from .prepared_registry import approve_mapping
+
     approve_mapping(conn, code, 1, pinned)
 
 
@@ -537,44 +504,28 @@ class Publisher(Protocol):
 
 
 class Store:
-    def __init__(self, engine: Engine, *, lease_authority=None, read_only: bool = False):
+    def __init__(
+        self, engine: Engine, *, lease_authority=None, read_only: bool = False
+    ):
         if type(read_only) is not bool:
             raise ValueError("read_only must be a boolean")
         if engine.dialect.name not in ("postgresql", "mysql"):
             raise ValueError("MDM requires PostgreSQL")
         with engine.connect() as conn:
-            self.protocol = storage_adapter().storage_version(conn)
-            self.prepared = self.protocol >= 5
-            if self.prepared:
-                from .prepared_registry import installed
-                installed(conn)
-        if engine.dialect.name == "mysql" and not self.prepared and not read_only:
-            raise ValueError("MDM requires PostgreSQL or a governed prepared store")
+            from .prepared_registry import require_installed
+
+            self.protocol = require_installed(conn).protocol
+        self.prepared = True
         self.engine = engine
         self.lease_authority = lease_authority
         self.read_only = read_only
 
-    def _authorize(self, conn: Connection) -> None:
+    def commit(self, conn: Connection, request: dict, run_id: str) -> dict:
         if self.read_only:
             raise Conflict("A read-only MDM store cannot admit writes or publication")
-        if self.lease_authority is not None:
-            from edgar_warehouse.bookkeeping.clean.destinations import guard
+        from .prepared import commit
 
-            # The guard and business effects commit in this destination's
-            # transaction. Authority never changes request_hash/batch_id.
-            guard(conn, self.lease_authority.current())
-
-    def commit(self, conn: Connection, request: dict, run_id: str) -> dict:
-        if self.prepared:
-            if self.read_only:
-                raise Conflict("A read-only MDM store cannot admit writes or publication")
-            from .prepared import commit
-            return commit(self, request, run_id)
-        self._authorize(conn)
-        return conn.scalar(
-            text("SELECT mdm.save_batch(:request,CAST(:run AS uuid))"),
-            {"request": canonical(request), "run": str(UUID(run_id))},
-        )
+        return commit(self, request, run_id)
 
     def deliver_one(
         self,
@@ -585,78 +536,22 @@ class Store:
         lease_seconds: int = 300,
         batch_id: str | None = None,
     ) -> bool:
-        if self.prepared:
-            if self.read_only:
-                raise Conflict("A read-only MDM store cannot admit writes or publication")
-            from .prepared_publication import deliver
-            return deliver(self, consumer, worker, publisher,
-                           lease_seconds=lease_seconds, batch_id=batch_id)
-        with self.engine.begin() as conn:
-            self._authorize(conn)
-            claim = conn.scalar(
-                text("SELECT mdm.claim_outbox_input(:c,:w,:seconds,:batch)"),
-                {"c": consumer, "w": worker, "seconds": lease_seconds, "batch": batch_id},
-            )
-        if claim is None:
-            return False
-        key = f"{consumer}/{claim['batch_id']}"
-        try:
-            from .payloads import prepare
+        if self.read_only:
+            raise Conflict("A read-only MDM store cannot admit writes or publication")
+        from .prepared_publication import deliver
 
-            payload = prepare(claim)
-            publisher.publish(key, payload, claim["payload_hash"])
-            receipt = publisher.verify(key, payload, claim["payload_hash"])
-        except Exception as exc:
-            with self.engine.begin() as conn:
-                self._authorize(conn)
-                conn.execute(
-                    text("SELECT mdm.finish_outbox(:b,:c,:f,NULL,:err)"),
-                    {
-                        "b": claim["batch_id"],
-                        "c": consumer,
-                        "f": claim["fence"],
-                        "err": type(exc).__name__,
-                    },
-                )
-            raise
-        with self.engine.begin() as conn:
-            self._authorize(conn)
-            conn.execute(
-                text("SELECT mdm.finish_outbox(:b,:c,:f,:h,NULL)"),
-                {
-                    "b": claim["batch_id"],
-                    "c": consumer,
-                    "f": claim["fence"],
-                    "h": receipt,
-                },
-            )
-        return True
+        return deliver(self, consumer, worker, publisher,
+                       lease_seconds=lease_seconds, batch_id=batch_id)
 
     def run_status(self, run_id: str) -> dict:
         """Observation for Bookkeeping; never declares an empty run complete."""
-        if self.prepared:
-            from .prepared_publication import adapter, publication_rows
+        from .prepared_publication import adapter, publication_rows
 
-            api = adapter(self)
-            with self.engine.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
-                observed = api.observed_batches(run_id, connection=conn)
-                _, publications = publication_rows(api,observed,connection=conn)
-            batches = len({row["batch_key"] for row in publications})
-            pending = sum(not row["verified"] for row in publications)
-            return {"batches": batches, "pending": pending,
-                    "publication_complete": batches > 0 and pending == 0}
-        if self.engine.dialect.name != "postgresql":
-            raise Conflict("Normal run observation is not yet qualified for this engine")
-        with self.engine.connect() as conn:
-            result = rows(
-                conn,
-                """SELECT count(DISTINCT o.batch_id) AS batches,
-              count(*) FILTER(WHERE p.verified_at IS NULL) AS pending
-              FROM mdm.run_batch o JOIN mdm.outbox p USING(batch_id)
-              WHERE o.run_id=CAST(:run AS uuid)""",
-                run=run_id,
-            )[0]
-        return {
-            **result,
-            "publication_complete": result["batches"] > 0 and result["pending"] == 0,
-        }
+        api = adapter(self)
+        with self.engine.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
+            observed = api.observed_batches(run_id, connection=conn)
+            _, publications = publication_rows(api,observed,connection=conn)
+        batches = len({row["batch_key"] for row in publications})
+        pending = sum(not row["verified"] for row in publications)
+        return {"batches": batches, "pending": pending,
+                "publication_complete": batches > 0 and pending == 0}

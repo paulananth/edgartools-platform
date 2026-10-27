@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from sqlalchemy import text
 
-from .store import Conflict, canonical
+from .store import Conflict
 
 
 class StaleAssessment(Conflict):
@@ -12,61 +11,33 @@ class StaleAssessment(Conflict):
 
 
 def record(store, body: dict, run_id: str, *, intent=None) -> dict:
-    if getattr(store, "prepared", False):
-        from .prepared import record as retain
-        return retain(store, body, run_id, intent=intent)
-    with store.engine.begin() as conn:
-        store._authorize(conn)
-        key = record_in(conn, body, run_id)
-    return {"assessment_id": key, **body}
+    from .prepared import record as retain
 
-
-def record_in(conn, body: dict, run_id: str) -> str:
-    """Record a proposal in the caller's transaction; its key."""
-    return conn.scalar(
-        text("SELECT mdm.record_match_proposal(:body,CAST(:run AS uuid))"),
-        {"body": canonical(body), "run": run_id},
-    )
+    return retain(store, body, run_id, intent=intent)
 
 
 def load(conn, key: str) -> dict:
-    from .store import storage_adapter
-    api = storage_adapter()
-    if api.storage_version(conn) >= 5:
-        import json
-        held = api.Adapter(conn.engine, prefix="mdm_store", protocol=api.storage_version(conn)).read_proposal(key, connection=conn)
-        if held is None:
-            raise Conflict("Unknown identity assessment")
-        return json.loads(bytes(held["body"]))
-    body = conn.scalar(
-        text("SELECT body FROM mdm.match_proposal WHERE assessment_id=:key"),
-        {"key": key},
-    )
-    if body is None:
+    import json
+    from .prepared_registry import require_installed
+
+    held = require_installed(conn).read_proposal(key, connection=conn)
+    if held is None:
         raise Conflict("Unknown identity assessment")
-    return body
+    return json.loads(bytes(held["body"]))
 
 
 def stale(exc) -> bool:
     """Whether the save refused a proposal because it no longer holds: the
     batch computed now writes other than its effects, or it was applied or
-    superseded meanwhile (`save_batch`)."""
+    superseded meanwhile at the destination."""
     text_ = str(getattr(exc, "orig", exc))
     return "differs from assessed effects" in text_ or "requires a ready assessment" in text_
 
 
 def supersede(store, key: str, run_id: str) -> None:
-    if getattr(store, "prepared", False):
-        from .store import storage_adapter
-        from .prepared import authority, _refusals
-        api = storage_adapter().Adapter(store.engine, prefix="mdm_store", protocol=store.protocol)
-        _refusals(lambda: api.supersede_proposal(key, run_id, authority=authority(store)))
-        return
-    # Outside the rolled-back master transaction. A concurrent successful
-    # application wins; the SQL capability never supersedes an applied proposal.
-    with store.engine.begin() as conn:
-        store._authorize(conn)
-        conn.execute(
-            text("SELECT mdm.supersede_match_proposal(:key,CAST(:run AS uuid))"),
-            {"key": key, "run": run_id},
-        )
+    from .store import storage_adapter
+    from .prepared import authority, _refusals
+
+    api = storage_adapter().Adapter(store.engine, prefix="mdm_store", protocol=store.protocol)
+    _refusals(lambda: api.supersede_proposal(key, run_id, authority=authority(store)))
+    return

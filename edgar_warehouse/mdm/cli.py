@@ -21,7 +21,7 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     migrate = mdm_sub.add_parser("migrate", help="Create or upgrade the MDM schema")
     migrate.add_argument("--application-role", default="application")
     migrate.add_argument("--application-host", default="%", help="MySQL runtime account host")
-    migrate.add_argument("--prepared-store", action="store_true",
+    migrate.add_argument("--prepared-store", action="store_true", default=True,
                          help="Install governed prepared storage on a fresh PostgreSQL or MySQL target")
     migrate.set_defaults(handler=_logged_handler("migrate", _handle_migrate))
 

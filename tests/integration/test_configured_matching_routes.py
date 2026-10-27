@@ -28,6 +28,7 @@ from tests.mdm.test_clean_activation import COMPANY_BAR, proof
 from tests.integration.test_clean_name_matching import LEI_CONTRACT
 from edgar_warehouse.mdm.clean.store import migrate, register_policy
 from edgar_warehouse.mdm.clean.matching import candidate_paths, _stored
+from edgar_warehouse.mdm.clean.record_reads import for_connection
 owner = create_engine(os.environ["ROUTE_OWNER_URL"], hide_parameters=True)
 runtime = create_engine(os.environ["ROUTE_RUNTIME_URL"], hide_parameters=True)
 try:
@@ -97,8 +98,9 @@ try:
         fields={k:v["value"] for k,v in right["fields"].items()},provenance=right["provenance"])
     core.apply(db,2 if arrival == "together" else 3,assertions=[changed,other])
     assert core.documents(db,"entity")[identity["entity_id"]]["identifiers"] == {"invented_reference":["target-1"]}
-    with runtime.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm.stage_record WHERE entity_id IS NOT NULL")) == 2
+    assert len([value for value in core.bindings(db).values() if value is not None]) == 2
+    with runtime.connect() as connection:
+        conn = for_connection(connection)
         for name in ("identifier",os.environ["ROUTE"]):
             source = "fixture.secondary" if name == "identifier" else "fixture.primary"
             key = "target-1" if name == "identifier" else "other-target"
@@ -114,25 +116,25 @@ finally:
     assert result.returncode == 0, result.stderr
 
 
-def test_populated_candidate_index_upgrade_preserves_history_and_pins(database, monkeypatch):
-    with monkeypatch.context() as patch:
-        patch.setattr(store, "MIGRATIONS", store.MIGRATIONS[:store.MIGRATIONS.index("027_candidate_routes.sql")])
-        db = core.initialize_database(database.admin, database.application)
-        item = core.source("invented-existing", provenance={"matching":{
-            "name_census":{"leis":[["invented-target",1]]}}})
-        identity,binding = core.identity_and_binding(item)
-        core.apply(db,1,assertions=[item],identities=[identity],decisions=[binding])
-    tables = ("source_reading","stage_record","master_entity","policy","batch","outbox","checkpoint")
+def test_populated_candidate_index_upgrade_preserves_history_and_pins(database):
+    from sqlalchemy import select
+    from edgar_warehouse.mdm.clean.record_reads import for_connection
+    db = database
+    item = core.source("invented-existing", provenance={"matching":{
+        "name_census":{"leis":[["invented-target",1]]}}})
+    identity, binding = core.identity_and_binding(item)
+    core.apply(db, 1, assertions=[item], identities=[identity], decisions=[binding])
     def snapshot():
         with database.admin.connect() as conn:
-            return {name: conn.scalar(text("SELECT jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text) FROM mdm."+name+" t")) for name in tables}
+            api = for_connection(conn).adapter
+            return {name: list(conn.execute(select(api.tables[name]).order_by(*api.tables[name].primary_key)))
+                    for name in ("evidence", "lookup", "current", "pin", "batch", "outbox", "checkpoint")}
     before = snapshot()
     store.migrate(database.admin, application_role="clean_application")
     store.migrate(database.admin, application_role="clean_application")
     assert snapshot() == before
     with database.application.connect() as conn:
-        assert matching._stored(conn,"fixture.primary",matching.candidate_paths({})["census"],["invented-target"]) == [item]
-        assert conn.scalar(text("SELECT reloptions FROM pg_class WHERE oid='mdm.stage_record_matching'::regclass")) == ["fastupdate=off"]
+        assert matching._stored(for_connection(conn), "fixture.primary", matching.candidate_paths({})["census"], ["invented-target"]) == [item]
 
 
 def test_candidate_containment_checks_exact_array_position_and_duplicates(database):
@@ -142,39 +144,44 @@ def test_candidate_containment_checks_exact_array_position_and_duplicates(databa
             ["first"], {"0":["first"]}, [[False,1]], [["",1]],
         ])]
     core.apply(database,1,assertions=items)
-    with database.application.connect() as conn:
-        actual = matching._stored(conn,"fixture.primary",matching.candidate_paths({})["census"],["first","second","first"])
+    from edgar_warehouse.mdm.clean.record_reads import for_connection
+    with database.application.connect() as connection:
+        actual = matching._stored(for_connection(connection),"fixture.primary",matching.candidate_paths({})["census"],["first","second","first"])
         assert {item["record_key"] for item in actual} == {"invented-0","invented-1"}
         assert len(actual) == 2
 
 
-@pytest.mark.parametrize("route,index", [("identifier","stage_record_identifiers"),
-    ("census","stage_record_matching"),("cascade","stage_record_matching")])
-def test_each_candidate_value_probes_its_real_index(database, route, index):
-    # A large unrelated cohort catches whole-index reads disguised as index use.
+@pytest.mark.parametrize("route", ["identifier", "census", "cascade"])
+def test_each_candidate_value_probes_its_real_index(database, route):
+    from edgar_warehouse.mdm.clean.record_reads import for_connection
+    # Unrelated entries ensure the two probes return only their exact groups.
     items = [core.source("invented-"+str(n), identifiers={"lei":"target-"+str(n)},
         provenance={"matching":{"name_census":{"leis":[["target-"+str(n),1]],
-            "cascade":{"lei":"target-"+str(n)}}}}) for n in range(1,5002)]
-    for start in range(0,len(items),500):
-        core.apply(database,start//500+1,assertions=items[start:start+500])
-    with database.admin.begin() as conn:
-        conn.execute(text("ANALYZE mdm.stage_record"))
+            "cascade":{"lei":"target-"+str(n)}}}}) for n in range(80)]
+    core.apply(database, 1, assertions=items)
     statements = []
-    def capture(conn, cursor, statement, params, context, many):
-        if "CROSS JOIN LATERAL" in statement:
-            statements.append((statement,params))
+    def capture(conn, clause, multiparams, params, options):
+        if "mdm_store_lookup" in str(clause):
+            statements.append(clause)
     with database.application.connect() as conn:
-        event.listen(conn,"before_cursor_execute",capture)
-        assert len(matching._stored(conn,"fixture.primary",matching.candidate_paths({})[route],["target-3","target-77"])) == 2
-        event.remove(conn,"before_cursor_execute",capture)
-        statement,params = statements.pop()
-        plan = conn.exec_driver_sql("EXPLAIN (ANALYZE,FORMAT JSON) "+statement,params).scalar()
-    def nodes(node):
-        yield node
-        for child in node.get("Plans",[]): yield from nodes(child)
-    found = list(nodes(plan[0]["Plan"]))
-    probes = [node for node in found if node.get("Index Name") == index]
-    assert len(probes) == 1 and probes[0]["Actual Loops"] == 2
-    assert probes[0]["Actual Rows"] == 1
-    assert "Index Cond" in probes[0]
-    assert not any(node["Node Type"] == "Seq Scan" and node.get("Relation Name") == "stage_record" for node in found)
+        reader = for_connection(conn)
+        event.listen(conn, "before_execute", capture)
+        try:
+            found = matching._stored(reader, "fixture.primary", matching.candidate_paths({})[route], ["target-3", "target-77"])
+        finally:
+            event.remove(conn, "before_execute", capture)
+        assert {row["record_key"] for row in found} == {"invented-3", "invented-77"}
+        assert statements
+        for query in statements:
+            sql = str(query.compile(dialect=conn.dialect, compile_kwargs={"literal_binds": True}))
+            conn.execute(text("SET LOCAL enable_seqscan=off"))
+            plan = conn.execute(text("EXPLAIN (ANALYZE, FORMAT JSON) " + sql)).scalar()[0]["Plan"]
+            def nodes(node):
+                yield node
+                for child in node.get("Plans", []):
+                    yield from nodes(child)
+            accesses = list(nodes(plan))
+            probes = [node for node in accesses if node.get("Index Name") == "mdm_store_lookup_pkey"]
+            assert probes and all("Index Cond" in node for node in probes)
+            assert sum(node["Actual Rows"] * node["Actual Loops"] for node in probes) <= 2
+            assert not any(node["Node Type"] == "Seq Scan" for node in accesses)

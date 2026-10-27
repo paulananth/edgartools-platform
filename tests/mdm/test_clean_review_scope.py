@@ -1,7 +1,7 @@
 """Which records a review names (platform validation 05b, part 1).
 
-The database behaviour is in `tests/integration/test_clean_review_scope.py`;
-these cover the cases that are hard to reach there.
+The shared calculation is qualified separately from the governed store's
+normal merge and worker review-recovery scenarios.
 """
 
 from __future__ import annotations

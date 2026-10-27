@@ -41,10 +41,9 @@ def test_fresh_company_person_and_relationship_mastering(database, tmp_path):
                "assertions": [*readings, *level1]}
     first = stage.apply(**command)
     assert first["generation"] == 1
-    with database.application.connect() as conn:
-        actual = dict(conn.execute(text("SELECT kind,count(*) FROM mdm.current_entity GROUP BY kind")).all())
-        assert actual == {"company": 2, "person": 2}
-        bindings = dict(conn.execute(text("SELECT subject,entity_id::text FROM mdm.stage_record")).all())
+    from collections import Counter
+    assert Counter(body["kind"] for body in core.documents(database, "entity").values()) == {"company": 2, "person": 2}
+    bindings = core.bindings(database, by_subject=True)
     # Bindings use the exact source subjects produced by the adapter. The two
     # GLEIF records wait for a binding: no approved rule joins them to SEC.
     person = next(r for r in readings if r["kind"] == "person")
@@ -61,26 +60,24 @@ def test_fresh_company_person_and_relationship_mastering(database, tmp_path):
     second_command = {**command, "batch_id": "fresh-links", "assertions": [link],
                       "decisions": steward, "expected_checkpoint": 1, "checkpoint": 2}
     second = stage.apply(**second_command)
-    with database.application.connect() as conn:
-        actual = dict(conn.execute(text("SELECT kind,count(*) FROM mdm.current_entity GROUP BY kind")).all())
-        assert actual == {"company": 2, "person": 2}
-        edges = conn.execute(text("SELECT body FROM mdm.current_record WHERE object_type='relationship'")).scalars().all()
-        direct = [e for e in edges if not e.get("derived")]
-        assert len(direct) == 1, edges
-        assert direct[0]["source_id"] == bindings[apple["subject"]]
-        assert direct[0]["target_id"] == bindings[microsoft["subject"]]
-        assert direct[0]["type"] == "IS_DIRECTLY_CONSOLIDATED_BY"
-        assert sorted(e["type"] for e in edges) == ["IS_DIRECTLY_CONSOLIDATED_BY", "IS_ULTIMATELY_CONSOLIDATED_BY"]
-        assert [e["type"] for e in edges if e.get("derived")] == ["IS_ULTIMATELY_CONSOLIDATED_BY"]
-        # GLEIF states the period's start, so its basis is stated; the
-        # calculated ultimate parent keeps its history (profiling 04b, part B).
-        assert all(p["valid_from_basis"] == "stated" for p in direct[0]["periods"])
-        (calculated,) = [e for e in edges if e.get("derived")]
-        assert calculated["algorithm"] == "accounting-chain-v2" and "as_of" not in calculated
-        assert [(p["valid_from"], p["path"]) for p in calculated["periods"]] == [
-            (direct[0]["periods"][0]["valid_from"], [direct[0]["relationship_id"]])]
-        assert {(e["source_id"], e["target_id"]) for e in edges} == {
-            (bindings[apple["subject"]], bindings[microsoft["subject"]])}
+    assert Counter(body["kind"] for body in core.documents(database, "entity").values()) == {"company": 2, "person": 2}
+    edges = list(core.documents(database, "relationship").values())
+    direct = [e for e in edges if not e.get("derived")]
+    assert len(direct) == 1, edges
+    assert direct[0]["source_id"] == bindings[apple["subject"]]
+    assert direct[0]["target_id"] == bindings[microsoft["subject"]]
+    assert direct[0]["type"] == "IS_DIRECTLY_CONSOLIDATED_BY"
+    assert sorted(e["type"] for e in edges) == ["IS_DIRECTLY_CONSOLIDATED_BY", "IS_ULTIMATELY_CONSOLIDATED_BY"]
+    assert [e["type"] for e in edges if e.get("derived")] == ["IS_ULTIMATELY_CONSOLIDATED_BY"]
+    # GLEIF states the period's start, so its basis is stated; the
+    # calculated ultimate parent keeps its history (profiling 04b, part B).
+    assert all(p["valid_from_basis"] == "stated" for p in direct[0]["periods"])
+    (calculated,) = [e for e in edges if e.get("derived")]
+    assert calculated["algorithm"] == "accounting-chain-v2" and "as_of" not in calculated
+    assert [(p["valid_from"], p["path"]) for p in calculated["periods"]] == [
+        (direct[0]["periods"][0]["valid_from"], [direct[0]["relationship_id"]])]
+    assert {(e["source_id"], e["target_id"]) for e in edges} == {
+        (bindings[apple["subject"]], bindings[microsoft["subject"]])}
     reader = ContractReader(database.application)
     for record in (person, apple):
         found = reader.entity(bindings[record["subject"]])
@@ -101,10 +98,11 @@ def test_fresh_company_person_and_relationship_mastering(database, tmp_path):
     assert stage.apply(**command)["duplicate"]
     assert stage.apply(**second_command)["duplicate"]
     with database.application.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 2
-        assert conn.scalar(text("SELECT count(*) FROM mdm.master_entity")) == 4
+        assert conn.scalar(text("SELECT count(*) FROM public.mdm_store_batch")) == 2
+        from edgar_warehouse.mdm.clean.inspection import counts
+        assert sum(counts(database.application)["masters"].values()) == 4
     # A restricted runtime cannot erase or bypass the newly mastered state.
-    for sql in ("DELETE FROM mdm.master_entity", "DELETE FROM mdm.source_reading",
+    for sql in ("DELETE FROM public.mdm_store_current", "DELETE FROM public.mdm_store_evidence",
                 "CREATE TABLE mdm.bypass(id int)"):
         with pytest.raises(DBAPIError) as denied, database.application.begin() as conn:
             conn.execute(text(sql))
@@ -129,8 +127,7 @@ def test_a_gleif_successor_ends_the_parent_link_on_its_event_date(database):
                "policy_digest": policy_digest, "expected_checkpoint": 0, "checkpoint": 1, "as_of": AS_OF,
                "assertions": [*readings, *level1]}
     stage.apply(**command)
-    with database.application.connect() as conn:
-        bindings = dict(conn.execute(text("SELECT subject,entity_id::text FROM mdm.stage_record")).all())
+    bindings = core.bindings(database, by_subject=True)
     apple, microsoft = (r for r in readings if r["kind"] == "company")
     child, owner = level1
     steward = [core.identity_and_binding(g, bindings[s["subject"]])[1] for g, s in ((child, apple), (owner, microsoft))]
@@ -140,9 +137,7 @@ def test_a_gleif_successor_ends_the_parent_link_on_its_event_date(database):
     assert [r["type"] for r in succession["relationships"]] == ["SUCCESSOR_ENTITY"]
     stage.apply(**{**command, "batch_id": "succession", "assertions": [succession],
                    "expected_checkpoint": 2, "checkpoint": 3})
-    with database.application.connect() as conn:
-        edges = {(e["type"], e.get("derived", False)): e for e in conn.execute(text(
-            "SELECT body FROM mdm.current_record WHERE object_type='relationship'")).scalars()}
+    edges = {(e["type"], e.get("derived", False)): e for e in core.documents(database, "relationship").values()}
     successor = edges[("SUCCESSOR_ENTITY", False)]
     assert (successor["source_id"], successor["target_id"]) == (
         bindings[apple["subject"]], bindings[microsoft["subject"]])

@@ -1,0 +1,263 @@
+{
+  "cases": [
+    {
+      "fields": "fd0da3583ccf753a5f9bdcdac3f9b19a8e392e6dc09f40111926330b66fe77ed",
+      "identity": "f73563736a7de8c282dbe4b1c41d69d52204856d97781820da74248c3058bcf9"
+    },
+    {
+      "fields": "81ef5e16e68f2c53b12c4fb1a4e457a1b9b52db60eba484893064df932c6fa97",
+      "identity": "f73563736a7de8c282dbe4b1c41d69d52204856d97781820da74248c3058bcf9"
+    },
+    {
+      "fields": "c1c4b8bdbc203cab8895c6d6ca26a66477d9e408632ad74e6ca047e44278720e",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "fb0a2ac271a9e40f13832a6fea16dc17cde7a70f6006330ce0941e884702fd69",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "03f6d6a8bcde7f601215ddc939f2c141386fe9b52583d3fbbddca25b4ac38ad5",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "c1c4b8bdbc203cab8895c6d6ca26a66477d9e408632ad74e6ca047e44278720e",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "4f054d8874056566ebe2cfaf8809d13b293e7ce10fde4fb949b1dda7df2bafcc",
+      "identity": "f73563736a7de8c282dbe4b1c41d69d52204856d97781820da74248c3058bcf9"
+    },
+    {
+      "fields": "977a4d89e31474305bfcb1155e6fc135da38841339f024b7b8bd8619a19ae1a9",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "c1c4b8bdbc203cab8895c6d6ca26a66477d9e408632ad74e6ca047e44278720e",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "badc9e729e5f8e3f961d07e8b7769b2ba737ee8e36c4f3bfe2644fa784c01928",
+      "identity": "d7b240bd6b88d840089a0cc982fb4fb6b5e6c760aa09092735f59888b9315c26"
+    },
+    {
+      "fields": "35a8d4cabc4975ed7d781edaeeb7b0cdef67440359553a86dc6dda2c845bc982",
+      "identity": "f73563736a7de8c282dbe4b1c41d69d52204856d97781820da74248c3058bcf9"
+    },
+    {
+      "fields": "c1c4b8bdbc203cab8895c6d6ca26a66477d9e408632ad74e6ca047e44278720e",
+      "identity": "f73563736a7de8c282dbe4b1c41d69d52204856d97781820da74248c3058bcf9"
+    },
+    {
+      "fields": "1a1a326bbd4c173e193b9948727cdf37a183a7cc664d37a48e1fec937f7a498e",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "10482107e189b79866d86b1e489d4ba4d75f32a6f6fed42a0f69f90857282500",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "c1c4b8bdbc203cab8895c6d6ca26a66477d9e408632ad74e6ca047e44278720e",
+      "identity": "f73563736a7de8c282dbe4b1c41d69d52204856d97781820da74248c3058bcf9"
+    },
+    {
+      "fields": "4d8e5e41faf15aae48b33e726cdbb0032a1b415082212a9070ac35adb67c7750",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "d54ddbba3fb9f6a1dd711a351a889e24b64d57ba775a17ba455ee1a6159943f2",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "c1c4b8bdbc203cab8895c6d6ca26a66477d9e408632ad74e6ca047e44278720e",
+      "identity": "f73563736a7de8c282dbe4b1c41d69d52204856d97781820da74248c3058bcf9"
+    },
+    {
+      "fields": "c5552c2bf62bd6a2de607ab14c67e63b3080295d6d1037de94372d3808217a3b",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "4bd534ed578b5edc5dbed50e24b4b674e617b1f90337539125061035b5e8cf87",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "c1c4b8bdbc203cab8895c6d6ca26a66477d9e408632ad74e6ca047e44278720e",
+      "identity": "f73563736a7de8c282dbe4b1c41d69d52204856d97781820da74248c3058bcf9"
+    },
+    {
+      "fields": "b59f40f8597948ae980ef9d1f107e8e2a75849bc41cc2a6049f72bc7978356f1",
+      "identity": "d7b240bd6b88d840089a0cc982fb4fb6b5e6c760aa09092735f59888b9315c26"
+    },
+    {
+      "fields": "3b8911f59b62aa70efee6221ded91d16bc66d8602ff0c05ff4536176ff31a18d",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "c1c4b8bdbc203cab8895c6d6ca26a66477d9e408632ad74e6ca047e44278720e",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "72f6fbd2bf92af426268f59aeead06c97ca4cb2cbc2b890d19c1c4ead1d7fdf8",
+      "identity": "f73563736a7de8c282dbe4b1c41d69d52204856d97781820da74248c3058bcf9"
+    },
+    {
+      "fields": "b10207e3923c13b296a621f8d87c79e3d5ea21b687bc58b9cf8553bca4537c91",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "c1c4b8bdbc203cab8895c6d6ca26a66477d9e408632ad74e6ca047e44278720e",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "95622df4eaf5a5a43f3352416e820ccba32f9cbc0827518941d1a186330ad8f5",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "feb2ec854389634bf7af3af4e83308def1248787ecf85f41cc979a9f126b9314",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "c1c4b8bdbc203cab8895c6d6ca26a66477d9e408632ad74e6ca047e44278720e",
+      "identity": "f73563736a7de8c282dbe4b1c41d69d52204856d97781820da74248c3058bcf9"
+    },
+    {
+      "fields": "88781d5134f4823c16363c3637ff451d34e059cd60790379fdf2683763cd271e",
+      "identity": "d7b240bd6b88d840089a0cc982fb4fb6b5e6c760aa09092735f59888b9315c26"
+    },
+    {
+      "fields": "5506742b6fd7dbf0b36c92d55bb9eed12d237698a54373b587482b0630898a4a",
+      "identity": "f73563736a7de8c282dbe4b1c41d69d52204856d97781820da74248c3058bcf9"
+    },
+    {
+      "fields": "c1c4b8bdbc203cab8895c6d6ca26a66477d9e408632ad74e6ca047e44278720e",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "5aec98433143422c07f8f9e029927c5828d86e0be79975839ab5055b1635ab08",
+      "identity": "cdf26cdc32aae02a19cdce041d24d8b1b935892379c9d21921c8ef819b28c242"
+    },
+    {
+      "fields": "67c5c3aa6c697df0f73d118af593c0c82242632bb70ade4c02af999946862bbc",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "c1c4b8bdbc203cab8895c6d6ca26a66477d9e408632ad74e6ca047e44278720e",
+      "identity": "f73563736a7de8c282dbe4b1c41d69d52204856d97781820da74248c3058bcf9"
+    },
+    {
+      "fields": "f15f3cb36f7febcff7074e598b63312c7dfac8f20764591a35509315554d13c6",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "90277bad858bb757bdd8a1b03eedbd9c44a6e79a5e74549789392be8503d7b8e",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "c1c4b8bdbc203cab8895c6d6ca26a66477d9e408632ad74e6ca047e44278720e",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "c8d8c25b95ca68abc806320c7813ba14f7966c3f2e78f3b4e74bad9540fad4e8",
+      "identity": "f73563736a7de8c282dbe4b1c41d69d52204856d97781820da74248c3058bcf9"
+    },
+    {
+      "fields": "e32a698f7dc431c3d32e3e95a049440395249f04caacd33f04e939c63f5ada0c",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "c1c4b8bdbc203cab8895c6d6ca26a66477d9e408632ad74e6ca047e44278720e",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "89cc847b3c205e60baf21acd21ca0007aa7f965ca5995c1edc0884108483b753",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "760e7df00697ff455ff3a438afb5cbfa015fe279d0fe489f14a7a2bdfd514b36",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "c1c4b8bdbc203cab8895c6d6ca26a66477d9e408632ad74e6ca047e44278720e",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "e0b7c378970c44c7ff3097d866d69d5380b5ae7b233722d302ff5e6a84c6c573",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "8b3b642f43c7fb3f8ada4dc8a1206da58dfd7010b1cd2fb59cefe2f380c7afdf",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "c1c4b8bdbc203cab8895c6d6ca26a66477d9e408632ad74e6ca047e44278720e",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "e32c2ec815a39c65812cd4a84c3e61832ad120d0e6e48d803190d8f52d602597",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "2d9be6a869b96d4ddcc5dab2b7d089ec3ddeb4b8c432682dfbbbf9e85514fdee",
+      "identity": "f73563736a7de8c282dbe4b1c41d69d52204856d97781820da74248c3058bcf9"
+    },
+    {
+      "fields": "c1c4b8bdbc203cab8895c6d6ca26a66477d9e408632ad74e6ca047e44278720e",
+      "identity": "f73563736a7de8c282dbe4b1c41d69d52204856d97781820da74248c3058bcf9"
+    },
+    {
+      "fields": "b7f54de6b9031e20a5da6add995751025f9375bfdaebefa542d0253b430b1b12",
+      "identity": "f73563736a7de8c282dbe4b1c41d69d52204856d97781820da74248c3058bcf9"
+    },
+    {
+      "fields": "190eb13c2139f4c7cf15c64d1ee222ccf872d804f8961b9a7c5674fd4930d94b",
+      "identity": "f73563736a7de8c282dbe4b1c41d69d52204856d97781820da74248c3058bcf9"
+    },
+    {
+      "fields": "c1c4b8bdbc203cab8895c6d6ca26a66477d9e408632ad74e6ca047e44278720e",
+      "identity": "f73563736a7de8c282dbe4b1c41d69d52204856d97781820da74248c3058bcf9"
+    },
+    {
+      "fields": "60d2ecfac2a29ad98de7d5f733b5c252cbc3c3cc1b043f0bd8d5c84c54fa3aca",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "2e9a6cd1da8ac7082947cdc8b72b3ab096ce20805dd1ca6e98ad2e126d906ded",
+      "identity": "d7b240bd6b88d840089a0cc982fb4fb6b5e6c760aa09092735f59888b9315c26"
+    },
+    {
+      "fields": "c1c4b8bdbc203cab8895c6d6ca26a66477d9e408632ad74e6ca047e44278720e",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "6fbab27fdc9ad5409f5d43fa9def1181a739830efd2416a2525d8a1f495627a5",
+      "identity": "f73563736a7de8c282dbe4b1c41d69d52204856d97781820da74248c3058bcf9"
+    },
+    {
+      "fields": "1e0564a25fdf4e1659dfd04fffa1f3b100f11abee9cc994bf324b57a33403366",
+      "identity": "f73563736a7de8c282dbe4b1c41d69d52204856d97781820da74248c3058bcf9"
+    },
+    {
+      "fields": "c1c4b8bdbc203cab8895c6d6ca26a66477d9e408632ad74e6ca047e44278720e",
+      "identity": "ac8bc1e295734fc055179ccdf1f093bf16cdb0c8db7696f4f4b542a025be34d9"
+    },
+    {
+      "fields": "3fd398b6bec9e20e5b38f5ee68693416d407910bafc75d7c021eab54e2007f60",
+      "identity": "d7b240bd6b88d840089a0cc982fb4fb6b5e6c760aa09092735f59888b9315c26"
+    },
+    {
+      "fields": "4b7d367896df7bf290010352d1a9d01689a0531bc35f723c7d1a4163916d1303",
+      "identity": "f73563736a7de8c282dbe4b1c41d69d52204856d97781820da74248c3058bcf9"
+    },
+    {
+      "fields": "c1c4b8bdbc203cab8895c6d6ca26a66477d9e408632ad74e6ca047e44278720e",
+      "identity": "f73563736a7de8c282dbe4b1c41d69d52204856d97781820da74248c3058bcf9"
+    },
+    {
+      "fields": "d429fb31bb08031e5cfd0c93b1726da8b0a0e3c9c67dbe6e236bcea4aa79e6ae",
+      "identity": "d7b240bd6b88d840089a0cc982fb4fb6b5e6c760aa09092735f59888b9315c26"
+    }
+  ],
+  "seed": 81403,
+  "as_of": "2026-09-18T00:00:00+00:00",
+  "encoding": "sha256 of canonical JSON outcome; Python exact numbers and Unicode, sorted set values"
+}
