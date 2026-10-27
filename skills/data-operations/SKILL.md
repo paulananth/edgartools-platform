@@ -284,6 +284,10 @@ Work it out from counts before starting:
   finished bundle or the end.
 - **Keep the machine awake and on power.** Sleep stops the workers. Their
   leases expire and the units run again later, with nothing loaded twice.
+  On macOS, check `pmset -g` (`sleep`): while the machine sleeps, Docker,
+  every test container and the shared server freeze, and brief Power Nap
+  wakes make a run look slow, not stopped (a 6-minute test took 61, ticket
+  138). Start a long run or test as `caffeinate -i <command>`.
 - **Read a failed call's database error**, the `(psycopg2.errors.X)` line,
   not SQLAlchemy's last line, which is only a link.
 - **A target that reads another target's runs** (`{run: {source, target,

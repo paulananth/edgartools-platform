@@ -193,8 +193,7 @@ def policy_body() -> dict:
     Proving Run activation): they, and the FIGI contract's verification, wait for the
     operator's switch-on."""
     # N-PORT's two Security rules wait for their switch-on too (ticket 138 part B2).
-    body = policy_layers.with_rules_on(files.policy(), "security", *OPENFIGI, "nport-security-cusip", "nport-security-isin",
-                                          "thirteenf-security-figi")
+    body = policy_layers.with_rules_on(files.policy(), "security", *OPENFIGI, "nport-security-cusip", "nport-security-isin")
     body["kinds"]["security"]["identifiers"]["figi"]["verification"] = {
         "corpus_sha256": "f" * 64, "approved_by": "fixture", "approved_at": "2026-10-25T00:00:00Z",
         "reason": "fixture verification: shape only, not a measurement"}
@@ -313,6 +312,21 @@ def test_a_filed_figi_finds_its_security_and_never_becomes_one_of_its_identifier
     assert found["identifiers"] == {"cusip": sorted([EQUITY, "ZZ0000211"]), "figi": figis(EQUITY)}
     created = securities(database)[bound(database, THIRTEENF, "ZZ0000229")]
     assert created["identifiers"] == {"cusip": ["ZZ0000229"]}
+
+
+def test_a_held_cusip_stays_on_its_security_whatever_figi_is_filed_with_it(database, tmp_path):
+    """The 13F CUSIP binds first (operator, 2026-10-27: "On, set aside put/call"): a
+    13F CUSIP a Security holds stays there when its filed FIGI is another
+    Security's; nothing merges and nothing waits for review."""
+    records, _ = prepared_records(tmp_path, ("cusip",))
+    load(database, [
+        ("openfigi", records),
+        ("13f", [core.source(key=BOND, source_code=THIRTEENF, kind="security", fields={"title_of_class": "NOTE"},
+                             identifiers={"cusip": BOND}, cross_references={"figi": figis(EQUITY)[0]})])])
+    held = securities(database)[bound(database, THIRTEENF, BOND)]
+    assert bound(database, THIRTEENF, BOND) == bound(database, CODE, BOND) != bound(database, CODE, EQUITY)
+    assert held["status"] == "accepted" and held["identifiers"]["cusip"] == [BOND]
+    assert len(securities(database)) == len(records)
 
 
 def grouping(database, records) -> list[list[str]]:
