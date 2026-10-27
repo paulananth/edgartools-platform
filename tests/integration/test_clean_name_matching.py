@@ -1,13 +1,4 @@
-"""Real PG16: SEC-to-GLEIF name matching in the Merge Stage (ticket 08).
-
-A waiting GLEIF record joins the Company its SEC record holds by CIK when the
-Name Census names exactly this CIK and this LEI, both name keys agree with the
-legal form kept, and the place test holds. Either source may load first.
-
-The activations are **fixture** activations with arithmetic-only proofs.
-Nothing in the production policy activates a matching rule before the
-operator approves its digest.
-"""
+"""Shared fixture builders; retired calculation tests are catalogued in ticket 08."""
 
 from __future__ import annotations
 
@@ -184,80 +175,8 @@ def companies(database):
     ]
 
 
-def test_a_gleif_record_joins_the_company_its_sec_record_holds(database):
-    policy = name_policy(database)
-    load(database, policy, "sec", sec())
-    load(database, policy, "gleif", gleif(), checkpoint=2)
-    (only,) = companies(database)
-    assert only["identifiers"] == {"cik": [APPLE_CIK], "lei": [APPLE_LEI]}
-
-
-def test_a_waiting_gleif_record_joins_when_its_sec_record_arrives(database):
-    policy = name_policy(database)
-    load(database, policy, "gleif", gleif())
-    assert companies(database) == []
-    load(database, policy, "sec", sec(), checkpoint=2)
-    (only,) = companies(database)
-    assert only["identifiers"] == {"cik": [APPLE_CIK], "lei": [APPLE_LEI]}
-
-
-def test_both_records_in_one_batch_make_one_company(database):
-    policy = name_policy(database)
-    load(database, policy, "both", sec(), gleif())
-    (only,) = companies(database)
-    assert only["identifiers"] == {"cik": [APPLE_CIK], "lei": [APPLE_LEI]}
-
-
 def _waits(database, policy, sec_record, gleif_record):
     load(database, policy, "sec", sec_record)
     load(database, policy, "gleif", gleif_record, checkpoint=2)
     (only,) = companies(database)
     assert only["identifiers"] == {"cik": [sec_record["record_key"]]}
-
-
-def test_an_inactive_rule_proposes_nothing(database):
-    _waits(database, name_policy(database, active=False), sec(), gleif())
-
-
-def test_a_company_that_holds_another_lei_waits(database):
-    policy = name_policy(database)
-    load(database, policy, "sec", sec())
-    load(database, policy, "gleif", gleif(), checkpoint=2)
-    other = gleif(lei="549300OTHER000000001")
-    load(database, policy, "gleif-2", other, checkpoint=3)
-    (only,) = companies(database)
-    assert only["identifiers"] == {"cik": [APPLE_CIK], "lei": [APPLE_LEI]}
-
-
-def test_a_company_in_conflict_review_gains_no_record_by_name(database):
-    """Ticket 04: the name rules honour the same suspension as the identifier
-    rules. The GLEIF record waits with a review; the batch commits."""
-    policy = name_policy(database)
-    load(database, policy, "sec", sec())
-    second = core.source(
-        key="sec-2",
-        source_code=SEC,
-        fields={"name": "APPLE INC"},
-        identifiers={"cik": APPLE_CIK},
-    )
-    load(database, policy, "sec-2", second, checkpoint=2)
-    moved = core.source(
-        key="sec-2",
-        source_code=SEC,
-        revision=2,
-        fields={"name": "APPLE INC"},
-        identifiers={"cik": "0000000002"},
-    )
-    load(database, policy, "sec-2b", moved, checkpoint=3)
-    (company,) = companies(database)
-    assert company["status"] == "review"
-    record = gleif()
-    load(database, policy, "gleif", record, checkpoint=4)
-    (company,) = companies(database)
-    assert record["subject"] not in company["subjects"]
-    reviews = [
-        r
-        for r in core.documents(database, "review").values()
-        if r.get("open") and r.get("subject") == record["subject"]
-    ]
-    assert "suspended_identifier" in {r["reason"] for r in reviews}

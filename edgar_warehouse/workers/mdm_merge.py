@@ -24,7 +24,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from uuid import NAMESPACE_URL, uuid5
 
-from sqlalchemy import text
 
 from edgar_warehouse.mdm.clean import limits
 
@@ -86,29 +85,8 @@ def _stage(envelope: dict, artifacts, folder: Path) -> tuple[Path, dict]:
 
 def receipt(store, manifest: dict, run_id: str, manifest_digest: str) -> bytes:
     """What MDM holds for the manifest's batches under this run, read back."""
-    if store.prepared:
-        from edgar_warehouse.mdm.clean.prepared_runs import receipt as prepared_receipt
-        return prepared_receipt(store,manifest,run_id,manifest_digest)
-    ids = [b["batch_id"] for b in manifest["batches"]]
-    with store.engine.connect() as conn:
-        scope = conn.scalar(text("SELECT scope FROM mdm.run WHERE run_id=CAST(:r AS uuid)"),
-                            {"r": run_id})
-        if (scope is None or scope.get("manifest_digest") != manifest_digest
-                or scope.get("expected_batches") != sorted(ids)):
-            raise ValueError("MDM run scope differs from the input manifest")
-        observed = set(conn.scalars(text("SELECT batch_id FROM mdm.run_batch WHERE run_id=CAST(:r AS uuid)"),
-                                    {"r": run_id}))
-        rows = {r["batch_id"]: dict(r) for r in conn.execute(text(
-            "SELECT batch_id, request_hash, policy_digest, consumer, checkpoint, generation "
-            "FROM mdm.batch WHERE batch_id = ANY(:ids)"), {"ids": ids}).mappings()}
-    missing = sorted(set(ids) - observed)
-    if missing or set(rows) != set(ids):
-        raise ValueError(f"MDM has not committed every batch of this run: {missing or sorted(set(ids) - set(rows))}")
-    body = {"version": 1, "mdm_run": run_id, "policy_digest": manifest["policy_digest"],
-            "batches": [rows[i] for i in sorted(ids)]}
-    if any(row["policy_digest"] != manifest["policy_digest"] for row in body["batches"]):
-        raise ValueError("A committed batch names a different policy")
-    return json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
+    from edgar_warehouse.mdm.clean.prepared_runs import receipt as prepared_receipt
+    return prepared_receipt(store,manifest,run_id,manifest_digest)
 
 
 def execute(envelope: dict, artifacts) -> dict:

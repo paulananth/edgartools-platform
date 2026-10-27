@@ -15,7 +15,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 from .evidence import instant
-from .store import identifier_values, rows
+from .store import identifier_values
 
 Withheld = dict[str, set[tuple[str, str]]]
 
@@ -37,21 +37,15 @@ def withheld_by(decisions, as_of: str | None = None) -> Withheld:
 def withheld(conn, subjects, decisions=(), as_of: str | None = None) -> Withheld:
     """`withheld_by` over the stored binds and revocations of `subjects` and
     this batch's `decisions`: one indexed read per subject on either store."""
-    from .record_reads import RecordReader
 
     subjects = sorted(set(subjects))
     stored = []
-    if subjects and isinstance(conn, RecordReader):
-        stored = [d for d in conn.related_decisions(subjects)
-                  if d["operation"] in ("bind", "revoke") and d.get("subject") in subjects]
-    elif subjects:
-        stored = [r["body"] for r in rows(
-            conn,
-            """SELECT d.body FROM unnest(CAST(:subjects AS text[])) k(key) CROSS JOIN LATERAL (
-                SELECT body FROM mdm.decision WHERE body->>'subject' = k.key
-                  AND operation IN ('bind', 'revoke') OFFSET 0) d""",
-            subjects=subjects,
-        )]
+    if subjects:
+        stored = [
+            d
+            for d in conn.related_decisions(subjects)
+            if d["operation"] in ("bind", "revoke") and d.get("subject") in subjects
+        ]
     return withheld_by([*stored, *decisions], as_of)
 
 

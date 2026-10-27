@@ -1,4 +1,5 @@
 """MDM command handlers: preparation, queries and publication requests."""
+
 from __future__ import annotations
 
 import json
@@ -82,42 +83,39 @@ def _print_mdm_report(read) -> int:
 def check_connectivity(args) -> int:
     def report(conn):
         from sqlalchemy import func, select
+
         adapter = _inspection_adapter(conn)
-        return {"sql": conn.scalar(text("SELECT 1")) == 1,
-                "migrations": conn.scalar(select(func.count()).select_from(adapter.tables["migration"]))
-                if adapter else conn.scalar(text("SELECT count(*) FROM mdm.migration"))}
+        return {
+            "sql": conn.scalar(text("SELECT 1")) == 1,
+            "migrations": conn.scalar(
+                select(func.count()).select_from(adapter.tables["migration"])
+            ),
+        }
+
     return _print_mdm_report(report)
 
 
 def _inspection_adapter(conn):
-    from .record_reads import for_connection, RecordReader
-    from .store import Conflict
+    from .record_reads import for_connection
 
-    reader = for_connection(conn)
-    if isinstance(reader, RecordReader):
-        if reader.adapter.protocol < 5:
-            raise Conflict("MDM inspection requires governed prepared storage")
-        return reader.adapter
-    return None
+    return for_connection(conn).adapter
 
 
 def counts(args) -> int:
     def report(conn):
-        adapter = _inspection_adapter(conn)
-        if adapter is not None:
-            result = adapter.count_types(("entity", "relationship", "review"), connection=conn)
-            return {kind: count for kind, count in result.items() if kind == "entity" or count}
-        return dict(conn.execute(text(
-            "SELECT 'entity',count(*) FROM mdm.current_entity "
-            "UNION ALL SELECT object_type,count(*) FROM mdm.current_record "
-            "WHERE object_type<>'entity' GROUP BY object_type"
-        )).all())
+        result = _inspection_adapter(conn).count_types(
+            ("entity", "relationship", "review"), connection=conn
+        )
+        return {
+            kind: count for kind, count in result.items() if kind == "entity" or count
+        }
+
     return _print_mdm_report(report)
 
 
 def force_publish(args) -> int:
     """Force publish (ticket 22): write the current snapshot for one consumer as
-    forced pages (`mdm.force_publish`, no master data changes), then the input
+    forced pages (no master data changes), then the input
     manifest of a publish target with one unit a page, for `rules run`. The
     same --run-id gives the same pages, so a stopped command is run again."""
     from uuid import UUID, uuid4
@@ -128,36 +126,51 @@ def force_publish(args) -> int:
     mdm = engine_from_env("MDM_DATABASE_URL")
     pages, after = [], {"object_type": "", "object_id": ""}
     try:
-        with mdm.connect() as conn:
-            prepared = _inspection_adapter(conn) is not None
-        if prepared:
-            from .store import Store
-            from .forced_publication import page as forced_page
-            selected = Store(mdm)
+        from .store import Store
+        from .forced_publication import page as forced_page
+
+        selected = Store(mdm)
         while after is not None:
-            if prepared:
-                page = forced_page(selected,args.consumer,run_id,len(pages)+1,after,args.page_size)
-            else:
-                with mdm.begin() as conn:
-                    page = conn.scalar(text(
-                        "SELECT mdm.force_publish(:c,CAST(:r AS uuid),:p,:t,:i,:n)"),
-                        {"c": args.consumer, "r": run_id, "p": len(pages) + 1, "t": after["object_type"],
-                         "i": after["object_id"], "n": args.page_size})
+            page = forced_page(
+                selected, args.consumer, run_id, len(pages) + 1, after, args.page_size
+            )
             pages.append(page)
             after = page["next"]
     finally:
         mdm.dispose()
     store = Artifacts()
     root = Path(args.output).resolve().as_uri()
-    units = [{"keys": {"batch_id": page["batch_id"], "consumer": args.consumer},
-              # A page as MDM holds it; whether this call wrote it is not part of it.
-              "input": store.put(f"{root}/pages", {"version": 1, "forced": True,
-                                                   **{k: page[k] for k in ("batch_id", "generation", "records")}}),
-              "output": f"{root}/published/{n}.json", "cursor": {}}
-             for n, page in enumerate(pages, 1)]
+    units = [
+        {
+            "keys": {"batch_id": page["batch_id"], "consumer": args.consumer},
+            # A page as MDM holds it; whether this call wrote it is not part of it.
+            "input": store.put(
+                f"{root}/pages",
+                {
+                    "version": 1,
+                    "forced": True,
+                    **{k: page[k] for k in ("batch_id", "generation", "records")},
+                },
+            ),
+            "output": f"{root}/published/{n}.json",
+            "cursor": {},
+        }
+        for n, page in enumerate(pages, 1)
+    ]
     manifest = store.put(root, {"version": 2, "steps": {args.step: units}})
-    print(json.dumps({"run_id": run_id, "consumer": args.consumer, "forced": True, "pages": len(pages),
-                      "records": sum(page["records"] for page in pages), "manifest": manifest}, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "run_id": run_id,
+                "consumer": args.consumer,
+                "forced": True,
+                "pages": len(pages),
+                "records": sum(page["records"] for page in pages),
+                "manifest": manifest,
+            },
+            sort_keys=True,
+        )
+    )
     return 0
 
 

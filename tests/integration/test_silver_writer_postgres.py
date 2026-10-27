@@ -171,7 +171,7 @@ def test_append_lands_typed_rows_with_mdm_ids_reruns_unchanged_and_refuses_a_cha
     assert table(runtime) == rows  # nothing written
     # Mastering z later: the next landing fills its id and changes nothing else.
     z = entity_context.company("z")
-    identity, binding = core.identity_and_binding(z)
+    identity, binding = core.identity_and_binding(z, published_at="2026-01-02T00:00:00+00:00")
     core.apply(database, 2, assertions=[z], identities=[identity], decisions=[binding])
     filled = land(sink, "visit", visits(), ids)
     assert (filled["inserted"], filled["changed"], filled["mdm_ids_updated"]) == (0, 0, 1)
@@ -223,7 +223,7 @@ def test_refresh_fills_ids_of_rows_already_landed_and_follows_a_merge(stores, da
     land(sink, "visit", visits(), ids)
     # z is mastered after its row landed; the row is never delivered again.
     z = entity_context.company("z")
-    identity, binding = core.identity_and_binding(z)
+    identity, binding = core.identity_and_binding(z, published_at="2026-01-02T00:00:00+00:00")
     core.apply(database, 2, assertions=[z], identities=[identity], decisions=[binding])
     assert refresh_ids(sink, "visit", ids)["rows_updated"] == {"member_id_mdm_id": 1}
     assert table(runtime)[3]["member_id_mdm_id"] == identity["entity_id"]
@@ -231,7 +231,7 @@ def test_refresh_fills_ids_of_rows_already_landed_and_follows_a_merge(stores, da
     # p and q (no identifiers, so nothing refuses the merge) land apart, then are merged:
     # both rows then point at the survivor.
     p_, q_ = (core.source(key, fields={"name": f"Company {key}"}, identifiers={}) for key in ("p", "q"))
-    pairs = [core.identity_and_binding(r) for r in (p_, q_)]
+    pairs = [core.identity_and_binding(r, published_at="2026-01-03T00:00:00+00:00") for r in (p_, q_)]
     core.apply(database, 3, assertions=[p_, q_], identities=[i for i, _ in pairs], decisions=[d for _, d in pairs])
     left, right = (i["entity_id"] for i, _ in pairs)
     more = [{"visit_id": 4, "member_id": "p"}, {"visit_id": 5, "member_id": "q"}]
@@ -239,10 +239,9 @@ def test_refresh_fills_ids_of_rows_already_landed_and_follows_a_merge(stores, da
     assert table(runtime)[4]["member_id_mdm_id"] == left and table(runtime)[5]["member_id_mdm_id"] == right
     loaded = {k: r["loaded_at"] for k, r in table(runtime).items()}
     core.apply(database, 4, decisions=[core.decision(
-        "merge", actor="steward", reason="same company", at=core.AT, left=left, right=right)])
-    with database.application.connect() as conn:
-        canonical = dict(conn.execute(text("SELECT object_id, canonical_id FROM mdm.current_entity "
-                                           "WHERE object_id = ANY(:ids)"), {"ids": [left, right]}).all())
+        "merge", actor="steward", reason="same company", at="2026-01-04T00:00:00+00:00", left=left, right=right)])
+    canonical = {key: body["canonical_id"] for key, body in core.documents(database, "entity").items()
+                 if key in {left, right}}
     survivor = canonical[left] or left
     assert survivor == (canonical[right] or right)
     assert refresh_ids(sink, "visit", ids)["rows_updated"] == {"member_id_mdm_id": 1}

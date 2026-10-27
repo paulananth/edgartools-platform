@@ -79,10 +79,27 @@ class Store:
 
 # One entry per store (GoF consult, ticket 05 RDM part): silver specs add one.
 STORES = {
-    "MDM": Store("MDM", "MDM_DATABASE_URL", True, "edgar-warehouse mdm check-connectivity", "edgar_warehouse.context:Context"),
-    "RDM": Store("RDM", "RDM_DATABASE_URL", False, "edgar-warehouse rdm migrate", "edgar_warehouse.rdm.context:CodeContext"),
-    "SILVER": Store("silver", "SILVER_DATABASE_URL", False, "edgar-warehouse silver migrate",
-                    "edgar_warehouse.silver_writer.context:TableContext"),
+    "MDM": Store(
+        "MDM",
+        "MDM_DATABASE_URL",
+        True,
+        "edgar-warehouse mdm check-connectivity",
+        "edgar_warehouse.context:Context",
+    ),
+    "RDM": Store(
+        "RDM",
+        "RDM_DATABASE_URL",
+        False,
+        "edgar-warehouse rdm migrate",
+        "edgar_warehouse.rdm.context:CodeContext",
+    ),
+    "SILVER": Store(
+        "silver",
+        "SILVER_DATABASE_URL",
+        False,
+        "edgar-warehouse silver migrate",
+        "edgar_warehouse.silver_writer.context:TableContext",
+    ),
 }
 
 
@@ -259,172 +276,194 @@ class Context:
 
     def _resolve(self, conn, kind: str | None, key: str) -> str:
         """The entity a key names: an id, or the one entity carrying an identifier."""
-        from sqlalchemy import text
 
         if ":" not in key:
             return key
         namespace, value = key.split(":", 1)
-        from edgar_warehouse.mdm.clean.prepared_registry import installed
+        from edgar_warehouse.mdm.clean.prepared_registry import (
+            require_installed as installed,
+        )
         from edgar_warehouse.mdm.clean.record_reads import RecordReader
         from edgar_warehouse.mdm.clean.primitives import prepare_matching_value
-        from edgar_warehouse.mdm.clean.store import containment_docs, storage_adapter
+        from edgar_warehouse.mdm.clean.store import storage_adapter
 
         adapter = installed(conn)
-        if adapter is not None:
-            api, reader = storage_adapter(), RecordReader(adapter, connection=conn)
-            values = {value} if value else set()
-            for policy in api.registered_policies(conn):
-                for block in policy.get("kinds", {}).values():
-                    contract = block.get("identifiers", {}).get(namespace)
-                    if contract:
-                        normalized = prepare_matching_value(contract["normalizer"], value, block)
-                        if normalized:
-                            values.add(normalized)
-            groups = [reader.group("identifier_records", namespace, normalized, source, "bound")
-                      for source in api.registered_sources(conn) for normalized in sorted(values)]
-            found = {identity: "identifier" for identity in reader.carrying_entities(
-                groups, namespace, value, kind=kind)}
-            if not found:
-                found = {identity: "cross_reference" for identity in reader.carrying_entities(
-                    [reader.group("cross_reference_records", namespace, value)], namespace, value,
-                    kind=kind, cross_reference=True)}
-        else:
-            carriers = conn.execute(text(
-            """SELECT DISTINCT coalesce(e.canonical_id, s.entity_id::text), s.subject
-                 FROM unnest(CAST(:docs AS jsonb[])) AS w(doc) CROSS JOIN LATERAL (
-                      SELECT entity_id, kind, subject FROM mdm.stage_record
-                       WHERE reading -> 'identifiers' @> w.doc OFFSET 0) s
-                 LEFT JOIN mdm.current_entity e ON e.object_id = s.entity_id::text
-                WHERE s.entity_id IS NOT NULL AND (CAST(:k AS text) IS NULL OR s.kind = :k)"""),
-            {"docs": containment_docs(namespace, value), "k": kind}).all()
-            # A value its bind withholds does not make it this master's (ticket 138 part A2b).
-            from edgar_warehouse.mdm.clean.withholding import given, withheld
-            kept_back = withheld(conn, {r[1] for r in carriers})
-            found = {r[0]: "identifier" for r in carriers if given(kept_back, r[1], namespace, value)}
-        if not found and adapter is None:
-            found = {r[0]: "cross_reference" for r in conn.execute(text(
-                """SELECT DISTINCT entity_id FROM mdm.cross_reference_lookup(:ns, :v)
-                    WHERE bound_entity_id IS NOT NULL AND (CAST(:k AS text) IS NULL OR kind = :k)"""),
-                {"ns": namespace, "v": value, "k": kind})}
+        api, reader = storage_adapter(), RecordReader(adapter, connection=conn)
+        values = {value} if value else set()
+        for policy in api.registered_policies(conn):
+            for block in policy.get("kinds", {}).values():
+                contract = block.get("identifiers", {}).get(namespace)
+                if contract:
+                    normalized = prepare_matching_value(
+                        contract["normalizer"], value, block
+                    )
+                    if normalized:
+                        values.add(normalized)
+        groups = [
+            reader.group("identifier_records", namespace, normalized, source, "bound")
+            for source in api.registered_sources(conn)
+            for normalized in sorted(values)
+        ]
+        found = {
+            identity: "identifier"
+            for identity in reader.carrying_entities(
+                groups, namespace, value, kind=kind
+            )
+        }
+        if not found:
+            found = {
+                identity: "cross_reference"
+                for identity in reader.carrying_entities(
+                    [reader.group("cross_reference_records", namespace, value)],
+                    namespace,
+                    value,
+                    kind=kind,
+                    cross_reference=True,
+                )
+            }
         subject = kind or "relationship"
         if not found:
-            raise ContextError(f"No {kind or 'entity'} carries {namespace}:{value}.",
-                               f"{PROG} {kind or 'company'} --search \"<name>\"")
+            raise ContextError(
+                f"No {kind or 'entity'} carries {namespace}:{value}.",
+                f'{PROG} {kind or "company"} --search "<name>"',
+            )
         if len(found) > 1:
             names = self._names(conn, list(found))
-            listed = "; ".join(f"{names.get(i, {}).get('name') or '(no name)'} ({i})" for i in sorted(found))
+            listed = "; ".join(
+                f"{names.get(i, {}).get('name') or '(no name)'} ({i})"
+                for i in sorted(found)
+            )
             raise ContextError(
                 f"{namespace}:{value} is carried by {len(found)} entities: {listed}. "
-                + ("It is a cross-reference id, lookup only: sharing it does not make them one entity."
-                   if "cross_reference" in found.values() else "Pick one by its id."),
+                + (
+                    "It is a cross-reference id, lookup only: sharing it does not make them one entity."
+                    if "cross_reference" in found.values()
+                    else "Pick one by its id."
+                ),
                 f"{PROG} {subject} {sorted(found)[0]}",
             )
         return next(iter(found))
 
     @staticmethod
     def _names(conn, ids: list[str]) -> dict:
-        from sqlalchemy import text
-        from edgar_warehouse.mdm.clean.prepared_registry import installed
+        from edgar_warehouse.mdm.clean.prepared_registry import (
+            require_installed as installed,
+        )
         from edgar_warehouse.mdm.clean.record_reads import RecordReader
 
         if not ids:
             return {}
         adapter = installed(conn)
-        if adapter is not None:
-            return {key: {"name": _name(body), "kind": body["kind"]}
-                    for key, body in RecordReader(adapter, connection=conn).masters(ids).items()}
-        return {r[0]: {"name": r[1], "kind": r[2]} for r in conn.execute(text(
-            "SELECT object_id, mdm.entity_name(body), kind FROM mdm.current_entity WHERE object_id = ANY(:ids)"),
-            {"ids": ids})}
+        return {
+            key: {"name": _name(body), "kind": body["kind"]}
+            for key, body in RecordReader(adapter, connection=conn).masters(ids).items()
+        }
 
     @staticmethod
     def _generation(conn, args) -> int | None:
-        from sqlalchemy import text
-        from edgar_warehouse.mdm.clean.prepared_registry import installed
+        from edgar_warehouse.mdm.clean.prepared_registry import (
+            require_installed as installed,
+        )
 
         adapter = installed(conn)
-        if adapter is not None and (args.as_at or args.as_of):
+        if args.as_at or args.as_of:
             flag = "--as-at" if args.as_at else "--as-of"
-            moment = parse_time(args.as_at or args.as_of, flag, f"{PROG} {args.subject} {args.key}")
+            moment = parse_time(
+                args.as_at or args.as_of, flag, f"{PROG} {args.subject} {args.key}"
+            )
             delta = moment - datetime(1970, 1, 1, tzinfo=UTC)
             micros = (delta.days * 86400 + delta.seconds) * 1000000 + delta.microseconds
             cursor = adapter.generation(connection=conn)
             while cursor:
-                rows = adapter.batch_metadata(cursor, path=() if args.as_at else ("effects", "as_of"), connection=conn)
+                rows = adapter.batch_metadata(
+                    cursor,
+                    path=() if args.as_at else ("effects", "as_of"),
+                    connection=conn,
+                )
                 if not rows:
                     break
                 for row in rows:
-                    if (row["recorded_at"] <= micros if args.as_at
-                            else datetime.fromisoformat(row["scalar"]) <= moment):
+                    if (
+                        row["recorded_at"] <= micros
+                        if args.as_at
+                        else datetime.fromisoformat(row["scalar"]) <= moment
+                    ):
                         return row["generation"]
                 cursor = rows[-1]["generation"] - 1
-            raise ContextError(f"MDM holds nothing {flag} {args.as_at or args.as_of}.",
-                               f"{PROG} {args.subject} {args.key}")
+            raise ContextError(
+                f"MDM holds nothing {flag} {args.as_at or args.as_of}.",
+                f"{PROG} {args.subject} {args.key}",
+            )
 
-        if args.as_at:
-            moment, flag = parse_time(args.as_at, "--as-at", f"{PROG} {args.subject} {args.key}"), "--as-at"
-            generation = conn.scalar(text("SELECT max(generation) FROM mdm.batch WHERE created_at <= :t"), {"t": moment})
-        elif args.as_of:
-            moment, flag = parse_time(args.as_of, "--as-of", f"{PROG} {args.subject} {args.key}"), "--as-of"
-            generation = conn.scalar(text(
-                "SELECT max(generation) FROM mdm.batch WHERE (effects ->> 'as_of')::timestamptz <= :t"), {"t": moment})
-        else:
-            return None
-        if generation is None:
-            raise ContextError(f"MDM holds nothing {flag} {args.as_at or args.as_of}.", f"{PROG} {args.subject} {args.key}")
-        return generation
+        return None
 
     def entity(self, args: argparse.Namespace) -> dict:
         with self.engine.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
             return self._entity(conn, args)
 
     def _entity(self, conn, args: argparse.Namespace) -> dict:
-        from sqlalchemy import text
 
         from edgar_warehouse.mdm.clean.consumer import ContractReader
 
         entity_id = self._resolve(conn, args.subject, args.key)
         generation = self._generation(conn, args)
         try:
-            read = ContractReader(self.engine).entity(entity_id, generation=generation, connection=conn)
+            read = ContractReader(self.engine).entity(
+                entity_id, generation=generation, connection=conn
+            )
         except KeyError:
             raise ContextError(
-                f"No {args.subject} {entity_id} in MDM" + (" at that time." if generation else "."),
-                f"{PROG} {args.subject} --search \"<name>\"",
+                f"No {args.subject} {entity_id} in MDM"
+                + (" at that time." if generation else "."),
+                f'{PROG} {args.subject} --search "<name>"',
             ) from None
         body = read["identity"]
         if body.get("kind") != args.subject:
-            raise ContextError(f"{entity_id} is a {body.get('kind')}, not a {args.subject}.", f"{PROG} {body.get('kind')} {entity_id}")
+            raise ContextError(
+                f"{entity_id} is a {body.get('kind')}, not a {args.subject}.",
+                f"{PROG} {body.get('kind')} {entity_id}",
+            )
         full = args.detail == "full"
         fields = []
         for name, field in sorted(body.get("fields", {}).items()):
             if field.get("cleared"):
                 continue
-            item = {"field": name, "value": field.get("value"), "source": field["winner"].get("source_code")}
+            item = {
+                "field": name,
+                "value": field.get("value"),
+                "source": field["winner"].get("source_code"),
+            }
             if full:
                 item["record_key"] = field["winner"].get("record_key")
                 item["effective_at"] = field["winner"].get("effective_at")
             fields.append(item)
         canonical = read["canonical_id"]
         subjects = body.get("subjects", [])
-        from edgar_warehouse.mdm.clean.prepared_registry import installed
+        from edgar_warehouse.mdm.clean.prepared_registry import (
+            require_installed as installed,
+        )
         from edgar_warehouse.mdm.clean.record_reads import RecordReader
 
         adapter = installed(conn)
-        if adapter is not None:
-            readings = RecordReader(adapter, connection=conn).readings(subjects)
-            records = sorted((reading["source_code"], reading["record_key"],
-                              reading.get("cross_references", {})) for reading in readings.values())
-            recorded_at = datetime.fromisoformat(read["projection"]["recorded_at"])
-        else:
-            records = conn.execute(text(
-            """SELECT source_code, record_key, coalesce(reading -> 'cross_references', '{}'::jsonb)
-                 FROM mdm.stage_record WHERE subject = ANY(:s) ORDER BY source_code, record_key"""),
-            {"s": subjects}).all()
-            recorded_at = conn.scalar(text("SELECT created_at FROM mdm.batch WHERE generation = :g"),
-                                  {"g": read["projection"]["generation"]})
+        readings = RecordReader(adapter, connection=conn).readings(subjects)
+        records = sorted(
+            (
+                reading["source_code"],
+                reading["record_key"],
+                reading.get("cross_references", {}),
+            )
+            for reading in readings.values()
+        )
+        recorded_at = datetime.fromisoformat(read["projection"]["recorded_at"])
         related, related_count, cut = self._walk(
-            conn, canonical, 1, self._at(args), "", RELATED_INLINE, generation if args.as_at else None)
+            conn,
+            canonical,
+            1,
+            self._at(args),
+            "",
+            RELATED_INLINE,
+            generation if args.as_at else None,
+        )
         cross_references: dict[str, set] = {}
         sources: dict[str, list] = {}
         for source_code, record_key, crossed in records:
@@ -441,7 +480,9 @@ class Context:
             "definition": definitions().get("kinds", {}).get(body["kind"], ""),
             "fields": fields,
             "identifiers": body.get("identifiers", {}),
-            "cross_references": {k: sorted(v) for k, v in sorted(cross_references.items())},
+            "cross_references": {
+                k: sorted(v) for k, v in sorted(cross_references.items())
+            },
             "sources": sources if full else sorted(sources),
             "trust": {
                 "generation": projection["generation"],
@@ -453,56 +494,108 @@ class Context:
             },
         }
         if args.as_at:
-            answer["trust"]["current_parts"] = ["cross_references", "sources", "related_names"]
-            answer["trust"]["note"] = ("Fields, identifiers, status and related links are of that generation; cross-references, "
-                                       "source records and the related entities' names are as MDM holds them now.")
+            answer["trust"]["current_parts"] = [
+                "cross_references",
+                "sources",
+                "related_names",
+            ]
+            answer["trust"]["note"] = (
+                "Fields, identifiers, status and related links are of that generation; cross-references, "
+                "source records and the related entities' names are as MDM holds them now."
+            )
         elif generation:
-            answer["trust"]["current_parts"] = ["cross_references", "sources", "related"]
-            answer["trust"]["note"] = ("Fields, identifiers and status are of that generation; cross-references, source records "
-                                       "and related links (held at that time) are as MDM holds them now.")
+            answer["trust"]["current_parts"] = [
+                "cross_references",
+                "sources",
+                "related",
+            ]
+            answer["trust"]["note"] = (
+                "Fields, identifiers and status are of that generation; cross-references, source records "
+                "and related links (held at that time) are as MDM holds them now."
+            )
         if canonical != entity_id:
             answer["merged_from"] = entity_id
         answer["related"] = [_brief_link(link) for link in related]
         answer["related_count"] = f"{related_count}+" if cut else related_count
         answer["truncated"] = False
         answer["next_page"] = None
-        answer["next_step"] = f"{PROG} relationship {canonical}" + (" --detail full" if not full else "")
+        answer["next_step"] = f"{PROG} relationship {canonical}" + (
+            " --detail full" if not full else ""
+        )
         command = f"{PROG} {args.subject} {args.key}" + "".join(
-            f" --{flag} {value}" for flag, value in (("as-of", args.as_of), ("as-at", args.as_at), ("detail", args.detail)) if value)
+            f" --{flag} {value}"
+            for flag, value in (
+                ("as-of", args.as_of),
+                ("as-at", args.as_at),
+                ("detail", args.detail),
+            )
+            if value
+        )
         return fit(answer, "fields", page_offset(args.page), command)
 
     def search(self, args: argparse.Namespace) -> dict:
-        from sqlalchemy import text
 
         if args.as_of or args.as_at:
-            raise ContextError("Search reads current names; look the entity up by its id with --as-of or --as-at.",
-                               f"{PROG} {args.subject} --search {shlex.quote(args.search)}")
+            raise ContextError(
+                "Search reads current names; look the entity up by its id with --as-of or --as-at.",
+                f"{PROG} {args.subject} --search {shlex.quote(args.search)}",
+            )
         if not 1 <= args.limit <= SEARCH_MAX:
-            raise ContextError(f"--limit is 1 to {SEARCH_MAX}.", f"{PROG} {args.subject} --search {shlex.quote(args.search)} --limit 5")
+            raise ContextError(
+                f"--limit is 1 to {SEARCH_MAX}.",
+                f"{PROG} {args.subject} --search {shlex.quote(args.search)} --limit 5",
+            )
         words = args.search.strip()
         if not words:
-            raise ContextError("--search needs some words.", f"{PROG} {args.subject} --search \"<words>\"")
-        with self.engine.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
-            from edgar_warehouse.mdm.clean.prepared_registry import installed
+            raise ContextError(
+                "--search needs some words.",
+                f'{PROG} {args.subject} --search "<words>"',
+            )
+        with self.engine.connect().execution_options(
+            isolation_level="REPEATABLE READ"
+        ) as conn:
+            from edgar_warehouse.mdm.clean.prepared_registry import (
+                require_installed as installed,
+            )
+
             adapter = installed(conn)
-            if adapter is not None:
-                from edgar_warehouse.mdm.clean.master_search import configuration, search
-                from edgar_warehouse.mdm.clean.store import Conflict
-                if configuration() is None:
-                    raise ContextError("Name search is not installed for prepared MDM storage.",
-                                       f"{PROG} {args.subject} <entity_id> or {PROG} {args.subject} <namespace>:<value>")
-                try:
-                    rows = search(adapter, conn, args.subject, words, args.limit)
-                except Conflict as error:
-                    raise ContextError(str(error), "edgar-warehouse mdm rebuild-name-index --limit 20 (owner)") from None
-            else:
-                rows = conn.execute(text("SELECT * FROM mdm.entity_search(:w, :k, :n)"),
-                                    {"w": words, "k": args.subject, "n": args.limit}).mappings().all()
+            from edgar_warehouse.mdm.clean.master_search import configuration, search
+            from edgar_warehouse.mdm.clean.store import Conflict
+
+            if configuration() is None:
+                raise ContextError(
+                    "Name search is not installed for prepared MDM storage.",
+                    f"{PROG} {args.subject} <entity_id> or {PROG} {args.subject} <namespace>:<value>",
+                )
+            try:
+                rows = search(adapter, conn, args.subject, words, args.limit)
+            except Conflict as error:
+                raise ContextError(
+                    str(error),
+                    "edgar-warehouse mdm rebuild-name-index --limit 20 (owner)",
+                ) from None
             trust = _latest(conn)
-        matches = [{"name": r["name"], "kind": r["kind"], "entity_id": r["entity_id"], "status": r["status"],
-                    "matched_by": r["matched_by"]} for r in rows]
+        matches = [
+            {
+                "name": r["name"],
+                "kind": r["kind"],
+                "entity_id": r["entity_id"],
+                "status": r["status"],
+                "matched_by": r["matched_by"],
+            }
+            for r in rows
+        ]
         if not matches:
-            print(json.dumps({"event": "context-search-miss", "kind": args.subject, "words": words}), file=sys.stderr)
+            print(
+                json.dumps(
+                    {
+                        "event": "context-search-miss",
+                        "kind": args.subject,
+                        "words": words,
+                    }
+                ),
+                file=sys.stderr,
+            )
         answer = {
             "search": words,
             "kind": args.subject,
@@ -511,10 +604,18 @@ class Context:
             "trust": trust,
             "truncated": False,
             "next_page": None,
-            "next_step": (f"{PROG} {args.subject} <entity_id>" if matches
-                          else f"No {args.subject} name matches. Try fewer words, or {PROG} {args.subject} <namespace>:<value>."),
+            "next_step": (
+                f"{PROG} {args.subject} <entity_id>"
+                if matches
+                else f"No {args.subject} name matches. Try fewer words, or {PROG} {args.subject} <namespace>:<value>."
+            ),
         }
-        return fit(answer, "matches", page_offset(args.page), f"{PROG} {args.subject} --search {shlex.quote(words)} --limit {args.limit}")
+        return fit(
+            answer,
+            "matches",
+            page_offset(args.page),
+            f"{PROG} {args.subject} --search {shlex.quote(words)} --limit {args.limit}",
+        )
 
     # -- Relationships -------------------------------------------------------
 
@@ -522,8 +623,16 @@ class Context:
     def _at(args) -> datetime:
         return parse_time(args.as_of, "--as-of", f"{PROG} {args.subject} {args.key}") if args.as_of else datetime.now(UTC)
 
-    def _walk(self, conn, start: str, hops: int, at: datetime, relationship_type: str, cap: int,
-              generation: int | None = None):
+    def _walk(
+        self,
+        conn,
+        start: str,
+        hops: int,
+        at: datetime,
+        relationship_type: str,
+        cap: int,
+        generation: int | None = None,
+    ):
         """The links around one entity, both directions, up to `hops` away.
 
         One query per hop finds the links through the link-start and link-end
@@ -533,49 +642,43 @@ class Context:
         periods holds at `at`; so does a calculated one with periods, and one
         without (an earlier algorithm) always counts. Returns (links, count, cut).
         """
-        from sqlalchemy import text
-        from edgar_warehouse.mdm.clean.prepared_registry import installed
+        from edgar_warehouse.mdm.clean.prepared_registry import (
+            require_installed as installed,
+        )
         from edgar_warehouse.mdm.clean.record_reads import RecordReader
 
         adapter = installed(conn)
 
-        links_at = ("""SELECT object_id, body FROM mdm.current_record
-                    WHERE object_type = 'relationship'
-                      AND (body ->> 'source_id' = ANY(:ids) OR body ->> 'target_id' = ANY(:ids))"""
-                    if generation is None else
-                    """SELECT relationship_id AS object_id, body FROM mdm.relationship_version
-                    WHERE from_generation <= :g AND (to_generation IS NULL OR to_generation > :g)
-                      AND (source_id = ANY(:ids) OR target_id = ANY(:ids))""")
         seen_entities, seen_links, links = {start}, set(), []
         frontier, cut = [start], False
         for depth in range(1, hops + 1):
             if not frontier:
                 break
-            if adapter is not None:
-                reader = RecordReader(adapter, connection=conn)
-                projections = (reader.projections(starts=frontier, changed=frontier) if generation is None
-                    else reader.historical_links(generation, starts=frontier, changed=frontier))
-                bodies = (item["body"] for item in projections if item["object_type"] == "relationship")
-                rows = sorted((body["relationship_id"], body) for body in bodies
-                    if not body.get("retired")
-                    and (not relationship_type or body["type"] == relationship_type)
-                    and (_period(body, at) is not None or body.get("derived") and not body.get("periods")))
-                rows = rows[:cap - len(links) + 1]
-            else:
-                rows = conn.execute(text(
-                links_at + """
-                      AND coalesce(body -> 'retired', 'false'::jsonb) = 'false'::jsonb
-                      AND (mdm.relationship_holds(body, :at)
-                           OR (coalesce((body ->> 'derived')::boolean, false)
-                               AND (body -> 'periods' IS NULL OR EXISTS (
-                                   SELECT 1 FROM jsonb_array_elements(body -> 'periods') p(period)
-                                    WHERE (p.period ->> 'valid_from')::timestamptz <= :at
-                                      AND (p.period ->> 'valid_to' IS NULL
-                                           OR (p.period ->> 'valid_to')::timestamptz > :at)))))
-                      AND (:t = '' OR body ->> 'type' = :t)
-                    ORDER BY object_id LIMIT :cap"""),
-                {"ids": frontier, "at": at, "t": relationship_type, "cap": cap - len(links) + 1,
-                 "g": generation}).all()
+            reader = RecordReader(adapter, connection=conn)
+            projections = (
+                reader.projections(starts=frontier, changed=frontier)
+                if generation is None
+                else reader.historical_links(
+                    generation, starts=frontier, changed=frontier
+                )
+            )
+            bodies = (
+                item["body"]
+                for item in projections
+                if item["object_type"] == "relationship"
+            )
+            rows = sorted(
+                (body["relationship_id"], body)
+                for body in bodies
+                if not body.get("retired")
+                and (not relationship_type or body["type"] == relationship_type)
+                and (
+                    _period(body, at) is not None
+                    or body.get("derived")
+                    and not body.get("periods")
+                )
+            )
+            rows = rows[: cap - len(links) + 1]
             following = []
             for relationship_id, body in rows:
                 if relationship_id in seen_links:
@@ -584,7 +687,9 @@ class Context:
                     cut = True
                     break
                 seen_links.add(relationship_id)
-                links.append({"depth": depth, "relationship_id": relationship_id, "body": body})
+                links.append(
+                    {"depth": depth, "relationship_id": relationship_id, "body": body}
+                )
                 for end in (body.get("source_id"), body.get("target_id")):
                     if end and end not in seen_entities:
                         seen_entities.add(end)
@@ -592,40 +697,96 @@ class Context:
             if cut:
                 break
             frontier = following
-        names = self._names(conn, sorted({e for link in links for e in (link["body"].get("source_id"), link["body"].get("target_id")) if e}))
+        names = self._names(
+            conn,
+            sorted(
+                {
+                    e
+                    for link in links
+                    for e in (
+                        link["body"].get("source_id"),
+                        link["body"].get("target_id"),
+                    )
+                    if e
+                }
+            ),
+        )
         for link in links:
             body = link["body"]
-            link["from"] = {**names.get(body.get("source_id"), {"name": None, "kind": None}), "entity_id": body.get("source_id")}
-            link["to"] = {**names.get(body.get("target_id"), {"name": None, "kind": None}), "entity_id": body.get("target_id")}
+            link["from"] = {
+                **names.get(body.get("source_id"), {"name": None, "kind": None}),
+                "entity_id": body.get("source_id"),
+            }
+            link["to"] = {
+                **names.get(body.get("target_id"), {"name": None, "kind": None}),
+                "entity_id": body.get("target_id"),
+            }
             link["period"] = _period(body, at)
-        links.sort(key=lambda l: (l["depth"], l["body"].get("type", ""), l["from"]["name"] or "", l["to"]["name"] or "", l["relationship_id"]))
+        links.sort(
+            key=lambda l: (
+                l["depth"],
+                l["body"].get("type", ""),
+                l["from"]["name"] or "",
+                l["to"]["name"] or "",
+                l["relationship_id"],
+            )
+        )
         return links, len(links), cut
 
     def relationships(self, args: argparse.Namespace) -> dict:
         if not args.key:
-            raise ContextError("Name the entity: its id or <namespace>:<value>.", f"{PROG} relationship <entity_id>")
+            raise ContextError(
+                "Name the entity: its id or <namespace>:<value>.",
+                f"{PROG} relationship <entity_id>",
+            )
         if not 1 <= args.hops <= MAX_HOPS:
-            raise ContextError(f"--hops is 1 to {MAX_HOPS}.", f"{PROG} relationship {args.key} --hops 1")
+            raise ContextError(
+                f"--hops is 1 to {MAX_HOPS}.",
+                f"{PROG} relationship {args.key} --hops 1",
+            )
         at = self._at(args)
-        with self.engine.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
+        with self.engine.connect().execution_options(
+            isolation_level="REPEATABLE READ"
+        ) as conn:
             entity_id = self._resolve(conn, None, args.key)
             generation = self._generation(conn, args) if args.as_at else None
-            from edgar_warehouse.mdm.clean.prepared_registry import installed
+            from edgar_warehouse.mdm.clean.prepared_registry import (
+                require_installed as installed,
+            )
+
             if installed(conn) is not None:
                 from edgar_warehouse.mdm.clean.consumer import ContractReader
+
                 try:
-                    entity_id = ContractReader(self.engine).entity(entity_id, generation=generation,
-                                                                   connection=conn)["canonical_id"]
+                    entity_id = ContractReader(self.engine).entity(
+                        entity_id, generation=generation, connection=conn
+                    )["canonical_id"]
                 except KeyError:
-                    raise ContextError("No entity at that recording time.", f"{PROG} <kind> <entity_id>") from None
+                    raise ContextError(
+                        "No entity at that recording time.",
+                        f"{PROG} <kind> <entity_id>",
+                    ) from None
             names = self._names(conn, [entity_id])
             if entity_id not in names:
-                raise ContextError(f"No entity {entity_id} in MDM.", f"{PROG} company --search \"<name>\"")
-            links, count, cut = self._walk(conn, entity_id, args.hops, at, args.relationship_type, WALK_CAP, generation)
+                raise ContextError(
+                    f"No entity {entity_id} in MDM.",
+                    f'{PROG} company --search "<name>"',
+                )
+            links, count, cut = self._walk(
+                conn,
+                entity_id,
+                args.hops,
+                at,
+                args.relationship_type,
+                WALK_CAP,
+                generation,
+            )
             trust = _latest(conn, generation)
             if generation is not None:
                 trust["current_parts"] = ["names"]
-                trust["note"] = "Links as MDM had recorded them by --as-at, of those holding now; names are as MDM holds them now."
+                trust["note"] = (
+                    "Links as MDM had recorded them by --as-at, of those holding now; names are as MDM holds them now."
+                )
             full = args.detail == "full"
             if full:
                 _attach_sources(conn, links)
@@ -638,18 +799,31 @@ class Context:
             "entity_id": entity_id,
             "at": at.isoformat(),
             "hops": args.hops,
-            "definitions": {t: types.get(t, "") for t in sorted({link["body"].get("type") for link in links})},
+            "definitions": {
+                t: types.get(t, "")
+                for t in sorted({link["body"].get("type") for link in links})
+            },
             "related": related,
             "related_count": f"{count}+" if cut else count,
             "trust": trust,
             "truncated": cut,
             "next_page": None,
-            "next_step": (f"Over {WALK_CAP} links: narrow it with --type <TYPE> or --hops 1, or query mdm.relationship_context."
-                          if cut else f"{PROG} <kind> <entity_id> for any entity listed"),
+            "next_step": (
+                f"Over {WALK_CAP} links: narrow it with --type <TYPE> or --hops 1, or query mdm.relationship_context."
+                if cut
+                else f"{PROG} <kind> <entity_id> for any entity listed"
+            ),
         }
         command = f"{PROG} relationship {args.key} --hops {args.hops}" + "".join(
-            f" --{flag} {value}" for flag, value in (("type", args.relationship_type), ("as-of", args.as_of),
-                                                     ("as-at", args.as_at), ("detail", args.detail)) if value)
+            f" --{flag} {value}"
+            for flag, value in (
+                ("type", args.relationship_type),
+                ("as-of", args.as_of),
+                ("as-at", args.as_at),
+                ("detail", args.detail),
+            )
+            if value
+        )
         return fit(answer, "related", page_offset(args.page), command)
 
 
@@ -700,50 +874,69 @@ def _full_link(link: dict) -> dict:
 
 def _latest(conn, generation: int | None = None) -> dict:
     """The generation an answer reads: MDM's latest batch, or the one --as-at picked."""
-    from sqlalchemy import text
-    from edgar_warehouse.mdm.clean.prepared_registry import installed
+    from edgar_warehouse.mdm.clean.prepared_registry import (
+        require_installed as installed,
+    )
 
     adapter = installed(conn)
-    if adapter is not None:
-        generation = adapter.generation(connection=conn) if generation is None else generation
-        if not generation:
-            return {"generation": None}
-        metadata = adapter.batch_metadata(generation, limit=1, path=("effects", "as_of"), connection=conn)
-        policy = adapter.batch_metadata(generation, limit=1, path=("effects", "policy_digest"), connection=conn)
-        if not metadata or metadata[0]["generation"] != generation or not policy:
-            raise KeyError("Unknown generation")
-        from datetime import timedelta
-        recorded = datetime(1970, 1, 1, tzinfo=UTC) + timedelta(microseconds=metadata[0]["recorded_at"])
-        return {"generation": generation, "recorded_at": recorded.isoformat(),
-                "policy_digest": policy[0]["scalar"], "as_of": metadata[0]["scalar"]}
-
-    row = conn.execute(text(
-        "SELECT generation, created_at, policy_digest, effects ->> 'as_of' FROM mdm.batch "
-        "WHERE CAST(:g AS bigint) IS NULL OR generation = :g ORDER BY generation DESC LIMIT 1"), {"g": generation}).first()
-    if row is None:
+    generation = (
+        adapter.generation(connection=conn) if generation is None else generation
+    )
+    if not generation:
         return {"generation": None}
-    return {"generation": row[0], "recorded_at": row[1].isoformat(), "policy_digest": row[2], "as_of": row[3]}
+    metadata = adapter.batch_metadata(
+        generation, limit=1, path=("effects", "as_of"), connection=conn
+    )
+    policy = adapter.batch_metadata(
+        generation, limit=1, path=("effects", "policy_digest"), connection=conn
+    )
+    if not metadata or metadata[0]["generation"] != generation or not policy:
+        raise KeyError("Unknown generation")
+    from datetime import timedelta
+
+    recorded = datetime(1970, 1, 1, tzinfo=UTC) + timedelta(
+        microseconds=metadata[0]["recorded_at"]
+    )
+    return {
+        "generation": generation,
+        "recorded_at": recorded.isoformat(),
+        "policy_digest": policy[0]["scalar"],
+        "as_of": metadata[0]["scalar"],
+    }
 
 
 def _attach_sources(conn, links: list[dict]) -> None:
     """Each link's stating records (source code and record key), in one query."""
-    from sqlalchemy import text
-    from edgar_warehouse.mdm.clean.prepared_registry import installed
+    from edgar_warehouse.mdm.clean.prepared_registry import (
+        require_installed as installed,
+    )
     from edgar_warehouse.mdm.clean.record_reads import RecordReader
 
-    wanted = {item.get("assertion_id") for link in links for item in link["body"].get("evidence", []) if item.get("assertion_id")}
+    wanted = {
+        item.get("assertion_id")
+        for link in links
+        for item in link["body"].get("evidence", [])
+        if item.get("assertion_id")
+    }
     if not wanted:
         return
     adapter = installed(conn)
-    if adapter is not None:
-        readings = RecordReader(adapter, connection=conn).inputs(("source-reading", key) for key in wanted)
-        found = {key: {"source_code": body["source_code"], "record_key": body["record_key"]}
-                 for (_, key), body in readings.items()}
-    else:
-        found = {r[0]: {"source_code": r[1], "record_key": r[2]} for r in conn.execute(text(
-        "SELECT assertion_id, source_code, record_key FROM mdm.source_reading WHERE assertion_id = ANY(:ids)"),
-        {"ids": sorted(wanted)})}
+    readings = RecordReader(adapter, connection=conn).inputs(
+        ("source-reading", key) for key in wanted
+    )
+    found = {
+        key: {"source_code": body["source_code"], "record_key": body["record_key"]}
+        for (_, key), body in readings.items()
+    }
     for link in links:
-        stated = {(found[i["assertion_id"]]["source_code"], found[i["assertion_id"]]["record_key"])
-                  for i in link["body"].get("evidence", []) if i.get("assertion_id") in found}
-        link["sources"] = [{"source_code": c, "record_key": k} for c, k in sorted(stated)]
+        stated = {
+            (
+                found[i["assertion_id"]]["source_code"],
+                found[i["assertion_id"]]["record_key"],
+            )
+            for i in link["body"].get("evidence", [])
+            if i.get("assertion_id") in found
+        }
+        link["sources"] = [
+            {"source_code": c, "record_key": k} for c, k in sorted(stated)
+        ]

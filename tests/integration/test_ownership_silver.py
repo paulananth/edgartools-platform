@@ -82,8 +82,8 @@ def test_a_joint_filings_lines_land_once_and_each_owner_finds_its_master(databas
         with runtime.connect() as conn:
             landed = list(conn.execute(text("SELECT * FROM silver.ownership_line ORDER BY line_table")).mappings())
             found = {r["rpt_owner_cik"]: r for r in conn.execute(text("SELECT * FROM silver.ownership_owner")).mappings()}
-        with database.application.connect() as conn:
-            entity = dict(conn.execute(text("SELECT record_key, entity_id::text FROM mdm.stage_record")).all())
+        entity = core.bindings(database)
+
     # Each line once, with its issuer, the date it holds at and the filing's date.
     assert [(r["line_table"], str(r["as_of"]), str(r["filed"]), str(r["issuer_mdm_id"])) for r in landed] == [
         ("non_derivative_holding", "2026-01-05", "2026-01-07", entity[ISSUER]),

@@ -1161,11 +1161,11 @@ class Adapter:
                 "recorded_at": int(row["occurred"]), "scalar": scalar}
         return list(found.values())
 
-    def record_keys_statement(self, object_type, *, after="", limit=100):
+    def record_keys_statement(self, object_type, *, after="", limit=100, immutable=False, lookup=False):
         """A bounded page in stable storage-key order, retaining opaque IDs."""
         if not isinstance(after, str) or type(limit) is not int or not 1 <= limit <= 1001:
             raise AdapterError("Invalid bounded record key page")
-        table = self.tables["current"]
+        table = self.tables["evidence" if immutable else "lookup" if lookup else "current"]
         statement = select(table.c.type_bytes, table.c.id_bytes, table.c.id_key).where(
             table.c.type_key == self._bound_key(object_type),
             table.c.id_key > (self._bound_key(after) if after else ""),
@@ -1174,9 +1174,9 @@ class Adapter:
             statement = statement.with_hint(table, "FORCE INDEX (PRIMARY)", dialect_name="mysql")
         return statement
 
-    def record_keys(self, object_type, *, after="", limit=100, connection=None):
+    def record_keys(self, object_type, *, after="", limit=100, connection=None, immutable=False, lookup=False):
         with self.engine.connect() if connection is None else nullcontext(connection) as conn:
-            rows = conn.execute(self.record_keys_statement(object_type, after=after, limit=limit)).mappings().all()
+            rows = conn.execute(self.record_keys_statement(object_type, after=after, limit=limit, immutable=immutable, lookup=lookup)).mappings().all()
         result = []
         for row in rows:
             raw = bytes(row["id_bytes"])

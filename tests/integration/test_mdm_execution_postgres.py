@@ -25,8 +25,8 @@ def test_complete_execution_commits_every_batch_and_retry_has_no_new_effects(dat
     assert result["end_to_end_complete"] is False
     assert execute_manifest(store, path=str(path), run_id=run_id)["commits"] == []
     with database.admin.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 2
-        assert conn.scalar(text("SELECT count(*) FROM mdm.run")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM public.mdm_store_batch")) == 2
+        assert conn.scalar(text("SELECT count(*) FROM public.mdm_store_run")) == 1
 
 
 def test_a_bound_stops_between_atomic_batches_and_can_resume(database, registered, tmp_path):
@@ -35,7 +35,7 @@ def test_a_bound_stops_between_atomic_batches_and_can_resume(database, registere
     with pytest.raises(ValueError, match="Next atomic batch requires --limit at least 10"):
         execute_manifest(store, path=str(path), run_id=run_id, limit=9)
     with database.admin.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 0
+        assert conn.scalar(text("SELECT count(*) FROM public.mdm_store_batch")) == 0
 
     first = execute_manifest(store, path=str(path), run_id=run_id, limit=10)
     assert first["records_processed"] == 10
@@ -52,8 +52,8 @@ def test_preview_proposes_one_atomic_batch_without_registering_or_committing(dat
 
     assert result["preview"] is True
     with database.admin.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 0
-        assert conn.scalar(text("SELECT count(*) FROM mdm.run")) == 0
+        assert conn.scalar(text("SELECT count(*) FROM public.mdm_store_batch")) == 0
+        assert conn.scalar(text("SELECT count(*) FROM public.mdm_store_run")) == 0
 
 
 def test_bounded_stages_preserve_manifest_order(database, registered, tmp_path):
@@ -96,7 +96,7 @@ def test_execution_refuses_invalid_source_members_before_committing(database, re
     with pytest.raises(error, match=reason):
         execute_manifest(Store(database.application), path=str(path), run_id=str(uuid4()))
     with database.admin.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 0
+        assert conn.scalar(text("SELECT count(*) FROM public.mdm_store_batch")) == 0
 
 
 def test_retained_duplicate_batches_spend_no_record_budget(database, registered, tmp_path):
@@ -117,7 +117,7 @@ def test_complete_execution_refuses_no_progress_instead_of_looping(database, reg
         execute_manifest(Store(database.application), path=str(path), run_id=str(uuid4()),
                          stage="derive-relationships")
     with database.admin.connect() as conn:
-        assert conn.scalar(text("SELECT count(*) FROM mdm.batch")) == 0
+        assert conn.scalar(text("SELECT count(*) FROM public.mdm_store_batch")) == 0
 
 
 @pytest.mark.parametrize("restricted,expected_role", [(True, "clean_application"), (False, "postgres")])

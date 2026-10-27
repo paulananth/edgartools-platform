@@ -13,17 +13,15 @@ its `last_seen` at the later one. Invented values only.
 from __future__ import annotations
 
 import io
-import json
 import zipfile
 from pathlib import Path
 from uuid import uuid4
 
-from sqlalchemy import text
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.mdm.clean.evidence import subject_key
 from edgar_warehouse.mdm.clean.merge import MergeStage
-from edgar_warehouse.mdm.clean.store import Store, canonical, register_policy
+from edgar_warehouse.mdm.clean.store import Store, register_policy
 from edgar_warehouse.rules import files
 from tests.integration import test_clean_mdm_postgres as core
 from tests.support import source_chain as chain
@@ -125,9 +123,7 @@ def test_an_adviser_links_to_its_custodians_across_months(database, tmp_path):
         stage.apply(batch_id=batch, run_id=str(uuid4()), policy_digest=policy, consumer="check",
                     expected_checkpoint=n - 1, checkpoint=n, as_of="2026-10-16T00:00:00+00:00",
                     assertions=records)
-    with database.application.connect() as conn:
-        links = [json.loads(b) if isinstance(b, str) else b for (b,) in conn.execute(text(
-            "SELECT body FROM mdm.current_record WHERE object_type='relationship' AND body->>'type'='CUSTODIAN'")).all()]
+    links = [body for body in core.documents(database, "relationship").values() if body["type"] == "CUSTODIAN"]
 
     named = {body["fields"]["name"]["value"]: entity for entity, body in core.documents(database, "entity").items()}
     assert len(links) == 2  # BD and LEI custodians; the one named only by name waits

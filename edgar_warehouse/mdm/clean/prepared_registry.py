@@ -13,7 +13,20 @@ def installed(conn):
     adapter = storage_ready(conn)
     if adapter is not None and conn.dialect.name == "postgresql":
         from .retirement import require_retired
+
         require_retired(conn)
+        from .registration import require_installed
+        require_installed(conn)
+    return adapter
+
+
+def require_installed(conn):
+    """Admit only complete governed storage; legacy data remains owner controlled."""
+    adapter = installed(conn)
+    if adapter is None:
+        raise Conflict(
+            "Normal MDM requires governed storage; run the explicit owner migration"
+        )
     return adapter
 
 
@@ -31,10 +44,18 @@ def storage_ready(conn):
     return adapter
 
 
+def _approve(conn, adapter, name, value):
+    if conn.dialect.name == "postgresql":
+        from .registration import approve
+        approve(conn, name, value)
+    else:
+        adapter.admit_pin(conn, name, value)
+
+
 def approve_policy(conn, key):
     adapter = installed(conn)
     if adapter is not None:
-        adapter.admit_pin(conn, "policy", key)
+        _approve(conn, adapter, "policy", key)
 
 
 def mapping_pin(code, version):
@@ -48,11 +69,11 @@ def schema_pin(code, schema):
 def approve_mapping(conn, code, version, body):
     adapter = installed(conn)
     if adapter is not None:
-        adapter.admit_pin(conn, mapping_pin(code, version), digest(body))
+        _approve(conn, adapter, mapping_pin(code, version), digest(body))
         # Deferred records name their schema, not a mapping revision. Retain
         # approval of each registered schema without resolving the latest map.
         schema = body.get("schema_version")
-        adapter.admit_pin(conn, schema_pin(code, schema), digest([code, schema]))
+        _approve(conn, adapter, schema_pin(code, schema), digest([code, schema]))
 
 
 def initialize(engine, *, application_role, application_host="%"):
@@ -61,15 +82,26 @@ def initialize(engine, *, application_role, application_host="%"):
 
     catalog.assert_current()
     api = storage_adapter()
-    result = api.migrate(engine, runtime_role=application_role,
-                         runtime_host=application_host, prefix=PREFIX, protocol=PROTOCOL,
-                         runtime_execute=False, defer_ready=True)
+    result = api.migrate(
+        engine,
+        runtime_role=application_role,
+        runtime_host=application_host,
+        prefix=PREFIX,
+        protocol=PROTOCOL,
+        runtime_execute=False,
+        defer_ready=True,
+    )
     adapter = api.Adapter(engine, prefix=PREFIX, protocol=PROTOCOL)
     with engine.begin() as conn:
-        adapter.activate(conn, {"catalog": digest(catalog.CATALOG)}, exclusive=("catalog",))
+        adapter.activate(
+            conn, {"catalog": digest(catalog.CATALOG)}, exclusive=("catalog",)
+        )
     finish_indexes(engine)
     from .retirement import retire
+
     retire(engine)
+    from .registration import install
+    install(engine)
     adapter.enable_runtime(application_role, runtime_host=application_host)
     return result
 

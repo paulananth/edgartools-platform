@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import text
 
 from . import limits
 from .activation import check_policy
@@ -35,7 +34,7 @@ def runtime_files() -> list[Path]:
     from edgar_warehouse.bookkeeping.clean import config, destinations
     from edgar_warehouse.mdm.clean import (
         activation, adapters, assessment, binding, cascade, catalog, classification,
-        correction, evidence, forced_publication, identifier_types, identity, matching, merge,
+        correction, evidence, forced_publication, identifier_types, identity, matching, merge, registration, retirement,
         name_census, names, prepared, prepared_registry, prepared_publication, prepared_runs, master_reads, master_search, record_reads, primitives, quality, relationships, run, schema, scope, store, survivorship,
     )
     from edgar_warehouse.rules import files, source_engine
@@ -47,12 +46,14 @@ def runtime_files() -> list[Path]:
     modules = (activation, adapters, assessment, binding, cascade, catalog, classification, config,
                correction, destinations, evidence, files, forced_publication, identifier_types,
                identity, limits, matching, merge, name_census, names, prepared, prepared_registry, prepared_publication, prepared_runs, master_reads, master_search, record_reads, primitives, quality,
-               relationships, run, schema, scope, source_mapping, store, survivorship)
+               relationships, registration, retirement, run, schema, scope, source_mapping, store, survivorship)
     adapter = store.storage_adapter()
     adapter_files = [Path(getfile(adapter)).with_name(name) for name in
                      ("database_adapter.py", "adapter_model.py", "adapter_sql.py", "registry_migration.py")]
     return [Path(__file__), *[Path(getfile(module)) for module in modules],
-            *source_engine.runtime_files(), catalog.path(), *adapter_files]
+            *source_engine.runtime_files(), catalog.path(), *adapter_files,
+            *[Path(store.__file__).parents[1] / "migrations" / module.MIGRATION
+              for module in (registration, retirement)]]
 
 
 def _reject_json_constant(value):
@@ -281,30 +282,20 @@ def execute_manifest(
     manifest, manifest_hash, root = read_manifest(path)
     if "native_source" in manifest:
         # The native GLEIF path was retired (Issue 20 L6): GLEIF is read by its contract.
-        raise Conflict("Native publication manifests are retired; GLEIF is read by its contract")
+        raise Conflict(
+            "Native publication manifests are retired; GLEIF is read by its contract"
+        )
     coordinator = RunCoordinator(store)
     handled = 0
     committed = []
-    if store.prepared:
-        from .prepared_runs import batches
-        observed, retained = batches(store, run_id, [b["batch_id"] for b in manifest["batches"]])
-    else:
-        with store.engine.connect() as conn:
-            observed = set(
-                conn.scalars(
-                    text(
-                        "SELECT batch_id FROM mdm.run_batch WHERE run_id=CAST(:run AS uuid)"
-                    ),
-                    {"run": run_id},
-                )
-            )
-            retained = set(
-                conn.scalars(
-                    text("SELECT batch_id FROM mdm.batch WHERE batch_id=ANY(:ids)"),
-                    {"ids": [b["batch_id"] for b in manifest["batches"]]},
-                )
-            )
-    mapping_versions = pinned_mapping_versions(store, manifest, coordinator.scope(run_id))
+    from .prepared_runs import batches
+
+    observed, retained = batches(
+        store, run_id, [b["batch_id"] for b in manifest["batches"]]
+    )
+    mapping_versions = pinned_mapping_versions(
+        store, manifest, coordinator.scope(run_id)
+    )
     if not preview:
         coordinator.start(
             run_id,
@@ -377,8 +368,13 @@ def execute_manifest(
             # The batch's run report profile is kept with its finished event,
             # and the run's report (`reconcile`, below) sums them as `checks`.
             result = coordinator.execute(
-                run_id, batch["batch_id"], partial(MergeStage(store).apply, **command),
-                checks={"as_of": manifest["as_of"], "profile": quality_profile(assertions, deferred)},
+                run_id,
+                batch["batch_id"],
+                partial(MergeStage(store).apply, **command),
+                checks={
+                    "as_of": manifest["as_of"],
+                    "profile": quality_profile(assertions, deferred),
+                },
             )
         if preview:
             return result  # Preview one atomic batch against the current generation.

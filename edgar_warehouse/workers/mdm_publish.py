@@ -20,7 +20,6 @@ import json
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from sqlalchemy import text
 
 from .mdm_merge import _store
 
@@ -60,31 +59,8 @@ def _publisher(envelope: dict, artifacts, store, consumer: str):
 
 
 def receipt(store, batch_id: str, consumer: str) -> bytes:
-    if store.prepared:
-        from edgar_warehouse.mdm.clean.prepared_publication import receipt as prepared_receipt
-        return prepared_receipt(store, batch_id, consumer)
-    with store.engine.connect() as conn:
-        row = conn.execute(text("SELECT payload_hash, verified_at FROM mdm.outbox WHERE batch_id=:b AND consumer=:c"),
-                           {"b": batch_id, "c": consumer}).mappings().first()
-        # A committed batch that changed nothing queues no consumer (migration 017),
-        # and one that changed no record queues none but the journal (018: change
-        # data capture): there is nothing to publish, and the receipt says so. A
-        # batch with a row for any other consumer is one whose records went out, so
-        # a missing row there is refused, as is any missing row before 018.
-        unchanged = row is None and conn.scalar(text(
-            "SELECT EXISTS(SELECT 1 FROM mdm.batch WHERE batch_id=:b) "
-            "AND NOT EXISTS(SELECT 1 FROM mdm.outbox WHERE batch_id=:b AND consumer<>'journal') "
-            "AND (:c<>'journal' OR NOT EXISTS(SELECT 1 FROM mdm.outbox WHERE batch_id=:b))"),
-            {"b": batch_id, "c": consumer})
-    if unchanged:
-        body = {"version": 1, "batch_id": batch_id, "consumer": consumer, "unchanged": True}
-        return json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
-    if row is None:
-        raise ValueError(f"MDM holds no {consumer} publication for {batch_id}")
-    if row["verified_at"] is None:
-        raise ValueError(f"The {consumer} publication of {batch_id} is not delivered yet")
-    body = {"version": 1, "batch_id": batch_id, "consumer": consumer, "payload_hash": row["payload_hash"]}
-    return json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
+    from edgar_warehouse.mdm.clean.prepared_publication import receipt as prepared_receipt
+    return prepared_receipt(store, batch_id, consumer)
 
 
 def execute(envelope: dict, artifacts) -> dict:
@@ -94,7 +70,7 @@ def execute(envelope: dict, artifacts) -> dict:
     store = _store(restricted=True, envelope=envelope)
     try:
         found = receipt_if_unchanged(store, batch_id, consumer)
-        if found is not None and store.prepared:
+        if (found is not None):
             store.deliver_one(consumer, envelope["claim"]["attempt"], None, batch_id=batch_id)
         if found is None:
             publisher = _publisher(envelope, artifacts, store, consumer)
@@ -116,16 +92,9 @@ def verify(envelope: dict, artifacts) -> tuple[dict, list]:
         expected = receipt(store, batch_id, consumer)
         if json.loads(expected).get("unchanged"):
             return _same(envelope, artifacts, expected)
-        if store.prepared:
-            from edgar_warehouse.mdm.clean.prepared_publication import retained
-            _, row = retained(store, batch_id, consumer)
-            payload = json.loads(bytes(row["payload"]))
-        else:
-            with store.engine.connect() as conn:
-                row = conn.execute(text("SELECT * FROM mdm.outbox_input WHERE batch_id=:b AND consumer=:c"),
-                                   {"b": batch_id, "c": consumer}).mappings().one()
-            from edgar_warehouse.mdm.clean.payloads import prepare
-            payload = prepare(row)
+        from edgar_warehouse.mdm.clean.prepared_publication import retained
+        _, row = retained(store, batch_id, consumer)
+        payload = json.loads(bytes(row["payload"]))
         publisher = _publisher(envelope, artifacts, store, consumer)
         publisher.verify(f"{consumer}/{batch_id}", payload, json.loads(expected)["payload_hash"])
     finally:

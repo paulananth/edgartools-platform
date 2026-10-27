@@ -13,13 +13,11 @@ overight"; "Keep the earlier date"). Invented values only.
 
 from __future__ import annotations
 
-import json
 import zipfile
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import text
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.mdm.clean.evidence import subject_key
@@ -155,10 +153,8 @@ def mastered_issuer(database):
 
 
 def issued_by(database):
-    with database.application.connect() as conn:
-        return conn.execute(text(
-            "SELECT body->'periods', body->>'last_seen' FROM mdm.current_record WHERE object_type='relationship' "
-            "AND body->>'type'='ISSUED_BY'")).all()
+    return [(body["periods"], body.get("last_seen"))
+            for body in core.documents(database, "relationship").values() if body["type"] == "ISSUED_BY"]
 
 
 def starts(database):
@@ -172,9 +168,7 @@ def test_an_issued_by_link_starts_at_its_earliest_filing(database, tmp_path):
     assert len(q2) == 2 and len(linked) == 1
     stage, policy = mastered_issuer(database)
     apply(stage, policy, "q2", q2, 3)
-    with database.application.connect() as conn:
-        reviews = conn.execute(text("SELECT body->>'reason' FROM mdm.current_record WHERE object_type='review' "
-                                    "AND body->'open'='true'::jsonb")).scalars().all()
+    reviews = [body["reason"] for body in core.documents(database, "review").values() if body.get("open")]
     assert "unknown_relationship_start" not in reviews
     assert starts(database) == [(MAY28, "stated")]
 

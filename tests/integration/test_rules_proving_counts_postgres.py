@@ -1,38 +1,37 @@
-"""`proving.counts` hashes every current record row by row (ticket 120): the same md5 as one
-string of them all, which the store's memory limit killed at 383,612 Securities."""
-from sqlalchemy import text
+"""Governed Proving hashes original record bytes under an explicit hash contract."""
+import hashlib
 
 from edgar_warehouse.rules import proving
-
-ONE_STRING = text(
-    "SELECT md5(coalesce((SELECT string_agg(object_type || ':' || object_id || ':' || body::text, "
-    "',' ORDER BY object_type, object_id) FROM mdm.current_record), '') || '|' || "
-    "coalesce((SELECT string_agg(c::text, ',' ORDER BY c.entity_id) FROM mdm.company c "
-    "WHERE c.to_generation IS NULL), ''))")
+from edgar_warehouse.mdm.clean.inspection import HASH_CONTRACT
+from edgar_warehouse.mdm.clean.prepared_registry import require_installed
+from edgar_warehouse.mdm.clean.store import canonical
+from tests.integration import test_clean_mdm_postgres as core
 
 
-def test_the_streamed_hash_is_the_one_string_hash(database):
-    with database.admin.connect() as conn:
-        empty = conn.scalar(ONE_STRING)
-    assert proving.counts(database.admin)["current_records_md5"] == empty
+def expected_hash(engine):
+    result = hashlib.md5((HASH_CONTRACT + "\n").encode())
+    with engine.connect() as conn:
+        api = require_installed(conn)
+        for kind in ("entity", "relationship", "review"):
+            keys = api.record_keys(kind, connection=conn)
+            rows = api.read([(kind, key) for key in keys], connection=conn)
+            for key in keys:
+                result.update(canonical([kind, key]).encode() + b":" + bytes(rows[kind, key]["body"]) + b"\n")
+    return result.hexdigest()
 
-    with database.admin.begin() as conn:
-        # Rows only to hash: no batch behind them, so the foreign keys are not checked.
-        conn.execute(text("SET LOCAL session_replication_role = replica"))
-        for object_type, object_id, body in [("review", "r-1", '{"open": true}'),
-                                             ("entity", "e-2", '{"name": "Société B"}'),
-                                             ("entity", "e-1", '{"name": "A", "identifiers": {"cusip": ["X"]}}')]:
-            conn.execute(text("INSERT INTO mdm.current_record (object_type, object_id, body, batch_id) "
-                              "VALUES (:t, :i, CAST(:b AS jsonb), 'batch-1')"), {"t": object_type, "i": object_id, "b": body})
-        # Two current Companies and an ended one: the Company part joins only the current, by entity id.
-        for entity, ended in (("00000000-0000-0000-0000-000000000002", None), ("00000000-0000-0000-0000-000000000001", None),
-                              ("00000000-0000-0000-0000-000000000003", 2)):
-            conn.execute(text("INSERT INTO mdm.company (entity_id, from_generation, to_generation, valid_from, valid_to, "
-                              "batch_id, status, identifiers, name, body) VALUES (CAST(:e AS uuid), 1, :t, now(), "
-                              "CASE WHEN :t IS NULL THEN NULL ELSE now() + interval '1 day' END, 'batch-1', 'accepted', "
-                              "'{}'::jsonb, 'Example', '{}'::jsonb)"), {"e": entity, "t": ended})
-    with database.admin.connect() as conn:
-        expected = conn.scalar(ONE_STRING)
 
-    assert expected != empty
-    assert proving.counts(database.admin)["current_records_md5"] == expected
+def test_streamed_hash_preserves_publication_bytes_and_unchanged_replay(database):
+    empty = proving.counts(database.application)
+    assert empty["current_records_md5"] == expected_hash(database.application)
+    assert empty["records_hash_contract"] == HASH_CONTRACT
+    item = core.source("invented-hash", fields={"name": "Invented Société 雪", "amount": 10**80 + 7})
+    identity, binding = core.identity_and_binding(item)
+    command = dict(assertions=[item], identities=[identity], decisions=[binding])
+    core.apply(database, 1, **command)
+    before = proving.counts(database.application)
+    assert before["current_records_md5"] == expected_hash(database.application)
+    assert before["current_records_md5"] != empty["current_records_md5"]
+    assert before["masters"] == {"company": 1}
+    assert before["stage_records"] == {"fixture.primary": 1}
+    assert core.apply(database, 1, **command)["duplicate"]
+    assert proving.counts(database.application) == before

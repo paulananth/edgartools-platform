@@ -22,15 +22,13 @@ from __future__ import annotations
 from collections import defaultdict
 from uuid import uuid4
 
-from sqlalchemy import text
 
 from . import correction
 from .activation import declared_namespaces
 from .evidence import instant
 from .primitives import normalizer
-from .store import Conflict, containment_docs, identifier_values, rows
-from .record_reads import RecordReader
-from .withholding import given, withheld
+from .store import Conflict
+from .withholding import withheld
 
 
 def nothing() -> dict:
@@ -42,7 +40,9 @@ def nothing() -> dict:
     return {"identities": [], "decisions": [], "reviews": [], "mints": [], "joins": []}
 
 
-def holders(conn, policy: dict, wanted: dict[str, set[str]], released: set[str] = frozenset()) -> dict:
+def holders(
+    conn, policy: dict, wanted: dict[str, set[str]], released: set[str] = frozenset()
+) -> dict:
     """Which Companies hold each identifier value: one bounded query per namespace.
 
     A Company holds a value only through the **latest** version of a bound
@@ -70,35 +70,23 @@ def holders(conn, policy: dict, wanted: dict[str, set[str]], released: set[str] 
         # Containment, one value at a time, so the GIN index on identifiers
         # (`stage_record_identifiers`) serves every namespace alike; `OFFSET 0`
         # keeps each value its own probe (ticket 77: 1.3 s a call before).
-        found_rows = (conn.holders(namespace, values, _issuers(policy, namespace), released)
-                      if isinstance(conn, RecordReader) else rows(
-            conn,
-            """SELECT DISTINCT s.reading->'identifiers'->:namespace AS value,
-                      s.entity_id::text AS entity_id, i.kind, s.subject
-            FROM unnest(CAST(:wanted AS jsonb[])) AS w(doc) CROSS JOIN LATERAL (
-                SELECT reading, entity_id, subject, source_code FROM mdm.stage_record
-                WHERE (reading->'identifiers') @> w.doc OFFSET 0) s
-            JOIN mdm.master_entity i ON i.entity_id = s.entity_id
-            WHERE s.source_code = ANY(:sources) AND NOT s.subject = ANY(:released)""",
-            namespace=namespace,
-            wanted=[doc for v in sorted(values) for doc in containment_docs(namespace, v)],
-            sources=_issuers(policy, namespace),
-            released=sorted(released),
-        ))
+        found_rows = conn.holders(
+            namespace, values, _issuers(policy, namespace), released
+        )
         merged = survivors(conn, {r["entity_id"] for r in found_rows})
-        portable = isinstance(conn, RecordReader)
         normals = {_normal(policy, namespace, v) for v in values}
         # A value a record's bind withholds is not its master's (part A2b);
         # the portable reader leaves those out itself.
-        kept_back = {} if portable else withheld(conn, {r["subject"] for r in found_rows})
         for row in found_rows:
             # A Stage row returns its whole list; only the values asked count.
-            for raw in [row["value"]] if portable else given(kept_back, row["subject"], namespace, row["value"]):
+            for raw in [row["value"]]:
                 key = (namespace, _normal(policy, namespace, raw))
-                if portable and key[1] not in values:
+                if key[1] not in values:
                     raise Conflict("Identifier reference differs from retained reading")
                 if key[1] in normals:
-                    found[key][merged.get(row["entity_id"], row["entity_id"])] = row["kind"]
+                    found[key][merged.get(row["entity_id"], row["entity_id"])] = row[
+                        "kind"
+                    ]
     return found
 
 
@@ -109,34 +97,17 @@ def bound(conn, subjects) -> dict[str, str]:
     """
     if not subjects:
         return {}
-    if isinstance(conn, RecordReader):
-        return conn.bindings(subjects)
-    return {
-        r["subject"]: r["entity_id"]
-        for r in rows(
-            conn,
-            """SELECT subject, entity_id::text AS entity_id FROM mdm.stage_record
-            WHERE subject = ANY(:subjects) AND entity_id IS NOT NULL""",
-            subjects=sorted(subjects),
-        )
-    }
+    return conn.bindings(subjects)
 
 
 def survivors(conn, entity_ids: set[str]) -> dict[str, str]:
     """Each merged-away Company's survivor; shared with `matching.py`."""
     if not entity_ids:
         return {}
-    if isinstance(conn, RecordReader):
-        return {identity:body["canonical_id"] for identity,body in conn.masters(entity_ids).items()
-                if body.get("canonical_id")}
     return {
-        r["object_id"]: r["canonical_id"]
-        for r in rows(
-            conn,
-            """SELECT object_id, canonical_id FROM mdm.current_entity
-            WHERE object_id=ANY(:ids) AND canonical_id IS NOT NULL""",
-            ids=sorted(entity_ids),
-        )
+        identity: body["canonical_id"]
+        for identity, body in conn.masters(entity_ids).items()
+        if body.get("canonical_id")
     }
 
 
@@ -150,16 +121,10 @@ def in_review(conn, entity_ids: set[str]) -> set[str]:
     """
     if not entity_ids:
         return set()
-    if isinstance(conn, RecordReader):
-        return {identity for identity,body in conn.masters(entity_ids).items() if body.get("status") == "review"}
     return {
-        r["object_id"]
-        for r in rows(
-            conn,
-            """SELECT object_id FROM mdm.current_entity
-            WHERE object_id=ANY(:ids) AND status='review'""",
-            ids=sorted(entity_ids),
-        )
+        identity
+        for identity, body in conn.masters(entity_ids).items()
+        if body.get("status") == "review"
     }
 
 
@@ -172,13 +137,7 @@ def consolidations(conn, entities: set[str]) -> list[dict]:
     keys, asked = set(entities), set()
     while want := keys - asked:
         asked |= want
-        bodies = (conn.related_decisions(want) if isinstance(conn, RecordReader) else [r["body"] for r in rows(
-            conn,
-            """SELECT body FROM mdm.decision
-            WHERE decision_id IN (SELECT id FROM mdm.decisions_naming(CAST(:keys AS text[])) id)
-              AND operation IN ('merge', 'exclude', 'reverse', 'revoke')""",
-            keys=sorted(want),
-        )])
+        bodies = conn.related_decisions(want)
         for body in bodies:
             operation = body["operation"]
             if operation in ("merge", "exclude"):
@@ -237,49 +196,78 @@ def propose(
 ) -> dict:
     """The bindings and new Companies the active identifier rules propose.
     `released`: the records this batch unbinds (ticket 13)."""
-    from edgar_warehouse.rules.source_engine import plan_record_matches, link_matching_records
+    from edgar_warehouse.rules.source_engine import (
+        plan_record_matches,
+        link_matching_records,
+    )
     from .identifier_types import TYPES
 
     subjects = sorted({record["subject"] for record in assertions})
     try:
         held = bound(conn, subjects)
         merged = survivors(conn, set(held.values()))
-        plan = plan_record_matches({
-            "policy": policy, "assertions": assertions, "decisions": decisions,
-            "identities": identities, "bound": list(held),
-            # A re-delivered record's values are its master's (its survivor's).
-            "bound_entities": {subject: merged.get(entity, entity) for subject, entity in held.items()},
-            # What each bound record's bind withholds, stored or in this batch (part A2b).
-            "withheld": {subject: [{"namespace": n, "raw": r} for n, r in sorted(values)]
-                         for subject, values in withheld(conn, held, decisions, as_of).items()},
-            "released": sorted(released),
-            "normalizers": {kind.normalizer_name: kind.upper for kind in TYPES.values()},
-        })
+        plan = plan_record_matches(
+            {
+                "policy": policy,
+                "assertions": assertions,
+                "decisions": decisions,
+                "identities": identities,
+                "bound": list(held),
+                # A re-delivered record's values are its master's (its survivor's).
+                "bound_entities": {
+                    subject: merged.get(entity, entity)
+                    for subject, entity in held.items()
+                },
+                # What each bound record's bind withholds, stored or in this batch (part A2b).
+                "withheld": {
+                    subject: [{"namespace": n, "raw": r} for n, r in sorted(values)]
+                    for subject, values in withheld(
+                        conn, held, decisions, as_of
+                    ).items()
+                },
+                "released": sorted(released),
+                "normalizers": {
+                    kind.normalizer_name: kind.upper for kind in TYPES.values()
+                },
+            }
+        )
         if not plan["applicable"]:
             return nothing()
-        found = holders(conn, policy, {name: set(values) for name, values in plan["wanted"].items()}, released)
-        suspended = in_review(conn, {entity for held in found.values() for entity in held})
+        found = holders(
+            conn,
+            policy,
+            {name: set(values) for name, values in plan["wanted"].items()},
+            released,
+        )
+        suspended = in_review(
+            conn, {entity for held in found.values() for entity in held}
+        )
         # A record reaching two or more masters may merge them (part A2a):
         # what those masters already rest on, read once for the batch.
         reaching: set[str] = set()
         for items in plan["applicable"].values():
-            entities = {e for i in items for e in found.get((i["namespace"], i["value"]), {})}
+            entities = {
+                e for i in items for e in found.get((i["namespace"], i["value"]), {})
+            }
             if len(entities) > 1:
                 reaching |= entities
         merges = consolidations(conn, reaching) if reaching else []
-        newest = conn.newest(plan["kinds"]) if isinstance(conn,RecordReader) else {}
-        if not isinstance(conn,RecordReader):
-            for kind in plan["kinds"]:
-                at=conn.scalar(text("SELECT max(published_at) FROM mdm.master_entity WHERE kind=:kind"), {"kind": kind})
-                newest[kind]=str(at) if at is not None else None
-        proposed = link_matching_records({
-            "plan": plan,
-            "found": [{"namespace": name, "value": value, "records": held} for (name, value), held in found.items()],
-            "suspended": sorted(suspended), "newest": newest,
-            "new_ids": [str(uuid4()) for _ in plan["applicable"]],
-            "refused": sorted(correction.refused(conn, set(subjects), decisions)), "as_of": as_of,
-            "consolidations": merges,
-        })
+        newest = conn.newest(plan["kinds"])
+        proposed = link_matching_records(
+            {
+                "plan": plan,
+                "found": [
+                    {"namespace": name, "value": value, "records": held}
+                    for (name, value), held in found.items()
+                ],
+                "suspended": sorted(suspended),
+                "newest": newest,
+                "new_ids": [str(uuid4()) for _ in plan["applicable"]],
+                "refused": sorted(correction.refused(conn, set(subjects), decisions)),
+                "as_of": as_of,
+                "consolidations": merges,
+            }
+        )
         if _merged(proposed):
             # Re-checked under the lock by the very read the planner was given:
             # a merge or exclusion stored since makes it stale.
@@ -290,7 +278,9 @@ def propose(
         raise Conflict(str(error)) from None
 
 
-def proposal_is_stale(conn, policy: dict, automatic: dict, released: set[str] = frozenset()) -> bool:
+def proposal_is_stale(
+    conn, policy: dict, automatic: dict, released: set[str] = frozenset()
+) -> bool:
     """Whether a rule's proposal no longer holds, re-checked under the lock.
 
     Run at apply, under the Merge Stage lock, since a concurrent run may have
@@ -319,20 +309,37 @@ def proposal_is_stale(conn, policy: dict, automatic: dict, released: set[str] = 
 
     # A merge rests on the consolidations its masters had (part A2a): one
     # stored since (a merge it must name, a Match Exclusion) makes it stale.
-    if _merged(automatic) and [d["decision_id"] for d in consolidations(
-            conn, set(automatic["consolidation_masters"]))] != automatic["consolidation_ids"]:
+    if (
+        _merged(automatic)
+        and [
+            d["decision_id"]
+            for d in consolidations(conn, set(automatic["consolidation_masters"]))
+        ]
+        != automatic["consolidation_ids"]
+    ):
         return True
     # A bind withholds a value only while another master holds it (part
     # A2b): withheld from one no other master holds now, it is stale.
-    held_back = [(d["entity_id"], w) for d in automatic.get("decisions") or []
-                 if d["operation"] == "bind" for w in d.get("withheld") or ()]
+    held_back = [
+        (d["entity_id"], w)
+        for d in automatic.get("decisions") or []
+        if d["operation"] == "bind"
+        for w in d.get("withheld") or ()
+    ]
     if held_back:
         asked: dict[str, set[str]] = defaultdict(set)
         for _, w in held_back:
             asked[w["namespace"]].add(w["raw"])
         others = holders(conn, policy, asked, released)
-        if any(not set(others.get((w["namespace"], _normal(policy, w["namespace"], w["raw"])), {})) - {entity}
-               for entity, w in held_back):
+        if any(
+            not set(
+                others.get(
+                    (w["namespace"], _normal(policy, w["namespace"], w["raw"])), {}
+                )
+            )
+            - {entity}
+            for entity, w in held_back
+        ):
             return True
     # A value proposed for a master is stale once another master holds it;
     # held by that master already, it is consistent.
@@ -349,17 +356,8 @@ def proposal_is_stale(conn, policy: dict, automatic: dict, released: set[str] = 
         at = earliest.get(i["kind"])
         if at is None or instant(i["published_at"]) < instant(at):
             earliest[i["kind"]] = i["published_at"]
-    if isinstance(conn,RecordReader):
-        newest=conn.newest(earliest)
-        return any(newest[kind] is not None and instant(newest[kind])>=instant(at)
-                   for kind,at in earliest.items())
+    newest = conn.newest(earliest)
     return any(
-        conn.scalar(
-            text(
-                """SELECT EXISTS(SELECT 1 FROM mdm.master_entity WHERE kind=:kind
-                AND published_at >= CAST(:at AS timestamptz))"""
-            ),
-            {"kind": kind, "at": at},
-        )
-        for kind, at in sorted(earliest.items())
+        newest[kind] is not None and instant(newest[kind]) >= instant(at)
+        for kind, at in earliest.items()
     )

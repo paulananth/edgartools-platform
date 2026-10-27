@@ -28,7 +28,6 @@ from sqlalchemy import text
 
 from edgar_warehouse.mdm.clean import merge
 
-from edgar_warehouse.mdm.clean.store import migrate
 
 SETTING = "plan_cache_mode=force_custom_plan"
 

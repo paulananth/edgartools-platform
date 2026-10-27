@@ -17,23 +17,11 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from sqlalchemy import bindparam, text
 
 from edgar_warehouse.control_contract import Blocked
 
 from . import checks
 from .sink import Sink
-
-LOOKUP = 10_000  # record keys per MDM query
-
-# The master entity to read now: the bound entity, or the entity it was merged
-# into (the same rule as mdm.cross_reference).
-_IDS = text(
-    "SELECT s.record_key, coalesce(e.canonical_id, s.entity_id::text) AS entity_id "
-    "FROM mdm.stage_record s "
-    "LEFT JOIN mdm.current_entity e ON e.object_id = s.entity_id::text AND e.canonical_id IS NOT NULL "
-    "WHERE s.source_code = :source_code AND s.kind = :kind AND s.record_key IN :keys"
-).bindparams(bindparam("keys", expanding=True))
 
 
 class MdmIds:
@@ -42,26 +30,18 @@ class MdmIds:
     def __init__(self, engine):
         self.engine = engine
 
-    def __call__(self, source_code: str, kind: str, keys: set[str]) -> dict[str, str | None]:
+    def __call__(
+        self, source_code: str, kind: str, keys: set[str]
+    ) -> dict[str, str | None]:
         if not keys:
             return {}
-        found: dict[str, str | None] = {}
-        ordered = sorted(keys)
         # Pointer, immutable reading and master must come from one snapshot.
-        with self.engine.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
-            from edgar_warehouse.mdm.clean.record_reads import for_connection, RecordReader
-            from edgar_warehouse.mdm.clean.store import Conflict
+        with self.engine.connect().execution_options(
+            isolation_level="REPEATABLE READ"
+        ) as conn:
+            from edgar_warehouse.mdm.clean.record_reads import for_connection
 
-            reader = for_connection(conn)
-            if isinstance(reader, RecordReader):
-                if reader.adapter.protocol < 5:
-                    raise Conflict("Master identifier lookup requires governed prepared storage")
-                return reader.master_ids(source_code, kind, keys)
-            for start in range(0, len(ordered), LOOKUP):
-                for row in conn.execute(_IDS, {"source_code": source_code, "kind": kind,
-                                               "keys": ordered[start:start + LOOKUP]}):
-                    found[row.record_key] = row.entity_id
-        return found
+            return for_connection(conn).master_ids(source_code, kind, keys)
 
 
 def land(sink: Sink, table: str, records: Iterable[dict], ids=None) -> dict:
