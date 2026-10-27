@@ -1,6 +1,6 @@
 """A configured lookup from a detail row's key to every current master holding
-it (ticket 138: a venue's MIC or exchange code with a ticker, to its Security).
-The kind, detail list and keys are configuration; lookup only, never matching."""
+it (ticket 138). The kind, detail list and keys are configuration
+(`detail_lookups` in the engine catalog); lookup only, never matching."""
 from . import master_index
 from .record_reads import RecordReader
 from .store import Conflict, digest

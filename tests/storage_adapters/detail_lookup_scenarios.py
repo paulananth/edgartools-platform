@@ -98,6 +98,19 @@ try:
         assert detail_lookups.rebuild(owner)["processed"] == 0
         with pytest.raises(DBAPIError):
             detail_lookups.rebuild(runtime, limit=1)
+    if case == "retired":
+        relist(("D1", "V1", "C1", "S1"))
+        reading = g["record"]("invented-lookup-two", s["secondary"], identifiers={},
+                              details=rows(("D9", "V1", "C9", "S1")))
+        floor = RecordReader(api).publications([kind])[kind]["published_at"]
+        identity, bind = g["identity"](reading,
+            (datetime.fromisoformat(floor) + timedelta(microseconds=1)).isoformat())
+        s["apply"](assertions=[reading], identities=[identity], decisions=[bind])
+        assert found("venue", "V1", "S1") == sorted([root, identity["entity_id"]])
+        # A retired master leaves the lookup; the other holder stays.
+        s["apply"](decisions=[decision("retire_source", actor="fixture", reason="invented retirement",
+            at="2026-02-02T00:00:00Z", source_code=s["secondary"], evidence=[reading["assertion_id"]])])
+        assert found("venue", "V1", "S1") == [root] and found("code", "C9", "S1") == []
     if case == "context":
         relist(("D1", "V1", "C1", "S1"))
         second = other("invented-lookup-two", ("D9", "V1", "C9", "S1"))

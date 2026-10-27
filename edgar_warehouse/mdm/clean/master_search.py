@@ -67,22 +67,6 @@ def index_for(spec):
     return master_index.Index("master_name", "Name-index", pin, derive, check)
 
 
-def _pinned(pin):
-    return master_index.Index("master_name", "Name-index", pin, None, None)
-
-
-def state_key(pin):
-    return master_index.state_key(_pinned(pin))
-
-
-def state(adapter, conn, pin, generation):
-    return master_index.state(adapter, conn, _pinned(pin), generation)
-
-
-def entries(adapter, conn, objects, spec):
-    return master_index.entries(adapter, conn, objects, index_for(spec))
-
-
 def normal_changes(adapter, conn, objects, generation):
     spec = configuration()
     if spec is None:

@@ -9,7 +9,7 @@ from edgar_warehouse.rules import files
 from tests.mdm.test_configured_pair_comparison import configured_root  # noqa: F401
 
 
-@pytest.mark.parametrize("case", ["keys", "changes", "rebuild", "context"])
+@pytest.mark.parametrize("case", ["keys", "changes", "retired", "rebuild", "context"])
 def test_normal_detail_lookup(case, database_factory, configured_root):
     if os.environ.get("SKILL_ADAPTER_TEST_ENGINE") == "mssql":
         pytest.skip("SQL Server full normal workflow remains deferred")

@@ -58,7 +58,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     parser.add_argument("--limit", type=int, default=5, help=f"How many search matches (1-{SEARCH_MAX})")
     parser.add_argument("--detail-key", nargs="+", metavar="NAME_OR_VALUE",
                         help="A configured detail key's name and values, in place of a key "
-                             "(security: mic XNYS AAPL, or exchange UN AAPL): every master holding it")
+                             "(security: mic <MIC> <ticker>, or exchange <code> <ticker>): every master holding it")
     parser.add_argument("--as-of", help="Business time: what was true then (ISO time with a zone)")
     parser.add_argument("--as-at", help="Recording time: what MDM had recorded by then (ISO time with a zone)")
     parser.add_argument("--hops", type=int, default=1, help=f"Relationships: how far to walk (1-{MAX_HOPS})")
@@ -502,6 +502,11 @@ class Context:
             if spec is None or spec["kind"] != args.subject:
                 raise ContextError(f"No detail lookup is configured for {args.subject}.",
                                    f"{PROG} {args.subject} <entity_id> or {PROG} {args.subject} <namespace>:<value>")
+            if name not in spec["keys"] or len(values) != len(spec["keys"][name]):
+                shapes = "; ".join(name + " " + " ".join(f"<{field}>" for field in fields)
+                                   for name, fields in sorted(spec["keys"].items()))
+                raise ContextError(f"--detail-key takes a key name and its values: {shapes}.",
+                                   f"{PROG} {args.subject} --detail-key {sorted(spec['keys'])[0]} <values>")
             try:
                 rows = detail_lookups.find(adapter, conn, name, values)
             except Conflict as error:
