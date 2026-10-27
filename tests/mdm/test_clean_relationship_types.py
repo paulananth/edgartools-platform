@@ -16,6 +16,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from tests.support.relationship_types import read_types
+
 from edgar_warehouse.mdm.clean import relationships
 from edgar_warehouse.mdm.clean.activation import check_policy
 from edgar_warehouse.mdm.clean.store import Conflict
@@ -96,7 +98,6 @@ def test_a_policy_that_pins_no_types_is_refused():
 @pytest.mark.parametrize("change, words", [
     ({"from": ["planet"]}, "unknown kind"),
     ({"to": []}, "at least one kind"),
-    ({"capacities": "director"}, "rules it cannot run"),
     ({"cycles": "invalid"}, "only on a hierarchy"),
     ({"hierarchy": True}, "cycles"),
     ({"hierarchy": True, "cycles": "invalid", "ultimate_parent": "guess-v9"}, "algorithm"),
@@ -110,13 +111,13 @@ def test_a_policy_that_pins_no_types_is_refused():
 ])
 def test_a_type_that_could_not_run_is_refused(change, words):
     types = {**relationships.types_of(files.policy()), "NEW_LINK": {"from": ["company"], "to": ["company"], **change}}
-    with pytest.raises(Conflict, match=words):
-        relationships.check_types(types)
+    with pytest.raises(ValueError, match=words):
+        read_types(types)
 
 
 def test_no_types_is_refused():
-    with pytest.raises(Conflict, match="at least one type"):
-        relationships.check_types({})
+    with pytest.raises(ValueError, match="at least one type"):
+        read_types({})
 
 
 def test_the_pin_round_trips_through_an_export(tmp_path):

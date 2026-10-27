@@ -303,7 +303,6 @@ fn source_contract(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(describe_field_rules, m)?)?;
     m.add_function(wrap_pyfunction!(prepare_relationships, m)?)?;
     m.add_function(wrap_pyfunction!(prepare_relationship_types, m)?)?;
-    m.add_function(wrap_pyfunction!(check_relationship_types, m)?)?;
     m.add_function(wrap_pyfunction!(prepare_relationship_periods, m)?)?;
     m.add("SourceRejected", m.py().get_type::<SourceRejected>())?;
     m.add_function(wrap_pyfunction!(scan_json_array, m)?)?;
@@ -483,11 +482,6 @@ fn describe_field_rules() -> (Vec<String>, Vec<String>) {
 #[pyfunction]
 fn prepare_relationship_types(py: Python<'_>, command: &str) -> PyResult<String> {
     py.allow_threads(|| crate::relationship_types::prepare_relationship_types(command)).map_err(PyValueError::new_err)
-}
-
-#[pyfunction]
-fn check_relationship_types(py: Python<'_>, command: &str) -> PyResult<String> {
-    py.allow_threads(|| crate::relationship_types::check_relationship_types(command)).map_err(PyValueError::new_err)
 }
 
 #[pyfunction]

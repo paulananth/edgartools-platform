@@ -71,15 +71,15 @@ pub fn check(types: &Map<String, Value>, kinds: Option<&BTreeSet<String>>) -> Re
         }
         match (&rules.ultimate_parent, &rules.ultimate_type) {
             (None, None) => {}
-            (Some(_), Some(written_as)) if types.contains_key(written_as) => {}
+            (Some(_), Some(named_type)) if types.contains_key(named_type) => {}
             _ => {
                 return Err(format!(
                     "Relationship type {name}: an ultimate parent names its ultimate_type, a declared type"
                 ))
             }
         }
-        for (flag, set) in [("ends_parent_links", rules.ends_parent_links), ("keeps_start", rules.keeps_start)] {
-            if set.is_some() && (set != Some(true) || hierarchy) {
+        for (flag, value) in [("ends_parent_links", rules.ends_parent_links), ("keeps_start", rules.keeps_start)] {
+            if value.is_some() && (value != Some(true) || hierarchy) {
                 return Err(format!("Relationship type {name}: {flag} is true, on a link that is no parent"));
             }
         }
@@ -105,8 +105,17 @@ pub fn from_codes(rows: &[Map<String, Value>], kinds: &BTreeSet<String>) -> Resu
         }
         types.insert(code, Value::Object(properties));
     }
+    // A retired type's capacities go with it.
+    let retired: BTreeSet<String> = rows
+        .iter()
+        .filter(|row| !valid(row) && text(row, "parent_code").is_none())
+        .filter_map(|row| text(row, "code"))
+        .collect();
     for row in rows.iter().filter(valid) {
         let Some(parent) = text(row, "parent_code") else { continue };
+        if retired.contains(&parent) {
+            continue;
+        }
         let code = text(row, "code").unwrap_or_default();
         let capacity = code
             .strip_prefix(&format!("{parent}:"))
@@ -135,18 +144,6 @@ pub fn prepare_relationship_types(raw: &str) -> Result<String, String> {
     serde_json::to_string(&from_codes(&command.codes, &command.kinds)?).map_err(|error| error.to_string())
 }
 
-/// The Python binding's check of types already read: `{"types": {...}, "kinds": [...]}`.
-pub fn check_relationship_types(raw: &str) -> Result<String, String> {
-    #[derive(Deserialize)]
-    struct Command {
-        types: Map<String, Value>,
-        kinds: BTreeSet<String>,
-    }
-    let command: Command = serde_json::from_str(raw).map_err(|_| "Invalid relationship types command")?;
-    check(&command.types, Some(&command.kinds))?;
-    Ok("null".into())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -167,6 +164,7 @@ mod tests {
             {"code": "OWNS:director", "parent_code": "OWNS", "status": "valid"},
             {"code": "OWNS:officer", "parent_code": "OWNS", "status": "valid"},
             {"code": "GONE", "parent_code": null, "status": "invalid", "properties": {"from": ["x"], "to": ["y"]}},
+            {"code": "GONE:director", "parent_code": "GONE", "status": "valid"},
             {"code": "PARENT", "parent_code": null, "status": "valid", "properties": {
                 "from": ["company"], "to": ["company"], "hierarchy": true, "cycles": "invalid",
                 "ultimate_parent": "accounting-chain-v2", "ultimate_type": "ULTIMATE"}},

@@ -302,15 +302,14 @@ fn is_decimal(text: &str) -> bool {
 /// properties existed keeps its bytes.
 pub fn code_properties(row: &Object) -> Result<Option<Document>, String> {
     use serde_json::Value;
-    const REFUSED: &str = "A code's properties are named text, true or false, or a list of distinct texts";
     let found: Value = match row.get("properties") {
         None => return Ok(None),
-        Some(raw) => serde_json::from_str(raw.get()).map_err(|_| REFUSED)?,
+        Some(raw) => serde_json::from_str(raw.get()).map_err(|_| "A code's properties are not JSON")?,
     };
     let given = match found {
         Value::Null => return Ok(None),
         Value::Object(given) if !given.is_empty() => given,
-        _ => return Err(REFUSED.into()),
+        _ => return Err("A code's properties are named values, at least one".into()),
     };
     let named = |name: &str| {
         name.len() <= 64
@@ -321,8 +320,9 @@ pub fn code_properties(row: &Object) -> Result<Option<Document>, String> {
     let mut kept = BTreeMap::new();
     for (name, value) in given {
         if !named(&name) {
-            return Err(REFUSED.into());
+            return Err(format!("A code's properties are named in lower-case words joined by _, not {name:?}"));
         }
+        let refused = || format!("A code's properties are text, true or false, or a list of distinct texts: {name}");
         let value = match value {
             Value::String(text) if filled(&text) => Value::String(text),
             Value::Bool(flag) => Value::Bool(flag),
@@ -331,18 +331,18 @@ pub fn code_properties(row: &Object) -> Result<Option<Document>, String> {
                     .into_iter()
                     .map(|item| match item {
                         Value::String(text) if filled(&text) => Ok(text),
-                        _ => Err(REFUSED.to_string()),
+                        _ => Err(refused()),
                     })
                     .collect::<Result<Vec<_>, _>>()?;
                 let count = texts.len();
                 texts.sort();
                 texts.dedup();
                 if texts.len() != count {
-                    return Err(REFUSED.into());
+                    return Err(refused());
                 }
                 Value::from(texts)
             }
-            _ => return Err(REFUSED.into()),
+            _ => return Err(refused()),
         };
         kept.insert(name, value);
     }

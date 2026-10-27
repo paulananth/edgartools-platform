@@ -277,12 +277,6 @@ def prepare_relationship_types(codes: list[dict], kinds: list[str]) -> dict:
         json.dumps({"codes": codes, "kinds": kinds}, ensure_ascii=False, separators=(",", ":"), allow_nan=False)))
 
 
-def check_relationship_types(types: Mapping, kinds: list[str]) -> None:
-    """Carry relationship types to their one Rust check."""
-    source_contract.check_relationship_types(
-        json.dumps({"types": dict(types), "kinds": kinds}, ensure_ascii=False, separators=(",", ":"), allow_nan=False))
-
-
 def prepare_relationship_periods(sightings: list[dict]) -> tuple[list[dict], list[dict]]:
     """Carry dated observations to the common relationship-history calculation."""
     periods, reviews = json.loads(source_contract.prepare_relationship_periods(

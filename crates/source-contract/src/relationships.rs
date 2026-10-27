@@ -38,6 +38,7 @@ struct Command {
     stored: BTreeMap<String, Object>,
     as_of: String,
     clock: String,
+    kinds: BTreeSet<String>,
 }
 
 #[derive(Clone)]
@@ -394,10 +395,10 @@ fn finish_at_succession(
 pub fn prepare_relationships(raw: &str) -> Result<String, String> {
     let command: Command = serde_json::from_str(raw).map_err(|_| "Invalid relationship command")?;
     // The types run only as their one check allows (ticket 132).
-    let types: serde_json::Value = serde_json::from_str(raw).map_err(|_| "Invalid relationship command")?;
+    let types = serde_json::to_value(&command.types).map_err(|error| error.to_string())?;
     crate::relationship_types::check(
-        types.get("types").and_then(serde_json::Value::as_object).ok_or("Invalid relationship command")?,
-        None,
+        types.as_object().ok_or("Invalid relationship command")?,
+        Some(&command.kinds),
     )?;
     let mut edges: IndexMap<String, Relationship> = IndexMap::new();
     let mut reviews = Vec::new();

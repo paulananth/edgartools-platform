@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .evidence import instant
+from .evidence import KINDS, instant
 from edgar_warehouse.rules.source_engine import prepare_relationship_periods, prepare_relationships
 
 
@@ -25,18 +25,6 @@ def types_of(policy: dict) -> dict:
     try:
         return prepare_relationship_types(files.published_reference(pin), sorted(KINDS))
     except (ValueError, files.RulesFileError) as error:
-        raise Conflict(str(error)) from None
-
-
-def check_types(types: dict) -> None:
-    """Refuse types the Rust engine could not run exactly as written."""
-    from edgar_warehouse.rules.source_engine import check_relationship_types
-    from .evidence import KINDS
-    from .store import Conflict
-
-    try:
-        check_relationship_types(types, sorted(KINDS))
-    except ValueError as error:
         raise Conflict(str(error)) from None
 
 
@@ -63,4 +51,5 @@ def project(
         "stored": stored or {},
         "as_of": as_of,
         "clock": instant(as_of).isoformat(),
+        "kinds": sorted(KINDS),
     })

@@ -4,6 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from tests.support.relationship_types import read_types
+
 from edgar_warehouse.mdm.clean import relationships
 from edgar_warehouse.mdm.clean.store import digest
 from tests.mdm.test_clean_parent_history import TYPES, PARENT, ULTIMATE, AS_OF, Y2020, Y2022, Y2024
@@ -118,5 +120,5 @@ def test_a_type_without_it_still_takes_a_later_stated_start():
 def test_keeps_start_is_true_and_never_on_a_hierarchy(spec, words):
     from edgar_warehouse.mdm.clean.store import Conflict
 
-    with pytest.raises(Conflict, match=words):
-        relationships.check_types({'X': {'from': ['company'], 'to': ['company'], **spec}})
+    with pytest.raises(ValueError, match=words):
+        read_types({'X': {'from': ['company'], 'to': ['company'], **spec}})
