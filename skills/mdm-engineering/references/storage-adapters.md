@@ -90,8 +90,10 @@ metadata permissions. Prove policy, mapping and schema approval commit with
 their immutable references and roll back together. Give a delegated registrar
 only the metadata capability its workflow needs; prove it cannot mutate the
 save gate, masters, history or leases, and that the worker cannot approve its
-own configuration. Verify privileged-function definitions and grants on owner
-reruns. Record delegated registration as unsupported on a selected engine until
+own configuration. Race registrars that read before acquiring the save lock:
+that lock does not refresh an earlier repeatable-read snapshot. The duplicate
+check uses the selected engine's current-read or conflict-and-retry semantics.
+Verify privileged-function definitions and grants on owner reruns. Record delegated registration as unsupported on a selected engine until
 that engine's actual role path passes; another engine's proof does not qualify it.
 
 Recovery distinguishes an interrupted first installation from damage to an
