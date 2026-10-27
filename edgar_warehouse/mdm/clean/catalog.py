@@ -24,7 +24,7 @@ def _validate(body):
     expected = {"version", "kinds", "profiles", "accepted_bars", "legacy_relationships", "legacy_ultimate_type",
                 "reference_tables", "legacy_jurisdiction_table", "pair_comparisons", "legacy_pair_comparison"}
     if (not isinstance(body, dict) or not expected <= set(body)
-        or set(body) - expected - {"master_search"}
+        or set(body) - expected - {"master_search", "detail_lookups"}
         or not isinstance(body["version"], str) or not body["version"]):
         raise ValueError("Mastering engine catalog must name its version and configured sections")
     if "master_search" in body:
@@ -39,6 +39,19 @@ def _validate(body):
             or not math.isfinite(search["position_weight"]) or not 0 < search["position_weight"] <= 1):
             raise ValueError("Master search needs versioned name fields and a position weight")
     kinds = body["kinds"]
+    if "detail_lookups" in body:
+        lookup = body["detail_lookups"]
+        if (not isinstance(lookup, dict) or set(lookup) != {"version", "kind", "detail", "keys"}
+            or any(not isinstance(lookup[part], str) or not lookup[part].strip()
+                   or lookup[part].strip() != lookup[part] for part in ("version", "kind", "detail"))
+            or not isinstance(kinds, list) or lookup["kind"] not in kinds
+            or not isinstance(lookup["keys"], dict) or not lookup["keys"]
+            or any(not isinstance(name, str) or not name or name.strip() != name
+                   or not isinstance(fields, list) or not fields
+                   or any(not isinstance(field, str) or not field or field.strip() != field for field in fields)
+                   or len(set(fields)) != len(fields)
+                   for name, fields in lookup["keys"].items())):
+            raise ValueError("Detail lookups need a version, a configured kind, a detail list and named keys")
     if (not isinstance(kinds, list) or not kinds or not all(isinstance(k, str) and k.strip() == k and k for k in kinds)
         or len(set(kinds)) != len(kinds)):
         raise ValueError("Mastering engine catalog names distinct kinds")

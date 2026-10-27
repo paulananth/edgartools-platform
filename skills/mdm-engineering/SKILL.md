@@ -267,6 +267,18 @@ temporary table and require an index seek in the plan. A scan fails the test.
 A statement whose key-list size changes enough to pick a bad cached plan uses
 `OPTION (RECOMPILE)` on that statement only. Do not put it on every procedure.
 
+**A lookup over current masters is an index passed as data** (ticket 138).
+`master_index.py` owns what every such lookup needs: a retained summary per
+master, per-generation coverage, the batch's changes once coverage is
+complete, and the resumable owner rebuild. A lookup gives an `Index`: its
+family, the pin of its configuration, `derive` (a master's body to its
+envelope, summary and groups) and `check` (a retained summary back to the
+groups it wrote). Name search (`master_search.py`) and the configured detail
+lookup (`detail_lookups.py`) are two; a third adds an `Index` and its reader,
+never a copy of the coverage or rebuild. A changed engine catalog reaches a
+store only through the owner's `mdm migrate`, and a new lookup over stored
+masters needs its rebuild before readers accept it.
+
 ## Migrations
 
 - A schema change is a new migration file, added at the end of the

@@ -22,7 +22,7 @@ g = s["g"]
 
 from edgar_warehouse.cli import main
 from edgar_warehouse.context import Context, ContextError
-from edgar_warehouse.mdm.clean import master_search
+from edgar_warehouse.mdm.clean import master_index, master_search
 from edgar_warehouse.mdm.clean.evidence import decision
 from edgar_warehouse.mdm.clean.record_reads import RecordReader
 from edgar_warehouse.mdm.clean.store import Conflict
@@ -147,9 +147,8 @@ try:
         assert first == {"generation": generation, "processed": 1, "ready": False}
         with pytest.raises(ContextError, match="complete index"):
             names("rebuilt")
-        pin = master_search.digest(master_search.configuration())
         with owner.connect() as conn:
-            checkpoint = master_search.state(api, conn, pin, generation)
+            checkpoint = master_index.state(api, conn, master_search.index_for(master_search.configuration()), generation)
         original = type(api).maintain_lookups
 
         def interrupted(self, conn, **kwargs):
@@ -160,7 +159,7 @@ try:
             with pytest.raises(RuntimeError, match="invented owner interruption"):
                 master_search.rebuild(owner, limit=1)
         with owner.connect() as conn:
-            assert master_search.state(api, conn, pin, generation) == checkpoint
+            assert master_index.state(api, conn, master_search.index_for(master_search.configuration()), generation) == checkpoint
         rename("CURRENT")
         with pytest.raises(Conflict, match="stale"):
             master_search.rebuild(owner, limit=1)
@@ -228,8 +227,7 @@ try:
         assert [row["entity_id"] for row in result] == [identity["entity_id"] for identity in identities[:3]]
         assert len(cohort_sizes) >= 3 and max(cohort_sizes) <= 203
     if case == "maintenance":
-        pin = master_search.digest(master_search.configuration())
-        key = master_search.state_key(pin)
+        key = master_index.state_key(master_search.index_for(master_search.configuration()))
         before, generation = durable_counts(), api.generation()
         original = api.read([key], lookup=True)[key]
         from edgar_warehouse.mdm.clean.store import storage_adapter
@@ -296,7 +294,7 @@ import pytest
 from sqlalchemy import func,select
 from edgar_warehouse.context import Context,ContextError
 from edgar_warehouse.database_connections import engine_from_env
-from edgar_warehouse.mdm.clean import master_search
+from edgar_warehouse.mdm.clean import master_index, master_search
 from edgar_warehouse.mdm.clean.merge import MergeStage
 from edgar_warehouse.mdm.clean.store import Store,migrate,storage_adapter
 owner,runtime=engine_from_env("READ_OWNER_URL"),engine_from_env("READ_RUNTIME_URL")
@@ -322,8 +320,7 @@ try:
         "as_of":AS_OF,"assertions":[READING]}
     assert stage.apply(**command)["generation"]==GENERATION+1
     assert names("after")[0]["entity_id"]==ROOT and names("alternate")==[]
-    pin=master_search.digest(master_search.configuration())
-    key=master_search.state_key(pin)
+    key=master_index.state_key(master_search.index_for(master_search.configuration()))
     original=api.read([key],lookup=True)[key]
     before=counts()
     assert stage.apply(**{**command,"run_id":str(uuid4())})["duplicate"]

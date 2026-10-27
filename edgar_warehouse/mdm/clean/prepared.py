@@ -195,9 +195,10 @@ def execute(stage, *, command, assertions, decisions, identities, deferred,
                 "objects": [{"type": kind, "id": key, "body": body} for (kind, key), body in objects.items()],
                 "identities": identities, "previous_publications": publications,
             })
-            from .master_search import normal_changes
+            from . import detail_lookups, master_search
             indexes = _changes(api, conn, [*history, *current, *projections,
-                                           *normal_changes(api, conn, objects, generation)])
+                                           *master_search.normal_changes(api, conn, objects, generation),
+                                           *detail_lookups.normal_changes(api, conn, objects, generation)])
             keys = [(p["object_type"], p["object_id"]) for p in request["projections"]]
             versions = api.read(keys, connection=conn)
             effects = {key: value for key, value in request.items() if key != "expected_generation"}

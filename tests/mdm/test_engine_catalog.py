@@ -45,6 +45,29 @@ def test_master_search_is_configured_and_validated(tmp_path, change):
             catalog.load(tmp_path)
 
 
+@pytest.mark.parametrize("change", ["valid", "missing_version", "unknown_kind", "no_keys", "empty_key",
+                                    "duplicate_fields", "bad_field", "unknown"])
+def test_detail_lookups_are_configured_and_validated(tmp_path, change):
+    body = copy.deepcopy(catalog.CATALOG)
+    body["kinds"].append("invented-kind")
+    spec = {"version": "invented-lookup-v1", "kind": "invented-kind", "detail": "invented_rows",
+            "keys": {"venue": ["invented_venue", "invented_symbol"]}}
+    body["detail_lookups"] = spec
+    if change == "missing_version": spec.pop("version")
+    elif change == "unknown_kind": spec["kind"] = "invented-absent-kind"
+    elif change == "no_keys": spec["keys"] = {}
+    elif change == "empty_key": spec["keys"]["venue"] = []
+    elif change == "duplicate_fields": spec["keys"]["venue"] *= 2
+    elif change == "bad_field": spec["keys"]["venue"] = [1]
+    elif change == "unknown": spec["invented"] = True
+    write(tmp_path, body)
+    if change == "valid":
+        assert catalog.load(tmp_path)["detail_lookups"] == spec
+    else:
+        with pytest.raises(ValueError, match="Detail lookups"):
+            catalog.load(tmp_path)
+
+
 def test_invented_kind_profile_and_approval_floor_are_loaded_without_engine_edits(tmp_path):
     body = copy.deepcopy(catalog.CATALOG)
     body["kinds"].append("invented-kind")

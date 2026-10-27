@@ -188,6 +188,258 @@ read:
       ZAR: {code: ZAR}
       ZMW: {code: ZMW}
       ZWD: {code: ZWD}
+    # The RDM code set iso-10383-mic, version 1 (ticket 138, the Listing;
+    # operator, 2026-10-26: "MIC beside, from RDM (Recommended)"), as published
+    # in rules/reference/published/iso-10383-mic/1: each OpenFIGI exchange code
+    # its crosswalk pairs with a MIC, keyed by that code. A test holds this
+    # table equal to it.
+    mic:
+      "AA": {mic: ENAX}
+      "AB": {mic: XSAU}
+      "AF": {mic: XBUE}
+      "AH": {mic: CHIA}
+      "AIAF": {mic: XDRF}
+      "AJ": {mic: A2XX}
+      "AM": {mic: XBCX}
+      "AO": {mic: XNEC}
+      "ASUNCION": {mic: XVPA}
+      "AT": {mic: XASX}
+      "AZ": {mic: BSEX}
+      "B2": {mic: BMTF}
+      "B3": {mic: BLOX}
+      "B4": {mic: BTFE}
+      "BB": {mic: XBRU}
+      "BD": {mic: XDHA}
+      "BF": {mic: CSE2}
+      "BG": {mic: XBOT}
+      "BH": {mic: XBDA}
+      "BK": {mic: XBLB}
+      "BQ": {mic: XEQT}
+      "BS": {mic: BVMF}
+      "BT": {mic: XSSE}
+      "BU": {mic: XBUL}
+      "BUENOS AIRES": {mic: XMAB}
+      "BW": {mic: XBRN}
+      "C1": {mic: XSSC}
+      "C2": {mic: XSEC}
+      "C3": {mic: XCHG}
+      "CAYMAN ISLANDS": {mic: XCAY}
+      "CC": {mic: XSGO}
+      "CE": {mic: XBCL}
+      "CENT ANOTACIONE": {mic: XDPA}
+      "CF": {mic: XCNQ}
+      "CG": {mic: XSHG}
+      "CHANNEL ISLANDS": {mic: XCIE}
+      "CHINA INTERBANK": {mic: XCFE}
+      "CJ": {mic: PURE}
+      "CK": {mic: XPRA}
+      "CR": {mic: XBNV}
+      "CS": {mic: XSHE}
+      "CT": {mic: XTSE}
+      "CV": {mic: XTSX}
+      "CX": {mic: XBOG}
+      "CY": {mic: XCYS}
+      "DC": {mic: XCSE}
+      "DD": {mic: DKTC}
+      "DF": {mic: FNDK}
+      "DG": {mic: LYNX}
+      "DH": {mic: XADS}
+      "DJ": {mic: XCXD}
+      "DT": {mic: XCX2}
+      "DU": {mic: DIFX}
+      "EB": {mic: BATE}
+      "EC": {mic: XCAI}
+      "EG": {mic: XGUA}
+      "EQ": {mic: XQUI}
+      "ET": {mic: XTAL}
+      "EUROMTF": {mic: EMTF}
+      "EURONEXT-LISBON": {mic: XLIS}
+      "Extra MOT Pro": {mic: XMOT}
+      "FF ZERTIFIKATE": {mic: FRAB}
+      "FH": {mic: XHEL}
+      "FP": {mic: XPAR}
+      "FS": {mic: XSPS}
+      "GA": {mic: XATH}
+      "GD": {mic: XDUS}
+      "GF": {mic: XFRA}
+      "GH": {mic: XHAM}
+      "GI": {mic: XHAN}
+      "GM": {mic: XMUN}
+      "GS": {mic: XSTU}
+      "GY": {mic: XETR}
+      "GZ": {mic: MUND}
+      "H1": {mic: SHSC}
+      "H2": {mic: SZSC}
+      "HD": {mic: ADRK}
+      "HK": {mic: XHKG}
+      "HX": {mic: XATX}
+      "I2": {mic: CEUX}
+      "IB": {mic: XBOM}
+      "ID": {mic: XDUB}
+      "IF": {mic: MTAH}
+      "IG": {mic: MCXX}
+      "IJ": {mic: XIDX}
+      "IM": {mic: MTAA}
+      "IQ": {mic: XIQS}
+      "IS": {mic: XNSE}
+      "IT": {mic: XTAE}
+      "JA": {mic: XJAM}
+      "JE": {mic: SBIJ}
+      "JF": {mic: XFKA}
+      "JI": {mic: CHIJ}
+      "JL": {mic: XJAX}
+      "JN": {mic: XNGO}
+      "JS": {mic: XSAP}
+      "JSE Contrib Prx": {mic: XBES}
+      "JT": {mic: XTKS}
+      "JU": {mic: XSBI}
+      "JV": {mic: ODXE}
+      "JW": {mic: SBIU}
+      "KA": {mic: XSAT}
+      "KE": {mic: XKON}
+      "KF": {mic: XKFB}
+      "KK": {mic: XKUW}
+      "KP": {mic: XKRX}
+      "KQ": {mic: XKOS}
+      "KT": {mic: NXTE}
+      "KZ": {mic: XKAZ}
+      "L1": {mic: LNEQ}
+      "L3": {mic: LIQU}
+      "LABUAN INTL FIN": {mic: XLFX}
+      "LB": {mic: XBEY}
+      "LG": {mic: XRIS}
+      "LN": {mic: XLON}
+      "LU": {mic: LSSI}
+      "LX": {mic: XLUX}
+      "MADRID": {mic: MARF}
+      "MB": {mic: XMOL}
+      "ME": {mic: XMNX}
+      "MF": {mic: XMEX}
+      "MICEX A1": {mic: MISX}
+      "MICEX A2": {mic: XPIC}
+      "MK": {mic: XKLS}
+      "MOEX Level 3": {mic: XMOS}
+      "MONTEVIDEO": {mic: XMNT}
+      "MOT": {mic: MOTX}
+      "MP": {mic: XMAU}
+      "MS": {mic: XMAE}
+      "MTS IRELAND": {mic: MCAD}
+      "MTS S.p.A": {mic: MTSC}
+      "MU": {mic: BIVA}
+      "MV": {mic: XMAL}
+      "MZ": {mic: XBVM}
+      "NA": {mic: XAMS}
+      "NL": {mic: XNSA}
+      "NOMX 1stNorth F": {mic: FNFI}
+      "NOMX ICELAND": {mic: XICE}
+      "NOMX VILNIUS": {mic: XLIT}
+      "NORDIC ABM": {mic: XOAM}
+      "NW": {mic: XNAM}
+      "NZ": {mic: XNZE}
+      "OC": {mic: OCEA}
+      "OD": {mic: 24EQ}
+      "OM": {mic: XMUS}
+      "OU": {mic: PFTS}
+      "PDEx": {mic: PDEX}
+      "PE": {mic: XLIM}
+      "PF": {mic: APXL}
+      "PK": {mic: XKAR}
+      "PM": {mic: XPHS}
+      "PO": {mic: XPOS}
+      "PORTAL": {mic: XPOR}
+      "PP": {mic: XPTY}
+      "PQ": {mic: OTCM}
+      "PW": {mic: XWAR}
+      "PZ": {mic: AQSE}
+      "QE": {mic: AQEU}
+      "QT": {mic: XQTX}
+      "QU": {mic: PFTQ}
+      "QX": {mic: AQXE}
+      "RC": {mic: XRMZ}
+      "RE": {mic: XBSE}
+      "RR": {mic: RTSX}
+      "RW": {mic: ROTC}
+      "S1": {mic: SGMX}
+      "S4": {mic: SGMU}
+      "SA": {mic: XVAL}
+      "SANTO DOMINGO": {mic: XBVR}
+      "SB": {mic: XBAR}
+      "SE": {mic: XSWX}
+      "SEDEX-Milan": {mic: SEDX}
+      "SEND": {mic: SEND}
+      "SF": {mic: FNSE}
+      "SG": {mic: XBEL}
+      "SIX STRUCTURED": {mic: XQMH}
+      "SJ": {mic: XJSE}
+      "SK": {mic: XBRA}
+      "SO": {mic: XBIL}
+      "SP": {mic: XSES}
+      "SQ": {mic: XMAD}
+      "SS": {mic: XSTO}
+      "SY": {mic: XDSE}
+      "T1": {mic: TQEX}
+      "T2": {mic: TREU}
+      "TA": {mic: XATS}
+      "TB": {mic: XBKK}
+      "TE": {mic: ETLX}
+      "TG": {mic: OMGA}
+      "TH": {mic: XGAT}
+      "TI": {mic: XIST}
+      "TK": {mic: LICA}
+      "TP": {mic: XTRN}
+      "TQ": {mic: TRQX}
+      "TR": {mic: MATN}
+      "TT (Taipei Stock Exchange)": {mic: ROCO}
+      "TT (Taiwan Stock Exchange)": {mic: XTAI}
+      "TW": {mic: XICX}
+      "TX": {mic: CHIC}
+      "UA": {mic: XASE}
+      "UB": {mic: XBOS}
+      "UC": {mic: XCIS}
+      "UD": {mic: XADF}
+      "UF": {mic: BATS}
+      "UK": {mic: UKEX}
+      "UM": {mic: XCHI}
+      "UN": {mic: XNYS}
+      "UP": {mic: ARCX}
+      "UQ": {mic: XNMS}
+      "UR": {mic: XNCM}
+      "UT": {mic: XNIM}
+      "UV": {mic: OOTC}
+      "UW": {mic: XNGS}
+      "UX": {mic: XPSX}
+      "VB": {mic: XBOL}
+      "VF": {mic: IEXG}
+      "VG": {mic: MEMX}
+      "VH": {mic: HSTC}
+      "VJ": {mic: EDGA}
+      "VK": {mic: EDGX}
+      "VL": {mic: LTSE}
+      "VM": {mic: XSTC}
+      "VP": {mic: EPRL}
+      "VS": {mic: BVCA}
+      "VT": {mic: TXSE}
+      "VU": {mic: XHNX}
+      "VY": {mic: BATY}
+      "Vorvel": {mic: HMTF}
+      "WT": {mic: TWEM}
+      "X1": {mic: ECEU}
+      "X2": {mic: CAPA}
+      "X9": {mic: TWEA}
+      "XA": {mic: XWBO}
+      "XC": {mic: CHIX}
+      "XE": {mic: XAPA}
+      "XG": {mic: XNGM}
+      "XH": {mic: XBUD}
+      "XJ": {mic: XLJU}
+      "XK": {mic: OTXB}
+      "XN": {mic: XOSL}
+      "XV": {mic: BOTC}
+      "XX": {mic: TRNL}
+      "XZ": {mic: TREA}
+      "YC": {mic: XECM}
+      "ZA": {mic: XZAG}
+      "ZU": {mic: XSTE}
   lookup_sets:
     asked:
       max_values: 51200
@@ -592,6 +844,16 @@ read:
                   path: exchCode
                   null_if:
                   - ""
+              # The listing's venue (ticket 138, the Listing): the MIC RDM pairs
+              # with its exchange code; none for a composite or an unpaired code.
+              mic:
+                lookup:
+                  reference: mic
+                  column: mic
+                  on_missing: "null"
+                  key:
+                    text:
+                      path: exchCode
               ticker:
                 text:
                   path: ticker

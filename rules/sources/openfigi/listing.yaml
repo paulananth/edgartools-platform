@@ -1,5 +1,5 @@
 # Every listing as a Security's detail row (ticket 120), with its currency
-# (ticket 138 part B3), read over lines.yaml's pieces; combine.yaml collects
+# (ticket 138 part B3) and its venue's MIC (source.yaml's `mic`), read over lines.yaml's pieces; combine.yaml collects
 # them by the identifier asked. A line's currency is its ticker's code
 # (source.yaml's `code`: the last three letters, a code N-PORT holdings
 # file). The operator ruled the currency is read from the ticker's suffix,
@@ -25,6 +25,7 @@ read:
             fields:
               figi: {value: {path: detail.figi}}
               exchange: {value: {path: detail.exchange}}
+              mic: {value: {path: detail.mic}}
               ticker: {value: {path: detail.ticker}}
               composite_figi: {value: {path: detail.composite_figi}}
               description: {value: {path: detail.description}}
