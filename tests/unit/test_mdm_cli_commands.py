@@ -20,6 +20,7 @@ PREPARE = ["--capture", "c", "--documents", "d", "--population", "p", "--catalog
     (["mdm", "prepare-clean-company", *PREPARE], "prepare_clean_company"),
     (["mdm", "force-publish", "--consumer", "graph", "--output", "o"], "force_publish"),
     (["mdm", "rebuild-name-index", "--limit", "1"], "rebuild_name_index"),
+    (["mdm", "rebuild-detail-lookup", "--limit", "1"], "rebuild_detail_lookup"),
 ])
 def test_each_command_runs_its_function(monkeypatch, argv, function):
     called = []

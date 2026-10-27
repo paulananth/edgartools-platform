@@ -1,6 +1,10 @@
 """Invented detail rows, normal saves and the owner rebuild of the detail lookup."""
+import io
+import json
 import os
 import runpy
+from argparse import Namespace
+from contextlib import redirect_stdout
 from datetime import datetime, timedelta
 from unittest.mock import patch
 
@@ -11,6 +15,8 @@ os.environ.update(READ_ID_CASE="lookup", READ_BASE_CASE="details")
 s = runpy.run_module("tests.storage_adapters.master_id_scenarios")
 g = s["g"]
 
+from edgar_warehouse.cli import main
+from edgar_warehouse.context import Context, ContextError
 from edgar_warehouse.mdm.clean import detail_lookups
 from edgar_warehouse.mdm.clean.evidence import decision
 from edgar_warehouse.mdm.clean.record_reads import RecordReader
@@ -92,6 +98,39 @@ try:
         assert detail_lookups.rebuild(owner)["processed"] == 0
         with pytest.raises(DBAPIError):
             detail_lookups.rebuild(runtime, limit=1)
+    if case == "context":
+        relist(("D1", "V1", "C1", "S1"))
+        second = other("invented-lookup-two", ("D9", "V1", "C9", "S1"))
+
+        def held(*key, subject=kind):
+            return Context(runtime).answer(Namespace(subject=subject, key=None, search=None, detail_key=list(key),
+                limit=5, as_of=None, as_at=None, detail="brief", page=None))
+
+        answer = held("venue", "V1", "S1")
+        assert [row["entity_id"] for row in answer["matches"]] == sorted([root, second])
+        assert answer["detail_key"] == {"name": "venue", "values": ["V1", "S1"],
+                                        "fields": ["invented_venue", "invented_symbol"]}
+        assert held("code", "C9", "S1")["matches"][0]["entity_id"] == second
+        assert held("venue", "V9", "S1")["matches"] == []
+        with pytest.raises(ContextError, match="takes"):
+            held("venue", "V1")
+        with pytest.raises(ContextError, match="No detail lookup"):
+            held("venue", "V1", "S1", subject="invented-other-kind")
+        os.environ["MDM_DATABASE_URL"] = os.environ["READ_RUNTIME_URL"]
+        os.environ["MDM_APPLICATION_ROLE"] = os.environ["READ_RUNTIME_ROLE"]
+        output = io.StringIO()
+        with redirect_stdout(output):
+            assert main(["context", kind, "--detail-key", "code", "C1", "S1"]) == 0
+        assert [row["entity_id"] for row in json.loads(output.getvalue())["matches"]] == [root]
+        with patch.object(detail_lookups, "normal_changes", return_value=[]):
+            relist(("D2", "V2", "C2", "S2"))
+        with pytest.raises(ContextError, match="complete index"):
+            held("venue", "V2", "S2")
+        os.environ["MDM_DATABASE_URL"] = os.environ["READ_OWNER_URL"]
+        with redirect_stdout(io.StringIO()):
+            assert main(["mdm", "rebuild-detail-lookup", "--limit", "1"]) == 0
+            assert main(["mdm", "rebuild-detail-lookup"]) == 0
+        assert [row["entity_id"] for row in held("venue", "V2", "S2")["matches"]] == [root]
     print("detail lookup proof passed")
 finally:
     owner.dispose()

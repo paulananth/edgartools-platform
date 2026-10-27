@@ -9,21 +9,23 @@ from edgar_warehouse.rules import files
 from tests.mdm.test_configured_pair_comparison import configured_root  # noqa: F401
 
 
-@pytest.mark.parametrize("case", ["keys", "changes", "rebuild"])
+@pytest.mark.parametrize("case", ["keys", "changes", "rebuild", "context"])
 def test_normal_detail_lookup(case, database_factory, configured_root):
     if os.environ.get("SKILL_ADAPTER_TEST_ENGINE") == "mssql":
         pytest.skip("SQL Server full normal workflow remains deferred")
     kind = "invented-kind"
     body = files.load(configured_root / "mastering/engine-v1.yaml")
-    if kind not in body["kinds"]:
-        body["kinds"].append(kind)
+    for declared in (kind, "invented-other-kind"):
+        if declared not in body["kinds"]:
+            body["kinds"].append(declared)
     body["accepted_bars"][kind] = dict(body["accepted_bars"]["company"])
     body["pair_comparisons"]["invented-comparison"]["eligibility_kind"] = kind
     body["detail_lookups"] = {"version": "invented-detail-lookup-v1", "kind": kind, "detail": "invented_rows",
         "keys": {"venue": ["invented_venue", "invented_symbol"], "code": ["invented_code", "invented_symbol"]}}
     (configured_root / "mastering/engine-v1.yaml").write_text(files.dumps(body))
     definitions = files.load(configured_root / "context/definitions.yaml")
-    definitions["kinds"][kind] = "An invented master used for detail lookup qualification."
+    for declared in (kind, "invented-other-kind"):
+        definitions["kinds"][declared] = "An invented master used for detail lookup qualification."
     (configured_root / "context/definitions.yaml").write_text(files.dumps(definitions))
     with database_factory() as (owner, runtime, role):
         result = subprocess.run([sys.executable, "-m", "tests.storage_adapters.detail_lookup_scenarios"],
