@@ -112,11 +112,11 @@ def test_a_type_without_it_still_takes_a_later_stated_start():
 
 
 @pytest.mark.parametrize('spec, words', [
-    ({'keeps_start': 'yes'}, 'keeps_start is true'),
+    ({'keeps_start': 'yes'}, 'rules it cannot run'),
     ({'keeps_start': True, 'hierarchy': True, 'cycles': 'invalid'}, 'keeps_start is true'),
 ])
 def test_keeps_start_is_true_and_never_on_a_hierarchy(spec, words):
     from edgar_warehouse.mdm.clean.store import Conflict
 
     with pytest.raises(Conflict, match=words):
-        relationships.check_types({'version': 'relationship-types-v5', 'types': {'X': {'from': ['company'], 'to': ['company'], **spec}}})
+        relationships.check_types({'X': {'from': ['company'], 'to': ['company'], **spec}})

@@ -1,13 +1,13 @@
-"""Relationship types are data (profiling ticket 04; operator, 2026-10-06: "Types as data").
+"""Relationship types are reference data (ticket 132; operator, 2026-10-27: "Use RDM
+for keeping types and other information", "Types in YAML + Rust only").
 
-`rules/merge/relationships.yaml` declares every relationship type MDM masters:
-the kinds at each end, the profile roles they need, the capacities of a Person
-link, and whether the type is a parent hierarchy, allows one parent, and
-derives an ultimate parent. A new type is a rules change, not a code change.
-
-A policy registered before the section existed keeps the table the code held
-then (`relationships.TYPES_V0`), so production keeps mastering the same links
-until the operator approves the policy that carries the section.
+RDM code set `mdm-relationship-types` holds every relationship type MDM
+masters: each type a code whose properties are its rules (the kinds at each
+end, the profile roles they need, whether it is a parent hierarchy, allows one
+parent and derives an ultimate parent, written as its `ultimate_type`); each
+capacity a child code `TYPE:capacity`. The policy pins it; the Rust engine reads
+and checks it. A new type is a new code set version, not a code change; a
+policy that pins none is refused.
 """
 
 from __future__ import annotations
@@ -62,8 +62,8 @@ REAL_NAMES = {
 }
 
 
-def test_the_rules_file_names_every_type_as_its_source_does():
-    types = files.policy()["relationships"]["types"]
+def test_the_code_set_names_every_type_as_its_source_does():
+    types = relationships.types_of(files.policy())
     assert set(types) == REAL_NAMES
     # Every type the old table had either keeps its name and rules, or is gone.
     for name, spec in BEFORE.items():
@@ -73,50 +73,61 @@ def test_the_rules_file_names_every_type_as_its_source_does():
             assert found == spec, name
     # The direct parent derives its ultimate parent as the stated type's name.
     assert types["IS_DIRECTLY_CONSOLIDATED_BY"]["ultimate_type"] == "IS_ULTIMATELY_CONSOLIDATED_BY"
+    # A capacity is a child code of its type.
+    codes = {row["code"]: row for row in files.pinned_reference("mdm-relationship-types")}
+    assert codes["EMPLOYED_BY:director"]["parent_code"] == "EMPLOYED_BY"
+    assert "capacities" not in codes["EMPLOYED_BY"]["properties"]
 
 
-def test_a_policy_without_the_section_keeps_that_table():
-    assert relationships.TYPES_V0 == BEFORE
-    assert relationships.types_of({"kinds": {}}) == BEFORE
+def test_a_policy_that_pins_no_types_is_refused():
+    with pytest.raises(Conflict, match="pins no relationship types"):
+        relationships.types_of({"kinds": {}})
+    body = files.policy()
+    body["reference_pins"].pop("mdm-relationship-types")
+    with pytest.raises(Conflict, match="no reference data named mdm-relationship-types"):
+        relationships.types_of(body)
+    body = files.policy()
+    body["reference_pins"]["mdm-relationship-types"] = {**body["reference_pins"]["mdm-relationship-types"],
+                                                        "sha256": "0" * 64}
+    with pytest.raises(Conflict, match="differs from its pinned sha256"):
+        check_policy(body)
 
 
 @pytest.mark.parametrize("change, words", [
     ({"from": ["planet"]}, "unknown kind"),
     ({"to": []}, "at least one kind"),
-    ({"capacities": "director"}, "a list"),
+    ({"capacities": "director"}, "rules it cannot run"),
     ({"cycles": "invalid"}, "only on a hierarchy"),
     ({"hierarchy": True}, "cycles"),
     ({"hierarchy": True, "cycles": "invalid", "ultimate_parent": "guess-v9"}, "algorithm"),
     ({"one_parent": True}, "only on a hierarchy"),
-    ({"colour": "red"}, "unknown key"),
+    ({"colour": "red"}, "rules it cannot run"),
     ({"hierarchy": True, "cycles": "invalid", "ultimate_parent": "accounting-chain-v1", "ultimate_type": "NOT_A_TYPE"},
      "ultimate_type"),
     ({"hierarchy": True, "cycles": "invalid", "ultimate_type": "IS_ULTIMATELY_CONSOLIDATED_BY"}, "ultimate_type"),
+    # An ultimate parent is written only as the type its hierarchy names (ticket 132: no default type).
+    ({"hierarchy": True, "cycles": "invalid", "ultimate_parent": "accounting-chain-v2"}, "names its ultimate_type"),
 ])
 def test_a_type_that_could_not_run_is_refused(change, words):
-    body = files.policy()
-    body["relationships"]["types"]["NEW_LINK"] = {"from": ["company"], "to": ["company"], **change}
+    types = {**relationships.types_of(files.policy()), "NEW_LINK": {"from": ["company"], "to": ["company"], **change}}
     with pytest.raises(Conflict, match=words):
-        check_policy(body)
+        relationships.check_types(types)
 
 
-def test_an_empty_types_section_is_refused_not_read_as_the_old_table():
-    body = files.policy()
-    body["relationships"]["types"] = {}
+def test_no_types_is_refused():
     with pytest.raises(Conflict, match="at least one type"):
-        check_policy(body)
+        relationships.check_types({})
 
 
-def test_the_types_round_trip_through_an_export(tmp_path):
+def test_the_pin_round_trips_through_an_export(tmp_path):
     body = files.policy()
     files.write_policy(body, tmp_path)
-    assert files.policy(tmp_path)["relationships"] == body["relationships"]
-    older = {k: v for k, v in body.items() if k != "relationships"}
-    with pytest.raises(files.RulesFileError, match="relationships absent"):
-        files.write_policy(older, tmp_path)
+    exported = files.policy(tmp_path)
+    assert exported["relationships"] == body["relationships"] == {"pin": "mdm-relationship-types"}
+    assert exported["reference_pins"]["mdm-relationship-types"] == body["reference_pins"]["mdm-relationship-types"]
 
 
-def test_the_rules_file_passes_the_policy_check():
+def test_the_policy_passes_the_policy_check():
     check_policy(files.policy())
 
 
@@ -125,15 +136,22 @@ def _state(*pairs):
     return SimpleNamespace(bindings=bindings, canonical={e: e for _, e in pairs})
 
 
-def test_a_new_type_declared_only_in_the_rules_is_mastered():
+def test_a_new_type_declared_only_as_a_code_is_mastered():
+    from edgar_warehouse.mdm.clean.evidence import KINDS
+    from edgar_warehouse.rules.source_engine import prepare_relationship_types
+
     entity = {"kind": "company", "status": "accepted", "profiles": []}
     claims = {"s1": {"assertion_id": "a1", "source_meta": {}, "relationships": [
         {"type": "SUPPLIES", "target_subject": "s2", "valid_from": "2024-01-01T00:00:00+00:00", "scope": ""}]}}
     state = _state(("s1", "e1"), ("s2", "e2"))
     entities = {"e1": entity, "e2": entity}
-    edges, reviews = relationships.project(claims, state, entities, "2025-01-01T00:00:00+00:00")
+    codes = files.pinned_reference("mdm-relationship-types")
+    edges, reviews = relationships.project(claims, state, entities, "2025-01-01T00:00:00+00:00",
+                                           prepare_relationship_types(codes, sorted(KINDS)))
     assert edges == [] and [r["reason"] for r in reviews] == ["unsupported_relationship"]
-    types = {**BEFORE, "SUPPLIES": {"from": ["company"], "to": ["company"]}}
+    supplies = {"code": "SUPPLIES", "label": "Supplies", "parent_code": None, "status": "valid",
+                "properties": {"from": ["company"], "to": ["company"]}}
+    types = prepare_relationship_types([*codes, supplies], sorted(KINDS))
     edges, reviews = relationships.project(claims, state, entities, "2025-01-01T00:00:00+00:00", types=types)
     assert [(e["type"], e["source_id"], e["target_id"]) for e in edges] == [("SUPPLIES", "e1", "e2")] and not reviews
 
@@ -141,7 +159,7 @@ def test_a_new_type_declared_only_in_the_rules_is_mastered():
 def test_every_capacity_a_contract_states_is_one_its_type_has():
     """A link's capacity is fixed text in its contract, so the allowed set is
     held here, not per record (rebuild ticket 10; operator, 2026-10-02)."""
-    types = files.policy()["relationships"]["types"]
+    types = relationships.types_of(files.policy())
     stated = [
         (link["type"], link["capacity"])
         for folder in sorted((files.ROOT / "sources").iterdir()) if (folder / "source.yaml").exists()

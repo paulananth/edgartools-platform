@@ -187,4 +187,4 @@ def test_a_parent_period_after_the_succession_goes_to_a_steward():
 ])
 def test_ends_parent_links_is_true_on_a_link_that_is_no_parent(spec):
     with pytest.raises(Conflict, match="ends_parent_links"):
-        relationships.check_types({"version": "t", "types": {"SUCCESSOR_ENTITY": spec}})
+        relationships.check_types({"SUCCESSOR_ENTITY": spec})

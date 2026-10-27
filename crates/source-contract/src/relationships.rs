@@ -38,7 +38,6 @@ struct Command {
     stored: BTreeMap<String, Object>,
     as_of: String,
     clock: String,
-    default_ultimate_type: String,
 }
 
 #[derive(Clone)]
@@ -394,6 +393,12 @@ fn finish_at_succession(
 /// Prepare direct links and derived history from a complete affected read set.
 pub fn prepare_relationships(raw: &str) -> Result<String, String> {
     let command: Command = serde_json::from_str(raw).map_err(|_| "Invalid relationship command")?;
+    // The types run only as their one check allows (ticket 132).
+    let types: serde_json::Value = serde_json::from_str(raw).map_err(|_| "Invalid relationship command")?;
+    crate::relationship_types::check(
+        types.get("types").and_then(serde_json::Value::as_object).ok_or("Invalid relationship command")?,
+        None,
+    )?;
     let mut edges: IndexMap<String, Relationship> = IndexMap::new();
     let mut reviews = Vec::new();
     for (subject, record) in &command.claims {
@@ -758,7 +763,7 @@ fn derive_current_parents(
                 "type".into(),
                 spec.get("ultimate_type")
                     .cloned()
-                    .map_or_else(|| values::write_value(&command.default_ultimate_type), Ok)?,
+                    .ok_or("An ultimate parent names its ultimate_type")?,
             ),
             ("source_id".into(), values::write_value(source)?),
             ("target_id".into(), values::write_value(&node)?),
@@ -783,7 +788,6 @@ fn derive_parent_history(
     invalid: &BTreeSet<String>,
     spec: &Object,
     scope: &Document,
-    command: &Command,
 ) -> Result<Vec<Object>, String> {
     let links: Vec<_> = group
         .iter()
@@ -846,7 +850,7 @@ fn derive_parent_history(
                 "type".into(),
                 spec.get("ultimate_type")
                     .cloned()
-                    .map_or_else(|| values::write_value(&command.default_ultimate_type), Ok)?,
+                    .ok_or("An ultimate parent names its ultimate_type")?,
             ),
             ("source_id".into(), values::write_value(&source)?),
             ("target_id".into(), values::write_value(&target)?),
@@ -1043,7 +1047,7 @@ fn finish_relationships(
                 group, &invalid, &spec, scope, command,
             )?),
             Some("accounting-chain-v2") => result.extend(derive_parent_history(
-                group, &invalid, &spec, scope, command,
+                group, &invalid, &spec, scope,
             )?),
             _ => {}
         }
