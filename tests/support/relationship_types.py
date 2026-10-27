@@ -28,3 +28,23 @@ def read_types(types: dict) -> dict:
     from edgar_warehouse.rules.source_engine import prepare_relationship_types
 
     return prepare_relationship_types(codes_of(types), sorted(KINDS))
+
+
+def pinned_types(types: dict, code_set: str = "invented-relationship-types") -> dict:
+    """Invented types published as an RDM code set under the configured rules
+    root (EDGAR_RULES_ROOT, never the repo's), and the policy parts that pin
+    it. Each content is its own version, so scenarios never overwrite another's."""
+    import hashlib
+    import os
+
+    from edgar_warehouse.rdm.store import canonical
+
+    assert os.environ.get("EDGAR_RULES_ROOT"), "invented types are published only into a configured rules root"
+    data = canonical([{**row, "label": row["code"]} for row in codes_of(types)], {})
+    sha256 = hashlib.sha256(data).hexdigest()
+    version = sha256[:16]
+    folder = files.ROOT / "reference" / "published" / code_set / version
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "canonical.jsonl").write_bytes(data)
+    return {"relationships": {"pin": code_set},
+            "reference_pins": {code_set: {"code_set": code_set, "version": version, "sha256": sha256}}}
