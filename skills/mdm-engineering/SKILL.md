@@ -180,11 +180,12 @@ retrieval, provenance and per-engine integration; data-operations applies the
 qualified migration. Retain cross-references with the source readings and
 derive their current lookup from that authority, without a second write path.
 
-The native PostgreSQL implementation exposes `mdm.cross_reference` and indexed
-`mdm.cross_reference_lookup(namespace,value)`. A lookup returns the source and
-record, reading/batch provenance, original bound entity and current canonical
-entity. Waiting records can be found with no bound entity. Preserve multiple
-records sharing one lookup value; that equality alone joins nothing.
+The governed reader resolves cross-references through indexed source-record
+references and their retained readings. A lookup preserves the source and record,
+reading/batch provenance, original bound master and current canonical master.
+Waiting records can be found with no bound master. Preserve multiple records
+sharing one lookup value; that equality alone joins nothing. A retired native
+routine or view is not a normal reader interface.
 
 For each selected engine and affected contract, prove mapping/formatting,
 indexed lookup, waiting/unbound results, canonical lookup after a merge,
@@ -356,9 +357,11 @@ These name this repo's code and the failures each rule came from.
   `edgar_warehouse/mdm/clean/store.py` (`MIGRATIONS`).
 - **Tests that hold the rules:**
   `tests/integration/test_clean_plan_cache_postgres.py` (plan setting, no
-  whole-list search), `tests/integration/test_clean_lookup_indexes.py`
-  (every lookup uses its index), `tests/mdm/test_clean_limits.py` (no size
-  cap in any function).
+  whole-list search), `tests/storage_adapters/test_record_scope.py`
+  (indexed scope and validated references),
+  `tests/storage_adapters/test_prepared_effects.py` (indexed reads and a request
+  beyond the former size cap), and `tests/mdm/test_clean_limits.py` (input
+  batching keeps an oversized record).
 - **No size refusal** (rebuild ticket 74): a 10,000-record closure cap and a
   16 MiB request cap, chosen for a local machine, stopped the ownership
   Proving Run, whose insider network was one connected group.
