@@ -118,7 +118,8 @@ read:
     # 2026-10-27: "On, set aside put/call"): an option row names the
     # underlying's FIGI, so a CUSIP filed only on such rows keeps none and
     # never finds a Security through it. Measured on the 13F capture: 97 of
-    # 10,681 CUSIPs with a filed FIGI lose it, and 4 keep another one.
+    # 10,681 CUSIPs with a filed FIGI lose it, and 4 keep another one. "No put
+    # or call" is the holding table's `put_call` null_if list; change both.
     sec_thirteenf_figi:
       each: infoTable
       select:

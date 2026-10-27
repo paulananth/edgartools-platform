@@ -315,7 +315,7 @@ def test_a_filed_figi_finds_its_security_and_never_becomes_one_of_its_identifier
 
 
 def test_a_held_cusip_stays_on_its_security_whatever_figi_is_filed_with_it(database, tmp_path):
-    """"13F CUSIP binds first" (operator, 2026-10-27: "On, set aside put/call"): a
+    """The 13F CUSIP binds first (operator, 2026-10-27: "On, set aside put/call"): a
     13F CUSIP a Security holds stays there when its filed FIGI is another
     Security's; nothing merges and nothing waits for review."""
     records, _ = prepared_records(tmp_path, ("cusip",))
