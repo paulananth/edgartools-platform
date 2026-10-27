@@ -181,29 +181,43 @@ export of the Rules Database carries them.
 
 ## Relationship types
 
-`rules/merge/relationships.yaml` declares every relationship type MDM masters
-(operator, 2026-10-06: "Types as data"). It is part of the Mastering Policy, so
-a change to it is a new policy version, approved by its digest. A new type
-needs no code change:
+Every relationship type MDM masters is a code in RDM code set
+`mdm-relationship-types` (ticket 132; operator, 2026-10-27: "Use RDM for keeping
+types and other information"). The Mastering Policy pins it
+(`relationships: {pin: mdm-relationship-types}` in `rules/merge/policy.yaml`,
+its version and sha256 in `rules/merge/reference-pins.yaml`), so a new version
+is a new pin, a new policy, approved by its digest. A new type needs no code
+change: draft a new code set version (data-profiling, "Reference data") with
+the type as a code whose `definition` is its plain words and source and whose
+`properties` are its rules:
 
 ```yaml
-types:
-  <TYPE_NAME>:
-    from: [<kind>, ...]          # the kinds at the start (the child, for a parent link)
-    to: [<kind>, ...]            # the kinds at the end
-    from_profile: <role>         # optional: a role profile the start must hold over the period
-    to_profile: <role>           # optional: the same for the end
-    capacities: [<name>, ...]    # optional: a person's link in a capacity, dated by sightings
-    hierarchy: true              # optional: the links form parent chains
-    cycles: invalid | review     # a hierarchy: a cycle's links are held back, or kept and reviewed
-    one_parent: true             # optional, a hierarchy: one parent at a time per scope
-    ultimate_parent: accounting-chain-v1   # optional, a hierarchy: derive each record's ultimate parent
+code: <TYPE_NAME>
+label: <Type name in words>
+definition: <what a link of this type says>. Source: <the source or standard>.
+properties:
+  from: [<kind>, ...]          # the kinds at the start (the child, for a parent link)
+  to: [<kind>, ...]            # the kinds at the end
+  from_profile: <role>         # optional: a role profile the start must hold over the period
+  to_profile: <role>           # optional: the same for the end
+  hierarchy: true              # optional: the links form parent chains
+  cycles: invalid              # a hierarchy: invalid (held back) or review (kept and reviewed)
+  one_parent: true             # optional, a hierarchy: one parent at a time per scope
+  ultimate_parent: accounting-chain-v2   # optional, a hierarchy: derive each record's ultimate parent
+  ultimate_type: <TYPE_NAME>   # with ultimate_parent: the declared type it is written as
+  keeps_start: true            # optional, no hierarchy: a link keeps its first start
+  ends_parent_links: true      # optional, no hierarchy: a succession ends the ceased entity's parent links
 ```
 
-`check_policy` refuses a type it could not run: an unknown kind or key, a
-hierarchy that does not say what its cycles do, an unknown ultimate-parent
-algorithm. Agents read every mastered link through `mdm.relationship_context`,
-and a parent chain through `mdm.relationship_chain(entity, type, max_hops)`.
+A capacity (a person's link in a capacity, dated by sightings) is a child code
+`<TYPE_NAME>:<capacity>` under its type. The Rust engine
+(`crates/source-contract/src/relationship_types.rs`) reads the pinned rows and
+is the one check, at registration and before every calculation: it refuses an
+unknown kind or property, a hierarchy that does not say what its cycles do, an
+unknown ultimate-parent algorithm, and an ultimate parent without its
+`ultimate_type`. A policy that pins no types is refused when it masters.
+Agents read every mastered link through `mdm.relationship_context`, and a
+parent chain through `mdm.relationship_chain(entity, type, max_hops)`.
 
 ## Reading MDM's context
 
@@ -223,9 +237,9 @@ type, and cite what it showed in your question to the operator.
   then, of those holding now; names as MDM holds them now, said in
   `trust.current_parts`). Follow `next_step` in each answer.
 
-What each kind and relationship type means is in
-`rules/context/definitions.yaml`. A new kind or relationship type adds its
-line there in the same PR; a test fails until it does.
+What each kind means is in `rules/context/definitions.yaml`; what each
+relationship type means is its code's `definition` in `mdm-relationship-types`.
+A new kind adds its line there in the same PR; a test fails until it does.
 
 ## Merge rules
 

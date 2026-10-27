@@ -38,4 +38,4 @@ so the two never conflict (as fix 2 of ticket 129: "Wait for #1121").
 - [ ] Three-axis review
 - [x] `rules/merge/relationships.yaml` removed (its words move into the code set's definitions) (2026-10-27 18:41 ET): and the types' words removed from `rules/context/definitions.yaml`; the agent context reads each type's definition from the code set; README and the agent-context spec name the code set
 - [ ] PR merged
-- [ ] Learning → skill
+- [x] Learning → skill (2026-10-27 18:42 ET): mdm-engineering, "Configured vocabulary lives once, in RDM, read by Rust"; data-profiling, a code's named properties; data-onboarding REFERENCE.md, "Relationship types" (a type is a code, its rules properties, its capacities child codes); data-modeling, where the types and their meanings live

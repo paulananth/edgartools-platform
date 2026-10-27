@@ -44,9 +44,11 @@ Read these before deciding, and use their words:
   `PROFILE_KINDS` (a profile and the kinds it may hang on).
 - `rules/merge/kinds/<kind>.yaml`, `identifiers`: the kind's Identifier
   Contract, the namespaces that decide identity.
-- `rules/merge/relationships.yaml`: every relationship type, the kinds at its
-  ends, capacities, profiles, and whether it is a hierarchy; their meanings are
-  in `rules/context/definitions.yaml`.
+- RDM code set `mdm-relationship-types` (`rules/reference/published/`, pinned
+  in `rules/merge/reference-pins.yaml`): every relationship type, a code whose
+  properties are the kinds at its ends, profiles and whether it is a
+  hierarchy, whose child codes are its capacities and whose definition is its
+  meaning and source.
 - `docs/specs/rdm/spec.md` and `docs/specs/agent-context/spec.md`: how
   reference data and agent context are kept.
 
@@ -285,7 +287,7 @@ where a gap hides. Before a build starts:
 Asked to review the model, check:
 
 - **Overlapping types:** two relationship types with the same ends and the
-  same meaning in `rules/context/definitions.yaml`.
+  same meaning in their codes' definitions (`mdm-relationship-types`).
 - **Inverse types without a note:** two types for one fact in opposite
   directions, which the definitions do not say are inverses.
 - **Names that need their definition:** a type whose capacities its name
