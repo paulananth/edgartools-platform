@@ -36,7 +36,7 @@ edgartools) reached the tests indirectly.
 - [x] Verified (2026-10-28 08:55 ET): all 149 platform modules import; unit,
   architecture and engine tests 1,146 passed; MDM tests 1,128 passed
 - [x] CI's Engine job found the archive parity tests import ijson and lxml as the
-  independent decoders they compare the Rust engine with (2026-10-28 09:17 ET): both
+  independent decoders they compare the Rust engine with (2026-10-28 09:03 ET): both
   join the `dev` group (test-only); the lock holds 52 packages; the parity tests 16
   passed, the engine tests 1,021 passed locally before
 - [ ] PR, CI green, merge
