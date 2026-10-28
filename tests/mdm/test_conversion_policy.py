@@ -30,3 +30,9 @@ def test_a_type_defined_differently_is_refused():
 def test_a_policy_with_no_inline_types_is_kept():
     body = {"version": 1}
     assert pinned(body) == (body, set())
+
+
+def test_a_type_added_since_is_accepted():
+    name = sorted(TODAY)[0]
+    body, dropped = pinned(native({k: v for k, v in TODAY.items() if k != name}))
+    assert types_of(body) == TODAY and dropped == set()

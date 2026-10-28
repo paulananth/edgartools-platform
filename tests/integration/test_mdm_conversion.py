@@ -29,6 +29,7 @@ CREATE TABLE mdm.batch (batch_id text PRIMARY KEY, request_hash text, run_id uui
 CREATE TABLE mdm.master_entity (entity_id uuid, kind text, published_at timestamptz, batch_id text);
 CREATE TABLE mdm.stage_record (subject text, entity_id uuid);
 CREATE TABLE mdm.decision (decision_id text, operation text, body jsonb, batch_id text);
+CREATE TABLE mdm.current_record (object_type text, object_id text, body jsonb, batch_id text);
 """
 
 
@@ -106,11 +107,11 @@ def native_state(engine):
 def test_masters_keep_their_ids_and_records_their_bindings(database, native):
     before = native_state(native)
     report = conversion.convert(native, database.admin)
-    assert {k: report[k] for k in ("policies", "batches", "readings", "decisions", "masters", "set_aside")} == {
-        "policies": 1, "batches": 2, "readings": 4, "decisions": 3, "masters": 2, "set_aside": 1}
-    assert conversion.verify(native, database.admin) == {
-        "masters": 2, "masters_kept": 2, "masters_added": 0,
-        "records": 4, "bindings_kept": 4, "decisions": 3, "decisions_lost": 0}
+    assert {k: report[k] for k in ("policies", "batches", "already_saved", "readings", "decisions", "masters",
+                                   "set_aside")} == {"policies": 1, "batches": 2, "already_saved": 0, "readings": 4, "decisions": 3, "masters": 2, "set_aside": 1}
+    assert conversion.verify(native, database.admin, page=3) == {
+        "masters": 2, "masters_kept": 2, "masters_added": 0, "records": 4, "records_present": 4,
+        "bindings_kept": 4, "decisions": 3, "decisions_lost": 0, "fields_differing": {}, "passed": True}
     assert native_state(native) == before
 
 
@@ -124,5 +125,23 @@ def test_a_second_run_changes_nothing(database, native):
 
 def test_a_stopped_conversion_resumes(database, native):
     assert conversion.convert(native, database.admin, limit=1)["batches"] == 1
-    conversion.convert(native, database.admin)
+    again = conversion.convert(native, database.admin, limit=1)
+    assert (again["already_saved"], again["batches"]) == (1, 1)
+    assert conversion.convert(native, database.admin)["already_saved"] == 2
     assert conversion.verify(native, database.admin)["masters_kept"] == 2
+
+
+def test_a_lost_binding_fails_the_checks(database, native):
+    conversion.convert(native, database.admin)
+    with native.begin() as conn:
+        conn.execute(text("UPDATE mdm.stage_record SET entity_id=:e WHERE entity_id IS NULL"), {"e": str(uuid4())})
+    checked = conversion.verify(native, database.admin)
+    assert (checked["bindings_kept"], checked["passed"]) == (3, False)
+
+
+def test_the_native_store_is_read_on_sessions_that_refuse_writes(native):
+    from sqlalchemy.exc import InternalError
+
+    with pytest.raises(InternalError, match="read-only transaction"):
+        with conversion._read_only(native) as conn:
+            conn.execute(text("DELETE FROM mdm.decision"))

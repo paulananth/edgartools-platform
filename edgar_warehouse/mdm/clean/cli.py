@@ -185,4 +185,4 @@ def convert_native(args) -> int:
         native.dispose()
         target.dispose()
     print(json.dumps(report, sort_keys=True))
-    return 0
+    return 0 if report.get("verified", {}).get("passed", True) else 1

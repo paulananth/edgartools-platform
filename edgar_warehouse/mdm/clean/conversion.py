@@ -6,8 +6,11 @@ and its `as_of`. The conversion carries the native policies and Dataset
 Contract readings as they were approved, then applies every command again, in
 the order it was saved, through the Merge Stage into a fresh governed store.
 Each master keeps its id and each source record its binding. The native store
-is read in a read-only transaction and never written. A rerun skips the
-batches already saved (by their batch ids), so a stopped conversion resumes.
+is read on read-only sessions and never written. A rerun skips the batches
+already saved (by their batch ids), so a stopped conversion resumes.
+
+An owner's one-off pass over a store of a fixed size: it reads the native
+tables whole (tens of thousands of rows at most), never on a merge's path.
 """
 
 from __future__ import annotations
@@ -22,16 +25,15 @@ COMMAND = ("batch_id", "policy_digest", "consumer", "expected_checkpoint", "chec
 
 
 def _read_only(engine):
-    conn = engine.connect()
-    conn.execute(text("SET TRANSACTION READ ONLY"))
-    return conn
+    """A native connection whose session refuses every write."""
+    return engine.connect().execution_options(postgresql_readonly=True)
 
 
 def pinned(body: dict) -> tuple[dict, set[str]]:
     """A native policy with its inline relationship types replaced by today's
     pinned code set (ticket 132), the one shape today's code refuses. Refused
-    when an inline type the code set keeps is defined differently; a type the
-    code set dropped is named in the report."""
+    when a type both name is defined differently; a type the code set dropped
+    is named in the report (a type added since needs no native record)."""
     from edgar_warehouse.rules import files
     from .relationships import types_of
 
@@ -39,11 +41,11 @@ def pinned(body: dict) -> tuple[dict, set[str]]:
     if not isinstance(section, dict) or "types" not in section:
         return body, set()
     policy = files.policy()
-    name = policy["relationships"]["pin"]
+    pin = policy["relationships"]["pin"]
     governed = {**body, "relationships": policy["relationships"],
-                "reference_pins": {**body.get("reference_pins", {}), name: policy["reference_pins"][name]}}
+                "reference_pins": {**body.get("reference_pins", {}), pin: policy["reference_pins"][pin]}}
     today = types_of(governed)
-    if any(section["types"].get(name) != spec for name, spec in today.items()):
+    if any(name in section["types"] and section["types"][name] != spec for name, spec in today.items()):
         raise Conflict("A native relationship type differs from today's code set")
     return governed, set(section["types"]) - set(today)
 
@@ -78,29 +80,42 @@ def carry_registrations(native, target) -> dict:
 
 
 def convert(native, target, *, limit: int | None = None) -> dict:
-    """Apply each native batch's command again, oldest first; saved ones are skipped."""
+    """Apply each native batch's command again, oldest first. A batch already
+    saved is skipped and not counted, so `limit` counts batches this run applies."""
     carried = carry_registrations(native, target)
     report = {"policies": len(carried["policies"]), "types_dropped": carried["types_dropped"],
-              "dataset_readings": carried["dataset_readings"], "batches": 0,
+              "dataset_readings": carried["dataset_readings"], "batches": 0, "already_saved": 0,
               "readings": 0, "decisions": 0, "masters": 0, "set_aside": 0}
-    stage = MergeStage(Store(target))
+    store = Store(target)
+    stage = MergeStage(store)
+    saved = storage_adapter().Adapter(target, prefix="mdm_store", protocol=store.protocol).read_batch
     with _read_only(native) as source:
         batches = source.execute(text("SELECT batch_id, run_id FROM mdm.batch ORDER BY generation")).all()
-        for batch_id, run_id in batches[:limit]:
+    for batch_id, run_id in batches:
+        if saved(batch_id) is not None:
+            report["already_saved"] += 1
+            continue
+        if limit is not None and report["batches"] >= limit:
+            break
+        # One short read a batch: no native transaction stays open across saves.
+        with _read_only(native) as source:
             effects = source.scalar(text("SELECT effects FROM mdm.batch WHERE batch_id=:b"), {"b": batch_id})
-            command = {k: effects[k] for k in COMMAND if k in effects}
-            command["policy_digest"] = carried["policies"][command["policy_digest"]]
-            stage.apply(**command, run_id=str(run_id))
-            report["batches"] += 1
-            report["readings"] += len(command["assertions"])
-            report["decisions"] += len(command["decisions"])
-            report["masters"] += len(command["identities"])
-            report["set_aside"] += len(command.get("deferred") or [])
+        command = {k: effects[k] for k in COMMAND if k in effects}
+        command["policy_digest"] = carried["policies"][command["policy_digest"]]
+        stage.apply(**command, run_id=str(run_id))
+        report["batches"] += 1
+        for key, part in (("readings", "assertions"), ("decisions", "decisions"),
+                          ("masters", "identities"), ("set_aside", "deferred")):
+            report[key] += len(command.get(part) or [])
     return report
 
 
-def verify(native, target) -> dict:
-    """The same masters, the same binding for every source record, no decision lost."""
+def verify(native, target, *, page: int = 1000) -> dict:
+    """The hard checks: the same masters, every source record present with the
+    same binding, no decision lost (`passed`). Field values that differ from the
+    native master's are counted by field, not failed."""
+    from collections import Counter
+
     from .consumer import ContractReader
     from .record_reads import for_connection
 
@@ -108,19 +123,34 @@ def verify(native, target) -> dict:
         masters = dict(source.execute(text("SELECT entity_id::text, kind FROM mdm.master_entity")).all())
         bound = dict(source.execute(text("SELECT subject, entity_id::text FROM mdm.stage_record")).all())
         decisions = set(source.scalars(text("SELECT decision_id FROM mdm.decision")))
+        native_fields = dict(source.execute(text(
+            "SELECT object_id, body->'fields' FROM mdm.current_record WHERE object_type='entity'")).all())
     reader, after, held, generation = ContractReader(target), "", {}, None
     while after is not None:
-        page = reader.snapshot_page("entity", after=after, generation=generation, limit=1000)
-        generation = page["generation"]
-        held.update((row["object_id"], row["body"]["kind"]) for row in page["items"])
-        after = page["next_after"]
+        found = reader.snapshot_page("entity", after=after, generation=generation, limit=page)
+        generation = found["generation"]
+        held.update((row["object_id"], row["body"]) for row in found["items"])
+        after = found["next_after"]
+    subjects, present, bindings, kept = sorted(bound), set(), {}, set()
     with target.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
-        reader = for_connection(conn)
-        found = reader.bindings(sorted(bound))
-        kept = {d.get("decision_id") for d in reader.related_decisions(bound)}
-    return {
-        "masters": len(masters), "masters_kept": sum(held.get(k) == v for k, v in masters.items()),
+        records = for_connection(conn)
+        for i in range(0, len(subjects), page):
+            chunk = subjects[i:i + page]
+            present |= set(records.current(chunk))
+            bindings.update(records.bindings(chunk))
+            kept |= {d.get("decision_id") for d in records.related_decisions(chunk)}
+    differ = Counter(name for key, fields in native_fields.items() if key in held
+                     for name in set(fields or {}) | set(held[key].get("fields") or {})
+                     if (fields or {}).get(name) != (held[key].get("fields") or {}).get(name))
+    report = {
+        "masters": len(masters), "masters_kept": sum((held.get(k) or {}).get("kind") == v for k, v in masters.items()),
         "masters_added": len(set(held) - set(masters)),
-        "records": len(bound), "bindings_kept": sum(found.get(s) == e for s, e in bound.items()),
+        "records": len(bound), "records_present": len(present),
+        "bindings_kept": sum(bindings.get(s) == e for s, e in bound.items()),
         "decisions": len(decisions), "decisions_lost": len(decisions - kept),
+        "fields_differing": dict(sorted(differ.items())),
     }
+    report["passed"] = (report["masters_kept"] == report["masters"] and not report["masters_added"]
+                        and report["records_present"] == report["bindings_kept"] == report["records"]
+                        and not report["decisions_lost"])
+    return report
