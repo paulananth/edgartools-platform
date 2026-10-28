@@ -955,6 +955,31 @@ retains arrays, objects, booleans, numbers and null. Captured key order and
 raw-count limits are preserved. `on_invalid: empty` is explicit; the default
 refuses a missing or non-object input.
 
+`each.nest` iterates inside each row of another iteration, so one table holds a
+row per inner item (ticket 46), such as a fact under its concept and unit in
+`facts.<taxonomy>.<concept>.units.<unit>[]`:
+
+```yaml
+each:
+  nest:
+    each: {entries: {path: facts.us-gaap, key_field: concept, value_field: body}}
+    keep: {concept: concept}
+    then:
+      nest:
+        each: {entries: {path: body.units, key_field: unit, value_field: facts}}
+        keep: {unit: unit}
+        then: {values: {path: facts}}
+```
+
+`then` runs against each outer row; `keep` copies the named fields of the
+outer row onto each inner row under new names (1 to 64 fields, each name 1 to
+64 ASCII letters, digits or `_`), and nothing else of the outer row is
+carried. A kept field the outer row lacks refuses (`nest_field_missing`). An inner row must be a JSON object
+(`nest_row_shape`), and a kept field never replaces one it has
+(`nest_field_conflict`). Every inner row of every outer row counts against
+`max_records`. Read an array held in an entries row with `values`, not a bare
+path. Columns still read `from: document` from the whole file.
+
 Choose a layout through `each.choose` with `condition`, `then` and `else`.
 The condition is an ordinary expression evaluated against the document;
 branches are iteration calls or paths. Boolean true selects `then`, false or

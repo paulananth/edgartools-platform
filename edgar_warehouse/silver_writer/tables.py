@@ -31,6 +31,23 @@ class Duration(TypeDecorator):
         return timedelta(microseconds=int(value))
 
 
+class ExactDecimal(TypeDecorator):
+    """A DECIMAL(p,s) column that refuses a figure it cannot hold exactly; the
+    database would round extra decimal places silently (ticket 46)."""
+    impl = Numeric
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None: return None
+        exact = Decimal(str(value))
+        scale, whole = self.impl.scale, self.impl.precision - self.impl.scale
+        # No more decimal places than the scale, no more whole digits than the rest.
+        if not exact.is_finite() or -exact.normalize().as_tuple().exponent > scale \
+                or (exact != 0 and exact.adjusted() >= whole):
+            raise Blocked(f"A figure does not fit DECIMAL({self.impl.precision},{scale}) exactly")
+        return exact
+
+
 class RawJSON(str):
     """Validated JSON text: preserve decimal digits before database transport."""
 
@@ -64,7 +81,7 @@ def logical_type(logical, dialect):
         precision, scale = map(int, physical[8:-1].split(","))
         if dialect == "mysql" and (precision > 65 or scale > 30):
             raise Blocked("Configured decimal exceeds MySQL's supported precision or scale")
-        return Numeric(precision, scale)
+        return ExactDecimal(precision, scale)
     return {"boolean": Boolean(), "double precision": Float(53),
         "text": Text().with_variant(LONGTEXT(charset="utf8mb4", collation="utf8mb4_0900_bin"), "mysql"),
         "uuid": Uuid(as_uuid=False), "bytea": LargeBinary().with_variant(LONGBLOB(), "mysql"),

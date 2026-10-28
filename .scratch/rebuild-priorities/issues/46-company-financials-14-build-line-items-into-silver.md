@@ -44,8 +44,38 @@ stores (operator, 2026-10-21: "Two proofs, local").
   (`.scratch/company-financials/line-items/draft_codes.py`), sha256 `035e1f56…`, pinned in
   `rules/reference/published/financial-line-items/1/`. Approved under the standing approval:
   operator, 2026-10-22: "Yes, code set + crosswalk (Recommended)"; 2026-10-15: "Approved the rules always"
-- [ ] `company_fact` lands in silver: a target for `sec.company-facts`, the flattening of
-  `units` and the facts, the spec's columns and key, exact decimals
+- [x] GoF consult before the engine change (2026-10-28 17:35 ET): leave `iteration.rs`'s dispatch (six commits each
+  added one small arm); `nest` in its own module like `matrix` and `parallel`, its arm before the
+  `objects` fall-through; one `branches` helper so `expressions` and `needs_order` recurse into both
+  `choose` and `nest`
+- [x] Engine: `each.nest` (2026-10-28 17:35 ET): an iteration inside each row of another, `keep` carrying named outer
+  fields onto each inner row; every inner row counts against `max_records`; an inner row must be an
+  object, a kept field never replaces one. `crates/source-contract/tests/nest.rs` 4 passed; the crate's
+  tests 221 passed; READING.md documents it
+- [x] `company_fact` lands in silver (2026-10-28 17:35 ET): facts.yaml's `company_fact` table (taxonomy, concept and unit
+  nested onto each fact; the exact figure; currency from the unit; a 10-digit company key) and
+  `silver-company-fact.yaml`. Found: the silver writer refuses an empty key column, and ticket 43's key
+  held `period_start`, empty for an instant; the key now reads `period` (start/end, or the instant's
+  date). Every captured file read (`.scratch/company-financials/reader/fact_rows.py`, 318 s): 368 files,
+  5,134,979 facts, as many distinct keys, every file equal fact by fact to the file read directly in
+  exact decimals; 4,686,212 facts in one of 23 currencies. Tests: `tests/integration/test_company_fact_silver.py`
+  3 passed (the rows, the spec, landed exact once with the Company's MDM id); the engine, mapdoc, catalog
+  and configured-master tests 1,166 passed (8 min, over the 5-minute local bound: the engine change reaches
+  every engine test). Landing runs by `edgar-warehouse silver land`, as N-PORT's holdings do; Bookkeeping
+  has no silver step yet
+- [ ] Found (2026-10-28 17:35 ET), for the operator: the ruling "each fact keeps its concept's label and description in
+  silver" (ticket 46, RDM section) has no column in ticket 43's approved `company_fact`; carrying them on
+  each of 5.1 million facts repeats each concept's text thousands of times
+- [x] Three-axis review of PR 2 (2026-10-28 17:37 ET). GoF: leave it (each kind is one small arm; `nest` in its own
+  module). Standards, acted on: the filer once (`company_key`, the link's 10-digit CIK; `cik` dropped, one
+  system of record); one shared field-name check; a kept field the outer row lacks refuses
+  (`nest_field_missing`); clearer limits. Spec, acted on: the figure check is the writer's own (a figure a
+  DECIMAL column cannot hold exactly is refused; PostgreSQL would round extra places silently): of the
+  5,134,979 captured figures the longest has 20 whole digits and 6 after the point; the link's
+  `inclusion: 1.0`; a test that an unknown taxonomy still refuses the file; the skill's "no new iteration
+  primitive" and ticket 43's key corrected. Noted: `currency` is three capital letters before any `/`, not
+  checked against the ISO list (23 distinct in the capture)
+- [ ] PR 2 (engine `nest`, `company_fact`): PR, CI, merge
 - [x] The line-item map `rules/sources/sec.company-facts/line-items.yaml` (2026-10-28 16:49 ET), version
   `line-items-2026-10-28.first-build`, naming the code set: the `us-gaap` and `ifrs-full` try-orders,
   the flags, the industry kinds and the computed fallbacks (sum or difference of terms; a term a
@@ -67,7 +97,7 @@ stores (operator, 2026-10-21: "Two proofs, local").
   accession; the skill's stale lines and ticket 43's "built by dbt". Noted: no REIT concept (research
   01 lists none); a lone reported total (`Borrowings`, `LongTermDebt`) carries "computed" as the key
   does. Tests 3 passed
-- [ ] PR 1 (configuration): PR, CI, merge
+- [x] PR 1 (configuration): PR, CI, merge (2026-10-28 17:08 ET): #1208 merged, 20 of 20 checks
 - [ ] `company_line_item` built: first present wins per company and annual period, latest
   copy `is_latest`, fiscal year (Compustat FYEAR), period kind, null with its reason,
   statement format ("unknown" until Company is mastered), the revenue quality check

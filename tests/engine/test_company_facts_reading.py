@@ -33,7 +33,7 @@ def read(raw: bytes) -> dict:
 
 def test_one_table_per_taxonomy_and_every_taxonomy_is_known():
     tables = read(document())
-    assert set(tables) == {"taxonomies"} | {"concepts_" + t.replace("-", "_") for t in TAXONOMIES}
+    assert set(tables) == {"taxonomies", "company_fact"} | {"concepts_" + t.replace("-", "_") for t in TAXONOMIES}
     assert sorted(CONTRACT["read"]["references"]["taxonomies"]) == TAXONOMIES
     assert tables["taxonomies"] == [{"taxonomy": "us-gaap", "known": True}]
     [row] = tables["concepts_us_gaap"]
