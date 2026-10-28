@@ -128,7 +128,7 @@ null and nontext values refuse. Normalize them in the source-extract contract.
   null files none (a missing column is refused), and a key with no member
   filed has no output row. Use it
   for a fact every row repeats about a master: the master takes the most-filed
-  value (ticket 138, "Most-filed value").
+  value (ticket 138).
 - Optional `exclude` names another member group with identical key columns
   and no exclusion of its own. Subtract its complete member set after all
   inputs finish. Counts remain uncapped; samples contain the lexically first
@@ -194,7 +194,7 @@ frozen units.
   32 entries. `where` never compares two columns: to keep a row by its
   group's counts (two counts equal, a count above one), join the counts onto
   each row in a combine, then decide in a source extract over its pieces with
-  `choose` and `equal` (OpenFIGI's `lines.yaml` and `listing.yaml`, ticket 138).
+  `choose` and `equal` (ticket 138).
 - Group keys are exact text or integers, with no conversion: integer `1`
   and text `"1"` are different identities; boolean/structured keys fail.
   Null group keys are skipped. Group `value` is a column or `.` for the

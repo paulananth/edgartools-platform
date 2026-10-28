@@ -101,7 +101,7 @@ def luhn_letter_digits(value: str) -> bool:
 
 def luhn_letter_values_from_left(value: str) -> bool:
     """Luhn over letters and digits (A-Z as 10-35), doubling every second character counted from
-    the left and adding the digits of each result; the last character is the check digit (FIGI)."""
+    the left and adding the digits of each result; the last character is the check digit."""
     value = value.upper()
     if len(value) < 2 or not value.isascii() or not value.isalnum() or not value[-1].isdigit():
         return False

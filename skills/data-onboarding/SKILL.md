@@ -481,8 +481,8 @@ missing, go on and log it.
   the findings name (and each fact every row repeats about the master) and
   check it is in the kind's fields and the Dataset Contract, and that no
   silver table spec carries it (a link's source key excepted); one found in
-  silver is a defect, not a choice. Ticket 138 found six N-PORT
-  Security fields in silver only, ruled for MDM three days before.
+  silver is a defect, not a choice (ticket 138 found six master fields in
+  silver only, ruled for MDM three days before).
 - **Fields:** use the kind's names. A list-shaped field has no contract
   syntax yet: leave it out, say so, and log a ticket.
   - **A date that usually changes stays out of MDM** unless it adds meaning
