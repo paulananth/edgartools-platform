@@ -35,8 +35,10 @@ The original 75% target does not justify losing distinct behavior.
 
 ## Five-whys outcomes
 
-Each removed ID, its retained proof and its equivalence rationale is recorded
-in [completion-retirement.json](completion-retirement.json).
+Each removed case, its retained proof and its equivalence rationale is recorded
+in [completion-retirement.json](completion-retirement.json). Seven parameter
+labels from reference data use SHA-256 case fingerprints; their exact mapping
+and collection-membership checks remain private.
 
 | Area | Removed | Obligation and retained proof |
 |---|---:|---|

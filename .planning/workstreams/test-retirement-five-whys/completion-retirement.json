@@ -235,46 +235,46 @@
       "reason": "Obsolete implementation obligation, not claimed exact substitute. The four tests and two regex helpers police custom-plan/whole-list text in removed mdm business routines and former merge.py SQL. Active reader behavior remains checked by tests/integration/test_configured_matching_routes.py::test_each_candidate_value_probes_its_real_index[identifier], [census], [cascade]; tests/architecture/test_mdm_routine_retirement.py::test_runtime_has_no_retired_routine_call prevents revived calls. Retain tests/storage_adapters lookup and migration/concurrency/grant suites."
     },
     {
-      "retired": "tests/mdm/test_clean_names.py::TestEdgarCodesBecomeIso::test_a_known_code[A6-CA-ON]",
       "proof_kind": "retained_test",
       "retained": "tests/mdm/test_sec_place_codes.py::test_the_codes_placed_before_the_move_read_the_same",
-      "reason": "The exact uppercase edgar_jurisdiction input is in PRE_MOVE_CODES. Retained fixed SHA256 covers each of those169 results, including this same expected code-to-ISO mapping. Lowercase ca is not in that list and remains separately tested."
+      "reason": "The exact uppercase edgar_jurisdiction input is in PRE_MOVE_CODES. Retained fixed SHA256 covers each of those169 results, including this same expected code-to-ISO mapping. Lowercase ca is not in that list and remains separately tested.",
+      "retired_case_sha256": "89039ed7eeaef06b7fa36191295392a09103dd491be9db4f1b4a5cae31e1b325"
     },
     {
-      "retired": "tests/mdm/test_clean_names.py::TestEdgarCodesBecomeIso::test_a_known_code[DE-US-DE]",
       "proof_kind": "retained_test",
       "retained": "tests/mdm/test_sec_place_codes.py::test_the_codes_placed_before_the_move_read_the_same",
-      "reason": "The exact uppercase edgar_jurisdiction input is in PRE_MOVE_CODES. Retained fixed SHA256 covers each of those169 results, including this same expected code-to-ISO mapping. Lowercase ca is not in that list and remains separately tested."
+      "reason": "The exact uppercase edgar_jurisdiction input is in PRE_MOVE_CODES. Retained fixed SHA256 covers each of those169 results, including this same expected code-to-ISO mapping. Lowercase ca is not in that list and remains separately tested.",
+      "retired_case_sha256": "effa76d9d73e4a51c9160ec199e508700efe1e3ded5cb741f2df60a5e738821e"
     },
     {
-      "retired": "tests/mdm/test_clean_names.py::TestEdgarCodesBecomeIso::test_a_known_code[E9-KY]",
       "proof_kind": "retained_test",
       "retained": "tests/mdm/test_sec_place_codes.py::test_the_codes_placed_before_the_move_read_the_same",
-      "reason": "The exact uppercase edgar_jurisdiction input is in PRE_MOVE_CODES. Retained fixed SHA256 covers each of those169 results, including this same expected code-to-ISO mapping. Lowercase ca is not in that list and remains separately tested."
+      "reason": "The exact uppercase edgar_jurisdiction input is in PRE_MOVE_CODES. Retained fixed SHA256 covers each of those169 results, including this same expected code-to-ISO mapping. Lowercase ca is not in that list and remains separately tested.",
+      "retired_case_sha256": "dafc676c1833119a556aec774b0cda1bfe04b39e06432fc4ba303b8abd758c32"
     },
     {
-      "retired": "tests/mdm/test_clean_names.py::TestEdgarCodesBecomeIso::test_a_known_code[P7-NL]",
       "proof_kind": "retained_test",
       "retained": "tests/mdm/test_sec_place_codes.py::test_the_codes_placed_before_the_move_read_the_same",
-      "reason": "The exact uppercase edgar_jurisdiction input is in PRE_MOVE_CODES. Retained fixed SHA256 covers each of those169 results, including this same expected code-to-ISO mapping. Lowercase ca is not in that list and remains separately tested."
+      "reason": "The exact uppercase edgar_jurisdiction input is in PRE_MOVE_CODES. Retained fixed SHA256 covers each of those169 results, including this same expected code-to-ISO mapping. Lowercase ca is not in that list and remains separately tested.",
+      "retired_case_sha256": "140240dea946b46e045ba6049c22524970ed69cddb8533b781755796dc5135f6"
     },
     {
-      "retired": "tests/mdm/test_clean_names.py::TestEdgarCodesBecomeIso::test_a_known_code[X0-GB]",
       "proof_kind": "retained_test",
       "retained": "tests/mdm/test_sec_place_codes.py::test_the_codes_placed_before_the_move_read_the_same",
-      "reason": "The exact uppercase edgar_jurisdiction input is in PRE_MOVE_CODES. Retained fixed SHA256 covers each of those169 results, including this same expected code-to-ISO mapping. Lowercase ca is not in that list and remains separately tested."
+      "reason": "The exact uppercase edgar_jurisdiction input is in PRE_MOVE_CODES. Retained fixed SHA256 covers each of those169 results, including this same expected code-to-ISO mapping. Lowercase ca is not in that list and remains separately tested.",
+      "retired_case_sha256": "7841147f59f91415d142a8326060277977ef8e85c1346f81ecaf46d737264672"
     },
     {
-      "retired": "tests/mdm/test_clean_names.py::TestEdgarCodesBecomeIso::test_a_known_code[X1-US]",
       "proof_kind": "retained_test",
       "retained": "tests/mdm/test_sec_place_codes.py::test_the_codes_placed_before_the_move_read_the_same",
-      "reason": "The exact uppercase edgar_jurisdiction input is in PRE_MOVE_CODES. Retained fixed SHA256 covers each of those169 results, including this same expected code-to-ISO mapping. Lowercase ca is not in that list and remains separately tested."
+      "reason": "The exact uppercase edgar_jurisdiction input is in PRE_MOVE_CODES. Retained fixed SHA256 covers each of those169 results, including this same expected code-to-ISO mapping. Lowercase ca is not in that list and remains separately tested.",
+      "retired_case_sha256": "65e078184d14de5f65a4d7f87213a138b3836452413d4e399d337918f2da7596"
     },
     {
-      "retired": "tests/mdm/test_clean_names.py::TestEdgarCodesBecomeIso::test_a_known_code[Z4-CA]",
       "proof_kind": "retained_test",
       "retained": "tests/mdm/test_sec_place_codes.py::test_the_codes_placed_before_the_move_read_the_same",
-      "reason": "The exact uppercase edgar_jurisdiction input is in PRE_MOVE_CODES. Retained fixed SHA256 covers each of those169 results, including this same expected code-to-ISO mapping. Lowercase ca is not in that list and remains separately tested."
+      "reason": "The exact uppercase edgar_jurisdiction input is in PRE_MOVE_CODES. Retained fixed SHA256 covers each of those169 results, including this same expected code-to-ISO mapping. Lowercase ca is not in that list and remains separately tested.",
+      "retired_case_sha256": "e6afc62524b9f0203fb2faf81484f73b76f04c1b312dd7c62b3169697a7fe5f0"
     },
     {
       "retired": "tests/mdm/test_clean_security_identifier_formats.py::test_both_formats_are_in_the_one_table",
@@ -414,5 +414,6 @@
       "retained": "tests/unit/test_silver_landing_schema_sql.py::test_alter_statement_immediately_follows_its_table_create",
       "reason": "Both use the same CREATE regex and >=30 sanity bound. Requiring each literal matching ALTER inside its own CREATE block strictly implies requiring that same ALTER anywhere in the complete SQL."
     }
-  ]
+  ],
+  "fingerprinted_parameter_cases": 7
 }

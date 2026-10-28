@@ -9,6 +9,7 @@ Status: in progress. Branch starts at `5f264261c`; PR #1197 already merged the f
 - [x] Verify retained behavior, collection and negative proofs — 2026-10-28 18:30 ET: local cohorts 142, 235 and 179 passed; PostgreSQL 11 passed (204.31 seconds), MySQL 11 passed (219.60 seconds); eight collections error-free; 23 injected faults rejected. Every local invocation stayed below five minutes.
 - [x] Review Standards, Spec and GoF and publish a PR — 2026-10-28 18:33 ET: root review in COMPLETION-EVIDENCE.md and independent Luna final review found no findings; all 55 new pytest targets, four CI targets and 127 prior targets resolve; four obsolete obligations are recorded separately. PR #1210 is draft pending CI.
 - [ ] Verify final-head CI, installed case accounting and cleanup; mark PR #1210 ready only after every check passes.
+- [x] Keep reference-data parameters out of public audit metadata — 2026-10-28 18:51 ET: seven case fingerprints map exactly to retired collected IDs in the private ledger; all 63 case decisions and retained targets are preserved.
 - [ ] Learning → skill: record the case-level review method and replace the obsolete plan-cache test pointer in a separate skill PR.
 
 The separate skill draft passes 80 generic lint checks. Its publication is
