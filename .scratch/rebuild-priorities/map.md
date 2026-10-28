@@ -138,6 +138,9 @@ Two tracks run side by side; the recreation proof runs last, on everything switc
 - [A Security's share class](issues/130-a-security-share-class.md): one letter from the filed titles (#1135)
 - [A field kept only when its sources agree](issues/131-a-field-kept-only-when-sources-agree.md): not built; source priority decides and the conflict stays recorded beside the winner (operator, 2026-10-23)
 - [A Person holds and does not issue](issues/25-security-mastering-05-a-person-holds-and-does-not-issue.md): HOLDS out of MDM; Form 4 holdings land in silver (#1134)
+- [132: Relationship types in one place](issues/132-relationship-types-in-one-place.md): one RDM code set the policy pins, read and checked by Rust; a policy pinning none masters no link (#1196)
+- [133: Statutory corporate tax rates in RDM](issues/133-statutory-tax-rates-in-rdm.md): OECD's combined statutory rate per country and year, a value per child code (#1149)
+- [136: One command loads a capture](issues/136-one-command-loads-a-capture.md): `edgar-warehouse load` (#1168)
 
 ## Not yet specified
 

@@ -2,7 +2,7 @@
 
 Priority: 144. Map: [Rebuild priorities](../map.md). Opened 2026-10-28 08:55 ET.
 
-Type: task. Status: open (PR pending).
+Type: task. Status: resolved (2026-10-28 11:53 ET).
 Raised by the operator, 2026-10-28: "Cleanup Python libraries now that we are
 using rust for most work"; on edgartools: "Remove it entirely".
 
@@ -39,7 +39,7 @@ edgartools) reached the tests indirectly.
   independent decoders they compare the Rust engine with (2026-10-28 09:03 ET): both
   join the `dev` group (test-only); the lock holds 52 packages; the parity tests 16
   passed, the engine tests 1,021 passed locally before
-- [ ] PR, CI green, merge
+- [x] PR, CI green, merge: #1202 merged 2026-10-28 09:35 ET, 21 checks
 - [ ] The dependency images rebuild on their next publish (the lock hash
   changes); nothing to do before then
 - [x] Learning → skill (2026-10-28 08:55 ET): CLAUDE.md "Python libraries":
