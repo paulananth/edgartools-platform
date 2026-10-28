@@ -25,7 +25,7 @@ edgartools) reached the tests indirectly.
 - [x] Operator's decision on edgartools (2026-10-28): "Remove it entirely"
 - [x] `pyproject.toml` declares only what the code imports; `dashboard` and
   `market` extras removed; duckdb and pandas in the `dev` group for the
-  tests (2026-10-28 08:55 ET): the lock goes from 154 packages to 50, the
+  tests (2026-10-28 08:55 ET): the lock goes from 154 packages to 50 (52 with the parity tests' decoders), the
   environment from 540 MB to 323 MB
 - [x] `scripts/batch/` (edgartools smoke tests) deleted; `test_sec_place_codes.py`
   states SEC's 309 codes and their digest itself, checked equal to the list
@@ -35,6 +35,10 @@ edgartools) reached the tests indirectly.
   edgartools a dependency (2026-10-28 08:55 ET)
 - [x] Verified (2026-10-28 08:55 ET): all 149 platform modules import; unit,
   architecture and engine tests 1,146 passed; MDM tests 1,128 passed
+- [x] CI's Engine job found the archive parity tests import ijson and lxml as the
+  independent decoders they compare the Rust engine with (2026-10-28 09:17 ET): both
+  join the `dev` group (test-only); the lock holds 52 packages; the parity tests 16
+  passed, the engine tests 1,021 passed locally before
 - [ ] PR, CI green, merge
 - [ ] The dependency images rebuild on their next publish (the lock hash
   changes); nothing to do before then

@@ -114,7 +114,10 @@ dev = [
     "pytest>=9.0.3",
     "pytest-testmon>=2.2.0",
     # Tests only: the profiling skill's scripts (which bring duckdb themselves
-    # when run, `uv run --with duckdb`) and the Snowflake Streamlit app's test.
+    # when run, `uv run --with duckdb`), the Snowflake Streamlit app's test, and
+    # the archive parity tests' independent JSON and XML decoders.
     "duckdb>=1.1",
+    "ijson>=3.3,<4",
+    "lxml>=5.3",
     "pandas>=2.1",
 ]
