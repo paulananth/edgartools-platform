@@ -90,6 +90,8 @@ if case == "cusip_first":
     del second["on_conflict"]
     rules.append(second)
     identifier_contracts["invented_code"] = dict(contract)
+from tests.support.relationship_types import pinned_types
+
 policy = {
     "version": "invented-read-phase",
     "required_consumers": ["invented-export"],
@@ -116,14 +118,11 @@ policy = {
         for r in rules
     ],
 }
-if case in ("links", "hierarchy"):
-    spec = {"from": [KIND], "to": [KIND]}
-    if case == "hierarchy":
-        spec.update(hierarchy=True, cycles="invalid", one_parent=True)
-    policy["relationships"] = {
-        "version": "invented-links-v1",
-        "types": {"invented_link": spec},
-    }
+# Every policy pins its relationship types, an RDM code set (ticket 132).
+spec = {"from": [KIND], "to": [KIND]}
+if case == "hierarchy":
+    spec.update(hierarchy=True, cycles="invalid", one_parent=True)
+policy.update(pinned_types({"invented_link": spec}))
 if case.startswith(("name_", "cascade_")):
     from tests.mdm.test_configured_pair_comparison import PROGRAM
 

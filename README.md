@@ -265,7 +265,7 @@ They answer different questions; one rule should not silently answer another.
 | Do records describe the same subject? | `rules/merge/kinds/<kind>.yaml` | Approved matching rules use identity evidence; lookup references alone do not join records. |
 | Which source supplies a field? | The kind's `defaults.sources` and `fields.<field>` | Rank eligible claims after identity has been resolved. |
 | Is an identifier well formed, and may it decide identity? | `rules/identifiers/` and the kind's Identifier Contracts | Format validation and identity authority are separate requirements. |
-| What do codes and links mean? | `rules/reference/`, pinned reference versions and `rules/merge/relationships.yaml` | Give values and relationship types a shared, explicit meaning. |
+| What do codes and links mean? | `rules/reference/`, pinned reference versions, including the relationship types (RDM code set `mdm-relationship-types`) | Give values and relationship types a shared, explicit meaning. |
 | What runs, and when is it complete? | The source's `bookkeeping` section or `rules/pipelines/<pipeline>/pipeline.yaml` | Declare worker steps, dependencies, checks and completion requirements. |
 
 ### Example: choose a field winner without changing identity

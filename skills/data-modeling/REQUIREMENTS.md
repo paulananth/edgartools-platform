@@ -3,7 +3,7 @@
 The boundary of the data-modeling skill. Decided from `CONTEXT.md`, `KINDS`
 and `PROFILE_KINDS` (`edgar_warehouse/mdm/clean/evidence.py`), the kinds'
 Identifier Contracts (`rules/merge/kinds/`), the relationship types
-(`rules/merge/relationships.yaml`), and the approved specs
+(RDM code set `mdm-relationship-types`), and the approved specs
 (`docs/specs/rdm/spec.md`, `docs/specs/agent-context/spec.md`,
 `docs/specs/profiling/`). First written by Grok; handed to Claude by
 the operator on 2026-10-07 ("I am handing it to you"), after a review found

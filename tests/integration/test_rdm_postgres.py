@@ -200,7 +200,7 @@ def test_a_hierarchy_publishes_paths_and_a_new_version_supersedes(rdm, tmp_path)
     assert rdm.diff("test-industry", "1", "3") == {
         "code_set": "test-industry", "from": "1", "to": "3", "added": [], "removed": [],
         "relabelled": [{"code": "B", "from": "Mining", "to": "Mining and quarrying"}],
-        "moved": [{"code": "C", "from": "A1", "to": "A"}], "revalued": []}
+        "moved": [{"code": "C", "from": "A1", "to": "A"}], "revalued": [], "properties_changed": []}
     rdm.approve("test-industry", "3", **OPERATOR)
     third = rdm.publish("test-industry", "3", out=tmp_path)
     assert third["superseded"] == "1" and third["sha256"] != first["sha256"]
@@ -283,6 +283,46 @@ def test_a_code_carries_an_exact_value_for_its_period(rdm, tmp_path):
                                      "valid_to": "2024-12-31"},
          "to": {"value": "24.75", "unit": "percent of taxable income", "valid_from": "2024-01-01",
                 "valid_to": "2024-12-31"}}]
+
+
+def _links(rdm, version, *, ends=("company", "person")):
+    """Invented link types: a code's properties say what its own words cannot."""
+    rdm.draft({"code_set": "test-links", "name": "Test link types"}, version,
+              [{"code": "LINKS", "label": "Links", "properties": {"from": list(ends), "hierarchy": True}},
+               {"code": "PLAIN", "label": "Plain"},
+               {"code": "ROLE", "label": "Role", "parent_code": "LINKS"}],
+              created_by="test")
+
+
+def test_a_code_carries_named_properties(rdm, tmp_path):
+    rdm, _ = rdm
+    _links(rdm, "1")
+    rdm.approve("test-links", "1", **OPERATOR)
+    published = rdm.publish("test-links", "1", out=tmp_path)
+    rows = {r["code"]: r for r in store.read_published(tmp_path, "test-links", "1", published["sha256"])}
+    assert rows["LINKS"]["properties"] == {"from": ["company", "person"], "hierarchy": True}
+    assert "properties" not in rows["PLAIN"] and rdm.verify("test-links", "1")["matches"]
+    with pytest.raises(DBAPIError, match="Only a draft"):
+        with rdm.engine.begin() as conn:
+            conn.execute(text("UPDATE rdm.code SET properties='{\"x\": \"y\"}' WHERE code_set='test-links' AND code='PLAIN'"))
+    with pytest.raises(DBAPIError, match="check constraint"):
+        rdm.draft({"code_set": "test-links"}, "list", [{"code": "X", "label": "X", "properties": ["x"]}],
+                  created_by="test")
+    from edgar_warehouse.rdm.context import CodeContext
+    asked = argparse.Namespace(subject="test-links", key="LINKS", as_of=None, as_at=None, hops=1,
+                               relationship_type=None, search=None, detail="brief", page=None, limit=5)
+    assert CodeContext(rdm.engine).answer(asked)["properties"] == {"from": ["company", "person"], "hierarchy": True}
+    assert "properties" not in CodeContext(rdm.engine).answer(argparse.Namespace(**{**vars(asked), "key": "PLAIN"}))
+    _links(rdm, "2", ends=("company",))
+    assert rdm.diff("test-links", "1", "2")["properties_changed"] == [
+        {"code": "LINKS", "from": {"from": ["company", "person"], "hierarchy": True},
+         "to": {"from": ["company"], "hierarchy": True}}]
+    # The Rust preparation refuses a property it could not publish exactly.
+    rdm.draft({"code_set": "test-links"}, "bad", [{"code": "X", "label": "X", "properties": {"Bad name": "x"}}],
+              created_by="test", supersedes="1")
+    rdm.approve("test-links", "bad", **OPERATOR)
+    with pytest.raises(Blocked, match="properties"):
+        rdm.publish("test-links", "bad", out=tmp_path)
 
 
 def test_the_value_migration_keeps_every_published_pin(tmp_path, monkeypatch):

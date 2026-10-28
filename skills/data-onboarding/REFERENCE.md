@@ -143,7 +143,7 @@ source's parser produces it, not from the raw file, when a parser exists.
 | `cross_reference_formats` | `namespace: format`, a named format as for `record_key_format`, for a cross-reference. |
 | `name_id` (a cross-reference) | **Only when the records carry no id another source shares.** Map the name: `cross_references: {name_id: <name path>}`, `cross_reference_formats: {name_id: name_id@1}`. The format keeps every token of the name (a share class or series number stays), so one name gives one id in every source, and `mdm.cross_reference_lookup('name_id', <id>)` finds the records named so. Lookup only, like any cross-reference. Measure it first with the data-profiling skill's `match_names.py` (operator, 2026-10-06: "no id exists you just need to create a id using name"). |
 | `reading` | The record's fields and matching values, read by the configured engine: the contract's one statement of them (Issue 20 L7 retired the older `fields`, `matching` and `field_shape` lists, and registration refuses them). One table, `mapped`, read from the whole record (`each: .`), with two object columns: `fields` (`mdm_field: expression`) and `matching` (`name: expression`, the values the matching rules compare, kept with the record outside its fields; `fields: {}` when there are none). Each field and matching value is a `value`, a `join` or an `object` of them: the Mapping Document shows each one's source path and refuses a computed one (`choose`), so compute it in an earlier step of the source and read its result. Name fields as MDM already names them for the kind (its field list in code, or, for a kind with none, its consumer spec; see Examples). For text, write `value: {path: <path>, path_mode: literal, type: text, null_if_blank: true}`: blank text is no value, and a value that is not text sets the record aside (`invalid_field_shape`). An address is `object: {fields: {<part>: <value, with trim: true>}, omit_nulls: true, null_if_empty: true}` with any of `street`, `street2`, `city`, `region`, `postcode`, `country`; a list of lines is `join: {path, item_path, separator, trim, skip_empty}`. Expressions are the source engine's (`skills/data-platform/READING.md`); the workbook and the catalog read each field's path from here. |
-| `relationships` | A list. Each has `type` (or `type_field` + `type_values`), `target_key` (paths), `target_source` (the other end's source code), optional `source_key` and `source_source` when the link starts at another record than the one stating it (a relationship record that starts at another record of the same source), `valid_from`, `valid_to` and `properties` (paths), and `scope`: fixed text, `<Provider> <relationship family>` (for example `ACME ownership`), not a path. Name each property after its source field with a `source_` prefix, so it cannot be mistaken for an MDM value. The `type` must be declared in `rules/merge/relationships.yaml` (below). A path reads one value; for a list, `each: <path>` makes one link per item, its paths starting `item.` (an item with no target key makes no link), and `find: {<name>: {in: <path>, where: {<path>: <text>, a list of texts (any of them), or {path: <path>}}}}` adds the first item of another list whose `where` paths all match, read under `<name>.`; a `where` path through a nested list matches when any element does, and no match leaves `<name>.` paths empty. Neither name may be a field of the record; a mapping that breaks this, or a `find` without `in` and `where`, stops the run. A link in a capacity (a type with `capacities`) names it with `capacity` (fixed text) and replaces `valid_from` with `on` (the record's event date) and `held` (a boolean: true is held; false or absent is a drop, since each record restates its capacities; any other value sets the record aside, `invalid_field_shape`), both required, and an optional `title`: each record is a dated sighting, and the Merge Stage folds the sightings into periods. A link's times are read as they are, unless `time_format` says otherwise: `instant` reads ISO 8601 instants; `date` reads a calendar date (`YYYY-MM-DD`) as the instant its day starts in UTC; a value that is not one sets the record aside (`invalid_time`). Three optional rules set the record aside, each with its own `reason` (list it in `nonblocking_deferred_reasons` when it must not stop the run): `ends: {reason}`, a record whose link names no end (without it, a link with no end is no link); `interval: {reason}`, a link with no start (`valid_from`, or `on` for a capacity), or an end not after its start; `status: {path, values, need_end, reason}`, a status outside `values`, or one in `need_end` with no end. |
+| `relationships` | A list. Each has `type` (or `type_field` + `type_values`), `target_key` (paths), `target_source` (the other end's source code), optional `source_key` and `source_source` when the link starts at another record than the one stating it (a relationship record that starts at another record of the same source), `valid_from`, `valid_to` and `properties` (paths), and `scope`: fixed text, `<Provider> <relationship family>` (for example `ACME ownership`), not a path. Name each property after its source field with a `source_` prefix, so it cannot be mistaken for an MDM value. The `type` must be a code in RDM code set `mdm-relationship-types` (below). A path reads one value; for a list, `each: <path>` makes one link per item, its paths starting `item.` (an item with no target key makes no link), and `find: {<name>: {in: <path>, where: {<path>: <text>, a list of texts (any of them), or {path: <path>}}}}` adds the first item of another list whose `where` paths all match, read under `<name>.`; a `where` path through a nested list matches when any element does, and no match leaves `<name>.` paths empty. Neither name may be a field of the record; a mapping that breaks this, or a `find` without `in` and `where`, stops the run. A link in a capacity (a type with `capacities`) names it with `capacity` (fixed text) and replaces `valid_from` with `on` (the record's event date) and `held` (a boolean: true is held; false or absent is a drop, since each record restates its capacities; any other value sets the record aside, `invalid_field_shape`), both required, and an optional `title`: each record is a dated sighting, and the Merge Stage folds the sightings into periods. A link's times are read as they are, unless `time_format` says otherwise: `instant` reads ISO 8601 instants; `date` reads a calendar date (`YYYY-MM-DD`) as the instant its day starts in UTC; a value that is not one sets the record aside (`invalid_time`). Three optional rules set the record aside, each with its own `reason` (list it in `nonblocking_deferred_reasons` when it must not stop the run): `ends: {reason}`, a record whose link names no end (without it, a link with no end is no link); `interval: {reason}`, a link with no start (`valid_from`, or `on` for a capacity), or an end not after its start; `status: {path, values, need_end, reason}`, a status outside `values`, or one in `need_end` with no end. |
 | `profiles` | A role profile: `role`, `authority`, `registration`, `jurisdiction`, `valid_from`, `valid_to`, `fields`. |
 | `provenance` | `name: path` kept with each record. Only values that stay the same across captures (the source's own record); capture hashes, run ids and sync times stay beside the record. |
 | `source_record_provenance` | `true`: keep the record key and adapter version as provenance. |
@@ -181,29 +181,44 @@ export of the Rules Database carries them.
 
 ## Relationship types
 
-`rules/merge/relationships.yaml` declares every relationship type MDM masters
-(operator, 2026-10-06: "Types as data"). It is part of the Mastering Policy, so
-a change to it is a new policy version, approved by its digest. A new type
-needs no code change:
+Every relationship type MDM masters is a code in RDM code set
+`mdm-relationship-types` (ticket 132; operator, 2026-10-27: "Use RDM for keeping
+types and other information"). The Mastering Policy pins it
+(`relationships: {pin: mdm-relationship-types}` in `rules/merge/policy.yaml`,
+its version and sha256 in `rules/merge/reference-pins.yaml`), so a new version
+is a new pin, a new policy, approved by its digest. A new type needs no code
+change: draft a new code set version (data-profiling, "Reference data") with
+the type as a code whose `definition` is its plain words and source and whose
+`properties` are its rules:
 
 ```yaml
-types:
-  <TYPE_NAME>:
-    from: [<kind>, ...]          # the kinds at the start (the child, for a parent link)
-    to: [<kind>, ...]            # the kinds at the end
-    from_profile: <role>         # optional: a role profile the start must hold over the period
-    to_profile: <role>           # optional: the same for the end
-    capacities: [<name>, ...]    # optional: a person's link in a capacity, dated by sightings
-    hierarchy: true              # optional: the links form parent chains
-    cycles: invalid | review     # a hierarchy: a cycle's links are held back, or kept and reviewed
-    one_parent: true             # optional, a hierarchy: one parent at a time per scope
-    ultimate_parent: accounting-chain-v1   # optional, a hierarchy: derive each record's ultimate parent
+code: <TYPE_NAME>
+label: <Type name in words>
+definition: <what a link of this type says>. Source: <the source or standard>.
+properties:
+  from: [<kind>, ...]          # the kinds at the start (the child, for a parent link)
+  to: [<kind>, ...]            # the kinds at the end
+  from_profile: <role>         # optional: a role profile the start must hold over the period
+  to_profile: <role>           # optional: the same for the end
+  hierarchy: true              # optional: the links form parent chains
+  cycles: invalid              # a hierarchy: invalid (held back) or review (kept and reviewed)
+  one_parent: true             # optional, a hierarchy: one parent at a time per scope
+  ultimate_parent: accounting-chain-v2   # optional, a hierarchy: derive each record's ultimate parent
+  ultimate_type: <TYPE_NAME>   # with ultimate_parent: the declared type it is written as
+  keeps_start: true            # optional, no hierarchy: a link keeps its first start
+  ends_parent_links: true      # optional, no hierarchy: a succession ends the ceased entity's parent links
 ```
 
-`check_policy` refuses a type it could not run: an unknown kind or key, a
-hierarchy that does not say what its cycles do, an unknown ultimate-parent
-algorithm. Agents read every mastered link through `mdm.relationship_context`,
-and a parent chain through `mdm.relationship_chain(entity, type, max_hops)`.
+A capacity (a person's link in a capacity, dated by sightings) is a child code
+`<TYPE_NAME>:<capacity>` under its type. The Rust engine
+(`crates/source-contract/src/relationship_types.rs`) reads the pinned rows and
+is the one check, at registration and before every calculation: it refuses an
+unknown kind or property, a hierarchy that does not say what its cycles do, an
+unknown ultimate-parent algorithm, and an ultimate parent without its
+`ultimate_type`. A policy that pins no types masters no link: each reported
+link goes to review as unsupported.
+Agents read every mastered link through `mdm.relationship_context`, and a
+parent chain through `mdm.relationship_chain(entity, type, max_hops)`.
 
 ## Reading MDM's context
 
@@ -223,9 +238,9 @@ type, and cite what it showed in your question to the operator.
   then, of those holding now; names as MDM holds them now, said in
   `trust.current_parts`). Follow `next_step` in each answer.
 
-What each kind and relationship type means is in
-`rules/context/definitions.yaml`. A new kind or relationship type adds its
-line there in the same PR; a test fails until it does.
+What each kind means is in `rules/context/definitions.yaml`; what each
+relationship type means is its code's `definition` in `mdm-relationship-types`.
+A new kind adds its line there in the same PR; a test fails until it does.
 
 ## Merge rules
 

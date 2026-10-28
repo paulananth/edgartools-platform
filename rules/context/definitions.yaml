@@ -33,34 +33,3 @@ kinds:
     apart from companies and governments.
   venue: >-
     A trading market or venue, apart from the organization that operates it.
-relationships:
-  IS_DIRECTLY_CONSOLIDATED_BY: >-
-    The entity's accounts are consolidated, under accounting standards (IFRS 10 / ASC 810), by this
-    direct parent; one per scope and time. Basis stated (a source says it).
-  IS_ULTIMATELY_CONSOLIDATED_BY: >-
-    The top of the entity's consolidation chain: the entity that consolidates it and that no other
-    entity consolidates. Basis stated (a source says it) or calculated (MDM walked the direct parents,
-    with the path); the two sit side by side, so a disagreement shows.
-  SUCCESSOR_ENTITY: >-
-    The entity that took over this one when it ceased in a corporate action (a merger, an absorption,
-    a demerger), with the event type and its effective date.
-  IS_SUBSIDIARY_OF: The entity is listed as a subsidiary of the registrant.
-  BENEFICIAL_OWNER_OF: >-
-    The owner beneficially owns the issuer's securities, as a ten percent owner (Forms 3/4/5, Section 16)
-    or a five percent owner (Schedules 13D/13G, Section 13(d)), with the percent as filed. Who owns, not
-    who decides: an adviser's discretion is on INVESTMENT_ADVISER_TO.
-  EMPLOYED_BY: The person works for the company as a director, an officer (with the title) or an employee.
-  ISSUED_BY: The security is issued by this entity.
-  CUSTODIAN: >-
-    The custodian holds 10% or more of the adviser's separately managed account assets, as the
-    adviser's Form ADV names it (Schedule D 5.K(3)); a custodian under 10% is not named.
-  INVESTMENT_ADVISER_TO: >-
-    The adviser is the fund's investment adviser, with discretion: discretionary (the adviser decides)
-    or non-discretionary (the client decides).
-  IS_FUND-MANAGED_BY: The fund is managed by this fund management entity (its fund manager).
-  IS_SUBFUND_OF: The fund is a sub-fund of the other fund (an umbrella).
-  IS_FEEDER_TO: The fund feeds its money into the other fund (a master fund).
-  IS_INTERNATIONAL_BRANCH_OF: The branch belongs to this head office.
-  AUDITED_BY: The company's statements were audited by the other company, an audit firm, for one engagement.
-  HAS_MARKET_OPERATOR: The trading venue's business is managed and operated by this entity, its market operator.
-  IS_SEGMENT_OF_EXCHANGE: The trading venue is a market segment of the other venue, its exchange.

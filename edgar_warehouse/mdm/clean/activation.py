@@ -72,9 +72,11 @@ def check_policy(body: dict) -> None:
         for family, bar in sorted((block.get("bars") or {}).items()):
             _check_bar(kind, family, bar)
     if "relationships" in body:
-        from .relationships import check_types
+        from .relationships import types_of
 
-        check_types(body["relationships"])
+        # The pinned relationship types, checked by the Rust engine; a policy
+        # without them registers, and mastering refuses it (ticket 132).
+        types_of(body)
     _check_shared_namespaces(kinds)
     seen = set()
     for kind, rule in _rules(body):

@@ -244,8 +244,6 @@ def mdm_contract(source_name: str, source_code: str, root: Path | None = None) -
 # file exists and written back by `write_policy` (GoF consult, profiling ticket
 # 02: the relationship types, then the reference pins, each grew this by hand).
 POLICY_FILES = {
-    # The relationship types MDM masters (profiling ticket 04): data, not code.
-    "relationships": "relationships.yaml",
     # The reference data the rules read, pinned by RDM version and sha256
     # (profiling ticket 02).
     "reference_pins": "reference-pins.yaml",
@@ -462,11 +460,16 @@ def pinned_reference(name: str, root: Path | None = None) -> list[dict]:
     its published canonical form, refused unless its sha256 is the pin. Each
     code carries its `labels` and `crosswalk` as lists ([to_set, to_version,
     to_code, match_type]), as RDM publishes them (docs/specs/rdm/spec.md §4)."""
+    return published_reference(reference_pin(name, root), root)
+
+
+def published_reference(pin: dict, root: Path | None = None) -> list[dict]:
+    """The codes of one pinned RDM code set version (`{code_set, version,
+    sha256}`, as a policy holds it), refused unless its sha256 is the pin."""
     import hashlib
     import json
 
     root = root or ROOT
-    pin = reference_pin(name, root)
     path = root / "reference" / "published" / pin["code_set"] / str(pin["version"]) / "canonical.jsonl"
     data = path.read_bytes()
     if hashlib.sha256(data).hexdigest() != pin["sha256"]:

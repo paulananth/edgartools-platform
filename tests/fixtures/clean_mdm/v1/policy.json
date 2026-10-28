@@ -58,6 +58,16 @@
       }
     }
   },
+  "reference_pins": {
+    "mdm-relationship-types": {
+      "code_set": "mdm-relationship-types",
+      "sha256": "9a0a3525e9427ab88405240a81b85be9d89a54c540b0c53770bdd269df7c4d33",
+      "version": "1"
+    }
+  },
+  "relationships": {
+    "pin": "mdm-relationship-types"
+  },
   "required_consumers": [
     "export",
     "graph",

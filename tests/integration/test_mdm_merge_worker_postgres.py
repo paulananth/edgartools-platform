@@ -26,6 +26,7 @@ from edgar_warehouse.cli import main
 from edgar_warehouse.workers import mdm_merge
 from tests.integration import test_clean_mdm_postgres as core
 from tests.integration.test_configured_bookkeeping_postgres import databases  # noqa: F401
+from tests.support.relationship_types import with_relationship_types
 from tests.support.rules_approval import approve
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -61,9 +62,9 @@ def mdm(databases):
         # Every MDM commit is fenced by the worker's live Bookkeeping lease.
         migrate_guard(admin, runtime_role="clean_application")
         with admin.begin() as conn:  # the Change Journal is a consumer too
-            policy = register_policy(conn, {"version": 1, "required_consumers": list(CONSUMERS),
-                                            "automatic_rules": [], "fields": {"company": {
-                                                "name": {"sources": ["fixture.primary", "fixture.secondary"]}}}})
+            policy = register_policy(conn, with_relationship_types({
+                "version": 1, "required_consumers": list(CONSUMERS), "automatic_rules": [],
+                "fields": {"company": {"name": {"sources": ["fixture.primary", "fixture.secondary"]}}}}))
         with admin.begin() as conn:
             conn.exec_driver_sql("GRANT USAGE ON SCHEMA mdm TO bk_verifier")
             conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA mdm TO bk_verifier")

@@ -12,6 +12,7 @@ from edgar_warehouse.mdm.clean.store import (
     migrate,
     register_policy,
 )
+from tests.support.relationship_types import with_relationship_types
 from tests.support.rules_authority import register_dataset
 
 
@@ -62,7 +63,7 @@ def initialize_database(admin, app):
     with admin.begin() as conn:
         policy = register_policy(
             conn,
-            {
+            with_relationship_types({
                 "version": 1,
                 "required_consumers": ["export", "graph"],
                 "automatic_rules": [],
@@ -74,7 +75,7 @@ def initialize_database(admin, app):
                         },
                     }
                 },
-            },
+            }),
         )
         for code in ["fixture.primary", "fixture.secondary"]:
             register_dataset(

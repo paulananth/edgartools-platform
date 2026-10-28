@@ -16,7 +16,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from edgar_warehouse.mdm.clean.relationships import fold_sightings, project
+from edgar_warehouse.mdm.clean.relationships import fold_sightings, project, types_of
+from edgar_warehouse.rules import files
 from edgar_warehouse.mdm.clean.store import digest
 
 D1, D2, D3, D4 = (f"2024-0{m}-15T00:00:00+00:00" for m in (1, 3, 6, 9))
@@ -92,7 +93,7 @@ def engine(*filings):
     claims = {f"filing-{n}": {"assertion_id": f"a{n}", "relationships": [
         {"source_subject": PERSON, "target_subject": ISSUER, **link} for link in links]}
         for n, links in enumerate(filings, 1)}
-    return project(claims, state, entities, D4)
+    return project(claims, state, entities, D4, types_of(files.policy()))
 
 
 def form4(on, capacity, kind="EMPLOYED_BY", **more):
@@ -101,11 +102,11 @@ def form4(on, capacity, kind="EMPLOYED_BY", **more):
 
 def test_one_link_per_person_company_and_capacity():
     links, reviews = engine([form4(D1, "director"), form4(D1, "officer", title="CFO"),
-                             form4(D1, "ten_percent_owner", kind="CONTROLS")],
+                             form4(D1, "ten_percent_owner", kind="BENEFICIAL_OWNER_OF")],
                             [form4(D2, "director")])
     assert reviews == []
     assert sorted((e["type"], e["capacity"], len(e["evidence"])) for e in links) == [
-        ("CONTROLS", "ten_percent_owner", 1), ("EMPLOYED_BY", "director", 2),
+        ("BENEFICIAL_OWNER_OF", "ten_percent_owner", 1), ("EMPLOYED_BY", "director", 2),
         ("EMPLOYED_BY", "officer", 1)]
 
 
@@ -118,7 +119,7 @@ def test_a_link_through_the_engine_takes_its_periods_from_its_sightings():
 
 
 def test_a_capacity_the_type_does_not_have_goes_to_review():
-    links, reviews = engine([form4(D1, "ten_percent_owner")], [form4(D1, "director", kind="CONTROLS")])
+    links, reviews = engine([form4(D1, "ten_percent_owner")], [form4(D1, "director", kind="BENEFICIAL_OWNER_OF")])
     assert links == []
     assert [r["reason"] for r in reviews] == ["unsupported_capacity", "unsupported_capacity"]
 
@@ -164,7 +165,7 @@ def test_a_link_without_a_capacity_keeps_the_id_it_had():
     claims = {"a": {"assertion_id": "a1", "relationships": [
         {"type": "IS_DIRECTLY_CONSOLIDATED_BY", "target_subject": "b", "valid_from": D1,
          "scope": "GLEIF accounting consolidation"}]}}
-    links, _ = project(claims, state, entities, D4)
+    links, _ = project(claims, state, entities, D4, types_of(files.policy()))
     direct = [e for e in links if not e["derived"]]
     assert [e["relationship_id"] for e in direct] == [
         digest(["IS_DIRECTLY_CONSOLIDATED_BY", "x", "y", "GLEIF accounting consolidation"])]

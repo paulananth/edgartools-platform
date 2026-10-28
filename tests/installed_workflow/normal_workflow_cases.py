@@ -146,8 +146,9 @@ elif case in {"held_transaction", "invalid_wire"}:
     assert frame() == before
 elif case.startswith("upgrade"):
     # Add real waiting reviews through the normal predecessor MergeStage.
-    policy = {**g["policy"], "version":"invented-upgrade", "relationships":{
-        "version":"invented-upgrade", "types":{"invented_link":{"from":[g["KIND"]],"to":[g["KIND"]]}}}}
+    from tests.support.relationship_types import pinned_types
+    policy = {**g["policy"], "version":"invented-upgrade",
+              **pinned_types({"invented_link":{"from":[g["KIND"]],"to":[g["KIND"]]}})}
     with owner.begin() as conn:
         pin = register_policy(conn,policy)
     from edgar_warehouse.mdm.clean.evidence import subject_key

@@ -12,6 +12,7 @@ BOUNDARY = "\n-- statement boundary\n"
 MIGRATION = Path(__file__).parent / "migrations" / "mysql-v1.sql"
 SEARCH_MIGRATION = MIGRATION.with_name("mysql-search-v2.sql")
 VALUE_MIGRATION = MIGRATION.with_name("mysql-value-v3.sql")
+PROPERTIES_MIGRATION = MIGRATION.with_name("mysql-properties-v4.sql")
 
 
 def migrate(engine, *, runtime_role, existing_only=False, database_name=None):
@@ -182,4 +183,5 @@ def _rebuild_search_guards(conn, base_statements):
 # run once before completion). A new one is a new file and one entry here. The
 # ids are recorded in installed stores, so the order never changes.
 FOLLOW_UPS = ((2, "search", "SEARCH_MIGRATION", _rebuild_search_guards),
-              (3, "value", "VALUE_MIGRATION", None))
+              (3, "value", "VALUE_MIGRATION", None),
+              (4, "properties", "PROPERTIES_MIGRATION", None))
