@@ -12,7 +12,7 @@ from edgar_warehouse.rules import files
 from tests.mdm.test_configured_pair_comparison import configured_root  # noqa: F401
 
 
-@pytest.mark.parametrize("case", ["lookup", "waiting", "merge", "unicode", "chunks", "silver", "concurrent"])
+@pytest.mark.parametrize("case", ["lookup", "waiting", "merge", "concurrent"])
 @pytest.mark.parametrize("kind", ["invented-kind", "invented-other-kind"])
 def test_normal_master_ids(case, kind, database_factory, configured_root):
     if os.environ.get("SKILL_ADAPTER_TEST_ENGINE") == "mssql":

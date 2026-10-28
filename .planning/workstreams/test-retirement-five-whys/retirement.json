@@ -1,0 +1,1414 @@
+{
+  "baseline": "0a1470c1a",
+  "baseline_cases": 4262,
+  "retained_cases": 4135,
+  "retired_cases": 127,
+  "retired_percent": 2.98,
+  "requested_target_percent": 75,
+  "target_revised_by_operator": "Retire only proven redundancy",
+  "missing_replacement_cases": 0,
+  "retained_scenario_assertions_unchanged": true,
+  "retired_by_surface": {
+    "classification": 1,
+    "ids": 6,
+    "reader": 38,
+    "search": 8,
+    "merge": 58,
+    "worker": 16
+  },
+  "cases": [
+    {
+      "retired": "tests/mdm/test_clean_classification.py::TestFirstStepWins::test_sec_saying_operating_company_settles_it",
+      "retained": "tests/mdm/test_clean_classification.py::TestFirstStepWins::test_an_earlier_step_wins_over_a_later_one",
+      "surface": "classification",
+      "same_body": true,
+      "injected_wrong_verdict_rejected": true
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_ids.py::test_normal_master_ids[invented-kind-chunks]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[ids-chunks-invented-kind]",
+      "surface": "ids",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "chunks"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_ids.py::test_normal_master_ids[invented-kind-silver]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[ids-silver-invented-kind]",
+      "surface": "ids",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "silver"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_ids.py::test_normal_master_ids[invented-kind-unicode]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[ids-unicode-invented-kind]",
+      "surface": "ids",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "unicode"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_ids.py::test_normal_master_ids[invented-other-kind-chunks]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[ids-chunks-invented-other-kind]",
+      "surface": "ids",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "chunks"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_ids.py::test_normal_master_ids[invented-other-kind-silver]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[ids-silver-invented-other-kind]",
+      "surface": "ids",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "silver"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_ids.py::test_normal_master_ids[invented-other-kind-unicode]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[ids-unicode-invented-other-kind]",
+      "surface": "ids",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "unicode"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-kind-alias]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-alias-invented-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "alias"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-kind-bulk_provenance]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-bulk_provenance-invented-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "bulk_provenance"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-kind-context_concurrent]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-context_concurrent-invented-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "context_concurrent"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-kind-context_current]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-context_current-invented-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "context_current"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-kind-context_links]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-context_links-invented-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "context_links"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-kind-context_lookup]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-context_lookup-invented-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "context_lookup"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-kind-context_relationships]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-context_relationships-invented-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "context_relationships"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-kind-context_times]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-context_times-invented-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "context_times"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-kind-current]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-current-invented-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "current"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-kind-details]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-details-invented-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "details"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-kind-history]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-history-invented-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "history"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-kind-inspection]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-inspection-invented-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "inspection"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-kind-pages]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-pages-invented-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "pages"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-kind-plans]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-plans-invented-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "plans"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-kind-producer]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-producer-invented-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "producer"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-kind-profile]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-profile-invented-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "profile"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-kind-recorded_time]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-recorded_time-invented-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "recorded_time"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-kind-recording_authority]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-recording_authority-invented-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "recording_authority"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-kind-review_pages]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-review_pages-invented-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "review_pages"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-other-kind-alias]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-alias-invented-other-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "alias"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-other-kind-bulk_provenance]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-bulk_provenance-invented-other-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "bulk_provenance"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-other-kind-context_concurrent]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-context_concurrent-invented-other-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "context_concurrent"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-other-kind-context_current]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-context_current-invented-other-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "context_current"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-other-kind-context_links]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-context_links-invented-other-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "context_links"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-other-kind-context_lookup]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-context_lookup-invented-other-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "context_lookup"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-other-kind-context_relationships]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-context_relationships-invented-other-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "context_relationships"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-other-kind-context_times]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-context_times-invented-other-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "context_times"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-other-kind-current]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-current-invented-other-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "current"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-other-kind-details]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-details-invented-other-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "details"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-other-kind-history]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-history-invented-other-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "history"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-other-kind-inspection]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-inspection-invented-other-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "inspection"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-other-kind-pages]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-pages-invented-other-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "pages"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-other-kind-plans]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-plans-invented-other-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "plans"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-other-kind-producer]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-producer-invented-other-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "producer"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-other-kind-profile]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-profile-invented-other-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "profile"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-other-kind-recorded_time]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-recorded_time-invented-other-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "recorded_time"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-other-kind-recording_authority]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-recording_authority-invented-other-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "recording_authority"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-other-kind-review_pages]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-review_pages-invented-other-kind]",
+      "surface": "reader",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "review_pages"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_search.py::test_normal_master_search[changes-invented-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[search-changes-invented-kind]",
+      "surface": "search",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "changes"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_search.py::test_normal_master_search[changes-invented-other-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[search-changes-invented-other-kind]",
+      "surface": "search",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "changes"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_search.py::test_normal_master_search[plans-invented-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[search-plans-invented-kind]",
+      "surface": "search",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "plans"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_search.py::test_normal_master_search[plans-invented-other-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[search-plans-invented-other-kind]",
+      "surface": "search",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "plans"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_search.py::test_normal_master_search[rebuild-invented-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[search-rebuild-invented-kind]",
+      "surface": "search",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "rebuild"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_search.py::test_normal_master_search[rebuild-invented-other-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[search-rebuild-invented-other-kind]",
+      "surface": "search",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "rebuild"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_search.py::test_normal_master_search[words-invented-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[search-words-invented-kind]",
+      "surface": "search",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "words"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_search.py::test_normal_master_search[words-invented-other-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[search-words-invented-other-kind]",
+      "surface": "search",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "words"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-assessment]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-assessment-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "assessment"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-cascade_candidate_first]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-cascade_candidate_first-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "cascade_candidate_first"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-cascade_holder_first]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-cascade_holder_first-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "cascade_holder_first"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-collision]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-collision-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "collision"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-competing]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-competing-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "competing"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-corrected]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-corrected-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "corrected"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-cusip_first]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-cusip_first-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "cusip_first"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-deferred]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-deferred-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "deferred"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-details]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-details-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "details"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-hierarchy]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-hierarchy-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "hierarchy"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-issuer_only]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-issuer_only-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "issuer_only"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-join]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-join-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "join"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-lifted]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-lifted-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "lifted"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-links]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-links-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "links"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-list_join]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-list_join-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "list_join"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-mint_competing]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-mint_competing-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "mint_competing"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-name_candidate_first]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-name_candidate_first-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "name_candidate_first"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-name_held_value]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-name_held_value-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "name_held_value"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-name_holder_first]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-name_holder_first-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "name_holder_first"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-newest]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-newest-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "newest"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-no_identity_stale]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-no_identity_stale-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "no_identity_stale"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-occurrence]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-occurrence-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "occurrence"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-preview]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-preview-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "preview"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-quarantine]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-quarantine-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "quarantine"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-released]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-released-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "released"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-retired]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-retired-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "retired"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-rule_merge]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-rule_merge-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "rule_merge"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-stale_assessment]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-stale_assessment-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "stale_assessment"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-unchanged]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-unchanged-invented-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "unchanged"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-assessment]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-assessment-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "assessment"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-cascade_candidate_first]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-cascade_candidate_first-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "cascade_candidate_first"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-cascade_holder_first]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-cascade_holder_first-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "cascade_holder_first"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-collision]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-collision-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "collision"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-competing]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-competing-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "competing"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-corrected]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-corrected-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "corrected"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-cusip_first]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-cusip_first-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "cusip_first"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-deferred]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-deferred-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "deferred"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-details]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-details-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "details"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-hierarchy]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-hierarchy-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "hierarchy"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-issuer_only]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-issuer_only-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "issuer_only"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-join]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-join-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "join"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-lifted]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-lifted-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "lifted"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-links]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-links-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "links"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-list_join]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-list_join-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "list_join"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-mint_competing]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-mint_competing-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "mint_competing"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-name_candidate_first]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-name_candidate_first-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "name_candidate_first"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-name_held_value]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-name_held_value-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "name_held_value"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-name_holder_first]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-name_holder_first-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "name_holder_first"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-newest]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-newest-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "newest"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-no_identity_stale]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-no_identity_stale-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "no_identity_stale"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-occurrence]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-occurrence-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "occurrence"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-preview]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-preview-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "preview"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-quarantine]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-quarantine-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "quarantine"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-released]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-released-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "released"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-retired]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-retired-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "retired"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-rule_merge]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-rule_merge-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "rule_merge"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-stale_assessment]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-stale_assessment-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "stale_assessment"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-other-kind-unchanged]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-unchanged-invented-other-kind]",
+      "surface": "merge",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "unchanged"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_worker_publication.py::test_normal_worker_publication[authority-invented-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[worker-authority-invented-kind]",
+      "surface": "worker",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "authority"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_worker_publication.py::test_normal_worker_publication[authority-invented-other-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[worker-authority-invented-other-kind]",
+      "surface": "worker",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "authority"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_worker_publication.py::test_normal_worker_publication[forced-invented-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[worker-forced-invented-kind]",
+      "surface": "worker",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "forced"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_worker_publication.py::test_normal_worker_publication[forced-invented-other-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[worker-forced-invented-other-kind]",
+      "surface": "worker",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "forced"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_worker_publication.py::test_normal_worker_publication[held_review-invented-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[worker-held_review-invented-kind]",
+      "surface": "worker",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "held_review"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_worker_publication.py::test_normal_worker_publication[held_review-invented-other-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[worker-held_review-invented-other-kind]",
+      "surface": "worker",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "held_review"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_worker_publication.py::test_normal_worker_publication[journal-invented-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[worker-journal-invented-kind]",
+      "surface": "worker",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "journal"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_worker_publication.py::test_normal_worker_publication[journal-invented-other-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[worker-journal-invented-other-kind]",
+      "surface": "worker",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "journal"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_worker_publication.py::test_normal_worker_publication[mapping_freeze-invented-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[worker-mapping_freeze-invented-kind]",
+      "surface": "worker",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "mapping_freeze"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_worker_publication.py::test_normal_worker_publication[mapping_freeze-invented-other-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[worker-mapping_freeze-invented-other-kind]",
+      "surface": "worker",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "mapping_freeze"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_worker_publication.py::test_normal_worker_publication[merge_worker-invented-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[worker-merge_worker-invented-kind]",
+      "surface": "worker",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "merge_worker"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_worker_publication.py::test_normal_worker_publication[merge_worker-invented-other-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[worker-merge_worker-invented-other-kind]",
+      "surface": "worker",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "merge_worker"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_worker_publication.py::test_normal_worker_publication[publication-invented-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[worker-publication-invented-kind]",
+      "surface": "worker",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "publication"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_worker_publication.py::test_normal_worker_publication[publication-invented-other-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[worker-publication-invented-other-kind]",
+      "surface": "worker",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "publication"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_worker_publication.py::test_normal_worker_publication[review_recovery-invented-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[worker-review_recovery-invented-kind]",
+      "surface": "worker",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-kind",
+      "case": "review_recovery"
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_worker_publication.py::test_normal_worker_publication[review_recovery-invented-other-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[worker-review_recovery-invented-other-kind]",
+      "surface": "worker",
+      "engines": [
+        "postgresql",
+        "mysql"
+      ],
+      "kind": "invented-other-kind",
+      "case": "review_recovery"
+    }
+  ]
+}
