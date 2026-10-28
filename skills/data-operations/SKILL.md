@@ -143,9 +143,8 @@ submits one source.
    means stop only when that source's `source.yaml` declares no Bookkeeping
    target. The inventory holds one `target`. A source that declares several,
    and whose sequence comment names them in order, is wired: run those
-   targets in that order. OpenFIGI is one target, `mastering`, over both
-   kinds asked, all bundles at once; then 13F, then N-PORT (ticket 138; the
-   security-master skill). Do not add a second inventory
+   targets in that order; `rules/source-sequence.yaml` gives the order of
+   sources, and a domain skill gives a domain's. Do not add a second inventory
    field, and do not submit another source in its place. A successful check does
    not install, approve or start a run. Detail is in
    `docs/specs/source-sequencing.md` in the repository.
@@ -257,8 +256,8 @@ Work it out from counts before starting:
    (`source.read`). A narrow step is one unit per bundle (`mdm.merge`,
    `mdm.prepare`). Only more bundles at once shorten narrow steps in total.
 3. **Bundles and readers.** One verifier checks a run's units one at a
-   time, so a run's wide step goes no faster than its verifier: OpenFIGI,
-   2026-10-25: 512 request units took 14 minutes, about 1.6 s each, with 6
+   time, so a run's wide step goes no faster than its verifier: measured
+   2026-10-25, 512 request units took 14 minutes, about 1.6 s each, with 6
    workers. Spread the work over runs: `--bundles` runs at once, each with
    its own verifier. `--workers` is per run, and 1 or 2 is enough when many
    bundles run together. Keep `--bundles` × (`--workers` + 1) near the

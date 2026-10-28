@@ -509,6 +509,12 @@ history (`git log -S '<symbol>' -- CLAUDE.md`).
   It cannot see non-Python inputs: after a change to a migration `.sql`, a rules `.yaml` or another
   data file, also run that area's test files by name. The full suite runs in CI on every PR, and
   nothing merges until it is green.
+- **A change to skills, tickets or docs only** needs no project environment, so never
+  `uv sync` a new worktree for it (several minutes, Rust engine included; operator,
+  2026-10-28: "If the skills test is building the whole environment it is a waste").
+  The genericity lint reads files only: `uv run --no-project --with pytest -- pytest -q
+  -p no:cacheprovider tests/unit/test_profiling_genericity.py` (under 1 s), and after an edit to
+  CLAUDE.md or AGENTS.md, `tests/unit/test_guides_name_existing_paths.py` the same way. CI runs the rest.
 - **A change to the Rust engine** (`crates/source-contract/`) reaches Python only after
   `uv sync --all-extras --group dev --reinstall-package source-contract`; until then Python tests run
   the old engine. testmon then reruns nearly every test (10 minutes, ticket 138), so name the area's

@@ -34,9 +34,8 @@ holder's valuation level and payoff profile).
 
 - [x] Skills say it (2026-10-28 07:02 ET): data-modeling, data-onboarding,
   refining-rules, security-master (PR #1199)
-- [ ] `nport_holding`: the six fields and the currency reach the Security
-  (ticket 138's part), then the 8 copies leave the spec (built on
-  `claude/t138-most-filed`)
+- [x] `nport_holding` (2026-10-28 08:12 ET): the six facts reach the Security and the 8
+  copies leave the spec, #1200; live at ticket 138's switch-on
 - [ ] `openfigi_listing`: check each column is on the Security in MDM, move
   any that is not, then retire the table
 - [ ] `ownership_owner`: the address, officer title and other text reach MDM

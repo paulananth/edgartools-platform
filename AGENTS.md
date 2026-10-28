@@ -155,6 +155,11 @@ Learned the hard way; each is a standing operator rule.
   <folders>`; never with `-p no:cacheprovider`). After a change to a
   `.sql`, `.yaml` or data file, also run that area's test files by name. No
   local test run may take more than five minutes; CI runs everything.
+- A change to skills, tickets or docs only needs no project environment: never
+  `uv sync` a new worktree for it. Run the genericity lint, which reads files
+  only: `uv run --no-project --with pytest -- pytest -q -p no:cacheprovider
+  tests/unit/test_profiling_genericity.py` (under 1 s), and
+  `tests/unit/test_guides_name_existing_paths.py` after a guide edit.
 - Merge when every CI check is green and the PR is ready.
 - A test states its expected answer; it never compares with a frozen copy of
   retired code. To retire such an oracle, write its answers into the test (or an
