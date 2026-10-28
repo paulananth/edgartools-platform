@@ -76,3 +76,10 @@ read:
                   values:
                   - {value: {path: filed}}
                   - {value: {path: isin_filed}}
+              # The most-filed value of each fact (ticket 138).
+              asset_category: {value: {path: asset_category}}
+              issuer_type: {value: {path: issuer_type}}
+              investment_country: {value: {path: investment_country}}
+              currency: {value: {path: currency}}
+              restricted: {value: {path: restricted}}
+              derivative_category: {value: {path: derivative_category}}

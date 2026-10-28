@@ -104,7 +104,7 @@ too large for one reading unit is read in several and reduced as one; a list
 gives what one reading of all its rows gives, and `last` requires a single
 source that lists a single reading),
 `table` (one name or an ordered list of 1..8 distinct names), `keys`
-(1..8 distinct text columns), `mode`, `count` (new output
+(1..8 distinct text columns), `mode` (`count`, `members` or `most`), `count` (new output
 column), `sample` and `sample_limit` (0..1,000). Text keys are exact; missing,
 null and nontext values refuse. Normalize them in the source-extract contract.
 
@@ -120,6 +120,15 @@ null and nontext values refuse. Normalize them in the source-extract contract.
   within each artifact chunk. Duplicate membership across tables counts once.
   `last` requires one table: unions lack original source ordinals, so a last
   occurrence across tables could otherwise depend on partition boundaries.
+- `mode: most` requires `member`, a text column, and `sample`, the new column
+  that holds the member the most selected rows file, with `sample_limit: 0`
+  and no `last`, `last_null` or `exclude`. `count` holds that member's rows
+  (on a tie, the tied members' rows).
+  Two members filed equally often leave `sample` null; a row whose member is
+  null files none (a missing column is refused), and a key with no member
+  filed has no output row. Use it
+  for a fact every row repeats about a master: the master takes the most-filed
+  value (ticket 138, "Most-filed value").
 - Optional `exclude` names another member group with identical key columns
   and no exclusion of its own. Subtract its complete member set after all
   inputs finish. Counts remain uncapped; samples contain the lexically first

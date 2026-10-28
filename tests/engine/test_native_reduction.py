@@ -120,3 +120,16 @@ def test_native_constructor_rejects_invalid_configuration(fault):
 
 def test_reduction_execution_identity_includes_native_binary_and_facade():
     assert set(source_engine.runtime_files()) <= set(source_combine.runtime_files())
+
+
+def test_most_keeps_the_value_the_most_rows_file_through_the_facade():
+    # Ticket 138, "Most-filed value": a null value is a row that files none, and a tie keeps none.
+    spec = {"source": "main", "table": "rows", "keys": ["key"], "mode": "most",
+            "member": "category", "count": "filed", "sample": "value", "sample_limit": 0}
+    reducer = engine({"most": spec})
+    reducer.push("most", [{"key": "x", "category": "EC"}, {"key": "x", "category": None},
+                          {"key": "x", "category": "EC"}, {"key": "x", "category": "DBT"},
+                          {"key": "y", "category": "EC"}, {"key": "y", "category": "DBT"},
+                          {"key": "z", "category": None}])
+    assert reducer.finish()["most"] == [{"key": "x", "filed": 2, "value": "EC"},
+                                        {"key": "y", "filed": 1, "value": None}]
