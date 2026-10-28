@@ -32,9 +32,12 @@ SCOPE = tuple(
 # "person" stays allowed: "personal data" is generic.
 SPECIFIC = re.compile(
     r"\b(SEC|sec\.gov|EDGAR|GLEIF|LEI|CIK|EIN|SIC|10-K|8-K|Company|company|companies|Person|"
-    r"Contoso|accession\w*|tickers?|mdm\.company|filings?)\b"
+    r"Contoso|accession\w*|tickers?|mdm\.company|filings?|"
+    # Operator, 2026-10-28: "Skill can not test security or company it must be generic".
+    # Lowercase "securities" stays allowed, as an ordinary word in organisation names.
+    r"N-?PORT|OpenFIGI|13F|FIGIs?|CUSIPs?|ISINs?|Security|Securities)\b"
     # Source codes and format names as written in rules files (`gleif`, `sec.ownership`, `sec_cik`, `lei`).
-    r"|\b(gleif\w*|sec[._]\w+|lei)\b"
+    r"|\b(gleif\w*|sec[._]\w+|lei|nport\w*|n-port|openfigi\w*|thirteenf\w*)\b"
 )
 # In a skill, a pull request number is history: it belongs in a ticket or an Examples section,
 # not in the how-to. A spec may cite the PR that approved it.
@@ -98,3 +101,11 @@ def test_lint_catches_a_name_and_spares_examples(tmp_path):
     doc.write_text("# A\nKeys such as a CIK.\n## Examples\nA CIK.\n### More\nAn LEI.\n## B\nA Company.\n"
                    "Run `--source gleif` with `sec_cik`; selected, secure.\nBuilt by #960; color #fff.\n")
     assert [h.split(": ", 1)[1] for h in specific_names(doc, tmp_path, history=True)] == ["CIK", "Company", "gleif", "sec_cik", "#960"]
+
+
+def test_lint_catches_a_security_source_and_spares_the_ordinary_word(tmp_path):
+    doc = tmp_path / "x.md"
+    doc.write_text("# A\nA Security from N-PORT, OpenFIGI or 13F, by its CUSIP, ISIN or FIGI.\n"
+                   "Read `nport.yaml`; an org named for securities.\n")
+    assert [h.split(": ", 1)[1] for h in specific_names(doc, tmp_path)] == [
+        "Security", "N-PORT", "OpenFIGI", "13F", "CUSIP", "ISIN", "FIGI", "nport"]

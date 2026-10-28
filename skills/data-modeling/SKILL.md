@@ -82,9 +82,9 @@ mdm"; operator, 2026-10-28: "silver must not have duplicate fields, it contredit
 masters (the link's source key, then the master id); it never copies a master
 field, not even the value that row filed. A field MDM lacks moves to MDM
 first; then silver drops it. A row's own unit is not a copy: the currency
-of an amount the row states stays beside that amount (operator, 2026-10-28,
-N-PORT's currency code: "Keep it on the row (Recommended)"), even when the
-master also holds a currency.
+of an amount the row states stays beside that amount (operator, 2026-10-28:
+"Keep it on the row (Recommended)"), even when the master also holds a
+currency.
 
 A part that looks like two classes is usually two parts: a code list inside a
 master file is reference data plus a master attribute that holds its codes.
