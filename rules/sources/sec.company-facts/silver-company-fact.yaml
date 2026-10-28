@@ -1,0 +1,135 @@
+# The silver table of every filed company fact (ticket 46; the spec approved on
+# ticket 43, operator 2026-10-22: "Approve the spec (Recommended)"). Its rows are
+# the `company_fact` table of facts.yaml, one per fact as filed; the line items
+# and measures are built from them. Corrected from ticket 43's spec: the key
+# names a fact's period by `period` (start/end, or the date of an instant),
+# since a key column is never empty and an instant has no start; the filer is
+# `company_key`, the 10-digit CIK its Company's Dataset Contract keys records
+# by, in place of a bigint `cik` beside it (one system of record: operator,
+# 2026-10-28, "silver must not have duplicate fields").
+table: company_fact
+definition: "One XBRL fact a filer reported, as filed: its concept, unit, period, figure and filing."
+grain: "one row per filed fact (company, taxonomy, concept, unit, period, filing)"
+columns:
+- name: company_key
+  type: VARCHAR
+  nullable: false
+  definition: "The filer's CIK as ten digits, by which its Company is found."
+  source: "document cik (a JSON number or digit text), zero-padded"
+  sensitivity: none
+- name: taxonomy
+  type: VARCHAR
+  nullable: false
+  definition: "The taxonomy of the concept (us-gaap, ifrs-full, dei, ...)."
+  source: "facts key"
+  sensitivity: none
+- name: concept
+  type: VARCHAR
+  nullable: false
+  definition: "The reported concept."
+  source: "facts.<taxonomy> key"
+  sensitivity: none
+- name: unit
+  type: VARCHAR
+  nullable: false
+  definition: "The unit as filed (USD, shares, USD/shares, pure, ...)."
+  source: "units key"
+  sensitivity: none
+- name: currency
+  type: VARCHAR
+  nullable: true
+  definition: "The ISO 4217 code when the unit is a currency or a currency per share; empty otherwise."
+  source: "the unit's three capital letters before any '/'"
+  sensitivity: none
+- name: period
+  type: VARCHAR
+  nullable: false
+  definition: "The fact's period: start/end for a duration (ISO 8601), the date for an instant."
+  source: "start and end"
+  sensitivity: none
+- name: period_start
+  type: DATE
+  nullable: true
+  definition: "The start of a duration; empty for an instant."
+  source: "start"
+  sensitivity: none
+- name: period_end
+  type: DATE
+  nullable: false
+  definition: "The end of the period, or the instant's date."
+  source: "end"
+  sensitivity: none
+- name: value
+  type: DECIMAL(38,10)
+  nullable: false
+  definition: "The figure as filed, never rounded."
+  source: "val, its exact filed digits"
+  sensitivity: none
+- name: accession
+  type: VARCHAR
+  nullable: false
+  definition: "The filing that reported the fact."
+  source: "accn"
+  sensitivity: none
+- name: filed
+  type: DATE
+  nullable: false
+  definition: "The filing date."
+  source: "filed"
+  sensitivity: none
+- name: form
+  type: VARCHAR
+  nullable: false
+  definition: "The form filed (10-K, 10-Q, 20-F, ...)."
+  source: "form"
+  sensitivity: none
+- name: fiscal_year_filed
+  type: BIGINT
+  nullable: true
+  definition: "The filing's own fiscal year label; kept, never a key (a year is keyed on the period's end)."
+  source: "fy"
+  sensitivity: none
+- name: fiscal_period_filed
+  type: VARCHAR
+  nullable: true
+  definition: "The filing's own fiscal period label (FY, Q1, ...); kept, never a key."
+  source: "fp"
+  sensitivity: none
+- name: frame
+  type: VARCHAR
+  nullable: true
+  definition: "The SEC calendar frame; a cross-check only."
+  source: "frame"
+  sensitivity: none
+key:
+- company_key
+- taxonomy
+- concept
+- unit
+- period
+- accession
+- filed
+links:
+- columns:
+  - company_key
+  kind: company
+  source_code: sec.submissions.company.v1
+  to_part: company
+  source_key: company_key
+  mdm_id_column: company_mdm_id
+  inclusion: 1.0
+time:
+  as_of: period_end
+  as_at: filed
+  event_time: null
+partition:
+- company_key
+load_mode: append
+why: >-
+  Every filed copy is kept (ticket 35); a restatement is a new filing, so a filed
+  fact never changes and the table appends. The key is the measured one (ticket
+  37: no repeat over 5,134,979 facts), its two period columns read as one.
+  The filing's fy and fp are kept but never key a year (ticket 35). The figure
+  is exact (tickets 128 and 134): of the 5,134,979 captured, the longest has 20
+  whole digits and 6 after the point, within DECIMAL(38,10).
+checks: []

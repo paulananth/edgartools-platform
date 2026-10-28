@@ -136,8 +136,11 @@ Evidence and sources: ticket 39, research 02 section 3.
 ## Reading company facts (ticket 40, decided 2026-10-22)
 
 - **Configured reading only** (operator, 2026-10-22: "configure only"): a
-  source-extract contract; no Python custom step, no new iteration primitive.
-  It is `rules/sources/sec.company-facts/facts.yaml` (ticket 45).
+  source-extract contract, no Python custom step. It is
+  `rules/sources/sec.company-facts/facts.yaml` (ticket 45). Its `company_fact`
+  table gives one row per filed fact through the engine's generic `nest`
+  iteration (ticket 46; operator, 2026-10-28: "Engine step, local
+  (Recommended)"), the rows silver's `company_fact` lands.
 - **The filer's CIK is filed two ways**: a JSON number in some files, digit text
   (zero-padded) in others (262 and 105 of the cohort). `integer` reads both as
   one bigint; never key on its spelling.
@@ -146,10 +149,9 @@ Evidence and sources: ticket 39, research 02 section 3.
   CIK wherever there are facts. A filer with no facts (an empty object) lands
   nothing.
 - **One table per taxonomy**, `each.entries` on `facts.<taxonomy>`: one row per
-  concept with its key, and its `units` kept whole as one value. A table takes
-  one iteration, so silver flattens units and the list of facts (dbt,
-  Snowflake `LATERAL FLATTEN`), the way the standard tools compose one level at
-  a time (research 02 section 4).
+  concept with its key, and its `units` kept whole as one value (label and
+  description). The facts themselves are `company_fact`'s rows, flattened by
+  `nest`: taxonomy, concept and unit carried onto each fact.
 - **A taxonomy with no table refuses the file**: a `taxonomies` table looks each
   key up in a frozen reference list with `on_missing: error`. Never drop one
   silently; add its table.

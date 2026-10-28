@@ -1,7 +1,13 @@
 //! Bounded configurable row iteration; no source identities or loaders.
 use serde_yaml::Value;
-use crate::{eval, matrix, parallel, setting, validate_expr, Engine, Lookups, Rejected, Row, Steps, Val};
+use crate::{eval, matrix, nest, parallel, setting, validate_expr, Engine, Lookups, Rejected, Row, Steps, Val};
 use crate::tree::{Child, El};
+
+/// A field a row is given a name for: 1–64 ASCII letters, digits or `_`, not led by a digit.
+pub(crate) fn field_name(name: &str) -> bool {
+    !name.is_empty() && name.len() <= 64
+        && name.chars().enumerate().all(|(i, c)| c == '_' || c.is_ascii_alphabetic() || (i > 0 && c.is_ascii_digit()))
+}
 
 pub(crate) fn validate(each: &Value, format: &str, steps: &Steps, depth: usize) -> Result<(), String> {
     if depth > 8 { return Err("iteration nesting exceeds eight calls".into()); }
@@ -37,8 +43,7 @@ pub(crate) fn validate(each: &Value, format: &str, steps: &Steps, depth: usize) 
             if map.keys().any(|k| !matches!(k.as_str(), Some("path" | "on_invalid")) && !(entries && matches!(k.as_str(), Some("key_field" | "value_field" | "keys")))) { return Err("objects/entries has an unknown argument".into()); }
             if entries {
                 for key in ["key_field", "value_field"] {
-                    if !setting(args,key).is_some_and(|name| !name.is_empty() && name.len() <= 64
-                        && name.chars().enumerate().all(|(i,c)| c == '_' || c.is_ascii_alphabetic() || (i > 0 && c.is_ascii_digit()))) {
+                    if !setting(args,key).is_some_and(field_name) {
                         return Err("entries requires distinct key_field/value_field identifiers of 1..64 ASCII characters".into());
                     }
                 }
@@ -58,6 +63,7 @@ pub(crate) fn validate(each: &Value, format: &str, steps: &Steps, depth: usize) 
             if args.get("on_invalid").is_some_and(|v| !matches!(v.as_str(), Some("empty" | "reject"))) { return Err("objects on_invalid is empty or reject".into()); }
             Ok(())
         }
+        Some("nest") => nest::validate(args, format, steps, depth),
         Some("choose") => {
             let map = args.as_mapping().ok_or("iteration choose requires a mapping")?;
             if map.len() != 3 || map.keys().any(|k| !matches!(k.as_str(), Some("condition" | "then" | "else"))) { return Err("iteration choose requires condition, then and else only".into()); }
@@ -69,19 +75,25 @@ pub(crate) fn validate(each: &Value, format: &str, steps: &Steps, depth: usize) 
     }
 }
 
+/// The iteration calls a call holds: `choose`'s two branches, `nest`'s outer and inner.
+fn branches(each: &Value) -> Vec<&Value> {
+    let (call, keys) = if let Some(args) = each.get("choose") { (args, ["then", "else"]) }
+        else if let Some(args) = each.get("nest") { (args, ["each", "then"]) }
+        else { return Vec::new() };
+    keys.iter().filter_map(|key| call.get(*key)).collect()
+}
+
 pub(crate) fn expressions(each: &Value) -> Vec<&Value> {
     let mut result = Vec::new();
     if let Some(value) = each.get("project").and_then(|args| args.get("value")) { result.push(value); }
-    if let Some(args) = each.get("choose") {
-        if let Some(condition) = args.get("condition") { result.push(condition); }
-        for key in ["then", "else"] { if let Some(branch) = args.get(key) { result.extend(expressions(branch)); } }
-    }
+    if let Some(condition) = each.get("choose").and_then(|args| args.get("condition")) { result.push(condition); }
+    for branch in branches(each) { result.extend(expressions(branch)); }
     result
 }
 
 pub(crate) fn needs_order(each: &Value) -> bool {
     each.get("objects").is_some() || each.get("entries").is_some() || each.get("matrix").and_then(|a| a.get("headers_coerce")).and_then(Value::as_str) == Some("python")
-        || each.get("choose").is_some_and(|args| ["then", "else"].iter().any(|k| args.get(*k).is_some_and(needs_order)))
+        || branches(each).into_iter().any(needs_order)
 }
 
 pub(crate) fn rows(engine: &Engine, context: &Row, lookups: &Lookups, document: &El, each: &Value, maximum: usize, take: usize) -> Result<(Vec<El>, usize), Rejected> {
@@ -138,6 +150,7 @@ pub(crate) fn rows(engine: &Engine, context: &Row, lookups: &Lookups, document: 
             },
         };
     }
+    if let Some(args) = each.get("nest") { return nest::rows(engine, context, lookups, document, args, maximum, take); }
     let entries = each.get("entries");
     let args = entries.unwrap_or(&each["objects"]);
     let object = match crate::lookup_value(document, setting(args, "path").unwrap(), true)? {

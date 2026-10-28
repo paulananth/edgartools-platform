@@ -29,7 +29,7 @@ The operator asked for `/design-review` first. That skill audits a live web page
 
 ## The spec (approved)
 
-Corrected (2026-10-28 16:55 ET, ticket 46; operator, 2026-10-28: "Engine step, local (Recommended)"): `company_line_item` and the facts' flattening are built by a configured engine step and land through the silver writer, not by dbt; the line items are 23 codes of RDM's `financial-line-items`.
+Corrected (2026-10-28 16:55 ET, ticket 46; operator, 2026-10-28: "Engine step, local (Recommended)"): `company_line_item` and the facts' flattening are built by a configured engine step and land through the silver writer, not by dbt; the line items are 23 codes of RDM's `financial-line-items`. `company_fact`'s key reads `period` (start/end, or an instant's date) in place of `period_start` and `period_end`, since the silver writer refuses an empty key column; the filer is `company_key` (the 10-digit CIK the Company's Dataset Contract keys by) in place of `cik`, one system of record (operator, 2026-10-28: "silver must not have duplicate fields"). The figure check is the writer's own: it refuses a figure a DECIMAL column cannot hold exactly.
 
 Three silver tables. The facts land from the reader (ticket 40) and dbt flattens units and facts; the line items and the measures are built from the facts by dbt, rebuilt whole each run. Rules configuration (the line-item map and the measure definitions) sits under `rules/`, with its version on every row it produced.
 

@@ -28,6 +28,7 @@ mod join;
 mod context;
 mod parallel;
 mod matrix;
+mod nest;
 mod iteration;
 mod predicate;
 mod json_text;

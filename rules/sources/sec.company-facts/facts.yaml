@@ -1,8 +1,9 @@
 # One SEC company facts file: every XBRL fact a filer reported, one JSON object per
 # filer (`facts.<taxonomy>.<concept>.units.<unit>[]`). Configured source extract only
 # (ticket 40; operator, 2026-10-22: "configure only"). One table per taxonomy, one row
-# per concept, its `units` kept whole as one value; silver flattens units and facts
-# (ticket 43, `company_fact`). Built from the trial contract (research 03), ticket 45.
+# per concept, its `units` kept whole as one value. Built from the trial contract
+# (research 03), ticket 45. `company_fact` gives one row per filed fact, the rows
+# silver lands (silver-company-fact.yaml, ticket 46).
 source: sec.company-facts
 read:
   format: json
@@ -174,3 +175,53 @@ read:
         label: {value: {path: body.label, type: text}}
         description: {value: {path: body.description, type: text}}
         units: {value: {path: body.units, type: object, nullable: false, big_numbers: text, decimals: text}}
+    # One row per filed fact, the rows of silver's `company_fact` (ticket 46): each
+    # taxonomy, concept and unit carried onto its facts by `nest`. The figure stays
+    # its exact filed digits (a big decimal). `period` keys a fact's period without
+    # an empty part: start/end for a duration (ISO 8601), the date for an instant.
+    company_fact:
+      each:
+        nest:
+          each: {entries: {path: facts, key_field: taxonomy, value_field: concepts, on_invalid: empty}}
+          keep: {taxonomy: taxonomy}
+          then:
+            nest:
+              each: {entries: {path: concepts, key_field: concept, value_field: body}}
+              keep: {concept: concept}
+              then:
+                nest:
+                  each: {entries: {path: body.units, key_field: unit, value_field: facts}}
+                  keep: {unit: unit}
+                  then: {values: {path: facts}}
+      columns:
+        company_key:
+          transform:
+            value: {concat: [{const: {value: '0000000000'}}, {integer: {path: cik, from: document}}]}
+            transforms: [{keep_last: 10}]
+        taxonomy: {text: {path: taxonomy, trim: false}}
+        concept: {text: {path: concept, trim: false}}
+        unit: {text: {path: unit, trim: false}}
+        # The ISO 4217 code when the unit is a currency or a currency per share
+        # (USD, EUR/shares), else empty.
+        currency:
+          text:
+            path: unit
+            trim: false
+            transforms:
+            - {regex_replace: {pattern: '/.*$', with: ''}}
+            - {regex_replace: {pattern: '^.*[^A-Z].*$|^[A-Z]{0,2}$|^[A-Z]{4,}$', with: ''}}
+            null_if: ['']
+        period:
+          choose:
+            condition: {test: {path: start, kind: not_null}}
+            then: {concat: [{text: {path: start, trim: false}}, {const: {value: /}}, {text: {path: end, trim: false}}]}
+            else: {text: {path: end, trim: false}}
+        period_start: {date: {path: start, kind: calendar}}
+        period_end: {date: {path: end, kind: calendar}}
+        value: {value: {path: val, nullable: false, big_numbers: text, decimals: text}}
+        accession: {text: {path: accn, trim: false}}
+        filed: {date: {path: filed, kind: calendar}}
+        form: {text: {path: form, trim: false}}
+        fiscal_year_filed: {integer: {path: fy}}
+        fiscal_period_filed: {text: {path: fp, trim: false}}
+        frame: {text: {path: frame, trim: false}}
