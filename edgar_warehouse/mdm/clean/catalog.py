@@ -21,7 +21,7 @@ def load(root=None):
 
 
 def _validate(body):
-    expected = {"version", "kinds", "profiles", "accepted_bars", "legacy_relationships", "legacy_ultimate_type",
+    expected = {"version", "kinds", "profiles", "accepted_bars",
                 "reference_tables", "legacy_jurisdiction_table", "pair_comparisons", "legacy_pair_comparison"}
     if (not isinstance(body, dict) or not expected <= set(body)
         or set(body) - expected - {"master_search", "detail_lookups"}
@@ -71,8 +71,6 @@ def _validate(body):
                 or any(type(v) not in (int, float) or not math.isfinite(v) or not 0 < v < 1 for v in bar.values())
                 or bar["one_sided_confidence"] <= 0.5):
                 raise ValueError("Mastering accepted bar is invalid")
-    if not isinstance(body["legacy_relationships"], dict) or not isinstance(body["legacy_ultimate_type"], str) or not body["legacy_ultimate_type"]:
-        raise ValueError("Mastering legacy relationship contract is invalid")
     references = body["reference_tables"]
     if (not isinstance(references, dict) or not references
         or any(not isinstance(alias, str) or not alias or not isinstance(spec, dict)

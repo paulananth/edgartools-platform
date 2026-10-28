@@ -14,15 +14,20 @@ class ExactJSON(TypeDecorator):
     impl = Text
     cache_ok = True
 
+    def __init__(self, *, none_as_null: bool = False):
+        """`none_as_null`: Python None is SQL NULL, not the JSON value null."""
+        super().__init__()
+        self.none_as_null = none_as_null
+
     def load_dialect_impl(self, dialect):
         if dialect.name == "postgresql":
-            return dialect.type_descriptor(JSONB())
+            return dialect.type_descriptor(JSONB(none_as_null=self.none_as_null))
         if dialect.name == "mysql":
             return dialect.type_descriptor(LONGTEXT(charset="utf8mb4", collation="utf8mb4_0900_bin"))
         raise ValueError("Exact JSON storage currently supports PostgreSQL and MySQL")
 
     def process_bind_param(self, value, dialect):
-        if dialect.name == "postgresql":
+        if dialect.name == "postgresql" or (value is None and self.none_as_null):
             return value
         return json.dumps(value, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
 

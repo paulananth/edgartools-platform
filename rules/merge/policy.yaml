@@ -3,6 +3,10 @@
 # is a change to what Clean MDM runs. Without the reference tables the digest is
 # 983352e8…4049, the one the operator approved on 2026-09-25.
 version: sec-company-local-v2
+# The relationship types MDM masters (ticket 132): the RDM code set pinned under
+# this name in reference-pins.yaml, read and checked by the Rust engine.
+relationships:
+  pin: mdm-relationship-types
 required_consumers:
 - journal
 - export

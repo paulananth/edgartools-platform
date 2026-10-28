@@ -296,6 +296,59 @@ fn is_decimal(text: &str) -> bool {
         && fraction.map_or(true, |f| !f.is_empty() && f.bytes().all(|b| b.is_ascii_digit()))
 }
 
+/// A code's named properties (ticket 132): each name lower-case words joined by
+/// `_`; each value text, `true` or `false`, or a list of distinct texts (kept
+/// sorted). None when the code has none, so a version published before
+/// properties existed keeps its bytes.
+pub fn code_properties(row: &Object) -> Result<Option<Document>, String> {
+    use serde_json::Value;
+    let found: Value = match row.get("properties") {
+        None => return Ok(None),
+        Some(raw) => serde_json::from_str(raw.get()).map_err(|_| "A code's properties are not JSON")?,
+    };
+    let given = match found {
+        Value::Null => return Ok(None),
+        Value::Object(given) if !given.is_empty() => given,
+        _ => return Err("A code's properties are named values, at least one".into()),
+    };
+    let named = |name: &str| {
+        name.len() <= 64
+            && name.starts_with(|c: char| c.is_ascii_lowercase())
+            && name.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+    };
+    let filled = |text: &str| !text.trim().is_empty() && text.trim() == text;
+    let mut kept = BTreeMap::new();
+    for (name, value) in given {
+        if !named(&name) {
+            return Err(format!("A code's properties are named in lower-case words joined by _, not {name:?}"));
+        }
+        let refused = || format!("A code's properties are text, true or false, or a list of distinct texts: {name}");
+        let value = match value {
+            Value::String(text) if filled(&text) => Value::String(text),
+            Value::Bool(flag) => Value::Bool(flag),
+            Value::Array(items) if !items.is_empty() => {
+                let mut texts = items
+                    .into_iter()
+                    .map(|item| match item {
+                        Value::String(text) if filled(&text) => Ok(text),
+                        _ => Err(refused()),
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let count = texts.len();
+                texts.sort();
+                texts.dedup();
+                if texts.len() != count {
+                    return Err(refused());
+                }
+                Value::from(texts)
+            }
+            _ => return Err(refused()),
+        };
+        kept.insert(name, value);
+    }
+    Ok(Some(write(&kept)?))
+}
+
 pub fn prepare_reference_version(raw: &str) -> Result<String, String> {
     let input: Input = serde_json::from_str(raw).map_err(|_| "Invalid reference preparation")?;
     let mut by_code = BTreeMap::new();
@@ -371,6 +424,9 @@ pub fn prepare_reference_version(raw: &str) -> Result<String, String> {
                 body.insert("unit".into(), write(&unit)?);
             }
             _ => return Err("A code's value is decimal text with its unit, or neither".into()),
+        }
+        if let Some(properties) = code_properties(row)? {
+            body.insert("properties".into(), properties);
         }
         let level = paths
             .last()
@@ -478,6 +534,24 @@ mod tests {
                     r#""value":"","unit":"percent""#, r#""value":"25","unit":" ""#] {
             let raw = format!(r#"{{"codes":[{{"code":"a","label":"A",{bad}}}]}}"#);
             assert!(prepare_reference_version(&raw).unwrap_err().contains("decimal text"), "{bad}");
+        }
+    }
+
+    #[test]
+    fn properties_join_the_canonical_form_only_where_a_code_has_some() {
+        let before = prepare_reference_version(r#"{"codes":[{"code":"a","label":"A"}]}"#).unwrap();
+        let null = prepare_reference_version(r#"{"codes":[{"code":"a","label":"A","properties":null}]}"#).unwrap();
+        assert_eq!(null, before);
+        let given = prepare_reference_version(
+            r#"{"codes":[{"code":"a","label":"A","properties":{"to":["b","a"],"hierarchy":true,"cycles":"invalid"}}]}"#,
+        )
+        .unwrap();
+        let expected = r#"\"properties\":{\"cycles\":\"invalid\",\"hierarchy\":true,\"to\":[\"a\",\"b\"]}"#;
+        assert!(given.contains(expected), "{given}");
+        for bad in [r#"{}"#, r#"{"Bad":"x"}"#, r#"{"x":""}"#, r#"{"x":" y"}"#, r#"{"x":1}"#, r#"{"x":[]}"#,
+                    r#"{"x":["a","a"]}"#, r#"{"x":[true]}"#, r#"{"x":{"y":"z"}}"#, r#"["x"]"#] {
+            let raw = format!(r#"{{"codes":[{{"code":"a","label":"A","properties":{bad}}}]}}"#);
+            assert!(prepare_reference_version(&raw).unwrap_err().contains("properties"), "{bad}");
         }
     }
 

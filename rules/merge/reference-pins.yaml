@@ -4,6 +4,14 @@
 # whose published canonical form is `rules/reference/published/<code set>/<version>/canonical.jsonl`;
 # a reader refuses it unless its sha256 is the pin. A new version is a new pin,
 # so a new policy and the operator's approval, as an edit to the embedded table was.
+# The relationship types MDM masters (ticket 132; operator, 2026-10-27: "Use RDM
+# for keeping types and other information"): each type a code whose properties
+# are its rules, its capacities child codes; the policy names it under
+# `relationships`.
+mdm-relationship-types:
+  code_set: mdm-relationship-types
+  version: '1'
+  sha256: 9a0a3525e9427ab88405240a81b85be9d89a54c540b0c53770bdd269df7c4d33
 sec-place-codes:
   code_set: sec-place-codes
   version: '1'

@@ -10,6 +10,7 @@ import pytest
 from edgar_warehouse.rules import files
 from tests.engine.test_data_skill_bundle_postgres import installed  # noqa: F401
 from tests.mdm.test_configured_pair_comparison import configured_root  # noqa: F401
+from tests.support.relationship_types import pinned_types
 
 
 CASES = ["join", "issuer_only", "corrected", "released", "quarantine",
@@ -122,8 +123,7 @@ policy={"version":"invented-installed-save","required_consumers":["invented-expo
         "automatic_rules":[{"kind":"invented-kind","family":"binding",
           "rule_id":"invented-bind","rule_version":"1","verdict":"bind",
           "activation":"deterministic"}]}
-policy["relationships"]={"version":"invented-installed-links","types":{
-    "invented_link":{"from":["invented-kind"],"to":["invented-kind"]}}}
+policy.update(PINNED)
 with owner.begin() as conn:
     pin=register_policy(conn,policy)
     register_dataset(conn,"invented.authority",SOURCE,rules_authority=AUTHORITY)
@@ -298,7 +298,9 @@ print(json.dumps({"independent_install":True,"preview_rolled_back":True,
         result = subprocess.run(
             [str(python), "-I", "-c", "\n".join([
                 "INSTALL=" + repr(str(root)), "CONTRACT=" + repr(contract),
-                "SOURCE=" + repr(source), "AUTHORITY=" + repr(envelope), code])],
+                "SOURCE=" + repr(source), "AUTHORITY=" + repr(envelope),
+                "PINNED=" + repr(pinned_types({"invented_link": {"from": [kind], "to": [kind]}},
+                                              root=configured_root)), code])],
             cwd=root, env={**os.environ, "EDGAR_RULES_ROOT": str(configured_root),
                           "READ_OWNER_URL": owner.url.render_as_string(hide_password=False),
                           "READ_RUNTIME_URL": runtime.url.render_as_string(hide_password=False),

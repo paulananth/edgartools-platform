@@ -202,15 +202,32 @@ def without_parent_history(policy: dict) -> dict:
     return body
 
 
+def without_types_in_rdm(policy: dict) -> dict:
+    """Ticket 132 (operator, 2026-10-27: "Use RDM for keeping types and other
+    information"): the relationship types moved from the policy body into RDM
+    code set mdm-relationship-types, which the policy pins. Peeled, they are
+    the body's own section again (relationship-types-v6)."""
+    from edgar_warehouse.mdm.clean import relationships
+
+    body = _copy(policy)
+    types = relationships.types_of(body)
+    body["reference_pins"].pop(body["relationships"]["pin"])
+    body["relationships"] = {"version": "relationship-types-v6", "types": types}
+    return body
+
+
 def without_real_names(policy: dict) -> dict:
     """Profiling ticket 04b (operator, 2026-10-07: "All relationships must be
     named as close as reality"; each name approved one by one): the
     relationship types under their sources' own names. Peeled, the types are
     the table profiling ticket 04 moved into the policy."""
-    from edgar_warehouse.mdm.clean import relationships
+    from pathlib import Path
+
+    from edgar_warehouse.rules import files
 
     body = _copy(policy)
-    body["relationships"] = {"version": "relationship-types-v1", "types": _copy(relationships.TYPES_V0)}
+    table = files.load(Path(__file__).parent / "fixtures" / "relationship-types-v1.yaml")["types"]
+    body["relationships"] = {"version": "relationship-types-v1", "types": table}
     return body
 
 
@@ -231,7 +248,7 @@ def without_reference_pins(policy: dict) -> dict:
 def without_relationship_types(policy: dict) -> dict:
     """Profiling ticket 04 (operator, 2026-10-06: "Types as data"): the
     relationship types, moved from code into the policy (`relationships`). A
-    policy without them masters the same table (`relationships.TYPES_V0`)."""
+    policy without them masters what relationship-types-v1 held."""
     return {k: v for k, v in _copy(policy).items() if k != "relationships"}
 
 
@@ -291,6 +308,8 @@ def without_place_codes(policy: dict) -> dict:
 # Newest first: each layer, and Company's policy digest with it and every
 # layer after it still on.
 LAYERS = [
+    # The types in RDM: "Use RDM for keeping types and other information" (2026-10-27, ticket 132).
+    (without_types_in_rdm, "a3bf10f406abe5d8cad20c698f1b51f2f81661a76a3944620edfc0c304f99cd5"),
     # Recorded under the standing rule on its tests (2026-10-25, ticket 138).
     (without_one_value_per_identifier, "81abb7cc110debcac75ddf846f92bab112938758d6bc225e6ebbf70c0ac72189"),
     # Removed: "Agreed Remove HOLDS from MDM's relationship types" (2026-10-22, ticket 25).

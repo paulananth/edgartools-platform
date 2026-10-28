@@ -271,6 +271,12 @@ def prepare_relationships(command: Mapping) -> tuple[list[dict], list[dict]]:
     return relationships, reviews
 
 
+def prepare_relationship_types(codes: list[dict], kinds: list[str]) -> dict:
+    """Carry an RDM code set version's rows to Rust, which reads and checks the types."""
+    return json.loads(source_contract.prepare_relationship_types(
+        json.dumps({"codes": codes, "kinds": kinds}, ensure_ascii=False, separators=(",", ":"), allow_nan=False)))
+
+
 def prepare_relationship_periods(sightings: list[dict]) -> tuple[list[dict], list[dict]]:
     """Carry dated observations to the common relationship-history calculation."""
     periods, reviews = json.loads(source_contract.prepare_relationship_periods(

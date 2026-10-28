@@ -62,7 +62,7 @@ def published(tmp_path_factory):
             database.MIGRATIONS = held
         with pytest.MonkeyPatch.context() as patch:
             patch.setattr(store_module, "CODE_COLUMNS",
-                          tuple(c for c in store_module.CODE_COLUMNS if c not in ("value", "unit")))
+                          tuple(c for c in store_module.CODE_COLUMNS if c not in ("value", "unit", "properties")))
             _import(store)
             store.approve("sec-place-codes", "1", **OPERATOR)
             first = store.publish("sec-place-codes", "1", out=out)
@@ -92,7 +92,8 @@ def published(tmp_path_factory):
             before_retiring = _now(runtime)
             store.retire("test-retired", "1")
         upgraded = database.migrate(owner, runtime_role="rdm_runtime", existing_only=True)
-        assert list(upgraded) == ["001_rdm.sql", "002_code_context.sql", "003_content_lock.sql", "004_code_value.sql"]
+        assert list(upgraded) == ["001_rdm.sql", "002_code_context.sql", "003_content_lock.sql", "004_code_value.sql",
+                                 "005_code_properties.sql"]
         yield runtime, first, between, before_retiring
 
 

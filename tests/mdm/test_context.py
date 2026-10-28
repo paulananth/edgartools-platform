@@ -18,8 +18,11 @@ def test_every_kind_and_relationship_type_has_a_definition():
     from edgar_warehouse.mdm.clean.catalog import CATALOG
     assert set(CATALOG["kinds"]) == KINDS
     assert {k for k, v in defined["kinds"].items() if v.strip()} == KINDS
-    types = files.load(files.ROOT / "merge" / "relationships.yaml")["types"]
-    assert {t for t, v in defined["relationships"].items() if v.strip()} == set(types)
+    from edgar_warehouse.mdm.clean.relationships import types_of
+
+    types = types_of(files.policy())
+    assert {t for t, v in context.relationship_definitions().items() if v.strip()} == set(types)
+    assert "relationships" not in defined  # the code set holds their words (ticket 132)
 
 
 def test_definitions_are_not_part_of_the_mastering_policy():

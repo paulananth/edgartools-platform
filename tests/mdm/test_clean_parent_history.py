@@ -15,6 +15,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from tests.support.relationship_types import read_types
+
 from edgar_warehouse.mdm.clean import relationships
 from edgar_warehouse.mdm.clean.store import Conflict
 
@@ -186,5 +188,5 @@ def test_a_parent_period_after_the_succession_goes_to_a_steward():
     {"from": LEGAL, "to": LEGAL, "hierarchy": True, "cycles": "review", "ends_parent_links": True},
 ])
 def test_ends_parent_links_is_true_on_a_link_that_is_no_parent(spec):
-    with pytest.raises(Conflict, match="ends_parent_links"):
-        relationships.check_types({"version": "t", "types": {"SUCCESSOR_ENTITY": spec}})
+    with pytest.raises(ValueError, match="ends_parent_links"):
+        read_types({"SUCCESSOR_ENTITY": spec})
