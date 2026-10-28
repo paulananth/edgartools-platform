@@ -12,64 +12,37 @@ license = "MIT"
 authors = [
   { name = "Paul Ananth", email = "thepaulananth@gmail.com" },
 ]
+# Only what the code imports (operator, 2026-10-28: "Cleanup Python libraries
+# now that we are using rust for most work"): the Rust engine reads and
+# combines the source files, so edgartools, spaCy, ijson, lxml and the old MDM
+# service and matching libraries are gone.
 dependencies = [
-    "edgartools>=5.29.0",
     "pyarrow>=17.0.0",
-    "fsspec>=2023.1.0",
     "pytz>=2024.1",
-    "zstandard>=0.20.0",
     "httpx>=0.25.0",
     "PyYAML>=6.0.2",
-    # spaCy 3.8 imports click from spacy.cli even for `import spacy` (not only CLI
-    # entrypoints). Newer typer vendors click and no longer pulls it transitively,
-    # so warehouse images that install only --extra s3 (no streamlit) were missing
-    # click and crashed Item 5.02 parse with ModuleNotFoundError. Pin explicitly.
-    "click>=8.1",
-    "spacy>=3.8.14",
-    "en-core-web-sm",
 ]
 
 [project.optional-dependencies]
 s3 = [
     "boto3>=1.42.91",
-    "fsspec>=2023.1.0",
-    "s3fs>=2023.1.0",
 ]
 snowflake = [
-    "snowflake-connector-python>=3.7",
-]
-dashboard = [
-    "streamlit>=1.32",
-    "plotly>=5.20",
-    "pandas>=2.1",
     "snowflake-connector-python>=3.7",
 ]
 mdm = [
     "source-contract",
     "edgartools-control-core",
-    "ijson>=3.3,<4",
-    "lxml>=5.3",
-    "fastapi>=0.111.0",
-    "uvicorn[standard]>=0.29.0",
     "sqlalchemy>=2.0.0",
     "psycopg2-binary>=2.9.9",
-    "sqladmin>=0.16.0",
-    "jellyfish>=1.0.0",
-    "splink>=3.9.0",
-    "pydantic>=2.7.0",
     "boto3>=1.34.0",
     "openpyxl>=3.1",
 ]
 mdm-runtime = [
     "source-contract",
     "edgartools-control-core",
-    "ijson>=3.3,<4",
-    "lxml>=5.3",
     "sqlalchemy>=2.0.0",
     "psycopg2-binary>=2.9.9",
-    "snowflake-connector-python>=3.7",
-    "jellyfish>=1.0.0",
-    "pydantic>=2.7.0",
     "boto3>=1.34.0",
 ]
 # The configured source engine: Rust behind Python (mastering to-do 15). A
@@ -79,11 +52,6 @@ mdm-runtime = [
 engine = [
     "source-contract",
     "edgartools-control-core",
-]
-market = [
-    "yfinance>=0.2.40",
-    "fredapi>=0.5.2",
-    "pandas>=2.1",
 ]
 
 [project.scripts]
@@ -140,10 +108,13 @@ filterwarnings = [
 [tool.uv.sources]
 edgartools-control-core = { path = "crates/control-contract" }
 source-contract = { path = "crates/source-contract" }
-en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
 
 [dependency-groups]
 dev = [
     "pytest>=9.0.3",
     "pytest-testmon>=2.2.0",
+    # Tests only: the profiling skill's scripts (which bring duckdb themselves
+    # when run, `uv run --with duckdb`) and the Snowflake Streamlit app's test.
+    "duckdb>=1.1",
+    "pandas>=2.1",
 ]
