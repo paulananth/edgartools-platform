@@ -519,7 +519,7 @@ history (`git log -S '<symbol>' -- CLAUDE.md`).
   `uv sync --all-extras --group dev --reinstall-package source-contract`; until then Python tests run
   the old engine. testmon then reruns nearly every test (10 minutes, ticket 138), so name the area's
   test files instead. The storage-adapter scenarios run locally on MySQL with
-  `CI=true SKILL_ADAPTER_TEST_ENGINE=mysql uv run --no-sync --with pymysql pytest tests/storage_adapters/...`;
+  `CI=true SKILL_ADAPTER_TEST_ENGINE=mysql uv run --no-sync pytest tests/storage_adapters/...` (the database clients are in the `dev` group);
   remove the `skill-adapter-proof-*` containers after.
 
 ## Known open items
