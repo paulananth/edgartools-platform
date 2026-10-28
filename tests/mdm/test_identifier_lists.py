@@ -157,6 +157,15 @@ def test_a_redelivered_record_gives_its_new_value_to_its_security():
     assert given(result, "mints") == {(HELD, F3)}
 
 
+
+def test_a_redelivered_record_alone_in_its_batch_gives_its_new_value_for_the_save_to_check():
+    # Nothing else in the batch: the new value still goes to its Security
+    # through `mints`, which the save re-checks under its lock.
+    again = record("one", F1, F3)
+    _, result = match([again], held={F1: HELD}, bound={again["subject"]: HELD})
+    assert result["identities"] == [] and result["reviews"] == []
+    assert given(result, "mints") == {(HELD, F3)}
+
 def test_a_refused_bind_gives_its_values_to_no_security():
     first = record("one", F1, F2)
     _, result = match([first, record("two", F2)], held={F1: HELD},
@@ -259,6 +268,17 @@ def test_merges_in_one_batch_chain_and_never_repeat():
     assert {entity for _, entity in binds(result)} <= {HELD, OTHER, THIRD}
     assert result["reviews"] == []
 
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_a_record_finding_a_security_only_through_a_value_added_in_the_batch_binds_it(reverse):
+    # "one" binds the held Security and adds F3; "two" finds it only by F3,
+    # "three" only by the F4 "two" adds. In either order, and with no merge
+    # rule, each binds the held Security and none creates one.
+    batch = [record("one", F1, F3), record("two", F3, F4), record("three", F4)]
+    _, result = match(batch[::-1] if reverse else batch, held={F1: HELD})
+    assert result["identities"] == [] and result["reviews"] == []
+    assert sorted(binds(result)) == sorted((r["subject"], HELD) for r in batch)
 
 CUSIP = "ZZ0000013"
 CUSIP_RULE = {**RULE, "rule_id": "fixture-security-cusip",
