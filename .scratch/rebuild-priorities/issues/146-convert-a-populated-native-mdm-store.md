@@ -2,7 +2,7 @@
 
 Priority: 146. Map: [Rebuild priorities](../map.md). Opened 2026-10-28 12:43 ET.
 
-Type: task. Status: in progress (Claude, branch `claude/t146-mdm-data-migration`).
+Type: task. Status: resolved (2026-10-28 15:10 ET).
 Blocked by: none. Unblocks ticket 120's switch-on in `company-on`.
 Operator, 2026-10-28: "how to get Securities running in a store: build a data
 migration so today's code can upgrade company-on - approved".
@@ -47,6 +47,6 @@ resumable command beside `rebuild-name-index`; `migrate()`'s refusal stays.
 - [x] Convert `company-on`; counts against the inventory; the swap, with the native database kept (2026-10-28 14:21 ET): the swap at 13:36 ET (backup first; `mdm` renamed `mdm_native`, read-only, the runtime, verifier and governance roles' connect revoked; a fresh governed `mdm`). The conversion 13:37–13:57 ET (19.5 min, peak 1.8 GB): 77 batches, 19,280 readings, 15,789 decisions, 15,564 masters, 886 set aside, equal to the inventory; 3 policies and 14 Dataset Contract readings carried, `HOLDS` dropped. The checks, 27 s: 15,564 masters kept, none added; 19,280 records present with the same binding; no decision lost; no field differs; passed
 - [x] Found (2026-10-28 14:21 ET): the checks were killed (signal 9) twice before their first page of masters. A consumer page reads each master with its batch's whole saved request (77 requests, 2,553 MB, the largest 141 MB), once per row. Fixed in the checks: they read the current master records only (`iter_type`), conversion tests 9 passed. The consumer page itself is [ticket 147](147-consumer-page-carries-the-batch-request.md)
 - [x] Three-axis review of the checks' read (2026-10-28 14:22 ET): GoF leave it (noted on ticket 147: the adapter built by hand at eight call sites); Spec: the checks unchanged (same keys, same bodies, now in the checks' own transaction), ticket 147 corrected (the request's hash check, 200 masters a statement); Standards: the whole read named in the docstring, one `_adapter` for both commands, the comment points at ticket 147; paging past 400 masters proved live (15,564 masters, about 39 pages, every count exact). Tests 20 passed
-- [ ] PR, CI, merge of the checks' read
-- [ ] Ticket 120's switch-on in `company-on`, and its loads (hours: say the time first)
-- [ ] Learning → skill
+- [x] PR, CI, merge of the checks' read (2026-10-28 15:10 ET): #1206 merged, 20 of 20 checks; rerun on `company-on` with that code (its path printed): passed in 26 s, the same counts
+- [ ] ~~Ticket 120's switch-on in `company-on`, and its loads~~ deferred to ticket 120: operator, 2026-10-28: "Do not load finish work". Found for it: today's four documents differ from `company-on`'s active ones (merge rules `aa6e8b4d` against `a417eb6b`, N-PORT Security `3465a646` against `768bcc72`, OpenFIGI `9d5277b8` against `e479ab31`, 13F `f8773931`, none active); each needs a saved version, its proof carried forward (13F its own), the standing approval and activation, merge rules first. The loads about 10 h. The merge path reads no saved batch request but its own run's, so ticket 147 does not block them
+- [x] Learning → skill (2026-10-28 15:10 ET): mdm-engineering, "Migrations": a populated native store converts with `mdm convert-native` (the swap, kept read-only, the checks), and a whole-store check reads current records, never consumer pages (a page carries each master's saved batch request)

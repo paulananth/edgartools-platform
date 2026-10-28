@@ -302,6 +302,20 @@ masters needs its rebuild before readers accept it.
   a role without the admin option does not fail.
 - A migration is applied explicitly. A deploy that carries a new migration is
   incomplete until the migration has run.
+- A populated native store does not migrate to governed storage; convert it
+  with `edgar-warehouse mdm convert-native` (owner only;
+  `NATIVE_MDM_DATABASE_URL` the native store, `MDM_DATABASE_URL` a fresh
+  governed one). It applies each saved batch's command again, oldest first, so
+  every master keeps its id; it carries the approved policies and Dataset
+  Contract readings, and a rerun skips the saved batches. Back up first, rename
+  the native database (`mdm_native`), make it read-only and revoke the
+  application roles' connect, then install the fresh store under the old name.
+  The command's checks (the same masters, every record's binding, no decision
+  lost) fail it with exit 1.
+- A governed store keeps each batch's whole request, which can be a hundred
+  MB or more after a large load or a conversion. A whole-store check reads the
+  current records (`iter_type`), never consumer pages: a consumer page reads
+  each master with its batch's request, once a row.
 
 ## Writes and transactions
 
