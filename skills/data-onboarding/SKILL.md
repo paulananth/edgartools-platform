@@ -39,6 +39,7 @@ Read these before anything else. Breaking one is never the right call.
 | Edit code while onboarding, even for a code ticket the operator approved | Configuration only: write the ticket for the code, and ask before coding |
 | Invent a command this skill does not name | Follow "When a command is missing" |
 | Ask several questions at once | Ask one, in plain words, with your recommendation |
+| Put a master data field in silver, alone or as a copy | Every master data field is on its master in MDM, and only there (operator, 2026-10-28: "all master data fields must be on mdm"; operator, 2026-10-28: "silver must not have duplicate fields, it contredits the data governance principle one system of record"): in the kind's fields and the Dataset Contract. A silver row holds the transaction's own facts and its link keys |
 
 ## Tell the discovery story as you work
 
@@ -476,6 +477,12 @@ missing, go on and log it.
   - A flag, role or type the source states about a record is evidence for a
     rule, never a key and never a decider on its own: such fields are often
     wrong or partial for the very records that matter.
+- **Every master field reaches MDM.** Before **test**, list each master field
+  the findings name (and each fact every row repeats about the master) and
+  check it is in the kind's fields and the Dataset Contract, and that no
+  silver table spec carries it (a link's source key excepted); one found in
+  silver is a defect, not a choice. Ticket 138 found six N-PORT
+  Security fields in silver only, ruled for MDM three days before.
 - **Fields:** use the kind's names. A list-shaped field has no contract
   syntax yet: leave it out, say so, and log a ticket.
   - **A date that usually changes stays out of MDM** unless it adds meaning

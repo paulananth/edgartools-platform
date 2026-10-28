@@ -76,6 +76,16 @@ Take the class from the approved findings, and check it against the glossary:
 | Transaction data | records events or facts about masters over time; only grows | silver |
 | Metadata | describes the data itself (counts, files, runs) | bookkeeping, not modeled here |
 
+**One system of record: every master data field is on its master in MDM,
+and only there** (operator, 2026-10-28: "all master data fields must be on
+mdm"; operator, 2026-10-28: "silver must not have duplicate fields, it contredits the data governance principle one system of record"). A silver row holds the transaction's own facts and its links to
+masters (the link's source key, then the master id); it never copies a master
+field, not even the value that row filed. A field MDM lacks moves to MDM
+first; then silver drops it. A row's own unit is not a copy: the currency
+of an amount the row states stays beside that amount (operator, 2026-10-28,
+N-PORT's currency code: "Keep it on the row (Recommended)"), even when the
+master also holds a currency.
+
 A part that looks like two classes is usually two parts: a code list inside a
 master file is reference data plus a master attribute that holds its codes.
 
@@ -202,10 +212,13 @@ the time columns, and the load mode. The spec is advice; this skill does not
 build the table.
 
 - **A transaction row links to its master by the master id only.** The
-  identifiers it reported are found through the Cross-reference.
+  identifiers it reported are found through the Cross-reference; the one
+  source key a link reads stays, since the writer fills the master id from it
+  once that record is mastered.
 - **A fact every row repeats about the master** (a category, a country, a
-  currency the instrument is in) is a master field as well: the value most
-  rows report, none on a tie, with each row keeping its own in silver. Ask
+  currency the instrument is in) is a master field, so it must reach MDM: the
+  value most rows report, none on a tie, on the kind's fields and the Dataset
+  Contract, and not on the silver row (one system of record). Ask
   before taking a fact that describes the holder's view (a valuation level, a
   position) to the master: that one stays on the row.
 
@@ -375,4 +388,4 @@ Examples only; nothing above depends on them.
     European stock (ISIN only) gave the same masters in all three load orders.
   - *A master fact from transaction rows.* N-PORT reports an asset category,
     issuer type, country and currency on each holding; the Security takes the
-    most-reported value, each holding keeps its own.
+    most-reported value; the holding row in silver does not repeat it.
