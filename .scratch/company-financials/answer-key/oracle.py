@@ -307,18 +307,20 @@ def item(company: Company, year: int, name: str) -> dict:
             total, eq = get("LiabilitiesAndStockholdersEquity"), get(
                 "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest")
             temp = get("TemporaryEquityCarryingAmountAttributableToParent")
-            if total is None or eq is None:
+            if total is None or eq is None or len({c["unit"] for c in (total, eq, temp) if c}) > 1:
                 return None
             v = value(total) - value(eq) - (value(temp) if temp else 0)
             return {"value": str(v), "unit": total["unit"], "concept": "computed: us_liabilities",
                     "accn": total["accn"], "filed": total["filed"], "flags": ["computed"]}
         if how in ("us_debt", "ifrs_debt"):
             options = ([[["LongTermDebt"], ["ShortTermBorrowings", "CommercialPaper", "NotesPayableCurrent"]],
-                        [["LongTermDebtNoncurrent"], ["LongTermDebtCurrent", "DebtCurrent"]],
+                        [["LongTermDebtNoncurrent"], ["LongTermDebtCurrent", "DebtCurrent"],
+                         ["ShortTermBorrowings", "CommercialPaper", "NotesPayableCurrent"]],
                         [["LongTermDebtAndCapitalLeaseObligations"], ["LongTermDebtAndCapitalLeaseObligationsCurrent"]]]
                        if how == "us_debt" else
-                       [[["Borrowings"]], [["LongtermBorrowings"], ["ShorttermBorrowings"]],
-                        [["LongtermBorrowings"], ["CurrentBorrowingsAndCurrentPortionOfNoncurrentBorrowings"]]])
+                       [[["Borrowings"]],
+                        [["LongtermBorrowings"], ["ShorttermBorrowings",
+                                                  "CurrentBorrowingsAndCurrentPortionOfNoncurrentBorrowings"]]])
             for number, legs in enumerate(options):
                 got = [next((c for c in (get(n) for n in leg) if c), None) for leg in legs]
                 if got[0] is None:

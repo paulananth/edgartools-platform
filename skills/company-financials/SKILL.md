@@ -59,7 +59,9 @@ Evidence and sources: ticket 35, research 02 section 1.
 
 ## Standard line items (ticket 38, decided 2026-10-21)
 
-- **Nineteen line items**, as research 01 section 6 lists them
+- **Nineteen groups, 23 line items** (current assets and liabilities, pretax
+  income and income tax, and dividends paid, buybacks and dividends per share
+  are each their own), as research 01 section 6 lists them
   (`.scratch/company-financials/research/01-measures-and-concepts.md`). Each is
   an ordered list of reported concepts. Where research 01's order differs from
   the Fundamental Accounting Concepts' Try Order, the standard's order wins:
@@ -80,16 +82,19 @@ Evidence and sources: ticket 35, research 02 section 1.
 - **A missing line item** is empty, with the reason "no concept filed", and
   counted per line item.
 - **The line items are an RDM code set** (operator, 2026-10-22: "Yes, code set +
-  crosswalk (Recommended)"): `financial-line-items`, 19 codes with label,
-  definition and kind, crosswalked to the `us-gaap` and `ifrs-full` concepts each
-  uses. The rules file below names those codes and holds only the order and
-  the fallbacks. The taxonomies are not loaded into RDM; a fact keeps its
+  crosswalk (Recommended)"): `financial-line-items`, 23 codes with label,
+  definition and period (duration or instant), crosswalked to the `us-gaap`,
+  `ifrs-full` and `dei` concepts each tries (a computed value's terms stay in
+  the map). The rules file `rules/sources/sec.company-facts/line-items.yaml`
+  names those codes and holds the order, the flags and the fallbacks; a test
+  holds the two equal. The taxonomies are not loaded into RDM; a fact keeps its
   concept's label in silver.
 - **The map is rules configuration** (operator: "Rules configuration
   (Recommended)"): a reviewed YAML file under `rules/` names each line item, its
   concepts in order, any computed fallback and its flag; a configured step
-  applies it. An operation the engine lacks is added as a generic engine
-  primitive (build ticket 46).
+  applies it, locally, landing through the silver writer (operator, 2026-10-28:
+  "Engine step, local (Recommended)"); not dbt. An operation the engine lacks
+  is added as a generic engine primitive (build ticket 46).
 - Figures in the reporting currency with its ISO code (ticket 42, below).
 
 Evidence and sources: ticket 38, research 02 section 2.
@@ -189,8 +194,8 @@ Evidence and sources: ticket 39, research 02 section 3.
 ## Silver tables and their review (ticket 43, decided 2026-10-22)
 
 - **Three tables**: `company_fact` (every filed fact, append, keyed on the
-  measured eight columns), `company_line_item` and `company_measure` (built by
-  dbt from the facts, rebuilt whole each run). The spec is on ticket 43.
+  measured eight columns), `company_line_item` and `company_measure` (built from
+  the facts by a configured engine step, rebuilt whole each run). The spec is on ticket 43.
 - **Review the financials tickets before a spec or a build**: the rulings of 35,
   38, 39, 40, 42 and 128 each reach the spec, the reader (45), the line items
   (46) and the answer key (44). The review of 2026-10-22 found a spec waiting on

@@ -1,0 +1,206 @@
+# The standard line items (ticket 46): for each company and annual period, which
+# reported concept gives each line item. Rulings: ticket 38 (research 01
+# section 6, with the Fundamental Accounting Concepts' Try Order for cost of
+# revenue), ticket 42 (an `ifrs-full` list beside each `us-gaap` list; research
+# 04), skills/company-financials "Standard line items".
+#
+# The codes are RDM's `financial-line-items` (label, definition, period); its
+# crosswalk to the concepts below is held equal to this file by a test. This
+# file holds only what a crosswalk cannot say: the try-order, the flags and the
+# computed fallbacks.
+#
+# Each list is tried in order; the first entry with a value for that exact
+# period wins. An entry is
+# - a concept (`dei:` names a cover-page concept), or
+#   {concept, flag} (the value carries the flag), or {concept, kind} (an
+#   industry concept: bank, insurer, utility);
+# - {computed: sum | difference, terms, flag}: the terms' values added, or
+#   the first less the rest, all in one unit, flagged "computed" (and with its
+#   own flag, when it names one), naming the accession of its first term read
+#   from the facts. A term is a
+#   concept, {first_of: [concepts]} (the first present), {line_item: code}
+#   (that line item's value for the same period) or {optional: term} (counted
+#   as nothing when absent). A required term missing, or two units, and the
+#   entry gives nothing.
+version: line-items-2026-10-28.first-build
+code_set: {code_set: financial-line-items, version: "1"}
+line_items:
+  revenue:
+    us-gaap:
+      - Revenues
+      - RevenueFromContractWithCustomerExcludingAssessedTax
+      - RevenueFromContractWithCustomerIncludingAssessedTax
+      - SalesRevenueNet
+      - {computed: sum, terms: [SalesRevenueGoodsNet, SalesRevenueServicesNet]}
+      - {concept: RevenuesNetOfInterestExpense, kind: bank}
+      - {concept: InterestAndDividendIncomeOperating, kind: bank}
+      - {concept: RegulatedAndUnregulatedOperatingRevenue, kind: utility}
+      - {concept: PremiumsEarnedNet, kind: insurer}
+    ifrs-full:
+      - Revenue
+      - RevenueFromContractsWithCustomers
+      - {concept: RevenueFromInterest, kind: bank}
+      - {concept: InterestRevenueCalculatedUsingEffectiveInterestMethod, kind: bank}
+      - {concept: InsuranceRevenue, kind: insurer}
+  net_income:
+    us-gaap:
+      - NetIncomeLoss
+      - {computed: difference, terms: [ProfitLoss, NetIncomeLossAttributableToNoncontrollingInterest]}
+      - {concept: ProfitLoss, flag: includes NCI}
+    ifrs-full:
+      - ProfitLossAttributableToOwnersOfParent
+      - {computed: difference, terms: [ProfitLoss, ProfitLossAttributableToNoncontrollingInterests]}
+      - {concept: ProfitLoss, flag: includes NCI}
+  eps_diluted:
+    us-gaap:
+      - EarningsPerShareDiluted
+      - EarningsPerShareBasicAndDiluted
+      - {concept: IncomeLossFromContinuingOperationsPerDilutedShare, flag: continuing operations}
+    ifrs-full:
+      - DilutedEarningsLossPerShare
+      - BasicAndDilutedEarningsLossPerShare
+      - {concept: DilutedEarningsLossPerShareFromContinuingOperations, flag: continuing operations}
+  ocf:
+    us-gaap:
+      - NetCashProvidedByUsedInOperatingActivities
+      - {concept: NetCashProvidedByUsedInOperatingActivitiesContinuingOperations, flag: continuing operations}
+    ifrs-full:
+      - CashFlowsFromUsedInOperatingActivities
+  capex:
+    us-gaap:
+      - PaymentsToAcquirePropertyPlantAndEquipment
+      - {concept: PaymentsToAcquireProductiveAssets, flag: includes software and intangibles}
+      - PaymentsToAcquireOtherPropertyPlantAndEquipment
+      - PaymentsForCapitalImprovements
+    ifrs-full:
+      - PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities
+      - {concept: PurchaseOfPropertyPlantAndEquipmentIntangibleAssetsOtherThanGoodwillInvestmentPropertyAndOtherNoncurrentAssets,
+         flag: includes intangibles and other assets}
+  book_value:
+    us-gaap:
+      - StockholdersEquity
+      - {computed: difference, terms: [StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest, MinorityInterest]}
+      - PartnersCapital
+      - MembersEquity
+    ifrs-full:
+      - EquityAttributableToOwnersOfParent
+      - {computed: difference, terms: [Equity, NoncontrollingInterests]}
+  assets:
+    us-gaap: [Assets]
+    ifrs-full: [Assets]
+  diluted_shares:
+    us-gaap:
+      - WeightedAverageNumberOfDilutedSharesOutstanding
+      - WeightedAverageNumberOfShareOutstandingBasicAndDiluted
+    ifrs-full:
+      - AdjustedWeightedAverageShares
+  shares_outstanding:
+    us-gaap:
+      - CommonStockSharesOutstanding
+      - {concept: "dei:EntityCommonStockSharesOutstanding", flag: cover-page date}
+    ifrs-full:
+      - NumberOfSharesOutstanding
+      - {concept: "dei:EntityCommonStockSharesOutstanding", flag: cover-page date}
+  gross_profit:
+    us-gaap:
+      - GrossProfit
+      - computed: difference
+        terms:
+          - {line_item: revenue}
+          - {first_of: [CostOfRevenue, CostOfGoodsAndServicesSold, CostOfServices, CostOfGoodsSold]}
+    ifrs-full:
+      - GrossProfit
+      - {computed: difference, terms: [{line_item: revenue}, CostOfSales]}
+  operating_income:
+    us-gaap: [OperatingIncomeLoss]
+    ifrs-full: [ProfitLossFromOperatingActivities]
+  total_debt:
+    # Never LongTermDebt + LongTermDebtCurrent; lease liabilities never added
+    # under IFRS (research 04). Every form is a computed total, `Borrowings`
+    # alone too, so each carries "computed" as the answer key's does.
+    us-gaap:
+      - computed: sum
+        terms: [LongTermDebt, {optional: {first_of: [ShortTermBorrowings, CommercialPaper, NotesPayableCurrent]}}]
+      - computed: sum
+        terms:
+          - LongTermDebtNoncurrent
+          - {optional: {first_of: [LongTermDebtCurrent, DebtCurrent]}}
+          - {optional: {first_of: [ShortTermBorrowings, CommercialPaper, NotesPayableCurrent]}}
+      - computed: sum
+        terms: [LongTermDebtAndCapitalLeaseObligations, {optional: LongTermDebtAndCapitalLeaseObligationsCurrent}]
+        flag: includes leases
+    ifrs-full:
+      - {computed: sum, terms: [Borrowings]}
+      - computed: sum
+        terms:
+          - LongtermBorrowings
+          - {optional: {first_of: [ShorttermBorrowings, CurrentBorrowingsAndCurrentPortionOfNoncurrentBorrowings]}}
+  cash:
+    us-gaap:
+      - CashAndCashEquivalentsAtCarryingValue
+      - {concept: CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents, flag: includes restricted cash}
+      - Cash
+    ifrs-full:
+      - CashAndCashEquivalents
+      - {concept: Cash, flag: cash only}
+  liabilities:
+    us-gaap:
+      - Liabilities
+      - computed: difference
+        terms:
+          - LiabilitiesAndStockholdersEquity
+          - StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest
+          - {optional: TemporaryEquityCarryingAmountAttributableToParent}
+    ifrs-full:
+      - Liabilities
+      - {computed: difference, terms: [EquityAndLiabilities, Equity]}
+  current_assets:
+    us-gaap: [AssetsCurrent]
+    ifrs-full: [CurrentAssets]
+  current_liabilities:
+    us-gaap: [LiabilitiesCurrent]
+    ifrs-full: [CurrentLiabilities]
+  pretax_income:
+    us-gaap:
+      - IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest
+      - IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments
+    ifrs-full: [ProfitLossBeforeTax]
+  income_tax:
+    us-gaap: [IncomeTaxExpenseBenefit]
+    ifrs-full: [IncomeTaxExpenseContinuingOperations]
+  interest_expense:
+    # Never InterestIncomeExpenseNet.
+    us-gaap:
+      - InterestExpense
+      - InterestExpenseNonoperating
+      - InterestExpenseDebt
+      - InterestAndDebtExpense
+      - InterestExpenseOperating
+    ifrs-full:
+      - InterestExpense
+      - InterestExpenseOnBorrowings
+      - {concept: FinanceCosts, flag: includes other finance costs}
+  da:
+    us-gaap:
+      - DepreciationDepletionAndAmortization
+      - DepreciationAndAmortization
+      - DepreciationAmortizationAndAccretionNet
+      - {concept: Depreciation, flag: excludes amortization}
+    ifrs-full:
+      - DepreciationAndAmortisationExpense
+      - AdjustmentsForDepreciationAndAmortisationExpense
+      - {concept: DepreciationAmortisationAndImpairmentLossReversalOfImpairmentLossRecognisedInProfitOrLoss,
+         flag: includes impairment}
+      - {concept: DepreciationExpense, flag: excludes amortisation}
+  dividends_paid:
+    us-gaap: [PaymentsOfDividendsCommonStock, PaymentsOfDividends]
+    ifrs-full:
+      - DividendsPaidClassifiedAsFinancingActivities
+      - DividendsPaidToEquityHoldersOfParentClassifiedAsFinancingActivities
+      - DividendsPaid
+  buybacks:
+    us-gaap: [PaymentsForRepurchaseOfCommonStock]
+    ifrs-full: [PaymentsToAcquireOrRedeemEntitysShares]
+  dps:
+    us-gaap: [CommonStockDividendsPerShareDeclared, CommonStockDividendsPerShareCashPaid]
+    ifrs-full: [DividendsRecognisedAsDistributionsToOwnersPerShare]
