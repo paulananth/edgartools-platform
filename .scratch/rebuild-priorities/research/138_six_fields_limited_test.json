@@ -1,0 +1,30 @@
+{
+ "identifiers_on_two_or_more_securities": 0,
+ "kind": "limited test before the switch-on (operator, 2026-10-28: \"Switch on with minimal testing no multi hours testing\")",
+ "open_reviews": {},
+ "records": 350,
+ "records_stating_each_fact": {
+  "asset_category": 348,
+  "currency": 350,
+  "derivative_category": 8,
+  "investment_country": 350,
+  "issuer_type": 350,
+  "restricted": 347
+ },
+ "second_pass_changed": false,
+ "securities": 350,
+ "securities_holding_each_fact": {
+  "asset_category": 348,
+  "currency": 350,
+  "derivative_category": 8,
+  "investment_country": 350,
+  "issuer_type": 350,
+  "restricted": 347
+ },
+ "slice": {
+  "cusips_sampled": 300,
+  "holdings": 2632,
+  "isin_only_holdings_sampled": 50,
+  "seed": 138
+ }
+}

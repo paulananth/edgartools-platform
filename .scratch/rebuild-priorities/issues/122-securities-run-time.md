@@ -72,6 +72,14 @@ need the Mac on power.
 
 One CUSIP slice, 49,082 records each joining an existing Security with its listings (158,554 rows): the merge took about 50 minutes, about 16 records a second. At that rate the quarter's OpenFIGI records (about 383,000 by CUSIP and 33,000 by ISIN) take about 7 hours of merge in `company-on`. "Merge in sets of records" (below) is the idea it adds weight to.
 
+## A repeated delivery is slow (measured 2026-10-28 11:53 ET, ticket 138's limited test)
+
+350 N-PORT Security records (300 CUSIPs, 50 ISIN-only) into a fresh disposable
+MDM in batches of 250: the first pass 8 s; the same records again, changing
+nothing, 172 s. Reading the 350 Securities back through `ContractReader`
+(`snapshot_page`, pages of 1,000) took about 5 minutes over two reads. Not yet
+profiled.
+
 ## Ideas to test (none decided)
 
 - [x] Measure the split between work and Bookkeeping's checks (2026-10-20 07:55 ET): sampled over pass 2's last steps, above; checks are 48 of 74 minutes, `finalize` 16

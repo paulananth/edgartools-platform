@@ -21,7 +21,7 @@ moves into the source engine) and keeps the duplicate as
 `CATALOG["legacy_relationships"]`; this ticket removes it from #1121's version,
 so the two never conflict (as fix 2 of ticket 129: "Wait for #1121").
 
-**Status:** in progress (Claude, branch `claude/t132-relationship-types`, 2026-10-27); was open, unblocked (2026-10-22 21:11 ET): #1121 merged (2026-10-22 19:08 ET); build on its version of `relationships.py`
+**Status:** resolved (2026-10-28 11:53 ET): #1196 merged 2026-10-28 06:57 ET; the follow-ups are ticket 140.
 
 ## Rulings (operator, 2026-10-27)
 

@@ -2,7 +2,7 @@
 
 Priority: 136. Map: [Rebuild priorities](../map.md). Opened 2026-10-25 12:32 ET.
 
-Type: task. Status: done (Claude). PR #1168 merged 2026-10-25 13:22 ET.
+Type: task. Status: resolved (2026-10-28 11:53 ET; done by Claude). PR #1168 merged 2026-10-25 13:22 ET.
 Blocked by: none. Unblocks the last part of [120](120-switch-on-securities.md).
 
 ## Why
