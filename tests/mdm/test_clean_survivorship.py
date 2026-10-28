@@ -294,20 +294,6 @@ class TestSelectFields:
         )
         assert fields == {}
 
-    def test_a_field_records_the_digest_it_was_selected_under(self):
-        a = company()
-        claims = current_claims([a], AS_OF, set())
-        fields, _, _ = select_fields(
-            "company",
-            sorted(claims),
-            claims,
-            {"fields": rules("sec.company")},
-            [],
-            as_of=AS_OF,
-            policy_digest="digest-1",
-        )
-        assert fields["legal_name"]["policy_digest"] == "digest-1"
-
     def test_an_unauthorized_clear_is_reviewed_not_applied(self):
         a = company(fields={"legal_name": {"op": "clear"}})
         claims = current_claims([a], AS_OF, set())

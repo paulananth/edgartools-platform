@@ -51,7 +51,6 @@ IDENTITY_LOCALS = (
     "reader_warehouse_name",
 )
 
-
 def _load_module():
     spec = importlib.util.spec_from_file_location("generate_snowflake_env", SCRIPT)
     assert spec and spec.loader
@@ -60,11 +59,9 @@ def _load_module():
     spec.loader.exec_module(module)
     return module
 
-
 @pytest.fixture()
 def mod():
     return _load_module()
-
 
 def _base_config(**overrides) -> dict:
     config = {
@@ -80,12 +77,10 @@ def _base_config(**overrides) -> dict:
     config.update(overrides)
     return config
 
-
 def _parse_locals(main_tf: str) -> dict[str, str]:
     """Extract `name = "VALUE"` string locals from a main.tf locals block."""
     body = main_tf.split("locals {", 1)[1].split("\n}", 1)[0]
     return dict(re.findall(r'^\s*(\w+)\s*=\s*"([^"]*)"\s*$', body, re.MULTILINE))
-
 
 def _generated(mod, config: dict) -> dict[str, str]:
     """Generate, returning {relative posix path: content}."""
@@ -94,11 +89,9 @@ def _generated(mod, config: dict) -> dict[str, str]:
         for path, content in mod.generate(mod.validate_config(config)).items()
     }
 
-
 # --------------------------------------------------------------------------
 # The parity test: generating `prod` must reproduce prod's live identifiers.
 # --------------------------------------------------------------------------
-
 
 def test_generating_prod_reproduces_live_prod_identifiers(mod):
     live = _parse_locals(LIVE_PROD_MAIN_TF.read_text())
@@ -121,7 +114,6 @@ def test_generating_prod_reproduces_live_prod_identifiers(mod):
             "Snowflake resource"
         )
 
-
 def test_generating_prod_reproduces_live_prod_environment_and_schemas(mod):
     live = _parse_locals(LIVE_PROD_MAIN_TF.read_text())
     files = _generated(mod, _base_config(env_name="prod"))
@@ -131,7 +123,6 @@ def test_generating_prod_reproduces_live_prod_environment_and_schemas(mod):
     for name in ("source_schema_name", "gold_schema_name"):
         assert generated[name] == live[name]
 
-
 def test_generated_prod_database_guard_matches_live_prod(mod):
     """Prod's variables.tf pins expected_database_name to EDGARTOOLS_PROD."""
     files = _generated(mod, _base_config(env_name="prod"))
@@ -139,11 +130,9 @@ def test_generated_prod_database_guard_matches_live_prod(mod):
     assert 'default     = "EDGARTOOLS_PROD"' in variables
     assert 'var.expected_database_name == "EDGARTOOLS_PROD"' in variables
 
-
 # --------------------------------------------------------------------------
 # Slug handling
 # --------------------------------------------------------------------------
-
 
 @pytest.mark.parametrize(
     ("slug", "expected_segment"),
@@ -153,7 +142,6 @@ def test_snowflake_segment_maps_hyphens_to_underscores(mod, slug, expected_segme
     """Hyphens are legal in a slug and a directory name, but not in an
     unquoted Snowflake identifier."""
     assert mod.snowflake_segment(slug) == expected_segment
-
 
 def test_hyphenated_slug_produces_valid_snowflake_identifiers(mod):
     files = _generated(mod, _base_config(env_name="eu-prod"))
@@ -168,7 +156,6 @@ def test_hyphenated_slug_produces_valid_snowflake_identifiers(mod):
         'key    = "snowflake/eu-prod/terraform.tfstate"'
         in files["infra/terraform/snowflake/accounts/eu-prod/backend.hcl"]
     )
-
 
 @pytest.mark.parametrize(
     "bad_slug",
@@ -187,19 +174,9 @@ def test_invalid_slugs_are_rejected(mod, bad_slug):
     with pytest.raises(mod.ConfigError, match="env_name"):
         mod.validate_config(_base_config(env_name=bad_slug))
 
-
-def test_underscore_and_hyphen_slugs_cannot_collide(mod):
-    """`eu_prod` is rejected precisely so it cannot map onto the same
-    EDGARTOOLS_EU_PROD database as `eu-prod`."""
-    assert mod.snowflake_segment("eu-prod") == "EU_PROD"
-    with pytest.raises(mod.ConfigError):
-        mod.validate_config(_base_config(env_name="eu_prod"))
-
-
 # --------------------------------------------------------------------------
 # Config validation fails closed
 # --------------------------------------------------------------------------
-
 
 @pytest.mark.parametrize(
     "field", ["env_name", "tfstate_bucket", "aws_region", "snowflake"]
@@ -210,14 +187,12 @@ def test_missing_required_top_level_field_is_rejected(mod, field):
     with pytest.raises(mod.ConfigError, match=field):
         mod.validate_config(config)
 
-
 @pytest.mark.parametrize("field", ["organization_name", "account_name", "user"])
 def test_missing_required_snowflake_field_is_rejected(mod, field):
     config = _base_config()
     del config["snowflake"][field]
     with pytest.raises(mod.ConfigError, match=field):
         mod.validate_config(config)
-
 
 def test_partial_native_pull_is_rejected(mod):
     """native_pull is all-or-nothing: `local.native_pull_enabled` requires all
@@ -231,11 +206,9 @@ def test_partial_native_pull_is_rejected(mod):
     with pytest.raises(mod.ConfigError, match="snowflake_export_root_url"):
         mod.validate_config(config)
 
-
 def test_render_fails_closed_on_unsubstituted_placeholder(mod):
     with pytest.raises(mod.ConfigError, match="UNKNOWN_TOKEN"):
         mod.render("value = {{UNKNOWN_TOKEN}}", {"ENV_NAME": "x"})
-
 
 def test_render_leaves_terraform_interpolation_untouched(mod):
     """Terraform's `${...}` must survive rendering; only `{{...}}` is ours."""
@@ -244,11 +217,9 @@ def test_render_leaves_terraform_interpolation_untouched(mod):
     )
     assert rendered == 'x = "edgartools-${local.environment}-secondary"'
 
-
 # --------------------------------------------------------------------------
 # Emitted file set and cross-root consistency
 # --------------------------------------------------------------------------
-
 
 def test_generates_both_roots_with_expected_files(mod):
     files = _generated(mod, _base_config(env_name="secondary"))
@@ -269,14 +240,12 @@ def test_generates_both_roots_with_expected_files(mod):
         ):
             assert f"{root}/{name}" in files, f"missing {root}/{name}"
 
-
 def test_generator_never_writes_into_existing_prod_or_dev_roots(mod):
     """Generating some other environment must not touch prod's or dev's roots."""
     files = _generated(mod, _base_config(env_name="secondary"))
     for path in files:
         assert "/accounts/prod/" not in path
         assert "/accounts/dev/" not in path
-
 
 def test_examples_match_the_local_config_they_document(mod):
     """The tracked `.example` files are generated from the same substitution as
@@ -289,7 +258,6 @@ def test_examples_match_the_local_config_they_document(mod):
     ):
         for name in ("terraform.tfvars", "backend.hcl"):
             assert files[f"{root}/{name}"] == files[f"{root}/{name}.example"]
-
 
 def test_access_root_state_pointer_matches_provisioning_backend(mod):
     """The access root reads the provisioning root's state. Both sides are
@@ -312,7 +280,6 @@ def test_access_root_state_pointer_matches_provisioning_backend(mod):
     assert tfvars["provisioning_state_key"] == backend["key"]
     assert tfvars["provisioning_state_region"] == backend["region"]
 
-
 def test_two_environments_get_isolated_state_keys(mod):
     """Blast-radius isolation: one environment's apply must not be able to read
     or write another's state."""
@@ -329,11 +296,9 @@ def test_two_environments_get_isolated_state_keys(mod):
     ):
         assert key_of(first, "alpha", prefix) != key_of(second, "beta", prefix)
 
-
 # --------------------------------------------------------------------------
 # native_pull toggling and the MDM dashboard default
 # --------------------------------------------------------------------------
-
 
 def test_native_pull_absent_emits_commented_placeholders(mod):
     files = _generated(mod, _base_config(env_name="secondary"))
@@ -341,7 +306,6 @@ def test_native_pull_absent_emits_commented_placeholders(mod):
     # Commented out, so local.native_pull_enabled is false and the module is skipped.
     assert "# snowflake_storage_role_arn" in tfvars
     assert re.search(r"^snowflake_storage_role_arn", tfvars, re.MULTILINE) is None
-
 
 def test_native_pull_present_emits_real_assignments(mod):
     config = _base_config(
@@ -366,7 +330,6 @@ def test_native_pull_present_emits_real_assignments(mod):
         re.MULTILINE,
     )
 
-
 def test_mdm_graph_review_dashboard_defaults_off(mod):
     """A brand-new account has no MDM_GRAPH_REVIEW contract yet, so enabling
     this by default would make the very first apply fail."""
@@ -380,7 +343,6 @@ def test_mdm_graph_review_dashboard_defaults_off(mod):
         variables,
         re.DOTALL,
     )
-
 
 def test_template_mdm_dashboard_count_diverges_from_live_prod(mod):
     """Pin the one known structural divergence from prod's live root.
@@ -407,7 +369,6 @@ def test_template_mdm_dashboard_count_diverges_from_live_prod(mod):
     generated_block = generated.split('module "mdm_dashboard"', 1)[1].split("\n}", 1)[0]
     assert "count" in generated_block
 
-
 def test_mdm_graph_review_dashboard_can_be_enabled(mod):
     config = _base_config(env_name="secondary", mdm_graph_review_dashboard_enabled=True)
     tfvars = _generated(mod, config)[
@@ -415,11 +376,9 @@ def test_mdm_graph_review_dashboard_can_be_enabled(mod):
     ]
     assert "mdm_graph_review_dashboard_enabled = true" in tfvars
 
-
 # --------------------------------------------------------------------------
 # The shipped example config must actually be valid
 # --------------------------------------------------------------------------
-
 
 def test_shipped_example_config_is_valid(mod):
     example = (

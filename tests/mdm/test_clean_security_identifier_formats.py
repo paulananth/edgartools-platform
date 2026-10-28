@@ -5,7 +5,7 @@ Operator, 2026-10-14: "CUSIP and ISIN join (Recommended)" for the Security maste
 
 import pytest
 
-from edgar_warehouse.mdm.clean.adapters import FORMATS, UnsupportedRecord, format_value
+from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord, format_value
 
 
 @pytest.mark.parametrize("raw, kept", [
@@ -55,7 +55,3 @@ def test_an_isin_that_is_not_one_is_refused_with_its_reason(raw, reason):
 def test_a_us_isin_holds_its_cusip():
     # The two identifiers of one US security agree: the ISIN is the country, the CUSIP and a check digit.
     assert format_value("US5949181045", "isin")[2:11] == format_value("594918104", "cusip")
-
-
-def test_both_formats_are_in_the_one_table():
-    assert {"cusip", "isin"} <= set(FORMATS)

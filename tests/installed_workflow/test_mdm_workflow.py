@@ -33,7 +33,7 @@ CASES = {
         "hierarchy": ["Q08"], "details": ["Q08"],
     },
     "reader": {name: ["Q17"] for name in (
-        "current", "history", "producer", "alias", "details", "pages", "review_pages",
+        "producer", "alias", "details", "pages", "review_pages",
         "context_current", "context_links", "context_relationships", "context_concurrent",
         "context_times", "context_lookup")},
     "ids": {"silver": ["Q17"], "unicode": ["Q17"], "chunks": ["Q17"]},
@@ -170,11 +170,11 @@ def test_installed_workflow(surface, case, families, kind, proof_install, databa
 @pytest.mark.parametrize("kind", ["invented-kind", "invented-other-kind"] if SHARD in (None, "workers") else [])
 def test_installed_separate_workers(kind, proof_install, database_factory, configured_root):
     """Retain the separate SELECT-only verifier and actual worker processes."""
-    from tests.storage_adapters.test_installed_worker import test_installed_worker_recovery
+    from tests.storage_adapters.installed_worker_checks import prove_installed_worker_recovery
 
     python, root, _ = proof_install
     started = time.monotonic()
-    test_installed_worker_recovery(kind, (python, root), database_factory, configured_root)
+    prove_installed_worker_recovery(kind, (python, root), database_factory, configured_root)
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     (configured_root / "installed-workflow-outcome.json").write_text(json.dumps({
         "case":"separate-worker-processes", "kind":kind, "revision":revision,

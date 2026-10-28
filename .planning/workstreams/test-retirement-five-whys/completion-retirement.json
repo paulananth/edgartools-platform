@@ -1,0 +1,418 @@
+{
+  "baseline": "5f264261c",
+  "prior_merged_pr": 1197,
+  "source_review_not_behavioral_execution": true,
+  "counts": {
+    "default": {
+      "before": 4170,
+      "after": 4107,
+      "retired": 63,
+      "added": 0
+    },
+    "postgresql": {
+      "before": 4182,
+      "after": 4119,
+      "retired": 63,
+      "added": 0
+    },
+    "mysql": {
+      "before": 4188,
+      "after": 4125,
+      "retired": 63,
+      "added": 0
+    },
+    "mssql": {
+      "before": 4106,
+      "after": 4057,
+      "retired": 49,
+      "added": 0
+    }
+  },
+  "selected_engine_union": {
+    "before": 4198,
+    "after": 4135,
+    "retired": 63
+  },
+  "missing_replacements": 0,
+  "deferred_overlapping_cases": 2,
+  "cases": [
+    {
+      "retired": "tests/architecture/test_bootstrap_dbt_snowflake_secret.py::test_script_has_valid_bash_syntax",
+      "proof_kind": "mandatory_ci_step",
+      "retained": ".github/workflows/ci.yml::jobs.shellcheck::Syntax-check infra scripts",
+      "reason": "Mandatory CI job executes the same bash -n syntax parser for every infra/scripts/*.sh file, including this SCRIPT; aggregate ci-gate requires that job. Python wrapper adds no distinct assertion."
+    },
+    {
+      "retired": "tests/architecture/test_dashboard_acceptance_check.py::TestSkeletonEmission::test_skeleton_never_fabricates_a_pass",
+      "proof_kind": "retained_test",
+      "retained": "tests/architecture/test_dashboard_acceptance_check.py::TestSkeletonEmission::test_skeleton_has_all_35_views_not_checked",
+      "reason": "Same emit_skeleton(rc-1,wm-1). Retained len==35 and all status==not_checked implies all status!=pass; the removed function makes only the weaker latter assertion."
+    },
+    {
+      "retired": "tests/architecture/test_deploy_snowflake_stack_password_resolution.py::test_resolver_call_requests_the_mdm_runtime_extra",
+      "proof_kind": "retained_test",
+      "retained": "tests/architecture/test_deploy_snowflake_stack_password_resolution.py::test_calls_the_shared_resolver_with_the_connection_flag",
+      "reason": "The retained full literal invocation contains the complete --extra mdm-runtime edgar-warehouse resolve-snowflake-env substring asserted here; same SCRIPT.read_text setup."
+    },
+    {
+      "retired": "tests/architecture/test_deploy_snowflake_stack_password_resolution.py::test_script_has_valid_bash_syntax",
+      "proof_kind": "mandatory_ci_step",
+      "retained": ".github/workflows/ci.yml::jobs.shellcheck::Syntax-check infra scripts",
+      "reason": "Mandatory CI job executes the same bash -n syntax parser for every infra/scripts/*.sh file, including this SCRIPT; aggregate ci-gate requires that job. Python wrapper adds no distinct assertion."
+    },
+    {
+      "retired": "tests/architecture/test_install_wizard.py::test_install_script_has_valid_bash_syntax",
+      "proof_kind": "mandatory_ci_step",
+      "retained": ".github/workflows/ci.yml::jobs.shellcheck::Syntax-check infra scripts",
+      "reason": "Mandatory CI syntax-check executes bash -n for every infra/scripts shell file including install.sh; the removed test adds only the same command."
+    },
+    {
+      "retired": "tests/architecture/test_install_wizard.py::test_neo4j_install_precedes_the_grants_stage",
+      "proof_kind": "retained_test",
+      "retained": "tests/architecture/test_install_wizard.py::test_stages_run_in_provision_deploy_early_data_late_data_order",
+      "reason": "Same exact stage-list equality requires both titles and install before grants; narrower pair ordering adds no independent input."
+    },
+    {
+      "retired": "tests/architecture/test_install_wizard.py::test_neo4j_install_stage_exists",
+      "proof_kind": "retained_test",
+      "retained": "tests/architecture/test_install_wizard.py::test_stages_run_in_provision_deploy_early_data_late_data_order",
+      "reason": "Exact equality to PROVISION_DEPLOY_DATA_STAGE_ORDER already requires the Neo4j stage at its declared position, using the same _plan_stage_titles fixture call."
+    },
+    {
+      "retired": "tests/architecture/test_preflight_secrets_manifest_check.py::test_script_has_valid_bash_syntax",
+      "proof_kind": "mandatory_ci_step",
+      "retained": ".github/workflows/ci.yml::jobs.shellcheck::Syntax-check infra scripts",
+      "reason": "Mandatory CI job executes the same bash -n syntax parser for every infra/scripts/*.sh file, including this SCRIPT; aggregate ci-gate requires that job. Python wrapper adds no distinct assertion."
+    },
+    {
+      "retired": "tests/architecture/test_secrets_manifest.py::test_manifest_is_valid_json_with_a_secrets_list",
+      "proof_kind": "retained_test",
+      "retained": "tests/architecture/test_secrets_manifest.py::test_manifest_declares_exactly_the_three_active_namespaced_secrets",
+      "reason": "The same json loader must succeed, and the exact three-name set cannot be produced by any non-list JSON value or empty list. Valid JSON, list shape and nonempty requirement are subsumed."
+    },
+    {
+      "retired": "tests/architecture/test_secrets_manifest.py::test_retired_empty_secrets_are_not_active_manifest_dependencies",
+      "proof_kind": "retained_test",
+      "retained": "tests/architecture/test_secrets_manifest.py::test_manifest_declares_exactly_the_three_active_namespaced_secrets",
+      "reason": "The exact active-name set already excludes both retired names; same manifest/load/setup, stronger set equality."
+    },
+    {
+      "retired": "tests/architecture/test_snowflake_env_generator.py::test_underscore_and_hyphen_slugs_cannot_collide",
+      "proof_kind": "retained_test",
+      "retained": "tests/architecture/test_snowflake_env_generator.py::test_snowflake_segment_maps_hyphens_to_underscores[eu-prod-EU_PROD]",
+      "reason": "Same snowflake_segment(eu-prod)==EU_PROD and same validate_config(_base_config(env_name=eu_prod)) refusal are already asserted by those two retained cases, with a more specific error match."
+    },
+    {
+      "retired": "tests/engine/test_gleif_header_count_equality.py::test_header_reference_four_context_three_actual_three_refuses[level1]",
+      "proof_kind": "retained_test",
+      "retained": "tests/engine/test_gleif_header_count_equality.py::test_bundled_xml_contract_refuses_inconsistent_publication_count[level1]",
+      "reason": "The retained shipped-template test builds the same member archive/header4/context3/actual3, checks the same specific refusal and absent output/parts. The only difference is count_bound_rules appends the exact equality assertion already present in that shipped template."
+    },
+    {
+      "retired": "tests/engine/test_gleif_header_count_equality.py::test_header_reference_four_context_three_actual_three_refuses[relationships]",
+      "proof_kind": "retained_test",
+      "retained": "tests/engine/test_gleif_header_count_equality.py::test_bundled_xml_contract_refuses_inconsistent_publication_count[relationships]",
+      "reason": "The retained shipped-template test builds the same member archive/header4/context3/actual3, checks the same specific refusal and absent output/parts. The only difference is count_bound_rules appends the exact equality assertion already present in that shipped template."
+    },
+    {
+      "retired": "tests/engine/test_gleif_header_count_equality.py::test_header_reference_four_context_three_actual_three_refuses[reporting-exceptions]",
+      "proof_kind": "retained_test",
+      "retained": "tests/engine/test_gleif_header_count_equality.py::test_bundled_xml_contract_refuses_inconsistent_publication_count[reporting-exceptions]",
+      "reason": "The retained shipped-template test builds the same member archive/header4/context3/actual3, checks the same specific refusal and absent output/parts. The only difference is count_bound_rules appends the exact equality assertion already present in that shipped template."
+    },
+    {
+      "retired": "tests/engine/test_json_sequence.py::test_native_frame_refusals[[]]",
+      "proof_kind": "retained_test",
+      "retained": "tests/engine/test_json_sequence.py::test_finite_typed_numeric_and_frame_cases",
+      "reason": "The exact malformed bytes occur in REFUSED and are consumed by the retained2066-case loop, which asserts SourceRejected through stream_json_array. Different max_record4096/65536 cannot affect these short malformed bodies; integer-minimum-sensitive -2**63 is not among these11matching cases. No error-code or callback-side-effect assertion is lost."
+    },
+    {
+      "retired": "tests/engine/test_json_sequence.py::test_native_frame_refusals[{\"records\":[[]]}]",
+      "proof_kind": "retained_test",
+      "retained": "tests/engine/test_json_sequence.py::test_finite_typed_numeric_and_frame_cases",
+      "reason": "The exact malformed bytes occur in REFUSED and are consumed by the retained2066-case loop, which asserts SourceRejected through stream_json_array. Different max_record4096/65536 cannot affect these short malformed bodies; integer-minimum-sensitive -2**63 is not among these11matching cases. No error-code or callback-side-effect assertion is lost."
+    },
+    {
+      "retired": "tests/engine/test_json_sequence.py::test_native_frame_refusals[{\"records\":[]} null]",
+      "proof_kind": "retained_test",
+      "retained": "tests/engine/test_json_sequence.py::test_finite_typed_numeric_and_frame_cases",
+      "reason": "The exact malformed bytes occur in REFUSED and are consumed by the retained2066-case loop, which asserts SourceRejected through stream_json_array. Different max_record4096/65536 cannot affect these short malformed bodies; integer-minimum-sensitive -2**63 is not among these11matching cases. No error-code or callback-side-effect assertion is lost."
+    },
+    {
+      "retired": "tests/engine/test_json_sequence.py::test_native_frame_refusals[{\"records\":[null]}]",
+      "proof_kind": "retained_test",
+      "retained": "tests/engine/test_json_sequence.py::test_finite_typed_numeric_and_frame_cases",
+      "reason": "The exact malformed bytes occur in REFUSED and are consumed by the retained2066-case loop, which asserts SourceRejected through stream_json_array. Different max_record4096/65536 cannot affect these short malformed bodies; integer-minimum-sensitive -2**63 is not among these11matching cases. No error-code or callback-side-effect assertion is lost."
+    },
+    {
+      "retired": "tests/engine/test_json_sequence.py::test_native_frame_refusals[{\"records\":[{\"a\":1,\"a\":2}]}]",
+      "proof_kind": "retained_test",
+      "retained": "tests/engine/test_json_sequence.py::test_finite_typed_numeric_and_frame_cases",
+      "reason": "The exact malformed bytes occur in REFUSED and are consumed by the retained2066-case loop, which asserts SourceRejected through stream_json_array. Different max_record4096/65536 cannot affect these short malformed bodies; integer-minimum-sensitive -2**63 is not among these11matching cases. No error-code or callback-side-effect assertion is lost."
+    },
+    {
+      "retired": "tests/engine/test_json_sequence.py::test_native_frame_refusals[{\"records\":[{\"n\":18446744073709551616}]}]",
+      "proof_kind": "retained_test",
+      "retained": "tests/engine/test_json_sequence.py::test_finite_typed_numeric_and_frame_cases",
+      "reason": "The exact malformed bytes occur in REFUSED and are consumed by the retained2066-case loop, which asserts SourceRejected through stream_json_array. Different max_record4096/65536 cannot affect these short malformed bodies; integer-minimum-sensitive -2**63 is not among these11matching cases. No error-code or callback-side-effect assertion is lost."
+    },
+    {
+      "retired": "tests/engine/test_json_sequence.py::test_native_frame_refusals[{\"records\":[{\"n\":1e400}]}]",
+      "proof_kind": "retained_test",
+      "retained": "tests/engine/test_json_sequence.py::test_finite_typed_numeric_and_frame_cases",
+      "reason": "The exact malformed bytes occur in REFUSED and are consumed by the retained2066-case loop, which asserts SourceRejected through stream_json_array. Different max_record4096/65536 cannot affect these short malformed bodies; integer-minimum-sensitive -2**63 is not among these11matching cases. No error-code or callback-side-effect assertion is lost."
+    },
+    {
+      "retired": "tests/engine/test_json_sequence.py::test_native_frame_refusals[{\"records\":[{\"n\":9223372036854775808}]}]",
+      "proof_kind": "retained_test",
+      "retained": "tests/engine/test_json_sequence.py::test_finite_typed_numeric_and_frame_cases",
+      "reason": "The exact malformed bytes occur in REFUSED and are consumed by the retained2066-case loop, which asserts SourceRejected through stream_json_array. Different max_record4096/65536 cannot affect these short malformed bodies; integer-minimum-sensitive -2**63 is not among these11matching cases. No error-code or callback-side-effect assertion is lost."
+    },
+    {
+      "retired": "tests/engine/test_json_sequence.py::test_native_frame_refusals[{\"records\":[{}]]",
+      "proof_kind": "retained_test",
+      "retained": "tests/engine/test_json_sequence.py::test_finite_typed_numeric_and_frame_cases",
+      "reason": "The exact malformed bytes occur in REFUSED and are consumed by the retained2066-case loop, which asserts SourceRejected through stream_json_array. Different max_record4096/65536 cannot affect these short malformed bodies; integer-minimum-sensitive -2**63 is not among these11matching cases. No error-code or callback-side-effect assertion is lost."
+    },
+    {
+      "retired": "tests/engine/test_json_sequence.py::test_native_frame_refusals[{\"records\":{}}]",
+      "proof_kind": "retained_test",
+      "retained": "tests/engine/test_json_sequence.py::test_finite_typed_numeric_and_frame_cases",
+      "reason": "The exact malformed bytes occur in REFUSED and are consumed by the retained2066-case loop, which asserts SourceRejected through stream_json_array. Different max_record4096/65536 cannot affect these short malformed bodies; integer-minimum-sensitive -2**63 is not among these11matching cases. No error-code or callback-side-effect assertion is lost."
+    },
+    {
+      "retired": "tests/engine/test_json_sequence.py::test_native_frame_refusals[{}]",
+      "proof_kind": "retained_test",
+      "retained": "tests/engine/test_json_sequence.py::test_finite_typed_numeric_and_frame_cases",
+      "reason": "The exact malformed bytes occur in REFUSED and are consumed by the retained2066-case loop, which asserts SourceRejected through stream_json_array. Different max_record4096/65536 cannot affect these short malformed bodies; integer-minimum-sensitive -2**63 is not among these11matching cases. No error-code or callback-side-effect assertion is lost."
+    },
+    {
+      "retired": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-current-invented-kind]",
+      "proof_kind": "retained_test",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-producer-invented-kind]",
+      "reason": "Same installed fixture, launcher, configure(kind), join seed and actual helper. producer runs all unconditional current assertions and every history update/old-generation assertion before any added replay/provenance operation. Q01/Q17 retained for same kind/engine."
+    },
+    {
+      "retired": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-current-invented-other-kind]",
+      "proof_kind": "retained_test",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-producer-invented-other-kind]",
+      "reason": "Same installed fixture, launcher, configure(kind), join seed and actual helper. producer runs all unconditional current assertions and every history update/old-generation assertion before any added replay/provenance operation. Q01/Q17 retained for same kind/engine."
+    },
+    {
+      "retired": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-history-invented-kind]",
+      "proof_kind": "retained_test",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-producer-invented-kind]",
+      "reason": "Same installed fixture, launcher, configure(kind), join seed and actual helper. producer runs all unconditional current assertions and every history update/old-generation assertion before any added replay/provenance operation. Q01/Q17 retained for same kind/engine."
+    },
+    {
+      "retired": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-history-invented-other-kind]",
+      "proof_kind": "retained_test",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-producer-invented-other-kind]",
+      "reason": "Same installed fixture, launcher, configure(kind), join seed and actual helper. producer runs all unconditional current assertions and every history update/old-generation assertion before any added replay/provenance operation. Q01/Q17 retained for same kind/engine."
+    },
+    {
+      "retired": "tests/integration/test_clean_plan_cache_postgres.py::test_key_lists_finds_lookups_against_array_variables",
+      "proof_kind": "obsolete_implementation_obligation",
+      "retained": null,
+      "reason": "Obsolete implementation obligation, not claimed exact substitute. The four tests and two regex helpers police custom-plan/whole-list text in removed mdm business routines and former merge.py SQL. Active reader behavior remains checked by tests/integration/test_configured_matching_routes.py::test_each_candidate_value_probes_its_real_index[identifier], [census], [cascade]; tests/architecture/test_mdm_routine_retirement.py::test_runtime_has_no_retired_routine_call prevents revived calls. Retain tests/storage_adapters lookup and migration/concurrency/grant suites."
+    },
+    {
+      "retired": "tests/integration/test_clean_plan_cache_postgres.py::test_no_function_or_closure_query_searches_with_a_whole_key_list",
+      "proof_kind": "obsolete_implementation_obligation",
+      "retained": null,
+      "reason": "Obsolete implementation obligation, not claimed exact substitute. The four tests and two regex helpers police custom-plan/whole-list text in removed mdm business routines and former merge.py SQL. Active reader behavior remains checked by tests/integration/test_configured_matching_routes.py::test_each_candidate_value_probes_its_real_index[identifier], [census], [cascade]; tests/architecture/test_mdm_routine_retirement.py::test_runtime_has_no_retired_routine_call prevents revived calls. Retain tests/storage_adapters lookup and migration/concurrency/grant suites."
+    },
+    {
+      "retired": "tests/integration/test_clean_plan_cache_postgres.py::test_only_functions_that_look_up_key_lists_plan_with_their_keys",
+      "proof_kind": "obsolete_implementation_obligation",
+      "retained": null,
+      "reason": "Obsolete implementation obligation, not claimed exact substitute. The four tests and two regex helpers police custom-plan/whole-list text in removed mdm business routines and former merge.py SQL. Active reader behavior remains checked by tests/integration/test_configured_matching_routes.py::test_each_candidate_value_probes_its_real_index[identifier], [census], [cascade]; tests/architecture/test_mdm_routine_retirement.py::test_runtime_has_no_retired_routine_call prevents revived calls. Retain tests/storage_adapters lookup and migration/concurrency/grant suites."
+    },
+    {
+      "retired": "tests/integration/test_clean_plan_cache_postgres.py::test_whole_list_searches_finds_overlap_and_any_key",
+      "proof_kind": "obsolete_implementation_obligation",
+      "retained": null,
+      "reason": "Obsolete implementation obligation, not claimed exact substitute. The four tests and two regex helpers police custom-plan/whole-list text in removed mdm business routines and former merge.py SQL. Active reader behavior remains checked by tests/integration/test_configured_matching_routes.py::test_each_candidate_value_probes_its_real_index[identifier], [census], [cascade]; tests/architecture/test_mdm_routine_retirement.py::test_runtime_has_no_retired_routine_call prevents revived calls. Retain tests/storage_adapters lookup and migration/concurrency/grant suites."
+    },
+    {
+      "retired": "tests/mdm/test_clean_names.py::TestEdgarCodesBecomeIso::test_a_known_code[A6-CA-ON]",
+      "proof_kind": "retained_test",
+      "retained": "tests/mdm/test_sec_place_codes.py::test_the_codes_placed_before_the_move_read_the_same",
+      "reason": "The exact uppercase edgar_jurisdiction input is in PRE_MOVE_CODES. Retained fixed SHA256 covers each of those169 results, including this same expected code-to-ISO mapping. Lowercase ca is not in that list and remains separately tested."
+    },
+    {
+      "retired": "tests/mdm/test_clean_names.py::TestEdgarCodesBecomeIso::test_a_known_code[DE-US-DE]",
+      "proof_kind": "retained_test",
+      "retained": "tests/mdm/test_sec_place_codes.py::test_the_codes_placed_before_the_move_read_the_same",
+      "reason": "The exact uppercase edgar_jurisdiction input is in PRE_MOVE_CODES. Retained fixed SHA256 covers each of those169 results, including this same expected code-to-ISO mapping. Lowercase ca is not in that list and remains separately tested."
+    },
+    {
+      "retired": "tests/mdm/test_clean_names.py::TestEdgarCodesBecomeIso::test_a_known_code[E9-KY]",
+      "proof_kind": "retained_test",
+      "retained": "tests/mdm/test_sec_place_codes.py::test_the_codes_placed_before_the_move_read_the_same",
+      "reason": "The exact uppercase edgar_jurisdiction input is in PRE_MOVE_CODES. Retained fixed SHA256 covers each of those169 results, including this same expected code-to-ISO mapping. Lowercase ca is not in that list and remains separately tested."
+    },
+    {
+      "retired": "tests/mdm/test_clean_names.py::TestEdgarCodesBecomeIso::test_a_known_code[P7-NL]",
+      "proof_kind": "retained_test",
+      "retained": "tests/mdm/test_sec_place_codes.py::test_the_codes_placed_before_the_move_read_the_same",
+      "reason": "The exact uppercase edgar_jurisdiction input is in PRE_MOVE_CODES. Retained fixed SHA256 covers each of those169 results, including this same expected code-to-ISO mapping. Lowercase ca is not in that list and remains separately tested."
+    },
+    {
+      "retired": "tests/mdm/test_clean_names.py::TestEdgarCodesBecomeIso::test_a_known_code[X0-GB]",
+      "proof_kind": "retained_test",
+      "retained": "tests/mdm/test_sec_place_codes.py::test_the_codes_placed_before_the_move_read_the_same",
+      "reason": "The exact uppercase edgar_jurisdiction input is in PRE_MOVE_CODES. Retained fixed SHA256 covers each of those169 results, including this same expected code-to-ISO mapping. Lowercase ca is not in that list and remains separately tested."
+    },
+    {
+      "retired": "tests/mdm/test_clean_names.py::TestEdgarCodesBecomeIso::test_a_known_code[X1-US]",
+      "proof_kind": "retained_test",
+      "retained": "tests/mdm/test_sec_place_codes.py::test_the_codes_placed_before_the_move_read_the_same",
+      "reason": "The exact uppercase edgar_jurisdiction input is in PRE_MOVE_CODES. Retained fixed SHA256 covers each of those169 results, including this same expected code-to-ISO mapping. Lowercase ca is not in that list and remains separately tested."
+    },
+    {
+      "retired": "tests/mdm/test_clean_names.py::TestEdgarCodesBecomeIso::test_a_known_code[Z4-CA]",
+      "proof_kind": "retained_test",
+      "retained": "tests/mdm/test_sec_place_codes.py::test_the_codes_placed_before_the_move_read_the_same",
+      "reason": "The exact uppercase edgar_jurisdiction input is in PRE_MOVE_CODES. Retained fixed SHA256 covers each of those169 results, including this same expected code-to-ISO mapping. Lowercase ca is not in that list and remains separately tested."
+    },
+    {
+      "retired": "tests/mdm/test_clean_security_identifier_formats.py::test_both_formats_are_in_the_one_table",
+      "proof_kind": "retained_test",
+      "retained": "tests/mdm/test_clean_identifier_types.py::test_the_declared_types_are_formats_and_normalizers",
+      "reason": "Retained body proves cusip and isin belong to identifier_types.TYPES and every TYPES key belongs to the same adapters.FORMATS object, logically including the retired subset-only assertion; it additionally checks normalizer registration."
+    },
+    {
+      "retired": "tests/mdm/test_clean_survivorship.py::TestSelectFields::test_a_field_records_the_digest_it_was_selected_under",
+      "proof_kind": "retained_test",
+      "retained": "tests/mdm/test_clean_survivorship.py::TestKindScopedRules::test_an_old_shape_body_still_records_the_body_digest",
+      "reason": "Same company(), current_claims([a], AS_OF, set()), old-shape {fields:rules(sec.company)}, sorted subjects and select_fields call; each asserts recorded policy_digest equals its opaque input. Only arbitrary token literal differs (digest-1 versus body-digest), with no different policy shape or branch."
+    },
+    {
+      "retired": "tests/storage_adapters/test_installed_worker.py::test_installed_worker_recovery[invented-kind]",
+      "proof_kind": "retained_test",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_separate_workers[invented-kind]",
+      "reason": "Retained test directly invokes the exact removed function body with same kind, installed interpreter/root, database_factory and unchanged configured_root; only adds outcome provenance. Move body to non-collected support module, preserving every verifier/process/fault/recovery assertion."
+    },
+    {
+      "retired": "tests/storage_adapters/test_installed_worker.py::test_installed_worker_recovery[invented-other-kind]",
+      "proof_kind": "retained_test",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_separate_workers[invented-other-kind]",
+      "reason": "Retained test directly invokes the exact removed function body with same kind, installed interpreter/root, database_factory and unchanged configured_root; only adds outcome provenance. Move body to non-collected support module, preserving every verifier/process/fault/recovery assertion."
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_ids.py::test_normal_master_ids[invented-kind-lookup]",
+      "proof_kind": "retained_test",
+      "retained": "tests/storage_adapters/test_normal_master_ids.py::test_normal_master_ids[invented-kind-waiting]",
+      "reason": "Same wrapper configuration, same join seed and helper. lookup label executes only unconditional MdmIds assertions; waiting executes every one before adding its waiting record. READ_ID_CASE does not influence upstream seed. No unique lookup assertion remains."
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_master_ids.py::test_normal_master_ids[invented-other-kind-lookup]",
+      "proof_kind": "retained_test",
+      "retained": "tests/storage_adapters/test_normal_master_ids.py::test_normal_master_ids[invented-other-kind-waiting]",
+      "reason": "Same wrapper configuration, same join seed and helper. lookup label executes only unconditional MdmIds assertions; waiting executes every one before adding its waiting record. READ_ID_CASE does not influence upstream seed. No unique lookup assertion remains."
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_record_reads.py::test_normal_record_read_phase[cascade_candidate_first]",
+      "proof_kind": "retained_test",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-cascade_candidate_first-invented-kind]",
+      "reason": "Both invoke exact record_read_scenarios with READ_CASE=cascade_candidate_first and default invented-kind. configured_root already has eligibility_kind invented-kind; same accepted bar copied, same database_factory/normalmigration. READ_PREPARED is unused throughout runtime/helper; extra wrapper envflag changes no behavior. Scope remains checkout normal_prepared_merge; other full scenarios retained installed."
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_record_reads.py::test_normal_record_read_phase[cascade_holder_first]",
+      "proof_kind": "retained_test",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-cascade_holder_first-invented-kind]",
+      "reason": "Both invoke exact record_read_scenarios with READ_CASE=cascade_holder_first and default invented-kind. configured_root already has eligibility_kind invented-kind; same accepted bar copied, same database_factory/normalmigration. READ_PREPARED is unused throughout runtime/helper; extra wrapper envflag changes no behavior. Scope remains checkout normal_prepared_merge; other full scenarios retained installed."
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_record_reads.py::test_normal_record_read_phase[corrected]",
+      "proof_kind": "retained_test",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-corrected-invented-kind]",
+      "reason": "Both invoke exact record_read_scenarios with READ_CASE=corrected and default invented-kind. configured_root already has eligibility_kind invented-kind; same accepted bar copied, same database_factory/normalmigration. READ_PREPARED is unused throughout runtime/helper; extra wrapper envflag changes no behavior. Scope remains checkout normal_prepared_merge; other full scenarios retained installed."
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_record_reads.py::test_normal_record_read_phase[issuer_only]",
+      "proof_kind": "retained_test",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-issuer_only-invented-kind]",
+      "reason": "Both invoke exact record_read_scenarios with READ_CASE=issuer_only and default invented-kind. configured_root already has eligibility_kind invented-kind; same accepted bar copied, same database_factory/normalmigration. READ_PREPARED is unused throughout runtime/helper; extra wrapper envflag changes no behavior. Scope remains checkout normal_prepared_merge; other full scenarios retained installed."
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_record_reads.py::test_normal_record_read_phase[join]",
+      "proof_kind": "retained_test",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-join-invented-kind]",
+      "reason": "Both invoke exact record_read_scenarios with READ_CASE=join and default invented-kind. configured_root already has eligibility_kind invented-kind; same accepted bar copied, same database_factory/normalmigration. READ_PREPARED is unused throughout runtime/helper; extra wrapper envflag changes no behavior. Scope remains checkout normal_prepared_merge; other full scenarios retained installed."
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_record_reads.py::test_normal_record_read_phase[lifted]",
+      "proof_kind": "retained_test",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-lifted-invented-kind]",
+      "reason": "Both invoke exact record_read_scenarios with READ_CASE=lifted and default invented-kind. configured_root already has eligibility_kind invented-kind; same accepted bar copied, same database_factory/normalmigration. READ_PREPARED is unused throughout runtime/helper; extra wrapper envflag changes no behavior. Scope remains checkout normal_prepared_merge; other full scenarios retained installed."
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_record_reads.py::test_normal_record_read_phase[name_candidate_first]",
+      "proof_kind": "retained_test",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-name_candidate_first-invented-kind]",
+      "reason": "Both invoke exact record_read_scenarios with READ_CASE=name_candidate_first and default invented-kind. configured_root already has eligibility_kind invented-kind; same accepted bar copied, same database_factory/normalmigration. READ_PREPARED is unused throughout runtime/helper; extra wrapper envflag changes no behavior. Scope remains checkout normal_prepared_merge; other full scenarios retained installed."
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_record_reads.py::test_normal_record_read_phase[name_held_value]",
+      "proof_kind": "retained_test",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-name_held_value-invented-kind]",
+      "reason": "Both invoke exact record_read_scenarios with READ_CASE=name_held_value and default invented-kind. configured_root already has eligibility_kind invented-kind; same accepted bar copied, same database_factory/normalmigration. READ_PREPARED is unused throughout runtime/helper; extra wrapper envflag changes no behavior. Scope remains checkout normal_prepared_merge; other full scenarios retained installed."
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_record_reads.py::test_normal_record_read_phase[name_holder_first]",
+      "proof_kind": "retained_test",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-name_holder_first-invented-kind]",
+      "reason": "Both invoke exact record_read_scenarios with READ_CASE=name_holder_first and default invented-kind. configured_root already has eligibility_kind invented-kind; same accepted bar copied, same database_factory/normalmigration. READ_PREPARED is unused throughout runtime/helper; extra wrapper envflag changes no behavior. Scope remains checkout normal_prepared_merge; other full scenarios retained installed."
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_record_reads.py::test_normal_record_read_phase[newest]",
+      "proof_kind": "retained_test",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-newest-invented-kind]",
+      "reason": "Both invoke exact record_read_scenarios with READ_CASE=newest and default invented-kind. configured_root already has eligibility_kind invented-kind; same accepted bar copied, same database_factory/normalmigration. READ_PREPARED is unused throughout runtime/helper; extra wrapper envflag changes no behavior. Scope remains checkout normal_prepared_merge; other full scenarios retained installed."
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_record_reads.py::test_normal_record_read_phase[quarantine]",
+      "proof_kind": "retained_test",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-quarantine-invented-kind]",
+      "reason": "Both invoke exact record_read_scenarios with READ_CASE=quarantine and default invented-kind. configured_root already has eligibility_kind invented-kind; same accepted bar copied, same database_factory/normalmigration. READ_PREPARED is unused throughout runtime/helper; extra wrapper envflag changes no behavior. Scope remains checkout normal_prepared_merge; other full scenarios retained installed."
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_record_reads.py::test_normal_record_read_phase[released]",
+      "proof_kind": "retained_test",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-released-invented-kind]",
+      "reason": "Both invoke exact record_read_scenarios with READ_CASE=released and default invented-kind. configured_root already has eligibility_kind invented-kind; same accepted bar copied, same database_factory/normalmigration. READ_PREPARED is unused throughout runtime/helper; extra wrapper envflag changes no behavior. Scope remains checkout normal_prepared_merge; other full scenarios retained installed."
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_record_reads.py::test_normal_record_read_phase[retired]",
+      "proof_kind": "retained_test",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[merge-retired-invented-kind]",
+      "reason": "Both invoke exact record_read_scenarios with READ_CASE=retired and default invented-kind. configured_root already has eligibility_kind invented-kind; same accepted bar copied, same database_factory/normalmigration. READ_PREPARED is unused throughout runtime/helper; extra wrapper envflag changes no behavior. Scope remains checkout normal_prepared_merge; other full scenarios retained installed."
+    },
+    {
+      "retired": "tests/storage_adapters/test_normal_record_reads.py::test_normal_record_read_phase[scope]",
+      "proof_kind": "retained_test",
+      "retained": "tests/storage_adapters/test_normal_prepared_merge.py::test_normal_prepared_merge[invented-kind-scope]",
+      "reason": "Both invoke exact record_read_scenarios with READ_CASE=scope and default invented-kind. configured_root already has eligibility_kind invented-kind; same accepted bar copied, same database_factory/normalmigration. READ_PREPARED is unused throughout runtime/helper; extra wrapper envflag changes no behavior. Scope remains checkout normal_prepared_merge; other full scenarios retained installed."
+    },
+    {
+      "retired": "tests/unit/test_rules_skill_commands.py::test_not_built_commands_are_marked_and_still_unbuilt",
+      "proof_kind": "retained_test",
+      "retained": "tests/unit/test_rules_skill_commands.py::test_every_rules_command_the_skill_names_exists[data-onboarding/SKILL.md]",
+      "reason": "NOT_BUILT is an empty constant: its intersection assertion is always true and its only loop executes zero times. The real per-skill command and flag tests still check every documented command; no current not-built exception exists."
+    },
+    {
+      "retired": "tests/unit/test_silver_landing_schema_sql.py::test_alter_statement_is_idempotent_syntax_not_a_conditional_guard",
+      "proof_kind": "retained_test",
+      "retained": "tests/unit/test_silver_landing_schema_sql.py::test_alter_statement_immediately_follows_its_table_create",
+      "reason": "The extracted ALTER regex only admits the exact plain syntax, so checking its extracted strings for IF is tautological. >=30 exact ALTERs already follows from the retained per-CREATE-block test."
+    },
+    {
+      "retired": "tests/unit/test_silver_landing_schema_sql.py::test_every_created_table_drops_parse_sequence_not_null",
+      "proof_kind": "retained_test",
+      "retained": "tests/unit/test_silver_landing_schema_sql.py::test_alter_statement_immediately_follows_its_table_create",
+      "reason": "Both use the same CREATE regex and >=30 sanity bound. Requiring each literal matching ALTER inside its own CREATE block strictly implies requiring that same ALTER anywhere in the complete SQL."
+    }
+  ]
+}

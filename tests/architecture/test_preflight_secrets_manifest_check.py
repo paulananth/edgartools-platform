@@ -40,7 +40,6 @@ fi
 exit 0
 """
 
-
 def _make_fake_aws(tmp_path: Path, secret_responses: dict[str, str | None]) -> Path:
     """secret_responses maps a secret-id substring to either a describe-secret
     JSON response body, or None to simulate describe-secret failing (missing).
@@ -70,7 +69,6 @@ def _make_fake_aws(tmp_path: Path, secret_responses: dict[str, str | None]) -> P
 
     return fakebin
 
-
 POPULATED = '{"Name":"x","VersionIdsToStages":{"AWSCURRENT":["v1"]}}'
 EMPTY_CONTAINER = '{"Name":"x","VersionIdsToStages":{}}'
 
@@ -80,7 +78,6 @@ ALL_POPULATED = {
     "mdm/snowflake": POPULATED,
     "dbt/snowflake": POPULATED,
 }
-
 
 def _run(tmp_path: Path, secret_responses: dict[str, str | None]) -> subprocess.CompletedProcess[str]:
     fakebin = _make_fake_aws(tmp_path, secret_responses)
@@ -92,11 +89,6 @@ def _run(tmp_path: Path, secret_responses: dict[str, str | None]) -> subprocess.
         text=True,
         env=env,
     )
-
-
-def test_script_has_valid_bash_syntax():
-    subprocess.run(["bash", "-n", str(SCRIPT)], check=True)
-
 
 def test_all_manifest_secrets_populated_or_correctly_empty_passes(tmp_path):
     result = _run(tmp_path, ALL_POPULATED)
@@ -111,7 +103,6 @@ def test_all_manifest_secrets_populated_or_correctly_empty_passes(tmp_path):
     assert "PASS: secret has a value: edgartools-prod/dbt/snowflake" in combined
     assert "PASS: secret container exists: edgartools-prod-edgar-identity" in combined
 
-
 def test_missing_dbt_snowflake_container_fails_the_gate(tmp_path):
     """The exact regression this ticket exists to catch: dbt/snowflake never
     provisioned at all.
@@ -123,7 +114,6 @@ def test_missing_dbt_snowflake_container_fails_the_gate(tmp_path):
     assert "FAIL: missing secret container: edgartools-prod/dbt/snowflake" in result.stderr
     assert "Preflight failed" in result.stderr
 
-
 def test_container_exists_but_never_populated_fails_for_a_populated_in_prod_secret(tmp_path):
     responses = dict(ALL_POPULATED)
     responses["dbt/snowflake"] = EMPTY_CONTAINER
@@ -131,7 +121,6 @@ def test_container_exists_but_never_populated_fails_for_a_populated_in_prod_secr
     assert result.returncode == 1
     assert "PASS: secret container exists: edgartools-prod/dbt/snowflake" in (result.stdout + result.stderr)
     assert "FAIL: secret container exists but has never been populated: edgartools-prod/dbt/snowflake" in result.stderr
-
 
 def test_never_calls_get_secret_value(tmp_path):
     """Ticket 5's own constraint: describe-secret metadata only, no secret

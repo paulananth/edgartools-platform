@@ -1,5 +1,9 @@
 # Five whys: retire repeated execution, keep distinct proof
 
+This is the initial pass merged in PR #1197. The subsequent full source review
+and current-main reconciliation are tracked in [COMPLETION.md](COMPLETION.md)
+and [COMPLETION-EVIDENCE.md](COMPLETION-EVIDENCE.md).
+
 Baseline `0a1470c1a`: **4,262 collected Python cases**. The original 75% request
 would require removing 3,197 cases. After the first evidence pass, the operator
 selected **“Retire only proven redundancy”**. This bounded change removes

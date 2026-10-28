@@ -15,24 +15,10 @@ CASES = (
     ["deferred"]
     if os.environ.get("SKILL_ADAPTER_TEST_ENGINE") == "mssql"
     else [
-        "join",
-        "issuer_only",
-        "corrected",
-        "released",
-        "quarantine",
-        "lifted",
-        "newest",
-        "scope",
-        "retired",
         "write_gate",
         "prepare_join",
         "prepare_no_identity",
         "prepare_new_identity",
-        "name_holder_first",
-        "name_candidate_first",
-        "name_held_value",
-        "cascade_holder_first",
-        "cascade_candidate_first",
     ]
 )
 

@@ -36,22 +36,13 @@ EXPECTED_NAMES = {
     "dbt/snowflake",
 }
 
-
 def _load_manifest() -> dict:
     return json.loads(MANIFEST_PATH.read_text())
-
-
-def test_manifest_is_valid_json_with_a_secrets_list():
-    manifest = _load_manifest()
-    assert isinstance(manifest["secrets"], list)
-    assert manifest["secrets"]
-
 
 def test_manifest_declares_exactly_the_three_active_namespaced_secrets():
     manifest = _load_manifest()
     names = {entry["name"] for entry in manifest["secrets"]}
     assert names == EXPECTED_NAMES
-
 
 def test_manifest_entry_shape_is_consistent():
     manifest = _load_manifest()
@@ -65,7 +56,6 @@ def test_manifest_entry_shape_is_consistent():
         }
         assert isinstance(entry["description"], str) and entry["description"]
         assert isinstance(entry["populated_in_prod"], bool)
-
 
 def test_dbt_snowflake_entry_now_has_a_populating_script_but_still_no_terraform_resource():
     """dbt/snowflake was the whole point of the manifest: read live in prod
@@ -82,23 +72,13 @@ def test_dbt_snowflake_entry_now_has_a_populating_script_but_still_no_terraform_
     assert entry["populating_script"] == "infra/scripts/bootstrap-dbt-snowflake-secret.sh"
     assert entry["populated_in_prod"] is True
 
-
-def test_retired_empty_secrets_are_not_active_manifest_dependencies():
-    manifest = _load_manifest()
-    names = {entry["name"] for entry in manifest["secrets"]}
-    assert "mdm/neo4j" not in names
-    assert "mdm/api_keys" not in names
-
-
 def test_mdm_postgres_dsn_and_mdm_snowflake_have_real_populating_scripts():
     manifest = _load_manifest()
     by_name = {e["name"]: e for e in manifest["secrets"]}
     assert by_name["mdm/postgres_dsn"]["populating_script"] == "infra/scripts/bootstrap-aws-mdm-secrets.sh"
     assert by_name["mdm/snowflake"]["populating_script"] == "infra/scripts/bootstrap-prod-mdm.sh"
 
-
 # --- infra/scripts/lib/secrets-manifest.sh -----------------------------------
-
 
 def _run_lookup(key: str, manifest_path: Path = MANIFEST_PATH) -> subprocess.CompletedProcess[str]:
     script = f'source "{LIB_PATH}"; secrets_manifest_name "{key}"'
@@ -111,12 +91,10 @@ def _run_lookup(key: str, manifest_path: Path = MANIFEST_PATH) -> subprocess.Com
         env=env,
     )
 
-
 def test_secrets_manifest_name_returns_a_declared_name_unchanged():
     result = _run_lookup("mdm/postgres_dsn")
     assert result.returncode == 0
     assert result.stdout.strip() == "mdm/postgres_dsn"
-
 
 def test_secrets_manifest_name_fails_loudly_on_an_undeclared_name():
     result = _run_lookup("not/a/real/secret")
@@ -125,16 +103,13 @@ def test_secrets_manifest_name_fails_loudly_on_an_undeclared_name():
     assert "not/a/real/secret" in result.stderr
     assert "is not declared" in result.stderr
 
-
 def test_secrets_manifest_name_fails_loudly_when_the_manifest_file_is_missing(tmp_path):
     missing = tmp_path / "does-not-exist.json"
     result = _run_lookup("mdm/postgres_dsn", manifest_path=missing)
     assert result.returncode == 1
     assert "not found" in result.stderr
 
-
 # --- bootstrap-aws-mdm-secrets.sh --------------------------------------------
-
 
 def _run_bootstrap_aws_mdm_secrets(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -143,7 +118,6 @@ def _run_bootstrap_aws_mdm_secrets(*args: str) -> subprocess.CompletedProcess[st
         capture_output=True,
         text=True,
     )
-
 
 def test_bootstrap_aws_mdm_secrets_default_secret_id_is_resolved_via_the_manifest():
     result = _run_bootstrap_aws_mdm_secrets(
@@ -156,7 +130,6 @@ def test_bootstrap_aws_mdm_secrets_default_secret_id_is_resolved_via_the_manifes
     assert result.returncode == 0, result.stderr
     assert "DRY RUN - target secret: edgartools-prod/mdm/postgres_dsn" in result.stderr
 
-
 def test_bootstrap_aws_mdm_secrets_explicit_secret_id_bypasses_the_manifest():
     result = _run_bootstrap_aws_mdm_secrets(
         "--env-name", "prod",
@@ -168,7 +141,6 @@ def test_bootstrap_aws_mdm_secrets_explicit_secret_id_bypasses_the_manifest():
     )
     assert result.returncode == 0, result.stderr
     assert "DRY RUN - target secret: custom/override" in result.stderr
-
 
 def test_bootstrap_aws_mdm_secrets_fails_loudly_if_the_manifest_is_missing_the_key(tmp_path):
     broken_manifest = tmp_path / "secrets-manifest.json"
@@ -193,21 +165,17 @@ def test_bootstrap_aws_mdm_secrets_fails_loudly_if_the_manifest_is_missing_the_k
     assert "mdm/postgres_dsn" in result.stderr
     assert "is not declared" in result.stderr
 
-
 # --- bootstrap-prod-mdm.sh (content assertions -- see module docstring) -----
-
 
 def test_bootstrap_prod_mdm_sources_the_shared_secrets_manifest_lib():
     content = BOOTSTRAP_PROD_MDM.read_text()
     assert 'source "${SCRIPT_DIR}/lib/secrets-manifest.sh"' in content
-
 
 def test_bootstrap_prod_mdm_resolves_all_three_secret_ids_via_the_manifest():
     content = BOOTSTRAP_PROD_MDM.read_text()
     assert 'secret_id "mdm/postgres_dsn"' in content
     assert 'secret_id "mdm/snowflake"' in content
     assert 'secret_id "dbt/snowflake"' in content
-
 
 def test_bootstrap_prod_mdm_only_resolves_snowflake_secret_ids_when_not_skipped():
     """The --skip-snowflake-secret path shouldn't fail just because
@@ -224,7 +192,6 @@ def test_bootstrap_prod_mdm_only_resolves_snowflake_secret_ids_when_not_skipped(
     assert guard_line < snowflake_secret_id_line
     # And nothing between the guard and the resolution closes the if early.
     assert not any("fi" == lines[i].strip() for i in range(guard_line + 1, snowflake_secret_id_line))
-
 
 def test_bootstrap_prod_mdm_no_longer_hardcodes_the_secret_ids_inline():
     content = BOOTSTRAP_PROD_MDM.read_text()
