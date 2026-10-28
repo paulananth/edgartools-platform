@@ -29,6 +29,7 @@ read:
             - {value: {path: isin}}
         balance: {value: {path: balance}}
         unit: {value: {path: unit}}
+        currency_code: {value: {path: currency_code}}
         currency_value: {value: {path: currency_value}}
         exchange_rate: {value: {path: exchange_rate}}
         percentage: {value: {path: percentage}}

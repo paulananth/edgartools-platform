@@ -86,7 +86,10 @@ def test_each_holding_names_the_security_record_its_holdings_make(tmp_path):
     # One system of record (operator, 2026-10-28; ticket 143): no row copies a
     # master field; the Security's identifiers, its issuer's LEI and the facts
     # it repeats are in MDM, read through the row's Security.
-    copies = {"cusip", "isin", "issuer_lei", "currency_code", "asset_cat", "issuer_type",
+    # The currency code stays: the unit of the row's own value (operator, 2026-10-28:
+    # "Keep it on the row (Recommended)").
+    assert "currency_code" in rows["4"]
+    copies = {"cusip", "isin", "issuer_lei", "asset_cat", "issuer_type",
               "investment_country", "is_restricted_security", "derivative_cat"}
     assert all(not copies & set(r) for r in rows.values())
 

@@ -57,6 +57,7 @@ read:
           member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}
         balance: {text: {path: BALANCE, default: "", null_if: [""]}}
         unit: {text: {path: UNIT, default: "", null_if: [""]}}
+        currency_code: {text: {path: CURRENCY_CODE, default: "", null_if: [""]}}
         currency_value: {text: {path: CURRENCY_VALUE, default: "", null_if: [""]}}
         exchange_rate: {text: {path: EXCHANGE_RATE, default: "", null_if: [""]}}
         percentage: {text: {path: PERCENTAGE, default: "", null_if: [""]}}
