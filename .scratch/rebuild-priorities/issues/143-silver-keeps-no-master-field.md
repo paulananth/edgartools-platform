@@ -21,7 +21,7 @@ moves to MDM first; then silver drops it.
 | Silver table | Master fields it copies | Already in MDM | Not yet in MDM |
 |---|---|---|---|
 | `openfigi_listing` (OpenFIGI) | all 11 columns: listing FIGI, ticker, exchange code, composite FIGI, share-class FIGI, name, security type, security type 2, market sector, security description, and the identifier asked | the listings (in the Security's record since ticket 120, found by the venue lookup since #1192), name, security types, market sector | security description, if MDM does not hold it yet (to check) |
-| `nport_holding` (N-PORT) | 9: CUSIP, ISIN, issuer LEI, currency code, asset category, issuer type, investment country, restricted, derivative category | CUSIP, ISIN (Security identifiers), issuer LEI (the issuer Company's identifier) | the six Security fields and the currency: ticket 138's "Most-filed value" part |
+| `nport_holding` (N-PORT) | 8: CUSIP, ISIN, issuer LEI, asset category, issuer type, investment country, restricted, derivative category (the currency code stays: the unit of the row's value; operator, 2026-10-28: "Keep it on the row (Recommended)") | CUSIP, ISIN (Security identifiers), issuer LEI (the issuer Company's identifier) | the six Security fields (currency included): ticket 138's "Most-filed value" part |
 | `ownership_owner` (Forms 3/4/5) | 15: the owner's name, 8 address columns, 4 capacity flags (director, officer, ten-percent owner, other), officer title, other text | name (Person legal name), the 4 capacities (relationships with dates) | the address (8 columns), officer title, other text |
 | `ownership_line` (Forms 3/4/5) | 2: security title, underlying security title | none | the class title on the Security: ticket 24 attaches a Form 4 line to its Security by class |
 
@@ -35,7 +35,8 @@ holder's valuation level and payoff profile).
 - [x] Skills say it (2026-10-28 07:02 ET): data-modeling, data-onboarding,
   refining-rules, security-master (PR #1199)
 - [ ] `nport_holding`: the six fields and the currency reach the Security
-  (ticket 138's part), then the 9 copies leave the spec
+  (ticket 138's part), then the 8 copies leave the spec (built on
+  `claude/t138-most-filed`)
 - [ ] `openfigi_listing`: check each column is on the Security in MDM, move
   any that is not, then retire the table
 - [ ] `ownership_owner`: the address, officer title and other text reach MDM
