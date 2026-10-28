@@ -17,6 +17,11 @@ masters a statement, about 28 GB for the largest batch, and macOS killed the pro
 arrived, twice. Any consumer reading masters of a store loaded in large batches
 meets the same limit; the hosted store too.
 
+Not on the merge path (2026-10-28, ticket 146): the merge's record reads select no batch
+request; `read_origins` is also called for relationships (none in `company-on`)
+and, in `reconcile`, for reviews a run's own batches touched, whose latest batch
+is that run's.
+
 ## Parts
 
 - [ ] Read a batch's request once per page (the distinct batch keys), not once

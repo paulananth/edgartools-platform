@@ -141,6 +141,7 @@ Two tracks run side by side; the recreation proof runs last, on everything switc
 - [132: Relationship types in one place](issues/132-relationship-types-in-one-place.md): one RDM code set the policy pins, read and checked by Rust; a policy pinning none masters no link (#1196)
 - [133: Statutory corporate tax rates in RDM](issues/133-statutory-tax-rates-in-rdm.md): OECD's combined statutory rate per country and year, a value per child code (#1149)
 - [136: One command loads a capture](issues/136-one-command-loads-a-capture.md): `edgar-warehouse load` (#1168)
+- [146: Convert a populated native MDM store](issues/146-convert-a-populated-native-mdm-store.md): `mdm convert-native` applies each saved batch again; `company-on` converted, every master kept (#1205, #1206)
 
 ## Not yet specified
 
