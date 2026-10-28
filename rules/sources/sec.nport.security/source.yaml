@@ -114,6 +114,14 @@ read:
           text:
             path: ISSUER_LEI
             default: ""
+        # Facts each holding repeats about its Security (ticket 138, "Most-filed
+        # value"): reduce.yaml keeps the value the most holdings file.
+        asset_category: {text: {path: ASSET_CAT, default: "", null_if: [""]}}
+        issuer_type: {text: {path: ISSUER_TYPE, default: "", null_if: [""]}}
+        investment_country: {text: {path: INVESTMENT_COUNTRY, default: "", null_if: [""]}}
+        currency: {text: {path: CURRENCY_CODE, default: "", null_if: [""]}}
+        restricted: {text: {path: IS_RESTRICTED_SECURITY, default: "", null_if: [""]}}
+        derivative_category: {text: {path: DERIVATIVE_CAT, default: "", null_if: [""]}}
         key_kind:
           const:
             value: cusip
@@ -250,6 +258,12 @@ read:
           text:
             path: ISSUER_LEI
             default: ""
+        asset_category: {text: {path: ASSET_CAT, default: "", null_if: [""]}}
+        issuer_type: {text: {path: ISSUER_TYPE, default: "", null_if: [""]}}
+        investment_country: {text: {path: INVESTMENT_COUNTRY, default: "", null_if: [""]}}
+        currency: {text: {path: CURRENCY_CODE, default: "", null_if: [""]}}
+        restricted: {text: {path: IS_RESTRICTED_SECURITY, default: "", null_if: [""]}}
+        derivative_category: {text: {path: DERIVATIVE_CAT, default: "", null_if: [""]}}
         key_kind:
           const:
             value: isin
@@ -613,6 +627,15 @@ mdm:
                         # (combine.yaml).
                         share_class:
                           join: {path: class, item_path: share_class, separator: "", max_items: 1}
+                        # Facts its holdings repeat, each the value the most file, none
+                        # on a tie (ticket 138, "Most-filed value"). Only here: the
+                        # holding's silver row does not repeat them (one system of record).
+                        asset_category: {value: {path: asset_category}}
+                        issuer_type: {value: {path: issuer_type}}
+                        investment_country: {value: {path: investment_country}}
+                        currency: {value: {path: currency}}
+                        restricted: {value: {path: restricted}}
+                        derivative_category: {value: {path: derivative_category}}
                         # No issuer LEI field: an LEI identifies a Company, not a
                         # Security ("A value of another kind stays out of this
                         # kind"); the Security reaches its issuer by ISSUED_BY
@@ -636,8 +659,15 @@ mdm:
           - isin
           - issuer
           - filed
+          - asset_category
+          - issuer_type
+          - investment_country
+          - currency
+          - restricted
+          - derivative_category
         # v3 (ticket 138): a CUSIP's record carries every ISIN filed with it.
-        version: sec-nport-security-v3
+        # v4 (ticket 138): and the six facts its holdings file most.
+        version: sec-nport-security-v4
         retain_deferred: true
         source_record_provenance: true
         kind: security

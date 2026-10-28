@@ -27,19 +27,10 @@ read:
             values:
             - {value: {path: cusip}}
             - {value: {path: isin}}
-        cusip: {value: {path: cusip}}
-        isin: {value: {path: isin}}
-        issuer_lei: {value: {path: issuer_lei}}
         balance: {value: {path: balance}}
         unit: {value: {path: unit}}
-        currency_code: {value: {path: currency_code}}
         currency_value: {value: {path: currency_value}}
         exchange_rate: {value: {path: exchange_rate}}
         percentage: {value: {path: percentage}}
         payoff_profile: {value: {path: payoff_profile}}
-        asset_cat: {value: {path: asset_cat}}
-        issuer_type: {value: {path: issuer_type}}
-        investment_country: {value: {path: investment_country}}
-        is_restricted_security: {value: {path: is_restricted_security}}
         fair_value_level: {value: {path: fair_value_level}}
-        derivative_cat: {value: {path: derivative_cat}}

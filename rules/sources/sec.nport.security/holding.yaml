@@ -57,26 +57,13 @@ read:
           member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}
         # The issuer's LEI as the fund filed it: evidence of the holding, kept
         # in silver, not on the Security (an LEI is a Company's identifier).
-        issuer_lei:
-          text:
-            path: ISSUER_LEI
-            default: ""
-            transforms:
-            - case: upper
-            null_if: ["", "N/A", "00000000000000000000"]
         balance: {text: {path: BALANCE, default: "", null_if: [""]}}
         unit: {text: {path: UNIT, default: "", null_if: [""]}}
-        currency_code: {text: {path: CURRENCY_CODE, default: "", null_if: [""]}}
         currency_value: {text: {path: CURRENCY_VALUE, default: "", null_if: [""]}}
         exchange_rate: {text: {path: EXCHANGE_RATE, default: "", null_if: [""]}}
         percentage: {text: {path: PERCENTAGE, default: "", null_if: [""]}}
         payoff_profile: {text: {path: PAYOFF_PROFILE, default: "", null_if: [""]}}
-        asset_cat: {text: {path: ASSET_CAT, default: "", null_if: [""]}}
-        issuer_type: {text: {path: ISSUER_TYPE, default: "", null_if: [""]}}
-        investment_country: {text: {path: INVESTMENT_COUNTRY, default: "", null_if: [""]}}
-        is_restricted_security: {text: {path: IS_RESTRICTED_SECURITY, default: "", null_if: [""]}}
         fair_value_level: {text: {path: FAIR_VALUE_LEVEL, default: "", null_if: [""]}}
-        derivative_cat: {text: {path: DERIVATIVE_CAT, default: "", null_if: [""]}}
   stream:
     framing: delimited
     delimited:

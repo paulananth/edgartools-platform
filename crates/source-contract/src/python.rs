@@ -365,7 +365,13 @@ impl PyReduction {
                             .map_err(|_| PyValueError::new_err("Reduction row must be an object"))?;
                         let key = spec.keys.iter().map(|column| reduction_text(row, column))
                             .collect::<PyResult<Vec<_>>>()?;
-                        let member = spec.member.as_ref().map(|column| reduction_text(row, column)).transpose()?;
+                        // `most`: a null value is a row that files none.
+                        let member = match &spec.member {
+                            Some(column) if spec.mode == "most"
+                                && row.get_item(column)?.is_none_or(|value| value.is_none()) => None,
+                            Some(column) => Some(reduction_text(row, column)?),
+                            None => None,
+                        };
                         let last = if let Some(column) = &spec.last {
                             if row.get_item(column)?.is_some_and(|value| value.is_none()) && spec.last_null.is_some() {
                                 spec.last_null.clone()

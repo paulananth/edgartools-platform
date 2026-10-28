@@ -83,9 +83,12 @@ def test_each_holding_names_the_security_record_its_holdings_make(tmp_path):
         "4": isin.ONE, "5": isin.ONE, "6": isin.TWO, "7": isin.TWO, "8": isin.NONE, "9": isin.CUSIP}
     assert {r["security_key"] for r in rows.values()} <= keys
     assert len(rows) == len(isin.HOLDINGS) + 1  # every filed holding is a row
-    # The filed issuer LEI stays on the row, as filed (an LEI is a Company's identifier,
-    # never a Security field): ONE's holdings name LEI, holding 8 names none.
-    assert rows["4"]["issuer_lei"] == cusip.LEI and rows["8"]["issuer_lei"] is None
+    # One system of record (operator, 2026-10-28; ticket 143): no row copies a
+    # master field; the Security's identifiers, its issuer's LEI and the facts
+    # it repeats are in MDM, read through the row's Security.
+    copies = {"cusip", "isin", "issuer_lei", "currency_code", "asset_cat", "issuer_type",
+              "investment_country", "is_restricted_security", "derivative_cat"}
+    assert all(not copies & set(r) for r in rows.values())
 
 
 def test_the_holder_is_the_series_else_the_registrant(tmp_path):

@@ -87,6 +87,20 @@ def test_count_preserves_duplicates_unselected_rows_consume_input_budget(tmp_pat
     assert not Path(urlparse(bounded["output"]).path).exists()
 
 
+
+def test_most_runs_through_the_worker_and_a_tie_keeps_none(tmp_path):
+    # Ticket 138, "Most-filed value": the value the most rows file; two filed
+    # equally often keep none; a row filing none votes for none.
+    store = Artifacts()
+    rows = [{"key": "x", "category": "EC"}, {"key": "x", "category": "EC"}, {"key": "x", "category": None},
+            {"key": "x", "category": "DBT"}, {"key": "y", "category": "EC"}, {"key": "y", "category": "DBT"}]
+    refs = {"main": reading(store, tmp_path, {"rows": rows})}
+    spec = {"source": "main", "table": "rows", "keys": ["key"], "mode": "most",
+            "member": "category", "count": "filed", "sample": "value", "sample_limit": 0}
+    output = store.json(source_combine.execute(envelope(store, tmp_path, plan({"most": spec}), refs), store))
+    assert output["artifacts"][0]["tables"]["most"] == [
+        {"key": "x", "filed": 2, "value": "EC"}, {"key": "y", "filed": 1, "value": None}]
+
 def test_large_input_uses_incremental_state_not_materializing_loader(tmp_path, monkeypatch):
     from edgar_warehouse.workers import source_readings
     store = Artifacts()
@@ -212,7 +226,8 @@ def test_late_partition_fault_and_late_unselected_reading_never_publish(tmp_path
 
 @pytest.mark.parametrize("fault", ["boolean_bound", "missing_bound", "unknown_group", "self_exclude",
                                    "count_exclude", "different_keys", "last_member", "column_collision",
-                                   "bad_sample", "bad_member", "missing_table", "deferred"])
+                                   "bad_sample", "bad_member", "missing_table", "deferred",
+                                   "most_limit", "most_last", "most_exclude"])
 def test_grammar_and_row_shape_fail_closed(tmp_path, fault):
     store = Artifacts()
     groups = {"members": member("rows"), "other": member("rows")}
@@ -230,6 +245,11 @@ def test_grammar_and_row_shape_fail_closed(tmp_path, fault):
     if fault == "bad_member": rows[0]["holder"] = 1
     if fault == "missing_table": groups["members"]["table"] = "absent"
     if fault == "deferred": deferred = [{"reason": "unresolved"}]
+    # `most` (ticket 138) takes no sample limit, last column or exclusion.
+    if fault.startswith("most"): groups["members"]["mode"] = "most"; groups["members"].pop("last", None)
+    if fault == "most_limit": groups["members"]["sample_limit"] = 1
+    if fault == "most_last": groups["members"]["sample_limit"] = 0; groups["members"]["last"] = "time"
+    if fault == "most_exclude": groups["members"]["sample_limit"] = 0; groups["members"]["exclude"] = "other"
     refs = {"main": reading(store, tmp_path, {"rows": rows}, deferred=deferred)}
     work = envelope(store, tmp_path, body, refs)
     with pytest.raises(ValueError):
