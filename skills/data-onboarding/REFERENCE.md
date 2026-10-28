@@ -215,7 +215,8 @@ A capacity (a person's link in a capacity, dated by sightings) is a child code
 is the one check, at registration and before every calculation: it refuses an
 unknown kind or property, a hierarchy that does not say what its cycles do, an
 unknown ultimate-parent algorithm, and an ultimate parent without its
-`ultimate_type`. A policy that pins no types is refused when it masters.
+`ultimate_type`. A policy that pins no types masters no link: each reported
+link goes to review as unsupported.
 Agents read every mastered link through `mdm.relationship_context`, and a
 parent chain through `mdm.relationship_chain(entity, type, max_hops)`.
 

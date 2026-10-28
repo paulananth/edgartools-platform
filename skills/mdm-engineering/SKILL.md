@@ -52,7 +52,8 @@ runs by (the relationship types, ticket 132) is an RDM code set the policy
 pins, each entry a code whose properties are its rules; one Rust module reads
 the pinned rows and holds the one check, called at registration and before
 every calculation. Python only carries rows to it and its error back. No code
-copy, no default for a missing entry: a policy pinning none is refused.
+copy, no default for a missing entry: a policy pinning none has no entries,
+so what would use one goes to review.
 
 Storage adapters own connections, types, SQL compilation, indexed retrieval,
 schema migrations, grants and transaction/concurrency primitives. Use

@@ -10,13 +10,15 @@ from edgar_warehouse.rules.source_engine import prepare_relationship_periods, pr
 def types_of(policy: dict) -> dict:
     """The relationship types a policy masters: the RDM code set it pins under
     `relationships` (ticket 132), read and checked by the Rust engine. A policy
-    pinning none is refused."""
+    pinning none masters no link: each reported one goes to review."""
     from edgar_warehouse.rules import files
     from edgar_warehouse.rules.source_engine import prepare_relationship_types
     from .evidence import KINDS
     from .store import Conflict
 
     section = policy.get("relationships")
+    if section is None:
+        return {}
     if not isinstance(section, dict) or set(section) != {"pin"}:
         raise Conflict("The policy pins no relationship types")
     pin = (policy.get("reference_pins") or {}).get(section["pin"])

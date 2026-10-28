@@ -7,7 +7,7 @@ end, the profile roles they need, whether it is a parent hierarchy, allows one
 parent and derives an ultimate parent, written as its `ultimate_type`); each
 capacity a child code `TYPE:capacity`. The policy pins it; the Rust engine reads
 and checks it. A new type is a new code set version, not a code change; a
-policy that pins none is refused.
+policy that pins none masters no link, each reported one going to review.
 """
 
 from __future__ import annotations
@@ -81,9 +81,19 @@ def test_the_code_set_names_every_type_as_its_source_does():
     assert "capacities" not in codes["EMPLOYED_BY"]["properties"]
 
 
-def test_a_policy_that_pins_no_types_is_refused():
+def test_a_policy_that_pins_no_types_masters_no_link():
+    assert relationships.types_of({"kinds": {}}) == {}
+    entity = {"kind": "company", "status": "accepted", "profiles": []}
+    claims = {"s1": {"assertion_id": "a1", "source_meta": {}, "relationships": [
+        {"type": "SUPPLIES", "target_subject": "s2", "valid_from": "2024-01-01T00:00:00+00:00", "scope": ""}]}}
+    edges, reviews = relationships.project(claims, _state(("s1", "e1"), ("s2", "e2")), {"e1": entity, "e2": entity},
+                                           "2025-01-01T00:00:00+00:00", types={})
+    assert edges == [] and [r["reason"] for r in reviews] == ["unsupported_relationship"]
+
+
+def test_a_policy_that_pins_types_badly_is_refused():
     with pytest.raises(Conflict, match="pins no relationship types"):
-        relationships.types_of({"kinds": {}})
+        relationships.types_of({"relationships": {"types": {}}})
     body = files.policy()
     body["reference_pins"].pop("mdm-relationship-types")
     with pytest.raises(Conflict, match="no reference data named mdm-relationship-types"):

@@ -394,12 +394,15 @@ fn finish_at_succession(
 /// Prepare direct links and derived history from a complete affected read set.
 pub fn prepare_relationships(raw: &str) -> Result<String, String> {
     let command: Command = serde_json::from_str(raw).map_err(|_| "Invalid relationship command")?;
-    // The types run only as their one check allows (ticket 132).
-    let types = serde_json::to_value(&command.types).map_err(|error| error.to_string())?;
-    crate::relationship_types::check(
-        types.as_object().ok_or("Invalid relationship command")?,
-        Some(&command.kinds),
-    )?;
+    // The types run only as their one check allows (ticket 132). A policy
+    // pinning none masters no link: each reported one goes to review.
+    if !command.types.is_empty() {
+        let types = serde_json::to_value(&command.types).map_err(|error| error.to_string())?;
+        crate::relationship_types::check(
+            types.as_object().ok_or("Invalid relationship command")?,
+            Some(&command.kinds),
+        )?;
+    }
     let mut edges: IndexMap<String, Relationship> = IndexMap::new();
     let mut reviews = Vec::new();
     for (subject, record) in &command.claims {
