@@ -120,4 +120,7 @@ dev = [
     "ijson>=3.3,<4",
     "lxml>=5.3",
     "pandas>=2.1",
+    # The MySQL and SQL Server clients the storage-adapter tests start against.
+    "PyMySQL[rsa]>=1.1,<2",
+    "pymssql>=2.3,<3",
 ]
