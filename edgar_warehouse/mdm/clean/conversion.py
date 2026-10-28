@@ -29,6 +29,11 @@ def _read_only(engine):
     return engine.connect().execution_options(postgresql_readonly=True)
 
 
+def _adapter(target):
+    """The target's governed storage adapter."""
+    return storage_adapter().Adapter(target, prefix="mdm_store", protocol=Store(target).protocol)
+
+
 def pinned(body: dict) -> tuple[dict, set[str]]:
     """A native policy with its inline relationship types replaced by today's
     pinned code set (ticket 132), the one shape today's code refuses. Refused
@@ -86,9 +91,8 @@ def convert(native, target, *, limit: int | None = None) -> dict:
     report = {"policies": len(carried["policies"]), "types_dropped": carried["types_dropped"],
               "dataset_readings": carried["dataset_readings"], "batches": 0, "already_saved": 0,
               "readings": 0, "decisions": 0, "masters": 0, "set_aside": 0}
-    store = Store(target)
-    stage = MergeStage(store)
-    saved = storage_adapter().Adapter(target, prefix="mdm_store", protocol=store.protocol).read_batch
+    stage = MergeStage(Store(target))
+    saved = _adapter(target).read_batch
     with _read_only(native) as source:
         batches = source.execute(text("SELECT batch_id, run_id FROM mdm.batch ORDER BY generation")).all()
     for batch_id, run_id in batches:
@@ -113,10 +117,11 @@ def convert(native, target, *, limit: int | None = None) -> dict:
 def verify(native, target, *, page: int = 1000) -> dict:
     """The hard checks: the same masters, every source record present with the
     same binding, no decision lost (`passed`). Field values that differ from the
-    native master's are counted by field, not failed."""
+    native master's are counted by field, not failed. Reads every current
+    master record whole, on purpose: a one-off check of the whole store."""
+    import json
     from collections import Counter
 
-    from .consumer import ContractReader
     from .record_reads import for_connection
 
     with _read_only(native) as source:
@@ -125,14 +130,12 @@ def verify(native, target, *, page: int = 1000) -> dict:
         decisions = set(source.scalars(text("SELECT decision_id FROM mdm.decision")))
         native_fields = dict(source.execute(text(
             "SELECT object_id, body->'fields' FROM mdm.current_record WHERE object_type='entity'")).all())
-    reader, after, held, generation = ContractReader(target), "", {}, None
-    while after is not None:
-        found = reader.snapshot_page("entity", after=after, generation=generation, limit=page)
-        generation = found["generation"]
-        held.update((row["object_id"], row["body"]) for row in found["items"])
-        after = found["next_after"]
     subjects, present, bindings, kept = sorted(bound), set(), {}, set()
+    adapter = _adapter(target)
     with target.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
+        # Current master records only: a consumer page also returns each
+        # master's whole saved batch request, once a row (ticket 147).
+        held = {key: json.loads(record["body"]) for (_, key), record in adapter.iter_type("entity", connection=conn)}
         records = for_connection(conn)
         for i in range(0, len(subjects), page):
             chunk = subjects[i:i + page]
