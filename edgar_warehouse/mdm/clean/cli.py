@@ -170,3 +170,19 @@ def rebuild_detail_lookup(args) -> int:
         engine.dispose()
     print(json.dumps(report, sort_keys=True))
     return 0
+
+
+def convert_native(args) -> int:
+    from .conversion import convert, verify
+
+    native = engine_from_env("NATIVE_MDM_DATABASE_URL", restricted=False)
+    target = engine_from_env("MDM_DATABASE_URL", restricted=False)
+    try:
+        report = convert(native, target, limit=args.limit)
+        if args.limit is None:
+            report["verified"] = verify(native, target)
+    finally:
+        native.dispose()
+        target.dispose()
+    print(json.dumps(report, sort_keys=True))
+    return 0 if report.get("verified", {}).get("passed", True) else 1
