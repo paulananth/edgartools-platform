@@ -39,7 +39,7 @@ Read these before anything else. Breaking one is never the right call.
 | Edit code while onboarding, even for a code ticket the operator approved | Configuration only: write the ticket for the code, and ask before coding |
 | Invent a command this skill does not name | Follow "When a command is missing" |
 | Ask several questions at once | Ask one, in plain words, with your recommendation |
-| Leave a master data field only in silver | Every master data field is on its master in MDM (operator, 2026-10-28: "all master data fields must be on mdm"): in the kind's fields and the Dataset Contract. A silver row may also keep its own copy; silver alone never holds a master field |
+| Put a master data field in silver, alone or as a copy | Every master data field is on its master in MDM, and only there (operator, 2026-10-28: "all master data fields must be on mdm"; operator, 2026-10-28: "silver must not have duplicate fields, it contredits the data governance principle one system of record"): in the kind's fields and the Dataset Contract. A silver row holds the transaction's own facts and its link keys |
 
 ## Tell the discovery story as you work
 
@@ -479,8 +479,9 @@ missing, go on and log it.
     wrong or partial for the very records that matter.
 - **Every master field reaches MDM.** Before **test**, list each master field
   the findings name (and each fact every row repeats about the master) and
-  check it is in the kind's fields and the Dataset Contract; one found only in
-  silver is a missing field, not a choice. Ticket 138 found six N-PORT
+  check it is in the kind's fields and the Dataset Contract, and that no
+  silver table spec carries it (a link's source key excepted); one found in
+  silver is a defect, not a choice. Ticket 138 found six N-PORT
   Security fields in silver only, ruled for MDM three days before.
 - **Fields:** use the kind's names. A list-shaped field has no contract
   syntax yet: leave it out, say so, and log a ticket.

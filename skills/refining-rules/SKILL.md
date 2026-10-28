@@ -35,7 +35,7 @@ with merge rules.
 | Change what identifies a record inside one source code | A new source code (`….v2`) |
 | Rewrite a batch MDM already took | A new version applies to new batches only |
 | Ask several questions at once | Ask one, in plain words, with your recommendation |
-| Leave a master data field only in silver | Every master data field is on its master in MDM (operator, 2026-10-28: "all master data fields must be on mdm"): a change that adds or finds one in silver alone also puts it on the kind's fields and the Dataset Contract |
+| Put a master data field in silver, alone or as a copy | Every master data field is on its master in MDM, and only there (operator, 2026-10-28: "silver must not have duplicate fields, it contredits the data governance principle one system of record"): a change that finds one in silver moves it to the kind's fields and the Dataset Contract, then drops it from silver |
 
 When two written decisions disagree, the later operator decision wins. Cite
 both in the log.
