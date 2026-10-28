@@ -30,20 +30,21 @@ def read_types(types: dict) -> dict:
     return prepare_relationship_types(codes_of(types), sorted(KINDS))
 
 
-def pinned_types(types: dict, code_set: str = "invented-relationship-types") -> dict:
-    """Invented types published as an RDM code set under the configured rules
-    root (EDGAR_RULES_ROOT, never the repo's), and the policy parts that pin
-    it. Each content is its own version, so scenarios never overwrite another's."""
+def pinned_types(types: dict, code_set: str = "invented-relationship-types", root=None) -> dict:
+    """Invented types published as an RDM code set under a configured rules
+    root (`root`, else EDGAR_RULES_ROOT; never the repo's), and the policy parts
+    that pin it. Each content is its own version, so scenarios never overwrite another's."""
     import hashlib
     import os
+    from pathlib import Path
 
     from edgar_warehouse.rdm.store import canonical
 
-    assert os.environ.get("EDGAR_RULES_ROOT"), "invented types are published only into a configured rules root"
+    assert root or os.environ.get("EDGAR_RULES_ROOT"), "invented types are published only into a configured rules root"
     data = canonical([{**row, "label": row["code"]} for row in codes_of(types)], {})
     sha256 = hashlib.sha256(data).hexdigest()
     version = sha256[:16]
-    folder = files.ROOT / "reference" / "published" / code_set / version
+    folder = (Path(root) if root else files.ROOT) / "reference" / "published" / code_set / version
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "canonical.jsonl").write_bytes(data)
     return {"relationships": {"pin": code_set},
