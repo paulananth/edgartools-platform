@@ -45,65 +45,12 @@ This platform automates that path end to end:
 
 ## How `edgartools` fits in
 
-[`edgartools`](https://github.com/dgunning/edgartools) is an open-source Python
-package for working with SEC EDGAR data. This repo depends on it from PyPI:
-
-```text
-edgartools>=5.29.0
-```
-
-### What the platform does itself
-
-Most of the heavy lifting is **this repository’s own code**, not the library:
-
-- HTTP download of submissions JSON, daily indexes, and filing documents
-- Rate limiting and retries against SEC endpoints
-- Writing bronze objects to S3
-- Silver DuckDB schema, shard layout, and gold export
-- AWS ECS / Step Functions orchestration
-- Snowflake native S3 pull, dbt models, dashboards
-- MDM entity resolution and graph sync
-
-### Where `edgartools` is used today
-
-After bronze files are already stored, the warehouse uses `edgartools` as a
-**parser / helper layer** for specific form families:
-
-| Form / domain | edgartools surface | Platform adapter |
-| --- | --- | --- |
-| Forms **3, 4, 5** (insider ownership) | local XML parser + bronze `submissions.json` (edgartools `reverse_name` / `_classify_is_individual` only) | `edgar_warehouse/parsers/ownership.py` |
-| **13F** institutional holdings | `parse_infotable_xml` | `edgar_warehouse/parsers/thirteenf.py` |
-| **8-K** earnings releases | `EarningsRelease` | `edgar_warehouse/parsers/earnings_release.py` |
-| **DEF 14A** proxy compensation | `extract_summary_compensation` | `edgar_warehouse/parsers/proxy_fundamentals.py` |
-| Filing attachments (fallback) | `edgar.get_by_accession_number` | `edgar_warehouse/bronze_filing_artifacts.py` |
-| Universe / tickers (MDM seed & scripts) | ticker helpers, `get_filings`, etc. | MDM CLI + `scripts/batch/` |
-
-**ADV (investment adviser)** forms are parsed by a **local** parser
-(`edgar_warehouse/parsers/adv.py`), not by `edgartools`.
-
-### Mental model
-
-```text
-SEC EDGAR
-    │
-    ▼
-This repo downloads & stores raw files  ──►  Bronze (S3)
-    │
-    ▼
-edgartools (+ local parsers) parse XML/HTML  ──►  Silver (DuckDB on S3)
-    │
-    ▼
-MDM + gold build + Snowflake + dbt  ──►  Dashboards
-```
-
-Think of `edgartools` as a **specialized filing parser toolkit**. The platform
-is the **factory** around it: ingest, store, orchestrate, model, and serve.
-
-Batch scripts under `scripts/batch/` exercise many more `edgartools` APIs
-(XBRL, 8-K sections, entity facts, etc.) as smoke tests when the library
-version is bumped.
-
----
+It no longer does. The platform's Rust source engine reads and combines the
+captured provider files from their rules (`rules/sources/<source>/`), so no
+code imports `edgartools`; it was removed as a dependency, with its smoke-test
+scripts (operator, 2026-10-28: "Remove it entirely"). The rest of this page
+predates the rebuild; `CLAUDE.md` and the data skills describe the platform as
+it runs.
 
 ## End-to-end architecture
 
@@ -371,7 +318,6 @@ Other workflows: `daily_incremental`, `bootstrap`, `targeted_resync`,
 | `infra/snowflake/sql/` | Bootstrap SQL, graph grants |
 | `infra/snowflake/streamlit/` | Production Streamlit-in-Snowflake app |
 | `examples/dashboard/` | Standalone Streamlit example |
-| `scripts/batch/` | edgartools smoke / batch exploration scripts |
 | `tests/` | Unit, architecture, MDM, integration tests |
 | `docs/` | Runbooks, architecture, release readiness |
 
@@ -413,7 +359,6 @@ Runtime uses **service-assumed roles**, not long-lived runner access keys.
 2. **Idempotent loaders** — Re-runs skip work unless `--force`.  
 3. **Parse after store** — Download first; parse from cached bronze when possible.  
 4. **Separate concerns** — Parallel bronze ≠ MDM ≠ single gold refresh.  
-5. **edgartools is a dependency, not the product** — Pin version; smoke-test with `scripts/batch/` on bumps.  
 6. **AWS-first** — Active path is S3 + ECS + Step Functions + Snowflake.  
 7. **Secrets stay out of Terraform inputs** — Identity and DSNs are populated out of band.  
 

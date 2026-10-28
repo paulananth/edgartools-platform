@@ -2,22 +2,20 @@
 
 The RDM code set `sec-place-codes` version 1, published under
 `rules/reference/published/` and pinned by the Mastering Policy, holds SEC's
-whole list of EDGAR codes, as edgartools ships it, with an ISO code for each.
+whole list of EDGAR codes, with an ISO code for each.
 `names.edgar_jurisdiction` reads it (rules skill ticket 08; profiling ticket 02
 moved it from `rules/reference/sec-place-codes.yaml`, now removed).
 """
 
 from __future__ import annotations
 
-import csv
 import hashlib
+import json
 import re
 import shutil
-from pathlib import Path
 
 import pytest
 
-import edgar
 from edgar_warehouse.mdm.clean.names import (
     _EDGAR_ISO,
     _US_TERRITORIES,
@@ -52,18 +50,18 @@ PRE_MOVE_CODES = [
 PRE_MOVE_DIGEST = "51f54ac5f32f11d6231d6c29dc781f8dc6cabea24deedffba3b93ff0d91aa9c1"
 
 
-SHIPPED_SHA256 = "1daf0cc6b18df804d143af5be98ee0b6dcd887233f9c85ce1aa85b2a36d1ab14"
+# SEC's whole list: 309 codes, each with its place and type, as the list
+# edgartools 5.x shipped it when the platform still installed it (checked equal
+# 2026-10-28, before edgartools was removed). A new SEC list is a new code set
+# version, published through RDM.
+SEC_CODES = 309
+SEC_DIGEST = "403f9f4e1461c2bdf70aff6d2528efcd73bf6f9f5125ae8099c76e5479156782"
 
 
-def test_the_table_is_secs_whole_list_as_edgartools_ships_it():
-    shipped = Path(edgar.__file__).parent / "reference" / "data" / "place_codes.csv"
-    assert hashlib.sha256(shipped.read_bytes()).hexdigest() == SHIPPED_SHA256, (
-        "edgartools ships a different SEC code list: compare it with "
-        "the published sec-place-codes version and publish a new one"
-    )
-    with shipped.open(newline="") as handle:
-        sec = {row["Code"]: (row["Place"], row["Type"]) for row in csv.DictReader(handle)}
-    assert {code: (row["place"], row["type"]) for code, row in TABLE.items()} == sec
+def test_the_table_is_secs_whole_list():
+    rows = sorted((code, row["place"], row["type"]) for code, row in TABLE.items())
+    assert len(rows) == SEC_CODES
+    assert hashlib.sha256(json.dumps(rows, separators=(",", ":")).encode()).hexdigest() == SEC_DIGEST
 
 
 def test_every_code_but_unknown_has_an_iso_code():

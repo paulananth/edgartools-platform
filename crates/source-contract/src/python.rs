@@ -302,6 +302,7 @@ fn source_contract(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(choose_field_values, m)?)?;
     m.add_function(wrap_pyfunction!(describe_field_rules, m)?)?;
     m.add_function(wrap_pyfunction!(prepare_relationships, m)?)?;
+    m.add_function(wrap_pyfunction!(prepare_relationship_types, m)?)?;
     m.add_function(wrap_pyfunction!(prepare_relationship_periods, m)?)?;
     m.add("SourceRejected", m.py().get_type::<SourceRejected>())?;
     m.add_function(wrap_pyfunction!(scan_json_array, m)?)?;
@@ -364,7 +365,13 @@ impl PyReduction {
                             .map_err(|_| PyValueError::new_err("Reduction row must be an object"))?;
                         let key = spec.keys.iter().map(|column| reduction_text(row, column))
                             .collect::<PyResult<Vec<_>>>()?;
-                        let member = spec.member.as_ref().map(|column| reduction_text(row, column)).transpose()?;
+                        // `most`: a null value is a row that files none; a missing column is refused.
+                        let member = match &spec.member {
+                            Some(column) if spec.mode == crate::reduction::Mode::Most
+                                && row.get_item(column)?.is_some_and(|value| value.is_none()) => None,
+                            Some(column) => Some(reduction_text(row, column)?),
+                            None => None,
+                        };
                         let last = if let Some(column) = &spec.last {
                             if row.get_item(column)?.is_some_and(|value| value.is_none()) && spec.last_null.is_some() {
                                 spec.last_null.clone()
@@ -476,6 +483,11 @@ fn choose_field_values(py: Python<'_>, command: &str) -> PyResult<String> {
 #[pyfunction]
 fn describe_field_rules() -> (Vec<String>, Vec<String>) {
     crate::field_values::describe_field_rules()
+}
+
+#[pyfunction]
+fn prepare_relationship_types(py: Python<'_>, command: &str) -> PyResult<String> {
+    py.allow_threads(|| crate::relationship_types::prepare_relationship_types(command)).map_err(PyValueError::new_err)
 }
 
 #[pyfunction]

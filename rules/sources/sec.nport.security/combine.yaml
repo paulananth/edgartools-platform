@@ -40,6 +40,13 @@ combine:
     isin_classes: {source: securities, table: isin_classes, key: isin, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
     # As `cusip_issuer`, for an ISIN-only Security (ticket 102).
     isin_issuer: {source: issuers, table: isin_issuers, key: isin, value: issuer_sample, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {issuers: 1}}
+    # The most-filed value of each fact (reduce.yaml's `most_*`; ticket 138).
+    asset_category: {source: securities, table: most_asset_category, key: key, value: asset_category, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    issuer_type: {source: securities, table: most_issuer_type, key: key, value: issuer_type, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    investment_country: {source: securities, table: most_investment_country, key: key, value: investment_country, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    currency: {source: securities, table: most_currency, key: key, value: currency, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    restricted: {source: securities, table: most_restricted, key: key, value: restricted, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    derivative_category: {source: securities, table: most_derivative_category, key: key, value: derivative_category, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
   tables:
     # One row per Security (ticket 120; operator, 2026-10-20: "One master
     # record"), keyed by its CUSIP, else its ISIN (reduce.yaml's `keys`). The
@@ -66,3 +73,9 @@ combine:
         isin_classes: {group: isin_classes, key: key, on_missing: skip, replace: false}
         isin_issuer: {group: isin_issuer, key: key, on_missing: skip, replace: false}
         isin_filed: {group: isin_filed, key: key, on_missing: skip, replace: false}
+        asset_category: {group: asset_category, key: key, on_missing: skip, replace: false}
+        issuer_type: {group: issuer_type, key: key, on_missing: skip, replace: false}
+        investment_country: {group: investment_country, key: key, on_missing: skip, replace: false}
+        currency: {group: currency, key: key, on_missing: skip, replace: false}
+        restricted: {group: restricted, key: key, on_missing: skip, replace: false}
+        derivative_category: {group: derivative_category, key: key, on_missing: skip, replace: false}

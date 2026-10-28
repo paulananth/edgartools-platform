@@ -105,7 +105,8 @@ def tables(dialect: str) -> dict[str, Table]:
         ("code_set", "version", "code", "label", "definition", "status")),
         text_column("parent_code", nullable=True), text_column("invalid_reason", nullable=True),
         Column("valid_from", Date), Column("valid_to", Date),
-        text_column("value", nullable=True), text_column("unit", nullable=True))
+        text_column("value", nullable=True), text_column("unit", nullable=True),
+        Column("properties", ExactJSON(none_as_null=True), nullable=True))
     result["code_label"] = table("code_label", *(text_column(n) for n in
         ("code_set", "version", "code", "language", "label", "kind", "source")))
     result["level"] = table("level", *(text_column(n) for n in
@@ -188,6 +189,7 @@ def code_context(conn, code_set, version, code):
         ("code_set", "version", "code", "label", "definition", "path", "label_path", "level", "parent_code", "invalid_reason", "code_status",
          "value", "unit")),
         Column("depth", Integer), Column("synonyms", ExactJSON()), Column("crosswalk", ExactJSON()),
+        Column("properties", ExactJSON(none_as_null=True)),
         Column("code_valid_from", Date), Column("code_valid_to", Date),
         schema=base.schema)
     if conn.dialect.name == "mysql":

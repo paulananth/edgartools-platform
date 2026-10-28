@@ -592,7 +592,8 @@ class TestTheCompanyPolicy:
         # then gave the calculated ultimate parent its history and let a
         # successor entity end parent links; profiling ticket 07 declared the
         # Form ADV sources and their three matching rules, switched off;
-        # ticket 138 stated each identifier's one value per Company.
+        # ticket 138 stated each identifier's one value per Company; ticket 132
+        # moved the relationship types into RDM, pinned.
         chain = policy_layers.digests(policy_layers.company_part(POLICY))
         assert chain == policy_layers.PINNED
         assert chain[-1] == "983352e81d295a165a1391e82fa8a24a710e6f638361a577f18f541917fd4049"

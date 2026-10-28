@@ -9,13 +9,23 @@ use serde_json::{Map, Value};
 type Key = Vec<String>;
 type Members = HashMap<String, Option<String>>;
 
+/// What a group keeps for each key; matched exhaustively, so a new mode is
+/// handled everywhere it must be.
+#[derive(Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Mode {
+    Count,
+    Members,
+    Most,
+}
+
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Group {
     pub source: Value,
     pub table: Value,
     pub keys: Vec<String>,
-    pub mode: String,
+    pub mode: Mode,
     pub count: String,
     pub sample: Option<String>,
     pub sample_limit: usize,
@@ -47,6 +57,8 @@ pub struct Row {
 enum Entry {
     Count(u64),
     Members(Members),
+    // Each member and how many rows filed it (`mode: most`).
+    Most(HashMap<String, u64>),
 }
 
 pub struct Reduction {
@@ -184,15 +196,15 @@ impl Reduction {
             {
                 return Err("Invalid reduction group".into());
             }
-            match g.mode.as_str() {
-                "count"
+            match g.mode {
+                Mode::Count
                     if g.sample.is_none()
                         && g.sample_limit == 0
                         && g.member.is_none()
                         && g.last.is_none()
                         && g.last_null.is_none()
                         && g.exclude.is_none() => {}
-                "members"
+                Mode::Members
                     if g.member.as_ref().is_some_and(|s| name(s))
                         && g.sample
                             .as_ref()
@@ -204,6 +216,16 @@ impl Reduction {
                                 && sources.len() == 1
                         })
                         && (g.last_null.is_none() || g.last.is_some()) => {}
+                // The member the most rows file; `sample` names its output column.
+                Mode::Most
+                    if g.member.as_ref().is_some_and(|s| name(s))
+                        && g.sample
+                            .as_ref()
+                            .is_some_and(|s| name(s) && !g.keys.contains(s) && s != &g.count)
+                        && g.sample_limit == 0
+                        && g.last.is_none()
+                        && g.last_null.is_none()
+                        && g.exclude.is_none() => {}
                 _ => return Err("Invalid reduction mode or columns".into()),
             }
             if let Some(exclude) = &g.exclude {
@@ -212,7 +234,7 @@ impl Reduction {
                     .get(exclude)
                     .ok_or("Invalid reduction exclusion")?;
                 if exclude == group_name
-                    || other.mode != "members"
+                    || other.mode != Mode::Members
                     || other.keys != g.keys
                     || other.exclude.is_some()
                 {
@@ -282,17 +304,32 @@ impl Reduction {
             }
             *selected_rows += 1;
             if row.key.len() != spec.keys.len()
-                || (spec.mode == "members") != row.member.is_some()
+                || (spec.mode == Mode::Count && row.member.is_some())
+                || (spec.mode == Mode::Members && row.member.is_none())
                 || (spec.last.is_some() && row.last.is_none())
                 || (spec.last.is_none() && row.last.is_some())
             {
                 return Err("Invalid reduction row".into());
             }
+            // A row that files no value votes for none.
+            if spec.mode == Mode::Most && row.member.is_none() {
+                continue;
+            }
             let prior = state.get(&row.key);
             let new_key = prior.is_none();
             let (new_member, add, remove) = match prior {
                 Some(Entry::Count(n)) => (false, (n + 1).to_string().len(), n.to_string().len()),
-                None if spec.mode == "count" => (false, 1, 0),
+                None if spec.mode == Mode::Count => (false, 1, 0),
+                _ if spec.mode == Mode::Most => {
+                    let member = row.member.as_ref().ok_or("Invalid reduction member")?;
+                    match prior {
+                        Some(Entry::Most(m)) if m.contains_key(member) => {
+                            let n = m[member];
+                            (false, (n + 1).to_string().len(), n.to_string().len())
+                        }
+                        _ => (true, text_bytes(member) + 1, 0),
+                    }
+                }
                 _ => {
                     let member = row.member.as_ref().ok_or("Invalid reduction member")?;
                     let old = match prior {
@@ -316,15 +353,17 @@ impl Reduction {
             self.keys += usize::from(new_key);
             self.members += usize::from(new_member);
             self.bytes = bytes;
-            let entry = state.entry(row.key).or_insert_with(|| {
-                if spec.mode == "count" {
-                    Entry::Count(0)
-                } else {
-                    Entry::Members(HashMap::new())
-                }
+            let entry = state.entry(row.key).or_insert_with(|| match spec.mode {
+                Mode::Count => Entry::Count(0),
+                Mode::Members => Entry::Members(HashMap::new()),
+                Mode::Most => Entry::Most(HashMap::new()),
             });
             match entry {
                 Entry::Count(n) => *n = n.checked_add(1).ok_or("Reduction count overflow")?,
+                Entry::Most(m) => {
+                    let n = m.entry(row.member.unwrap()).or_insert(0);
+                    *n = n.checked_add(1).ok_or("Reduction count overflow")?;
+                }
                 Entry::Members(m) => {
                     m.insert(row.member.unwrap(), row.last);
                 }
@@ -356,6 +395,18 @@ impl Reduction {
                 match entry {
                     Entry::Count(n) => {
                         row.insert(spec.count.clone(), Value::from(*n));
+                    }
+                    // The most-filed member and its rows; two members filed
+                    // equally often leave the value null.
+                    Entry::Most(m) => {
+                        let top = m.values().copied().max().unwrap_or(0);
+                        let mut winners = m.iter().filter(|(_, n)| **n == top);
+                        let value = match (winners.next(), winners.next()) {
+                            (Some((member, _)), None) => Value::String(member.clone()),
+                            _ => Value::Null,
+                        };
+                        row.insert(spec.count.clone(), Value::from(top));
+                        row.insert(spec.sample.clone().unwrap(), value);
                     }
                     Entry::Members(members) => {
                         let excluded = spec
@@ -497,6 +548,55 @@ mod tests {
             let mut group = listed.clone();
             group["source"] = bad;
             assert!(Reduction::new(&plan(serde_json::json!({"a": group})).to_string()).is_err());
+        }
+    }
+
+    fn most(key: &str, member: Option<&str>) -> Row {
+        Row {
+            key: vec![key.into()],
+            member: member.map(Into::into),
+            last: None,
+        }
+    }
+
+    #[test]
+    fn most_keeps_the_member_the_most_rows_file_and_a_tie_keeps_none() {
+        let group = serde_json::json!({"source": "main", "table": "rows", "keys": ["key"],
+            "mode": "most", "member": "category", "count": "filed", "sample": "value",
+            "sample_limit": 0});
+        let mut engine =
+            Reduction::new(&plan(serde_json::json!({"a": group.clone()})).to_string()).unwrap();
+        engine
+            .push(
+                "a",
+                vec![
+                    most("x", Some("EC")),
+                    most("x", Some("DBT")),
+                    most("x", None),
+                    most("x", Some("EC")),
+                    most("y", Some("EC")),
+                    most("y", Some("DBT")),
+                    most("z", None),
+                ],
+            )
+            .unwrap();
+        // A row filing no value votes for none; a key no row files a value for has no row.
+        assert_eq!(
+            engine.finish().unwrap()["a"],
+            serde_json::json!([
+                {"key": "x", "filed": 2, "value": "EC"},
+                {"key": "y", "filed": 1, "value": null}])
+        );
+        for bad in [
+            serde_json::json!({"sample_limit": 1}),
+            serde_json::json!({"last": "time"}),
+            serde_json::json!({"sample": null}),
+        ] {
+            let mut refused = group.clone();
+            for (k, v) in bad.as_object().unwrap() {
+                refused[k] = v.clone();
+            }
+            assert!(Reduction::new(&plan(serde_json::json!({"a": refused})).to_string()).is_err());
         }
     }
 

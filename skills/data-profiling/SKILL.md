@@ -341,6 +341,12 @@ A part classed reference data becomes a code set version in RDM
      published, never a float) with its `unit`, both or neither, on a child
      code dated to its period (`valid_from`, `valid_to`) under the code it
      belongs to; a consumer takes the child whose period holds its date.
+   - Named properties (ticket 132): what a code's own words cannot say, as
+     `properties` (each text, `true` or `false`, or a list of distinct texts;
+     names in lower-case words joined by `_`). The Rust preparation checks
+     them and the canonical form names them only on a code that has some, so
+     a version without them keeps its pin. Example: a relationship type's
+     ends and rules (`mdm-relationship-types`, data-onboarding REFERENCE.md).
    - `labels`: one `preferred` label per language, plus any `synonym`s.
    - `levels`: the names stewards gave each depth.
    - `crosswalk`: a code mapped to another code set, with `match_type`

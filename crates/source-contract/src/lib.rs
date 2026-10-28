@@ -38,6 +38,7 @@ pub mod readings;
 mod record_values;
 pub mod field_values;
 pub mod relationships;
+pub mod relationship_types;
 pub mod identity;
 pub mod decisions;
 pub mod master_records;

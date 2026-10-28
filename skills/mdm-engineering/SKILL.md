@@ -47,6 +47,14 @@ Python. Keep one policy interpretation and one merge algorithm for all
 engines. A dialect branch must not change which masters bind, which claims
 win, which links exist or which records wait or are rejected.
 
+**Configured vocabulary lives once, in RDM, read by Rust.** A vocabulary MDM
+runs by (the relationship types, ticket 132) is an RDM code set the policy
+pins, each entry a code whose properties are its rules; one Rust module reads
+the pinned rows and holds the one check, called at registration and before
+every calculation. Python only carries rows to it and its error back. No code
+copy, no default for a missing entry: a policy pinning none has no entries,
+so what would use one goes to review.
+
 Storage adapters own connections, types, SQL compilation, indexed retrieval,
 schema migrations, grants and transaction/concurrency primitives. Use
 [sql-writer](../sql-writer/SKILL.md) for portable models and statements;
@@ -122,7 +130,7 @@ authoritative content before approval freezes it.
 Decided (operator, 2026-10-25, ticket 138): the cross-reference becomes the
 one table of every identifier, each row the master id, the identifier kind,
 the value, matching or lookup only, the source, first and last seen. Built
-for Security (switched on 2026-10-26): a record may carry a list of values
+for one kind first (switched on 2026-10-26): a record may carry a list of values
 for one kind; the Merge Stage looks up every matching value: none mints, one
 binds, two consolidate automatically where the rule says so (below). The one
 table for the other kinds is still to build; until then the rest of this
@@ -131,7 +139,8 @@ section holds.
 **What a matching rule does with several masters is data on the rule.**
 `on_several: merge` merges the masters a record's values reach, the oldest
 surviving, only by an identifier whose Identifier Contract states
-`consolidates: true` (a listing FIGI; never a CUSIP or ISIN). `on_conflict:
+`consolidates: true` (an identifier that names one thing however it is
+listed; never a national number two masters may share). `on_conflict:
 first` binds to the one master the rule's value reaches and lists the
 values another master holds as the bind's `withheld`. Otherwise: review. A
 record in review merges nothing.
@@ -144,7 +153,7 @@ it, but the value is never minted, projected or counted as held, and the
 rule may not merge (activation refuses it). A value two masters hold reaches
 both, so the record's own `first` identifier still settles the conflict.
 Registration refuses a cross-reference only on a namespace the dataset
-itself issues (ticket 138 Design 5: 13F's filed FIGI).
+itself issues (ticket 138, Design 5).
 
 **A rule's merge** is a `merge` decision (`actor: rule:<id>@<version>`, no
 survivor named). It names every live merge either side rests on
@@ -330,7 +339,11 @@ Say the time of any proof over ten minutes before starting it. When a run
 shows a case the cohort did not contain, prove that case and stop. Name what
 stays unchecked, including the delivery's totals until switch-on. A domain
 skill that names a whole-delivery test uses that test only when the claim is
-the delivery's totals or switch-on. Stop the proof's containers when it ends,
+the delivery's totals or switch-on. So does a ticket's checklist: a line
+written as "proof on the capture" is met by the limited test that answers its
+claim, never by a multi-hour run that repeats it at scale (operator,
+2026-10-28: "Why do we need to run a 5-hour proving run this is a waste").
+Stop the proof's containers when it ends,
 whatever the outcome.
 
 ### Independent installed qualification

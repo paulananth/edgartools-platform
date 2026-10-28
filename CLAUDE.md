@@ -1,6 +1,6 @@
 # EdgarTools Platform
 
-This repo is the full data platform built on top of the `edgartools` PyPI package. It extracts SEC EDGAR filings data via an ETL runtime, stages Parquet files in S3, loads them into Snowflake, and transforms them into production-ready dynamic tables consumed by a Streamlit dashboard. The platform is designed to track a universe of public companies and investment advisers across all major SEC form types.
+This repo is the full data platform for SEC EDGAR and other provider data; its Rust source engine reads the captured files (the `edgartools` package is no longer a dependency). It extracts SEC EDGAR filings data via an ETL runtime, stages Parquet files in S3, loads them into Snowflake, and transforms them into production-ready dynamic tables consumed by a Streamlit dashboard. The platform is designed to track a universe of public companies and investment advisers across all major SEC form types.
 
 ## AWS account map (READ THIS before running any AWS command)
 
@@ -324,7 +324,6 @@ only points.
 | MDM graph tables (Snowflake `NEO4J_GRAPH_MIGRATION`, still read by the live dashboard; their writers were retired, platform validation 2a/2b, 2026-09-30) | `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql`, `infra/scripts/install-neo4j-graph-app.sh` |
 | Streamlit-in-Snowflake dashboard | `infra/snowflake/streamlit/streamlit_app.py` |
 | Standalone Streamlit dashboard | `examples/dashboard/edgar_universe_dashboard.py` |
-| Batch scripts per form type (edgartools smoke tests) | `scripts/batch/` |
 | AWS Terraform (prod) | `infra/terraform/accounts/prod/` |
 | Snowflake Terraform (prod) | `infra/terraform/snowflake/accounts/prod/` |
 | Docker / ECR publish scripts | `infra/scripts/` |
@@ -374,10 +373,13 @@ memory use or an exit code. Evidence:
 | **Silver** | Snowflake `EDGARTOOLS_SILVER` (landing zone `EDGARTOOLS_SILVER_LANDING` + dbt collapse); the rebuild's writer is `edgar_warehouse/silver_writer/` (PostgreSQL 16 today; a Snowflake sink is its own ticket) | Cleaned, typed, deduplicated records. The old landing writer and the local DuckDB store are deleted. |
 | **Gold** | `EDGARTOOLS_GOLD` (23 dbt dynamic tables) | Business-ready tables, e.g. `company`, `ownership_holdings`, `ownership_activity`, `filing_detail`, `filing_activity`, `adviser_disclosures`, `adviser_offices`, `private_funds`, `ticker_reference`, `edgartools_gold_status`, plus 13 more added since this table was first written (`accounting_flags`, `adv_fund_count_reconciliation`, `consensus_estimates`, `earnings_calendar`, `earnings_releases`, `executive_records`, `financial_derived`, `financial_factors`, `financial_facts`, `guidance_facts`, `institutional_holdings`, `mdm_company`, `transcript_events`) — see `infra/snowflake/dbt/edgartools_gold/models/gold/` for the current, authoritative list rather than trusting this count to stay accurate. Refreshed on a Snowflake-managed schedule. |
 
-## edgartools Dependency
+## Python libraries
 
-The platform depends on the `edgartools` PyPI package (`edgartools>=5.29.0`). It is **not** a local path dependency — install from PyPI.
-When the `edgartools` version is bumped, run the batch scripts in `scripts/batch/` to smoke-test it.
+The platform declares only the libraries its code imports; the Rust source
+engine reads and combines the captured files. `edgartools` is not a
+dependency (operator, 2026-10-28: "Remove it entirely"): nothing imports it, and its per-form
+smoke-test scripts are deleted. Libraries only tests need go in the `dev`
+group. Before adding a library, find the import that needs it.
 
 ## SEC data idempotency
 
@@ -507,6 +509,12 @@ history (`git log -S '<symbol>' -- CLAUDE.md`).
   It cannot see non-Python inputs: after a change to a migration `.sql`, a rules `.yaml` or another
   data file, also run that area's test files by name. The full suite runs in CI on every PR, and
   nothing merges until it is green.
+- **A change to skills, tickets or docs only** needs no project environment, so never
+  `uv sync` a new worktree for it (several minutes, Rust engine included; operator,
+  2026-10-28: "If the skills test is building the whole environment it is a waste").
+  The genericity lint reads files only: `uv run --no-project --with pytest -- pytest -q
+  -p no:cacheprovider tests/unit/test_profiling_genericity.py` (under 1 s), and after an edit to
+  CLAUDE.md or AGENTS.md, `tests/unit/test_guides_name_existing_paths.py` the same way. CI runs the rest.
 - **A change to the Rust engine** (`crates/source-contract/`) reaches Python only after
   `uv sync --all-extras --group dev --reinstall-package source-contract`; until then Python tests run
   the old engine. testmon then reruns nearly every test (10 minutes, ticket 138), so name the area's

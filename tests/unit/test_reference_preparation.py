@@ -19,9 +19,9 @@ def test_canonical_reference_bytes_match_the_existing_format():
             {"code": "a/\\", "label": "Root", "definition": "", "status": "valid"}]
     expected = []
     for row in sorted(rows, key=lambda row: row["code"]):
-        # A typed value is in the canonical form only on a code that has one.
+        # A typed value and properties are in the canonical form only on a code that has them.
         body = {key: store._plain(row.get(key)) for key in store.CODE_COLUMNS
-                if key not in ("value", "unit") or row.get("value") is not None}
+                if key not in ("value", "unit", "properties") or row.get(key) is not None}
         body["level"] = "Root level" if row["code"] == "a/\\" else "Leaf level"
         body["labels"] = sorted([label["language"], label["kind"], label["label"]] for label in row.get("labels", []))
         body["crosswalk"] = sorted([item["to_set"], item["to_version"], item["to_code"], item["match_type"]]

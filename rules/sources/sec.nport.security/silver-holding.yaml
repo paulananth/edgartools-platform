@@ -11,6 +11,16 @@
 # Measured on the 2026q2 capture: 5,347,869 holding rows, 0 duplicate keys;
 # 4,517,554 name a fund series and 830,315 are the registrant's own (no series);
 # every row has a registrant CIK.
+# One system of record (operator, 2026-10-28: "silver must not have duplicate
+# fields, it contredits the data governance principle one system of record";
+# ticket 143): a row holds the holding's own facts and its links. The CUSIP,
+# ISIN and the facts it repeats about its Security (currency, asset category,
+# issuer type, investment country, restricted, derivative category) are the
+# Security's, in MDM (ticket 138), read through `security_mdm_id`. The row's
+# currency code stays as the unit of its own value and exchange rate
+# (operator, 2026-10-28: "Keep it on the row (Recommended)"). The issuer LEI
+# identifies the issuer Company in MDM, which the Security reaches by
+# ISSUED_BY.
 # Rows are holding-rows.yaml's `holding` table. Numbers stay as filed (text) in
 # the rows and land as exact decimals. Append only: a filed holding never
 # changes; an amended report is a new filing.
@@ -66,24 +76,6 @@ columns:
   definition: "The Security's record key: the CUSIP, else the ISIN; empty when none."
   source: "holding-rows.yaml"
   sensitivity: none
-- name: cusip
-  type: VARCHAR
-  nullable: true
-  definition: "The CUSIP as filed; a placeholder is empty."
-  source: "ISSUER_CUSIP"
-  sensitivity: none
-- name: isin
-  type: VARCHAR
-  nullable: true
-  definition: "The holding's one ISIN; empty for none or two."
-  source: "IDENTIFIERS.IDENTIFIER_ISIN by HOLDING_ID"
-  sensitivity: none
-- name: issuer_lei
-  type: VARCHAR
-  nullable: true
-  definition: "The issuer's LEI as the fund filed it; the Security reaches its issuer by ISSUED_BY, not by this column."
-  source: "ISSUER_LEI"
-  sensitivity: none
 - name: balance
   type: DECIMAL(38,10)
   nullable: true
@@ -99,7 +91,7 @@ columns:
 - name: currency_code
   type: VARCHAR
   nullable: true
-  definition: "The currency of the value."
+  definition: "The currency of the value: the unit of this holding's own value and exchange rate, kept on the row (operator, 2026-10-28); the Security's currency, the one most of its holdings file, is in MDM."
   source: "CURRENCY_CODE"
   sensitivity: none
 - name: currency_value
@@ -126,41 +118,11 @@ columns:
   definition: "Long, short or none."
   source: "PAYOFF_PROFILE"
   sensitivity: none
-- name: asset_cat
-  type: VARCHAR
-  nullable: true
-  definition: "The asset category code."
-  source: "ASSET_CAT"
-  sensitivity: none
-- name: issuer_type
-  type: VARCHAR
-  nullable: true
-  definition: "The issuer type code."
-  source: "ISSUER_TYPE"
-  sensitivity: none
-- name: investment_country
-  type: VARCHAR
-  nullable: true
-  definition: "The country of the investment."
-  source: "INVESTMENT_COUNTRY"
-  sensitivity: none
-- name: is_restricted_security
-  type: VARCHAR
-  nullable: true
-  definition: "Whether the security is restricted (Y or N)."
-  source: "IS_RESTRICTED_SECURITY"
-  sensitivity: none
 - name: fair_value_level
   type: VARCHAR
   nullable: true
   definition: "The fair value hierarchy level."
   source: "FAIR_VALUE_LEVEL"
-  sensitivity: none
-- name: derivative_cat
-  type: VARCHAR
-  nullable: true
-  definition: "The derivative category code."
-  source: "DERIVATIVE_CAT"
   sensitivity: none
 key:
 - accession
@@ -203,19 +165,6 @@ why: >-
   by the filing and the holding id (unique over the quarter). It links to its
   holder and its Security by lookup, so the Fund-to-Security link needs no
   MDM record of its own. Append, since a filed holding never changes.
-# Data quality (ticket 105; operator, 2026-10-17: "Flag, land the row"): a
-# holding whose CUSIP or ISIN fails its declared shape and check digit lands
-# flagged, the check's id in its `quality` column; it is never refused.
-checks:
-- id: cusip_valid
-  check: identifier
-  column: cusip
-  type: cusip
-  on_fail: flag
-  why: A CUSIP has the shape and the check digit rules/identifiers/cusip.yaml declares.
-- id: isin_valid
-  check: identifier
-  column: isin
-  type: isin
-  on_fail: flag
-  why: An ISIN has the shape and the check digit rules/identifiers/isin.yaml declares.
+# No checks: the CUSIP and ISIN they checked (ticket 105) are the Security's,
+# checked by its Dataset Contract (ticket 143).
+checks: []

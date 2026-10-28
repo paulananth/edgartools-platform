@@ -45,7 +45,8 @@ def mysql_statements():
         "code": ["code<>''", "status IN ('valid','invalid')", "valid_to IS NULL OR valid_to>=valid_from",
             "(status='invalid')=(invalid_reason IS NOT NULL)", "parent_code IS NULL OR parent_code<>code",
             "value IS NULL OR REGEXP_LIKE(value,'^-?[0-9]+([.][0-9]+)?$','c')", "unit IS NULL OR trim(unit)<>''",
-            "(value IS NULL)=(unit IS NULL)"],
+            "(value IS NULL)=(unit IS NULL)",
+            "properties IS NULL OR (JSON_VALID(properties) AND JSON_TYPE(properties)='OBJECT' AND JSON_LENGTH(properties)>0)"],
         "code_label": ["REGEXP_LIKE(language,'^[a-z]{2,3}(-[A-Za-z0-9]+)*$','c')",
             "trim(label)<>''", "kind IN ('preferred','synonym')"],
         "level": ["depth>=1", "trim(name)<>''"],
@@ -166,7 +167,7 @@ def mysql_statements():
         "AND x.from_set=c.code_set AND x.from_version=c.version AND x.from_code=c.code),JSON_ARRAY()) AS crosswalk,"
         "c.version,v.sha256,v.valid_from,v.valid_to,v.status AS version_status,c.status AS code_status,"
         "c.valid_from AS code_valid_from,c.valid_to AS code_valid_to,c.invalid_reason,v.approved_by,v.approved_at,v.published_at,"
-        "c.value,c.unit "
+        "c.value,c.unit,c.properties "
         "FROM code c JOIN code_set_version v ON v._row_key=c._version_key AND v.code_set=c.code_set AND v.version=c.version "
         "JOIN code_set s ON s._row_key=v._catalog_key AND s.code_set=c.code_set "
         "JOIN code_path p ON p._row_key=c._row_key AND p.code_set=c.code_set AND p.version=c.version AND p.code=c.code "

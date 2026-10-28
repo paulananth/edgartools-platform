@@ -202,9 +202,9 @@ def test_value_migration_on_a_published_store_keeps_its_pin(store, monkeypatch, 
     owner, runtime, arguments = store
     with monkeypatch.context() as patch:
         patch.setattr(mysql_migration, "FOLLOW_UPS",
-                      tuple(f for f in mysql_migration.FOLLOW_UPS if f[1] != "value"))
+                      tuple(f for f in mysql_migration.FOLLOW_UPS if f[1] not in ("value", "properties")))
         patch.setattr(store_module, "CODE_COLUMNS",
-                      tuple(c for c in store_module.CODE_COLUMNS if c not in ("value", "unit")))
+                      tuple(c for c in store_module.CODE_COLUMNS if c not in ("value", "unit", "properties")))
         assert "mysql-value-v3.sql" not in migrate(owner, **arguments)
         reference = RDM(runtime, reserved_subjects=())
         reference.draft({"code_set": "invented", "name": "Invented"}, "1",
@@ -217,6 +217,31 @@ def test_value_migration_on_a_published_store_keeps_its_pin(store, monkeypatch, 
                                                  "computed": published["sha256"], "matches": True}
     assert [(r["code"], r["value"], r["unit"]) for r in reference.codes("invented", "1")] == \
         [("a", None, None), ("b", None, None)]
+
+
+def test_properties_migration_on_a_published_store_keeps_its_pin(store, monkeypatch, tmp_path):
+    """A version published before the properties migration verifies after it, and
+    a version drafted after it carries its properties."""
+    from edgar_warehouse.rdm import store as store_module
+
+    owner, runtime, arguments = store
+    with monkeypatch.context() as patch:
+        patch.setattr(mysql_migration, "FOLLOW_UPS",
+                      tuple(f for f in mysql_migration.FOLLOW_UPS if f[1] != "properties"))
+        patch.setattr(store_module, "CODE_COLUMNS",
+                      tuple(c for c in store_module.CODE_COLUMNS if c != "properties"))
+        assert "mysql-properties-v4.sql" not in migrate(owner, **arguments)
+        reference = RDM(runtime, reserved_subjects=())
+        reference.draft({"code_set": "invented", "name": "Invented"}, "1", [{"code": "a", "label": "First"}],
+                        created_by="drafter")
+        reference.approve("invented", "1", by="operator", words="Approve this invented version")
+        published = reference.publish("invented", "1", out=tmp_path)
+    assert "mysql-properties-v4.sql" in migrate(owner, **arguments)
+    assert reference.verify("invented", "1")["matches"] and \
+        reference.verify("invented", "1")["stored"] == published["sha256"]
+    reference.draft({"code_set": "invented"}, "2", [{"code": "a", "label": "First", "properties": {"to": ["x"]}}],
+                    created_by="drafter", supersedes="1")
+    assert [(r["code"], r["properties"]) for r in reference.codes("invented", "2")] == [("a", {"to": ["x"]})]
 
 
 def test_approval_refresh_is_set_based_and_unchanged_refresh_writes_nothing(store):

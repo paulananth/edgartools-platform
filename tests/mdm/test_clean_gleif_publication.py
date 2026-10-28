@@ -171,7 +171,8 @@ def test_rr_and_repex_xml_and_json_have_the_same_simple_record(
 def test_native_accounting_relationships_are_typed_and_cycles_suppressed(kind):
     from types import SimpleNamespace
 
-    from edgar_warehouse.mdm.clean.relationships import project
+    from edgar_warehouse.mdm.clean.relationships import project, types_of
+    from edgar_warehouse.rules import files
 
     state = SimpleNamespace(
         bindings={"a": "a", "b": "b"}, canonical={"a": "a", "b": "b"}
@@ -191,7 +192,7 @@ def test_native_accounting_relationships_are_typed_and_cycles_suppressed(kind):
             ],
         }
     }
-    edges, reviews = project(claims, state, entities, "2026-01-01T00:00:00Z")
+    edges, reviews = project(claims, state, entities, "2026-01-01T00:00:00Z", types_of(files.policy()))
     assert not reviews
     assert any(e["type"] == kind and e["derived"] is False for e in edges)
     claims["b"] = {
@@ -200,7 +201,7 @@ def test_native_accounting_relationships_are_typed_and_cycles_suppressed(kind):
             {"type": kind, "target_subject": "a", "valid_from": "2020-01-01T00:00:00Z"}
         ],
     }
-    edges, reviews = project(claims, state, entities, "2026-01-01T00:00:00Z")
+    edges, reviews = project(claims, state, entities, "2026-01-01T00:00:00Z", types_of(files.policy()))
     assert not edges
     assert any(r["reason"] == "hierarchy_cycle" for r in reviews)
 

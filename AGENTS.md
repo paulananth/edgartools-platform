@@ -155,6 +155,11 @@ Learned the hard way; each is a standing operator rule.
   <folders>`; never with `-p no:cacheprovider`). After a change to a
   `.sql`, `.yaml` or data file, also run that area's test files by name. No
   local test run may take more than five minutes; CI runs everything.
+- A change to skills, tickets or docs only needs no project environment: never
+  `uv sync` a new worktree for it. Run the genericity lint, which reads files
+  only: `uv run --no-project --with pytest -- pytest -q -p no:cacheprovider
+  tests/unit/test_profiling_genericity.py` (under 1 s), and
+  `tests/unit/test_guides_name_existing_paths.py` after a guide edit.
 - Merge when every CI check is green and the PR is ready.
 - A test states its expected answer; it never compares with a frozen copy of
   retired code. To retire such an oracle, write its answers into the test (or an
@@ -278,7 +283,7 @@ Large files should be read in chunks before editing: `edgar_warehouse/mdm/clean/
 - Use `uv` for Python dependency management and Python command execution.
 - Do not use bare `pip` for repo workflows. Use `uv sync`, `uv pip install` for deliberate one-off installs, or `uv run --with <package>` for transient tools.
 - Prefer `uv run --with dbt-snowflake dbt ...` over bare `dbt`.
-- Project dependency source is PyPI. `edgartools>=5.29.0` is not vendored here.
+- Project dependency source is PyPI. Declare only the libraries the code imports; `edgartools` is not a dependency (operator, 2026-10-28: "Remove it entirely").
 - Docker images use AWS ECR for deployable artifacts.
 - Use the Docker context already configured on the machine. Leave `DOCKER_HOST` unset. Publish images with `docker build` and `docker push` through `infra/scripts/publish-warehouse-image.sh --mode docker`.
 - After a local image build, inspect `docker system df` and clear unused build cache with `docker builder prune`. Keep named volumes unless the operator names a volume to remove. If `docker info` cannot reach the daemon, report that blocker.
@@ -329,7 +334,6 @@ Notes:
 - SEC filing artifacts are additive and immutable after capture.
 - Processing follows the source-coverage and Change Journal policy under
   "Shared local data"; retain immutable captures for verification and replay.
-- When bumping `edgartools`, run the relevant scripts in `scripts/batch/` to smoke-test parser surfaces.
 
 ## AWS Terraform Model
 

@@ -344,8 +344,9 @@ if os.environ["READ_WORKER_CASE"] == "review_recovery":
     from edgar_warehouse.workers import mdm_merge
     os.environ["MDM_DATABASE_URL"] = os.environ["READ_RUNTIME_URL"]
     os.environ["MDM_APPLICATION_ROLE"] = os.environ["READ_RUNTIME_ROLE"]
-    policy = {**g["inactive"],"version":"invented-waiting-policy","relationships":{
-        "version":"invented-waiting","types":{"invented_link":{"from":[g["KIND"]],"to":[g["KIND"]]}}}}
+    from tests.support.relationship_types import pinned_types
+    policy = {**g["inactive"],"version":"invented-waiting-policy",
+              **pinned_types({"invented_link":{"from":[g["KIND"]],"to":[g["KIND"]]}})}
     with g["owner"].begin() as conn:
         pin = g["register_policy"](conn,policy)
     waiting = g["record"]("one",revision=2,relationships=[{"type":"invented_link",

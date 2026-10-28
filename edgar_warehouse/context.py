@@ -159,6 +159,15 @@ def definitions() -> dict:
     return files.load(files.ROOT / "context" / "definitions.yaml")
 
 
+def relationship_definitions() -> dict:
+    """Each relationship type's plain words: its code's definition in the RDM
+    code set the policy pins (ticket 132)."""
+    from edgar_warehouse.rules import files
+
+    return {row["code"]: row["definition"] for row in files.pinned_reference("mdm-relationship-types")
+            if row["parent_code"] is None}
+
+
 def parse_time(value: str, flag: str, command: str) -> datetime:
     try:
         moment = datetime.fromisoformat(value)
@@ -629,7 +638,7 @@ class Context:
             full = args.detail == "full"
             if full:
                 _attach_sources(conn, links)
-        types = definitions().get("relationships", {})
+        types = relationship_definitions()
         related = [_full_link(link) if full else _brief_link(link) for link in links]
         answer = {
             "name": names[entity_id]["name"],
