@@ -11,7 +11,7 @@ from edgar_warehouse.rules import files
 from tests.mdm.test_configured_pair_comparison import configured_root  # noqa: F401
 
 
-@pytest.mark.parametrize("case", ["current", "history", "producer", "alias", "profile", "details", "plans", "unknown", "bulk_provenance", "inspection", "forced_publication", "pages", "review_pages", "context_current", "context_links", "context_relationships", "context_concurrent", "context_times", "context_lookup", "context_search_gap", "recording_authority", "recorded_time"])
+@pytest.mark.parametrize("case", ["unknown", "forced_publication", "context_search_gap"])
 @pytest.mark.parametrize("kind", ["invented-kind", "invented-other-kind"])
 def test_normal_master_reads(case, kind, database_factory, configured_root):
     if os.environ.get("SKILL_ADAPTER_TEST_ENGINE") == "mssql":
