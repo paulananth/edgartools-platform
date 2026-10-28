@@ -30,6 +30,63 @@ reduce:
       count: kinds
       sample: kind_sample
       sample_limit: 1
+    # Each fact every holding repeats about its Security (ticket 138; operator,
+    # 2026-10-25: "Most-filed value"): the value the most holdings of the key
+    # file; a tie keeps none, and a holding filing none votes for none.
+    most_asset_category:
+      source: holdings
+      table: [security_cusip, security_isin]
+      keys: [key]
+      mode: most
+      member: asset_category
+      count: asset_category_filed
+      sample: asset_category
+      sample_limit: 0
+    most_issuer_type:
+      source: holdings
+      table: [security_cusip, security_isin]
+      keys: [key]
+      mode: most
+      member: issuer_type
+      count: issuer_type_filed
+      sample: issuer_type
+      sample_limit: 0
+    most_investment_country:
+      source: holdings
+      table: [security_cusip, security_isin]
+      keys: [key]
+      mode: most
+      member: investment_country
+      count: investment_country_filed
+      sample: investment_country
+      sample_limit: 0
+    most_currency:
+      source: holdings
+      table: [security_cusip, security_isin]
+      keys: [key]
+      mode: most
+      member: currency
+      count: currency_filed
+      sample: currency
+      sample_limit: 0
+    most_restricted:
+      source: holdings
+      table: [security_cusip, security_isin]
+      keys: [key]
+      mode: most
+      member: restricted
+      count: restricted_filed
+      sample: restricted
+      sample_limit: 0
+    most_derivative_category:
+      source: holdings
+      table: [security_cusip, security_isin]
+      keys: [key]
+      mode: most
+      member: derivative_category
+      count: derivative_category_filed
+      sample: derivative_category
+      sample_limit: 0
     cusips:
       source: holdings
       table: security_cusip

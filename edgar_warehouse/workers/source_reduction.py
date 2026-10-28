@@ -60,8 +60,8 @@ def contract(body, refs):
         if (not isinstance(keys, list) or not 1 <= len(keys) <= 8
                 or not all(_name(key) for key in keys) or len(set(keys)) != len(keys)):
             raise ValueError("Reduction keys name 1..8 distinct text columns")
-        if spec["mode"] not in ("count", "members"):
-            raise ValueError("Reduction mode is count or members")
+        if spec["mode"] not in ("count", "members", "most"):
+            raise ValueError("Reduction mode is count, members or most")
         if not _name(spec["count"]) or spec["count"] in keys:
             raise ValueError("Reduction count names a new output column")
         if (type(spec["sample_limit"]) is not int or not 0 <= spec["sample_limit"] <= 1000):
@@ -69,6 +69,12 @@ def contract(body, refs):
         if spec["mode"] == "count":
             if spec["sample"] is not None or spec["sample_limit"] != 0 or set(spec) != required:
                 raise ValueError("Count reduction has no member, last, exclusion or sample")
+        elif spec["mode"] == "most":
+            # The member the most rows file, named by `sample`; a tie keeps none.
+            if (not _name(spec.get("member")) or not _name(spec["sample"])
+                    or spec["sample"] in [*keys, spec["count"]] or spec["sample_limit"] != 0
+                    or {"last", "last_null", "exclude"} & set(spec)):
+                raise ValueError("Most reduction requires member and a distinct sample column, and no limit, last or exclusion")
         else:
             if (not _name(spec.get("member")) or not _name(spec["sample"])
                     or spec["sample"] in [*keys, spec["count"]]
