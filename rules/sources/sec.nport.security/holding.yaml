@@ -55,8 +55,6 @@ read:
         # One ISIN, else none (a holding listing two names neither).
         isin:
           member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}
-        # The issuer's LEI as the fund filed it: evidence of the holding, kept
-        # in silver, not on the Security (an LEI is a Company's identifier).
         balance: {text: {path: BALANCE, default: "", null_if: [""]}}
         unit: {text: {path: UNIT, default: "", null_if: [""]}}
         currency_value: {text: {path: CURRENCY_VALUE, default: "", null_if: [""]}}

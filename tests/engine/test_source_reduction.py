@@ -87,7 +87,6 @@ def test_count_preserves_duplicates_unselected_rows_consume_input_budget(tmp_pat
     assert not Path(urlparse(bounded["output"]).path).exists()
 
 
-
 def test_most_runs_through_the_worker_and_a_tie_keeps_none(tmp_path):
     # Ticket 138, "Most-filed value": the value the most rows file; two filed
     # equally often keep none; a row filing none votes for none.
@@ -100,6 +99,7 @@ def test_most_runs_through_the_worker_and_a_tie_keeps_none(tmp_path):
     output = store.json(source_combine.execute(envelope(store, tmp_path, plan({"most": spec}), refs), store))
     assert output["artifacts"][0]["tables"]["most"] == [
         {"key": "x", "filed": 2, "value": "EC"}, {"key": "y", "filed": 1, "value": None}]
+
 
 def test_large_input_uses_incremental_state_not_materializing_loader(tmp_path, monkeypatch):
     from edgar_warehouse.workers import source_readings

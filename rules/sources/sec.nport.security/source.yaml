@@ -115,13 +115,14 @@ read:
             path: ISSUER_LEI
             default: ""
         # Facts each holding repeats about its Security (ticket 138, "Most-filed
-        # value"): reduce.yaml keeps the value the most holdings file.
-        asset_category: {text: {path: ASSET_CAT, default: "", null_if: [""]}}
-        issuer_type: {text: {path: ISSUER_TYPE, default: "", null_if: [""]}}
-        investment_country: {text: {path: INVESTMENT_COUNTRY, default: "", null_if: [""]}}
-        currency: {text: {path: CURRENCY_CODE, default: "", null_if: [""]}}
-        restricted: {text: {path: IS_RESTRICTED_SECURITY, default: "", null_if: [""]}}
-        derivative_category: {text: {path: DERIVATIVE_CAT, default: "", null_if: [""]}}
+        # value"): reduce.yaml keeps the value the most holdings file, each
+        # trimmed and upper-cased so one code's spellings count as one.
+        asset_category: {text: {path: ASSET_CAT, default: "", transforms: [{case: upper}], null_if: [""]}}
+        issuer_type: {text: {path: ISSUER_TYPE, default: "", transforms: [{case: upper}], null_if: [""]}}
+        investment_country: {text: {path: INVESTMENT_COUNTRY, default: "", transforms: [{case: upper}], null_if: [""]}}
+        currency: {text: {path: CURRENCY_CODE, default: "", transforms: [{case: upper}], null_if: [""]}}
+        restricted: {text: {path: IS_RESTRICTED_SECURITY, default: "", transforms: [{case: upper}], null_if: [""]}}
+        derivative_category: {text: {path: DERIVATIVE_CAT, default: "", transforms: [{case: upper}], null_if: [""]}}
         key_kind:
           const:
             value: cusip
@@ -258,12 +259,12 @@ read:
           text:
             path: ISSUER_LEI
             default: ""
-        asset_category: {text: {path: ASSET_CAT, default: "", null_if: [""]}}
-        issuer_type: {text: {path: ISSUER_TYPE, default: "", null_if: [""]}}
-        investment_country: {text: {path: INVESTMENT_COUNTRY, default: "", null_if: [""]}}
-        currency: {text: {path: CURRENCY_CODE, default: "", null_if: [""]}}
-        restricted: {text: {path: IS_RESTRICTED_SECURITY, default: "", null_if: [""]}}
-        derivative_category: {text: {path: DERIVATIVE_CAT, default: "", null_if: [""]}}
+        asset_category: {text: {path: ASSET_CAT, default: "", transforms: [{case: upper}], null_if: [""]}}
+        issuer_type: {text: {path: ISSUER_TYPE, default: "", transforms: [{case: upper}], null_if: [""]}}
+        investment_country: {text: {path: INVESTMENT_COUNTRY, default: "", transforms: [{case: upper}], null_if: [""]}}
+        currency: {text: {path: CURRENCY_CODE, default: "", transforms: [{case: upper}], null_if: [""]}}
+        restricted: {text: {path: IS_RESTRICTED_SECURITY, default: "", transforms: [{case: upper}], null_if: [""]}}
+        derivative_category: {text: {path: DERIVATIVE_CAT, default: "", transforms: [{case: upper}], null_if: [""]}}
         key_kind:
           const:
             value: isin

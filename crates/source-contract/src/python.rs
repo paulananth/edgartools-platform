@@ -365,10 +365,10 @@ impl PyReduction {
                             .map_err(|_| PyValueError::new_err("Reduction row must be an object"))?;
                         let key = spec.keys.iter().map(|column| reduction_text(row, column))
                             .collect::<PyResult<Vec<_>>>()?;
-                        // `most`: a null value is a row that files none.
+                        // `most`: a null value is a row that files none; a missing column is refused.
                         let member = match &spec.member {
-                            Some(column) if spec.mode == "most"
-                                && row.get_item(column)?.is_none_or(|value| value.is_none()) => None,
+                            Some(column) if spec.mode == crate::reduction::Mode::Most
+                                && row.get_item(column)?.is_some_and(|value| value.is_none()) => None,
                             Some(column) => Some(reduction_text(row, column)?),
                             None => None,
                         };

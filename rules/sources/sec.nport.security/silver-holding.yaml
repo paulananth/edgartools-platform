@@ -13,10 +13,12 @@
 # every row has a registrant CIK.
 # One system of record (operator, 2026-10-28: "silver must not have duplicate
 # fields, it contredits the data governance principle one system of record";
-# ticket 143): a row holds the holding's own facts and its links; the CUSIP,
-# ISIN, issuer LEI and the facts it repeats about its Security (currency, asset
-# category, issuer type, investment country, restricted, derivative category)
-# are the Security's, in MDM (ticket 138), and are read through `security_mdm_id`.
+# ticket 143): a row holds the holding's own facts and its links. The CUSIP,
+# ISIN and the facts it repeats about its Security (currency, asset category,
+# issuer type, investment country, restricted, derivative category) are the
+# Security's, in MDM (ticket 138), read through `security_mdm_id`; the issuer
+# LEI identifies the issuer Company in MDM, which the Security reaches by
+# ISSUED_BY.
 # Rows are holding-rows.yaml's `holding` table. Numbers stay as filed (text) in
 # the rows and land as exact decimals. Append only: a filed holding never
 # changes; an amended report is a new filing.
@@ -155,7 +157,6 @@ why: >-
   by the filing and the holding id (unique over the quarter). It links to its
   holder and its Security by lookup, so the Fund-to-Security link needs no
   MDM record of its own. Append, since a filed holding never changes.
-# Data quality (ticket 105; operator, 2026-10-17: "Flag, land the row"): a
-# holding whose CUSIP or ISIN fails its declared shape and check digit lands
-# flagged, the check's id in its `quality` column; it is never refused.
+# No checks: the CUSIP and ISIN they checked (ticket 105) are the Security's,
+# checked by its Dataset Contract (ticket 143).
 checks: []

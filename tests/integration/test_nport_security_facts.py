@@ -24,7 +24,7 @@ HOLDINGS = [
     ["A-1", "1", "Example Corp", chain.LEI, "Common", HELD, "EC", "CORP", "US", "USD", "N", ""],
     ["A-1", "2", "Example Corp", chain.LEI, "Common", HELD, "EC", "CORP", "US", "USD", "N", ""],
     ["A-2", "3", "Example Corp", chain.LEI, "Common", HELD, "DBT", "MUN", "US", "EUR", "N", ""],
-    ["A-2", "4", "Example Corp", chain.LEI, "Common", HELD, "", "MUN", "", "USD", "Y", ""],
+    ["A-2", "4", "Example Corp", chain.LEI, "Common", HELD, "", "MUN", "", " usd", "Y", ""],
     ["A-1", "5", "Other Inc", "", "Common", BARE, "", "", "", "", "", ""],
 ]
 
@@ -49,7 +49,8 @@ def records(root: Path) -> dict[str, dict]:
 
 def test_each_fact_is_the_value_the_most_holdings_file_and_a_tie_keeps_none(tmp_path):
     fields = records(tmp_path)
-    # EC 2 to DBT 1 (one files none); CORP 2 to MUN 2 is a tie; US 3; USD 3 to EUR 1;
+    # EC 2 to DBT 1 (one files none); CORP 2 to MUN 2 is a tie; US 3; USD 3 to EUR 1
+    # (" usd" is USD: each value is trimmed and upper-cased);
     # N 3 to Y 1; no holding files a derivative category.
     assert {k: fields[HELD].get(k) for k in ("asset_category", "issuer_type", "investment_country",
                                              "currency", "restricted", "derivative_category")} == {

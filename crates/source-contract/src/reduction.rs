@@ -9,13 +9,23 @@ use serde_json::{Map, Value};
 type Key = Vec<String>;
 type Members = HashMap<String, Option<String>>;
 
+/// What a group keeps for each key; matched exhaustively, so a new mode is
+/// handled everywhere it must be.
+#[derive(Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Mode {
+    Count,
+    Members,
+    Most,
+}
+
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Group {
     pub source: Value,
     pub table: Value,
     pub keys: Vec<String>,
-    pub mode: String,
+    pub mode: Mode,
     pub count: String,
     pub sample: Option<String>,
     pub sample_limit: usize,
@@ -186,15 +196,15 @@ impl Reduction {
             {
                 return Err("Invalid reduction group".into());
             }
-            match g.mode.as_str() {
-                "count"
+            match g.mode {
+                Mode::Count
                     if g.sample.is_none()
                         && g.sample_limit == 0
                         && g.member.is_none()
                         && g.last.is_none()
                         && g.last_null.is_none()
                         && g.exclude.is_none() => {}
-                "members"
+                Mode::Members
                     if g.member.as_ref().is_some_and(|s| name(s))
                         && g.sample
                             .as_ref()
@@ -207,7 +217,7 @@ impl Reduction {
                         })
                         && (g.last_null.is_none() || g.last.is_some()) => {}
                 // The member the most rows file; `sample` names its output column.
-                "most"
+                Mode::Most
                     if g.member.as_ref().is_some_and(|s| name(s))
                         && g.sample
                             .as_ref()
@@ -224,7 +234,7 @@ impl Reduction {
                     .get(exclude)
                     .ok_or("Invalid reduction exclusion")?;
                 if exclude == group_name
-                    || other.mode != "members"
+                    || other.mode != Mode::Members
                     || other.keys != g.keys
                     || other.exclude.is_some()
                 {
@@ -294,23 +304,23 @@ impl Reduction {
             }
             *selected_rows += 1;
             if row.key.len() != spec.keys.len()
-                || (spec.mode == "count" && row.member.is_some())
-                || (spec.mode == "members" && row.member.is_none())
+                || (spec.mode == Mode::Count && row.member.is_some())
+                || (spec.mode == Mode::Members && row.member.is_none())
                 || (spec.last.is_some() && row.last.is_none())
                 || (spec.last.is_none() && row.last.is_some())
             {
                 return Err("Invalid reduction row".into());
             }
             // A row that files no value votes for none.
-            if spec.mode == "most" && row.member.is_none() {
+            if spec.mode == Mode::Most && row.member.is_none() {
                 continue;
             }
             let prior = state.get(&row.key);
             let new_key = prior.is_none();
             let (new_member, add, remove) = match prior {
                 Some(Entry::Count(n)) => (false, (n + 1).to_string().len(), n.to_string().len()),
-                None if spec.mode == "count" => (false, 1, 0),
-                _ if spec.mode == "most" => {
+                None if spec.mode == Mode::Count => (false, 1, 0),
+                _ if spec.mode == Mode::Most => {
                     let member = row.member.as_ref().ok_or("Invalid reduction member")?;
                     match prior {
                         Some(Entry::Most(m)) if m.contains_key(member) => {
@@ -343,10 +353,10 @@ impl Reduction {
             self.keys += usize::from(new_key);
             self.members += usize::from(new_member);
             self.bytes = bytes;
-            let entry = state.entry(row.key).or_insert_with(|| match spec.mode.as_str() {
-                "count" => Entry::Count(0),
-                "most" => Entry::Most(HashMap::new()),
-                _ => Entry::Members(HashMap::new()),
+            let entry = state.entry(row.key).or_insert_with(|| match spec.mode {
+                Mode::Count => Entry::Count(0),
+                Mode::Members => Entry::Members(HashMap::new()),
+                Mode::Most => Entry::Most(HashMap::new()),
             });
             match entry {
                 Entry::Count(n) => *n = n.checked_add(1).ok_or("Reduction count overflow")?,

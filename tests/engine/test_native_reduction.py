@@ -130,6 +130,6 @@ def test_most_keeps_the_value_the_most_rows_file_through_the_facade():
     reducer.push("most", [{"key": "x", "category": "EC"}, {"key": "x", "category": None},
                           {"key": "x", "category": "EC"}, {"key": "x", "category": "DBT"},
                           {"key": "y", "category": "EC"}, {"key": "y", "category": "DBT"},
-                          {"key": "z"}])
+                          {"key": "z", "category": None}])
     assert reducer.finish()["most"] == [{"key": "x", "filed": 2, "value": "EC"},
                                         {"key": "y", "filed": 1, "value": None}]
