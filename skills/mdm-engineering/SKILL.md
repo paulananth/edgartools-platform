@@ -338,7 +338,11 @@ Say the time of any proof over ten minutes before starting it. When a run
 shows a case the cohort did not contain, prove that case and stop. Name what
 stays unchecked, including the delivery's totals until switch-on. A domain
 skill that names a whole-delivery test uses that test only when the claim is
-the delivery's totals or switch-on. Stop the proof's containers when it ends,
+the delivery's totals or switch-on. So does a ticket's checklist: a line
+written as "proof on the capture" is met by the limited test that answers its
+claim, never by a multi-hour run that repeats it at scale (operator,
+2026-10-28: "Why do we need to run a 5-hour proving run this is a waste").
+Stop the proof's containers when it ends,
 whatever the outcome.
 
 ### Independent installed qualification
