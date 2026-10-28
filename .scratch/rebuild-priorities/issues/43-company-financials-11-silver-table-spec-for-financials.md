@@ -29,6 +29,8 @@ The operator asked for `/design-review` first. That skill audits a live web page
 
 ## The spec (approved)
 
+Corrected (2026-10-28 16:55 ET, ticket 46; operator, 2026-10-28: "Engine step, local (Recommended)"): `company_line_item` and the facts' flattening are built by a configured engine step and land through the silver writer, not by dbt; the line items are 23 codes of RDM's `financial-line-items`.
+
 Three silver tables. The facts land from the reader (ticket 40) and dbt flattens units and facts; the line items and the measures are built from the facts by dbt, rebuilt whole each run. Rules configuration (the line-item map and the measure definitions) sits under `rules/`, with its version on every row it produced.
 
 ### 1. `company_fact`: every filed fact
