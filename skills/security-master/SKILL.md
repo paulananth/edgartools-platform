@@ -109,7 +109,7 @@ priority"; this replaces "make openfigi priority 1 and 13f last" when ticket
 | name | OpenFIGI, 13F, N-PORT |
 | security type, security type 2, market sector, security description | OpenFIGI: the one value the listings state, else the US composite's, else the ISIN country's composite's (description is new to MDM, "Same rule as name") |
 | title of class, share class, issuer | 13F, N-PORT; the issuer by N-PORT's issuer LEI |
-| asset category, issuer type, investment country, currency, restricted, derivative category | N-PORT: the value the most holdings file; a tie keeps none ("Most-filed value"); each holding keeps its own in silver |
+| asset category, issuer type, investment country, currency, restricted, derivative category | N-PORT: the value the most holdings file; a tie keeps none ("Most-filed value"); each holding also keeps its own in silver. **To build** (ticket 138, 2026-10-28): today these reach silver only |
 
 The one Cross-reference serves every kind; Company, Person and Fund move onto
 it in their own tickets ("Security now, others next tickets").
