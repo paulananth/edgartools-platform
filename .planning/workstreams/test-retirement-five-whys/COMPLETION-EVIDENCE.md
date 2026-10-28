@@ -8,6 +8,12 @@ file. The operator's ruling remains: retire only proven redundancy.
 
 ## Collection
 
+The earlier full source review covered 4,292 Python case IDs. Reconciliation
+adds 48 explicitly reviewed IDs and checks 16 changed existing Python bodies
+and eight added Rust tests. All 4,198 current baseline IDs have a review
+decision, with none missing; all 238 Rust test declarations are retained.
+These are source-review counts, not claims that each case ran locally.
+
 | Collection | Before | After | Removed |
 |---|---:|---:|---:|
 | Default | 4,170 | 4,107 | 63 |
@@ -57,10 +63,20 @@ retained producer case, avoiding references to retired intermediate tests.
   18.09 seconds.
 - Retained assertions rejected all 23 injected faults. Two faults exercise
   the activation replacements whose removals are deferred.
+- Affected retained storage cases: 11 PostgreSQL passed, 204.31 seconds;
+  11 MySQL passed, 219.60 seconds. Private logs and caches are separate for
+  each engine; existing test servers were retained.
+- The retained populated owner-retirement case passed on PostgreSQL in
+  5.96 seconds. It asserts the final routine set is exactly the two storage
+  guards, preserving rows, constraints, restricted grants and duplicate replay.
+  The earlier snapshot routine is dropped by migration 020; normal owner
+  installation calls `prepared_registry.initialize` and retirement 028 for
+  the remaining business routines. Historical declarations do not describe
+  the final installed schema.
 - Shared worker helper body remains AST-identical; its sibling scenario
   resolution is unchanged. No production code or historical migration changes.
 
-Database cohort outcomes and final CI are recorded in the ticket when complete.
+Final CI is recorded in the ticket when complete.
 Logs, source-level review ledgers and diagnostics remain private. Source review
 is separate from behavioral execution.
 
