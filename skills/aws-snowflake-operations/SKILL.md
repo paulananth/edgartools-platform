@@ -200,7 +200,7 @@ What it left in Snowflake is live:
 > Leave `DOCKER_HOST` unset. Publish images with `docker build` and
 > `docker push` through `infra/scripts/publish-warehouse-image.sh --mode docker`.
 > Local PostgreSQL 16 for agents is the shared server in
-> [Initialize shared local PostgreSQL](docs/local-agent-testing.md).
+> "Initialize shared local PostgreSQL" (`docs/local-agent-testing.md` in the repository).
 
 ```bash
 # SEC User-Agent for a provider capture (provider_capture); must contain an email
