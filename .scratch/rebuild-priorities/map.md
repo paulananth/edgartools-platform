@@ -142,6 +142,7 @@ Two tracks run side by side; the recreation proof runs last, on everything switc
 - [133: Statutory corporate tax rates in RDM](issues/133-statutory-tax-rates-in-rdm.md): OECD's combined statutory rate per country and year, a value per child code (#1149)
 - [136: One command loads a capture](issues/136-one-command-loads-a-capture.md): `edgar-warehouse load` (#1168)
 - [146: Convert a populated native MDM store](issues/146-convert-a-populated-native-mdm-store.md): `mdm convert-native` applies each saved batch again; `company-on` converted, every master kept (#1205, #1206)
+- [46: Line items into silver](issues/46-company-financials-14-build-line-items-into-silver.md): every filed fact in `company_fact`; `company_line_item` one row per company, line item and fiscal year, built by SQL over silver and equal to the answer key on the 368-company cohort (#1208, #1209, #1211, #1214, #1215)
 
 ## Not yet specified
 
