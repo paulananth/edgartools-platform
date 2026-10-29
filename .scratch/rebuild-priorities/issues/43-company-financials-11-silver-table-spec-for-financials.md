@@ -70,6 +70,8 @@ why: >
   captured Company list; the local MDM has no Company yet (ticket 37).
 ```
 
+Corrected (2026-10-28 20:30 ET, ticket 46; operator, 2026-10-28: "SQL over silver (Recommended)" and "do not complecate too much"): `company_line_item` is built by one SQL query over `company_fact`, generated from `line-items.yaml`, and landed by the silver writer; its spec is `rules/sources/sec.company-facts/silver-company-line-item.yaml`: one row per company, line item and fiscal year (the latest copy; every filed copy stays in `company_fact`), key `[company_key, line_item, fiscal_year]`, no `is_latest`, no `statement_format` (read from the Company master), `flags` as JSON. The spec below is the one approved on 2026-10-22.
+
 ### 2. `company_line_item`: the 19 standard line items
 
 ```yaml

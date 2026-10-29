@@ -108,10 +108,35 @@ stores (operator, 2026-10-21: "Two proofs, local").
   01 lists none); a lone reported total (`Borrowings`, `LongTermDebt`) carries "computed" as the key
   does. Tests 3 passed
 - [x] PR 1 (configuration): PR, CI, merge (2026-10-28 17:08 ET): #1208 merged, 20 of 20 checks
-- [ ] `company_line_item` built: first present wins per company and annual period, latest
-  copy `is_latest`, fiscal year (Compustat FYEAR), period kind, null with its reason,
-  statement format ("unknown" until Company is mastered), the revenue quality check
+- [x] Ruling: how `company_line_item` is built (2026-10-28 20:21 ET): operator, 2026-10-28: "SQL over silver
+  (Recommended)", asked after the engine path proved to need a whole group, count, largest and join language
+  (several engine PRs): one SQL query, generated from `line-items.yaml`, reads silver's `company_fact` in
+  PostgreSQL, and the silver writer lands its rows (its checks still apply); CAGR and the measures are SQL on
+  top; on Snowflake the same query becomes a dbt model. Replaces "Engine step, local" for the line items (the
+  facts' flattening stays the engine's `nest`, PR 2)
+- [x] Decided from the rulings (2026-10-28 20:25 ET), the spec of `company_line_item` (ticket 43's, corrected):
+  one row per company, line item and fiscal year: the latest-filed copy of the chosen concept. Every filed
+  copy stays in `company_fact` (ticket 35's "keep all, latest by default" holds there; a second copy here
+  would repeat it, operator 2026-10-28: "silver must not have duplicate fields"), so `is_latest` goes and
+  CAGR reads one row per year with no filter (operator, 2026-10-28: "do not complecate too much"). Key
+  `[company_key, line_item, fiscal_year]`, never empty (a missing item is a row with an empty value and its
+  reason); `company_key` in place of `cik` (PR 2); `period_start`, `period_end` kept as columns. No
+  `statement_format`: it is the Company master's SIC, the same on every row of a company, so it is read from
+  Company (data-modeling skill, section 6); the measures (ticket 48) read it there. Load mode snapshot
+- [x] Decided (2026-10-28 20:25 ET), two ties the rulings leave open, measured on the 368-company cohort,
+  applied alike in the SQL and the answer key: (1) an annual report filing as many facts for two annual
+  periods (268 reports) covers the later one as its own year; (2) one filed copy in two units (910 copies,
+  149 of them concepts the map reads: a convenience translation, a per-share figure also filed as `pure`)
+  keeps the unit that filing uses most, its reporting currency (ticket 42: "never convert"), then the unit's
+  text. A year's taxonomy had no tie (0)
+- [ ] `company_line_item` built: first present wins per company and annual period, latest copy, fiscal year
+  (Compustat FYEAR), the reported-year rule, the year's taxonomy, the computed entries, null with its reason,
+  the revenue quality check
 - [ ] Tests: none of research 01 section 5's nine hazards possible; the answer key's
   line items match (ticket 44)
-- [ ] GoF consult before code; three-axis review; PR, CI, merge
+- [x] GoF consult before code (2026-10-28 20:25 ET): the map's grammar is read in two places (the crosswalk
+  test, the answer key) and the SQL would be a third, so it is parsed once (`edgar_warehouse/financials/
+  line_items.py`: plain entries and terms, refusing a leading optional and a line-item cycle) and the test's
+  `crosswalk_of` moves there; the silver writer and its CLI dispatch are left as they are (one more command)
+- [ ] Three-axis review; PR, CI, merge
 - [ ] Learning → skill

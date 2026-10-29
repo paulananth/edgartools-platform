@@ -23,6 +23,12 @@
 #   as nothing when absent). A required term missing, or two units, and the
 #   entry gives nothing.
 version: line-items-2026-10-28.first-build
+# A line item whose chosen figure is smaller than another of its list's concepts
+# filed for the same period, in the same unit, carries this flag for a steward;
+# the order is never switched silently (ticket 38: "Standard order + a quality
+# check (Recommended)").
+larger_total_check:
+  revenue: revenue quality check
 code_set: {code_set: financial-line-items, version: "1"}
 line_items:
   revenue:

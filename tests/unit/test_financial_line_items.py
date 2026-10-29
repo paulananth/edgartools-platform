@@ -7,45 +7,17 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
 import yaml
+
+from edgar_warehouse.control_contract import Blocked
+from edgar_warehouse.financials import line_items
+from edgar_warehouse.financials.line_items import FLAG_MATCH, crosswalk_of
 
 ROOT = Path(__file__).resolve().parents[2]
 MAP = ROOT / "rules" / "sources" / "sec.company-facts" / "line-items.yaml"
 PUBLISHED = ROOT / "rules" / "reference" / "published"
 TAXONOMIES = ("us-gaap", "ifrs-full")
-
-
-# How a flagged concept relates to its line item, as SKOS mapping relations:
-# broad when it holds more than the line item, narrow when less, close when it
-# is the same figure read another way. A new flag needs its line here.
-FLAG_MATCH = {
-    "includes NCI": "broad", "includes software and intangibles": "broad",
-    "includes intangibles and other assets": "broad", "includes restricted cash": "broad",
-    "includes other finance costs": "broad", "includes impairment": "broad",
-    "continuing operations": "narrow", "excludes amortization": "narrow",
-    "excludes amortisation": "narrow", "cash only": "narrow", "cover-page date": "close",
-}
-
-
-def _concept(name: str, taxonomy: str) -> tuple[str, str]:
-    """A concept's taxonomy and name; `dei:` names a cover-page concept."""
-    return ("dei", name[4:]) if name.startswith("dei:") else (taxonomy, name)
-
-
-def crosswalk_of(body: dict) -> dict[tuple[str, str, str], str]:
-    """Each (line item, taxonomy, concept) the map tries as the line item itself,
-    with its match type. A computed value's terms are inputs, not mappings, so
-    they stay in the map only."""
-    found: dict[tuple[str, str, str], str] = {}
-    for code, lists in body["line_items"].items():
-        for taxonomy in TAXONOMIES:
-            for entry in lists[taxonomy]:
-                if isinstance(entry, str):
-                    found[(code, *_concept(entry, taxonomy))] = "close"
-                elif "concept" in entry:
-                    flag = entry.get("flag")
-                    found[(code, *_concept(entry["concept"], taxonomy))] = FLAG_MATCH[flag] if flag else "close"
-    return found
 
 
 def _published(code_set: str, version: str) -> list[dict]:
@@ -56,18 +28,51 @@ def _published(code_set: str, version: str) -> list[dict]:
 
 
 def test_the_map_names_the_code_set_s_codes_in_both_taxonomies():
+    items = line_items.load(MAP)
+    assert len(items.lists) == 23 and all(set(lists) == set(TAXONOMIES) for lists in items.lists.values())
+    # gross profit reads revenue, so revenue is built first
+    assert [s for s in items.stages() if "gross_profit" in s] != [s for s in items.stages() if "revenue" in s]
+    assert items.larger_total_check == {"revenue": "revenue quality check"}
+
+
+def _with(code: str, entries: list) -> dict:
     body = yaml.safe_load(MAP.read_text())
-    pin = body["code_set"]
-    codes = {row["code"] for row in _published(pin["code_set"], pin["version"])}
-    assert set(body["line_items"]) == codes and len(codes) == 23
-    for code, lists in body["line_items"].items():
-        assert set(lists) == set(TAXONOMIES), code
-        for taxonomy in TAXONOMIES:
-            for entry in lists[taxonomy]:
-                if isinstance(entry, dict) and "computed" in entry:
-                    assert entry["computed"] in ("sum", "difference") and entry["terms"], code
-                    refs = [t["line_item"] for t in entry["terms"] if isinstance(t, dict) and "line_item" in t]
-                    assert set(refs) <= codes - {code}, code
+    body["line_items"][code]["us-gaap"] = entries
+    return body
+
+
+@pytest.mark.parametrize("code, entries, refused", [
+    ("total_debt", [{"computed": "sum", "terms": [{"optional": "Debt"}, "LongTermDebt"]}], "first term"),
+    ("gross_profit", [{"computed": "sum", "terms": [{"line_item": "revenue"}]}], "reads at least one fact"),
+    ("revenue", [{"computed": "sum", "terms": ["Revenues", {"line_item": "gross_profit"}]}], "cycle"),
+    ("revenue", [{"computed": "sum", "terms": ["Revenues", {"line_item": "turnover"}]}], "unknown line item"),
+    ("revenue", [{"concept": "Revenues", "flag": "a new flag"}], "no match type"),
+    ("revenue", ["Revenues'; DROP TABLE x"], "not a concept name"),
+    ("revenue", [{"computed": "product", "terms": ["Revenues"]}], "sum or a difference"),
+])
+def test_the_map_is_refused_whole_when_an_entry_breaks_its_grammar(code, entries, refused):
+    with pytest.raises(Blocked, match=refused):
+        line_items.parse(_with(code, entries))
+
+
+def test_none_of_research_01_s_concept_hazards_is_in_the_map():
+    """Research 01 section 5, hazards 1 to 6: concepts the old code and edgartools
+    read as a line item they are not."""
+    items = line_items.load(MAP)
+    read = {(code, concept) for code, lists in items.lists.items() for t in TAXONOMIES for e in lists[t]
+            for _, concept in ([e.concept] if e.concept else [c for term in e.terms for c in term.concepts])}
+    concepts = {concept for _, concept in read}
+    assert "LineOfCreditFacilityRemainingBorrowingCapacity" not in concepts  # 1: undrawn capacity
+    assert ("liabilities", "LiabilitiesAndStockholdersEquity") in read  # 2: only as a term less equity
+    assert all(e.concept is None for e in items.lists["liabilities"]["us-gaap"]
+               if any(("us-gaap", "LiabilitiesAndStockholdersEquity") in t.concepts for t in e.terms))
+    assert ("assets", "AssetsCurrent") not in read  # 3
+    assert not {"CommonStockSharesIssued", "WeightedAverageNumberOfSharesOutstandingBasic"} & {
+        c for code, c in read if code == "shares_outstanding"}  # 4
+    assert not {"IncomeTaxesPaidNet", "InterestIncomeExpenseNet", "AmortizationOfIntangibleAssets"} & concepts  # 5
+    assert "CurrentPortionOfLongTermDebt" not in concepts  # 6
+    assert not any(("us-gaap", "LongTermDebt") in t.concepts and ("us-gaap", "LongTermDebtCurrent") in u.concepts
+                   for e in items.lists["total_debt"]["us-gaap"] for t in e.terms for u in e.terms)  # 6
 
 
 def test_every_concept_the_map_reads_is_in_the_crosswalk_and_nothing_else():
@@ -76,7 +81,7 @@ def test_every_concept_the_map_reads_is_in_the_crosswalk_and_nothing_else():
     published = {(row["code"], to_set, concept): match
                  for row in _published(pin["code_set"], pin["version"])
                  for to_set, version, concept, match in row["crosswalk"] if version == "outside"}
-    assert published == crosswalk_of(body)
+    assert published == crosswalk_of(line_items.parse(body))
 
 
 def test_the_crosswalk_states_how_each_kind_of_entry_relates():

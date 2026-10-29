@@ -180,6 +180,14 @@ class Company:
         self.country = country(place)
         self.fs = bool(sic and sic.isdigit() and (6000 <= int(sic) <= 6199 or 6300 <= int(sic) <= 6411))
         self.facts = body.get("facts") or {}
+        # How many facts each filing files in each unit: a copy filed in two units keeps
+        # the one its filing uses most, its reporting currency, then the unit's text (ticket 46).
+        self.used: dict[str, Counter] = {}
+        for concepts in self.facts.values():
+            for spec in concepts.values():
+                for unit, rows in (spec.get("units") or {}).items():
+                    for f in rows:
+                        self.used.setdefault(f["accn"], Counter())[unit] += 1
         self.years = self._years()
 
     def copies(self, taxonomy: str, concept: str):
@@ -195,7 +203,8 @@ class Company:
         report covers as its own fiscal year; a 12-month period seen only as a
         comparative is kept as filed but is not a year (operator, 2026-10-22: "The
         reported year (Recommended)"). A report's own period is the annual period
-        it files the most facts for. Both or neither reported: the later (ticket 35)."""
+        it files the most facts for, the later on a tie (ticket 46). Both or neither
+        reported: the later (ticket 35)."""
         ends: set[str] = set()
         per_report: dict[str, Counter] = {}
         for taxonomy in ("us-gaap", "ifrs-full"):
@@ -206,7 +215,7 @@ class Company:
                             ends.add(f["end"])
                             if (f.get("form") or "").split("/")[0] in ANNUAL_REPORTS:
                                 per_report.setdefault(f["accn"], Counter())[f["end"]] += 1
-        reported = {counts.most_common(1)[0][0] for counts in per_report.values()}
+        reported = {max(counts, key=lambda end: (counts[end], end)) for counts in per_report.values()}
         years: dict[int, dict] = {}
         for end in sorted(ends):
             year = fiscal_year(end)
@@ -237,7 +246,8 @@ class Company:
         return by_filing[max(by_filing)].most_common(1)[0][0]
 
     def found(self, taxonomy: str, concept: str, end: str, instant: bool) -> list[dict]:
-        """Every filed copy of a concept for the year ending `end`, latest filed first."""
+        """Every filed copy of a concept for the year ending `end`, latest filed first;
+        within one filing, its most-used unit, then the unit's text, then the later start."""
         out = []
         for unit, f in self.copies(taxonomy, concept):
             if f["end"] != end:
@@ -248,7 +258,9 @@ class Company:
                 continue
             out.append({"concept": concept, "unit": unit, "val": str(f["val"]), "filed": f["filed"],
                         "accn": f["accn"], "form": f.get("form"), "start": f.get("start")})
-        return sorted(out, key=lambda c: (c["filed"], c["accn"]), reverse=True)
+        out.sort(key=lambda c: c["start"] or "", reverse=True)
+        out.sort(key=lambda c: c["unit"])
+        return sorted(out, key=lambda c: (c["filed"], c["accn"], self.used[c["accn"]][c["unit"]]), reverse=True)
 
 
 def value(copy: dict) -> Decimal:

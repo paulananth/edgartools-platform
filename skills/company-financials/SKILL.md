@@ -95,10 +95,18 @@ Evidence and sources: ticket 35, research 02 section 1.
   read the line items (labelled by the code set) and the measures.
 - **The map is rules configuration** (operator: "Rules configuration
   (Recommended)"): a reviewed YAML file under `rules/` names each line item, its
-  concepts in order, any computed fallback and its flag; a configured step
-  applies it, locally, landing through the silver writer (operator, 2026-10-28:
-  "Engine step, local (Recommended)"); not dbt. An operation the engine lacks
-  is added as a generic engine primitive (build ticket 46).
+  concepts in order, any computed fallback and its flag. One SQL query,
+  generated from it, builds `company_line_item` from silver's `company_fact`,
+  and the silver writer lands the rows (operator, 2026-10-28: "SQL over silver
+  (Recommended)", after the engine path proved to need a whole group and join
+  language): `edgar_warehouse/financials/line_items.py`, run by
+  `edgar-warehouse silver line-items`. On Snowflake the same query becomes a
+  dbt model.
+- **Ties the rulings leave open** (ticket 46, measured on the cohort): an
+  annual report filing as many facts for two annual periods covers the later
+  as its own year; one filed copy in two units keeps the unit its filing uses
+  most (its reporting currency), then the unit's text. The query and the answer
+  key break them alike.
 - Figures in the reporting currency with its ISO code (ticket 42, below).
 
 Evidence and sources: ticket 38, research 02 section 2.
@@ -201,11 +209,15 @@ Evidence and sources: ticket 39, research 02 section 3.
 
 - **Three tables**: `company_fact` (every filed fact, append, keyed on the
   measured eight columns), `company_line_item` and `company_measure` (built from
-  the facts by a configured engine step, rebuilt whole each run). The spec is on ticket 43.
+  the facts by SQL, rebuilt whole each run). The spec is on ticket 43, corrected
+  on ticket 46: `company_line_item` holds one row per company, line item and
+  fiscal year, the latest copy, so CAGR is a plain join on `fiscal_year`; every
+  filed copy stays in `company_fact` (one system of record).
 - **Review the financials tickets before a spec or a build**: the rulings of 35,
   38, 39, 40, 42 and 128 each reach the spec, the reader (45), the line items
   (46) and the answer key (44). The review of 2026-10-22 found a spec waiting on
   too few tickets, a build still offering a custom step, an answer key without
   the IFRS, financial-services, mixed-currency and changed-year-end cases.
-- **The statement format is "unknown" until Company is mastered**: it comes from
-  the Company master's SIC code, and the local MDM has no Company yet (ticket 37).
+- **The statement format is read from Company, never copied onto a row**: it
+  comes from the Company master's SIC code, and is "unknown" until Company is
+  mastered (ticket 37; ticket 46).

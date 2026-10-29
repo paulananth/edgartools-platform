@@ -8,7 +8,7 @@ map tries as the line item itself, in `us-gaap`, `ifrs-full` or `dei`
 (`to_version: outside`), each with its SKOS match type (`FLAG_MATCH` in the
 test); a computed value's terms stay in the map only. The test
 `tests/unit/test_financial_line_items.py` holds the map and this crosswalk
-equal. Published to a scratch folder; its two files are copied into
+equal; `crosswalk_of` is `edgar_warehouse/financials/line_items.py`'s. Published to a scratch folder; its two files are copied into
 `rules/reference/published/financial-line-items/1/`.
 
 Run from the repo root: uv run --no-sync python .scratch/company-financials/line-items/draft_codes.py
@@ -22,7 +22,7 @@ import yaml
 from edgar_warehouse.rdm.database import migrate
 from edgar_warehouse.rdm.store import RDM
 from tests.integration.test_rdm_postgres import server
-from tests.unit.test_financial_line_items import crosswalk_of
+from edgar_warehouse.financials.line_items import crosswalk_of, parse
 
 MAP = Path("rules/sources/sec.company-facts/line-items.yaml")
 OUT = Path("rules/reference/published")
@@ -66,7 +66,7 @@ def main() -> None:
     codes = [{"code": code, "label": WORDS[code][0], "definition": WORDS[code][1],
               "properties": {"period": "instant" if code in INSTANT else "duration"}} for code in items]
     crosswalk = [{"from_code": code, "to_set": to_set, "to_version": "outside", "to_code": concept, "match_type": match}
-                 for (code, to_set, concept), match in sorted(crosswalk_of(body).items())]
+                 for (code, to_set, concept), match in sorted(crosswalk_of(parse(body)).items())]
     with server() as engine:
         migrate(engine("rdm"), runtime_role="rdm_runtime")
         rdm = RDM(engine("rdm", "rdm_runtime"))

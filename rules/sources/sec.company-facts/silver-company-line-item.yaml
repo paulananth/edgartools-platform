@@ -1,0 +1,134 @@
+# The silver table of the standard line items (ticket 46; ticket 43's spec as
+# corrected on ticket 46, 2026-10-28): one row per company, line item and fiscal
+# year, built by one SQL query over `company_fact` from line-items.yaml
+# (edgar_warehouse/financials/line_items.py; operator, 2026-10-28: "SQL over
+# silver (Recommended)"). Each row is the latest-filed copy of the chosen
+# concept; every filed copy stays in `company_fact`.
+table: company_line_item
+definition: "One standard line item of a company for one fiscal year, chosen from the facts it filed."
+grain: "one row per company, line item and fiscal year"
+columns:
+- name: company_key
+  type: VARCHAR
+  nullable: false
+  definition: "The filer's CIK as ten digits, by which its Company is found."
+  source: "company_fact.company_key"
+  sensitivity: none
+- name: line_item
+  type: VARCHAR
+  nullable: false
+  definition: "A code of RDM's financial-line-items (its label and definition are there)."
+  source: "line-items.yaml"
+  sensitivity: none
+- name: fiscal_year
+  type: BIGINT
+  nullable: false
+  definition: "Compustat FYEAR of the annual period's end: an end in January to May is the previous year's."
+  source: "the annual period's end"
+  sensitivity: none
+- name: period_start
+  type: DATE
+  nullable: true
+  definition: "The start of the figure's annual period; empty for a balance (an instant) or a missing figure."
+  source: "company_fact.period_start"
+  sensitivity: none
+- name: period_end
+  type: DATE
+  nullable: false
+  definition: "The end of the fiscal year: the date of a balance, the end of a flow."
+  source: "the fiscal year's annual period"
+  sensitivity: none
+- name: value
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: "The figure, exact; empty when no concept was filed."
+  source: "company_fact.value, or a computed sum or difference of them"
+  sensitivity: none
+- name: unit
+  type: VARCHAR
+  nullable: true
+  definition: "The unit as filed (USD, shares, USD/shares, ...)."
+  source: "company_fact.unit"
+  sensitivity: none
+- name: currency
+  type: VARCHAR
+  nullable: true
+  definition: "The ISO 4217 code of the figure's reporting currency; never converted."
+  source: "company_fact.currency"
+  sensitivity: none
+- name: taxonomy
+  type: VARCHAR
+  nullable: false
+  definition: "us-gaap or ifrs-full: the one most facts use in the year's latest annual filing."
+  source: "company_fact.taxonomy"
+  sensitivity: none
+- name: concept
+  type: VARCHAR
+  nullable: true
+  definition: "The concept chosen by the line item's ordered list, or computed."
+  source: "company_fact.concept"
+  sensitivity: none
+- name: inputs
+  type: JSON
+  nullable: true
+  definition: "For a computed figure, each term's concept (or line item), accession and value."
+  source: "company_fact"
+  sensitivity: none
+- name: accession
+  type: VARCHAR
+  nullable: true
+  definition: "The filing the figure was taken from (a computed figure's first fact term)."
+  source: "company_fact.accession"
+  sensitivity: none
+- name: filed
+  type: DATE
+  nullable: true
+  definition: "That filing's date."
+  source: "company_fact.filed"
+  sensitivity: none
+- name: flags
+  type: JSON
+  nullable: false
+  definition: "Words a reader must know: computed, includes NCI, continuing operations, cover-page date, kind: bank, revenue quality check, ..."
+  source: "line-items.yaml"
+  sensitivity: none
+- name: null_reason
+  type: VARCHAR
+  nullable: true
+  definition: "Why the value is empty: no concept filed."
+  source: "line-items.yaml"
+  sensitivity: none
+- name: rule_version
+  type: VARCHAR
+  nullable: false
+  definition: "The named version of line-items.yaml that chose the figure."
+  source: "line-items.yaml version"
+  sensitivity: none
+key:
+- company_key
+- line_item
+- fiscal_year
+links:
+- columns:
+  - company_key
+  kind: company
+  source_code: sec.submissions.company.v1
+  to_part: company
+  source_key: company_key
+  mdm_id_column: company_mdm_id
+  inclusion: 1.0
+time:
+  as_of: period_end
+  as_at: filed
+  event_time: null
+partition:
+- company_key
+load_mode: snapshot
+why: >-
+  Rebuilt whole from company_fact each run, so a new filing replaces a year's
+  figure without editing rows. One row per year keeps CAGR and the measures a
+  plain join on fiscal_year (operator, 2026-10-28: "do not complecate too
+  much"); the restated and first-reported copies are company_fact's (ticket 35).
+  A missing figure is a row with its reason, so it is counted (ticket 38). The
+  statement format is read from the Company master's SIC, never copied here.
+checks: []
