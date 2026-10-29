@@ -1,8 +1,8 @@
 # Name Frequency's SEC half, counted (ticket 148): who holds each name key, over
 # current and former names (`held`: its CIK count and the five smallest CIKs),
 # and which keys are some filer's current name (`wanted`). It replaces the
-# Python fold `name_census._sec_population`; `name_census.document` writes the
-# census from it. Measured 2026-10-12 on the whole capture: 43,338 filers,
+# Python fold `name_census._sec_population` (kept as the tests' oracle);
+# `name_census.counted_document` writes the census from it. Measured 2026-10-12 on the whole capture: 43,338 filers,
 # 43,245 current-name keys.
 execution:
   profile: source.combine

@@ -29,5 +29,5 @@ print(json.dumps({"filers": sec["filers"], "recorded_filers": census["sec"]["fil
                   "population_sha256_equal": sec["population_sha256"] == census["sec"]["population_sha256"],
                   "receipts_sha256_equal": sec["receipts_sha256"] == census["sec"]["receipts_sha256"],
                   "current_name_keys": len(wanted), "recorded_entries": len(entries), "keys_differing": len(differ),
-                  "first_differing": differ[:3], "read_seconds": round(read),
+                  "read_seconds": round(read),
                   "seconds": round(time.monotonic() - began)}, indent=1))

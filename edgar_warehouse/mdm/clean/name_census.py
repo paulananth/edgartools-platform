@@ -19,8 +19,11 @@ What it counts, per the measured rules (`.scratch/company-mastering/research/
 - a match is the SEC current name against a GLEIF **legal** name.
 
 Both sources arrive as configured readings (`name_frequency.py`, the
-`mdm name-census` command): `fold_reading` counts the Golden Copy's and
-`document` writes the census. A delta publication is refused there:
+`mdm name-census` command) and are counted by configured reductions;
+`counted_document` writes the census from the counts. The set-based fold here
+(`_sec_population`, `fold_reading`, `census`, `document`) is the oracle the
+tests compare with, and the matching cascade's candidates, until ticket 148
+retires it. A delta publication is refused there:
 uniqueness counted over a delta counts only what changed, and would let a
 common name look unique.
 """

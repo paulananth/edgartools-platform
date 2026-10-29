@@ -3,10 +3,12 @@
 The census (`name_census.py`) counts who else carries a name across the whole
 SEC capture population and the whole GLEIF Golden Copy. Each SEC main
 submissions document the population names is read from the receipt-bound raw
-capture through `census-raw.yaml` by the `source.read` worker and its verifier,
-two documents a unit, and the Golden Copy arrives as one verified configured
-reading (`census-complete-stream.yaml`). Both are folded and written by
-`name_census.census`.
+capture through `census-sec-names.yaml` by the `source.read` worker and its
+verifier (each filer's name keys beside its CIK, up to 256 documents a unit),
+and the Golden Copy arrives as one verified configured reading
+(`census-complete-stream.yaml`). Each half is counted by a configured reduction
+(`census-sec-reduction.yaml`, `census-name-reduction.yaml`; ticket 148), and
+`name_census.counted_document` writes the census from the counts.
 
 The GLEIF reading projected only the names the SEC population holds, so its
 `wanted` lookup must equal the name keys counted here; its archive and record
