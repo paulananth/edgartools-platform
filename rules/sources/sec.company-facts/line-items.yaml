@@ -22,9 +22,10 @@
 #   (that line item's value for the same period) or {optional: term} (counted
 #   as nothing when absent). A required term missing, or two units, and the
 #   entry gives nothing.
-version: line-items-2026-10-28.first-build
-# A line item whose chosen figure is smaller than another of its list's concepts
-# filed for the same period, in the same unit, carries this flag for a steward;
+version: line-items-2026-10-28.revenue-check
+# A line item whose chosen figure is smaller than another total of its list (an
+# unflagged concept: never an industry kind or a flagged figure) filed for the
+# same period, in the same unit, carries this flag for a steward;
 # the order is never switched silently (ticket 38: "Standard order + a quality
 # check (Recommended)").
 larger_total_check:

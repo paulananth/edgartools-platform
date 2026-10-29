@@ -280,6 +280,7 @@ def item(company: Company, year: int, name: str) -> dict:
             return None
         chosen = copies[0]
         return {"value": chosen["val"], "unit": chosen["unit"], "concept": concept, "accn": chosen["accn"],
+                "start": chosen["start"],
                 "filed": chosen["filed"], "flags": [f for f in (flag, kind and f"kind: {kind}") if f]}
 
     def get(concept):
@@ -357,6 +358,13 @@ def item(company: Company, year: int, name: str) -> dict:
         else:
             got = first(entry_spec[1], kind=entry_spec[2])
         if got:
+            if name == "revenue" and got["concept"] in LISTS[taxonomy][name]:
+                # Ticket 38's quality check: another revenue total (an unflagged concept of the list)
+                # filed larger for the period, in the same unit (ticket 46).
+                totals = [c for c in LISTS[taxonomy][name] if isinstance(c, str) and c != got["concept"]]
+                if any(Decimal(copy["val"]) > Decimal(got["value"]) for c in totals
+                       for copy in company.found(taxonomy, c, end, instant)[:1] if copy["unit"] == got["unit"]):
+                    got["flags"] = got["flags"] + ["revenue quality check"]
             return {**got, "taxonomy": taxonomy, "end": end, "tried": tried}
     return {"value": None, "reason": "no concept filed", "taxonomy": taxonomy, "end": end, "tried": tried}
 

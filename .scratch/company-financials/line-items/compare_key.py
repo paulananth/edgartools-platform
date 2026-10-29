@@ -87,12 +87,16 @@ def main() -> None:
         w, g = want[key], got[key]
         w_value = None if w.get("value") is None else Decimal(w["value"])
         w_flags = sorted(w.get("flags") or [])
-        g_flags = sorted(f for f in g.flags if f != QUALITY)
+        g_flags = sorted(g.flags)
         tally["quality flagged"] += QUALITY in g.flags
+        computed = w.get("concept", "").startswith("computed")
         same = (w_value == g.value and w.get("unit") == g.unit and w.get("accn") == g.accession
                 and (w.get("filed") or None) == (g.filed.isoformat() if g.filed else None)
                 and w_flags == g_flags and w["taxonomy"] == g.taxonomy and w["end"] == g.period_end.isoformat()
-                and (w.get("concept", "").startswith("computed") or w.get("concept") == g.concept))
+                and (g.concept == "computed" if computed else w.get("concept") == g.concept)
+                and (computed or (w.get("start") or None) == (g.period_start.isoformat() if g.period_start else None))
+                and (oracle.currency(w["unit"]) if w.get("unit") else None) == g.currency
+                and w.get("reason") == g.null_reason)
         tally["equal" if same else "different"] += 1
         tally["with value"] += g.value is not None
         if not same and len(differ) < 200:

@@ -153,7 +153,25 @@ stores (operator, 2026-10-21: "Two proofs, local").
   reported October year, not the December 12 months seen only as a 3-fact comparative (its annual report
   files 28 facts each for October 2023 and 2022): 16 line items and 36 measures of that year move, nothing
   else; measures with a value 881; local key sha256 `ad2bcf3294c093fc2f455d0aed0662f8443d38c7a16e87f263adebc0794bb427`
-- [ ] Three-axis review; PR, CI, merge
+- [x] Three-axis review of PR 3 (2026-10-28 21:24 ET). GoF: leave it (new code, one axis of change; the
+  steps are now (name, body) pairs from the start, not split back from text). Standards: a flag holding a colon
+  would be read by SQLAlchemy as a parameter (colons refused in flag words; the version is checked words; the
+  source must be a table name); position, term, choice and sign are `bigint` (integer rule); the stage test
+  states revenue's stage before gross profit's; the test reuses the module's paths; the named concepts come
+  from the map, not tuple slots. Noted, not changed: `build` calls the writer (one call; the CLI stays thin).
+  Spec: the revenue quality check was never checked independently and compared every concept of the list:
+  it now compares only the list's other totals (unflagged concepts: never an industry kind), the answer key
+  computes it too, and the map's version is renamed `line-items-2026-10-28.revenue-check`; the comparison now
+  also checks every flag, `period_start` of a chosen concept, the currency and the null reason. Rerun: 96,807
+  of 96,807 equal; 52 revenues flagged (121 before the narrowing), as the key flags them; local key sha256
+  `b9fc3feb1e74a67686cbf586259f1be8720f46fff074692cb4cd96a5ed6688db` (flags only; no value or measure moved
+  from `ad2bcf32`). Also noted: a year's taxonomy breaks a tie toward us-gaap (0 ties in the cohort; the key
+  does the same); ticket 43's `period_kind` is dropped (every row is an annual year), recorded there
+- [ ] Found (2026-10-28 21:24 ET), for the operator: the cover-page share count
+  (`dei:EntityCommonStockSharesOutstanding`, flagged "cover-page date") is taken only when dated on the year's
+  end, as the answer key reads it; it is usually dated weeks later, so it fills 63 rows. Whether it should be
+  taken at its own date (the flag's meaning) is a new kind of question, asked after this PR
+- [ ] PR 3: PR, CI, merge
 - [x] Learning → skill (2026-10-28 21:17 ET): `skills/company-financials/SKILL.md`: the line items are SQL over
   silver, run as counted steps (never timed under `count(*)`); a concept of another taxonomy is named with it;
   the two ties; `company_line_item`'s one row per year; the statement format read from Company

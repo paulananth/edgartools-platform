@@ -37,7 +37,7 @@ FLAG_MATCH = {
     "excludes amortisation": "narrow", "cash only": "narrow", "cover-page date": "close",
 }
 _CONCEPT = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,199}")
-_WORDS = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ,:.()-]{0,99}")
+_WORDS = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ,.()-]{0,99}")
 
 
 @dataclass(frozen=True)
@@ -161,7 +161,7 @@ def parse(body: dict) -> LineItems:
     checks = body.get("larger_total_check") or {}
     if not set(checks) <= codes:
         raise Blocked("larger_total_check names line items")
-    items = LineItems(body["version"], pin, period, lists, {c: _words(f) for c, f in checks.items()})
+    items = LineItems(_words(body["version"]), pin, period, lists, {c: _words(f) for c, f in checks.items()})
     items.stages()
     return items
 
@@ -216,49 +216,53 @@ def statements(items: LineItems, source: str = "silver.company_fact") -> list[st
 
 
 def _steps(items: LineItems, source: str) -> tuple[list[tuple[str, str]], str]:
+    if not re.fullmatch(r"[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)?", source):
+        raise Blocked(f"the facts are read from a table name: {source!r}")
     kind = {code: "instant" if p == "instant" else "annual" for code, p in items.period.items()}
     direct, terms, computed = [], [], []
     for code, lists in items.lists.items():
         for taxonomy in TAXONOMIES:
             for position, entry in enumerate(lists[taxonomy], 1):
-                key = [_lit(code), _lit(taxonomy), str(position)]
+                key = [_lit(code), _lit(taxonomy), f"{position}::bigint"]
                 if entry.concept:
                     direct.append((*key, _lit(entry.concept[0]), _lit(entry.concept[1]), _lit(kind[code]),
                                    _flags(entry.flags)))
                     continue
                 computed.append((*key, _flags(entry.flags)))
                 for number, term in enumerate(entry.terms, 1):
-                    sign = "-1" if entry.computed == "difference" and number > 1 else "1"
+                    sign = "-1::bigint" if entry.computed == "difference" and number > 1 else "1::bigint"
                     for choice, (term_taxonomy, concept) in enumerate(term.concepts or [(None, None)], 1):
-                        terms.append((*key, str(number), str(choice), sign, "true" if term.optional else "false",
+                        terms.append((*key, f"{number}::bigint", f"{choice}::bigint", sign, "true" if term.optional else "false",
                                       _lit(term_taxonomy), _lit(concept), _lit(term.line_item), _lit(kind[code])))
-    named = sorted({(r[3], r[4]) for r in direct} | {(r[7], r[8]) for r in terms if r[8] != "NULL"})
+    named = sorted({e.concept for lists in items.lists.values() for lst in lists.values() for e in lst if e.concept}
+                   | {c for lists in items.lists.values() for lst in lists.values() for e in lst
+                      for t in e.terms for c in t.concepts})
     entry_columns = "line_item, taxonomy, position"
     ctes = [
-        f"""entry AS ({_values(entry_columns + ", concept_taxonomy, concept, kind, flags", direct,
-                                "NULL::text, NULL::text, 0, NULL::text, NULL::text, NULL::text, NULL::text[]")})""",
-        f"""computed_entry AS ({_values(entry_columns + ", flags", computed,
-                                         "NULL::text, NULL::text, 0, NULL::text[]")})""",
-        f"""term AS ({_values(entry_columns + ", term, choice, sign, optional, concept_taxonomy, concept, line_item_ref, kind",
-                              terms, "NULL::text, NULL::text, 0, 0, 0, 0, false, NULL::text, NULL::text, NULL::text, NULL::text")})""",
-        f"""named(taxonomy, concept) AS (VALUES {", ".join(f"({t}, {c})" for t, c in named)})""",
+        ("entry", f"""{_values(entry_columns + ", concept_taxonomy, concept, kind, flags", direct,
+                                "NULL::text, NULL::text, 0::bigint, NULL::text, NULL::text, NULL::text, NULL::text[]")}"""),
+        ("computed_entry", f"""{_values(entry_columns + ", flags", computed,
+                                         "NULL::text, NULL::text, 0::bigint, NULL::text[]")}"""),
+        ("term", f"""{_values(entry_columns + ", term, choice, sign, optional, concept_taxonomy, concept, line_item_ref, kind",
+                              terms, "NULL::text, NULL::text, 0::bigint, 0::bigint, 0::bigint, 0::bigint, false, NULL::text, NULL::text, NULL::text, NULL::text")}"""),
+        ("named(taxonomy, concept)", f"""VALUES {", ".join(f"({_lit(t)}, {_lit(c)})" for t, c in named)}"""),
         # Each fact with its period's kind: an instant, or an annual period of 364-371 days (ticket 35).
-        f"""typed_fact AS (
+        ("typed_fact", f"""
   SELECT f.company_key, f.taxonomy, f.concept, f.unit, f.currency, f.period_start, f.period_end, f.value,
          f.accession, f.filed, f.form,
          CASE WHEN f.period_start IS NULL THEN 'instant'
               WHEN f.period_end - f.period_start + 1 BETWEEN 364 AND 371 THEN 'annual' END AS kind
-  FROM {source} f)""",
-        """annual AS (SELECT * FROM typed_fact WHERE kind = 'annual' AND taxonomy IN ('us-gaap', 'ifrs-full'))""",
+  FROM {source} f"""),
+        ("annual", """SELECT * FROM typed_fact WHERE kind = 'annual' AND taxonomy IN ('us-gaap', 'ifrs-full')"""),
         # Each annual report's own period: the annual period it files the most facts for, the later on a tie.
-        f"""report_end AS (
+        ("report_end", f"""
   SELECT DISTINCT ON (company_key, accession) company_key, accession, period_end
   FROM annual WHERE split_part(form, '/', 1) IN ({", ".join(map(_lit, ANNUAL_REPORTS))})
   GROUP BY company_key, accession, period_end
-  ORDER BY company_key, accession, count(*) DESC, period_end DESC)""",
+  ORDER BY company_key, accession, count(*) DESC, period_end DESC"""),
         # Each fiscal year (Compustat FYEAR: an end in January to May is the previous year's): the latest
         # end an annual report covers as its own year, else the latest end (ticket 35).
-        """year_end AS (
+        ("year_end", """
   SELECT DISTINCT ON (a.company_key, a.fiscal_year) a.company_key, a.fiscal_year, a.period_end
   FROM (SELECT DISTINCT company_key, period_end,
                CAST(CASE WHEN extract(month FROM period_end) >= 6 THEN extract(year FROM period_end)
@@ -266,20 +270,20 @@ def _steps(items: LineItems, source: str) -> tuple[list[tuple[str, str]], str]:
         FROM annual) a
   LEFT JOIN (SELECT DISTINCT company_key, period_end FROM report_end) r
          ON r.company_key = a.company_key AND r.period_end = a.period_end
-  ORDER BY a.company_key, a.fiscal_year, (r.period_end IS NOT NULL) DESC, a.period_end DESC)""",
+  ORDER BY a.company_key, a.fiscal_year, (r.period_end IS NOT NULL) DESC, a.period_end DESC"""),
         # The year's taxonomy: the one most facts use in the latest filing holding an annual fact
         # ending that day (ticket 42); us-gaap on a tie.
-        """fiscal AS (
+        ("fiscal", """
   SELECT DISTINCT ON (y.company_key, y.fiscal_year) y.company_key, y.fiscal_year, y.period_end, a.taxonomy
   FROM year_end y JOIN annual a ON a.company_key = y.company_key AND a.period_end = y.period_end
   GROUP BY y.company_key, y.fiscal_year, y.period_end, a.filed, a.accession, a.taxonomy
   ORDER BY y.company_key, y.fiscal_year, a.filed DESC, a.accession DESC, count(*) DESC,
-           (a.taxonomy = 'us-gaap') DESC)""",
+           (a.taxonomy = 'us-gaap') DESC"""),
         # Each filing's units, by how many facts use them: a copy filed in two units keeps the one its
         # filing uses most (its reporting currency; ticket 42 never converts), then the unit's text.
-        """filing_unit AS (SELECT company_key, accession, unit, count(*) AS uses FROM typed_fact GROUP BY 1, 2, 3)""",
+        ("filing_unit", """SELECT company_key, accession, unit, count(*) AS uses FROM typed_fact GROUP BY 1, 2, 3"""),
         # Each named concept's latest-filed copy for a year's exact period.
-        """latest_copy AS (
+        ("latest_copy", """
   SELECT DISTINCT ON (f.company_key, y.fiscal_year, f.taxonomy, f.concept, f.kind)
          y.fiscal_year, f.company_key, f.taxonomy, f.concept, f.kind, f.unit, f.currency, f.period_start,
          f.value, f.accession, f.filed
@@ -289,31 +293,31 @@ def _steps(items: LineItems, source: str) -> tuple[list[tuple[str, str]], str]:
   JOIN filing_unit u ON u.company_key = f.company_key AND u.accession = f.accession AND u.unit = f.unit
   WHERE f.kind IS NOT NULL
   ORDER BY f.company_key, y.fiscal_year, f.taxonomy, f.concept, f.kind, f.filed DESC, f.accession DESC,
-           u.uses DESC, f.unit COLLATE "C", f.period_start DESC)""",
-        """direct AS (
+           u.uses DESC, f.unit COLLATE "C", f.period_start DESC"""),
+        ("direct", """
   SELECT y.company_key, y.fiscal_year, e.line_item, e.position, c.value, c.unit, c.currency, c.period_start,
          -- a concept of another taxonomy than the year's names it, as the map does (dei:...)
          CASE WHEN c.taxonomy = y.taxonomy THEN c.concept ELSE c.taxonomy || ':' || c.concept END AS concept,
          c.accession, c.filed, e.flags, NULL::jsonb AS inputs
   FROM fiscal y JOIN entry e ON e.taxonomy = y.taxonomy
   JOIN latest_copy c ON c.company_key = y.company_key AND c.fiscal_year = y.fiscal_year
-             AND c.taxonomy = e.concept_taxonomy AND c.concept = e.concept AND c.kind = e.kind)""",
+             AND c.taxonomy = e.concept_taxonomy AND c.concept = e.concept AND c.kind = e.kind"""),
         # Each fact term's value: the first present of its concepts.
-        """fact_term AS (
+        ("fact_term", """
   SELECT DISTINCT ON (y.company_key, y.fiscal_year, t.line_item, t.position, t.term)
          y.company_key, y.fiscal_year, t.line_item, t.position, t.term, c.value, c.unit, c.currency,
          c.period_start, c.concept, c.accession, c.filed
   FROM fiscal y JOIN term t ON t.taxonomy = y.taxonomy AND t.concept IS NOT NULL
   JOIN latest_copy c ON c.company_key = y.company_key AND c.fiscal_year = y.fiscal_year
              AND c.taxonomy = t.concept_taxonomy AND c.concept = t.concept AND c.kind = t.kind
-  ORDER BY y.company_key, y.fiscal_year, t.line_item, t.position, t.term, t.choice)""",
+  ORDER BY y.company_key, y.fiscal_year, t.line_item, t.position, t.term, t.choice"""),
     ]
     chosen = []
     for stage, codes in enumerate(items.stages()):
         earlier = " UNION ALL ".join(f"SELECT * FROM chosen_{s}" for s in range(stage)) or (
             "SELECT * FROM direct WHERE false")
         inside = ", ".join(map(_lit, codes))
-        ctes.append(f"""term_{stage} AS (
+        ctes.append((f"term_{stage}", f"""
   SELECT y.company_key, y.fiscal_year, y.taxonomy, t.line_item, t.position, t.term, t.sign, t.optional,
          COALESCE(f.value, l.value) AS value, COALESCE(f.unit, l.unit) AS unit,
          COALESCE(f.currency, l.currency) AS currency, f.period_start, f.concept, f.accession, f.filed,
@@ -322,9 +326,9 @@ def _steps(items: LineItems, source: str) -> tuple[list[tuple[str, str]], str]:
   LEFT JOIN fact_term f ON f.company_key = y.company_key AND f.fiscal_year = y.fiscal_year
         AND f.line_item = t.line_item AND f.position = t.position AND f.term = t.term
   LEFT JOIN ({earlier}) l ON t.line_item_ref IS NOT NULL AND l.company_key = y.company_key
-        AND l.fiscal_year = y.fiscal_year AND l.line_item = t.line_item_ref AND l.value IS NOT NULL)""")
+        AND l.fiscal_year = y.fiscal_year AND l.line_item = t.line_item_ref AND l.value IS NOT NULL"""))
         # A computed entry: every required term present, one unit; it names its first fact term's filing.
-        ctes.append(f"""computed_{stage} AS (
+        ctes.append((f"computed_{stage}", f"""
   SELECT v.company_key, v.fiscal_year, v.line_item, v.position, sum(v.sign * v.value) AS value,
          min(v.unit) AS unit, min(v.currency) AS currency,
          (array_agg(v.period_start ORDER BY v.term) FILTER (WHERE v.accession IS NOT NULL))[1] AS period_start,
@@ -338,28 +342,25 @@ def _steps(items: LineItems, source: str) -> tuple[list[tuple[str, str]], str]:
   FROM term_{stage} v JOIN computed_entry e
     ON e.line_item = v.line_item AND e.taxonomy = v.taxonomy AND e.position = v.position
   GROUP BY v.company_key, v.fiscal_year, v.line_item, v.position, e.flags
-  HAVING bool_and(v.value IS NOT NULL OR v.optional) AND count(DISTINCT v.unit) = 1)""")
-        ctes.append(f"""chosen_{stage} AS (
+  HAVING bool_and(v.value IS NOT NULL OR v.optional) AND count(DISTINCT v.unit) = 1"""))
+        ctes.append((f"chosen_{stage}", f"""
   SELECT DISTINCT ON (company_key, fiscal_year, line_item) * FROM (
     SELECT * FROM direct WHERE line_item IN ({inside})
     UNION ALL SELECT * FROM computed_{stage}) x
-  ORDER BY company_key, fiscal_year, line_item, position)""")
+  ORDER BY company_key, fiscal_year, line_item, position"""))
         chosen.append(f"SELECT * FROM chosen_{stage}")
-    ctes.append(f"chosen AS ({' UNION ALL '.join(chosen)})")
+    ctes.append(("chosen", " UNION ALL ".join(chosen)))
     checks = [(_lit(code), _lit(flag)) for code, flag in items.larger_total_check.items()]
-    ctes.append(f"""larger_total_check AS ({_values("line_item, flag", checks, "NULL::text, NULL::text")})""")
-    # A chosen figure smaller than another of its list's concepts, same period and unit: flagged.
-    ctes.append("""larger AS (
+    ctes.append(("larger_total_check", f"""{_values("line_item, flag", checks, "NULL::text, NULL::text")}"""))
+    # A chosen figure smaller than another total of its list (an unflagged concept), same period and unit.
+    ctes.append(("larger", """
   SELECT DISTINCT c.company_key, c.fiscal_year, c.line_item, k.flag
   FROM chosen c JOIN larger_total_check k ON k.line_item = c.line_item
   JOIN direct d ON d.company_key = c.company_key AND d.fiscal_year = c.fiscal_year
-              AND d.line_item = c.line_item AND d.unit = c.unit AND d.value > c.value)""")
+              AND d.line_item = c.line_item AND d.unit = c.unit AND d.value > c.value
+              AND cardinality(d.flags) = 0"""))
     codes = ", ".join(f"({_lit(c)}, {_lit(kind[c])})" for c in items.lists)
-    steps = []
-    for cte in ctes:
-        name, body = cte.split(" AS (", 1)
-        steps.append((name, body.strip()[:-1]))
-    return steps, f"""SELECT y.company_key, i.line_item, y.fiscal_year,
+    return ctes, f"""SELECT y.company_key, i.line_item, y.fiscal_year,
        CASE WHEN i.kind = 'annual' THEN c.period_start END AS period_start, y.period_end,
        c.value, c.unit, c.currency, y.taxonomy, c.concept, c.inputs, c.accession, c.filed,
        to_jsonb(COALESCE(c.flags, ARRAY[]::text[]) || CASE WHEN g.flag IS NULL THEN ARRAY[]::text[]

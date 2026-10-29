@@ -77,7 +77,8 @@ Evidence and sources: ticket 35, research 02 section 1.
   value flagged "computed".
 - **Revenue keeps the standard order** (`Revenues` first), with a data-quality
   rule that flags a period where the chosen revenue is smaller than another
-  revenue total filed for it, for a steward (operator: "Standard order + a
+  revenue total filed for it (another unflagged concept of its list, same
+  unit: never an industry kind; ticket 46), for a steward (operator: "Standard order + a
   quality check (Recommended)"). Never a silent switch to the larger total.
 - **A missing line item** is empty, with the reason "no concept filed", and
   counted per line item.

@@ -3,35 +3,27 @@ every concept it reads is in that code set's crosswalk, and nothing else."""
 
 from __future__ import annotations
 
-import hashlib
-import json
-from pathlib import Path
 
 import pytest
 import yaml
 
 from edgar_warehouse.control_contract import Blocked
 from edgar_warehouse.financials import line_items
-from edgar_warehouse.financials.line_items import FLAG_MATCH, crosswalk_of
+from edgar_warehouse.financials.line_items import TAXONOMIES, crosswalk_of
 
-ROOT = Path(__file__).resolve().parents[2]
-MAP = ROOT / "rules" / "sources" / "sec.company-facts" / "line-items.yaml"
-PUBLISHED = ROOT / "rules" / "reference" / "published"
-TAXONOMIES = ("us-gaap", "ifrs-full")
+MAP = line_items.MAP
 
 
 def _published(code_set: str, version: str) -> list[dict]:
-    folder = PUBLISHED / code_set / version
-    data = (folder / "canonical.jsonl").read_bytes()
-    assert hashlib.sha256(data).hexdigest() == json.loads((folder / "pin.json").read_text())["sha256"]
-    return [json.loads(line) for line in data.decode().splitlines()]
+    return line_items._published(code_set, version)
 
 
 def test_the_map_names_the_code_set_s_codes_in_both_taxonomies():
     items = line_items.load(MAP)
     assert len(items.lists) == 23 and all(set(lists) == set(TAXONOMIES) for lists in items.lists.values())
-    # gross profit reads revenue, so revenue is built first
-    assert [s for s in items.stages() if "gross_profit" in s] != [s for s in items.stages() if "revenue" in s]
+    # gross profit reads revenue, so revenue is built in an earlier stage
+    stage = {code: n for n, codes in enumerate(items.stages()) for code in codes}
+    assert (stage["revenue"], stage["gross_profit"]) == (0, 1)
     assert items.larger_total_check == {"revenue": "revenue quality check"}
 
 
