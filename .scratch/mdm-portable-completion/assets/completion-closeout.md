@@ -23,6 +23,10 @@ current/history duplicate entry points per engine were removed in #1210; their
 complete assertions remain in the producer case. Every qualification family is
 retained. Case-count reduction is separate from runtime speedup.
 
+## Record qualification
+
+[The closeout record CI](completion-record-ci.json) passes all 20 checks at `74896164` in run 40793162573, with 160 installed cases per engine, all 18 families, equal pins and cleanup. A clean rebase preserves that patch; the following changes only record this receipt and resolve the publication checkboxes. PR #1212 retains a final-head CI gate before readiness and merge.
+
 ## Obligation reconciliation
 
 | Obligation | Qualified caller and boundary | Merged work |

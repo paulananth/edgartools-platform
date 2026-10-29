@@ -20,7 +20,7 @@ last, retain database authority, and introduce no entity/source policy in code.
 
 ## Current MDM qualification
 
-The normal configured PostgreSQL/MySQL MDM workflow is qualified through merged #1210: 20 checks, 160 independently installed cases per engine, two configured kinds and all 18 families. Historical checkpoint limitations below describe earlier revisions. SQL Server, broader Silver qualification, hosted migration and activation remain separate. Final closeout-record CI/landing is tracked in [ticket 09](../../../.scratch/mdm-portable-completion/issues/09-close-completion-and-skill-learning.md).
+The normal configured PostgreSQL/MySQL MDM workflow is qualified through merged #1210: 20 checks, 160 independently installed cases per engine, two configured kinds and all 18 families. Historical checkpoint limitations below describe earlier revisions. SQL Server, broader Silver qualification, hosted migration and activation remain separate. The resolved closeout and its CI receipt are tracked in [ticket 09](../../../.scratch/mdm-portable-completion/issues/09-close-completion-and-skill-learning.md).
 
 ## Initial design review
 

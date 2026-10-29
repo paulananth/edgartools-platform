@@ -29,11 +29,11 @@ One configuration-driven normal MDM workflow runs on PostgreSQL and MySQL, with 
 - [Connect worker authority and publication recovery](issues/06-connect-worker-authority-and-publication.md) — implementation #1171 and guidance #1173 merged; commit-local authority, delivery recovery, original producers and zero-work replay are qualified.
 - [Qualify the independently installed workflow](issues/07-qualify-installed-equivalence.md) — #1178/#1179 merged; current #1210 qualification retains 160 cases per engine, two configured kinds and all 18 families, with equal pins and verified cleanup.
 - [Retire superseded PostgreSQL business routines and callers](issues/08-retire-postgresql-business-routines.md) — #1180/#1190/#1191 merged; 34 legacy business routines removed, two integrity guards retained; historical migrations and storage guarantees preserved.
-- [Close completion records and account for learning](issues/09-close-completion-and-skill-learning.md) — records reconciled on a fresh branch; final record PR qualification and landing remain its publication gate. [Current evidence](assets/completion-closeout.md).
+- [Close completion records and account for learning](issues/09-close-completion-and-skill-learning.md) — resolved record reconciliation; PR #1212 publishes the verified record and three-axis review. [Current evidence](assets/completion-closeout.md).
 
-## Remaining publication gate
+## Completion
 
-The implemented MDM workflow and its current two-engine qualification are complete. Ticket 09 reconciles the child/parent records and publishes the final review. No new engine gap is inferred from an obsolete checkpoint. Any demonstrated new gap gets a bounded ticket with its own proof. The separate test-cleanup ticket retains two deferred deletions and the blocked test-guidance update.
+The implemented MDM workflow and its current two-engine qualification are complete. Ticket 09 resolves the child/parent records and publishes the final review; [record CI](assets/completion-record-ci.json) passes all 20 checks with the complete installed matrix. No new engine gap is inferred from an obsolete checkpoint. Any demonstrated new gap gets a bounded ticket with its own proof. The separate test-cleanup ticket retains two deferred deletions and the blocked test-guidance update.
 
 ## Out of scope
 
