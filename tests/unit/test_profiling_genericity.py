@@ -24,6 +24,10 @@ EXEMPT = {
     # The operator's rulings for company financials: naming its sources and concepts is
     # its purpose (operator, 2026-10-21: "New company-financials skill (Recommended)").
     "company-financials",
+    # This deployment's AWS and Snowflake operations: naming its accounts, objects and
+    # sources is its purpose (operator, 2026-10-28: "specific occasional tasks move it to
+    # a skill or rules file").
+    "aws-snowflake-operations",
 }
 SCOPE = tuple(
     f"skills/{d.name}" for d in sorted((ROOT / "skills").iterdir()) if d.is_dir() and d.name not in EXEMPT
