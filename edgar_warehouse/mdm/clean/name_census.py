@@ -139,17 +139,32 @@ def document(
     `other` the entities holding it only as another name; with `cascade`, the
     candidate `entities` and the global `address_counts` the passes read.
     """
+    return counted_document(
+        sec_population=sec_population, gleif=gleif, wanted=wanted,
+        held={key: (len(ciks), sorted(ciks)[:CAP]) for key, ciks in held.items()},
+        legal={key: (len(leis), [[lei, leis[lei]] for lei in sorted(leis)[:CAP]]) for key, leis in legal.items()},
+        other={key: len(holders - set(legal.get(key, {}))) for key, holders in other.items()},
+        cascade=cascade, entities=entities, address_counts=address_counts)
+
+
+def counted_document(*, sec_population: dict, gleif: dict, wanted: set, held: dict, legal: dict, other: dict,
+                     cascade: dict | None = None, entities=(), address_counts=None) -> dict:
+    """The census document from counts: `held` each SEC name key's CIK count and its
+    five smallest CIKs, `legal` each key's legal-holder count and its five smallest
+    `[lei, last update]` pairs, `other` each key's other-name holders who are not
+    its legal holders. The configured reductions give exactly these (ticket 148)."""
     entries = {}
     for key in sorted(wanted):
-        leis = legal.get(key, {})
+        cik_count, ciks = held[key]
+        lei_count, leis = legal.get(key, (0, []))
         entries[key] = {
-            "ciks": sorted(held[key])[:CAP],
-            "cik_count": len(held[key]),
-            "leis": [[lei, leis[lei]] for lei in sorted(leis)[:CAP]],
-            "lei_count": len(leis),
+            "ciks": ciks,
+            "cik_count": cik_count,
+            "leis": leis,
+            "lei_count": lei_count,
             # Another legal entity whose other name is this one, not counting
             # an entity that also holds it as its legal name.
-            "other_name_holders": len(other.get(key, set()) - set(leis)),
+            "other_name_holders": other.get(key, 0),
         }
     result = {
         "version": VERSION,

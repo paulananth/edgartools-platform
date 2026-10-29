@@ -1,0 +1,34 @@
+# Name Frequency's SEC half, counted (ticket 148): who holds each name key, over
+# current and former names (`held`: its CIK count and the five smallest CIKs),
+# and which keys are some filer's current name (`wanted`). It replaces the
+# Python fold `name_census._sec_population`; `name_census.document` writes the
+# census from it. Measured 2026-10-12 on the whole capture: 43,338 filers,
+# 43,245 current-name keys.
+execution:
+  profile: source.combine
+reduce:
+  max_rows: 2000000
+  max_input_bytes: 1073741824
+  max_state_bytes: 268435456
+  max_keys: 1000000
+  max_members: 2000000
+  max_output_rows: 1000000
+  max_output_bytes: 268435456
+  groups:
+    held:
+      source: names
+      table: [current, former]
+      keys: [key]
+      mode: members
+      member: cik
+      count: cik_count
+      sample: ciks
+      sample_limit: 5
+    wanted:
+      source: names
+      table: current
+      keys: [key]
+      mode: count
+      count: filers
+      sample: null
+      sample_limit: 0

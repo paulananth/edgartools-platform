@@ -41,8 +41,10 @@ from .gleif_publication import validate_metadata
 from .matching import active_rules
 from .store import Conflict, canonical, digest
 
-SEC_READING = rules_files.ROOT / "sources/sec.submissions.company/census-raw.yaml"
+SEC_READING = rules_files.ROOT / "sources/sec.submissions.company/census-sec-names.yaml"
+SEC_REDUCTION = rules_files.ROOT / "sources/sec.submissions.company/census-sec-reduction.yaml"
 GLEIF_READING = rules_files.ROOT / "sources/gleif/census-complete-stream.yaml"
+GLEIF_REDUCTION = rules_files.ROOT / "sources/gleif/census-name-reduction.yaml"
 # The saved Golden Copy reading: 13.25 GB expanded projects to about 211 MB
 # and 3.3 million rows (whole-source census ticket, 2026-10-09).
 # The bounds are the recipe's own spool and output limits (`max_spool_bytes`,
@@ -130,15 +132,16 @@ def _combine(store: Artifacts, folder: Path, name: str, contract: dict, readings
 
 
 def _population(capture: Path, population: Path, store: Artifacts, folder: Path) -> tuple[list, dict, list, dict]:
-    """The filers of the population's documents, each read from the receipt-bound capture,
-    with the population's receipt keys and the capture's receipts."""
+    """The population's documents read from the receipt-bound capture (`census-sec-names.yaml`:
+    each filer's name keys beside its CIK): the readings, the population's summary, its
+    receipt keys and the capture's receipts."""
     receipts_raw, receipts = raw_capture.receipts(capture)
     population_raw = raw_capture.read_bounded(population, POPULATION_BYTES)
     keys = json.loads(population_raw)
     if not isinstance(keys, list) or not keys or len(set(keys)) != len(keys):
         raise Conflict("A population names one or more distinct receipt keys")
     contract = rules_files.load(SEC_READING)
-    filers = []
+    readings, ciks = [], []
     for start in range(0, len(keys), contract["execution"]["max_artifacts"]):
         artifacts = []
         for key in keys[start:start + contract["execution"]["max_artifacts"]]:
@@ -149,13 +152,44 @@ def _population(capture: Path, population: Path, store: Artifacts, folder: Path)
                                                   "values": {"cik": raw_capture.cik(key)}})
             artifacts.append({"input": document, "context": context})
         _, reading = raw_capture.read_unit(store, folder, f"population-{start}", deepcopy(contract), artifacts)
-        for reading in store.json(reading)["artifacts"]:
-            (filer,) = reading["tables"]["filer"]
-            former = [row["name"] for row in reading["tables"]["former"] if row["name"]]
-            filers.append((f"{filer['cik']:010d}", filer["name"], former))
+        readings.append(reading)
+        for artifact in store.json(reading)["artifacts"]:
+            (filer,) = artifact["tables"]["current"]
+            ciks.append(filer["cik"])
+    if len(set(ciks)) != len(ciks):
+        raise Conflict("A filer is in the population twice")
     sec = {"receipts_sha256": hashlib.sha256(receipts_raw).hexdigest(),
-           "population_sha256": hashlib.sha256(population_raw).hexdigest(), "filers": len(filers)}
-    return filers, sec, keys, receipts
+           "population_sha256": hashlib.sha256(population_raw).hexdigest(), "filers": len(ciks)}
+    return readings, sec, keys, receipts
+
+
+def _reduced(store: Artifacts, folder: Path, name: str, recipe: Path, readings: dict) -> dict[str, list]:
+    """A configured reduction (`source.combine`), executed then verified: its groups' rows."""
+    contract = rules_files.load(recipe)
+    combined = _combine(store, folder, name, contract, readings)
+    bound = contract["reduce"]["max_output_bytes"]
+    (artifact,) = [artifact for artifact, _ in source_readings.iter_artifacts(
+        combined, store, max_bytes=bound, max_rows=contract["reduce"]["max_output_rows"],
+        allow_lookup_receipts=True)]
+    return artifact["tables"]
+
+
+def _sec_counts(store: Artifacts, folder: Path, readings: list) -> tuple[dict, set]:
+    """Who holds each SEC name key (its CIK count and five smallest CIKs) and the
+    current-name keys, from `census-sec-reduction.yaml`. An empty key is no name."""
+    tables = _reduced(store, folder, "sec-census", SEC_REDUCTION, {"names": readings})
+    held = {row["key"]: (row["cik_count"], [item["cik"] for item in row["ciks"]]) for row in tables["held"]}
+    return held, {row["key"] for row in tables["wanted"]} - {""}
+
+
+def _gleif_counts(store: Artifacts, folder: Path, reading: dict) -> tuple[dict, dict]:
+    """Each name key's GLEIF legal holders (count and five smallest with their last
+    update) and its other-name holders who are not legal holders, from
+    `census-name-reduction.yaml`."""
+    tables = _reduced(store, folder, "gleif-census", GLEIF_REDUCTION, {"names": reading})
+    legal = {row["key"]: (row["count"], [[item["lei"], item["updated"]] for item in row["holders"]])
+             for row in tables["legal"]}
+    return legal, {row["key"]: row["count"] for row in tables["other"]}
 
 
 def _gleif(reading: dict, store: Artifacts, metadata: dict, wanted: set) -> tuple[dict, object]:
@@ -201,17 +235,23 @@ def write_name_frequency(*, capture: str, population: str, gleif_reading: dict, 
     if runs and not catalog:
         raise Conflict("The matching cascade reads each filer's tickers: name the capture's exchange catalog")
     store = Artifacts()
+    metadata = json.loads(raw_capture.read_bounded(Path(gleif_metadata).resolve(), METADATA_BYTES))
     with tempfile.TemporaryDirectory(prefix=".name-frequency-") as scratch:
         folder = Path(capture).resolve()
-        filers, sec, keys, receipts = _population(folder, Path(population).resolve(), store, Path(scratch))
+        readings, sec, keys, receipts = _population(folder, Path(population).resolve(), store, Path(scratch))
         cascade_filers = _cascade_filers(folder, receipts, keys, catalog, store, Path(scratch)) if runs else []
-    if len({cik for cik, _, _ in filers}) != len(filers):
-        raise Conflict("A filer is in the population twice")
-    held, wanted = name_census._sec_population(filers)
-    metadata = json.loads(raw_capture.read_bounded(Path(gleif_metadata).resolve(), METADATA_BYTES))
-    gleif, readings = _gleif(gleif_reading, store, metadata, wanted)
-    census = name_census.census(sec_population=sec, gleif=gleif, held=held, wanted=wanted, readings=readings,
-                                cascade={"spec": spec, "filers": cascade_filers} if runs else None)
+        held, wanted = _sec_counts(store, Path(scratch), readings)
+        gleif, chunks = _gleif(gleif_reading, store, metadata, wanted)
+        legal, other = _gleif_counts(store, Path(scratch), gleif_reading)
+        # The cascade's candidates and address counts are its own fold over the same reading.
+        cascade, entities, counts = None, (), None
+        if runs:
+            counts = cascaded.count_addresses(f.place for f in cascade_filers)
+            _, _, entities = name_census.fold_reading(
+                chunks, cascade_wanted={f.key for f in cascade_filers} - {""}, address_counts=counts)
+            cascade = {"spec": spec, "filers": cascade_filers}
+    census = name_census.counted_document(sec_population=sec, gleif=gleif, wanted=wanted, held=held, legal=legal,
+                                          other=other, cascade=cascade, entities=entities, address_counts=counts)
     data = (canonical(census) + "\n").encode()
     target = Path(output).resolve()
     if target.exists():
