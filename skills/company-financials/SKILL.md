@@ -157,8 +157,29 @@ Evidence and sources: ticket 38, research 02 section 2.
   the latest-filed series.
 - **Proved** per measure and per null reason against ticket 44's hand-computed
   answer key.
+- **Built as SQL over the line items** (ticket 47): `measures.yaml` names each
+  ratio, return and growth series; `company_measure` is rebuilt whole from
+  `company_line_item`, and reads `company_fact` only to find a year that holds
+  two annual periods.
+- **One list of null reasons**, the same in the spec, the code and the answer
+  key: no concept filed, missing year, fiscal year changed, mixed currencies,
+  denominator zero or negative, not meaningful (growth from or to zero or less),
+  not meaningful for financial services, statement format unknown, no country
+  of incorporation, no statutory rate for the country and year. A measure
+  checks the format first, then a missing input, then mixed currencies, then
+  its denominator. A computed input (free cash flow, invested capital) whose parts
+  are in two currencies is missing with the reason "mixed currencies", never
+  "no concept filed". A new reason is added to all three at once.
+- **The statement format and country come from the Company master**, read in
+  Python and passed to the SQL as rows (MDM and silver are separate databases).
+  A filer with no Company master has no format: a measure that depends on it is
+  null, "statement format unknown"; every other measure is computed.
+- **Work a growth rate at 40 places**: PostgreSQL's `ln` and `exp` keep about
+  16 digits by default, which misses the tenth decimal on a large rate (one in
+  the 368-company cohort). Compare with an answer key rounded once, as silver
+  stores it: a key rounded to 12 places and then to 10 moves the last digit.
 
-Evidence and sources: ticket 39, research 02 section 3.
+Evidence and sources: ticket 39, research 02 section 3; the build, ticket 47.
 
 ## Reading company facts (ticket 40, decided 2026-10-22)
 

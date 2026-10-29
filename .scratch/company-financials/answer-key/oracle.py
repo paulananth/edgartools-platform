@@ -422,35 +422,39 @@ def measures(company: Company, items: dict[int, dict]) -> list[dict]:
             val = str(Decimal(val).quantize(PLACES))
         out.append({"measure": name, "year": year, "window": window, "value": val, "reason": reason, "inputs": inputs or {}})
 
-    def ratio(name, year, top, bottom, inputs):
+    def ratio(name, year, top, bottom, inputs, why=None):
+        """`why`: the numerator's own reason when it could not be computed (mixed currencies)."""
         if company.fs and name in NOT_FS:
             return add(name, year, None, reason="not meaningful for financial services")
         (a, ca), (b, cb) = top, bottom
         if a is None or b is None:
-            return add(name, year, None, reason="no concept filed", inputs=inputs)
+            return add(name, year, None, reason=(a is None and why) or "no concept filed", inputs=inputs)
         if ca and cb and ca != cb:
             return add(name, year, None, reason="mixed currencies", inputs=inputs)
         if b <= 0:
-            return add(name, year, None, reason="denominator zero or less", inputs=inputs)
+            return add(name, year, None, reason="denominator zero or negative", inputs=inputs)
         return add(name, year, None, val=a / b, inputs=inputs)
 
     for year in sorted(items):
         get = lambda n, y=year: number(y, n)
         ocf, capex = get("ocf"), get("capex")
         fcf = (ocf[0] - capex[0], ocf[1]) if ocf[0] is not None and capex[0] is not None and ocf[1] == capex[1] else (None, None)
+        # Operating cash flow and capital expenditure in two currencies: the inputs mix currencies (ticket 42).
+        fcf_why = "mixed currencies" if ocf[0] is not None and capex[0] is not None and ocf[1] != capex[1] else None
         items[year]["fcf"] = ({"value": str(fcf[0]), "unit": items[year]["ocf"]["unit"], "concept": "computed: ocf - capex",
-                               "flags": ["computed", "non-GAAP"]} if fcf[0] is not None else {"value": None, "reason": "no concept filed"})
+                               "flags": ["computed", "non-GAAP"]} if fcf[0] is not None
+                              else {"value": None, "reason": fcf_why or "no concept filed"})
         rev = get("revenue")
         ratio("gross_margin", year, get("gross_profit"), rev, {"gross_profit": year, "revenue": year})
         ratio("operating_margin", year, get("operating_income"), rev, {"operating_income": year, "revenue": year})
         ratio("net_margin", year, get("net_income"), rev, {"net_income": year, "revenue": year})
-        ratio("fcf_margin", year, fcf, rev, {"fcf": year, "revenue": year})
+        ratio("fcf_margin", year, fcf, rev, {"fcf": year, "revenue": year}, why=fcf_why)
         ratio("debt_to_assets", year, get("total_debt"), get("assets"), {})
         ratio("debt_to_equity", year, get("total_debt"), get("book_value"), {})
         ratio("liabilities_to_assets", year, get("liabilities"), get("assets"), {})
         ratio("current_ratio", year, get("current_assets"), get("current_liabilities"), {})
         ratio("book_value_per_share", year, get("book_value"), get("shares_outstanding"), {})
-        ratio("fcf_per_share", year, fcf, get("diluted_shares"), {})
+        ratio("fcf_per_share", year, fcf, get("diluted_shares"), {}, why=fcf_why)
         # Returns, on the average and on the beginning balance (ticket 39).
         ni, oi, pre, tax = get("net_income"), get("operating_income"), get("pretax_income"), get("income_tax")
         prior = year - 1
@@ -479,19 +483,22 @@ def measures(company: Company, items: dict[int, dict]) -> list[dict]:
                     top = (oi[0] * (1 - rate), oi[1])
 
                     def capital(y):
+                        """Debt + equity - cash, and why not when the three are in two currencies."""
                         d, e, c = number(y, "total_debt"), number(y, "book_value"), number(y, "cash")
-                        if None in (d[0], e[0], c[0]) or len({d[1], e[1], c[1]}) > 1:
-                            return (None, None)
-                        return (d[0] + e[0] - c[0], e[1])
-                    now, then = capital(year), capital(prior)
+                        if None in (d[0], e[0], c[0]):
+                            return (None, None), None
+                        if len({d[1], e[1], c[1]}) > 1:
+                            return (None, None), "mixed currencies"
+                        return (d[0] + e[0] - c[0], e[1]), None
+                    (now, now_why), (then, then_why) = capital(year), capital(prior)
                 else:
                     top = ni
-                    now, then = number(year, top_name), number(prior, top_name)
+                    (now, now_why), (then, then_why) = (number(year, top_name), None), (number(prior, top_name), None)
                 if top[0] is None or now[0] is None:
-                    add(name, year, None, reason="no concept filed")
+                    add(name, year, None, reason=(top[0] is not None and now_why) or "no concept filed")
                     continue
                 if prior not in items or then[0] is None:
-                    add(name, year, None, reason=missing(prior))
+                    add(name, year, None, reason=(prior in items and then_why) or missing(prior))
                     continue
                 currencies = {c for c in (top[1], now[1], then[1]) if c}
                 if len(currencies) > 1:
@@ -499,7 +506,7 @@ def measures(company: Company, items: dict[int, dict]) -> list[dict]:
                     continue
                 bottom = (now[0] + then[0]) / 2 if form == "average" else then[0]
                 if bottom <= 0:
-                    add(name, year, None, reason="denominator zero or less")
+                    add(name, year, None, reason="denominator zero or negative")
                     continue
                 add(name, year, None, val=top[0] / bottom, inputs={"top": str(top[0]), "bottom": str(bottom)})
         # Growth over exactly 1, 3, 5 and 10 years (ticket 39).
@@ -510,10 +517,11 @@ def measures(company: Company, items: dict[int, dict]) -> list[dict]:
                     if (year - n) in items and items[year - n].get("fcf", {}).get("value") is not None else (None, None)), (
                     get(name) if name != "fcf" else fcf)
                 label = f"{name}_cagr"
+                start_why = ((items.get(year - n) or {}).get("fcf") or {}).get("reason") if name == "fcf" else None
                 if end_value[0] is None:
-                    add(label, year, n, reason="no concept filed")
+                    add(label, year, n, reason=(name == "fcf" and fcf_why) or "no concept filed")
                 elif start[0] is None:
-                    add(label, year, n, reason=missing(year - n))
+                    add(label, year, n, reason=start_why if start_why == "mixed currencies" else missing(year - n))
                 elif start[1] and end_value[1] and start[1] != end_value[1]:
                     add(label, year, n, reason="mixed currencies")
                 elif start[0] <= 0 or end_value[0] <= 0:

@@ -4,7 +4,8 @@ spec as a table, land a part's rows into it, and describe a table for an agent.
 Connections come from the environment and are never printed:
 SILVER_MIGRATION_DATABASE_URL (the schema owner, for init, migrate and register),
 SILVER_DATABASE_URL (the restricted runtime login, for land and describe) and
-MDM_DATABASE_URL (read, for the MDM ids of a table that links to masters).
+MDM_DATABASE_URL (read, for the MDM ids of a table that links to masters, and the
+statement format and country the measures read from each Company).
 """
 
 from __future__ import annotations
@@ -42,6 +43,13 @@ def _handle(args):
             ids = MdmIds(engine("MDM_DATABASE_URL")) if os.environ.get("MDM_DATABASE_URL") else None
             silver_engine = engine("SILVER_DATABASE_URL")
             result = line_items.build(silver_engine, DatabaseSink(silver_engine), ids)
+        elif args.silver_command == "measures":
+            from edgar_warehouse.financials import measures
+
+            mdm_engine = engine("MDM_DATABASE_URL")  # each filer's statement format, from its Company master
+            silver_engine = engine("SILVER_DATABASE_URL")
+            result = measures.build(silver_engine, DatabaseSink(silver_engine), MdmIds(mdm_engine),
+                                    lambda keys: measures.from_company(mdm_engine, keys))
         elif args.silver_command in {"land", "refresh-ids"}:
             ids = MdmIds(engine("MDM_DATABASE_URL")) if os.environ.get("MDM_DATABASE_URL") else None
             sink = DatabaseSink(engine("SILVER_DATABASE_URL"))
@@ -94,6 +102,8 @@ def _commands(parser):
     landed.set_defaults(handler=_handle)
     built = commands.add_parser("line-items", help="Build company_line_item from company_fact by line-items.yaml")
     built.set_defaults(handler=_handle)
+    measured = commands.add_parser("measures", help="Build company_measure from company_line_item by measures.yaml")
+    measured.set_defaults(handler=_handle)
     refreshed = commands.add_parser("refresh-ids", help="Fill the MDM ids of rows already landed, from MDM as it is now")
     refreshed.add_argument("table")
     refreshed.set_defaults(handler=_handle)
