@@ -113,6 +113,30 @@ try:
         assert len(lists[2]) == 3 and lists[2][0]["amount"] == 10**80 + 1
         assert lists[3][0]["amount"] == 10**80 + 2
         assert lists[4] == lists[5] == [{"key": "D1", "amount": 10**80 + 2, "sources": [s["primary"]]}]
+    if case == "one_request":
+        # Ticket 147: masters saved in one batch carry that batch's request; a page of
+        # them reads it once, not once a master, and every master holds the same bytes.
+        readings = [g["record"]("invented-" + name, identifiers={g["NAMESPACE"]: number})
+                    for name, number in (("a", "901"), ("b", "902"), ("c", "903"))]
+        s["stage"].apply(batch_id="invented-one-request", run_id=str(uuid4()), policy_digest=g["pin"],
+            consumer="invented-one-request", expected_checkpoint=0, checkpoint=1,
+            as_of=g["AS_OF"], assertions=readings)
+        keys = [("source-reading", reading["assertion_id"]) for reading in readings]
+        statements = []
+
+        def executed(conn, cursor, statement, parameters, context, executemany):
+            statements.append(statement)
+
+        event.listen(runtime, "before_cursor_execute", executed)
+        try:
+            origins = g["normal"].read_origins(keys, immutable=True)
+        finally:
+            event.remove(runtime, "before_cursor_execute", executed)
+        assert set(origins) == set(keys)
+        assert sum("intent" in statement for statement in statements) == 1
+        assert "intent" not in str(g["normal"].origin_statement(keys, immutable=True))  # never once a record
+        assert len({id(origin["origin"]["intent"]) for origin in origins.values()}) == 1
+        assert len({origin["origin"]["batch"] for origin in origins.values()}) == 1
     if case == "plans":
         adapter = g["normal"]
         for immutable, keys in ((False, [("entity", root), ("entity", "invented-missing")]),
