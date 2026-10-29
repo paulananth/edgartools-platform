@@ -1,0 +1,221 @@
+{
+  "recorded_at_et": "2026-10-28 20:12 ET",
+  "main": "5c1d5b16392bc22ae4939a360ea1e06cfc1509b5",
+  "qualification_head": "5b51bc4a9dc39ffae4cd3b8a5e2e2bc363237655",
+  "run": "40783186458",
+  "checks": 20,
+  "installed_revision": "5ee3bb938f4e6710f0e17db2e61e26f5867c6ead",
+  "engines": {
+    "postgresql": {
+      "passed_cases": 160,
+      "families": 18,
+      "configured_kinds": 2,
+      "cleanup_verified": true,
+      "family_case_counts": {
+        "Q01": 160,
+        "Q02": 2,
+        "Q03": 4,
+        "Q04": 20,
+        "Q05": 10,
+        "Q06": 10,
+        "Q07": 4,
+        "Q08": 6,
+        "Q09": 10,
+        "Q10": 4,
+        "Q11": 6,
+        "Q12": 8,
+        "Q13": 8,
+        "Q14": 18,
+        "Q15": 12,
+        "Q16": 12,
+        "Q17": 30,
+        "Q18": 18
+      }
+    },
+    "mysql": {
+      "passed_cases": 160,
+      "families": 18,
+      "configured_kinds": 2,
+      "cleanup_verified": true,
+      "family_case_counts": {
+        "Q01": 160,
+        "Q02": 2,
+        "Q03": 4,
+        "Q04": 20,
+        "Q05": 10,
+        "Q06": 10,
+        "Q07": 4,
+        "Q08": 6,
+        "Q09": 10,
+        "Q10": 4,
+        "Q11": 6,
+        "Q12": 8,
+        "Q13": 8,
+        "Q14": 18,
+        "Q15": 12,
+        "Q16": 12,
+        "Q17": 30,
+        "Q18": 18
+      }
+    }
+  },
+  "identical_configuration_pins": true,
+  "every_expected_case_once": true,
+  "committed_head_in_install": true,
+  "scope": "Normal configured MDM on PostgreSQL and MySQL; recorded qualification, not hosted activation",
+  "merged_prs": [
+    {
+      "pr": 1150,
+      "state": "MERGED",
+      "merge": "acd96aa888c3420cda79b27be24c5561908371e7",
+      "head": "dc740a7fac42b68f1fbd303f82982df51082b611",
+      "reported_checks": 9,
+      "reported_checks_passed": true
+    },
+    {
+      "pr": 1151,
+      "state": "MERGED",
+      "merge": "fd95de34f4625cd331654bc876c96889ff7bf0cb",
+      "head": "bebbebd617c51e38a823bd7787cd1525f941fb22",
+      "reported_checks": 9,
+      "reported_checks_passed": true
+    },
+    {
+      "pr": 1152,
+      "state": "MERGED",
+      "merge": "1e8ac3c5fb48d5dac4c90b34546bcc6d7f9e044c",
+      "head": "4a26aadf460b5a0ca088e2efb238da5437167381",
+      "reported_checks": 9,
+      "reported_checks_passed": true
+    },
+    {
+      "pr": 1153,
+      "state": "MERGED",
+      "merge": "a57666e3a69ee0ca2bbafd7e5d9f0830820c4bf6",
+      "head": "c1e74e92971de275f48b47d077b27750111e0ac4",
+      "reported_checks": 9,
+      "reported_checks_passed": true
+    },
+    {
+      "pr": 1155,
+      "state": "MERGED",
+      "merge": "c5571c3631da95e293052cfca8d45e448160fe05",
+      "head": "e3ee7c4df5d5346b9ba83f3615c9cdb95f689c90",
+      "reported_checks": 9,
+      "reported_checks_passed": true
+    },
+    {
+      "pr": 1156,
+      "state": "MERGED",
+      "merge": "4b9798c21bb086f2bf000160fd54e1d3da3a7aab",
+      "head": "7d75a70715895876d64238fdc09e84c664b6a43c",
+      "reported_checks": 9,
+      "reported_checks_passed": true
+    },
+    {
+      "pr": 1158,
+      "state": "MERGED",
+      "merge": "4bf7c3860e9a11636c5df8611b8b44e96c54195d",
+      "head": "9bfe66cbcaf9e657ba56a7e2db277eebe3592283",
+      "reported_checks": 9,
+      "reported_checks_passed": true
+    },
+    {
+      "pr": 1159,
+      "state": "MERGED",
+      "merge": "4a3d0bf6c44f2516c6fafc8e49838a0fa2ccbc28",
+      "head": "568fb1a88ca309138926c68cc73338bb0b369f95",
+      "reported_checks": 9,
+      "reported_checks_passed": true
+    },
+    {
+      "pr": 1164,
+      "state": "MERGED",
+      "merge": "71298a8affea68029f92620e96f2ad5baf628aed",
+      "head": "dab40c6fed5c097a295fa680f8184a27a18c4d0d",
+      "reported_checks": 9,
+      "reported_checks_passed": true
+    },
+    {
+      "pr": 1165,
+      "state": "MERGED",
+      "merge": "548431a0549d71800bbed71eef9d4fc7d8a61812",
+      "head": "d844d00e6e68af6ef359279f7ccdda30eca89c8b",
+      "reported_checks": 0,
+      "reported_checks_passed": null
+    },
+    {
+      "pr": 1171,
+      "state": "MERGED",
+      "merge": "4fb26ae4c23e55abcfa30662f63270275447d5af",
+      "head": "682c5c86496f5f290bea1e34ee9feabda2dfb32d",
+      "reported_checks": 13,
+      "reported_checks_passed": true
+    },
+    {
+      "pr": 1173,
+      "state": "MERGED",
+      "merge": "36e6008df81027cf6b6c27900830f593a18bcfe5",
+      "head": "83b30d4f506305740f7faee73bbc85bbd172baf5",
+      "reported_checks": 13,
+      "reported_checks_passed": true
+    },
+    {
+      "pr": 1178,
+      "state": "MERGED",
+      "merge": "b25588992cb31aaf143a7b4dc8c6376abcbb7567",
+      "head": "dbd78c42e9aa525ed1e72e79f2c2dd5114dc53a8",
+      "reported_checks": 21,
+      "reported_checks_passed": true
+    },
+    {
+      "pr": 1179,
+      "state": "MERGED",
+      "merge": "43588ae72466fe4121de6c7992c4c90c7fa70a76",
+      "head": "159ce2518a992ce793e46ec82e43aa83f002e3c7",
+      "reported_checks": 13,
+      "reported_checks_passed": true
+    },
+    {
+      "pr": 1180,
+      "state": "MERGED",
+      "merge": "46bc0fce65ff1137bc6633c8a356cebee5542901",
+      "head": "9712984e981ce14989cbca075a887ead45de2cea",
+      "reported_checks": 21,
+      "reported_checks_passed": true
+    },
+    {
+      "pr": 1190,
+      "state": "MERGED",
+      "merge": "6744302a32daa65f4664fec506bfb8817438e288",
+      "head": "dd1195dbdeff2fca1496b445e2d558cdba1a7ecd",
+      "reported_checks": 21,
+      "reported_checks_passed": true
+    },
+    {
+      "pr": 1191,
+      "state": "MERGED",
+      "merge": "e0ef1c03bdd5af4b2a558e33f3d0df7d7b66d852",
+      "head": "223dd554331c2e4991b552a62b87005bc6e7ce6f",
+      "reported_checks": 21,
+      "reported_checks_passed": true
+    },
+    {
+      "pr": 1197,
+      "state": "MERGED",
+      "merge": "915ee8332cf6a2c13f8d80f8051403c740ef6e93",
+      "head": "e1b7f4412d65670eee279ae0b06f6c8af98b5ded",
+      "reported_checks": 21,
+      "reported_checks_passed": true
+    },
+    {
+      "pr": 1210,
+      "state": "MERGED",
+      "merge": "5c1d5b16392bc22ae4939a360ea1e06cfc1509b5",
+      "head": "5b51bc4a9dc39ffae4cd3b8a5e2e2bc363237655",
+      "reported_checks": 20,
+      "reported_checks_passed": true
+    }
+  ],
+  "historical_check_metadata_note": "PR1165 is merged but returns no PR check metadata; no historical green count is inferred. Current qualification includes its merged guidance."
+}

@@ -1,9 +1,13 @@
 # Retire PostgreSQL business routines and caller paths
 
 Type: task
-Status: review
+Status: resolved
 Parent: [Complete portable MDM and retire PostgreSQL business logic](../map.md)
 Blocked by: none — 07 merged in #1178; skill learning #1179 merged
+
+## Current closeout — 2026-10-28 20:12 ET
+
+PRs #1180 / 1190 / 1191 are merged; 21 final-head checks pass on each PR; current owner-retirement and installed evidence remain qualified. Current qualification is 160 installed cases per engine, two configured kinds and all 18 families at #1210. [Closeout evidence](../assets/completion-evidence.json) records the verified heads and limits. Historical checkpoints below retain their original dates.
 
 ## Question
 

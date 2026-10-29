@@ -1,11 +1,15 @@
 # Connect master reads and operator commands
 
 Type: task
-Status: claimed
+Status: resolved
 Assignee: Codex
 Claimed: 2026-10-24 09:55 ET
 Parent: [Complete portable MDM and retire PostgreSQL business logic](../map.md)
 Blocked by: none; prerequisite 04 merged in #1159
+
+## Current closeout — 2026-10-28 20:12 ET
+
+PRs #1164 / 1165 are merged; 9 checks on implementation #1164; current #1210 qualification covers the merged reader and guidance. Current qualification is 160 installed cases per engine, two configured kinds and all 18 families at #1210. [Closeout evidence](../assets/completion-evidence.json) records the verified heads and limits. Historical checkpoints below retain their original dates.
 
 ## Question
 
@@ -36,7 +40,7 @@ Can installed consumers and operators use normal engine-selected MDM read and in
   - [x] Add owner-controlled bounded/resumable populated rebuilding without business history or publication changes — 2026-10-25 12:19 ET; interruption, resume, overtaking and explicit restart pass on both engines; 401-reference maintenance uses three insert statements and three mixed update/delete statements.
   - [x] Qualify indexed Context searches and rebuild interruption/retry across both configured kinds/sources on PostgreSQL/MySQL — 2026-10-25 12:19 ET; 20 local search cases per engine pass; latest bulk maintenance adds two passing cases per engine.
   - [x] Qualify the independent installed search and actual owner rebuild on both engines — 2026-10-25 12:26 ET; two installed cases per engine pass outside the checkout, including gap refusal, bounded resume, unchanged business counts/generation and zero-work repeat.
-  - [ ] Finish final source review and CI for the published search checkpoint.
+  - [x] Finish final source review and CI for the published search checkpoint. — 2026-10-28 20:12 ET: merged #1164; reviewed code and nine implementation checks verified; current 20-check installed qualification also passes.
 - [x] Learning → skill — 2026-10-25 12:26 ET; separate PR #1165 now includes search coverage, bounded owner rebuild, overtaking/restart and batched-maintenance lessons, with 91 affected documentation checks passing; retained reader learning completed 2026-10-24 20:52 ET; mdm-engineering retained-read provenance and metadata guidance is published separately in draft PR #1165; earlier 80 affected checks pass. Its rebased check and landing remain pending.
 
 ## Acceptance evidence
