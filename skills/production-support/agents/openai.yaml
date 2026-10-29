@@ -1,0 +1,4 @@
+interface:
+  display_name: "Production Support"
+  short_description: "Diagnose jobs and improve resource efficiency"
+  default_prompt: "Use $production-support to investigate a pipeline incident with architecture and security consultation."
