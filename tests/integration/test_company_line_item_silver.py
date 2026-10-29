@@ -115,7 +115,7 @@ def test_the_first_present_concept_s_latest_copy_wins(built):
     cash, shares = rows[(US, 2025, "cash")], rows[(US, 2025, "shares_outstanding")]
     assert (cash["value"], cash["unit"], cash["currency"], cash["period_start"]) == (Decimal(70), "USD", "USD", None)
     assert (shares["value"], shares["concept"], shares["flags"]) == (
-        Decimal(7), "EntityCommonStockSharesOutstanding", ["cover-page date"])
+        Decimal(7), "dei:EntityCommonStockSharesOutstanding", ["cover-page date"])
 
 
 def test_computed_values_are_exact_and_name_their_inputs(built):

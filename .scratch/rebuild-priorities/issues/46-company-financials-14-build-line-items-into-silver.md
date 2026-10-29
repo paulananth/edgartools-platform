@@ -129,14 +129,31 @@ stores (operator, 2026-10-21: "Two proofs, local").
   149 of them concepts the map reads: a convenience translation, a per-share figure also filed as `pure`)
   keeps the unit that filing uses most, its reporting currency (ticket 42: "never convert"), then the unit's
   text. A year's taxonomy had no tie (0)
-- [ ] `company_line_item` built: first present wins per company and annual period, latest copy, fiscal year
-  (Compustat FYEAR), the reported-year rule, the year's taxonomy, the computed entries, null with its reason,
-  the revenue quality check
-- [ ] Tests: none of research 01 section 5's nine hazards possible; the answer key's
-  line items match (ticket 44)
-- [x] GoF consult before code (2026-10-28 20:25 ET): the map's grammar is read in two places (the crosswalk
-  test, the answer key) and the SQL would be a third, so it is parsed once (`edgar_warehouse/financials/
-  line_items.py`: plain entries and terms, refusing a leading optional and a line-item cycle) and the test's
-  `crosswalk_of` moves there; the silver writer and its CLI dispatch are left as they are (one more command)
+- [x] `company_line_item` built (2026-10-28 21:17 ET): `edgar_warehouse/financials/line_items.py` parses the map
+  once and generates the SQL (Compustat FYEAR, the reported year, the year's taxonomy, first present concept,
+  latest copy, exact sums and differences, `first_of`, `optional` and `line_item` terms, the revenue quality
+  check, "no concept filed"); `edgar-warehouse silver line-items` runs it and the silver writer lands the rows;
+  spec `rules/sources/sec.company-facts/silver-company-line-item.yaml`
+- [x] Found (2026-10-28 21:17 ET): as one statement, PostgreSQL guessed each step's rows (257 annual facts for
+  millions) and ran 30 minutes without finishing; each step is now a counted temporary table
+  (`statements()`): the 368-company cohort builds in 14 s. A per-row revenue check in the final select did the
+  same; it is a joined step. `query()` keeps the one-statement form for dbt
+- [x] Found (2026-10-28 21:17 ET): a concept of another taxonomy than the year's (the cover-page shares) is named
+  with its taxonomy, `dei:EntityCommonStockSharesOutstanding`, as the map and the key name it (63 rows)
+- [x] Tests (2026-10-28 21:17 ET): `tests/unit/test_financial_line_items.py` (the map refused whole on a broken
+  entry; none of research 01 section 5's concept hazards 1-6 in the map) and
+  `tests/integration/test_company_line_item_silver.py` (first present, latest copy, quarter never the year,
+  computed with inputs, a line-item term, an optional leg, two units give nothing, a copy in two units, the
+  cover-page concept, FYEAR, the reported year, IFRS with a stray us-gaap fact; hazards 7-9): 20 passed with
+  `test_company_fact_silver.py`. The answer key's rules over the whole cohort
+  (`.scratch/company-financials/line-items/compare_key.py`): 368 companies, 5,134,979 facts, 4,209
+  company-years on both sides, 96,807 line items of 96,807 equal (value, unit, filing, date, flags, taxonomy,
+  period end, concept), 73,567 with a value; 121 revenues flagged by the quality check; 135 s
+- [x] Answer key regenerated with the two ties (2026-10-28 21:17 ET; ticket 44): one company's FY2023 is now its
+  reported October year, not the December 12 months seen only as a 3-fact comparative (its annual report
+  files 28 facts each for October 2023 and 2022): 16 line items and 36 measures of that year move, nothing
+  else; measures with a value 881; local key sha256 `ad2bcf3294c093fc2f455d0aed0662f8443d38c7a16e87f263adebc0794bb427`
 - [ ] Three-axis review; PR, CI, merge
-- [ ] Learning → skill
+- [x] Learning → skill (2026-10-28 21:17 ET): `skills/company-financials/SKILL.md`: the line items are SQL over
+  silver, run as counted steps (never timed under `count(*)`); a concept of another taxonomy is named with it;
+  the two ties; `company_line_item`'s one row per year; the statement format read from Company

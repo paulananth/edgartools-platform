@@ -199,6 +199,23 @@ def _values(columns: str, rows: list[tuple], empty: str) -> str:
 def query(items: LineItems, source: str = "silver.company_fact") -> str:
     """One SQL statement (PostgreSQL) over `source`, giving every row of
     `company_line_item`: one per company, line item and fiscal year."""
+    steps, final = _steps(items, source)
+    return "WITH " + ",\n".join(f"{name} AS ({body})" for name, body in steps) + "\n" + final
+
+
+def statements(items: LineItems, source: str = "silver.company_fact") -> list[str]:
+    """The same query as steps, each a temporary table its planner has counted:
+    run as one statement, PostgreSQL guesses each step's rows and picks nested
+    loops over millions of facts (ticket 46: 30 minutes, not finished)."""
+    steps, final = _steps(items, source)
+    out = []
+    for name, body in steps:
+        table = name.split("(")[0]
+        out += [f"CREATE TEMPORARY TABLE {name} ON COMMIT DROP AS {body}", f"ANALYZE {table}"]
+    return out + [final]
+
+
+def _steps(items: LineItems, source: str) -> tuple[list[tuple[str, str]], str]:
     kind = {code: "instant" if p == "instant" else "annual" for code, p in items.period.items()}
     direct, terms, computed = [], [], []
     for code, lists in items.lists.items():
@@ -226,13 +243,13 @@ def query(items: LineItems, source: str = "silver.company_fact") -> str:
                               terms, "NULL::text, NULL::text, 0, 0, 0, 0, false, NULL::text, NULL::text, NULL::text, NULL::text")})""",
         f"""named(taxonomy, concept) AS (VALUES {", ".join(f"({t}, {c})" for t, c in named)})""",
         # Each fact with its period's kind: an instant, or an annual period of 364-371 days (ticket 35).
-        f"""fact AS (
+        f"""typed_fact AS (
   SELECT f.company_key, f.taxonomy, f.concept, f.unit, f.currency, f.period_start, f.period_end, f.value,
          f.accession, f.filed, f.form,
          CASE WHEN f.period_start IS NULL THEN 'instant'
               WHEN f.period_end - f.period_start + 1 BETWEEN 364 AND 371 THEN 'annual' END AS kind
   FROM {source} f)""",
-        """annual AS (SELECT * FROM fact WHERE kind = 'annual' AND taxonomy IN ('us-gaap', 'ifrs-full'))""",
+        """annual AS (SELECT * FROM typed_fact WHERE kind = 'annual' AND taxonomy IN ('us-gaap', 'ifrs-full'))""",
         # Each annual report's own period: the annual period it files the most facts for, the later on a tie.
         f"""report_end AS (
   SELECT DISTINCT ON (company_key, accession) company_key, accession, period_end
@@ -260,13 +277,13 @@ def query(items: LineItems, source: str = "silver.company_fact") -> str:
            (a.taxonomy = 'us-gaap') DESC)""",
         # Each filing's units, by how many facts use them: a copy filed in two units keeps the one its
         # filing uses most (its reporting currency; ticket 42 never converts), then the unit's text.
-        """filing_unit AS (SELECT company_key, accession, unit, count(*) AS uses FROM fact GROUP BY 1, 2, 3)""",
+        """filing_unit AS (SELECT company_key, accession, unit, count(*) AS uses FROM typed_fact GROUP BY 1, 2, 3)""",
         # Each named concept's latest-filed copy for a year's exact period.
-        """copy AS (
+        """latest_copy AS (
   SELECT DISTINCT ON (f.company_key, y.fiscal_year, f.taxonomy, f.concept, f.kind)
          y.fiscal_year, f.company_key, f.taxonomy, f.concept, f.kind, f.unit, f.currency, f.period_start,
          f.value, f.accession, f.filed
-  FROM fact f
+  FROM typed_fact f
   JOIN named n ON n.taxonomy = f.taxonomy AND n.concept = f.concept
   JOIN year_end y ON y.company_key = f.company_key AND y.period_end = f.period_end
   JOIN filing_unit u ON u.company_key = f.company_key AND u.accession = f.accession AND u.unit = f.unit
@@ -275,9 +292,11 @@ def query(items: LineItems, source: str = "silver.company_fact") -> str:
            u.uses DESC, f.unit COLLATE "C", f.period_start DESC)""",
         """direct AS (
   SELECT y.company_key, y.fiscal_year, e.line_item, e.position, c.value, c.unit, c.currency, c.period_start,
-         c.concept, c.accession, c.filed, e.flags, NULL::jsonb AS inputs
+         -- a concept of another taxonomy than the year's names it, as the map does (dei:...)
+         CASE WHEN c.taxonomy = y.taxonomy THEN c.concept ELSE c.taxonomy || ':' || c.concept END AS concept,
+         c.accession, c.filed, e.flags, NULL::jsonb AS inputs
   FROM fiscal y JOIN entry e ON e.taxonomy = y.taxonomy
-  JOIN copy c ON c.company_key = y.company_key AND c.fiscal_year = y.fiscal_year
+  JOIN latest_copy c ON c.company_key = y.company_key AND c.fiscal_year = y.fiscal_year
              AND c.taxonomy = e.concept_taxonomy AND c.concept = e.concept AND c.kind = e.kind)""",
         # Each fact term's value: the first present of its concepts.
         """fact_term AS (
@@ -285,7 +304,7 @@ def query(items: LineItems, source: str = "silver.company_fact") -> str:
          y.company_key, y.fiscal_year, t.line_item, t.position, t.term, c.value, c.unit, c.currency,
          c.period_start, c.concept, c.accession, c.filed
   FROM fiscal y JOIN term t ON t.taxonomy = y.taxonomy AND t.concept IS NOT NULL
-  JOIN copy c ON c.company_key = y.company_key AND c.fiscal_year = y.fiscal_year
+  JOIN latest_copy c ON c.company_key = y.company_key AND c.fiscal_year = y.fiscal_year
              AND c.taxonomy = t.concept_taxonomy AND c.concept = t.concept AND c.kind = t.kind
   ORDER BY y.company_key, y.fiscal_year, t.line_item, t.position, t.term, t.choice)""",
     ]
@@ -329,20 +348,27 @@ def query(items: LineItems, source: str = "silver.company_fact") -> str:
     ctes.append(f"chosen AS ({' UNION ALL '.join(chosen)})")
     checks = [(_lit(code), _lit(flag)) for code, flag in items.larger_total_check.items()]
     ctes.append(f"""larger_total_check AS ({_values("line_item, flag", checks, "NULL::text, NULL::text")})""")
+    # A chosen figure smaller than another of its list's concepts, same period and unit: flagged.
+    ctes.append("""larger AS (
+  SELECT DISTINCT c.company_key, c.fiscal_year, c.line_item, k.flag
+  FROM chosen c JOIN larger_total_check k ON k.line_item = c.line_item
+  JOIN direct d ON d.company_key = c.company_key AND d.fiscal_year = c.fiscal_year
+              AND d.line_item = c.line_item AND d.unit = c.unit AND d.value > c.value)""")
     codes = ", ".join(f"({_lit(c)}, {_lit(kind[c])})" for c in items.lists)
-    return "WITH " + ",\n".join(ctes) + f"""
-SELECT y.company_key, i.line_item, y.fiscal_year,
+    steps = []
+    for cte in ctes:
+        name, body = cte.split(" AS (", 1)
+        steps.append((name, body.strip()[:-1]))
+    return steps, f"""SELECT y.company_key, i.line_item, y.fiscal_year,
        CASE WHEN i.kind = 'annual' THEN c.period_start END AS period_start, y.period_end,
        c.value, c.unit, c.currency, y.taxonomy, c.concept, c.inputs, c.accession, c.filed,
-       to_jsonb(COALESCE(c.flags, ARRAY[]::text[]) || CASE WHEN EXISTS (
-           SELECT 1 FROM direct d WHERE d.company_key = c.company_key AND d.fiscal_year = c.fiscal_year
-              AND d.line_item = c.line_item AND d.unit = c.unit AND d.value > c.value)
-         THEN (SELECT array_agg(k.flag) FROM larger_total_check k WHERE k.line_item = c.line_item)
-         ELSE ARRAY[]::text[] END) AS flags,
+       to_jsonb(COALESCE(c.flags, ARRAY[]::text[]) || CASE WHEN g.flag IS NULL THEN ARRAY[]::text[]
+                                                         ELSE ARRAY[g.flag] END) AS flags,
        CASE WHEN c.value IS NULL THEN {_lit(NO_CONCEPT)} END AS null_reason,
        {_lit(items.version)} AS rule_version
 FROM fiscal y CROSS JOIN (VALUES {codes}) AS i(line_item, kind)
 LEFT JOIN chosen c ON c.company_key = y.company_key AND c.fiscal_year = y.fiscal_year AND c.line_item = i.line_item
+LEFT JOIN larger g ON g.company_key = y.company_key AND g.fiscal_year = y.fiscal_year AND g.line_item = i.line_item
 ORDER BY y.company_key, i.line_item, y.fiscal_year"""
 
 
@@ -353,6 +379,9 @@ def build(silver_engine, sink, ids, items: LineItems | None = None) -> dict:
     from edgar_warehouse.silver_writer.writer import land
 
     items = items or load()
-    with silver_engine.connect() as conn:
-        rows = [dict(r._mapping) for r in conn.execute(text(query(items)))]
+    with silver_engine.connect() as conn, conn.begin():
+        *steps, final = statements(items)
+        for step in steps:
+            conn.execute(text(step))
+        rows = [dict(r._mapping) for r in conn.execute(text(final))]
     return land(sink, "company_line_item", rows, ids)

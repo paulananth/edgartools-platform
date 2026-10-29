@@ -101,7 +101,13 @@ Evidence and sources: ticket 35, research 02 section 1.
   (Recommended)", after the engine path proved to need a whole group and join
   language): `edgar_warehouse/financials/line_items.py`, run by
   `edgar-warehouse silver line-items`. On Snowflake the same query becomes a
-  dbt model.
+  dbt model. It runs as steps, each a temporary table PostgreSQL has counted
+  (`statements()`): as one statement the planner guessed hundreds of rows for
+  millions and never finished in 30 minutes; as steps the cohort builds in
+  14 s. Never test its speed under `count(*)`, which skips the select list.
+- **A concept of another taxonomy than the year's is named with its taxonomy**
+  (`dei:EntityCommonStockSharesOutstanding`), since the row's `taxonomy` is
+  the year's.
 - **Ties the rulings leave open** (ticket 46, measured on the cohort): an
   annual report filing as many facts for two annual periods covers the later
   as its own year; one filed copy in two units keeps the unit its filing uses

@@ -69,10 +69,13 @@ def main() -> None:
             finally:
                 raw.close()
             read = time.monotonic() - began
-            with engine.connect() as conn:
+            with engine.connect() as conn, conn.begin():
                 facts = conn.scalar(text("SELECT count(*) FROM fact"))
                 started = time.monotonic()
-                got = {(r.company_key, r.fiscal_year, r.line_item): r for r in conn.execute(text(line_items.query(items, "fact")))}
+                *steps, final = line_items.statements(items, "fact")
+                for step in steps:
+                    conn.execute(text(step))
+                got = {(r.company_key, r.fiscal_year, r.line_item): r for r in conn.execute(text(final))}
                 query_seconds = time.monotonic() - started
             want: dict = {}
             for part in pool.map(expected, paths, chunksize=4):
