@@ -28,6 +28,8 @@ FORMS = ("average", "beginning")
 DERIVED = {"fcf", "operating_income_after_tax", "invested_capital"}
 COMPANY_SOURCE = "sec.submissions.company.v1"
 NO_CONCEPT = line_items.NO_CONCEPT
+MIXED = "mixed currencies"
+FINANCIAL_SERVICES = "financial services"
 _NAME = re.compile(r"[a-z][a-z0-9_]{0,59}")
 
 
@@ -64,10 +66,12 @@ def parse(body: dict, codes: set[str]) -> Measures:
         raise Blocked(f"growth reads line items: {sorted(set(growth['series']) - allowed)}")
     if not all(isinstance(n, int) and n > 0 for n in growth["windows"]):
         raise Blocked("a growth window is a whole number of years")
-    measures = Measures(line_items._words(body["version"]), frozenset(body["not_for_financial_services"]),
+    measures = Measures(line_items.words(body["version"]), frozenset(body["not_for_financial_services"]),
                         ratios, returns, tuple(growth["series"]), tuple(growth["windows"]))
-    if not measures.not_for_financial_services <= measures.names():
-        raise Blocked(f"not a measure: {sorted(measures.not_for_financial_services - measures.names())}")
+    # A growth rate divides a series by itself, so the statement format never makes it meaningless.
+    one_year = measures.names() - {f"{name}_cagr" for name in measures.series}
+    if not measures.not_for_financial_services <= one_year:
+        raise Blocked(f"not a ratio or return: {sorted(measures.not_for_financial_services - one_year)}")
     return measures
 
 
@@ -98,7 +102,7 @@ def filers(companies: dict[str, tuple[str | None, str | None]]) -> dict[str, tup
     """Each company's statement format and country, from its SIC and place of
     incorporation. A company left out has no Company master: its format is unknown."""
     countries = _countries()
-    return {key: ("financial services" if financial_services(sic) else "industrial", countries.get(place or ""))
+    return {key: (FINANCIAL_SERVICES if financial_services(sic) else "industrial", countries.get(place or ""))
             for key, (sic, place) in companies.items()}
 
 
@@ -139,16 +143,32 @@ def statements(measures: Measures, formats: dict, lines: str = "silver.company_l
     return sql.counted(*_steps(measures, formats, lines, facts))
 
 
+def _part(alias: str) -> str:
+    """One figure's trace: its value, concept and filing."""
+    return (f"jsonb_strip_nulls(jsonb_build_object('value', {alias}.value::text, 'concept', {alias}.concept, "
+            f"'accession', {alias}.accession))")
+
+
 def _input(alias: str) -> str:
-    """One input's trace: its fiscal year, value, concept and filing, and any parts it was computed from."""
+    """One input's trace: its fiscal year and its figure, or the parts it was computed from."""
     return (f"jsonb_strip_nulls(jsonb_build_object('fiscal_year', {alias}.fiscal_year, 'value', {alias}.value::text, "
             f"'concept', {alias}.concept, 'accession', {alias}.accession)) || COALESCE({alias}.detail, '{{}}'::jsonb)")
 
 
-# The first null reason of a measure that depends on the statement format (ticket 42); a filer with
-# no Company master has no format ("unknown until Company is mastered", ticket 43).
-_FORMAT_REASON = """WHEN m.not_fs AND f.format = 'financial services' THEN 'not meaningful for financial services'
-              WHEN m.not_fs AND f.format IS NULL THEN 'statement format unknown'"""
+def _item(alias: str, name: str, year: str = "y") -> str:
+    return (f"LEFT JOIN item {alias} ON {alias}.company_key = {year}.company_key "
+            f"AND {alias}.fiscal_year = {year}.fiscal_year AND {alias}.line_item = {lit(name)}")
+
+
+def _flag(name: str, not_fs: frozenset[str]) -> str:
+    return "true" if name in not_fs else "false"
+
+
+def _format_reason(not_fs: str = "m.not_fs", fmt: str = "f.format") -> str:
+    """The first null reason of a measure that depends on the statement format (ticket 42); a filer
+    with no Company master has no format ("unknown until Company is mastered", skill, ticket 43)."""
+    return f"""WHEN {not_fs} AND {fmt} = {lit(FINANCIAL_SERVICES)} THEN 'not meaningful for financial services'
+              WHEN {not_fs} AND {fmt} IS NULL THEN 'statement format unknown'"""
 
 
 def _steps(measures: Measures, formats: dict, lines: str, facts: str) -> tuple[list[tuple[str, str]], str]:
@@ -156,7 +176,6 @@ def _steps(measures: Measures, formats: dict, lines: str, facts: str) -> tuple[l
         if not re.fullmatch(r"[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)?", table):
             raise Blocked(f"the measures read a table name: {table!r}")
     not_fs = measures.not_for_financial_services
-    flag = lambda name: "true" if name in not_fs else "false"  # noqa: E731
     windows = sorted(set(measures.windows) | {1})
     ctes = [
         ("filer", sql.values("company_key, format, country",
@@ -166,81 +185,80 @@ def _steps(measures: Measures, formats: dict, lines: str, facts: str) -> tuple[l
                             _rates({c for _, c in formats.values() if c}),
                             "NULL::text, NULL::date, NULL::date, NULL::numeric")),
         ("ratio_def", sql.values("measure, top, bottom, not_fs",
-                                 [(lit(n), lit(t), lit(b), flag(n)) for n, (t, b) in measures.ratios.items()],
+                                 [(lit(n), lit(t), lit(b), _flag(n, not_fs)) for n, (t, b) in measures.ratios.items()],
                                  "NULL::text, NULL::text, NULL::text, false")),
         ("return_def", sql.values("measure, form, top, balance, not_fs",
-                                  [(lit(f"{n}_{form}"), lit(form), lit(t), lit(b), flag(f"{n}_{form}"))
+                                  [(lit(f"{n}_{form}"), lit(form), lit(t), lit(b), _flag(f"{n}_{form}", not_fs))
                                    for n, (t, b) in measures.returns.items() for form in FORMS],
                                   "NULL::text, NULL::text, NULL::text, NULL::text, false")),
         ("growth_def", sql.values("measure, series, window_years",
                                   [(lit(f"{s}_cagr"), lit(s), f"{n}::bigint")
                                    for s in measures.series for n in measures.windows],
                                   "NULL::text, NULL::text, 0::bigint")),
+        # A value with a reason is an input that could not be computed (mixed currencies, no tax rate).
         ("item", f"""
   SELECT company_key, fiscal_year, line_item, value, currency, concept, accession, NULL::text AS reason,
          NULL::jsonb AS detail
   FROM {lines}"""),
-        ("fiscal", f"""SELECT DISTINCT company_key, fiscal_year, period_end FROM {lines}"""),
+        # Each fiscal year once, at its end.
+        ("fiscal", f"""SELECT company_key, fiscal_year, max(period_end) AS period_end FROM {lines} GROUP BY 1, 2"""),
         # Free cash flow: operating cash flow less capital expenditure, in one currency (non-GAAP).
         ("fcf", f"""
   SELECT y.company_key, y.fiscal_year, 'fcf' AS line_item,
          CASE WHEN o.currency IS NOT DISTINCT FROM c.currency THEN o.value - c.value END AS value,
-         o.currency, 'computed: ocf - capex' AS concept, o.accession, NULL::text AS reason,
-         jsonb_build_object('ocf', o.value::text, 'capex', c.value::text) AS detail
-  FROM fiscal y
-  LEFT JOIN item o ON o.company_key = y.company_key AND o.fiscal_year = y.fiscal_year AND o.line_item = 'ocf'
-  LEFT JOIN item c ON c.company_key = y.company_key AND c.fiscal_year = y.fiscal_year AND c.line_item = 'capex'"""),
+         o.currency, 'computed' AS concept, NULL::text AS accession,
+         CASE WHEN o.value IS NOT NULL AND c.value IS NOT NULL
+                   AND o.currency IS DISTINCT FROM c.currency THEN {lit(MIXED)} END AS reason,
+         jsonb_build_object('ocf', {_part("o")}, 'capex', {_part("c")}) AS detail
+  FROM fiscal y {_item("o", "ocf")} {_item("c", "capex")}"""),
         # ROIC's tax rate: income tax over pretax income, else the country's statutory rate in force at the
         # year's end (ticket 39; RDM corporate-tax-rates, ticket 133).
-        ("taxed", """
-  SELECT y.company_key, y.fiscal_year, y.period_end, oi.value AS oi, oi.currency, oi.accession, pre.value AS pre,
-         tax.value AS tax, f.country,
+        ("taxed", f"""
+  SELECT y.company_key, y.fiscal_year, y.period_end, oi.value AS oi, oi.currency, f.country,
+         {_part("oi")} AS oi_part, {_part("pre")} AS pre_part, {_part("tax")} AS tax_part,
+         oi.value IS NULL OR pre.value IS NULL OR tax.value IS NULL AS missing,
          CASE WHEN pre.value > 0 THEN CASE WHEN tax.value / pre.value BETWEEN 0 AND 1
                                          THEN tax.value / pre.value END END AS own_rate
-  FROM fiscal y
-  LEFT JOIN filer f ON f.company_key = y.company_key
-  LEFT JOIN item oi ON oi.company_key = y.company_key AND oi.fiscal_year = y.fiscal_year
-                   AND oi.line_item = 'operating_income'
-  LEFT JOIN item pre ON pre.company_key = y.company_key AND pre.fiscal_year = y.fiscal_year
-                    AND pre.line_item = 'pretax_income'
-  LEFT JOIN item tax ON tax.company_key = y.company_key AND tax.fiscal_year = y.fiscal_year
-                    AND tax.line_item = 'income_tax'"""),
+  FROM fiscal y LEFT JOIN filer f ON f.company_key = y.company_key
+  {_item("oi", "operating_income")} {_item("pre", "pretax_income")} {_item("tax", "income_tax")}"""),
         ("operating_income_after_tax", f"""
-  SELECT t.company_key, t.fiscal_year, 'operating_income_after_tax' AS line_item,
-         t.oi * (1 - COALESCE(t.own_rate, r.rate)) AS value, t.currency, 'computed' AS concept, t.accession,
-         CASE WHEN t.oi IS NULL OR t.pre IS NULL OR t.tax IS NULL THEN {lit(NO_CONCEPT)}
-              WHEN t.own_rate IS NULL AND t.country IS NULL THEN 'no country of incorporation'
-              WHEN t.own_rate IS NULL AND r.rate IS NULL THEN 'no statutory rate for the country and year'
-         END AS reason,
-         jsonb_strip_nulls(jsonb_build_object('operating_income', t.oi::text, 'pretax_income', t.pre::text,
-             'income_tax', t.tax::text, 'tax_rate', COALESCE(t.own_rate, r.rate)::text,
-             'rate_source', CASE WHEN t.own_rate IS NOT NULL THEN 'filed'
-                                 WHEN r.rate IS NOT NULL THEN 'statutory: ' || t.country END)) AS detail
-  FROM taxed t
-  LEFT JOIN rate r ON r.country = t.country AND t.period_end BETWEEN r.valid_from AND r.valid_to"""),
+  SELECT company_key, fiscal_year, line_item, CASE WHEN reason IS NULL THEN value END AS value, currency,
+         concept, accession, reason, detail
+  FROM (
+    SELECT t.company_key, t.fiscal_year, 'operating_income_after_tax' AS line_item,
+           t.oi * (1 - COALESCE(t.own_rate, r.rate)) AS value, t.currency, 'computed' AS concept,
+           NULL::text AS accession,
+           CASE WHEN t.missing THEN {lit(NO_CONCEPT)}
+                WHEN t.own_rate IS NULL AND t.country IS NULL THEN 'no country of incorporation'
+                WHEN t.own_rate IS NULL AND r.rate IS NULL THEN 'no statutory rate for the country and year'
+           END AS reason,
+           jsonb_strip_nulls(jsonb_build_object('operating_income', t.oi_part, 'pretax_income', t.pre_part,
+               'income_tax', t.tax_part, 'tax_rate', COALESCE(t.own_rate, r.rate)::text,
+               'rate_source', CASE WHEN t.own_rate IS NOT NULL THEN 'filed'
+                                   WHEN r.rate IS NOT NULL THEN 'statutory: ' || t.country END)) AS detail
+    FROM taxed t
+    LEFT JOIN rate r ON r.country = t.country AND t.period_end BETWEEN r.valid_from AND r.valid_to) a"""),
         # Invested capital: debt + equity - cash, the three in one currency.
-        ("invested_capital", """
+        ("invested_capital", f"""
   SELECT y.company_key, y.fiscal_year, 'invested_capital' AS line_item,
          CASE WHEN d.currency IS NOT DISTINCT FROM e.currency AND e.currency IS NOT DISTINCT FROM c.currency
               THEN d.value + e.value - c.value END AS value,
-         e.currency, 'computed' AS concept, e.accession, NULL::text AS reason,
-         jsonb_build_object('total_debt', d.value::text, 'book_value', e.value::text, 'cash', c.value::text) AS detail
-  FROM fiscal y
-  LEFT JOIN item d ON d.company_key = y.company_key AND d.fiscal_year = y.fiscal_year AND d.line_item = 'total_debt'
-  LEFT JOIN item e ON e.company_key = y.company_key AND e.fiscal_year = y.fiscal_year AND e.line_item = 'book_value'
-  LEFT JOIN item c ON c.company_key = y.company_key AND c.fiscal_year = y.fiscal_year AND c.line_item = 'cash'"""),
+         e.currency, 'computed' AS concept, NULL::text AS accession,
+         CASE WHEN d.value IS NOT NULL AND e.value IS NOT NULL AND c.value IS NOT NULL
+                   AND (d.currency IS DISTINCT FROM e.currency OR e.currency IS DISTINCT FROM c.currency)
+              THEN {lit(MIXED)} END AS reason,
+         jsonb_build_object('total_debt', {_part("d")}, 'book_value', {_part("e")}, 'cash', {_part("c")}) AS detail
+  FROM fiscal y {_item("d", "total_debt")} {_item("e", "book_value")} {_item("c", "cash")}"""),
         ("series", """
   SELECT * FROM item UNION ALL SELECT * FROM fcf
   UNION ALL SELECT * FROM operating_income_after_tax UNION ALL SELECT * FROM invested_capital"""),
         # A fiscal year that holds two annual periods (the year end moved; ticket 35).
         ("two_ends", f"""
   SELECT company_key, fiscal_year FROM (
-    SELECT DISTINCT company_key, period_end,
-           CAST(CASE WHEN extract(month FROM period_end) >= 6 THEN extract(year FROM period_end)
-                     ELSE extract(year FROM period_end) - 1 END AS bigint) AS fiscal_year
+    SELECT DISTINCT company_key, period_end, {sql.fiscal_year("period_end")} AS fiscal_year
     FROM {facts}
     WHERE taxonomy IN ('us-gaap', 'ifrs-full') AND period_start IS NOT NULL
-      AND period_end - period_start + 1 BETWEEN 364 AND 371) a
+      AND {sql.annual("period_start", "period_end")}) a
   GROUP BY company_key, fiscal_year HAVING count(*) > 1"""),
         # Why an earlier year a measure needs has no figure: a year with an annual period is "missing
         # year"; a year with none is "fiscal year changed" when the year end moved around the gap (the
@@ -259,13 +277,15 @@ def _steps(measures: Measures, formats: dict, lines: str, facts: str) -> tuple[l
                      AND fiscal_year < c.prior ORDER BY fiscal_year DESC LIMIT 1) lo ON true
   LEFT JOIN LATERAL (SELECT fiscal_year, period_end FROM fiscal WHERE company_key = c.company_key
                      AND fiscal_year > c.prior ORDER BY fiscal_year LIMIT 1) hi ON true"""),
-        # One year's numerator over its denominator.
+        # One year's numerator over its denominator. Each null reason in order: the format, a missing
+        # input (its own reason, if it could not be computed), mixed currencies, the denominator. A figure
+        # with no currency (a share count) is never mixed, as the answer key reads it.
         ("ratio", f"""
   SELECT y.company_key, m.measure, y.fiscal_year, 1::bigint AS window_years,
-         CASE {_FORMAT_REASON}
-              WHEN t.reason IS NOT NULL THEN t.reason
-              WHEN t.value IS NULL OR b.value IS NULL THEN {lit(NO_CONCEPT)}
-              WHEN t.currency <> b.currency THEN 'mixed currencies'
+         CASE {_format_reason()}
+              WHEN t.value IS NULL THEN COALESCE(t.reason, {lit(NO_CONCEPT)})
+              WHEN b.value IS NULL THEN COALESCE(b.reason, {lit(NO_CONCEPT)})
+              WHEN t.currency <> b.currency THEN {lit(MIXED)}
               WHEN b.value <= 0 THEN 'denominator zero or negative' END AS null_reason,
          CASE WHEN b.value > 0 THEN t.value / b.value END AS value,
          CASE WHEN b.currency IS NULL THEN t.currency END AS currency,
@@ -276,19 +296,20 @@ def _steps(measures: Measures, formats: dict, lines: str, facts: str) -> tuple[l
   LEFT JOIN series b ON b.company_key = y.company_key AND b.fiscal_year = y.fiscal_year AND b.line_item = m.bottom"""),
         # A return on the average of the year's and the prior year's balance, or on the prior year's.
         ("returned", f"""
-  SELECT company_key, measure, fiscal_year, 1::bigint AS window_years, null_reason,
+  SELECT company_key, measure, fiscal_year, 1::bigint AS window_years,
+         CASE {_format_reason("not_fs", "format")}
+              WHEN top IS NULL THEN COALESCE(top_reason, {lit(NO_CONCEPT)})
+              WHEN balance IS NULL THEN COALESCE(balance_reason, {lit(NO_CONCEPT)})
+              WHEN prior_balance IS NULL THEN COALESCE(prior_reason, gap_reason)
+              WHEN currencies > 1 THEN {lit(MIXED)}
+              WHEN bottom <= 0 THEN 'denominator zero or negative' END AS null_reason,
          CASE WHEN bottom > 0 THEN top / bottom END AS value, NULL::text AS currency, inputs
   FROM (
-    SELECT y.company_key, m.measure, y.fiscal_year, t.value AS top,
+    SELECT y.company_key, m.measure, y.fiscal_year, m.not_fs, f.format,
+           t.value AS top, t.reason AS top_reason, n.value AS balance, n.reason AS balance_reason,
+           p.value AS prior_balance, p.reason AS prior_reason, g.reason AS gap_reason,
            CASE WHEN m.form = 'average' THEN (n.value + p.value) / 2 ELSE p.value END AS bottom,
-           CASE {_FORMAT_REASON}
-                WHEN t.reason IS NOT NULL THEN t.reason
-                WHEN t.value IS NULL OR n.value IS NULL THEN {lit(NO_CONCEPT)}
-                WHEN p.value IS NULL THEN g.reason
-                WHEN (SELECT count(DISTINCT c) FROM (VALUES (t.currency), (n.currency), (p.currency)) v(c)) > 1
-                     THEN 'mixed currencies'
-                WHEN (CASE WHEN m.form = 'average' THEN (n.value + p.value) / 2 ELSE p.value END) <= 0
-                     THEN 'denominator zero or negative' END AS null_reason,
+           (SELECT count(DISTINCT c) FROM (VALUES (t.currency), (n.currency), (p.currency)) v(c)) AS currencies,
            jsonb_build_object('return', {_input("t")}, 'balance', {_input("n")}, 'prior_balance', {_input("p")})
                AS inputs
     FROM fiscal y CROSS JOIN return_def m
@@ -298,16 +319,17 @@ def _steps(measures: Measures, formats: dict, lines: str, facts: str) -> tuple[l
                       AND n.line_item = m.balance
     LEFT JOIN series p ON p.company_key = y.company_key AND p.fiscal_year = y.fiscal_year - 1
                       AND p.line_item = m.balance
-    LEFT JOIN gap g ON g.company_key = y.company_key AND g.prior = y.fiscal_year - 1) r"""),
-        # Compound annual growth over exactly `window_years` years: (end / start)^(1/n) - 1, worked at 40
+    LEFT JOIN gap g ON g.company_key = y.company_key AND g.prior = y.fiscal_year - 1) m"""),
+        # Compound annual growth over exactly `window_years` years: (end / start)^(1/n) - 1. Worked at 40
         # places: at its default, PostgreSQL keeps about 16 digits, short of 10 places on a large rate.
         ("growth", f"""
   SELECT y.company_key, m.measure, y.fiscal_year, m.window_years,
-         CASE WHEN e.value IS NULL THEN {lit(NO_CONCEPT)}
-              WHEN s.value IS NULL THEN g.reason
-              WHEN s.currency <> e.currency THEN 'mixed currencies'
+         CASE WHEN e.value IS NULL THEN COALESCE(e.reason, {lit(NO_CONCEPT)})
+              WHEN s.value IS NULL THEN COALESCE(s.reason, g.reason)
+              WHEN s.currency <> e.currency THEN {lit(MIXED)}
               WHEN s.value <= 0 OR e.value <= 0 THEN 'not meaningful' END AS null_reason,
-         CASE WHEN s.value > 0 AND e.value > 0 THEN exp(ln((e.value / s.value)::numeric(70, 40)) / m.window_years) - 1 END AS value,
+         CASE WHEN s.value > 0 AND e.value > 0
+              THEN exp(ln(round(e.value, 40) / s.value) / m.window_years) - 1 END AS value,
          NULL::text AS currency,
          jsonb_build_object('start', {_input("s")}, 'end', {_input("e")}) AS inputs
   FROM fiscal y CROSS JOIN growth_def m

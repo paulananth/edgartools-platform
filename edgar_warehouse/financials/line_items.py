@@ -104,7 +104,7 @@ def _concept(name, taxonomy: str) -> tuple[str, str]:
     return taxonomy, name
 
 
-def _words(text) -> str:
+def words(text) -> str:
     if not isinstance(text, str) or not _WORDS.fullmatch(text):
         raise Blocked(f"a flag is plain words: {text!r}")
     return text
@@ -137,12 +137,12 @@ def _entry(raw, taxonomy: str, codes: set[str]) -> Entry:
         if as_of not in ("period", "report"):
             raise Blocked(f"as_of is period or report: {as_of!r}")
         if "flag" in raw:
-            flag = _words(raw["flag"])
+            flag = words(raw["flag"])
             if flag not in FLAG_MATCH:
                 raise Blocked(f"a flag with no match type: {flag!r}")
             return Entry(flags=(flag,), concept=_concept(raw["concept"], taxonomy), match=FLAG_MATCH[flag],
                          as_of=as_of)
-        return Entry(flags=(f"kind: {_words(raw['kind'])}",), concept=_concept(raw["concept"], taxonomy),
+        return Entry(flags=(f"kind: {words(raw['kind'])}",), concept=_concept(raw["concept"], taxonomy),
                      as_of=as_of)
     if "computed" in raw and set(raw) <= {"computed", "terms", "flag"}:
         if raw["computed"] not in ("sum", "difference") or not isinstance(raw.get("terms"), list) or not raw["terms"]:
@@ -152,7 +152,7 @@ def _entry(raw, taxonomy: str, codes: set[str]) -> Entry:
             raise Blocked("a computed entry's first term is required: a sum of optional terms alone is never a value")
         if all(t.line_item for t in terms):
             raise Blocked("a computed entry reads at least one fact: it names that fact's filing")
-        return Entry(flags=("computed",) + ((_words(raw["flag"]),) if "flag" in raw else ()),
+        return Entry(flags=("computed",) + ((words(raw["flag"]),) if "flag" in raw else ()),
                      computed=raw["computed"], terms=terms)
     raise Blocked(f"an entry is a concept, {{concept, flag}}, {{concept, kind}} or {{computed, terms, flag}}: {raw!r}")
 
@@ -174,7 +174,7 @@ def parse(body: dict) -> LineItems:
     checks = body.get("larger_total_check") or {}
     if not set(checks) <= codes:
         raise Blocked("larger_total_check names line items")
-    items = LineItems(_words(body["version"]), pin, period, lists, {c: _words(f) for c, f in checks.items()})
+    items = LineItems(words(body["version"]), pin, period, lists, {c: words(f) for c, f in checks.items()})
     items.stages()
     return items
 
@@ -246,7 +246,7 @@ def _steps(items: LineItems, source: str) -> tuple[list[tuple[str, str]], str]:
   SELECT f.company_key, f.taxonomy, f.concept, f.unit, f.currency, f.period_start, f.period_end, f.value,
          f.accession, f.filed, f.form,
          CASE WHEN f.period_start IS NULL THEN 'instant'
-              WHEN f.period_end - f.period_start + 1 BETWEEN 364 AND 371 THEN 'annual' END AS kind
+              WHEN {sql.annual('f.period_start', 'f.period_end')} THEN 'annual' END AS kind
   FROM {source} f"""),
         ("annual", """SELECT * FROM typed_fact WHERE kind = 'annual' AND taxonomy IN ('us-gaap', 'ifrs-full')"""),
         # Each annual report's own period: the annual period it files the most facts for, the later on a tie.
@@ -257,11 +257,10 @@ def _steps(items: LineItems, source: str) -> tuple[list[tuple[str, str]], str]:
   ORDER BY company_key, accession, count(*) DESC, period_end DESC"""),
         # Each fiscal year (Compustat FYEAR: an end in January to May is the previous year's): the latest
         # end an annual report covers as its own year, else the latest end (ticket 35).
-        ("year_end", """
+        ("year_end", f"""
   SELECT DISTINCT ON (a.company_key, a.fiscal_year) a.company_key, a.fiscal_year, a.period_end
   FROM (SELECT DISTINCT company_key, period_end,
-               CAST(CASE WHEN extract(month FROM period_end) >= 6 THEN extract(year FROM period_end)
-                         ELSE extract(year FROM period_end) - 1 END AS bigint) AS fiscal_year
+               {sql.fiscal_year('period_end')} AS fiscal_year
         FROM annual) a
   LEFT JOIN (SELECT DISTINCT company_key, period_end FROM report_end) r
          ON r.company_key = a.company_key AND r.period_end = a.period_end

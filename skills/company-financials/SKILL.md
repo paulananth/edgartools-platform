@@ -167,7 +167,9 @@ Evidence and sources: ticket 38, research 02 section 2.
   not meaningful for financial services, statement format unknown, no country
   of incorporation, no statutory rate for the country and year. A measure
   checks the format first, then a missing input, then mixed currencies, then
-  its denominator. A new reason is added to all three at once.
+  its denominator. A computed input (free cash flow, invested capital) whose parts
+  are in two currencies is missing with the reason "mixed currencies", never
+  "no concept filed". A new reason is added to all three at once.
 - **The statement format and country come from the Company master**, read in
   Python and passed to the SQL as rows (MDM and silver are separate databases).
   A filer with no Company master has no format: a measure that depends on it is

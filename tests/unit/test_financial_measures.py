@@ -32,7 +32,8 @@ def _with(part: str, value) -> dict:
     ("ratios", {"Margin; DROP": ["revenue", "assets"]}, "lower-case words"),
     ("growth", {"series": ["turnover"], "windows": [1]}, "growth reads line items"),
     ("growth", {"series": ["revenue"], "windows": [0]}, "whole number of years"),
-    ("not_for_financial_services", ["gross_margin", "turnover_margin"], "not a measure"),
+    ("not_for_financial_services", ["gross_margin", "turnover_margin"], "not a ratio or return"),
+    ("not_for_financial_services", ["revenue_cagr"], "not a ratio or return"),
 ])
 def test_the_definitions_are_refused_whole_when_one_breaks_its_grammar(part, value, refused):
     with pytest.raises(Blocked, match=refused):

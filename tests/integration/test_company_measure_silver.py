@@ -20,12 +20,12 @@ from tests.integration.test_company_line_item_silver import fact, no_masters
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
 
 FOLDER = files.ROOT / "sources" / "sec.company-facts"
-(GROWING, LOSS, STATUTORY, NO_PLACE, NO_RATE, BANK, UNMASTERED, EUROS, MOVED, TWO_ENDS, GAP) = (
-    f"{n:010d}" for n in range(1, 12))
+(GROWING, LOSS, STATUTORY, NO_PLACE, NO_RATE, BANK, UNMASTERED, EUROS, MOVED, TWO_ENDS, GAP, MIXED_PARTS) = (
+    f"{n:010d}" for n in range(1, 13))
 # Each company's SIC and place of incorporation, as its Company master holds them; UNMASTERED has none.
 COMPANIES = {GROWING: ("3571", "DE"), LOSS: ("3571", "DE"), STATUTORY: ("3571", "DE"), NO_PLACE: ("3571", None),
              NO_RATE: ("3571", "1F"), BANK: ("6022", "DE"), EUROS: ("3571", "DE"), MOVED: ("3571", "DE"),
-             TWO_ENDS: ("3571", "DE"), GAP: ("3571", "DE")}
+             TWO_ENDS: ("3571", "DE"), GAP: ("3571", "DE"), MIXED_PARTS: ("3571", "DE")}
 
 
 def line(company, year, item, value, currency="USD", end=None):
@@ -69,6 +69,14 @@ LINES = [
     *year(TWO_ENDS, 2023, revenue=120),
     *year(GAP, 2021, revenue=100),
     *year(GAP, 2023, revenue=120),
+    # A computed input whose parts are in two currencies: free cash flow, and invested capital.
+    *year(MIXED_PARTS, 2024, revenue=100, ocf=30, total_debt=50, book_value=50, cash=0, operating_income=10,
+          pretax_income=8, income_tax=2),
+    *year(MIXED_PARTS, 2025, revenue=100, ocf=30, total_debt=50, book_value=50, operating_income=10,
+          pretax_income=8, income_tax=2),
+    line(MIXED_PARTS, 2024, "capex", 10, currency="EUR"),
+    line(MIXED_PARTS, 2025, "capex", 10),
+    line(MIXED_PARTS, 2025, "cash", 5, currency="EUR"),
 ]
 FACTS = [fact(TWO_ENDS, "Revenues", 110, "2023-06-30", "2022-07-01"),
          fact(TWO_ENDS, "Revenues", 120, "2023-12-31", "2023-01-01")]
@@ -169,3 +177,14 @@ def test_a_gap_where_the_year_end_moved_is_a_changed_fiscal_year(built):
     assert got(rows, TWO_ENDS, "revenue_cagr", 2023, 1) == (None, "fiscal year changed")
     assert got(rows, GAP, "revenue_cagr", 2023, 1) == (None, "missing year")
     assert got(rows, GAP, "revenue_cagr", 2023, 3) == (None, "missing year")
+
+
+def test_a_computed_input_in_two_currencies_says_so(built):
+    _, _, rows = built
+    assert got(rows, MIXED_PARTS, "fcf_margin", 2024) == (None, "mixed currencies")
+    assert got(rows, MIXED_PARTS, "fcf_margin", 2025) == (Decimal("0.2"), None)
+    assert got(rows, MIXED_PARTS, "fcf_cagr", 2025, 1) == (None, "mixed currencies")  # the start year's
+    assert got(rows, MIXED_PARTS, "roic_beginning", 2025) == (None, "mixed currencies")  # this year's capital
+    fcf = rows[(MIXED_PARTS, "fcf_margin", 2025, 1)]["inputs"]["fcf"]
+    assert (fcf["concept"], fcf["capex"]) == ("computed", {"value": "10.0000000000", "concept": "Invented",
+                                                           "accession": f"{MIXED_PARTS}-25-000001"})

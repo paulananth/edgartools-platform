@@ -3,15 +3,18 @@
 # company_line_item (edgar_warehouse/financials/measures.py) into
 # company_measure: one row per company, measure, fiscal year and window.
 #
-# Each name below is a line item of financial-line-items, or `fcf`: operating
-# cash flow less capital expenditure, computed per year and flagged non-GAAP.
+# Each name below is a line item of financial-line-items, or a value computed
+# per year from them: `fcf` (operating cash flow less capital expenditure,
+# non-GAAP), and ROIC's `operating_income_after_tax` and `invested_capital`.
 # A ratio is null, in this order, when the measure is not meaningful for
-# financial services, when an input is missing ("no concept filed"), when its
-# inputs are in two currencies, or when its denominator is zero or negative.
+# financial services, when an input is missing ("no concept filed", or why it
+# could not be computed), when its inputs are in two currencies, or when its
+# denominator is zero or negative.
 version: measures-2026-10-29.first-build
 
 # Ticket 42: not meaningful for a financial-services filer (SIC 6000-6199,
 # 6300-6411), which presents no gross profit, total debt or current balance.
+# Ratios and returns only: a growth rate compares a series with itself.
 not_for_financial_services:
 - gross_margin
 - debt_to_assets
