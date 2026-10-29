@@ -2,7 +2,7 @@
 
 Priority: 47, tier 3, product value. Map: [Rebuild priorities](../map.md). Moved from `.scratch/company-financials/issues/15-build-measures.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
-Type: task. Status: open. Blocked by: 39, 44, 46. Map: [map](../../company-financials/map.md).
+Type: task. Status: resolved (2026-10-29 18:03 ET): #1223 merged. Blocked by: 39, 44, 46. Map: [map](../../company-financials/map.md).
 
 ## Question
 
@@ -23,5 +23,5 @@ Started 2026-10-29 16:52 ET on `claude/t47-measures` (operator, 2026-10-29: "Yes
 - [x] The wording of "no statutory rate for the country and year" (deferred from 133): the cohort never meets it (0 of 168,360), so not asked; the words stand as the key had them, and an invented filer tests them (2026-10-29 17:28 ET)
 - [x] GoF consult before code (2026-10-29 17:28 ET): leave it (`line_items.py` changed twice since written); one extraction only, the shared SQL text (`financials/sql.py`), now with two callers
 - [x] Three-axis review (Standards, Spec, GoF), findings fixed (2026-10-29 17:39 ET). GoF: leave it. Fixed: (1) a computed input whose parts are in two currencies (free cash flow; invested capital) read "no concept filed" in the SQL and the answer key alike, against the ruling "mixed currencies" (ticket 42): both now say so, and ROIC's after-tax income is empty whenever it has a reason; an integration test covers it (the cohort never meets it: the key's bytes and the cohort's 168,360 equal measures are unchanged); (2) a computed input's trace names each part's value, concept and filing; (3) the growth rate rounded to 40 places before dividing, with no limit on its integer digits; (4) a growth rate refused in the financial-services list; one row per fiscal year; Compustat FYEAR and the annual-period test written once in `financials/sql.py`, used by the line items too; `line_items.words` public. Not changed: "statement format unknown" has its source in the skill (ticket 43: "unknown until Company is mastered"); the cohort comparison stays local (real figures; the repository is public). Tests: 72 pass
-- [ ] PR, CI green, merge
+- [x] PR, CI green, merge: #1223 merged 2026-10-29 18:03 ET, 20 of 20 checks green (squash 2a57f1ee)
 - [x] Learning → skill: `skills/company-financials/SKILL.md`, "Measures": built as SQL over the line items; one list of null reasons and their order; format and country from the Company master; a growth rate at 40 places, and an answer key rounded once (2026-10-29 17:28 ET)
