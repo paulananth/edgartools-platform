@@ -108,10 +108,70 @@ stores (operator, 2026-10-21: "Two proofs, local").
   01 lists none); a lone reported total (`Borrowings`, `LongTermDebt`) carries "computed" as the key
   does. Tests 3 passed
 - [x] PR 1 (configuration): PR, CI, merge (2026-10-28 17:08 ET): #1208 merged, 20 of 20 checks
-- [ ] `company_line_item` built: first present wins per company and annual period, latest
-  copy `is_latest`, fiscal year (Compustat FYEAR), period kind, null with its reason,
-  statement format ("unknown" until Company is mastered), the revenue quality check
-- [ ] Tests: none of research 01 section 5's nine hazards possible; the answer key's
-  line items match (ticket 44)
-- [ ] GoF consult before code; three-axis review; PR, CI, merge
-- [ ] Learning → skill
+- [x] Ruling: how `company_line_item` is built (2026-10-28 20:21 ET): operator, 2026-10-28: "SQL over silver
+  (Recommended)", asked after the engine path proved to need a whole group, count, largest and join language
+  (several engine PRs): one SQL query, generated from `line-items.yaml`, reads silver's `company_fact` in
+  PostgreSQL, and the silver writer lands its rows (its checks still apply); CAGR and the measures are SQL on
+  top; on Snowflake the same query becomes a dbt model. Replaces "Engine step, local" for the line items (the
+  facts' flattening stays the engine's `nest`, PR 2)
+- [x] Decided from the rulings (2026-10-28 20:25 ET), the spec of `company_line_item` (ticket 43's, corrected):
+  one row per company, line item and fiscal year: the latest-filed copy of the chosen concept. Every filed
+  copy stays in `company_fact` (ticket 35's "keep all, latest by default" holds there; a second copy here
+  would repeat it, operator 2026-10-28: "silver must not have duplicate fields"), so `is_latest` goes and
+  CAGR reads one row per year with no filter (operator, 2026-10-28: "do not complecate too much"). Key
+  `[company_key, line_item, fiscal_year]`, never empty (a missing item is a row with an empty value and its
+  reason); `company_key` in place of `cik` (PR 2); `period_start`, `period_end` kept as columns. No
+  `statement_format`: it is the Company master's SIC, the same on every row of a company, so it is read from
+  Company (data-modeling skill, section 6); the measures (ticket 48) read it there. Load mode snapshot
+- [x] Decided (2026-10-28 20:25 ET), two ties the rulings leave open, measured on the 368-company cohort,
+  applied alike in the SQL and the answer key: (1) an annual report filing as many facts for two annual
+  periods (268 reports) covers the later one as its own year; (2) one filed copy in two units (910 copies,
+  149 of them concepts the map reads: a convenience translation, a per-share figure also filed as `pure`)
+  keeps the unit that filing uses most, its reporting currency (ticket 42: "never convert"), then the unit's
+  text. A year's taxonomy had no tie (0)
+- [x] `company_line_item` built (2026-10-28 21:17 ET): `edgar_warehouse/financials/line_items.py` parses the map
+  once and generates the SQL (Compustat FYEAR, the reported year, the year's taxonomy, first present concept,
+  latest copy, exact sums and differences, `first_of`, `optional` and `line_item` terms, the revenue quality
+  check, "no concept filed"); `edgar-warehouse silver line-items` runs it and the silver writer lands the rows;
+  spec `rules/sources/sec.company-facts/silver-company-line-item.yaml`
+- [x] Found (2026-10-28 21:17 ET): as one statement, PostgreSQL guessed each step's rows (257 annual facts for
+  millions) and ran 30 minutes without finishing; each step is now a counted temporary table
+  (`statements()`): the 368-company cohort builds in 14 s. A per-row revenue check in the final select did the
+  same; it is a joined step. `query()` keeps the one-statement form for dbt
+- [x] Found (2026-10-28 21:17 ET): a concept of another taxonomy than the year's (the cover-page shares) is named
+  with its taxonomy, `dei:EntityCommonStockSharesOutstanding`, as the map and the key name it (63 rows)
+- [x] Tests (2026-10-28 21:17 ET): `tests/unit/test_financial_line_items.py` (the map refused whole on a broken
+  entry; none of research 01 section 5's concept hazards 1-6 in the map) and
+  `tests/integration/test_company_line_item_silver.py` (first present, latest copy, quarter never the year,
+  computed with inputs, a line-item term, an optional leg, two units give nothing, a copy in two units, the
+  cover-page concept, FYEAR, the reported year, IFRS with a stray us-gaap fact; hazards 7-9): 20 passed with
+  `test_company_fact_silver.py`. The answer key's rules over the whole cohort
+  (`.scratch/company-financials/line-items/compare_key.py`): 368 companies, 5,134,979 facts, 4,209
+  company-years on both sides, 96,807 line items of 96,807 equal (value, unit, filing, date, flags, taxonomy,
+  period end, concept), 73,567 with a value; 121 revenues flagged by the quality check; 135 s
+- [x] Answer key regenerated with the two ties (2026-10-28 21:17 ET; ticket 44): one company's FY2023 is now its
+  reported October year, not the December 12 months seen only as a 3-fact comparative (its annual report
+  files 28 facts each for October 2023 and 2022): 16 line items and 36 measures of that year move, nothing
+  else; measures with a value 881; local key sha256 `ad2bcf3294c093fc2f455d0aed0662f8443d38c7a16e87f263adebc0794bb427`
+- [x] Three-axis review of PR 3 (2026-10-28 21:24 ET). GoF: leave it (new code, one axis of change; the
+  steps are now (name, body) pairs from the start, not split back from text). Standards: a flag holding a colon
+  would be read by SQLAlchemy as a parameter (colons refused in flag words; the version is checked words; the
+  source must be a table name); position, term, choice and sign are `bigint` (integer rule); the stage test
+  states revenue's stage before gross profit's; the test reuses the module's paths; the named concepts come
+  from the map, not tuple slots. Noted, not changed: `build` calls the writer (one call; the CLI stays thin).
+  Spec: the revenue quality check was never checked independently and compared every concept of the list:
+  it now compares only the list's other totals (unflagged concepts: never an industry kind), the answer key
+  computes it too, and the map's version is renamed `line-items-2026-10-28.revenue-check`; the comparison now
+  also checks every flag, `period_start` of a chosen concept, the currency and the null reason. Rerun: 96,807
+  of 96,807 equal; 52 revenues flagged (121 before the narrowing), as the key flags them; local key sha256
+  `b9fc3feb1e74a67686cbf586259f1be8720f46fff074692cb4cd96a5ed6688db` (flags only; no value or measure moved
+  from `ad2bcf32`). Also noted: a year's taxonomy breaks a tie toward us-gaap (0 ties in the cohort; the key
+  does the same); ticket 43's `period_kind` is dropped (every row is an annual year), recorded there
+- [ ] Found (2026-10-28 21:24 ET), for the operator: the cover-page share count
+  (`dei:EntityCommonStockSharesOutstanding`, flagged "cover-page date") is taken only when dated on the year's
+  end, as the answer key reads it; it is usually dated weeks later, so it fills 63 rows. Whether it should be
+  taken at its own date (the flag's meaning) is a new kind of question, asked after this PR
+- [ ] PR 3: PR, CI, merge
+- [x] Learning → skill (2026-10-28 21:17 ET): `skills/company-financials/SKILL.md`: the line items are SQL over
+  silver, run as counted steps (never timed under `count(*)`); a concept of another taxonomy is named with it;
+  the two ties; `company_line_item`'s one row per year; the statement format read from Company

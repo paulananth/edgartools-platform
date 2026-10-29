@@ -36,6 +36,12 @@ def _handle(args):
         elif args.silver_command == "register":
             result = database.register(engine("SILVER_MIGRATION_DATABASE_URL"), spec_file(args.spec, args.part),
                                        runtime_role=args.runtime_role)
+        elif args.silver_command == "line-items":
+            from edgar_warehouse.financials import line_items
+
+            ids = MdmIds(engine("MDM_DATABASE_URL")) if os.environ.get("MDM_DATABASE_URL") else None
+            silver_engine = engine("SILVER_DATABASE_URL")
+            result = line_items.build(silver_engine, DatabaseSink(silver_engine), ids)
         elif args.silver_command in {"land", "refresh-ids"}:
             ids = MdmIds(engine("MDM_DATABASE_URL")) if os.environ.get("MDM_DATABASE_URL") else None
             sink = DatabaseSink(engine("SILVER_DATABASE_URL"))
@@ -86,6 +92,8 @@ def _commands(parser):
     landed.add_argument("table")
     landed.add_argument("rows", type=Path, help="Flat rows: a .jsonl, .csv or .parquet file")
     landed.set_defaults(handler=_handle)
+    built = commands.add_parser("line-items", help="Build company_line_item from company_fact by line-items.yaml")
+    built.set_defaults(handler=_handle)
     refreshed = commands.add_parser("refresh-ids", help="Fill the MDM ids of rows already landed, from MDM as it is now")
     refreshed.add_argument("table")
     refreshed.set_defaults(handler=_handle)
