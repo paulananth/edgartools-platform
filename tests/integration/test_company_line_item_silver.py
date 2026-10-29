@@ -19,7 +19,7 @@ from edgar_warehouse.silver_writer.writer import land
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
 
 FOLDER = files.ROOT / "sources" / "sec.company-facts"
-US, EU, MARCH = "0000000001", "0000000003", "0000000002"
+US, EU, MARCH, NEXT = "0000000001", "0000000003", "0000000002", "0000000004"
 
 
 def no_masters(source_code, kind, keys):
@@ -80,6 +80,24 @@ FACTS = [
     year_2025(EU, "Revenue", 200, taxonomy="ifrs-full", unit="EUR", accession="0000000003-26-000001"),
     year_2025(EU, "ProfitLoss", 20, taxonomy="ifrs-full", unit="EUR", accession="0000000003-26-000001"),
     year_2025(EU, "Revenues", 999, unit="EUR", accession="0000000003-26-000001"),
+    # Cover-page counts: the amendment of a year's annual report wins (filed later); a count filed in the
+    # next year's report, even dated on this year's end, is never this year's; of two in one report, the later.
+    year_2025(NEXT, "Revenues", 100, accession="0000000004-26-000001"),
+    year_2025(NEXT, "CostOfRevenue", 60, accession="0000000004-26-000001"),
+    fact(NEXT, "EntityCommonStockSharesOutstanding", 7, "2026-01-20", taxonomy="dei", unit="shares",
+         accession="0000000004-26-000001"),
+    year_2025(NEXT, "Revenues", 100, accession="0000000004-26-000002", filed="2026-03-01", form="10-K/A"),
+    fact(NEXT, "EntityCommonStockSharesOutstanding", 9, "2026-02-20", taxonomy="dei", unit="shares",
+         accession="0000000004-26-000002", filed="2026-03-01", form="10-K/A"),
+    fact(NEXT, "Revenues", 120, "2026-12-31", "2026-01-01", accession="0000000004-27-000001", filed="2027-02-01"),
+    fact(NEXT, "CostOfRevenue", 70, "2026-12-31", "2026-01-01", accession="0000000004-27-000001", filed="2027-02-01"),
+    year_2025(NEXT, "Revenues", 100, accession="0000000004-27-000001", filed="2027-02-01"),
+    balance_2025(NEXT, "EntityCommonStockSharesOutstanding", 99, taxonomy="dei", unit="shares",
+                 accession="0000000004-27-000001", filed="2027-02-01"),
+    fact(NEXT, "EntityCommonStockSharesOutstanding", 50, "2027-01-10", taxonomy="dei", unit="shares",
+         accession="0000000004-27-000001", filed="2027-02-01"),
+    fact(NEXT, "EntityCommonStockSharesOutstanding", 51, "2027-01-15", taxonomy="dei", unit="shares",
+         accession="0000000004-27-000001", filed="2027-02-01"),
 ]
 
 
@@ -100,8 +118,8 @@ def built(postgres):
 
 def test_one_row_per_company_line_item_and_fiscal_year(built):
     result, rows = built
-    assert result["inserted"] == len(rows) == 3 * 23
-    assert {(c, y) for c, y, _ in rows} == {(US, 2025), (MARCH, 2024), (EU, 2025)}
+    assert result["inserted"] == len(rows) == 5 * 23
+    assert {(c, y) for c, y, _ in rows} == {(US, 2025), (MARCH, 2024), (EU, 2025), (NEXT, 2025), (NEXT, 2026)}
     dps = rows[(US, 2025, "dps")]
     assert (dps["value"], dps["null_reason"], dps["period_end"].isoformat()) == (None, "no concept filed", "2025-12-31")
     assert {r["rule_version"] for r in rows.values()} == {line_items.load().version}
@@ -143,3 +161,13 @@ def test_the_fiscal_year_and_its_taxonomy(built):
     eu, profit = rows[(EU, 2025, "revenue")], rows[(EU, 2025, "net_income")]
     assert (eu["taxonomy"], eu["concept"], eu["value"], eu["currency"]) == ("ifrs-full", "Revenue", Decimal(200), "EUR")
     assert (profit["concept"], profit["flags"]) == ("ProfitLoss", ["includes NCI"])
+
+
+def test_a_cover_page_count_is_its_own_annual_report_s(built):
+    _, rows = built
+    amended, next_year = rows[(NEXT, 2025, "shares_outstanding")], rows[(NEXT, 2026, "shares_outstanding")]
+    assert (amended["value"], amended["accession"], amended["inputs"][0]["date"]) == (
+        Decimal(9), "0000000004-26-000002", "2026-02-20")
+    assert (next_year["value"], next_year["inputs"][0]) == (Decimal(51), {
+        "concept": "dei:EntityCommonStockSharesOutstanding", "accession": "0000000004-27-000001",
+        "value": "51.0000000000", "date": "2027-01-15"})

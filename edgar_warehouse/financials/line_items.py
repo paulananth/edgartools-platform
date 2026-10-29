@@ -36,6 +36,8 @@ FLAG_MATCH = {
     "continuing operations": "narrow", "excludes amortization": "narrow",
     "excludes amortisation": "narrow", "cash only": "narrow", "cover-page date": "close",
 }
+# The latest-filed copy first; within one filing, its most-used unit (its reporting currency), then the unit's text.
+_LATEST = 'f.filed DESC, f.accession DESC, u.uses DESC, f.unit COLLATE "C"'
 _CONCEPT = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,199}")
 _WORDS = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ,.()-]{0,99}")
 
@@ -164,6 +166,8 @@ def parse(body: dict) -> LineItems:
         if set(raw) != set(TAXONOMIES):
             raise Blocked(f"{code} lists {TAXONOMIES} both")
         lists[code] = {t: tuple(_entry(e, t, codes) for e in raw[t]) for t in TAXONOMIES}
+        if period[code] != "instant" and any(e.as_of == "report" for lst in lists[code].values() for e in lst):
+            raise Blocked(f"{code}: as_of report reads a balance at its own date, so only an instant line item")
     checks = body.get("larger_total_check") or {}
     if not set(checks) <= codes:
         raise Blocked("larger_total_check names line items")
@@ -289,7 +293,7 @@ def _steps(items: LineItems, source: str) -> tuple[list[tuple[str, str]], str]:
         # filing uses most (its reporting currency; ticket 42 never converts), then the unit's text.
         ("filing_unit", """SELECT company_key, accession, unit, count(*) AS uses FROM typed_fact GROUP BY 1, 2, 3"""),
         # Each named concept's latest-filed copy for a year's exact period.
-        ("latest_copy", """
+        ("latest_copy", f"""
   SELECT DISTINCT ON (f.company_key, y.fiscal_year, f.taxonomy, f.concept, f.kind)
          y.fiscal_year, f.company_key, f.taxonomy, f.concept, f.kind, f.unit, f.currency, f.period_start,
          f.value, f.accession, f.filed
@@ -298,10 +302,9 @@ def _steps(items: LineItems, source: str) -> tuple[list[tuple[str, str]], str]:
   JOIN year_end y ON y.company_key = f.company_key AND y.period_end = f.period_end
   JOIN filing_unit u ON u.company_key = f.company_key AND u.accession = f.accession AND u.unit = f.unit
   WHERE f.kind IS NOT NULL
-  ORDER BY f.company_key, y.fiscal_year, f.taxonomy, f.concept, f.kind, f.filed DESC, f.accession DESC,
-           u.uses DESC, f.unit COLLATE "C", f.period_start DESC"""),
+  ORDER BY f.company_key, y.fiscal_year, f.taxonomy, f.concept, f.kind, {_LATEST}, f.period_start DESC"""),
         # Each named concept's copy filed in the annual report covering a year as its own, at its own date.
-        ("report_copy", """
+        ("report_copy", f"""
   SELECT DISTINCT ON (f.company_key, y.fiscal_year, f.taxonomy, f.concept, f.kind)
          y.fiscal_year, f.company_key, f.taxonomy, f.concept, f.kind, f.unit, f.currency, f.period_end,
          f.value, f.accession, f.filed
@@ -311,8 +314,7 @@ def _steps(items: LineItems, source: str) -> tuple[list[tuple[str, str]], str]:
   JOIN fiscal y ON y.company_key = f.company_key AND y.period_end = r.period_end
   JOIN filing_unit u ON u.company_key = f.company_key AND u.accession = f.accession AND u.unit = f.unit
   WHERE f.kind IS NOT NULL
-  ORDER BY f.company_key, y.fiscal_year, f.taxonomy, f.concept, f.kind, f.filed DESC, f.accession DESC,
-           u.uses DESC, f.unit COLLATE "C", f.period_end DESC"""),
+  ORDER BY f.company_key, y.fiscal_year, f.taxonomy, f.concept, f.kind, {_LATEST}, f.period_end DESC"""),
         ("direct", """
   SELECT y.company_key, y.fiscal_year, e.line_item, e.position, c.value, c.unit, c.currency, c.period_start,
          -- a concept of another taxonomy than the year's names it, as the map does (dei:...)
@@ -326,7 +328,7 @@ def _steps(items: LineItems, source: str) -> tuple[list[tuple[str, str]], str]:
   SELECT y.company_key, y.fiscal_year, e.line_item, e.position, c.value, c.unit, c.currency, NULL::date,
          CASE WHEN c.taxonomy = y.taxonomy THEN c.concept ELSE c.taxonomy || ':' || c.concept END,
          c.accession, c.filed, e.flags,
-         jsonb_build_array(jsonb_build_object('concept', c.concept, 'accession', c.accession,
+         jsonb_build_array(jsonb_build_object('concept', c.taxonomy || ':' || c.concept, 'accession', c.accession,
                                               'value', c.value::text, 'date', c.period_end::text))
   FROM fiscal y JOIN entry e ON e.taxonomy = y.taxonomy AND e.as_of = 'report'
   JOIN report_copy c ON c.company_key = y.company_key AND c.fiscal_year = y.fiscal_year

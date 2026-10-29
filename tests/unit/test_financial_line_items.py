@@ -42,10 +42,16 @@ def _with(code: str, entries: list) -> dict:
     ("revenue", ["Revenues'; DROP TABLE x"], "not a concept name"),
     ("revenue", [{"computed": "product", "terms": ["Revenues"]}], "sum or a difference"),
     ("revenue", [{"concept": "Revenues", "flag": "cover-page date", "as_of": "filing"}], "period or report"),
+    ("revenue", [{"concept": "Revenues", "kind": "bank", "as_of": "report"}], "only an instant line item"),
 ])
 def test_the_map_is_refused_whole_when_an_entry_breaks_its_grammar(code, entries, refused):
     with pytest.raises(Blocked, match=refused):
         line_items.parse(_with(code, entries))
+
+
+def test_a_balance_may_be_read_from_the_year_s_own_report():
+    entries = line_items.parse(_with("assets", ["Assets", {"concept": "Liabilities", "kind": "bank", "as_of": "report"}]))
+    assert [e.as_of for e in entries.lists["assets"]["us-gaap"]] == ["period", "report"]
 
 
 def test_none_of_research_01_s_concept_hazards_is_in_the_map():

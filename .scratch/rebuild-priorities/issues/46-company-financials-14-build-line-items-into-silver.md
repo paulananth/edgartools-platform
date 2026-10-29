@@ -179,6 +179,12 @@ stores (operator, 2026-10-21: "Two proofs, local").
   query 86 s. Key: 10 line items and 6 measures of the three cases move (a cover count dated on the year end
   but filed outside that year's own report no longer counts); measures with a value 879; local key sha256
   `d54a23a7dbaadcd4b403dd93c6ff8f0e9f8cb43adce4c4e13aac5a6dcd72554d`. Tests 16 passed
+- [x] Three-axis review of PR 4 (2026-10-29 06:23 ET). GoF: leave it (two `as_of` values, one change). Standards:
+  no violation; the two copy steps now share one ordering (`_LATEST`). Spec: conforms; `as_of: report` is now
+  refused on a duration line item, `inputs` names the concept as the row does (`dei:...`), and the tests cover
+  an amended report winning, a count filed in the next year's report never counting (even dated on the year
+  end), and the later of two counts in one report; the skill says an amendment wins and a Part III amendment
+  covers no year. Rerun: 96,807 of 96,807 equal; tests 24 passed
 - [ ] PR 4 (the cover-page share count): PR, CI, merge
 - [x] PR 3: PR, CI, merge (2026-10-28 21:38 ET): #1214 merged, 20 of 20 checks
 - [x] Learning → skill (2026-10-28 21:17 ET): `skills/company-financials/SKILL.md`: the line items are SQL over
