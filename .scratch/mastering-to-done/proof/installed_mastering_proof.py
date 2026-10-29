@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections import Counter
 import shutil
 import signal
 import subprocess
@@ -51,10 +52,8 @@ from sqlalchemy import create_engine, text
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.bookkeeping.clean.database import grant_profile
 from edgar_warehouse.bookkeeping.clean.destinations import migrate_guard
-from collections import Counter
-
 from edgar_warehouse.mdm.clean import inspection
-from edgar_warehouse.mdm.clean.record_reads import for_connection
+from edgar_warehouse.mdm.clean.record_reads import RecordReader, for_connection
 from edgar_warehouse.mdm.clean.store import digest, migrate, register_policy
 from edgar_warehouse.rules import files
 from tests.engine.test_data_skill_bundle_postgres import _run, _stores, installed  # noqa: F401
@@ -67,7 +66,7 @@ import importlib.util
 _OLD = importlib.util.spec_from_file_location(
     "census_proof", Path(__file__).resolve().parents[3] / ".planning/workstreams/whole-source-census/installed_proof.py")
 old = importlib.util.module_from_spec(_OLD)
-_OLD.loader.exec_module(old)  # counts, bindings, the GLEIF inputs and steps: unchanged from 2026-10-10
+_OLD.loader.exec_module(old)  # the GLEIF inputs and steps, unchanged from 2026-10-10; counts are read here
 
 WORK = Path(os.environ.get("COMPANY_PROOF_WORK", "~/.local/share/edgartools/clean-mdm/proving/cm27-raw")).expanduser()
 CAPTURE = Path("~/.local/share/edgartools/clean-mdm/captures/sec.submissions.company/all-76230").expanduser()
@@ -210,16 +209,23 @@ def test_installed_company_mastering(installed, databases, tmp_path):  # noqa: F
         """The store's counts and which record is bound to which master, read from governed storage
         (since #1152 MDM's records live there, not in the `mdm` tables the 2026-10-10 counts read)."""
         found = inspection.counts(mdm_reader)
-        stage, bound, groups = Counter(), Counter(), {}
+        stage, bound, groups, companies = Counter(), Counter(), {}, 0
         with mdm_reader.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
             reader = for_connection(conn)
+            # Open Companies as on 2026-10-10: current Company entities, an alias left out.
+            for page in inspection._pages(reader.adapter, conn, "entity"):
+                for _, row in page:
+                    body = RecordReader._body(row)
+                    companies += body.get("kind") == "company" and body.get("status") != "alias"
             for page in inspection._pages(reader.adapter, conn, "source-record", lookup=True):
-                for subject, body in reader.current([key for key, _ in page]).items():
+                pointers = reader.current([key for key, _ in page])
+                reader._readings(pointers)  # each pointer checked against its retained reading
+                for subject, body in pointers.items():
                     stage[f"{body['source_code']}:{body['kind']}"] += 1
                     if body.get("entity_id"):
                         bound[body["source_code"]] += 1
                         groups.setdefault(body["entity_id"], []).append(subject)
-        return ({"companies_open": found["masters"].get("company", 0), "stage_records": dict(sorted(stage.items())),
+        return ({"companies_open": companies, "stage_records": dict(sorted(stage.items())),
                  "stage_bound": dict(sorted(bound.items())), "open_reviews": found["open_reviews"],
                  "decisions": found["decisions"]},
                 digest(sorted(sorted(g) for g in groups.values())))
@@ -334,6 +340,8 @@ def test_installed_company_mastering(installed, databases, tmp_path):  # noqa: F
     assert report["second_pass_changed_nothing"]
     # Only changed data (017): merging the same records again queues no publication work.
     assert second_writes.get("outbox") == first_writes.get("outbox"), (first_writes, second_writes)
+    for key in ("batch_change", "current_records_md5"):  # the history and the current records, unchanged
+        assert second_writes.get(key) == first_writes.get(key), key
     assert changed_data["named_again"] == 0 and changed_data["runs_started_again"] == 0, changed_data
     assert changed_data["file_processed_events"] == changed_data["named_first"], changed_data
     if whole:
@@ -341,10 +349,12 @@ def test_installed_company_mastering(installed, databases, tmp_path):  # noqa: F
         assert first["stage_bound"].get(SEC) == 6414
         if only != "sec":
             assert first["companies_open"] == 6414 and first["stage_bound"].get(GLEIF) == 3052
-            # Reported, not asserted: the 2026-10-09 digest was taken over the `mdm` tables' subjects.
+            assert first["stage_records"].get(f"{GLEIF}:company") == 3716, first["stage_records"]
+            # Governed storage names a record's subject as the `mdm` tables did: the digest still compares.
+            assert report["bindings_equal_checkout_replay"] is True
             if PIN:
                 replay = PIN["after_first_pass"]
-                for key in ("companies_open", "stage_records", "stage_bound", "decisions_by_rule"):
+                for key in ("companies_open", "stage_records", "stage_bound"):
                     assert first[key] == replay[key], key
                 # The replay counted the records GLEIF cannot bind apart; here they are open reviews.
                 assert first["open_reviews"] == {**replay["open_reviews"], **PIN["gleif_set_aside"]}
