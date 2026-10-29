@@ -62,9 +62,32 @@ open branch.
   32's baseline
 - [ ] ~~The census consumers read the configured target's output; the Python construction retired~~ moved to
   ticket 148
-- [ ] The installed population proof on today's `main`: 6,414 Companies and 3,052 CIK+LEI from an empty store,
-  a second pass changing nothing, recovery (runs after ticket 120's loads, which hold the machine until about
-  13:00 ET)
+- [x] The proof's inputs on today's `main`, and its expected answers written before the run (2026-10-29 18:27 ET):
+  the harness is `.scratch/mastering-to-done/proof/installed_mastering_proof.py` (2026-10-12, kept current to
+  #1066): each of the 14 `cm27-raw` document lists (6,726 Company documents) prepared by the installed `mdm
+  prepare-clean-company` and merged by installed workers, then GLEIF, then a second pass. The 10-10 inputs it
+  borrowed are gone (`cm27/bundles`, the GLEIF row cache, the checkout replay's binding pin); the GLEIF scope is
+  rebuilt exactly: each cohort filer's current-name key (ticket 148's configured reading) looked up in the
+  recorded census gives 3,755 LEIs, the 10-10 proof's number (`cm27-raw/gleif-rows-scope-20261029.jsonl`, local).
+  Rule changes since 10-12 (16 commits on the Company, GLEIF and SEC submissions rules) leave the expected counts
+  as they were: ticket 97's issuer rule acts only on records an N-PORT holding flags, and the proof supplies
+  that set empty. Expected: 6,726 documents prepared; 6,414 SEC records staged and bound (312 wait, classification
+  deferred); 6,414 Companies; 3,052 GLEIF records bound; the second pass changes nothing; the recovery's killed
+  worker's item finished by a later attempt. The binding-pin comparison: its file is gone, but its digest is in the 10-10 harness (`CHECKOUT_BINDINGS`); reported, not asserted, since it was taken over the `mdm` tables' subjects
+- [x] The harness on today's storage (2026-10-29 18:47 ET): MDM's records live in governed storage since #1152, so
+  the 10-12 harness's counts read the empty `mdm` tables and its verifier could not read the storage's tables. A
+  one-bundle run (bundle 1-1) passed with every count 0 and proved nothing; the harness now grants the verifier the
+  `public` schema (as today's installed test does) and counts through the record reader (`inspection.counts` and
+  each source record's current pointer). Rerun on bundle 1-1: 512 documents, 486 Companies bound, 26 classification
+  deferred, the killed worker's item finished by attempt 2, a second pass unchanged
+- [x] The installed population proof on today's `main` (2026-10-29 19:23 ET; 35 min, 18:48-19:23 ET), every expected answer met:
+  14 bundles, 6,726 documents prepared by the installed `mdm prepare-clean-company`; **6,414 Companies** from an empty
+  store; **6,414 SEC records bound** (312 wait, classification deferred); 3,716 GLEIF records staged, **3,052 bound**
+  (664 wait for a binding, 39 unsupported identity kind); 9,466 bind decisions; the recovery's killed merge worker's
+  item finished by attempt 2; prepared again, 0 documents named and 0 runs started, 6,726 recorded processed; the
+  **second pass changed nothing** (the current records' digest, the outbox's 63 and the history's 10,529 equal); and
+  the record-to-master bindings **equal the 2026-10-09 checkout replay's digest** (`9216cc18...`). Report local only
+  (it holds no record values, but the run's identifiers stay on this machine)
 - [ ] Built, reviewed (Standards, Spec, GoF), PR, CI green, merged
 - [ ] 32's two deferred parts re-opened on this ticket's merge
-- [ ] Learning → skill
+- [x] Learning → skill (2026-10-29 19:23 ET): `skills/mdm-engineering/SKILL.md`, "Independent installed qualification": count a store through its record reader, never its tables; a proof whose counts are all zero proved nothing

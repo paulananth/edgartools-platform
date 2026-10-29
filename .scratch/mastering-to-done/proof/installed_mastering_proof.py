@@ -51,7 +51,11 @@ from sqlalchemy import create_engine, text
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.bookkeeping.clean.database import grant_profile
 from edgar_warehouse.bookkeeping.clean.destinations import migrate_guard
-from edgar_warehouse.mdm.clean.store import migrate, register_policy
+from collections import Counter
+
+from edgar_warehouse.mdm.clean import inspection
+from edgar_warehouse.mdm.clean.record_reads import for_connection
+from edgar_warehouse.mdm.clean.store import digest, migrate, register_policy
 from edgar_warehouse.rules import files
 from tests.engine.test_data_skill_bundle_postgres import _run, _stores, installed  # noqa: F401
 from tests.integration.test_configured_bookkeeping_postgres import databases  # noqa: F401
@@ -124,6 +128,8 @@ def test_installed_company_mastering(installed, databases, tmp_path):  # noqa: F
         register_dataset(conn, GLEIF, "1", files.mdm_contract("gleif", GLEIF))
         conn.exec_driver_sql("GRANT USAGE ON SCHEMA mdm TO bk_verifier")
         conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA mdm TO bk_verifier")
+        # Governed storage keeps its tables in `public` (since #1152), as the installed test grants them.
+        conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA public TO bk_verifier")
         assert conn.execute(text("SELECT count(*) FROM mdm.stage_record")).scalar() == 0
     mdm_reader = create_engine(mdm_admin.url.set(username="bk_verifier", password="test"))
     old.say(stage="provisioned", policy=policy, bundles=names)
@@ -201,15 +207,28 @@ def test_installed_company_mastering(installed, databases, tmp_path):  # noqa: F
         assert json.loads(cli("bookkeeping", "status", run_id))["run"]["state"] == "complete"
 
     def snapshot() -> tuple[dict, str]:
-        with mdm_reader.connect() as conn:
-            return old.counts(conn), old.bindings(conn)
+        """The store's counts and which record is bound to which master, read from governed storage
+        (since #1152 MDM's records live there, not in the `mdm` tables the 2026-10-10 counts read)."""
+        found = inspection.counts(mdm_reader)
+        stage, bound, groups = Counter(), Counter(), {}
+        with mdm_reader.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
+            reader = for_connection(conn)
+            for page in inspection._pages(reader.adapter, conn, "source-record", lookup=True):
+                for subject, body in reader.current([key for key, _ in page]).items():
+                    stage[f"{body['source_code']}:{body['kind']}"] += 1
+                    if body.get("entity_id"):
+                        bound[body["source_code"]] += 1
+                        groups.setdefault(body["entity_id"], []).append(subject)
+        return ({"companies_open": found["masters"].get("company", 0), "stage_records": dict(sorted(stage.items())),
+                 "stage_bound": dict(sorted(bound.items())), "open_reviews": found["open_reviews"],
+                 "decisions": found["decisions"]},
+                digest(sorted(sorted(g) for g in groups.values())))
 
     def writes() -> dict:
-        """Rows each MDM table and the change journal hold: what a pass wrote."""
-        with mdm_reader.connect() as conn:
-            found = {t: conn.execute(text(f"SELECT count(*) FROM mdm.{t}")).scalar() for t in (
-                "batch", "source_reading", "decision", "company", "current_record", "outbox", "checkpoint",
-                "match_proposal", "set_aside_record")}
+        """What a pass wrote: governed storage's change history, outbox and current records, and the
+        change journal's events."""
+        found = inspection.counts(mdm_reader)
+        found = {**found["changes"], "current_records_md5": found["current_records_md5"]}
         journal = create_engine(databases.admin.url.set(database=databases.ledger.engine.url.database))
         with journal.connect() as conn:
             found["journal_events"] = conn.execute(text("SELECT count(*) FROM journal.event")).scalar()
@@ -314,16 +333,15 @@ def test_installed_company_mastering(installed, databases, tmp_path):  # noqa: F
     old.say(stage="report", **report)
     assert report["second_pass_changed_nothing"]
     # Only changed data (017): merging the same records again queues no publication work.
-    assert second_writes["outbox"] == first_writes["outbox"], (first_writes, second_writes)
+    assert second_writes.get("outbox") == first_writes.get("outbox"), (first_writes, second_writes)
     assert changed_data["named_again"] == 0 and changed_data["runs_started_again"] == 0, changed_data
     assert changed_data["file_processed_events"] == changed_data["named_first"], changed_data
     if whole:
         assert first["stage_records"].get(f"{SEC}:company") == 6414, first["stage_records"]
         assert first["stage_bound"].get(SEC) == 6414
-        assert report["bindings_equal_checkout_replay"] in (True, None)
         if only != "sec":
             assert first["companies_open"] == 6414 and first["stage_bound"].get(GLEIF) == 3052
-            assert report["bindings_equal_checkout_replay"] is True
+            # Reported, not asserted: the 2026-10-09 digest was taken over the `mdm` tables' subjects.
             if PIN:
                 replay = PIN["after_first_pass"]
                 for key in ("companies_open", "stage_records", "stage_bound", "decisions_by_rule"):
@@ -359,7 +377,8 @@ def kill_and_recover(python, entry, worker, root, run_id, items, snapshot) -> di
 
 def _gleif(old, store, tmp_path, policy) -> tuple[dict, int]:
     """The 2026-10-10 GLEIF units: the Level 1 reading with its approved scope filled."""
-    (cache,) = Path("~/.local/share/edgartools/clean-mdm/proving/cm27").expanduser().glob("gleif-rows-*.jsonl")
+    # The approved scope's LEIs: the 2026-10-10 row cache is gone; the scope rebuilt from the census (3,755) is in WORK.
+    (cache,) = WORK.glob("gleif-rows-*.jsonl")
     leis = sorted({json.loads(line)[1]["LEI"]["$"] for line in cache.open()})
     contract = files.load(files.ROOT / "sources/gleif/level1-json.yaml")
     contract["read"]["references"]["approved_scope"] = {lei: {"selected": True} for lei in leis}
