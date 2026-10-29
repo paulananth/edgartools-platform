@@ -2,7 +2,7 @@
 
 Priority: 46, tier 3, product value. Map: [Rebuild priorities](../map.md). Moved from `.scratch/company-financials/issues/14-build-line-items-into-silver.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
-Type: task. Status: in progress (Claude, branch `claude/t46-line-item-codes`). Blocked by: 38, 42, 43, 45. Map: [map](../../company-financials/map.md).
+Type: task. Status: resolved (2026-10-29 06:39 ET). Blocked by: 38, 42, 43, 45. Map: [map](../../company-financials/map.md).
 
 ## Question
 
@@ -185,7 +185,7 @@ stores (operator, 2026-10-21: "Two proofs, local").
   an amended report winning, a count filed in the next year's report never counting (even dated on the year
   end), and the later of two counts in one report; the skill says an amendment wins and a Part III amendment
   covers no year. Rerun: 96,807 of 96,807 equal; tests 24 passed
-- [ ] PR 4 (the cover-page share count): PR, CI, merge
+- [x] PR 4 (the cover-page share count): PR, CI, merge (2026-10-29 06:39 ET): #1215 merged, 20 of 20 checks
 - [x] PR 3: PR, CI, merge (2026-10-28 21:38 ET): #1214 merged, 20 of 20 checks
 - [x] Learning → skill (2026-10-28 21:17 ET): `skills/company-financials/SKILL.md`: the line items are SQL over
   silver, run as counted steps (never timed under `count(*)`); a concept of another taxonomy is named with it;
