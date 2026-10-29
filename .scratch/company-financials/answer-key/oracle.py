@@ -58,7 +58,7 @@ LISTS = {
         "diluted_shares": ["WeightedAverageNumberOfDilutedSharesOutstanding",
                            "WeightedAverageNumberOfShareOutstandingBasicAndDiluted"],
         "shares_outstanding": ["CommonStockSharesOutstanding",
-                               ("flag", "dei:EntityCommonStockSharesOutstanding", "cover-page date")],
+                               ("cover", "dei:EntityCommonStockSharesOutstanding", "cover-page date")],
         "gross_profit": ["GrossProfit", ("computed", "revenue_less_cost")],
         "operating_income": ["OperatingIncomeLoss"],
         "total_debt": [("computed", "us_debt")],
@@ -95,7 +95,7 @@ LISTS = {
         "assets": ["Assets"],
         "diluted_shares": ["AdjustedWeightedAverageShares"],
         "shares_outstanding": ["NumberOfSharesOutstanding",
-                               ("flag", "dei:EntityCommonStockSharesOutstanding", "cover-page date")],
+                               ("cover", "dei:EntityCommonStockSharesOutstanding", "cover-page date")],
         "gross_profit": ["GrossProfit", ("computed", "ifrs_revenue_less_cost")],
         "operating_income": ["ProfitLossFromOperatingActivities"],
         "total_debt": [("computed", "ifrs_debt")],
@@ -215,7 +215,10 @@ class Company:
                             ends.add(f["end"])
                             if (f.get("form") or "").split("/")[0] in ANNUAL_REPORTS:
                                 per_report.setdefault(f["accn"], Counter())[f["end"]] += 1
-        reported = {max(counts, key=lambda end: (counts[end], end)) for counts in per_report.values()}
+        # Each annual report's own year end (operator, 2026-10-29: a cover-page figure is the one filed in
+        # the year's own annual report, at its own date: "Annual report's cover (Recommended)").
+        self.report_end = {accn: max(counts, key=lambda end: (counts[end], end)) for accn, counts in per_report.items()}
+        reported = set(self.report_end.values())
         years: dict[int, dict] = {}
         for end in sorted(ends):
             year = fiscal_year(end)
@@ -282,6 +285,23 @@ def item(company: Company, year: int, name: str) -> dict:
         return {"value": chosen["val"], "unit": chosen["unit"], "concept": concept, "accn": chosen["accn"],
                 "start": chosen["start"],
                 "filed": chosen["filed"], "flags": [f for f in (flag, kind and f"kind: {kind}") if f]}
+
+    def cover(concept, flag):
+        """The concept's copy filed in the annual report covering this year as its own, at its own date."""
+        tax, name_ = ("dei", concept[4:]) if concept.startswith("dei:") else (taxonomy, concept)
+        copies = [{"concept": concept, "unit": unit, "val": str(f["val"]), "filed": f["filed"], "accn": f["accn"],
+                   "date": f["end"]}
+                  for unit, f in company.copies(tax, name_)
+                  if not f.get("start") and company.report_end.get(f["accn"]) == end]
+        copies.sort(key=lambda c: c["date"], reverse=True)
+        copies.sort(key=lambda c: c["unit"])
+        copies.sort(key=lambda c: (c["filed"], c["accn"], company.used[c["accn"]][c["unit"]]), reverse=True)
+        tried.append({"concept": concept, "copies": copies, "filed_in_the_year_s_annual_report": True})
+        if not copies:
+            return None
+        chosen = copies[0]
+        return {"value": chosen["val"], "unit": chosen["unit"], "concept": concept, "accn": chosen["accn"],
+                "start": None, "filed": chosen["filed"], "date": chosen["date"], "flags": [flag]}
 
     def get(concept):
         copies = company.found(taxonomy, concept, end, instant)
@@ -355,6 +375,8 @@ def item(company: Company, year: int, name: str) -> dict:
             got = computed(entry_spec[1])
         elif entry_spec[0] == "flag":
             got = first(entry_spec[1], flag=entry_spec[2])
+        elif entry_spec[0] == "cover":
+            got = cover(entry_spec[1], entry_spec[2])
         else:
             got = first(entry_spec[1], kind=entry_spec[2])
         if got:

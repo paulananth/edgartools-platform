@@ -41,6 +41,7 @@ def _with(code: str, entries: list) -> dict:
     ("revenue", [{"concept": "Revenues", "flag": "a new flag"}], "no match type"),
     ("revenue", ["Revenues'; DROP TABLE x"], "not a concept name"),
     ("revenue", [{"computed": "product", "terms": ["Revenues"]}], "sum or a difference"),
+    ("revenue", [{"concept": "Revenues", "flag": "cover-page date", "as_of": "filing"}], "period or report"),
 ])
 def test_the_map_is_refused_whole_when_an_entry_breaks_its_grammar(code, entries, refused):
     with pytest.raises(Blocked, match=refused):

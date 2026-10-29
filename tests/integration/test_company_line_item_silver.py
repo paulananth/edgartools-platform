@@ -65,8 +65,11 @@ FACTS = [
     # Cash: one copy filed in two units keeps the unit its filing uses most.
     balance_2025(US, "CashAndCashEquivalentsAtCarryingValue", 70),
     balance_2025(US, "CashAndCashEquivalentsAtCarryingValue", 65, unit="EUR"),
-    # Shares outstanding: the cover-page concept, flagged.
-    balance_2025(US, "EntityCommonStockSharesOutstanding", 7, taxonomy="dei", unit="shares"),
+    # Shares outstanding: the cover-page count of the year's own annual report, at its own date, flagged;
+    # never one filed in another form.
+    fact(US, "EntityCommonStockSharesOutstanding", 7, "2026-01-20", taxonomy="dei", unit="shares"),
+    fact(US, "EntityCommonStockSharesOutstanding", 8, "2026-04-20", taxonomy="dei", unit="shares",
+         accession="0000000001-26-000005", filed="2026-04-30", form="10-Q"),
     # A year ending in March is the previous year's (Compustat FYEAR); the annual
     # report's own year wins over a later period seen only in another form.
     fact(MARCH, "Revenues", 40, "2025-03-31", "2024-04-01", accession="0000000002-25-000001", filed="2025-05-01"),
@@ -116,6 +119,7 @@ def test_the_first_present_concept_s_latest_copy_wins(built):
     assert (cash["value"], cash["unit"], cash["currency"], cash["period_start"]) == (Decimal(70), "USD", "USD", None)
     assert (shares["value"], shares["concept"], shares["flags"]) == (
         Decimal(7), "dei:EntityCommonStockSharesOutstanding", ["cover-page date"])
+    assert shares["inputs"][0]["date"] == "2026-01-20" and shares["period_end"].isoformat() == "2025-12-31"
 
 
 def test_computed_values_are_exact_and_name_their_inputs(built):

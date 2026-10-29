@@ -55,6 +55,7 @@ class Entry:
     flags: tuple[str, ...]
     concept: tuple[str, str] | None = None
     match: str = "close"
+    as_of: str = "period"  # or "report": the copy filed in the year's own annual report, at its own date
     computed: str | None = None
     terms: tuple[Term, ...] = ()
 
@@ -126,13 +127,18 @@ def _entry(raw, taxonomy: str, codes: set[str]) -> Entry:
         return Entry(flags=(), concept=_concept(raw, taxonomy))
     if not isinstance(raw, dict):
         raise Blocked(f"an entry is a concept or a mapping: {raw!r}")
-    if "concept" in raw and set(raw) in ({"concept", "flag"}, {"concept", "kind"}):
+    if "concept" in raw and set(raw) - {"as_of"} in ({"concept", "flag"}, {"concept", "kind"}):
+        as_of = raw.get("as_of", "period")
+        if as_of not in ("period", "report"):
+            raise Blocked(f"as_of is period or report: {as_of!r}")
         if "flag" in raw:
             flag = _words(raw["flag"])
             if flag not in FLAG_MATCH:
                 raise Blocked(f"a flag with no match type: {flag!r}")
-            return Entry(flags=(flag,), concept=_concept(raw["concept"], taxonomy), match=FLAG_MATCH[flag])
-        return Entry(flags=(f"kind: {_words(raw['kind'])}",), concept=_concept(raw["concept"], taxonomy))
+            return Entry(flags=(flag,), concept=_concept(raw["concept"], taxonomy), match=FLAG_MATCH[flag],
+                         as_of=as_of)
+        return Entry(flags=(f"kind: {_words(raw['kind'])}",), concept=_concept(raw["concept"], taxonomy),
+                     as_of=as_of)
     if "computed" in raw and set(raw) <= {"computed", "terms", "flag"}:
         if raw["computed"] not in ("sum", "difference") or not isinstance(raw.get("terms"), list) or not raw["terms"]:
             raise Blocked(f"a computed entry is a sum or a difference of terms: {raw!r}")
@@ -226,7 +232,7 @@ def _steps(items: LineItems, source: str) -> tuple[list[tuple[str, str]], str]:
                 key = [_lit(code), _lit(taxonomy), f"{position}::bigint"]
                 if entry.concept:
                     direct.append((*key, _lit(entry.concept[0]), _lit(entry.concept[1]), _lit(kind[code]),
-                                   _flags(entry.flags)))
+                                   _flags(entry.flags), _lit(entry.as_of)))
                     continue
                 computed.append((*key, _flags(entry.flags)))
                 for number, term in enumerate(entry.terms, 1):
@@ -239,8 +245,8 @@ def _steps(items: LineItems, source: str) -> tuple[list[tuple[str, str]], str]:
                       for t in e.terms for c in t.concepts})
     entry_columns = "line_item, taxonomy, position"
     ctes = [
-        ("entry", f"""{_values(entry_columns + ", concept_taxonomy, concept, kind, flags", direct,
-                                "NULL::text, NULL::text, 0::bigint, NULL::text, NULL::text, NULL::text, NULL::text[]")}"""),
+        ("entry", f"""{_values(entry_columns + ", concept_taxonomy, concept, kind, flags, as_of", direct,
+                                "NULL::text, NULL::text, 0::bigint, NULL::text, NULL::text, NULL::text, NULL::text[], NULL::text")}"""),
         ("computed_entry", f"""{_values(entry_columns + ", flags", computed,
                                          "NULL::text, NULL::text, 0::bigint, NULL::text[]")}"""),
         ("term", f"""{_values(entry_columns + ", term, choice, sign, optional, concept_taxonomy, concept, line_item_ref, kind",
@@ -294,13 +300,36 @@ def _steps(items: LineItems, source: str) -> tuple[list[tuple[str, str]], str]:
   WHERE f.kind IS NOT NULL
   ORDER BY f.company_key, y.fiscal_year, f.taxonomy, f.concept, f.kind, f.filed DESC, f.accession DESC,
            u.uses DESC, f.unit COLLATE "C", f.period_start DESC"""),
+        # Each named concept's copy filed in the annual report covering a year as its own, at its own date.
+        ("report_copy", """
+  SELECT DISTINCT ON (f.company_key, y.fiscal_year, f.taxonomy, f.concept, f.kind)
+         y.fiscal_year, f.company_key, f.taxonomy, f.concept, f.kind, f.unit, f.currency, f.period_end,
+         f.value, f.accession, f.filed
+  FROM typed_fact f
+  JOIN named n ON n.taxonomy = f.taxonomy AND n.concept = f.concept
+  JOIN report_end r ON r.company_key = f.company_key AND r.accession = f.accession
+  JOIN fiscal y ON y.company_key = f.company_key AND y.period_end = r.period_end
+  JOIN filing_unit u ON u.company_key = f.company_key AND u.accession = f.accession AND u.unit = f.unit
+  WHERE f.kind IS NOT NULL
+  ORDER BY f.company_key, y.fiscal_year, f.taxonomy, f.concept, f.kind, f.filed DESC, f.accession DESC,
+           u.uses DESC, f.unit COLLATE "C", f.period_end DESC"""),
         ("direct", """
   SELECT y.company_key, y.fiscal_year, e.line_item, e.position, c.value, c.unit, c.currency, c.period_start,
          -- a concept of another taxonomy than the year's names it, as the map does (dei:...)
          CASE WHEN c.taxonomy = y.taxonomy THEN c.concept ELSE c.taxonomy || ':' || c.concept END AS concept,
          c.accession, c.filed, e.flags, NULL::jsonb AS inputs
-  FROM fiscal y JOIN entry e ON e.taxonomy = y.taxonomy
+  FROM fiscal y JOIN entry e ON e.taxonomy = y.taxonomy AND e.as_of = 'period'
   JOIN latest_copy c ON c.company_key = y.company_key AND c.fiscal_year = y.fiscal_year
+             AND c.taxonomy = e.concept_taxonomy AND c.concept = e.concept AND c.kind = e.kind
+  UNION ALL
+  -- a figure at its own date, filed in the annual report that covers this year as its own (a cover page)
+  SELECT y.company_key, y.fiscal_year, e.line_item, e.position, c.value, c.unit, c.currency, NULL::date,
+         CASE WHEN c.taxonomy = y.taxonomy THEN c.concept ELSE c.taxonomy || ':' || c.concept END,
+         c.accession, c.filed, e.flags,
+         jsonb_build_array(jsonb_build_object('concept', c.concept, 'accession', c.accession,
+                                              'value', c.value::text, 'date', c.period_end::text))
+  FROM fiscal y JOIN entry e ON e.taxonomy = y.taxonomy AND e.as_of = 'report'
+  JOIN report_copy c ON c.company_key = y.company_key AND c.fiscal_year = y.fiscal_year
              AND c.taxonomy = e.concept_taxonomy AND c.concept = e.concept AND c.kind = e.kind"""),
         # Each fact term's value: the first present of its concepts.
         ("fact_term", """

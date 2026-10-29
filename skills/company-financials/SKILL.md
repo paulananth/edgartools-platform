@@ -106,6 +106,12 @@ Evidence and sources: ticket 35, research 02 section 1.
   (`statements()`): as one statement the planner guessed hundreds of rows for
   millions and never finished in 30 minutes; as steps the cohort builds in
   14 s. Never test its speed under `count(*)`, which skips the select list.
+- **A cover-page figure is read from the year's own annual report, at its own
+  date** (operator, 2026-10-29: "Annual report's cover (Recommended)"): the
+  shares-outstanding fallback takes the cover-page count filed in the annual
+  report covering that year, flagged "cover-page date", its date in `inputs`
+  (`as_of: report` in the map); never a copy dated on the year end from another
+  filing.
 - **A concept of another taxonomy than the year's is named with its taxonomy**
   (`dei:EntityCommonStockSharesOutstanding`), since the row's `taxonomy` is
   the year's.
