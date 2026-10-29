@@ -4,7 +4,7 @@ Priority: 135, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md
 Opened 2026-10-22 from the map review ("review all existing ticket and provide a
 way to complete the project").
 
-Type: task. Status: open, set aside (operator, 2026-10-22 21:13 ET: "skip this move to next"); the route goes on with the next ticket.
+Type: task. Status: in progress (Claude, 2026-10-29; operator, 2026-10-29 07:33 ET: "Take over 135").
 Blocked by: nothing on this map (#1121 and #1142 merged).
 
 ## Question
@@ -35,8 +35,31 @@ open branch.
 
 ## Checklist
 
-- [ ] Operator's ruling: Claude takes the item over, or it waits for Codex. Asked 2026-10-22 21:13 ET; answer: "skip this move to next", so not now; ask again when Track B reaches step 3
-- [ ] The item's remaining parts listed here from the workstream file, each with its evidence
+- [x] Operator's ruling (2026-10-29 07:33 ET): "Take over 135": Claude takes the item over (asked 2026-10-22,
+  then "skip this move to next"). No Codex PR is open (checked 07:35 ET); the overlap guard still runs on every commit
+- [x] The item's remaining parts, from the workstream files (2026-10-29 07:35 ET): the item is
+  `.planning/workstreams/sec-configured-fields/TICKET.md` line 9; its parts are spread over
+  `company-preparation-cutover` and `whole-source-census`. On today's `main`:
+  - Legacy record mapping: none left (`legacy_pair_comparison` and `legacy_jurisdiction_table` are configuration
+    keys of the mastering catalog, not old code). Done.
+  - Company preparation: configured since #880 (2026-10-09): `company_prepare.py` only binds the approved run
+    IDs and the census digest into the `mastering` target's configured steps (read, combine, `mdm.prepare`,
+    `mdm.merge`). Done.
+  - The Name Frequency census (`mdm name-census`): still built in Python (`name_frequency.py`, `name_census.py`,
+    GLEIF's input checked by `gleif_publication`), over configured readings; the whole-source comparison to
+    original-source EOF passed (2026-10-09). Open in `whole-source-census`: "Express complete source census
+    construction in bundled Rules, with immutable source/context receipts and separate worker verification",
+    then replace its consumers and retire the Python construction
+  - The installed population proof (6,414 Companies, 3,052 CIK+LEI from an empty store, an unchanged replay and
+    recovery): passed 2026-10-10, -11 and -11 (#906 and the raw-capture bundles); MDM storage changed since
+    (governed storage, #1152-#1190), so it runs again on today's `main` before 32's baseline
+- [ ] The census construction as a configured Bookkeeping target in Rules (source extract, combine), each step
+  verified by its own worker; equal to today's Python census on the whole capture (the 2026-10-09 file sha256)
+- [ ] The census consumers read the configured target's output; the Python construction retired, an
+  independent test-only oracle kept until the configured one is proven
+- [ ] The installed population proof on today's `main`: 6,414 Companies and 3,052 CIK+LEI from an empty store,
+  a second pass changing nothing, recovery (runs after ticket 120's loads, which hold the machine until about
+  13:00 ET)
 - [ ] Built, reviewed (Standards, Spec, GoF), PR, CI green, merged
 - [ ] 32's two deferred parts re-opened on this ticket's merge
 - [ ] Learning → skill
