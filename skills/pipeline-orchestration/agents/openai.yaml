@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pipeline Orchestration"
+  short_description: "Schedule and sequence portable data pipelines"
+  default_prompt: "Use $pipeline-orchestration to build and qualify a per-pipeline schedule on an approved platform."
