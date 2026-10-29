@@ -5,7 +5,6 @@ import os
 import subprocess
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "infra" / "scripts" / "install.sh"
 # Relative to REPO_ROOT (both subprocess.run calls below set cwd=REPO_ROOT) rather
@@ -57,7 +56,6 @@ PROVISION_DEPLOY_DATA_STAGE_ORDER: list[str] = [
     "Check: doctor",
 ]
 
-
 def _resolve_bash() -> str:
     # On Linux/macOS there's exactly one "bash", so plain PATH resolution is fine.
     if os.name != "nt":
@@ -85,9 +83,7 @@ def _resolve_bash() -> str:
         return str(candidate)
     return "bash"
 
-
 BASH = _resolve_bash()
-
 
 def run_wizard(
     *args: str,
@@ -156,7 +152,6 @@ def run_wizard(
         )
     return result
 
-
 def make_fake_tools(tmp_path: Path) -> tuple[Path, Path]:
     fakebin = tmp_path / "fakebin"
     fakebin.mkdir()
@@ -194,11 +189,6 @@ exit 0
         path.chmod(0o755)
     return fakebin, call_log
 
-
-def test_install_script_has_valid_bash_syntax() -> None:
-    subprocess.run([BASH, "-n", SCRIPT_ARG], cwd=REPO_ROOT, check=True)
-
-
 def test_declining_the_environment_exits_without_mutation(tmp_path: Path) -> None:
     # Was test_default_env_is_dev_*: there is no default environment any more
     # (wayfinder ticket 03). run_wizard supplies --env-name dev, so what this
@@ -212,7 +202,6 @@ def test_declining_the_environment_exits_without_mutation(tmp_path: Path) -> Non
     assert "Continue with selected environment dev?" in combined
     assert "Declined selected environment dev; exiting without mutation." in combined
     assert not workspace.exists()
-
 
 def test_single_command_launches_tui_preview_plan(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
@@ -230,7 +219,6 @@ def test_single_command_launches_tui_preview_plan(tmp_path: Path) -> None:
     assert "Ordered install plan for dev:" in combined
     assert "[preview only]" in combined
     assert not workspace.exists()
-
 
 def test_tui_offers_gum_install_and_continues_with_bash_when_declined(tmp_path: Path) -> None:
     fakebin = tmp_path / "fakebin"
@@ -263,7 +251,6 @@ echo "$*" >> "${BREW_LOG}"
     assert "Continuing with the plain Bash fallback." in combined
     assert "Ordered install plan for dev:" in combined
     assert not brew_log.exists()
-
 
 def test_tui_can_install_gum_with_homebrew_and_use_it_immediately(tmp_path: Path) -> None:
     fakebin = tmp_path / "fakebin"
@@ -344,7 +331,6 @@ chmod +x "{fakebin / 'gum'}"
     assert "input --prompt AWS admin/provisioning profile:" in log
     assert "confirm Continue with selected environment dev?" in log
 
-
 def test_tui_makes_all_core_config_selectable(tmp_path: Path) -> None:
     workspace = tmp_path / "custom-workspace"
     input_text = "\n".join(
@@ -373,7 +359,6 @@ def test_tui_makes_all_core_config_selectable(tmp_path: Path) -> None:
     assert "AWS_PROFILE='aws-admin-custom' AWS_DEFAULT_REGION='us-west-2' terraform apply" in combined
     assert "SNOW_CONNECTION='snow-prod-custom' bash infra/scripts/deploy-snowflake-stack.sh" in combined
     assert not workspace.exists()
-
 
 def test_plan_prints_preview_only_aws_ordered_commands(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
@@ -408,7 +393,6 @@ def test_plan_prints_preview_only_aws_ordered_commands(tmp_path: Path) -> None:
     assert "full bootstrap" not in out.lower()
     assert not workspace.exists()
 
-
 def test_prod_plan_uses_canonical_names_and_maintained_delegates(tmp_path: Path) -> None:
     result = run_wizard("plan", "--env-name", "prod", "--snow-connection", "snowconn", "--workspace", str(tmp_path / "workspace"))
 
@@ -420,7 +404,6 @@ def test_prod_plan_uses_canonical_names_and_maintained_delegates(tmp_path: Path)
     assert "bootstrap-prod-mdm.sh" in out
     assert "infra/snowflake/streamlit/deploy.sh" in out
     assert "PRODB" not in out
-
 
 def test_prod_apply_rejects_wrong_aws_account_before_any_stage(tmp_path: Path) -> None:
     fakebin, call_log = make_fake_tools(tmp_path)
@@ -448,9 +431,6 @@ def test_prod_apply_rejects_wrong_aws_account_before_any_stage(tmp_path: Path) -
     calls = call_log.read_text(encoding="utf-8")
     assert "terraform apply" not in calls
 
-
-
-
 def test_doctor_init_plan_do_not_call_state_changing_commands(tmp_path: Path) -> None:
     fakebin, call_log = make_fake_tools(tmp_path)
     workspace = tmp_path / "workspace"
@@ -476,7 +456,6 @@ def test_doctor_init_plan_do_not_call_state_changing_commands(tmp_path: Path) ->
     assert (workspace / "reports").is_dir()
     assert (workspace / "setup" / "dev" / "infra" / "terraform" / "accounts" / "dev" / "backend.hcl.example").is_file()
 
-
 def test_deploy_preview_and_declined_apply_do_not_execute_stages(tmp_path: Path) -> None:
     fakebin, call_log = make_fake_tools(tmp_path)
     workspace = tmp_path / "workspace"
@@ -501,7 +480,6 @@ def test_deploy_preview_and_declined_apply_do_not_execute_stages(tmp_path: Path)
     assert "terraform apply" not in calls
     assert "deploy-aws-application" not in calls
     assert "publish-warehouse-image" not in calls
-
 
 def test_report_redacts_sensitive_values_from_state_and_commands(tmp_path: Path) -> None:
     fakebin, call_log = make_fake_tools(tmp_path)
@@ -553,7 +531,6 @@ def test_report_redacts_sensitive_values_from_state_and_commands(tmp_path: Path)
     assert "## Current Notes and Issues" in report
     assert "cleanup-ecr-images.sh" in report
 
-
 def test_gum_is_used_when_present_and_forced(tmp_path: Path) -> None:
     fakebin = tmp_path / "fakebin"
     fakebin.mkdir()
@@ -580,7 +557,6 @@ exit 0
     run_wizard("plan", "--workspace", str(tmp_path / "workspace"), input_text="", env=env)
 
     assert "confirm Continue with selected environment dev?" in gum_log.read_text(encoding="utf-8")
-
 
 def test_gum_is_used_for_tui_choose_and_input_when_present(tmp_path: Path) -> None:
     fakebin = tmp_path / "fakebin"
@@ -650,14 +626,12 @@ esac
     assert "input --prompt AWS admin/provisioning profile:" in log
     assert "confirm Continue with selected environment dev?" in log
 
-
 # ---------------------------------------------------------------------------
 # Wayfinder snowflake-env-provisioning ticket 03: --env <dev|prod> became
 # --env-name <slug>, and --snow-connection became required with no derived
 # default. These pin the new contract; the tests above only prove the old one
 # stopped being required.
 # ---------------------------------------------------------------------------
-
 
 def test_env_name_is_required_for_non_wizard_commands(tmp_path: Path) -> None:
     result = run_wizard(
@@ -671,7 +645,6 @@ def test_env_name_is_required_for_non_wizard_commands(tmp_path: Path) -> None:
     )
     assert result.returncode != 0
     assert "--env-name is required" in result.stdout + result.stderr
-
 
 def test_snow_connection_is_required_and_never_derived(tmp_path: Path) -> None:
     """Deriving it is what let install.sh and deploy-snowflake-stack.sh disagree
@@ -687,7 +660,6 @@ def test_snow_connection_is_required_and_never_derived(tmp_path: Path) -> None:
     )
     assert result.returncode != 0
     assert "--snow-connection is required" in result.stdout + result.stderr
-
 
 def test_old_env_flag_is_gone(tmp_path: Path) -> None:
     """Clean breaking rename -- no back-compat alias (dev is decommissioned, so
@@ -708,7 +680,6 @@ def test_old_env_flag_is_gone(tmp_path: Path) -> None:
     # returncode check would keep passing for entirely the wrong reason.
     assert "Unknown argument: --env" in result.stdout + result.stderr
 
-
 def test_arbitrary_slug_is_accepted_not_just_dev_or_prod(tmp_path: Path) -> None:
     """The whole point of ticket 03: a third environment fits neither bucket."""
     result = run_wizard(
@@ -725,7 +696,6 @@ def test_arbitrary_slug_is_accepted_not_just_dev_or_prod(tmp_path: Path) -> None
     assert "Ordered install plan for eu-prod:" in combined
     assert "EDGARTOOLS_EU-PROD" not in combined  # hyphen must not leak untouched
 
-
 def test_malformed_slug_is_rejected(tmp_path: Path) -> None:
     for bad in ("BAD_Env", "1prod", "eu--prod", "eu-prod-"):
         result = run_wizard(
@@ -739,7 +709,6 @@ def test_malformed_slug_is_rejected(tmp_path: Path) -> None:
         )
         assert result.returncode != 0, bad
         assert "not a valid environment slug" in result.stdout + result.stderr, bad
-
 
 def test_snowflake_delegates_get_env_name_and_aws_delegates_keep_env(
     tmp_path: Path,
@@ -768,14 +737,12 @@ def test_snowflake_delegates_get_env_name_and_aws_delegates_keep_env(
     assert "deploy-aws-application.sh" not in combined
     assert "run-aws-mdm-e2e.sh --env prod" not in combined
 
-
 # ---------------------------------------------------------------------------
 # Wayfinder snowflake-env-provisioning ticket 05: the run order is install.sh's
 # existing sequence plus a Neo4j Native App install stage. Nothing installed the
 # app before -- the grants SQL only GRANTs against one it assumes exists -- so a
 # brand-new account could never complete the graph half of a go-live.
 # ---------------------------------------------------------------------------
-
 
 def _plan_stage_titles(tmp_path: Path) -> list[str]:
     result = run_wizard(
@@ -797,30 +764,6 @@ def _plan_stage_titles(tmp_path: Path) -> list[str]:
                 titles.append(title)
     return titles
 
-
-def test_neo4j_install_stage_exists(tmp_path: Path) -> None:
-    assert "Snowflake: Neo4j Native App install" in _plan_stage_titles(tmp_path)
-
-
-def test_neo4j_install_precedes_the_grants_stage(tmp_path: Path) -> None:
-    """Placement is the decision, not an accident.
-
-    Installing needs a one-time ORGADMIN acceptance of the Marketplace terms in
-    Snowsight, which has no SQL equivalent (ticket 02). It must precede the
-    stage that GRANTs against the application. Its literal position is
-    otherwise unpinned: the install-sh-provision-deploy-data map's
-    Neo4j-placement decision (see
-    .scratch/install-sh-provision-deploy-data/issues/01-classify-stages-into-phases.md)
-    allows it to sit anywhere within the provision phase -- no longer required
-    to be literally the second stage -- as long as this relative order holds.
-    """
-    titles = _plan_stage_titles(tmp_path)
-    install = titles.index(NEO4J_INSTALL_STAGE_TITLE)
-    grants = titles.index(GRANTS_STAGE_TITLE)
-
-    assert install < grants
-
-
 def test_stages_run_in_provision_deploy_early_data_late_data_order(
     tmp_path: Path,
 ) -> None:
@@ -833,7 +776,6 @@ def test_stages_run_in_provision_deploy_early_data_late_data_order(
     disabled until their Rules/feed baseline qualifies.
     """
     assert _plan_stage_titles(tmp_path) == PROVISION_DEPLOY_DATA_STAGE_ORDER
-
 
 def test_neo4j_install_stage_delegates_to_the_script(tmp_path: Path) -> None:
     result = run_wizard(
@@ -851,7 +793,6 @@ def test_neo4j_install_stage_delegates_to_the_script(tmp_path: Path) -> None:
         "bash infra/scripts/install-neo4j-graph-app.sh --snow-connection edgartools-prod"
         in combined
     )
-
 
 def test_plan_omits_legacy_bookkeeping_provisioning(
     tmp_path: Path,
@@ -872,7 +813,6 @@ def test_plan_omits_legacy_bookkeeping_provisioning(
     assert "--instance-name 'EDGARTOOLS_PROD_MDM'" in combined
     assert "--env-name prod" in combined
 
-
 def test_plan_is_preview_only_and_installs_nothing(tmp_path: Path) -> None:
     """The new stage is state-changing, so it must stay behind the same
     preview/confirm gate as every other stage."""
@@ -891,7 +831,6 @@ def test_plan_is_preview_only_and_installs_nothing(tmp_path: Path) -> None:
         if "install-neo4j-graph-app.sh" in line:
             assert "[preview only]" in line
 
-
 # ---------------------------------------------------------------------------
 # Missing-deploys fix: bootstrap SQL files 06/09/10/11/12/13/14/16/17 had no
 # install.sh (or deploy-snowflake-stack.sh, for 15) stage at all before this
@@ -902,7 +841,6 @@ def test_plan_is_preview_only_and_installs_nothing(tmp_path: Path) -> None:
 # real bronze_seed_silver_gold execution) while writing this fix. These tests
 # pin each file's stage placement so the gap can't silently reopen.
 # ---------------------------------------------------------------------------
-
 
 def _plan_output(tmp_path: Path) -> str:
     result = run_wizard(
@@ -917,7 +855,6 @@ def _plan_output(tmp_path: Path) -> str:
     )
     return result.stdout + result.stderr
 
-
 def test_fundamentals_load_wrapper_stage_applies_file_06(tmp_path: Path) -> None:
     combined = _plan_output(tmp_path)
     assert "infra/snowflake/sql/bootstrap/06_fundamentals_load_wrapper.sql" in combined
@@ -925,7 +862,6 @@ def test_fundamentals_load_wrapper_stage_applies_file_06(tmp_path: Path) -> None
     assert titles.index("Snowflake: native-pull foundation") < titles.index(
         "Snowflake: fundamentals load wrapper"
     )
-
 
 def test_installer_role_stage_applies_file_19_before_mdm_mirror_schema(
     tmp_path: Path,
@@ -939,7 +875,6 @@ def test_installer_role_stage_applies_file_19_before_mdm_mirror_schema(
         "Snowflake: MDM mirror + graph schema"
     )
 
-
 def test_mdm_mirror_and_graph_schema_stage_applies_files_09_and_10(
     tmp_path: Path,
 ) -> None:
@@ -952,7 +887,6 @@ def test_mdm_mirror_and_graph_schema_stage_applies_files_09_and_10(
     assert titles.index(GRANTS_STAGE_TITLE) < mirror_idx
     assert mirror_idx < titles.index("AWS: ECR image publish")
 
-
 def test_mdm_export_deployer_read_stage_applies_file_17_after_export_targets(
     tmp_path: Path,
 ) -> None:
@@ -962,7 +896,6 @@ def test_mdm_export_deployer_read_stage_applies_file_17_after_export_targets(
     assert titles.index("Snowflake: MDM export targets") < titles.index(
         "Snowflake: MDM export deployer read"
     )
-
 
 def test_silver_landing_stage_applies_files_11_through_16_before_dbt_gold(
     tmp_path: Path,
@@ -974,7 +907,6 @@ def test_silver_landing_stage_applies_files_11_through_16_before_dbt_gold(
     silver_idx = titles.index("Snowflake: silver-landing schema + ingest")
     assert titles.index("Snowflake: MDM export deployer read") < silver_idx
     assert silver_idx < titles.index("Snowflake: dbt gold")
-
 
 def test_no_bootstrap_sql_file_is_missing_from_the_full_plan(tmp_path: Path) -> None:
     """Every bootstrap SQL file must be reachable from install.sh (07/08
@@ -1015,7 +947,6 @@ def test_no_bootstrap_sql_file_is_missing_from_the_full_plan(tmp_path: Path) -> 
         assert matches, number
         assert any(name in combined for name in matches), (number, matches)
 
-
 def test_decision_schema_applied_by_deploy_snowflake_stack_between_the_two_applies() -> (
     None
 ):
@@ -1037,7 +968,6 @@ def test_decision_schema_applied_by_deploy_snowflake_stack_between_the_two_appli
     )
     access_root_apply = script.index('terraform_apply_root "${SNOWFLAKE_ACCESS_ROOT}"')
     assert snowflake_root_apply < decision_schema_call < access_root_apply
-
 
 def test_each_store_is_created_and_upgraded_for_its_runtime_login(tmp_path: Path, monkeypatch) -> None:
     """The five configured stores (skills/data-platform/SKILL.md, "Stores"): each

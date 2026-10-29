@@ -180,14 +180,15 @@
     },
     {
       "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-kind-current]",
-      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-current-invented-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-producer-invented-kind]",
       "surface": "reader",
       "engines": [
         "postgresql",
         "mysql"
       ],
       "kind": "invented-kind",
-      "case": "current"
+      "case": "current",
+      "replacement_updated_by": "completion-retirement.json"
     },
     {
       "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-kind-details]",
@@ -202,14 +203,15 @@
     },
     {
       "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-kind-history]",
-      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-history-invented-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-producer-invented-kind]",
       "surface": "reader",
       "engines": [
         "postgresql",
         "mysql"
       ],
       "kind": "invented-kind",
-      "case": "history"
+      "case": "history",
+      "replacement_updated_by": "completion-retirement.json"
     },
     {
       "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-kind-inspection]",
@@ -389,14 +391,15 @@
     },
     {
       "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-other-kind-current]",
-      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-current-invented-other-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-producer-invented-other-kind]",
       "surface": "reader",
       "engines": [
         "postgresql",
         "mysql"
       ],
       "kind": "invented-other-kind",
-      "case": "current"
+      "case": "current",
+      "replacement_updated_by": "completion-retirement.json"
     },
     {
       "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-other-kind-details]",
@@ -411,14 +414,15 @@
     },
     {
       "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-other-kind-history]",
-      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-history-invented-other-kind]",
+      "retained": "tests/installed_workflow/test_mdm_workflow.py::test_installed_workflow[reader-producer-invented-other-kind]",
       "surface": "reader",
       "engines": [
         "postgresql",
         "mysql"
       ],
       "kind": "invented-other-kind",
-      "case": "history"
+      "case": "history",
+      "replacement_updated_by": "completion-retirement.json"
     },
     {
       "retired": "tests/storage_adapters/test_normal_master_reads.py::test_normal_master_reads[invented-other-kind-inspection]",

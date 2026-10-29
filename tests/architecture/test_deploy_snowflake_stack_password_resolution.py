@@ -30,7 +30,6 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "infra" / "scripts" / "deploy-snowflake-stack.sh"
 
-
 def _resolve_bash() -> str:
     # See test_install_wizard.py::_resolve_bash for the full rationale
     # (System32's bash.exe shadowing a real Git Bash on Windows). Duplicated
@@ -47,11 +46,9 @@ def _resolve_bash() -> str:
         return str(candidate)
     return "bash"
 
-
 BASH = _resolve_bash()
 
 NONEXISTENT_ENV = "credential-isolation-test-env-does-not-exist"
-
 
 def _make_fake_uv(tmp_path: Path, *, resolver_should_fail: bool) -> tuple[Path, Path]:
     fakebin = tmp_path / "fakebin"
@@ -88,7 +85,6 @@ exit 0
     uv_path.chmod(0o755)
     return fakebin, call_log
 
-
 def _run_script(tmp_path: Path, *, fakebin: Path | None, extra_env: dict[str, str]) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     for key in ("TF_VAR_snowflake_password", "SNOWFLAKE_PASSWORD"):
@@ -108,48 +104,22 @@ def _run_script(tmp_path: Path, *, fakebin: Path | None, extra_env: dict[str, st
         env=env,
     )
 
-
 # --- static content assertions -----------------------------------------------
-
-
-def test_script_has_valid_bash_syntax():
-    subprocess.run([BASH, "-n", str(SCRIPT)], check=True)
-
 
 def test_no_longer_contains_the_old_inline_python_config_toml_parser():
     content = SCRIPT.read_text()
     assert "tomllib" not in content
     assert 'data.get("connections", {})' not in content
 
-
 def test_calls_the_shared_resolver_with_the_connection_flag():
     content = SCRIPT.read_text()
     assert 'uv run --project "${REPO_ROOT}" --extra mdm-runtime edgar-warehouse resolve-snowflake-env --connection "${SNOW_CONNECTION}"' in content
-
-
-def test_resolver_call_requests_the_mdm_runtime_extra():
-    """edgar_warehouse.mdm.export imports sqlalchemy at module level, which
-    is only present under the mdm/mdm-runtime optional-dependency groups
-    (pyproject.toml), never a base dependency. Reproduced live: `uv run
-    --project . edgar-warehouse resolve-snowflake-env ...` against a fresh
-    (no-extras) venv raises `ModuleNotFoundError: No module named
-    'sqlalchemy'`; `--extra mdm-runtime` (the same extra
-    bootstrap-prod-mdm.sh already uses for its own `edgar-warehouse mdm ...`
-    calls) fixes it. Without this flag every real invocation of this script
-    would fail at this line for any operator whose venv only has the base
-    `uv sync --extra s3 --extra snowflake` install CLAUDE.md documents.
-    """
-    content = SCRIPT.read_text()
-    assert "--extra mdm-runtime edgar-warehouse resolve-snowflake-env" in content
-
 
 def test_requires_uv_before_calling_the_resolver():
     content = SCRIPT.read_text()
     assert "require_command uv" in content
 
-
 # --- behavioral: override precedence still short-circuits the resolver ------
-
 
 def test_tf_var_snowflake_password_already_set_never_invokes_the_resolver(tmp_path):
     fakebin, call_log = _make_fake_uv(tmp_path, resolver_should_fail=False)
@@ -160,7 +130,6 @@ def test_tf_var_snowflake_password_already_set_never_invokes_the_resolver(tmp_pa
     assert "does not exist" in result.stderr
     assert "WARNING: could not resolve" not in result.stderr
 
-
 def test_snowflake_password_env_var_never_invokes_the_resolver(tmp_path):
     fakebin, call_log = _make_fake_uv(tmp_path, resolver_should_fail=False)
     result = _run_script(tmp_path, fakebin=fakebin, extra_env={"SNOWFLAKE_PASSWORD": "preset-password"})
@@ -170,9 +139,7 @@ def test_snowflake_password_env_var_never_invokes_the_resolver(tmp_path):
     assert "does not exist" in result.stderr
     assert "WARNING: could not resolve" not in result.stderr
 
-
 # --- behavioral: no override -> the resolver is actually invoked ------------
-
 
 def test_no_override_invokes_the_resolver_with_the_snow_connection(tmp_path):
     fakebin, call_log = _make_fake_uv(tmp_path, resolver_should_fail=False)
@@ -186,7 +153,6 @@ def test_no_override_invokes_the_resolver_with_the_snow_connection(tmp_path):
     assert result.returncode == 1
     assert "does not exist" in result.stderr
     assert "WARNING: could not resolve" not in result.stderr
-
 
 def test_resolver_failure_is_non_fatal_and_falls_through(tmp_path):
     fakebin, call_log = _make_fake_uv(tmp_path, resolver_should_fail=True)

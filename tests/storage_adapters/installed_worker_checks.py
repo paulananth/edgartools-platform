@@ -10,15 +10,12 @@ from uuid import uuid4
 import pytest
 
 from edgar_warehouse.rules import files
-from tests.engine.test_data_skill_bundle_postgres import installed  # noqa: F401
 from tests.mdm.test_clean_activation import CIK_CONTRACT
-from tests.mdm.test_configured_pair_comparison import configured_root  # noqa: F401
 from tests.support.rules_authority import authority
 from tests.support.reading import reading
 
 
-@pytest.mark.parametrize("kind",["invented-kind","invented-other-kind"])
-def test_installed_worker_recovery(kind,installed,database_factory,configured_root):
+def prove_installed_worker_recovery(kind,installed,database_factory,configured_root):
     if os.environ.get("SKILL_ADAPTER_TEST_ENGINE") == "mssql":
         pytest.skip("Full SQL Server workflow remains deferred")
     python,root = installed

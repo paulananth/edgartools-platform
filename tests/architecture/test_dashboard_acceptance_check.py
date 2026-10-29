@@ -20,7 +20,6 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "infra" / "scripts" / "check-dashboard-acceptance.py"
 
-
 def _load_module():
     spec = importlib.util.spec_from_file_location("check_dashboard_acceptance", SCRIPT)
     assert spec and spec.loader
@@ -29,11 +28,9 @@ def _load_module():
     spec.loader.exec_module(module)
     return module
 
-
 @pytest.fixture()
 def mod():
     return _load_module()
-
 
 def _all_pass_state(mod, watermark: str = "wm-1"):
     state = mod.init_state(release_candidate="rc-1", release_watermark=watermark)
@@ -51,7 +48,6 @@ def _all_pass_state(mod, watermark: str = "wm-1"):
             checked_at="2026-07-29T12:00:00Z",
         )
     return state
-
 
 class TestViewInventory:
     def test_exactly_35_views_covering_both_dashboards(self, mod):
@@ -115,7 +111,6 @@ class TestViewInventory:
 
         with pytest.raises(mod.SchemaError, match=field):
             mod.load_acceptance(path)
-
 
 class TestOverallStatusPrecedence:
     """The four failure reasons must stay distinguishable -- collapsing them
@@ -211,13 +206,8 @@ class TestOverallStatusPrecedence:
         assert status == "NOT_READY"
         assert set(reasons) == {"stale", "fail"}
 
-
 class TestSkeletonEmission:
     def test_skeleton_has_all_35_views_not_checked(self, mod):
         skeleton = mod.emit_skeleton(release_candidate="rc-1", release_watermark="wm-1")
         assert len(skeleton["views"]) == 35
         assert all(v["status"] == "not_checked" for v in skeleton["views"].values())
-
-    def test_skeleton_never_fabricates_a_pass(self, mod):
-        skeleton = mod.emit_skeleton(release_candidate="rc-1", release_watermark="wm-1")
-        assert all(v["status"] != "pass" for v in skeleton["views"].values())

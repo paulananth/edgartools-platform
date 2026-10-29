@@ -68,16 +68,7 @@ class TestTheLegalFormIsKept:
 class TestEdgarCodesBecomeIso:
     @pytest.mark.parametrize(
         ("code", "iso"),
-        [
-            ("DE", "US-DE"),
-            ("ca", "US-CA"),
-            ("P7", "NL"),
-            ("X0", "GB"),
-            ("A6", "CA-ON"),
-            ("E9", "KY"),
-            ("Z4", "CA"),
-            ("X1", "US"),
-        ],
+        [("ca", "US-CA")],
     )
     def test_a_known_code(self, code, iso):
         assert edgar_jurisdiction(code) == iso

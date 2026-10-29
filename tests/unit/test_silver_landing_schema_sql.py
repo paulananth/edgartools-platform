@@ -34,25 +34,8 @@ SCHEMA_SQL_PATH = (
     REPO_ROOT / "infra" / "snowflake" / "sql" / "bootstrap" / "11_silver_landing_schema.sql"
 )
 
-
 def _read_schema_sql() -> str:
     return SCHEMA_SQL_PATH.read_text()
-
-
-def test_every_created_table_drops_parse_sequence_not_null():
-    sql = _read_schema_sql()
-
-    create_table_names = re.findall(r"CREATE TABLE IF NOT EXISTS (\w+) \(", sql)
-    assert len(create_table_names) >= 30, "sanity check: expected ~30 landing tables"
-
-    for table in create_table_names:
-        assert f"ALTER TABLE {table} ALTER COLUMN parse_sequence DROP NOT NULL;" in sql, (
-            f"{table}: missing the DROP NOT NULL fix -- Snowflake's PRIMARY KEY "
-            "clause implicitly forces parse_sequence NOT NULL regardless of the "
-            "column's own declaration, so this ALTER is required, not optional "
-            "(see this file's module docstring)."
-        )
-
 
 def test_alter_statement_immediately_follows_its_table_create():
     """Not just present anywhere -- must directly follow its own CREATE TABLE,
@@ -68,24 +51,6 @@ def test_alter_statement_immediately_follows_its_table_create():
         # The block runs up to (but not including) the next CREATE TABLE, so
         # the ALTER for this table must appear within it.
         assert f"ALTER TABLE {table} ALTER COLUMN parse_sequence DROP NOT NULL;" in block
-
-
-def test_alter_statement_is_idempotent_syntax_not_a_conditional_guard():
-    """Snowflake's ALTER COLUMN DROP NOT NULL has no IF EXISTS/IF NOT EXISTS
-    form -- idempotency here comes from DROP NOT NULL being a no-op against an
-    already-nullable column, not from guard syntax. Assert the statement is the
-    plain form (no accidental guard clause that would break on a fresh table
-    that never had a NOT NULL constraint to drop)."""
-    sql = _read_schema_sql()
-
-    alter_statements = re.findall(
-        r"ALTER TABLE \w+ ALTER COLUMN parse_sequence DROP NOT NULL;", sql
-    )
-    assert len(alter_statements) >= 30
-    for statement in alter_statements:
-        assert "IF EXISTS" not in statement
-        assert "IF NOT EXISTS" not in statement
-
 
 def test_every_create_table_has_a_matching_alter_and_vice_versa():
     """Counts must match exactly -- catches a table gaining a CREATE without

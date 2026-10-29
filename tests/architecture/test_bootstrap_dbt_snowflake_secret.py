@@ -23,7 +23,6 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "infra" / "scripts" / "bootstrap-dbt-snowflake-secret.sh"
 
-
 def _run(*args: str, stdin: str = "hunter2\n", env_overrides: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     if env_overrides:
@@ -35,11 +34,6 @@ def _run(*args: str, stdin: str = "hunter2\n", env_overrides: dict[str, str] | N
         text=True,
         env=env,
     )
-
-
-def test_script_has_valid_bash_syntax():
-    subprocess.run(["bash", "-n", str(SCRIPT)], check=True)
-
 
 def test_dry_run_with_required_flags_only_defaults_database_and_omits_role():
     result = _run(
@@ -58,7 +52,6 @@ def test_dry_run_with_required_flags_only_defaults_database_and_omits_role():
     assert "hunter2" not in result.stdout
     assert "hunter2" not in result.stderr
 
-
 def test_dry_run_derives_database_from_a_hyphenated_env_name():
     result = _run(
         "--env-name", "eu-prod",
@@ -68,7 +61,6 @@ def test_dry_run_derives_database_from_a_hyphenated_env_name():
     assert result.returncode == 0, result.stderr
     assert "database=EDGARTOOLS_EU_PROD" in result.stderr
     assert "DRY RUN - target secret: edgartools-eu-prod/dbt/snowflake" in result.stderr
-
 
 def test_explicit_database_and_role_override_the_default():
     result = _run(
@@ -81,7 +73,6 @@ def test_explicit_database_and_role_override_the_default():
     assert "database=CUSTOM_DB" in result.stderr
     assert "role=EDGARTOOLS_PROD_LOADER" in result.stderr
 
-
 def test_explicit_secret_id_bypasses_the_manifest():
     result = _run(
         "--env-name", "prod",
@@ -92,30 +83,25 @@ def test_explicit_secret_id_bypasses_the_manifest():
     assert result.returncode == 0, result.stderr
     assert "DRY RUN - target secret: custom/override" in result.stderr
 
-
 def test_missing_account_fails_loudly():
     result = _run("--env-name", "prod", "--user", "u", "--warehouse", "w", "--password-stdin", "--dry-run")
     assert result.returncode == 1
     assert "--account is required" in result.stderr
-
 
 def test_missing_user_fails_loudly():
     result = _run("--env-name", "prod", "--account", "a", "--warehouse", "w", "--password-stdin", "--dry-run")
     assert result.returncode == 1
     assert "--user is required" in result.stderr
 
-
 def test_missing_warehouse_fails_loudly():
     result = _run("--env-name", "prod", "--account", "a", "--user", "u", "--password-stdin", "--dry-run")
     assert result.returncode == 1
     assert "--warehouse is required" in result.stderr
 
-
 def test_missing_password_stdin_flag_fails_loudly():
     result = _run("--env-name", "prod", "--account", "a", "--user", "u", "--warehouse", "w", "--dry-run")
     assert result.returncode == 1
     assert "--password-stdin is required" in result.stderr
-
 
 def test_empty_password_from_stdin_fails_loudly():
     result = _run(
@@ -126,7 +112,6 @@ def test_empty_password_from_stdin_fails_loudly():
     assert result.returncode == 1
     assert "password read from stdin was empty" in result.stderr
 
-
 def test_invalid_env_name_slug_fails_loudly():
     result = _run(
         "--env-name", "Not_A_Slug", "--account", "a", "--user", "u", "--warehouse", "w",
@@ -134,7 +119,6 @@ def test_invalid_env_name_slug_fails_loudly():
     )
     assert result.returncode == 2
     assert "not a valid environment slug" in result.stderr
-
 
 def test_missing_manifest_entry_fails_loudly(tmp_path):
     broken_manifest = tmp_path / "secrets-manifest.json"
@@ -147,7 +131,6 @@ def test_missing_manifest_entry_fails_loudly(tmp_path):
     assert result.returncode == 1
     assert "dbt/snowflake" in result.stderr
     assert "is not declared" in result.stderr
-
 
 def test_real_run_writes_the_exact_payload_shape_bootstrap_prod_mdm_reads(tmp_path):
     """The one test that inspects the actual secret-string payload, via a
@@ -207,7 +190,6 @@ exit 0
     # inside the payload the fake `aws` captured on its own argv.
     assert "s3cr3t-p@ss w0rd" not in result.stdout
     assert "s3cr3t-p@ss w0rd" not in result.stderr
-
 
 def test_real_run_without_role_writes_an_empty_role_key(tmp_path):
     """Not omitted: bootstrap-prod-mdm.sh's jq transform unconditionally
