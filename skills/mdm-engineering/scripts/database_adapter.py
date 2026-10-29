@@ -1088,12 +1088,14 @@ class Adapter:
         """Each named batch's saved request and assessment, one row a batch."""
         if not batch_keys:
             raise AdapterError("A nonempty batch key collection is required")
-        batch = self.tables["batch"]
-        statement = select(batch.c.batch_key, batch.c.intent, batch.c.request_hash, batch.c.assessment).where(
-            batch.c.batch_key.in_(sorted(batch_keys)))
-        if self.engine.dialect.name == "mysql":
-            statement = statement.with_hint(batch, "FORCE INDEX (PRIMARY)", dialect_name="mysql")
-        return statement
+        batch, probes = self.tables["batch"], []
+        for batch_key in sorted(batch_keys):  # one primary-key seek a batch
+            probe = select(batch.c.batch_key, batch.c.intent, batch.c.request_hash, batch.c.assessment).where(
+                batch.c.batch_key == batch_key)
+            if self.engine.dialect.name == "mysql":
+                probe = probe.with_hint(batch, "FORCE INDEX (PRIMARY)", dialect_name="mysql")
+            probes.append(probe)
+        return union_all(*probes) if len(probes) > 1 else probes[0]
 
     def batch_metadata_statement(self, before, *, limit=100, path=()):
         """Bounded generation-key reads of recording time and one opaque scalar.
