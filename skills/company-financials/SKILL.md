@@ -87,8 +87,12 @@ Evidence and sources: ticket 35, research 02 section 1.
   `ifrs-full` and `dei` concepts each tries (a computed value's terms stay in
   the map). The rules file `rules/sources/sec.company-facts/line-items.yaml`
   names those codes and holds the order, the flags and the fallbacks; a test
-  holds the two equal. The taxonomies are not loaded into RDM; a fact keeps its
-  concept's label in silver.
+  holds the two equal. The taxonomies are not loaded into RDM, and a
+  concept's label and description stay out of silver: the same text on every
+  fact of the concept is reference data, never a row field, and no analysis
+  needs it (operator, 2026-10-28: "keep financial so that is it easy to
+  calculate cgar and other analytics do not complecate too much"). Analyses
+  read the line items (labelled by the code set) and the measures.
 - **The map is rules configuration** (operator: "Rules configuration
   (Recommended)"): a reviewed YAML file under `rules/` names each line item, its
   concepts in order, any computed fallback and its flag; a configured step

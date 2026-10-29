@@ -15,8 +15,8 @@ rdm": the 19 standard line items are an RDM code set (`financial-line-items`: co
 label, definition, kind), crosswalked to the `us-gaap` and `ifrs-full` concepts each
 uses (outside standards, `to_version: outside`). The rules YAML names those RDM codes
 and holds only the try-order and the computed fallbacks, which a crosswalk cannot
-express. The taxonomies themselves are not loaded into RDM: each fact keeps its
-concept's label and description in silver.
+express. The taxonomies themselves are not loaded into RDM. (Corrected 2026-10-28
+20:20 ET, below: a concept's label and description are not kept in silver.)
 
 - [x] The RDM code set `financial-line-items` drafted, its crosswalk to research 01
   and 04's concepts, approved in the operator's words and published: see Parts
@@ -63,9 +63,19 @@ stores (operator, 2026-10-21: "Two proofs, local").
   and configured-master tests 1,166 passed (8 min, over the 5-minute local bound: the engine change reaches
   every engine test). Landing runs by `edgar-warehouse silver land`, as N-PORT's holdings do; Bookkeeping
   has no silver step yet
-- [ ] Found (2026-10-28 17:35 ET), for the operator: the ruling "each fact keeps its concept's label and description in
+- [x] Found (2026-10-28 17:35 ET), for the operator: the ruling "each fact keeps its concept's label and description in
   silver" (ticket 46, RDM section) has no column in ticket 43's approved `company_fact`; carrying them on
   each of 5.1 million facts repeats each concept's text thousands of times
+- [x] Ruling: a concept's label and description stay out of silver (2026-10-28 20:20 ET): operator, 2026-10-28:
+  "consult data-modeling skill and how to keep financial so that is it easy to calculate cgar and other analytics
+  do not complecate too much". By the data-modeling skill, a concept's label is reference data of an outside
+  standard (the taxonomy), the same on every fact of that concept, so it never goes on a transaction row (sections
+  1 and 6: one system of record, no repeated master or reference field). Measured: 8,495 concepts over 139,643
+  filer-concept pairs; 57 concepts worded differently between filers; 1.9 MB of text if held once. No analysis
+  needs it: CAGR and the measures read `company_line_item` (one row per company, line item and annual period;
+  the default copy `is_latest`) and `company_measure`, and a line item's label and definition are RDM's
+  `financial-line-items`. So no label column and no concept table; a concept table is added only when a use
+  needs it
 - [x] Three-axis review of PR 2 (2026-10-28 17:37 ET). GoF: leave it (each kind is one small arm; `nest` in its own
   module). Standards, acted on: the filer once (`company_key`, the link's 10-digit CIK; `cik` dropped, one
   system of record); one shared field-name check; a kept field the outer row lacks refuses
@@ -75,7 +85,7 @@ stores (operator, 2026-10-21: "Two proofs, local").
   `inclusion: 1.0`; a test that an unknown taxonomy still refuses the file; the skill's "no new iteration
   primitive" and ticket 43's key corrected. Noted: `currency` is three capital letters before any `/`, not
   checked against the ISO list (23 distinct in the capture)
-- [ ] PR 2 (engine `nest`, `company_fact`): PR, CI, merge
+- [x] PR 2 (engine `nest`, `company_fact`): PR, CI, merge (2026-10-28 17:52 ET): #1209 merged, 20 of 20 checks
 - [x] The line-item map `rules/sources/sec.company-facts/line-items.yaml` (2026-10-28 16:49 ET), version
   `line-items-2026-10-28.first-build`, naming the code set: the `us-gaap` and `ifrs-full` try-orders,
   the flags, the industry kinds and the computed fallbacks (sum or difference of terms; a term a
