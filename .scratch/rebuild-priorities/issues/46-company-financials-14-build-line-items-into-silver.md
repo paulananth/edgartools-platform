@@ -167,11 +167,26 @@ stores (operator, 2026-10-21: "Two proofs, local").
   `b9fc3feb1e74a67686cbf586259f1be8720f46fff074692cb4cd96a5ed6688db` (flags only; no value or measure moved
   from `ad2bcf32`). Also noted: a year's taxonomy breaks a tie toward us-gaap (0 ties in the cohort; the key
   does the same); ticket 43's `period_kind` is dropped (every row is an annual year), recorded there
-- [ ] Found (2026-10-28 21:24 ET), for the operator: the cover-page share count
+- [x] Found (2026-10-28 21:24 ET), for the operator: the cover-page share count
   (`dei:EntityCommonStockSharesOutstanding`, flagged "cover-page date") is taken only when dated on the year's
   end, as the answer key reads it; it is usually dated weeks later, so it fills 63 rows. Whether it should be
   taken at its own date (the flag's meaning) is a new kind of question, asked after this PR
-- [ ] PR 3: PR, CI, merge
+- [x] Ruling: the cover-page share count (2026-10-29 06:23 ET): operator, 2026-10-29: "Annual report's cover
+  (Recommended)": the shares-outstanding fallback takes the cover-page count filed in the year's own annual
+  report, at its own date, flagged "cover-page date"; its date is in `inputs`. The map gains `as_of: report`
+  on a concept entry (version `line-items-2026-10-29.cover-shares`); the SQL and the answer key changed
+  together. Cohort: 96,807 of 96,807 equal; 74,030 with a value (463 more shares-outstanding years filled);
+  query 86 s. Key: 10 line items and 6 measures of the three cases move (a cover count dated on the year end
+  but filed outside that year's own report no longer counts); measures with a value 879; local key sha256
+  `d54a23a7dbaadcd4b403dd93c6ff8f0e9f8cb43adce4c4e13aac5a6dcd72554d`. Tests 16 passed
+- [x] Three-axis review of PR 4 (2026-10-29 06:23 ET). GoF: leave it (two `as_of` values, one change). Standards:
+  no violation; the two copy steps now share one ordering (`_LATEST`). Spec: conforms; `as_of: report` is now
+  refused on a duration line item, `inputs` names the concept as the row does (`dei:...`), and the tests cover
+  an amended report winning, a count filed in the next year's report never counting (even dated on the year
+  end), and the later of two counts in one report; the skill says an amendment wins and a Part III amendment
+  covers no year. Rerun: 96,807 of 96,807 equal; tests 24 passed
+- [ ] PR 4 (the cover-page share count): PR, CI, merge
+- [x] PR 3: PR, CI, merge (2026-10-28 21:38 ET): #1214 merged, 20 of 20 checks
 - [x] Learning → skill (2026-10-28 21:17 ET): `skills/company-financials/SKILL.md`: the line items are SQL over
   silver, run as counted steps (never timed under `count(*)`); a concept of another taxonomy is named with it;
   the two ties; `company_line_item`'s one row per year; the statement format read from Company

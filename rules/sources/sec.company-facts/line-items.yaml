@@ -13,7 +13,9 @@
 # period wins. An entry is
 # - a concept (`dei:` names a cover-page concept), or
 #   {concept, flag} (the value carries the flag), or {concept, kind} (an
-#   industry concept: bank, insurer, utility);
+#   industry concept: bank, insurer, utility); `as_of: report` on either takes
+#   the copy filed in the year's own annual report, at its own date (a
+#   cover-page figure), in place of a copy dated on the period;
 # - {computed: sum | difference, terms, flag}: the terms' values added, or
 #   the first less the rest, all in one unit, flagged "computed" (and with its
 #   own flag, when it names one), naming the accession of its first term read
@@ -22,7 +24,7 @@
 #   (that line item's value for the same period) or {optional: term} (counted
 #   as nothing when absent). A required term missing, or two units, and the
 #   entry gives nothing.
-version: line-items-2026-10-28.revenue-check
+version: line-items-2026-10-29.cover-shares
 # A line item whose chosen figure is smaller than another total of its list (an
 # unflagged concept: never an industry kind or a flagged figure) filed for the
 # same period, in the same unit, carries this flag for a steward;
@@ -104,10 +106,10 @@ line_items:
   shares_outstanding:
     us-gaap:
       - CommonStockSharesOutstanding
-      - {concept: "dei:EntityCommonStockSharesOutstanding", flag: cover-page date}
+      - {concept: "dei:EntityCommonStockSharesOutstanding", flag: cover-page date, as_of: report}
     ifrs-full:
       - NumberOfSharesOutstanding
-      - {concept: "dei:EntityCommonStockSharesOutstanding", flag: cover-page date}
+      - {concept: "dei:EntityCommonStockSharesOutstanding", flag: cover-page date, as_of: report}
   gross_profit:
     us-gaap:
       - GrossProfit
