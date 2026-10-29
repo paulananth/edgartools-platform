@@ -15,7 +15,7 @@ MAP = line_items.MAP
 
 
 def _published(code_set: str, version: str) -> list[dict]:
-    return line_items._published(code_set, version)
+    return line_items.published(code_set, version)
 
 
 def test_the_map_names_the_code_set_s_codes_in_both_taxonomies():

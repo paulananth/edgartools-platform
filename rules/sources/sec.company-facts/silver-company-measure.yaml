@@ -1,0 +1,90 @@
+# The silver table of the fundamental measures (ticket 47; ticket 43's spec,
+# keyed on company_key as ticket 46 corrected it): one row per company, measure,
+# fiscal year and window, built by SQL over company_line_item from measures.yaml
+# (edgar_warehouse/financials/measures.py; ticket 39: "Stored, built from silver").
+table: company_measure
+definition: "One fundamental measure of a company for one fiscal year and window, computed from its line items."
+grain: "one row per company, measure, fiscal year and window"
+columns:
+- name: company_key
+  type: VARCHAR
+  nullable: false
+  definition: "The filer's CIK as ten digits, by which its Company is found."
+  source: "company_line_item.company_key"
+  sensitivity: none
+- name: measure
+  type: VARCHAR
+  nullable: false
+  definition: "A measure of measures.yaml: a ratio (gross_margin, ...), a return in its two forms (roe_average, roe_beginning, ...) or a growth rate (revenue_cagr, ...)."
+  source: "measures.yaml"
+  sensitivity: none
+- name: fiscal_year
+  type: BIGINT
+  nullable: false
+  definition: "The window's last fiscal year (Compustat FYEAR)."
+  source: "company_line_item.fiscal_year"
+  sensitivity: none
+- name: window_years
+  type: BIGINT
+  nullable: false
+  definition: "1 for a one-year measure; 1, 3, 5 or 10 for a growth rate."
+  source: "measures.yaml"
+  sensitivity: none
+- name: value
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: "The raw measure, no truncation or smoothing; empty with its reason."
+  source: "company_line_item.value"
+  sensitivity: none
+- name: currency
+  type: VARCHAR
+  nullable: true
+  definition: "The ISO 4217 code of a per-share amount; empty for a ratio of like amounts."
+  source: "company_line_item.currency"
+  sensitivity: none
+- name: null_reason
+  type: VARCHAR
+  nullable: true
+  definition: "Why the value is empty: no concept filed, missing year, fiscal year changed, mixed currencies, denominator zero or negative, not meaningful (a growth rate from or to zero or less), not meaningful for financial services, statement format unknown, no country of incorporation, no statutory rate for the country and year."
+  source: "measures.yaml"
+  sensitivity: none
+- name: inputs
+  type: JSON
+  nullable: false
+  definition: "Each line item the measure read: its fiscal year, value, concept and accession, and what a computed input was computed from (ROIC's tax rate and its source)."
+  source: "company_line_item"
+  sensitivity: none
+- name: definition_version
+  type: VARCHAR
+  nullable: false
+  definition: "The named version of measures.yaml that computed the measure."
+  source: "measures.yaml version"
+  sensitivity: none
+key:
+- company_key
+- measure
+- fiscal_year
+- window_years
+links:
+- columns:
+  - company_key
+  kind: company
+  source_code: sec.submissions.company.v1
+  to_part: company
+  source_key: company_key
+  mdm_id_column: company_mdm_id
+  inclusion: 1.0
+time:
+  as_of: fiscal_year
+  as_at: loaded_at
+  event_time: null
+partition:
+- company_key
+load_mode: snapshot
+why: >-
+  Stored, built from silver (ticket 39), from the latest-filed line items, and
+  rebuilt whole each run; its as-at is the run, the writer's loaded_at.
+  Each row names its inputs and definition version, so a value traces to its
+  facts and filings. The statement format and country are read from the
+  Company master, never copied here.
+checks: []

@@ -431,7 +431,7 @@ def measures(company: Company, items: dict[int, dict]) -> list[dict]:
         if ca and cb and ca != cb:
             return add(name, year, None, reason="mixed currencies", inputs=inputs)
         if b <= 0:
-            return add(name, year, None, reason="denominator zero or less", inputs=inputs)
+            return add(name, year, None, reason="denominator zero or negative", inputs=inputs)
         return add(name, year, None, val=a / b, inputs=inputs)
 
     for year in sorted(items):
@@ -499,7 +499,7 @@ def measures(company: Company, items: dict[int, dict]) -> list[dict]:
                     continue
                 bottom = (now[0] + then[0]) / 2 if form == "average" else then[0]
                 if bottom <= 0:
-                    add(name, year, None, reason="denominator zero or less")
+                    add(name, year, None, reason="denominator zero or negative")
                     continue
                 add(name, year, None, val=top[0] / bottom, inputs={"top": str(top[0]), "bottom": str(bottom)})
         # Growth over exactly 1, 3, 5 and 10 years (ticket 39).

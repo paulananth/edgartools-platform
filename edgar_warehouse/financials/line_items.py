@@ -19,6 +19,9 @@ from pathlib import Path
 
 from edgar_warehouse.control_contract import Blocked
 
+from . import sql
+from .sql import lit as _lit, values as _values
+
 ROOT = Path(__file__).resolve().parents[2]
 MAP = ROOT / "rules" / "sources" / "sec.company-facts" / "line-items.yaml"
 PUBLISHED = ROOT / "rules" / "reference" / "published"
@@ -85,7 +88,7 @@ class LineItems:
         return out
 
 
-def _published(code_set: str, version: str) -> list[dict]:
+def published(code_set: str, version: str) -> list[dict]:
     folder = PUBLISHED / code_set / version
     data = (folder / "canonical.jsonl").read_bytes()
     if hashlib.sha256(data).hexdigest() != json.loads((folder / "pin.json").read_text())["sha256"]:
@@ -157,7 +160,7 @@ def _entry(raw, taxonomy: str, codes: set[str]) -> Entry:
 def parse(body: dict) -> LineItems:
     """The map, checked whole: every code is the pinned code set's, in both taxonomies."""
     pin = body["code_set"]
-    period = {row["code"]: row["properties"]["period"] for row in _published(pin["code_set"], pin["version"])}
+    period = {row["code"]: row["properties"]["period"] for row in published(pin["code_set"], pin["version"])}
     if set(body["line_items"]) != set(period):
         raise Blocked("the map names exactly the code set's codes")
     codes = set(period)
@@ -192,37 +195,19 @@ def crosswalk_of(items: LineItems) -> dict[tuple[str, str, str], str]:
 
 # --- the query ---------------------------------------------------------------------
 
-def _lit(text: str | None) -> str:
-    return "NULL" if text is None else "'" + text.replace("'", "''") + "'"
-
-
 def _flags(flags) -> str:
     return "ARRAY[" + ", ".join(_lit(f) for f in flags) + "]::text[]" if flags else "ARRAY[]::text[]"
-
-
-def _values(columns: str, rows: list[tuple], empty: str) -> str:
-    if not rows:
-        return f"SELECT {empty} WHERE false"
-    return f"SELECT * FROM (VALUES {', '.join('(' + ', '.join(r) + ')' for r in rows)}) AS v({columns})"
 
 
 def query(items: LineItems, source: str = "silver.company_fact") -> str:
     """One SQL statement (PostgreSQL) over `source`, giving every row of
     `company_line_item`: one per company, line item and fiscal year."""
-    steps, final = _steps(items, source)
-    return "WITH " + ",\n".join(f"{name} AS ({body})" for name, body in steps) + "\n" + final
+    return sql.query(*_steps(items, source))
 
 
 def statements(items: LineItems, source: str = "silver.company_fact") -> list[str]:
-    """The same query as steps, each a temporary table its planner has counted:
-    run as one statement, PostgreSQL guesses each step's rows and picks nested
-    loops over millions of facts (ticket 46: 30 minutes, not finished)."""
-    steps, final = _steps(items, source)
-    out = []
-    for name, body in steps:
-        table = name.split("(")[0]
-        out += [f"CREATE TEMPORARY TABLE {name} ON COMMIT DROP AS {body}", f"ANALYZE {table}"]
-    return out + [final]
+    """The same query as counted steps (`sql.counted`)."""
+    return sql.counted(*_steps(items, source))
 
 
 def _steps(items: LineItems, source: str) -> tuple[list[tuple[str, str]], str]:
