@@ -1,6 +1,6 @@
 # Retire redundant tests using five whys
 
-Status: in progress
+Status: complete (2026-10-29 07:43 ET)
 Baseline: origin/main `0a1470c1a`; repository-wide Python collected cases. Native Rust cases are inventoried separately. Original target: 75%; operator clarified “Retire only proven redundancy” after the first measured pass; no deselection, assertion packing, or skipped tests counted as retirement.
 
 ## Parts
@@ -9,7 +9,7 @@ Baseline: origin/main `0a1470c1a`; repository-wide Python collected cases. Nativ
 - [x] Apply five whys to candidate families — 2026-10-27 19:40 ET: six family decisions in FIVE-WHYS.md, all 127 retired IDs mapped in retirement.json; zero missing replacements; operator clarified that distinct coverage is retained.
 - [x] Remove justified redundant tests and stale wrapper code — 2026-10-27 19:40 ET: collection 4,262 → 4,135; 126 duplicate scenario invocations and one identical classification body; scenario assertions, installed matrix and production code unchanged, verified by AST and git diff.
 - [x] Verify retained behavior and collection counts — 2026-10-27 19:42 ET: testmon 49 affected classification/architecture checks, 30 retained caller cases on PostgreSQL (124 seconds) and 30 on MySQL (177 seconds); retained classification rejects an injected wrong verdict; collection 4,135; no CI speedup claimed.
-- [ ] Review Standards, Spec and GoF; publish the change in a PR and verify final CI with a bounded watcher.
+- [x] Review Standards, Spec and GoF; publish the change in a PR and verify final CI with a bounded watcher — PR #1197 merged 2026-10-28 10:24 ET (recorded 2026-10-29 07:43 ET); the follow-up is COMPLETION.md (#1210)
 - [x] Learning → skill: none — 2026-10-27 19:40 ET: existing mdm-engineering cheapest-proof and independent-installation guidance applies; no missing procedure demonstrated.
 
 ## Method

@@ -251,7 +251,10 @@ the table, or reads a whole index, is a defect. Several indexed columns are
 separate seeks, never one `OR` across them. Reads are a few queries over the
 batch's keys, never one query per record. A whole read is allowed only for a
 table that stays a handful of rows, and its docstring says so. A test shows
-the seek. Integer columns that count records are 64-bit (`BIGINT`).
+the seek. Integer columns that count records are 64-bit (`BIGINT`). A read
+selects only the columns it uses: a `LATERAL` subquery with `OFFSET 0` keeps
+every column of its table, so selecting the whole table there carries a large
+column into the plan; name the columns.
 
 **PostgreSQL.** Look up with `unnest(keys) k(key) CROSS JOIN LATERAL (SELECT
 ... FROM t WHERE t.col = k.key OFFSET 0)`. The `OFFSET 0` keeps the planner
@@ -313,9 +316,9 @@ masters needs its rebuild before readers accept it.
   The command's checks (the same masters, every record's binding, no decision
   lost) fail it with exit 1.
 - A governed store keeps each batch's whole request, which can be a hundred
-  MB or more after a large load or a conversion. A whole-store check reads the
-  current records (`iter_type`), never consumer pages: a consumer page reads
-  each master with its batch's request, once a row.
+  MB or more after a large load or a conversion. A read of records reads each
+  batch's request once (the distinct batch keys), never once a record. A
+  whole-store check still reads the current records (`iter_type`).
 
 ## Writes and transactions
 
@@ -381,6 +384,22 @@ passes for each selected engine and configured kind on the final revision.
 Exclude temporary-directory symlink aliases from artifact uploads; count each
 expected engine/kind/case once and refuse missing or contradictory outcomes.
 
+### Retire redundant tests by their obligations
+
+Inventory collected cases for every selected engine, including fixture and
+parameter variants. For each proposed retirement, answer five whys: the failure
+it detects, its consequence, its current caller, the retained proof of the same
+boundary, and what would be lost. Compare the complete setup and assertions;
+similar names or overlapping happy paths do not establish equivalence. Keep
+distinct authorization, migration, concurrency, rollback and recovery checks.
+
+Map each retired case to executable retained proof, following replacements
+through to a case that remains. Verify that proof rejects the relevant fault.
+When removing a checkout wrapper, retain its shared scenario and the installed
+engine/kind invocation. Record obsolete obligations separately from duplicates.
+Count collected cases and existing fixture vectors separately; measure runtime
+separately too. A percentage target is not evidence for removing a test.
+
 ## Examples
 
 These name this repo's code and the failures each rule came from.
@@ -395,8 +414,8 @@ These name this repo's code and the failures each rule came from.
   1 MiB a batch); the migrations are registered in
   `edgar_warehouse/mdm/clean/store.py` (`MIGRATIONS`).
 - **Tests that hold the rules:**
-  `tests/integration/test_clean_plan_cache_postgres.py` (plan setting, no
-  whole-list search), `tests/storage_adapters/test_record_scope.py`
+  `tests/architecture/test_mdm_routine_retirement.py` (retired calculation
+  callers stay absent), `tests/storage_adapters/test_record_scope.py`
   (indexed scope and validated references),
   `tests/storage_adapters/test_prepared_effects.py` (indexed reads and a request
   beyond the former size cap), and `tests/mdm/test_clean_limits.py` (input
