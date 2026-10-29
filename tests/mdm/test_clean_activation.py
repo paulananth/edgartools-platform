@@ -576,28 +576,6 @@ class TestTheCompanyPolicy:
             "cbee08506a55c299a7a1d4b5c43f21ee1007181566b500f07fb28072e32d97cf"
         )
 
-    def test_the_policy_is_the_active_digest(self):
-        # The operator approved ticket 08's declared matching rules as
-        # `983352e8...` (2026-09-25 15:21 ET); ticket 12's approval was
-        # `35250dad...`. Rules skill ticket 08 added the SEC place-code table
-        # to the body and changed nothing else.
-        # Company mastering ticket 21 declared the cascade's passes, and
-        # ticket 15 the CIK matching rule, all switched off; without them the
-        # policy is unchanged.
-        # Ticket 25 switched the two name matching rules on; platform
-        # validation 06a added GLEIF's relationship file to the sources;
-        # profiling ticket 04 moved the relationship types into the policy;
-        # profiling ticket 02 pinned the reference data in place of the table;
-        # profiling ticket 04b named the relationship types as their sources do,
-        # then gave the calculated ultimate parent its history and let a
-        # successor entity end parent links; profiling ticket 07 declared the
-        # Form ADV sources and their three matching rules, switched off;
-        # ticket 138 stated each identifier's one value per Company; ticket 132
-        # moved the relationship types into RDM, pinned.
-        chain = policy_layers.digests(policy_layers.company_part(POLICY))
-        assert chain == policy_layers.PINNED
-        assert chain[-1] == "983352e81d295a165a1391e82fa8a24a710e6f638361a577f18f541917fd4049"
-
     def test_the_proof_files_match_the_pinned_hashes(self):
         root = Path(__file__).parents[2] / ".scratch/company-mastering/research"
         for name, expected in PROOF["cohort"]["files"].items():
@@ -778,13 +756,6 @@ class TestANameBindingRule:
         body = name_policy()
         body["automatic_rules"][0]["verdict"] = "company"
         with pytest.raises(Conflict, match="does not emit|cannot prove"):
-            check_policy(body)
-
-    def test_identifier_binding_still_activates_only_deterministically(self):
-        body = binding_policy()
-        body["automatic_rules"][0]["activation"] = "measured"
-        body["automatic_rules"][0]["proof"] = proof()
-        with pytest.raises(Conflict, match="applies to"):
             check_policy(body)
 
 

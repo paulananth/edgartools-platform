@@ -53,10 +53,15 @@ open branch.
   - The installed population proof (6,414 Companies, 3,052 CIK+LEI from an empty store, an unchanged replay and
     recovery): passed 2026-10-10, -11 and -11 (#906 and the raw-capture bundles); MDM storage changed since
     (governed storage, #1152-#1190), so it runs again on today's `main` before 32's baseline
-- [ ] The census construction as a configured Bookkeeping target in Rules (source extract, combine), each step
-  verified by its own worker; equal to today's Python census on the whole capture (the 2026-10-09 file sha256)
-- [ ] The census consumers read the configured target's output; the Python construction retired, an
-  independent test-only oracle kept until the configured one is proven
+- [x] Narrowed (2026-10-29 07:50 ET; operator, 2026-10-29: "Yes clean up anything pending from codex", agreeing
+  to narrow 135 to the proof): Codex finished the MDM migration (#1212); no live code calls the old native
+  routines or schema (checked on main). Ticket 32's baseline needs only the installed population proof below:
+  the census it reads is built from configured readings and was proven equal to the original sources to EOF
+  (2026-10-09). The census build moving into Rules is ticket 148
+- [ ] ~~The census construction as a configured Bookkeeping target in Rules~~ moved to ticket 148: not needed for
+  32's baseline
+- [ ] ~~The census consumers read the configured target's output; the Python construction retired~~ moved to
+  ticket 148
 - [ ] The installed population proof on today's `main`: 6,414 Companies and 3,052 CIK+LEI from an empty store,
   a second pass changing nothing, recovery (runs after ticket 120's loads, which hold the machine until about
   13:00 ET)
