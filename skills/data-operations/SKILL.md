@@ -268,6 +268,14 @@ Work it out from counts before starting:
    Expect each bundle to run slower when the cores are shared. A target that
    reads another target's runs waits for that target. If the total does not
    fit the window, say so and do not start. Never drop files to make it fit.
+5. **Memory and shared masters, not only cores.** Bundles of one target
+   that merge into the same masters collide: measured 2026-10-29, one source's
+   load with 4 bundles at once on an 8 GB machine (Docker's VM 4 GB), 10 of 16
+   merges stopped "Prepared state changed; re-assess" and 4 were killed for
+   memory (status -9). Even one at a time, 6 of its 15 merges were
+   killed for memory and one took 39 minutes. Run such merges one bundle at
+   a time, and measure one merge's peak memory against the free memory
+   before choosing `--bundles` (ticket 150).
 
 ### While a load runs
 
