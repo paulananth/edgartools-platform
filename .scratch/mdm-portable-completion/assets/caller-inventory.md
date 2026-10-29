@@ -2,6 +2,10 @@
 
 Baseline: main `4b1bb68f`, merged from qualified PR #1148. This is a source and fresh-install catalog inventory, not full MySQL workflow qualification or a production-store audit.
 
+## Current resolution
+
+This inventory is the historical baseline used to allocate replacement work. All listed normal MDM caller gaps are resolved by merged tickets 02–08 on PostgreSQL/MySQL. [Current closeout](completion-closeout.md) maps those obligations to the final independently installed qualification. Historical counts and checkpoint limits below remain dated to their original baseline.
+
 ## Measured baseline
 
 | Measure | Count | Meaning |

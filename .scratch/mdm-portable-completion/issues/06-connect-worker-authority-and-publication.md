@@ -1,11 +1,15 @@
 # Connect worker authority and publication recovery
 
 Type: task
-Status: claimed
+Status: resolved
 Assignee: Codex
 Claimed: 2026-10-25 15:21 ET
 Parent: [Complete portable MDM and retire PostgreSQL business logic](../map.md)
 Blocked by: none; 04, 05 and their skill prerequisites are merged
+
+## Current closeout — 2026-10-28 20:12 ET
+
+PRs #1171 / 1173 are merged; 13 checks on each implementation/guidance PR; current installed worker families qualify both engines. Current qualification is 160 installed cases per engine, two configured kinds and all 18 families at #1210. [Closeout evidence](../assets/completion-evidence.json) records the verified heads and limits. Historical checkpoints below retain their original dates.
 
 ## Question
 
@@ -20,7 +24,7 @@ Can the normal worker preserve authority through commit and recover publication 
 - [x] Connect immutable root-run scope, attempts, mapping pins, receipts and reconciliation through indexed portable storage; no fake business batches. — 2026-10-25 21:22 ET; mapping interruption/resume retains the original version on both kinds/engines; a later root uses the corrected version. Observing roots retain producer attribution and add no business generation.
 - [x] Connect actual merge/publish workers, normal manifest execution, Journal delivery and supported forced-publication commands to that storage. — 2026-10-25 21:22 ET; both kinds pass actual worker execution, immutable Journal retry and forced CLI page delivery on each engine; four independent installed cases pass at 7708cb5b.
 - [x] Qualify two configured kinds/sources on each engine through an independently installed five-wheel bundle; include lost acknowledgement and zero-work replay — 2026-10-25 20:39 ET; committed runtime 7708cb5b passes four isolated installed cases with two sources, separate worker/verifier processes and a SELECT-only verifier login. Journal interruption/replacement-run recovery, forced CLI pages and no-new-merge retry pass. MySQL verifier-grant fixture uses SQLAlchemy text compilation for its literal host wildcard. Original installed-save first-kind regressions also pass on both engines; final-head installed qualification and CI remain pending.
-- [ ] Finish Standards/Spec/GoF review and final CI, publish the implementation PR, and update Lavish with verified outcomes.
+- [x] Finish Standards/Spec/GoF review and final CI, publish the implementation PR, and update Lavish with verified outcomes. — 2026-10-28 20:12 ET: implementation #1171 and guidance #1173 merged with 13 checks each; recorded three-axis review retained; current installed matrix and Lavish pending-only board verified.
 - [x] Qualify the initial opaque run-metadata boundary — 2026-10-25 15:52 ET; four storage cases per engine pass for immutability, CAS conflicts, expired proof and denied direct writes.
 - [x] Qualify the initial fenced/outbox ordering and release boundary — 2026-10-25 15:52 ET; four storage cases per engine pass, including expired acknowledgement and stale-owner refusal after release/reclaim.
 - [x] Qualify normal merge authority and actual contract publication worker/verifier — 2026-10-25 15:52 ET; four normal cases per engine pass across two configured kinds; expired first/duplicate writes and expired delivered-row retries refuse.

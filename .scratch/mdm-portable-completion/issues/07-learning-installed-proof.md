@@ -1,9 +1,13 @@
 # Installed qualification lessons
 
 Type: task
-Status: claimed
+Status: resolved
 Assignee: Codex
 Parent: [Installed workflow qualification](07-qualify-installed-equivalence.md)
+
+## Current closeout — 2026-10-28 20:12 ET
+
+PRs #1179 are merged; 13 final-head checks pass. Current qualification is 160 installed cases per engine, two configured kinds and all 18 families at #1210. [Closeout evidence](../assets/completion-evidence.json) records the verified heads and limits. Historical checkpoints below retain their original dates.
 
 ## Parts
 

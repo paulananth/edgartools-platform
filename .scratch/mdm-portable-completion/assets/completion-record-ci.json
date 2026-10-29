@@ -1,0 +1,68 @@
+{
+  "run": "40793162573",
+  "head": "74896164d4486790f3c9c6ad7d9213dd2ae46777",
+  "installed_revision": "0c9581362e5865be74f7f95f3c066f18f155b6ec",
+  "checks": 20,
+  "ignored_identical_alias_copies": 0,
+  "elapsed_seconds": 839,
+  "engines": {
+    "postgresql": {
+      "passed_cases": 160,
+      "families": 18,
+      "configured_kinds": 2,
+      "cleanup_verified": true,
+      "family_case_counts": {
+        "Q01": 160,
+        "Q02": 2,
+        "Q03": 4,
+        "Q04": 20,
+        "Q05": 10,
+        "Q06": 10,
+        "Q07": 4,
+        "Q08": 6,
+        "Q09": 10,
+        "Q10": 4,
+        "Q11": 6,
+        "Q12": 8,
+        "Q13": 8,
+        "Q14": 18,
+        "Q15": 12,
+        "Q16": 12,
+        "Q17": 30,
+        "Q18": 18
+      }
+    },
+    "mysql": {
+      "passed_cases": 160,
+      "families": 18,
+      "configured_kinds": 2,
+      "cleanup_verified": true,
+      "family_case_counts": {
+        "Q01": 160,
+        "Q02": 2,
+        "Q03": 4,
+        "Q04": 20,
+        "Q05": 10,
+        "Q06": 10,
+        "Q07": 4,
+        "Q08": 6,
+        "Q09": 10,
+        "Q10": 4,
+        "Q11": 6,
+        "Q12": 8,
+        "Q13": 8,
+        "Q14": 18,
+        "Q15": 12,
+        "Q16": 12,
+        "Q17": 30,
+        "Q18": 18
+      }
+    }
+  },
+  "finished_at_et": "2026-10-28 20:32 ET",
+  "recorded_at_et": "2026-10-28 20:45 ET",
+  "every_expected_case_once": true,
+  "identical_configuration_pins": true,
+  "committed_head_in_install": true,
+  "scope": "Verified record revision; only rebase and closeout receipt/status text follow this qualified revision"
+}

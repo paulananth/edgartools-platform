@@ -8,15 +8,19 @@ last, retain database authority, and introduce no entity/source policy in code.
 - [x] Remove fixed candidate selectors from shared native record-index preparation; reindex from retained latest readings and refuse an unqualified route change without them — 994 MDM unit cases passed with the rebuilt native wheel; configured reindex/replay passed in the 24-case PostgreSQL and MySQL checkpoint cohorts; 2026-10-23 12:59 ET.
 - [x] Add indexed current-record, candidate and membership transport with binding/correction readers against the shared native indexes; retain exact reference and provenance validation — 24 checkpoint cases per engine, including normal binding/correction module entry points, passed; this does not connect the complete Merge Stage caller; 2026-10-23 12:59 ET.
 - [x] Qualify the destination-authority storage capability independently — PostgreSQL/MySQL commit expiry, overtaking, duplicate proof refresh, direct malformed requests, restricted rights, interrupted upgrade, indexed plans and unchanged historical fingerprints passed within each 24-case cohort; normal worker integration remains unchecked below; 2026-10-23 12:59 ET.
-- [ ] Close the demonstrated worker dependency: destination-local external resource fences and expiry must hold through the MySQL commit; preserve protocol 1–3 migration fingerprints and publication-on-input behavior.
-- [ ] Complete normal MySQL owner migration and restricted caller operations; helper storage qualification alone is insufficient.
-- [ ] Qualify atomic merge, identity, history, relationships, detail lists and publication on both selected engines.
-- [ ] Qualify competing/stale writers, rollback, interrupted recovery and unchanged replay on both engines.
+- [x] Close the demonstrated worker dependency: destination-local external resource fences and expiry must hold through the MySQL commit; preserve protocol 1–3 migration fingerprints and publication-on-input behavior. — 2026-10-28 20:12 ET: reconciled against merged tickets 02–08, #1210 current 20-check CI and 160 installed cases per engine; see ticket 09 closeout evidence.
+- [x] Complete normal MySQL owner migration and restricted caller operations; helper storage qualification alone is insufficient. — 2026-10-28 20:12 ET: reconciled against merged tickets 02–08, #1210 current 20-check CI and 160 installed cases per engine; see ticket 09 closeout evidence.
+- [x] Qualify atomic merge, identity, history, relationships, detail lists and publication on both selected engines. — 2026-10-28 20:12 ET: reconciled against merged tickets 02–08, #1210 current 20-check CI and 160 installed cases per engine; see ticket 09 closeout evidence.
+- [x] Qualify competing/stale writers, rollback, interrupted recovery and unchanged replay on both engines. — 2026-10-28 20:12 ET: reconciled against merged tickets 02–08, #1210 current 20-check CI and 160 installed cases per engine; see ticket 09 closeout evidence.
 - [x] Qualify the shipped candidate profile and registered migration files outside the checkout — independently installed five-wheel bundle from 48e406db; two checks passed in 182.37 seconds; 2026-10-23 09:13 ET.
-- [ ] Qualify independently installed normal merge callers on both engines with invented vocabulary.
+- [x] Qualify independently installed normal merge callers on both engines with invented vocabulary. — 2026-10-28 20:12 ET: reconciled against merged tickets 02–08, #1210 current 20-check CI and 160 installed cases per engine; see ticket 09 closeout evidence.
 - [x] Verify the checkpoint final CI head and review readiness — all nine checks green at 149ff418; operator-approved PR #1148 merged as 4b1bb68f after 994 unit, 49 PostgreSQL workflow, 98 adapter cases per PostgreSQL/MySQL, 88 retained SQL Server adapter and two independently installed bundle checks passed; 2026-10-23 13:23 ET.
 - [x] Review the candidate-route checkpoint on Standards, Spec and GoF; publish evidence/PR — review below, clean whitespace/overlap checks and draft PR #1148 at implementation head 48e406db; 2026-10-23 09:13 ET.
 - [x] Learning → skill: document protocol-4 destination authority, explicit input publication and pinned route reindexing with integration limits — separate skill PR #1150, seven genericity checks and all nine CI checks passed; operator-approved merge acd96aa8 verified; 2026-10-23 13:23 ET.
+
+## Current MDM qualification
+
+The normal configured PostgreSQL/MySQL MDM workflow is qualified through merged #1210: 20 checks, 160 independently installed cases per engine, two configured kinds and all 18 families. Historical checkpoint limitations below describe earlier revisions. SQL Server, broader Silver qualification, hosted migration and activation remain separate. The resolved closeout and its CI receipt are tracked in [ticket 09](../../../.scratch/mdm-portable-completion/issues/09-close-completion-and-skill-learning.md).
 
 ## Initial design review
 

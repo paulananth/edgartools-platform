@@ -1,9 +1,13 @@
 # Qualify configuration registration and verifier duties
 
 Type: task
-Status: review
+Status: resolved
 Parent: [Retire PostgreSQL business routines and caller paths](08-retire-postgresql-business-routines.md)
 Blocked by: none for reusable guidance; implementation is PR #1190
+
+## Current closeout — 2026-10-28 20:12 ET
+
+PRs #1191 are merged; 21 final-head checks pass. Current qualification is 160 installed cases per engine, two configured kinds and all 18 families at #1210. [Closeout evidence](../assets/completion-evidence.json) records the verified heads and limits. Historical checkpoints below retain their original dates.
 
 ## Parts
 
