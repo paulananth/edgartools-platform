@@ -91,7 +91,7 @@ done
 
 # Required, never derived from the environment name. Deriving it is what let
 # install.sh and this script disagree about the default connection for the same
-# environment (CLAUDE.md, "SnowCLI connection naming").
+# environment (skills/aws-snowflake-operations, "SnowCLI connection naming").
 [[ -n "$SNOW_CONNECTION" ]] || die "--snow-connection is required (no default is derived from --env-name)"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
