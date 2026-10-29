@@ -1046,16 +1046,18 @@ class Adapter:
             selected = self.lookup_statement(keys, immutable=immutable).subquery("selected")
         batch, run = self.tables["batch"], self.tables["run"]
         if self.engine.dialect.name == "postgresql":
-            batch = select(batch).where(batch.c.batch_key == selected.c.batch_key).offset(0).lateral("origin_batch")
-            run = select(run).where(run.c.run_key == batch.c.run_key).offset(0).lateral("origin_run")
+            batch = select(batch.c.batch_key, batch.c.batch_bytes, batch.c.generation, batch.c.request_hash,
+                           batch.c.run_key).where(batch.c.batch_key == selected.c.batch_key).offset(0).lateral("origin_batch")
+            run = select(run.c.run_key, run.c.run_bytes).where(run.c.run_key == batch.c.run_key).offset(0).lateral("origin_run")
             joined = selected.join(batch, true()).join(run, true())
         else:
             joined = selected.join(batch, batch.c.batch_key == selected.c.batch_key).join(run, run.c.run_key == batch.c.run_key)
         proposal, event = self.tables["proposal"], self.tables["proposal_event"]
         if self.engine.dialect.name == "postgresql":
-            proposal = select(proposal).where(proposal.c.batch_key == selected.c.batch_key,
+            proposal = select(proposal.c.proposal_key).where(proposal.c.batch_key == selected.c.batch_key,
                 proposal.c.state == "applied").offset(0).lateral("origin_proposal")
-            event = select(event).where(event.c.proposal_key == proposal.c.proposal_key,
+            event = select(event.c.occurred, event.c.observer_bytes, event.c.batch_key).where(
+                event.c.proposal_key == proposal.c.proposal_key,
                 event.c.observer_key == run.c.run_key, event.c.event == "applied").offset(0).lateral("origin_event")
             joined = joined.outerjoin(proposal, true()).outerjoin(event, true())
         else:
@@ -1063,9 +1065,11 @@ class Adapter:
                 & (proposal.c.state == "applied")).outerjoin(event,
                 (event.c.proposal_key == proposal.c.proposal_key)
                 & (event.c.observer_key == run.c.run_key) & (event.c.event == "applied"))
+        # The batch's request and assessment are read once per batch (`origin_requests_statement`),
+        # never once per record: a large batch's request repeated on every master of a page
+        # exhausted memory (ticket 147).
         statement = select(selected, batch.c.batch_bytes.label("origin_batch"),
-            batch.c.generation.label("origin_generation"), batch.c.intent.label("origin_intent"),
-            batch.c.request_hash.label("origin_hash"), batch.c.assessment.label("origin_assessment"),
+            batch.c.generation.label("origin_generation"), batch.c.request_hash.label("origin_hash"),
             run.c.run_key.label("origin_run_key"), run.c.run_bytes.label("origin_run"),
             event.c.occurred.label("origin_recorded_at"),
             event.c.observer_bytes.label("origin_observer"),
@@ -1079,6 +1083,19 @@ class Adapter:
             statement = statement.with_hint(proposal, f"FORCE INDEX ({self.prefix}_proposal_batch)", dialect_name="mysql")
             statement = statement.with_hint(event, "FORCE INDEX (PRIMARY)", dialect_name="mysql")
         return statement
+
+    def origin_requests_statement(self, batch_keys):
+        """Each named batch's saved request and assessment, one row a batch."""
+        if not batch_keys:
+            raise AdapterError("A nonempty batch key collection is required")
+        batch, probes = self.tables["batch"], []
+        for batch_key in sorted(batch_keys):  # one primary-key seek a batch
+            probe = select(batch.c.batch_key, batch.c.intent, batch.c.request_hash, batch.c.assessment).where(
+                batch.c.batch_key == batch_key)
+            if self.engine.dialect.name == "mysql":
+                probe = probe.with_hint(batch, "FORCE INDEX (PRIMARY)", dialect_name="mysql")
+            probes.append(probe)
+        return union_all(*probes) if len(probes) > 1 else probes[0]
 
     def batch_metadata_statement(self, before, *, limit=100, path=()):
         """Bounded generation-key reads of recording time and one opaque scalar.
@@ -1214,22 +1231,32 @@ class Adapter:
         return result
 
     def read_origins(self, keys, *, generation=None, immutable=False, connection=None):
-        """Return exact records and the immutable batch's original producer."""
-        unique, found = list(dict.fromkeys(keys)), {}
+        """Return exact records and the immutable batch's original producer. Each batch's
+        request and assessment are read and hash-checked once per call; every record of
+        that batch shares them."""
+        unique, found, requests = list(dict.fromkeys(keys)), {}, {}
         for start in range(0, len(unique), 200):
             chunk = unique[start:start + 200]
             with self.engine.connect() if connection is None else nullcontext(connection) as conn:
                 rows = conn.execute(self.origin_statement(chunk, generation=generation, immutable=immutable)).mappings().all()
+                wanted = {row["batch_key"] for row in rows} - set(requests)
+                if wanted:
+                    for saved in conn.execute(self.origin_requests_statement(wanted)).mappings():
+                        intent = bytes(saved["intent"])
+                        if hashlib.sha256(intent).hexdigest() != saved["request_hash"]:
+                            raise AdapterError("record_origin_mismatch")
+                        requests[saved["batch_key"]] = (intent, bytes(saved["assessment"]), saved["request_hash"])
             for row in rows:
                 identity = bytes(row["type_bytes"]).decode(), bytes(row["id_bytes"]).decode()
                 if identity not in chunk:
                     raise AdapterError("object_digest_collision")
                 if identity in found:
                     raise AdapterError("ambiguous_record_origin")
-                batch, run, intent = bytes(row["origin_batch"]), bytes(row["origin_run"]), bytes(row["origin_intent"])
+                batch, run = bytes(row["origin_batch"]), bytes(row["origin_run"])
+                intent, assessment, request_hash = requests.get(row["batch_key"], (None, None, None))
                 if (hashlib.sha256(batch).hexdigest() != row["batch_key"]
                         or hashlib.sha256(run).hexdigest() != row["origin_run_key"]
-                        or hashlib.sha256(intent).hexdigest() != row["origin_hash"]
+                        or intent is None or request_hash != row["origin_hash"]
                         or row["origin_recorded_at"] is None or row["origin_recorded_at"] <= 0
                         or row["origin_event_batch"] != row["batch_key"]
                         or row["origin_observer"] is None or bytes(row["origin_observer"]) != run
@@ -1237,7 +1264,7 @@ class Adapter:
                     raise AdapterError("record_origin_mismatch")
                 found[identity] = {**self._read_record(row), "origin": {
                     "batch": batch.decode(), "run": run.decode(), "intent": intent,
-                    "assessment": bytes(row["origin_assessment"]),
+                    "assessment": assessment,
                     "generation": int(row["origin_generation"]),
                     "recorded_at": int(row["origin_recorded_at"]),
                 }}

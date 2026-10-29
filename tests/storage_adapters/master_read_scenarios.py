@@ -5,7 +5,7 @@ import runpy
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import event
+from sqlalchemy import event, select
 
 os.environ["READ_ID_CASE"] = "lookup"
 case = os.environ["READ_CONSUMER_CASE"]
@@ -113,6 +113,34 @@ try:
         assert len(lists[2]) == 3 and lists[2][0]["amount"] == 10**80 + 1
         assert lists[3][0]["amount"] == 10**80 + 2
         assert lists[4] == lists[5] == [{"key": "D1", "amount": 10**80 + 2, "sources": [s["primary"]]}]
+    if case == "one_request":
+        # Ticket 147: masters saved in one batch carry that batch's request; a page of
+        # them reads it once, not once a master, by primary key.
+        readings = [g["record"]("invented-" + name, identifiers={g["NAMESPACE"]: number})
+                    for name, number in (("a", "901"), ("b", "902"), ("c", "903"))]
+        s["stage"].apply(batch_id="invented-one-request", run_id=str(uuid4()), policy_digest=g["pin"],
+            consumer="invented-one-request", expected_checkpoint=0, checkpoint=1,
+            as_of=g["AS_OF"], assertions=readings)
+        adapter, statements = g["normal"], []
+        request_column = adapter.tables["batch"].name + ".intent"
+
+        def executed(conn, cursor, statement, parameters, context, executemany):
+            statements.append(statement)
+
+        event.listen(runtime, "before_cursor_execute", executed)
+        try:
+            page = reader.snapshot_page("entity", limit=1000)
+        finally:
+            event.remove(runtime, "before_cursor_execute", executed)
+        assert len(page["items"]) >= 4  # the seed master and the three new ones
+        assert sum(request_column in statement for statement in statements) == 1
+        assert "intent" not in str(adapter.origin_statement([("entity", root)]))  # never once a record
+        origins = adapter.read_origins([("source-reading", r["assertion_id"]) for r in readings], immutable=True)
+        assert len({(o["origin"]["batch"], o["origin"]["intent"]) for o in origins.values()}) == 1
+        # the batch's request is read by its primary key, a seek
+        with runtime.connect() as conn:
+            saved = set(conn.scalars(select(adapter.tables["batch"].c.batch_key).limit(2)))
+        assert_index_lookup(runtime, adapter.origin_requests_statement(saved), adapter.tables["batch"].name)
     if case == "plans":
         adapter = g["normal"]
         for immutable, keys in ((False, [("entity", root), ("entity", "invented-missing")]),
