@@ -1,6 +1,6 @@
 # Portable pipeline orchestration and production support skills
 
-Status: implemented and locally validated; publishing the review handoff.
+Status: implementation and local qualification complete; PR #1225 published ready for review, CI remains the merge gate.
 
 ## Parts
 
@@ -12,7 +12,7 @@ Status: implemented and locally validated; publishing the review handoff.
 - [x] Create source-neutral orchestration and production-support skills plus the appropriate agent definitions, with existing capability gaps stated precisely — 2026-10-29 18:16 ET: two discoverable skills and three canonical Luna/low TOML roles; project discovery links; no runtime or global-configuration mutation.
 - [x] Validate skill behavior, packaging/discovery and agent configuration without deploying live infrastructure — 2026-10-29 18:16 ET: both skill validators; source-neutrality lint (86 initial passes plus corrected case passing on testmon rerun); two independent forward tests; TOML parsing and fresh CLI role-name discovery; two wheel builds and isolated installed-bundle copy with 23 relative links checked.
 - [x] Review Standards, Spec and GoF and qualify declared local validation — 2026-10-29 18:16 ET: independent review below; business-calendar finding corrected; no code refactor or deployment claim.
-- [ ] Publish the scoped result in a PR and verify its checked head.
+- [x] Publish the scoped result in a PR and verify its checked head — 2026-10-29 18:16 ET: PR #1225 is ready (not draft); GitHub head matched the published implementation commit 5fc0c57e. This closeout record is the only subsequent change; final pushed head is reported in the PR handoff. CI remains pending, with no merge or deployment claimed.
 - [x] Learning → skill — 2026-10-29 18:16 ET: pipeline-orchestration owns schedule/calendar, control boundaries and platform qualification; production-support owns bounded investigations, mandatory expert review, action authority and retry-adjusted cost guidance. Verified by forward tests and skill validation; existing shared skills untouched.
 
 ## Scope boundary
