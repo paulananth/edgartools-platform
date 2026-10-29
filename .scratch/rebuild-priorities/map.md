@@ -55,6 +55,8 @@ Two tracks run side by side; the recreation proof runs last, on everything switc
 
 **Operator decisions on the route:** switching on 120 and 09 (with the labels); the OECD fetch for 133; accepting 48 and 32.
 
+**A new feed, after the two proofs:** [149: S-1 registration statements](issues/149-s1-registration-statements.md) (operator, 2026-10-29: "Create a ticket to pull and process S-1"). Nothing captures S-1 documents today, so the feed is not on either proof's path; it is gated on the operator's ruling of what it delivers and permission for each SEC request.
+
 ## Decisions so far
 
 - [Which measures analysts use, and the reported concepts behind each](issues/33-company-financials-01-which-measures-and-concepts.md): 19 line items by usage, concepts chosen per period, years keyed on period end
