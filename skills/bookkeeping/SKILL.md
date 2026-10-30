@@ -120,8 +120,12 @@ verifiers reach Bookkeeping only through these commands, which print JSON:
 | `bookkeeping finalize <run>` | operator | Delivers control's events and records the run's checks |
 | `bookkeeping grant-profile --profile P --worker W --verifier V` | operator (migration owner) | Lets login W report profile P's work and a different login V verify it |
 
-Workers and verifiers connect as their own logins, each a member of the
-runtime role. A profile no login was granted cannot report or verify anything.
+Workers and verifiers connect as their own logins, each with the restricted
+control runtime grants. A profile no login was granted cannot report or verify anything.
+Profile groups record authenticated duty membership; they carry no SQL object
+privileges. Install the control capabilities for each runtime
+principal, then grant its profile duty. A login with both duties still cannot
+verify its own report.
 Control is also packaged alone: `packages/bookkeeping` (`edgar-bookkeeping`).
 
 `edgar-warehouse workers work|verify <profile> <run>` runs a worker
@@ -142,9 +146,9 @@ always redone or read back (ticket 72).
 
 ## Init and migrate modes
 
-Use `init` for an empty `bookkeeping` PostgreSQL 16 database; use
-`migrate` only for an already initialized, checksummed Bookkeeping schema.
-Both apply pending numbered migrations and refresh restricted runtime grants.
+Use `init` for an empty Bookkeeping database on PostgreSQL 16 or MySQL 8;
+use `migrate` only for its already initialized, checksummed storage.
+Both install the selected engine's frozen migrations and refresh restricted runtime grants.
 `migrate` refuses to create a missing schema; checksum drift or an untracked
 schema blocks both. These modes create no run, import no legacy history or
 checkpoints, and do not change Rules, Change Journal or destination schemas.
@@ -152,7 +156,7 @@ checkpoints, and do not change Rules, Change Journal or destination schemas.
 Use a separate migration owner in `BOOKKEEPING_MIGRATION_DATABASE_URL`
 and an existing restricted runtime role. Never use the runtime connection
 or a runtime login as the migration owner. Check
-the exact database, PostgreSQL version and role before executing; do not print
+the configured database, selected engine/version and role before executing; do not print
 connection secrets. Then run the selected command and verify the returned
 migration checksums, five control tables, runtime privileges and zero imported
 run/work rows:
@@ -162,9 +166,29 @@ edgar-warehouse bookkeeping init --runtime-role <role>
 edgar-warehouse bookkeeping migrate --runtime-role <role>
 ```
 
-Select one command for the requested state. If destination transaction guards
-are in scope, provision them separately with `bookkeeping init-guard` using
+The database defaults to `bookkeeping`. An explicitly approved different name
+uses `--database-name <database>` on either command; its private owner connection
+must select that exact database. Bare PostgreSQL/MySQL URLs select the shipped
+drivers. The independent control wheel needs its `mysql` extra for MySQL.
+Keep the existing runtime account's host restriction: MySQL resolves its unique
+account and refuses ambiguous same-name accounts rather than widening access.
+
+MySQL's incomplete migration marker refuses normal writes, including cached
+callers. Repair an interrupted installation with the same build, then rerun
+`migrate` for each configured runtime principal to restore its grants. Missing
+initialized tables or changed installed guards/indexes require owner diagnosis
+and restoration; migration does not replace lost control history with empty data.
+Qualify populated recovery, both duties, actual index use and completion delayed
+past lease expiry. Compare the exact retained receipts/cursors, not just counts.
+SQL Server's normal control lifecycle remains deferred; its existing read and
+prepared-transition helper checks do not qualify a whole run.
+
+Select one command for the requested state. Caller-held destination transaction
+guards are PostgreSQL-only. When those guards are in scope, provision them
+separately with `bookkeeping init-guard` using
 `DESTINATION_MIGRATION_DATABASE_URL` and its restricted destination role.
+MySQL writers use their destination's own atomic capability; report unsupported
+legacy guard calls explicitly rather than emulating deferred commit enforcement.
 Neither control-store mode silently provisions a destination or executes work.
 
 ## Plan mode

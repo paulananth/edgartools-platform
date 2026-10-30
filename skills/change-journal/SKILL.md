@@ -52,8 +52,10 @@ platform modules and is not the independence proof.
 
 ## Init and migrate
 
-Use init for an empty `change_journal` PostgreSQL 16 database; migrate
-only for its already initialized checksummed journal schema. Check the exact
+Use init for an empty Journal database on its selected PostgreSQL 16, MySQL 8
+or SQL Server 2022 target; migrate only its already initialized checksummed
+storage. Qualify the actual selected engine and independent installation.
+Check the exact
 database, version and separate migration/runtime roles without printing secrets.
 Use `CHANGE_JOURNAL_MIGRATION_DATABASE_URL` for the migration owner and
 `CHANGE_JOURNAL_DATABASE_URL` for restricted runtime append/read functions.
@@ -64,10 +66,18 @@ edgar-warehouse change-journal init --runtime-role <role>
 edgar-warehouse change-journal migrate --runtime-role <role>
 ```
 
-Select the command matching store state. Read back migration checksums, the sole
-`journal.event` table, restricted function grants and event count. Untracked
+The database defaults to `change_journal`. On either command, an explicitly
+approved different name uses `--database-name <database>` and an owner connection
+that selects that exact database. The independent wheel's `mysql` or `sqlserver`
+extra supplies the selected optional driver.
+
+Select the command matching store state. Read back migration checksums, the
+engine's Journal-owned event storage/readback objects, restricted grants and event count. Untracked
 schemas, checksum drift, wrong databases or legacy/business tables must block.
 Import no legacy events, checkpoints or pending delivery; preserve old archives.
+An initialized store whose event table disappeared requires restoration;
+rerunning migration must refuse rather than create apparently fresh history.
+Include that refusal in populated owner-recovery and installed-CLI qualification.
 
 ## Plan
 
