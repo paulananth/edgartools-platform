@@ -52,7 +52,7 @@ def test_a_text_document_is_kept_unread_within_its_size():
     cfg = dict(format='text', required=[], allow_empty=False, max_bytes=16)
     _complete(b'<html>s</html>', cfg)
     _complete(b'not json at all', cfg)
-    for data, changes in ((b'<html>' + b'x' * 16, {}), (b'', {}), (b' \n', {})):
+    for data in (b'<html>' + b'x' * 16, b'', b' \n'):
         with pytest.raises(ValueError, match='completeness'):
-            _complete(data, {**cfg, **changes})
+            _complete(data, cfg)
     _complete(b'', {**cfg, 'allow_empty': True})

@@ -7,8 +7,10 @@ work and leases; Change Journal records authorization and completed evidence.
 
 The offline qualification covers HTTPS JSON objects (and, for a POST feed,
 JSON arrays), at most 128 MiB and
-1–9 requests per second. XML, ZIP, text and `ticker_catalog` completeness are
-refused before HTTP. The Company source still selects `artifact.copy` for
+1–9 requests per second. A `text` feed (ticket 149: an HTML registration
+statement) is kept as its original bytes and never read: only its size bound
+and emptiness are checked, and it names no required members. XML, ZIP and
+`ticker_catalog` completeness are refused before HTTP. The Company source still selects `artifact.copy` for
 capture. Live SEC acquisition, continuation discovery/expansion, producer
 manifests and source activation remain Issue 20 L8 work. No fixture constitutes
 live source qualification.

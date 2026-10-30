@@ -5,6 +5,9 @@ Worker renewal invokes public control commands with its restricted login;
 independent readback/admission uses a separate verifier login.
 """
 from copy import deepcopy
+import io
+import zipfile
+from urllib.parse import urlparse
 from functools import partial
 from pathlib import Path
 from uuid import uuid4
@@ -216,8 +219,7 @@ def test_page_uses_its_own_approved_completeness(setup, monkeypatch):
     finish(envelope, capture.execute(envelope, book.artifacts))
 
 
-# A text feed that names required members is refused too: a text document is never read.
-@pytest.mark.parametrize('setup', ['xml', 'zip', 'text', 'ticker_catalog', 'oversize_bound'], indirect=True)
+@pytest.mark.parametrize('setup', ['xml', 'zip', 'ticker_catalog', 'oversize_bound'], indirect=True)
 def test_approved_unsupported_format_or_bound_refuses_before_get(setup, monkeypatch):
     book, start, _ = setup
     calls = []
@@ -227,11 +229,18 @@ def test_approved_unsupported_format_or_bound_refuses_before_get(setup, monkeypa
     assert calls == []
 
 
+@pytest.mark.parametrize('setup', ['text'], indirect=True)
+def test_a_text_feed_naming_required_members_refuses_before_get(setup, monkeypatch):
+    book, start, _ = setup
+    calls = []
+    http(monkeypatch, lambda request: calls.append(request) or httpx.Response(200))
+    with pytest.raises(ValueError, match='names no required members'):
+        capture.execute(start(), book.artifacts)
+    assert calls == []
+
+
 @pytest.mark.parametrize('setup', ['text_document'], indirect=True)
 def test_a_text_document_is_captured_as_its_bytes(setup, monkeypatch):
-    import io
-    import zipfile
-    from urllib.parse import urlparse
     book, start, finish = setup
     page = b'<html><body>An invented registration statement</body></html>'
     http(monkeypatch, lambda request: httpx.Response(200, content=page, headers={'Content-Type': 'text/html'}))
@@ -481,3 +490,22 @@ def test_a_failed_post_keeps_no_key_in_its_error(setup, monkeypatch):
     with pytest.raises(ValueError, match='Provider request failed: ConnectError') as refused:
         capture.execute(start(body=JOBS), book.artifacts)
     assert refused.value.__suppress_context__ and SECRET not in str(refused.value)  # the httpx error, with its headers, is not chained
+
+
+@pytest.mark.parametrize('setup', ['text_document'], indirect=True)
+def test_a_text_document_not_modified_reuses_its_previous_bytes(setup, monkeypatch):
+    book, start, finish = setup
+    calls = []
+    def respond(request):
+        calls.append(request)
+        if len(calls) == 1:
+            return httpx.Response(200, content=b'<html>invented</html>', headers={'etag': 'W/"one"'})
+        return httpx.Response(304)
+    http(monkeypatch, respond)
+    main = start()
+    original = capture.execute(main, book.artifacts)
+    finish(main, original)
+    envelope = start(previous=original)
+    receipt = book.artifacts.json(capture.execute(envelope, book.artifacts))
+    assert receipt['metadata']['status'] == 304 and receipt['metadata']['previous'] == original
+    assert len(calls) == 2

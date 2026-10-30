@@ -77,9 +77,10 @@ def _load(envelope, artifacts):
         raise ValueError('Capture rate must be an exact integer from 1 to 9')
     completeness = configuration.get('page_completeness') if request['document'] == 'page' else configuration['completeness']
     if (completeness is None or completeness['format'] not in ('json', 'json_array', 'text')
-            or not 1 <= completeness['max_bytes'] <= transport.MAX_BYTES
-            or completeness['format'] == 'text' and completeness['required']):
+            or not 1 <= completeness['max_bytes'] <= transport.MAX_BYTES):
         raise ValueError('Capture v1 supports bounded JSON object or array, or text document, completeness only')
+    if completeness['format'] == 'text' and completeness['required']:
+        raise ValueError('A text document is never read, so it names no required members')
     capability = configuration['capabilities']['fetch']
     if capability == 'https.post':
         # The body sits in the request document, itself at most HEADER_BYTES (1 MiB).

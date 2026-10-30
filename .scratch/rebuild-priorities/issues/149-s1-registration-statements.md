@@ -39,7 +39,10 @@ What does "process an S-1" deliver, and how is it captured? The decisions:
 - [x] Decided by the operator (2026-10-29 21:16 ET): "Extend the configured capture (Recommended)": the configured capture (`provider.capture`, qualified for JSON) learns a size-bounded HTML document, its own PR, before the first request; every document keeps its receipt, journal event and verifier
 - [ ] `EDGAR_IDENTITY` set by the operator in their own environment (the SEC's User-Agent with a contact email; the capture refuses without it); checked present, never printed
 - [ ] The capture learns an HTML document: GoF consult, tests, three-axis review, PR, CI, merge
-- [ ] Capture: bronze, immutable and additive, each file with its receipt
+- [ ] The feed's rules: `rules/sources/sec.registration/source.yaml` with one acquisition feed (the SEC archive's filing folders as its approved URL prefix, `sec.conditional` fetch, `text` completeness bounded by the largest main document's size, a polite rate) and a capture target (`provider.capture`); `rules check` passes
+- [ ] The capture's units: one frozen request per filing (the filing's folder plus its primary document name, scoped by CIK and accession), written from the captured submissions' index for the 9,646 S-1 and F-1 originals; nothing exists for this today (`docs/configured-capture.md`: producer manifests are Issue 20 L8 work)
+- [ ] The acquisition switched on in `company-on` on the operator's words (save, a proof over a few documents, approve, activate)
+- [ ] Capture: bronze, immutable and additive, each file with its receipt (9,646 requests; the time stated before it starts)
 - [ ] Profile (data-profiling skill): fields, keys, links and quality, as REPORT.md and findings.yaml
 - [ ] Onboard (data-onboarding skill): the source contract or reader, quality checks, links to Company and
   Security, Mapping Document and Data Catalog entry
