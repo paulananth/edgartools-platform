@@ -1,6 +1,6 @@
 # Complete the normal Bookkeeping storage lifecycle on PostgreSQL and MySQL
 
-Status: PostgreSQL/MySQL implementation, committed-install qualification and review complete; publication/final CI remain the release gate. SQL Server normal lifecycle remains deferred.
+Status: PostgreSQL/MySQL implementation and guidance merged with all 20 checks green on each final head. SQL Server normal lifecycle remains deferred.
 Base: b05d27513; branch codex/bookkeeping-storage-portability-20261029.
 Parent: control-store-portability and platform-three-databases.
 
@@ -16,7 +16,7 @@ Parent: control-store-portability and platform-three-databases.
 - [x] Complete Standards, Spec and GoF review — 2026-10-30 06:51 ET: two independent Luna low reviewers, including host/account and Journal safeguard increments, found no remaining blocking issue; keep the existing facade/storage seam.
 - [x] Publish reviewed implementation in PR #1237 — 2026-10-30 07:11 ET: production source 6b057fc8 and initial record head 07909421 are published; final-head CI remains a separate gate.
 - [x] Qualify the coupled installed Rules → Bookkeeping → real workers/verifier → Journal pipeline — 2026-10-30 07:11 ET: five-wheel installed source 07909421 passed on MySQL (132.29 seconds) and PostgreSQL (43.72 seconds); two verified steps, two Journal events, unchanged resume. Two independent reviewers found no Standards, Spec or GoF issue in the added test.
-- [ ] Qualify final published head in full CI before readiness and merge.
+- [x] Qualify final published head in full CI before readiness and merge — 2026-10-30 07:33 ET: all 20 checks passed at 6c4969bd; PR #1237 merged as abc7397e. Separate guidance PR #1239 passed all 20 checks at 5d7d4523 and merged as 834b35b9.
 - [ ] ~~SQL Server normal lifecycle~~ deferred until the PostgreSQL/MySQL gate; retain current adapter tests.
 - [x] Learning → skill: bookkeeping and change-journal — 2026-10-30 07:11 ET: separate PR #1239 records configured initialization, role membership, host restrictions, interrupted install and lost-history recovery; 95 affected checks and independent review passed. Merge follows #1237.
 
@@ -111,3 +111,11 @@ Keep the existing facade, typed observations, native run preparation and small
 storage adapter. A new registry, controller hierarchy or worker callback system
 has no demonstrated benefit. The unsupported legacy caller-held guard remains
 explicit rather than receiving a simulated commit boundary.
+
+## Release receipt (2026-10-30 07:33 ET)
+
+PR #1237: https://github.com/paulananth/edgartools-platform/pull/1237
+
+PR #1239: https://github.com/paulananth/edgartools-platform/pull/1239
+
+Both final heads were marked ready only after all 20 checks passed, then merged sequentially. The two changed Journal CLI/missing-storage cases also passed on the existing SQL Server test server (2.84 seconds); its normal Bookkeeping controller remains deferred. An initial local SQL Server attempt used a stale port and failed before test setup; resolving the live Docker binding made both cases pass without a code change. No operational data or provider was accessed.
