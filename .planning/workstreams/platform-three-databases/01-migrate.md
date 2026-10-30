@@ -59,7 +59,7 @@ these three stores. Masters' onboarding and activation remain later gates.
 
 ## MDM closeout checkpoint
 
-MDM on PostgreSQL/MySQL is qualified through merged #1210; [ticket 09](../../../.scratch/mdm-portable-completion/issues/09-close-completion-and-skill-learning.md) reconciles its final records. Remaining broad audit, Silver, SQL Server and platform-wide rows stay open. The two deferred test deletions and blocked test-guidance update remain in their own test-retirement ticket.
+MDM on PostgreSQL/MySQL is qualified through merged #1210; [ticket 09](../../../.scratch/mdm-portable-completion/issues/09-close-completion-and-skill-learning.md) reconciles its final records. Remaining broad audit, Silver, SQL Server and platform-wide rows stay open. The two deferred test deletions and test-guidance update subsequently merged in #1219; the dated test-retirement record is complete. The Silver supported-type remainder and explicit calendar deferral are recorded in its current ticket.
 
 ## Full work checklist
 
