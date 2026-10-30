@@ -4,7 +4,7 @@ import os
 import subprocess
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 
 from tests.integration.test_bookkeeping_wheel_postgres import control_python, DOMAIN  # noqa: F401
 from tests.integration.test_configured_bookkeeping_postgres import config
@@ -106,6 +106,14 @@ finally: book.close()
                     assert invoke("finalize", run_id)["run"]["state"] == "complete"
                     assert json.loads(artifacts.verified({"uri": counted, "sha256": final["items"][1]["receipt"]["sha256"]})) == {"lines": 1}
                     invoke("migrate", "--runtime-role", role, "--database-name", owner.url.database)
+                    with journal_owner.begin() as conn:
+                        conn.execute(text("DROP TABLE journal.event CASCADE" if owner.dialect.name == "postgresql" else "DROP TABLE journal_event"))
+                    refused = subprocess.run([str(python), "-I", "-m", "edgar_warehouse.change_journal.cli", "migrate",
+                        "--runtime-role", journal_role, "--database-name", journal_owner.url.database],
+                        capture_output=True, text=True, cwd=tmp_path, timeout=30, env=environment)
+                    assert refused.returncode != 0, "Installed Journal recreated missing history"
+                    assert not inspect(journal_owner).has_table("event" if owner.dialect.name == "postgresql" else "journal_event",
+                        schema="journal" if owner.dialect.name == "postgresql" else None)
                 finally:
                     with owner.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
                         for group in granted:
