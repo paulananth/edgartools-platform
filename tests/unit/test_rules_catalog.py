@@ -101,10 +101,12 @@ class _Server:
 
     def __call__(self, method, path, body=None, params=None):
         self.calls.append((method, path))
+        if method == "PUT" and path == "/pipelines":
+            return {**body, "fullyQualifiedName": catalog.fqn(body["service"], body["name"]), "id": "pipeline-" + body["name"]}
         if method == "PUT" and path == "/tables":
             name = f"{body['databaseSchema']}.{catalog.quote(body['name'])}"
             self.ids[name] = f"id-{len(self.ids)}"
-            return {"fullyQualifiedName": name, "id": self.ids[name]}
+            return {**body, "fullyQualifiedName": name, "id": self.ids[name]}
         if method == "GET" and path == "/tables" and not params.get("after"):  # two pages
             stale = {"fullyQualifiedName": "edgartools-rules.sources.gone.old", "id": "id-old"}
             # a server that ignores `service` also lists another service's table
@@ -122,6 +124,10 @@ class _Server:
             ours = self.ids['edgartools-rules.sources.gleif."gleif.relationships.v1"']
             return {"upstreamEdges": [{"fromEntity": ours, "toEntity": company},
                                       {"fromEntity": "id-other", "toEntity": company}]}
+        if method == "PUT" and "name" in body:
+            parent = body.get("database") or body.get("service")
+            return {**body, "id": body["name"], "fullyQualifiedName":
+                    parent + "." + catalog.quote(body["name"]) if parent else body["name"]}
         return {"data": []} if method == "GET" else {}
 
 
@@ -140,8 +146,11 @@ def test_publish_deletes_only_what_the_rules_no_longer_name():
 def test_publish_stops_when_the_server_names_a_table_otherwise():
     plan = catalog.plan()
 
+    server = _Server(plan)
     def call(method, path, body=None, params=None):
-        return {"fullyQualifiedName": "elsewhere", "id": "x"} if path == "/tables" else {}
+        if path == "/tables":
+            return {"fullyQualifiedName": "elsewhere", "id": "x"}
+        return server(method, path, body, params)
 
     with pytest.raises(catalog.CatalogError, match="The server named table"):
         catalog.publish(plan, call)

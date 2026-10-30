@@ -19,11 +19,14 @@ def test_every_committed_mapping_document_equals_its_rules():
         assert mapdoc.differences(path, sheets) == [], path
 
 
-def test_only_sources_that_feed_mdm_have_one():
-    assert {name for name, _, _ in mapdoc.documents().values()} == {
-        "gleif", "sec.submissions.company", "company", "sec.submissions.person", "person", "iapd.adv",
-        "sec.ownership", "sec.thirteenf.information_table", "sec.nport.security", "sec.nport.registrant", "security",
-        "sec.nport.fund", "fund_structure", "openfigi"}
+def test_every_configured_source_kind_and_pipeline_has_a_workbook():
+    root = files.ROOT
+    expected = {p.parent.name for p in (root / "sources").glob("*/source.yaml")}
+    expected |= {p.parent.name for p in (root / "pipelines").glob("*/pipeline.yaml")}
+    expected |= set(files.policy(root)["kinds"])
+    if files.policy(root).get("relationships"):
+        expected.add("relationships")
+    assert {name for name, _, _ in mapdoc.documents(root).values()} == expected
 
 
 @pytest.fixture

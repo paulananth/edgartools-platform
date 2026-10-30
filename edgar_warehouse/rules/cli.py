@@ -208,12 +208,12 @@ def _catalog(args):
         print("Set OPENMETADATA_URL and OPENMETADATA_TOKEN (a bot's token: Settings > Bots)", file=sys.stderr)
         return 2
     try:
-        result = catalog.publish(plan, catalog.connect(url, token))
+        result = (catalog.verify if args.action == "check" else catalog.publish)(plan, catalog.connect(url, token))
     except catalog.CatalogError as error:
         print(f"The catalog was not published: {error}", file=sys.stderr)
         return 1
     print(json.dumps(result, indent=2, sort_keys=True))
-    return 0
+    return 0 if result.get("ok", True) else 1
 
 
 def register(subparsers):
@@ -247,8 +247,8 @@ def register(subparsers):
     mapping.set_defaults(handler=_mapdoc)
     catalog = commands.add_parser(
         "catalog", help="The Data Catalog (OpenMetadata), published one way from the rules files")
-    catalog.add_argument("action", choices=("plan", "publish"),
-                         help="plan: print the catalog the rules describe; publish: make OpenMetadata equal to it")
+    catalog.add_argument("action", choices=("plan", "publish", "check"),
+                         help="plan: preview; publish: reconcile OpenMetadata; check: read back metadata and lineage")
     catalog.add_argument("--root", default=str(files.ROOT))
     catalog.set_defaults(handler=_catalog)
     test = commands.add_parser(

@@ -44,6 +44,7 @@ from . import files
 from .mapdoc import critical_elements, mapped, paths, winners
 
 SERVICE = "edgartools-rules"
+PIPELINES_SERVICE = SERVICE + "-pipelines"
 SOURCES, MDM, CLEAN = "sources", "mdm", "clean"
 SILVER, RDM, CODE_SETS = "silver", "rdm", "code_sets"
 TEXT = "STRING"  # the catalog shows what a value means, not a database type
@@ -120,8 +121,13 @@ def _dataset(source: str, code: str, contract: dict, kinds: list[str], fills: di
     if critical:
         about.append("Critical data elements (a record missing one is an exception, never merged): "
                      + "; ".join(critical) + ".")
+    for section in ("checks", "fixes"):
+        for rule in (contract.get("quality") or {}).get(section) or []:
+            about.append(f"Data quality {section}: `{rule.get('id')}` "
+                         + json.dumps(rule, sort_keys=True, ensure_ascii=False) + ".")
     if adapter.get("relationships"):
-        about.append("It also carries relationships to other records.")
+        about.append("Declared relationship mappings: "
+                     + json.dumps(adapter["relationships"], sort_keys=True, ensure_ascii=False) + ".")
     table = {"name": code, "databaseSchema": fqn(SERVICE, SOURCES, source), "description": " ".join(about),
              "columns": [{"name": path, "dataType": TEXT, "description": "; ".join(used) + "."}
                          for path, used in sorted(uses.items())]}
@@ -251,6 +257,59 @@ def _feeds(body: dict) -> list[tuple[str, dict]]:
     return sorted(((body.get("acquisition") or {}).get("feeds") or {}).items())
 
 
+def _pipelines(root: Path) -> list[dict]:
+    """Native catalog pipelines for every declared source and standalone target."""
+    result = []
+    for folder, scope, filename in (("sources", "source", "source.yaml"),
+                                    ("pipelines", "pipeline", "pipeline.yaml")):
+        for path in sorted((root / folder).glob("*/" + filename)):
+            body = files.load_source(path) if scope == "source" else files.load(path)
+            for name, target in sorted(((body.get("bookkeeping") or {}).get("targets") or {}).items()):
+                steps = target.get("steps") or []
+                tasks = [{"name": step["name"], "taskType": step["operation"],
+                          "description": f"Key: {step.get('key')}. Leases: {step.get('leases') or []}. "
+                                         f"Checks: {step.get('checks') or []}.",
+                          "downstreamTasks": [other["name"] for other in steps
+                                              if step["name"] in (other.get("requires") or [])]}
+                         for step in steps]
+                result.append({"name": f"{scope}:{path.parent.name}:{name}", "service": PIPELINES_SERVICE,
+                               "description": f"Configured {scope} `{path.parent.name}`, target `{name}`. "
+                                              f"Definition only; approval, activation and runs are separate. "
+                                              f"Run checks: {target.get('checks') or []}.",
+                               "pipelineLocation": path.relative_to(root).as_posix(), "tasks": tasks})
+    return result
+
+
+def _relationships(root: Path, policy: dict) -> tuple[list[dict], list[dict]]:
+    """Pinned type definitions and the declared datasets that supply them."""
+    from .mapdoc import relationship_rows
+    rows = relationship_rows(root, policy)
+    roots = {r["code"]: r for r in rows if r.get("parent_code") is None}
+    tables, lineage = [], []
+    for name, row in sorted(roots.items()):
+        props = row.get("properties") or {}
+        capacities = [{"code": r["code"], "label": r["label"], "properties": r.get("properties") or {}}
+                      for r in rows if r.get("parent_code") == name]
+        tables.append({"name": name, "databaseSchema": fqn(SERVICE, MDM, "relationships"),
+                       "description": f"Configured relationship type: {row.get('definition') or row['label']}. "
+                                      f"From: {props.get('from') or []}. To: {props.get('to') or []}. "
+                                      f"Capacities: {capacities}. Definition metadata, not relationship records.",
+                       "columns": [{"name": key, "dataType": TEXT,
+                                    "description": json.dumps(value, ensure_ascii=False, sort_keys=True)}
+                                   for key, value in sorted(props.items())]})
+    for path in sorted((root / "sources").glob("*/source.yaml")):
+        body = files.load_source(path)
+        for code, entry in sorted((body.get("mdm") or {}).items()):
+            adapter = (entry.get("contract") or {}).get("adapter") or {}
+            names = {name for rel in adapter.get("relationships") or []
+                     for name in ([rel["type"]] if rel.get("type") else (rel.get("type_values") or {}).values())}
+            for name in sorted(names & roots.keys()):
+                lineage.append({"from": fqn(SERVICE, SOURCES, body.get("source") or path.parent.name, code),
+                                "to": fqn(SERVICE, MDM, "relationships", name), "columns": [],
+                                "description": f"`{code}` declares relationships of type `{name}`."})
+    return tables, lineage
+
+
 def plan(root: Path | None = None) -> dict:
     """The whole catalog the rules under `root` describe, sorted, so the same
     rules always give the same plan."""
@@ -262,6 +321,9 @@ def plan(root: Path | None = None) -> dict:
     silver_schemas, profiled, profiled_lineage = _profiles(root)
     tables += profiled
     lineage += profiled_lineage
+    relationship_tables, relationship_lineage = _relationships(root, policy)
+    tables += relationship_tables
+    lineage += relationship_lineage
     bodies = [(path, files.load_source(path)) for path in sorted((root / "sources").glob("*/source.yaml"))]
     # A feed captures one bronze family; a source that declares no feed of its own
     # reads the files of each feed that captures its family (a second kind from
@@ -330,11 +392,18 @@ def plan(root: Path | None = None) -> dict:
                {"name": RDM, "service": SERVICE, "description": "RDM: the code sets the profiled data needs."}]
               if silver_schemas else [])],
         "schemas": schemas + [{"name": CLEAN, "database": fqn(SERVICE, MDM),
-                               "description": "The kinds MDM masters."}] + silver_schemas
+                               "description": "The kinds MDM masters."}]
+                   + ([{"name": "relationships", "database": fqn(SERVICE, MDM),
+                        "description": "Pinned relationship type definitions and their declared source lineage."}]
+                      if relationship_tables else []) + silver_schemas
                    + ([{"name": CODE_SETS, "database": fqn(SERVICE, RDM), "description": "Code sets, by name."}]
                       if silver_schemas else []),
         "tables": tables,
         "lineage": lineage,
+        "pipeline_service": {"name": PIPELINES_SERVICE, "serviceType": "CustomPipeline",
+                             "description": f"Configured pipeline definitions; rules digest `{rules_digest(root)}`. "
+                                            "This catalog does not enable schedules or run workloads."},
+        "pipelines": _pipelines(root),
     }
 
 
@@ -356,7 +425,7 @@ def connect(url: str, token: str) -> Call:
         query = "?" + urlencode(params) if params else ""
         request = Request(base + path + query, method=method,
                           data=None if body is None else json.dumps(body).encode(),
-                          headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+                          headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json-patch+json" if method == "PATCH" else "application/json"})
         try:
             with urlopen(request, timeout=120) as answer:
                 text = answer.read()
@@ -371,48 +440,82 @@ def connect(url: str, token: str) -> Call:
     return call
 
 
-def _listed(call: Call, path: str, params: dict) -> list[dict]:
+def _listed(call: Call, path: str, params: dict, service: str = SERVICE) -> list[dict]:
     """Every entity the server lists, page by page, keeping only those inside
     our own service: a publish never touches another service, even when a
     server ignores the filter it was asked for."""
     found, after = [], None
     while True:
         page = call("GET", path, params={**params, "limit": 1000, **({"after": after} if after else {})}) or {}
-        found += [e for e in page.get("data") or [] if e["fullyQualifiedName"].startswith(SERVICE + ".")]
+        found += [e for e in page.get("data") or [] if e["fullyQualifiedName"].startswith(service + ".")]
         after = (page.get("paging") or {}).get("after")
         if not after:
             return found
+
+
+def _upsert(call: Call, endpoint: str, body: dict) -> dict:
+    """Reconcile rule-owned descriptions even when a bot PUT preserves them."""
+    parent = body.get("databaseSchema") or body.get("database") or body.get("service")
+    expected = parent + "." + quote(body["name"]) if parent else body["name"]
+    answer = call("PUT", endpoint, body)
+    if answer.get("fullyQualifiedName") != expected:
+        kind = "table" if endpoint == "/tables" else "pipeline" if endpoint == "/pipelines" else endpoint
+        raise CatalogError(f"The server named {kind} {expected} {answer.get('fullyQualifiedName')}")
+    changes = []
+    if "description" in body and answer.get("description") != body["description"]:
+        changes.append({"op": "add", "path": "/description", "value": body["description"]})
+    columns = {column["name"]: index for index, column in enumerate(answer.get("columns") or [])}
+    for column in body.get("columns") or []:
+        if column["name"] in columns and "description" in column:
+            index = columns[column["name"]]
+            if answer["columns"][index].get("description") != column["description"]:
+                changes.append({"op": "add", "path": f"/columns/{index}/description", "value": column["description"]})
+    if changes:
+        updated = call("PATCH", endpoint + "/" + answer["id"], changes)
+        if updated.get("fullyQualifiedName") != expected or updated.get("id") != answer["id"]:
+            raise CatalogError(f"The server changed the identity of {expected}")
+        answer = updated
+    return answer
 
 
 def publish(plan: dict, call: Call) -> dict:
     """Make the catalog equal to `plan`: create or update everything it names,
     then delete, inside its own service only, the tables, schemas and lineage
     it no longer names. Publishing the same plan again changes nothing."""
-    call("PUT", "/services/databaseServices", plan["service"])
+    _upsert(call, "/services/databaseServices", plan["service"])
     for database in plan["databases"]:
-        call("PUT", "/databases", database)
+        _upsert(call, "/databases", database)
     for schema in plan["schemas"]:
-        call("PUT", "/databaseSchemas", schema)
+        _upsert(call, "/databaseSchemas", schema)
     ids = {}  # a planned table's name -> its id
     for table in plan["tables"]:
-        name, answer = f"{table['databaseSchema']}.{quote(table['name'])}", call("PUT", "/tables", table)
+        name, answer = f"{table['databaseSchema']}.{quote(table['name'])}", _upsert(call, "/tables", table)
         if answer["fullyQualifiedName"] != name:  # lineage names columns by this name
             raise CatalogError(f"The server named table {name} {answer['fullyQualifiedName']}")
         ids[name] = answer["id"]
+    pipeline_ids = {}
+    if plan.get("pipeline_service"):
+        _upsert(call, "/services/pipelineServices", plan["pipeline_service"])
+        for pipeline in plan.get("pipelines") or []:
+            name = fqn(plan["pipeline_service"]["name"], pipeline["name"])
+            answer = _upsert(call, "/pipelines", pipeline)
+            if answer["fullyQualifiedName"] != name:
+                raise CatalogError(f"The server named pipeline {name} {answer['fullyQualifiedName']}")
+            pipeline_ids[name] = answer["id"]
     service = plan["service"]["name"]
     removed = {"tables": 0, "schemas": 0, "databases": 0, "lineage": 0}
-    for table in _listed(call, "/tables", {"service": service}):
+    for table in _listed(call, "/tables", {"service": service}, service):
         if table["fullyQualifiedName"] not in ids:
             call("DELETE", f"/tables/{table['id']}", params={"hardDelete": "true"})
             removed["tables"] += 1
     planned_schemas = {f"{s['database']}.{quote(s['name'])}" for s in plan["schemas"]}
     planned_databases = {fqn(service, d["name"]) for d in plan["databases"]}
-    for database in _listed(call, "/databases", {"service": service}):
+    for database in _listed(call, "/databases", {"service": service}, service):
         if database["fullyQualifiedName"] not in planned_databases:
             call("DELETE", f"/databases/{database['id']}", params={"hardDelete": "true", "recursive": "true"})
             removed["databases"] += 1
             continue
-        for schema in _listed(call, "/databaseSchemas", {"database": database["fullyQualifiedName"]}):
+        for schema in _listed(call, "/databaseSchemas", {"database": database["fullyQualifiedName"]}, service):
             if schema["fullyQualifiedName"] not in planned_schemas:
                 call("DELETE", f"/databaseSchemas/{schema['id']}", params={"hardDelete": "true", "recursive": "true"})
                 removed["schemas"] += 1
@@ -432,4 +535,80 @@ def publish(plan: dict, call: Call) -> dict:
             if edge["toEntity"] == table_id and stale:  # a link from another service is not ours to remove
                 call("DELETE", f"/lineage/table/{edge['fromEntity']}/table/{table_id}")
                 removed["lineage"] += 1
-    return {"service": service, "tables": len(plan["tables"]), "lineage": len(plan["lineage"]), "removed": removed}
+    if plan.get("pipeline_service"):
+        pipeline_service = plan["pipeline_service"]["name"]
+        for pipeline in _listed(call, "/pipelines", {"service": pipeline_service}, pipeline_service):
+            if pipeline["fullyQualifiedName"] not in pipeline_ids:
+                call("DELETE", f"/pipelines/{pipeline['id']}", params={"hardDelete": "true"})
+                removed["pipelines"] = removed.get("pipelines", 0) + 1
+    return {"service": service, "tables": len(plan["tables"]), "lineage": len(plan["lineage"]),
+            "pipelines": len(pipeline_ids), "removed": removed}
+
+
+def verify(plan: dict, call: Call) -> dict:
+    """Read back the owned metadata and lineage; never repair while checking."""
+    differences = []
+
+    def compare(expected, actual, where):
+        if isinstance(expected, str) and isinstance(actual, dict) and "fullyQualifiedName" in actual:
+            actual = actual["fullyQualifiedName"]
+        if expected == [] and actual is None:
+            actual = []
+        if isinstance(expected, dict):
+            if not isinstance(actual, dict):
+                differences.append(where + ": missing object")
+                return
+            for key, value in expected.items():
+                compare(value, actual.get(key), where + "." + key)
+        elif isinstance(expected, list):
+            if not isinstance(actual, list) or len(expected) != len(actual):
+                differences.append(where + ": different list")
+            else:
+                for index, value in enumerate(expected):
+                    compare(value, actual[index], f"{where}[{index}]")
+        elif expected != actual:
+            differences.append(where + ": differs")
+
+    service = plan["service"]["name"]
+    compare(plan["service"], call("GET", "/services/databaseServices/name/" + escape(service, safe="")), "service")
+    identifiers = {}
+    for collection, scope in (("databases", service), ("schemas", service),
+                              ("tables", service), ("pipelines", plan.get("pipeline_service", {}).get("name"))):
+        if scope is None:
+            continue
+        endpoint = "databaseSchemas" if collection == "schemas" else collection
+        if collection == "schemas":
+            listed = [row for database in plan["databases"] for row in _listed(
+                call, "/databaseSchemas", {"database": fqn(service, database["name"])}, service)]
+        else:
+            listed = _listed(call, "/" + endpoint, {"service": scope}, scope)
+        names = {r["fullyQualifiedName"]: r["id"] for r in listed}
+        expected_names = set()
+        for entry in plan.get(collection) or []:
+            parent = entry.get("databaseSchema") or entry.get("database") or entry.get("service") or service
+            name = parent + "." + quote(entry["name"])
+            expected_names.add(name)
+            compare(entry, call("GET", f"/{endpoint}/name/{escape(name, safe='')}",
+                                params={"fields": "tasks"} if collection == "pipelines" else None), name)
+        if set(names) != expected_names:
+            differences.append(collection + ": different membership")
+        if collection == "tables":
+            identifiers = names
+    if plan.get("pipeline_service"):
+        compare(plan["pipeline_service"], call("GET", "/services/pipelineServices/name/"
+                + escape(plan["pipeline_service"]["name"], safe="")), "pipeline_service")
+    for name, table_id in identifiers.items():
+        graph = call("GET", "/lineage/table/name/" + escape(name, safe=""),
+                     params={"upstreamDepth": 1, "downstreamDepth": 0}) or {}
+        actual = {edge["fromEntity"]: edge for edge in graph.get("upstreamEdges") or []
+                  if edge["toEntity"] == table_id and edge["fromEntity"] in identifiers.values()}
+        expected = {identifiers.get(edge["from"]): edge for edge in plan["lineage"] if edge["to"] == name}
+        if set(actual) != set(expected):
+            differences.append(name + ": different lineage")
+        for source in actual.keys() & expected.keys():
+            wanted = expected[source]
+            details = actual[source].get("lineageDetails") or {}
+            compare(wanted["description"], details.get("description"), name + ".lineage.description")
+            compare(wanted["columns"], details.get("columnsLineage") or [], name + ".lineage.columns")
+    return {"ok": not differences, "tables": len(plan["tables"]),
+            "pipelines": len(plan.get("pipelines") or []), "differences": differences}
