@@ -226,3 +226,11 @@ def test_json_lines_preserves_unquoted_decimal_digits(tmp_path):
     assert delivered["amount"] == Decimal("12345678901234567890.12345678")
     assert delivered["tags"] == {"fraction": Decimal("0.123456789012345678901234567890123"),
                                  "tiny": Decimal("1e-600")}
+
+
+def test_exact_json_numbers_keep_existing_integral_master_key_spelling():
+    from decimal import Decimal
+    from edgar_warehouse.silver_writer.writer import _key
+    assert _key(Decimal("1.0")) == _key(1.0) == "1"
+    assert _key(Decimal("1e60")) == str(10**60)
+    assert _key(Decimal("1.25")) == "1.25"

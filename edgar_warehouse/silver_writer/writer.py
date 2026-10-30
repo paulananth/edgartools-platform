@@ -15,6 +15,7 @@ in bounded chunks); a part too large for that is landed in several deliveries.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Iterable
 
 
@@ -93,6 +94,8 @@ def refresh_ids(sink: Sink, table: str, ids) -> dict:
 def _key(value) -> str | None:
     if value is None:
         return None
+    if isinstance(value, Decimal) and value.is_finite() and value == value.to_integral_value():
+        value = int(value)
     if isinstance(value, float) and value.is_integer():
         value = int(value)
     return str(value)

@@ -82,3 +82,9 @@ would add indirection without reducing a repeated change cost. The liability of
 exact JSON readback is a raw-text cast and Decimal-valued fractional results;
 real-engine round-trip/replay tests cover the boundary. Committed installed proof
 and CI are still required before final qualification.
+
+The first committed installed-caller attempt exceeded 280 seconds during native
+package preparation; no installed behavior pass is claimed from it. Its owned
+processes stopped. Reuse the checkout's existing native target cache on retry;
+retain the same local test deadline. Exact JSON parsing also keeps the prior
+integral numeric master-key spelling through a bounded Decimal normalization.
