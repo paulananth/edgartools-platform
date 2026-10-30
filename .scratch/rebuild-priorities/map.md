@@ -45,7 +45,7 @@ Two tracks run side by side; the recreation proof runs last, on everything switc
 **Track A: the financials, to their cohort proof (48)**
 1. [44: the answer key](issues/44-company-financials-12-answer-key-for-measures.md): on `claude/financials-answer-key`; confirm the restatement and the stock split by hand, recompute one value per hard case, rebase over main's company-financials skill lines, PR.
 2. [133: statutory corporate tax rates in RDM](issues/133-statutory-tax-rates-in-rdm.md): ROIC's fallback rate; one OECD fetch, only with the operator's permission for that request.
-3. [46: line items into silver](issues/46-company-financials-14-build-line-items-into-silver.md) and [47: the measures](issues/47-company-financials-15-build-measures.md) are done; next [48: the cohort proof](issues/48-company-financials-16-cohort-proof.md); the operator accepts.
+3. [46: line items into silver](issues/46-company-financials-14-build-line-items-into-silver.md) and [47: the measures](issues/47-company-financials-15-build-measures.md) are done, and [48: the cohort proof](issues/48-company-financials-16-cohort-proof.md) is accepted (operator, 2026-10-30 14:35 ET): Track A is complete.
 
 **Track B: every captured feed mastered, then the recreation proof (32)**
 1. Switch-ons, each on the operator's words: [120](issues/120-switch-on-securities.md) Securities, switched on in `company-on` (resolved 2026-10-29; its remaining loads are [150](issues/150-finish-the-security-loads-in-company-on.md), after the slow merge's cause is fixed); [09](issues/09-mastering-to-done-07-cascade-passes-switch-on.md) the cascade passes (about 1½ h of the operator's labels, 344 pairs). [114](issues/114-onboard-company.md) and [80](issues/80-onboard-openfigi.md) have only bookkeeping lines left; their source activations moved to 71 (hosting).
@@ -146,6 +146,7 @@ Two tracks run side by side; the recreation proof runs last, on everything switc
 - [146: Convert a populated native MDM store](issues/146-convert-a-populated-native-mdm-store.md): `mdm convert-native` applies each saved batch again; `company-on` converted, every master kept (#1205, #1206)
 - [46: Line items into silver](issues/46-company-financials-14-build-line-items-into-silver.md): every filed fact in `company_fact`; `company_line_item` one row per company, line item and fiscal year, built by SQL over silver and equal to the answer key on the 368-company cohort (#1208, #1209, #1211, #1214, #1215)
 - [47: The measures](issues/47-company-financials-15-build-measures.md): `company_measure`, 40 measures a company and year (ratios, ROE/ROA/ROIC in two forms, CAGR over 1, 3, 5 and 10 years) by SQL over the line items; the statement format and country from the Company master; all 168,360 cohort measures equal the answer key (#1223)
+- [48: The cohort proof](issues/48-company-financials-16-cohort-proof.md): 368 filers through the installed bundle, once with the final checks: every filed line item equal to its fact, every measure's inputs stored, no null without a reason, the hand key 1,600 of 1,600; accepted 2026-10-30 (#1245)
 
 ## Not yet specified
 

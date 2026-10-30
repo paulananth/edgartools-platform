@@ -2,7 +2,7 @@
 
 Priority: 48, tier 3, product value. Map: [Rebuild priorities](../map.md). Moved from `.scratch/company-financials/issues/16-cohort-proof.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
-Type: task. Status: in progress (Claude, 2026-10-30 09:54 ET; operator: "start 48"). Blocked by: 47 (resolved 2026-10-29 18:03 ET). Map: [map](../../company-financials/map.md).
+Type: task. Status: resolved (2026-10-30 14:35 ET, accepted) (Claude, 2026-10-30 09:54 ET; operator: "start 48"). Blocked by: 47 (resolved 2026-10-29 18:03 ET). Map: [map](../../company-financials/map.md).
 
 ## Question
 
@@ -83,7 +83,7 @@ tables, traced to its fact and filing; an agent reads one company's measures.
 - [x] GoF consult, three-axis review (2026-10-30 12:31 ET): GoF, leave the bundle's hand-kept file list (14 additions
   one at a time, but the new test now fails on any miss); Standards, no hard violation; Spec, five gaps in the
   proof's checks, all fixed and passed on the sample, then at full size (13:21 ET)
-- [ ] PR, CI green, merged
-- [ ] The operator accepts the proof (the operator's decision, never ticked for them)
-- [ ] `skills/company-financials/SKILL.md`, "Status of each rule": the rules proved live, once accepted
+- [x] PR, CI green, merged (2026-10-30 13:27 ET, #1245; it merged before its CI ran, then CI passed on main's merge commit; the watcher fixed in #1247)
+- [x] The operator accepts the proof (the operator's decision, never ticked for them) (operator, 2026-10-30 14:35 ET: "yes")
+- [x] `skills/company-financials/SKILL.md`, "Status of each rule": the rules proved live, once accepted (2026-10-30 14:35 ET, this PR)
 - [x] Learning → skill (2026-10-30 13:27 ET, PR #1246 merged): `skills/mdm-engineering/SKILL.md`, "Choose the cheapest proof": a full-size proof runs once, with its final checks (reviewed, passed on a sample first); a rules file is read through `rules.files.ROOT` 
