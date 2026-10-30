@@ -44,6 +44,8 @@ def setup(databases, tmp_path, monkeypatch, request):
             'format': 'json', 'required': ['page'], 'allow_empty': False, 'max_bytes': 1024}
     elif getattr(request, 'param', None) in ('xml', 'zip', 'text', 'ticker_catalog'):
         body['acquisition']['feeds']['fixture']['completeness']['format'] = request.param
+    elif getattr(request, 'param', None) == 'text_document':  # ticket 149: an HTML document, kept unread
+        body['acquisition']['feeds']['fixture']['completeness'].update(format='text', required=[])
     elif getattr(request, 'param', None) == 'oversize_bound':
         body['acquisition']['feeds']['fixture']['completeness']['max_bytes'] = transport.MAX_BYTES + 1
     elif getattr(request, 'param', None) == 'post':  # ticket 92: a mapping API, a JSON array back
@@ -214,14 +216,39 @@ def test_page_uses_its_own_approved_completeness(setup, monkeypatch):
     finish(envelope, capture.execute(envelope, book.artifacts))
 
 
+# A text feed that names required members is refused too: a text document is never read.
 @pytest.mark.parametrize('setup', ['xml', 'zip', 'text', 'ticker_catalog', 'oversize_bound'], indirect=True)
 def test_approved_unsupported_format_or_bound_refuses_before_get(setup, monkeypatch):
     book, start, _ = setup
     calls = []
     http(monkeypatch, lambda request: calls.append(request) or httpx.Response(200))
-    with pytest.raises(ValueError, match='bounded JSON object or array completeness'):
+    with pytest.raises(ValueError, match='bounded JSON object or array, or text document, completeness'):
         capture.execute(start(), book.artifacts)
     assert calls == []
+
+
+@pytest.mark.parametrize('setup', ['text_document'], indirect=True)
+def test_a_text_document_is_captured_as_its_bytes(setup, monkeypatch):
+    import io
+    import zipfile
+    from urllib.parse import urlparse
+    book, start, finish = setup
+    page = b'<html><body>An invented registration statement</body></html>'
+    http(monkeypatch, lambda request: httpx.Response(200, content=page, headers={'Content-Type': 'text/html'}))
+    envelope = start()
+    receipt = capture.execute(envelope, book.artifacts)
+    finish(envelope, receipt)
+    snapshot = Path(urlparse(envelope['output'] + '.capture.zip').path)  # the worker's snapshot beside its receipt
+    with zipfile.ZipFile(io.BytesIO(snapshot.read_bytes())) as archive:
+        assert archive.read('payload') == page
+
+
+@pytest.mark.parametrize('setup', ['text_document'], indirect=True)
+def test_an_empty_text_document_is_refused(setup, monkeypatch):
+    book, start, _ = setup
+    http(monkeypatch, lambda request: httpx.Response(200, content=b'  \n'))
+    with pytest.raises(ValueError, match='completeness'):
+        capture.execute(start(), book.artifacts)
 
 
 @pytest.mark.parametrize('setup', ['invalid_native_contract'], indirect=True)
