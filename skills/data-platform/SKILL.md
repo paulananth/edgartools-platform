@@ -55,6 +55,12 @@ matching evidence and authorization already given. Present a concrete tested
 version before requesting its approval, and continue independent authorized work
 while a necessary input or approval is pending.
 
+For catalog restoration, Mapping Documents, entity domains, glossaries, quality
+publication, unclear asset names or coverage of all entities/pipelines, use
+[Business catalog](../data-onboarding/CATALOG.md).
+This is configuration metadata publication; source processing and activation
+retain their own gates.
+
 ## Source readiness
 
 When running, recovering or qualifying a source, apply these operator requirements
