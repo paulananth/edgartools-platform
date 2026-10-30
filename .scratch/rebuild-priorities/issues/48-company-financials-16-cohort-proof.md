@@ -62,13 +62,27 @@ tables, traced to its fact and filing; an agent reads one company's measures.
   line items; the hand key keeps 12 places, silver 10: compared within silver's rounding step, 1,600 of 1,600
   equal (rounding the key again moved 4 by one in the last place). Sample: masters' SIC and place equal the
   submissions file's 3 of 3; silver equals the rules oracle 1,600 of 1,600 (2026-10-30 11:50 ET)
-- [ ] Open: 8 measures on mastered filers differ from the rules oracle. Likely cause: 2 masters hold a place of
-  incorporation other than their own file's (one empty, one filled where the file is empty); each place is copied
-  from the file as filed, so a merged master's value from another record is the probable source. Not confirmed:
-  the report counts differences without naming the filer (to be broken down by filer on the next run)
-- [ ] Open: the test server dropped a connection during the Company merge in 2 of 8 sample runs
-  (`server closed the connection unexpectedly`); its log is now kept on every run; the full run had none
-- [ ] GoF consult, three-axis review
+- [x] The full proof runs once with the stronger checks (operator, 2026-10-30 13:09 ET: "no more weaker check stronger
+  checks must run once with the appropriate checks"): the 12:22 ET run's weaker checks are not the evidence;
+  the run started 12:44 ET is, with the Spec review's checks, each first passed on the sample. Passed
+  (2026-10-30 13:21 ET, 32.1 min): 70,366 of 70,366 filed line items equal a fact of their filing (concept, period end,
+  value; a cover-page figure at its own date); 0 empty values without a reason in either table; 86,492 of
+  86,492 measures with a value trace by name and year to stored line items; no measure on one side only;
+  the hand key 1,600 of 1,600; the rules oracle 168,244 of 168,360; every count above as in the 12:22 run
+- [x] The 8 measures on mastered filers that differ from the rules oracle (2026-10-30 13:21 ET, by filer, on this machine
+  only): all one filer's ROIC (beginning and average, 4 years each). Its Company master holds a place of
+  incorporation; its latest submissions file has none. Silver reads the master, as the rule says, so it finds
+  the statutory rate (6 values; 2 then "missing year"); the oracle, fed the file, says "no country of
+  incorporation". Silver follows the rule; the difference is in the oracle's input
+- [ ] Follow-up, not this ticket's: 2 Company masters hold a place of incorporation other than their own latest
+  file's (one filled where the file is empty, one empty where the file has one). Each place is copied from the
+  file as filed, so survivorship across a merged master's records is the likely source; for the Company master's
+  owner (MDM), not financials
+- [ ] Open: the test server dropped a connection during the Company merge in 3 of 13 sample runs
+  (`server closed the connection unexpectedly`); its log is now kept on every run; neither full run had one
+- [x] GoF consult, three-axis review (2026-10-30 12:31 ET): GoF, leave the bundle's hand-kept file list (14 additions
+  one at a time, but the new test now fails on any miss); Standards, no hard violation; Spec, five gaps in the
+  proof's checks, all fixed and passed on the sample, then at full size (13:21 ET)
 - [ ] PR, CI green, merged
 - [ ] The operator accepts the proof (the operator's decision, never ticked for them)
 - [ ] `skills/company-financials/SKILL.md`, "Status of each rule": the rules proved live, once accepted
