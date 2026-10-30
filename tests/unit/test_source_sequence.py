@@ -144,14 +144,14 @@ def test_default_inventory_accounts_for_each_committed_source(capsys):
                                "sec.nport.fund", "openfigi", "sec.nport.security"]
     # OpenFIGI is one target since ticket 138, so it is configured, not blocked.
     assert {name for name, item in result["sources"].items() if item["status"] == "blocked"} == {
-        "iapd.adv", "sec.ownership", "sec.thirteenf.information_table", "sec.company-facts",
+        "iapd.adv", "sec.ownership", "sec.thirteenf.information_table", "sec.company-facts", "sec.registration",
     }
 
 
 @pytest.mark.parametrize("name", [
     "sec.submissions.company", "gleif", "sec.submissions.person", "iapd.adv", "sec.ownership",
     "sec.thirteenf.information_table", "sec.nport.registrant", "sec.nport.fund", "sec.nport.security", "openfigi",
-    "sec.company-facts",
+    "sec.company-facts", "sec.registration",
 ])
 def test_each_committed_source_can_be_checked_on_its_own(capsys, name):
     parser = argparse.ArgumentParser()

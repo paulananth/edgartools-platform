@@ -1,0 +1,53 @@
+# SEC registration statements (ticket 149): the main document of each original
+# S-1 and F-1 filing, captured whole from the SEC archive and kept unread.
+# Rulings it rests on (operator, 2026-10-29):
+# - "complete 149 authotised to download S-1": SEC requests for this feed.
+# - "S-1 + F-1 originals, main doc (Recommended)": the filings listed in the
+#   captured submissions (`sec.submissions.company`); the registration
+#   statement document only, never the exhibits (the whole filings are about
+#   90 GB, more than the machine holds).
+# - "Extend the configured capture (Recommended)": each document through
+#   `provider.capture`, with its receipt, journal event and verifier.
+# A document's address is the filing's folder plus its primary document name,
+# both from the submissions index; one unit per accession (a filing listed
+# under two co-registrants is asked once). The bound is the transport's 128 MiB
+# ceiling: the index gives the whole filing's size, not the main document's.
+# No dataset yet: the reading and its Dataset Contract come with onboarding.
+source: sec.registration
+bronze:
+  family: sec.registration
+acquisition:
+  version: 1
+  feeds:
+    registration:
+      family: sec.registration
+      datasets: []
+      scope:
+      - cik
+      - accession
+      capabilities:
+        capture: provider.capture
+        fetch: sec.conditional
+      completeness:
+        format: text
+        required: []
+        allow_empty: false
+        max_bytes: 134217728
+      required_producers:
+      - capture
+      url_prefixes:
+      - https://www.sec.gov/Archives/edgar/data/
+bookkeeping:
+  version: 1
+  targets:
+    capture:
+      lease_seconds: 300
+      heartbeat_seconds: 30
+      steps:
+        - name: capture
+          operation: provider.capture
+          requires: []
+          key: "{accession}"
+          leases: ["provider:sec", "output:{destination}"]
+          checks: [input.hash, output.receipt, capture.verified]
+      checks: [manifest.hash, work.accounting, journal.delivered]
