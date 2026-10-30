@@ -17,6 +17,7 @@
 //! into memory up to those limits: records are not streamed.
 
 mod formats;
+mod html;
 pub mod json_sequence;
 pub mod xml_sequence;
 pub mod delimited_sequence;
@@ -126,7 +127,7 @@ pub struct Reading {
     pub deferred: Vec<Deferred>,
 }
 
-const FORMATS: [&str; 5] = ["xml", "json", "jsonl", "csv", "tsv"];
+const FORMATS: [&str; 6] = ["xml", "json", "jsonl", "csv", "tsv", "html"];
 const PRIMITIVES: [&str; 26] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object", "coalesce", "choose", "test", "equal", "overlap", "join", "member", "member_value", "project", "recover", "transform", "sequence", "concat", "pluck"];
 const CHECKS: [&str; 7] = ["required", "in_set", "in_lookup", "absent", "count", "before", "lei"];
 
@@ -358,6 +359,7 @@ impl Engine {
             "jsonl" => formats::jsonl(bytes, max_records, self.json_integer, self.json_python_text),
             "csv" => formats::csv(&formats::decode(bytes, &encodings(&self.read))?, max_records),
             "tsv" => formats::tsv(&formats::decode(bytes, &encodings(&self.read))?, max_records),
+            "html" => html::html(&formats::decode(bytes, &encodings(&self.read))?, max_records),
             _ => {
                 let parsed = match parse_xml(bytes) {
                     Err(error)
@@ -576,9 +578,9 @@ fn validate(read: &Value, steps: &Steps) -> Result<(), String> {
         let named = encodings(read);
         let fits = !named.is_empty() && named.len() <= 2 && named.iter().all(|e| formats::ENCODINGS.contains(&e.as_str()))
             && (named.len() == 1 || (named[0] == "utf-8" && named[1] != "utf-8"));
-        if !fits || !matches!(format, "csv" | "tsv") {
+        if !fits || !matches!(format, "csv" | "tsv" | "html") {
             return Err(format!(
-                "read.encoding is one of {:?}, or [utf-8, <another>] (UTF-8 when the bytes are UTF-8), for CSV or TSV",
+                "read.encoding is one of {:?}, or [utf-8, <another>] (UTF-8 when the bytes are UTF-8), for CSV, TSV or HTML",
                 formats::ENCODINGS
             ));
         }

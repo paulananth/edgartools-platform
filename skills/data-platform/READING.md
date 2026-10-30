@@ -1584,3 +1584,58 @@ read:
         accession: {context: {name: accession}}
         period: {text: {path: periodOfReport.$}}
 ```
+
+## An HTML page: blocks of text and tables of cells
+
+`read.format: html` reads a web page as people read it, not as its tags nest:
+paths have no any-depth step, and a page nests its text and tables at any
+depth. The page's tree is built as a browser builds it (HTML5: an unclosed
+or misnested tag never refuses a page; stray text in a table shows before
+it), then read flat:
+
+- `title`: the page's title (the head's; one inside an image is not);
+- `block`: each run of text outside a table cell, cut where a block element
+  (paragraph, heading, list item, line break, division, caption) starts or
+  ends; in plain text (a page with no tags) and in `<pre>`, a blank line cuts
+  a block too;
+- `row`: each table row with a nonblank cell, as one record: `@table` is its
+  table's number in the page, `@row` its number among its table's kept rows
+  (both from 1), and its cells are `c1`, `c2`... by column, as a CSV without
+  a header names them. A blank cell is kept (`""`) so the next cells keep
+  their columns, and a cell spanning columns (`colspan`) is followed by a
+  blank cell for each column it spans. A table inside a cell is a table of
+  its own, numbered after the one holding it; its text is not in the cell.
+
+Each block and row carries `@at`, its place in the page (from 1, one count
+for both), so a contract can tie a heading to the table after it. Each is
+an element holding its text (`$`); nothing repeats inside a record, so
+`each: block` and `each: row` need no `nest`. Text is the visible text:
+entities decoded, script, style and inline images dropped, whitespace (the
+no-break space too) collapsed to one space and trimmed.
+
+```yaml
+read:
+  format: html
+  container: zip        # a capture snapshot keeps the page as its `payload`
+  member: payload
+  encoding: [utf-8, windows-1252]
+  limits: {max_bytes: 33554432, max_records: 100000}
+  tables:
+    blocks:
+      each: block
+      columns:
+        at: {text: {path: '@at'}}
+        text: {text: {path: $}}
+    rows:
+      each: row
+      columns:
+        at: {text: {path: '@at'}}
+        table: {text: {path: '@table'}}
+        first: {text: {path: c1.$}}
+        second: {text: {path: c2.$}}
+```
+
+`max_records` bounds blocks and rows together, and the read stops at the
+first record over it. A block over 1 MiB refuses the page (`limit_exceeded`),
+since a text transformation takes at most 1 MiB. `read.encoding` works as
+for CSV.
