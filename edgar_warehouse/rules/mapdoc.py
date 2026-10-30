@@ -401,6 +401,40 @@ def comment_notes(*paths: Path) -> list[list[str]]:
     return notes
 
 
+def pipeline_sheets(body: dict) -> dict[str, list[list[str]]]:
+    """Declared control targets and tasks, without implying they are active."""
+    targets = [["Target", "Run checks", "Lease seconds", "Heartbeat seconds", "Rules path"]]
+    steps = [["Target", "Step", "Operation", "Requires", "Key", "Leases", "Checks", "Rules path"]]
+    for name, target in sorted(((body.get("bookkeeping") or {}).get("targets") or {}).items()):
+        where = f"bookkeeping.targets.{name}"
+        targets.append([name, _text(target.get("checks")), _text(target.get("lease_seconds")),
+                        _text(target.get("heartbeat_seconds")), where])
+        for index, step in enumerate(target.get("steps") or []):
+            steps.append([name, step["name"], step["operation"], _text(step.get("requires")),
+                          _text(step.get("key")), _text(step.get("leases")), _text(step.get("checks")),
+                          f"{where}.steps[{index}]"])
+    return {"Pipeline targets": targets, "Pipeline steps": steps}
+
+
+def relationship_rows(root: Path, policy: dict) -> list[dict]:
+    """Read the policy's own immutable relationship reference, checking its hash."""
+    section = policy.get("relationships")
+    return files.pinned_reference(section["pin"], root) if section else []
+
+
+def relationship_sheets(rows: list[dict]) -> dict[str, list[list[str]]]:
+    types = [["Type", "Meaning", "From kinds", "To kinds", "Properties"]]
+    capacities = [["Capacity", "Relationship type", "Meaning", "Properties"]]
+    for row in sorted(rows, key=lambda r: r["code"]):
+        props = row.get("properties") or {}
+        if row.get("parent_code") is None:
+            types.append([row["code"], row.get("definition") or row["label"],
+                          _text(props.get("from")), _text(props.get("to")), _text(props)])
+        else:
+            capacities.append([row["code"], row["parent_code"], row["label"], _text(props)])
+    return {"Relationship types": types, "Capacities": capacities}
+
+
 def documents(root: Path | None = None) -> dict[Path, tuple[str, dict[str, list[list[str]]], list[Path]]]:
     """Every Mapping Document the rules under `root` generate, by path: the
     source or kind it describes, its sheets, and the rules files behind it."""
@@ -410,10 +444,18 @@ def documents(root: Path | None = None) -> dict[Path, tuple[str, dict[str, list[
     found: dict[Path, tuple] = {}
     for path in sorted((root / "sources").glob("*/source.yaml")):
         body = files.load_source(path)
-        if body.get("mdm"):  # a source that feeds no MDM kind maps nothing
-            name = path.parent.name
-            found[path.parent / "MAPPING.xlsx"] = (
-                name, _source_sheets(name, body, policy, root), [path, path.parent / "quality.yaml"])
+        name = path.parent.name
+        found[path.parent / "MAPPING.xlsx"] = (
+            name, {**_source_sheets(name, body, policy, root), **pipeline_sheets(body)},
+            [path, path.parent / "quality.yaml"])
+    for path in sorted((root / "pipelines").glob("*/pipeline.yaml")):
+        body = files.load(path)
+        found[path.parent / "MAPPING.xlsx"] = (path.parent.name, pipeline_sheets(body), [path])
+    rows = relationship_rows(root, policy)
+    if rows:
+        found[root / "merge" / "relationships.xlsx"] = (
+            "relationships", relationship_sheets(rows), [root / "merge" / "policy.yaml",
+                                                       root / "merge" / "reference-pins.yaml"])
     for kind, rules in sorted((policy.get("kinds") or {}).items()):
         yaml = root / "merge" / "kinds" / f"{kind}.yaml"
         found[yaml.with_suffix(".xlsx")] = (kind, _kind_sheets(kind, rules, by_kind.get(kind, {})), [yaml])

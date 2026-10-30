@@ -28,7 +28,7 @@ x-server-env: &server-env
   SEARCH_TYPE: elasticsearch
   PIPELINE_SERVICE_CLIENT_ENABLED: "false"
   SERVER_HOST_API_URL: http://openmetadata-server:8585/api
-  OPENMETADATA_HEAP_OPTS: -Xmx1G -Xms1G
+  OPENMETADATA_HEAP_OPTS: "${CATALOG_SERVER_HEAP_OPTS:--Xmx1G -Xms1G}"
 
 services:
   postgresql:
@@ -51,7 +51,7 @@ services:
     restart: unless-stopped
     environment:
       - discovery.type=single-node
-      - ES_JAVA_OPTS=-Xms1024m -Xmx1024m
+      - "ES_JAVA_OPTS=${CATALOG_SEARCH_HEAP_OPTS:--Xms1024m -Xmx1024m}"
       - xpack.security.enabled=false
     volumes:
       - es-data:/usr/share/elasticsearch/data

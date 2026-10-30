@@ -278,6 +278,11 @@ Large files should be read in chunks before editing: `edgar_warehouse/mdm/clean/
 
 ## Tooling Rules
 
+- Never use computer-use tools, browser automation or GUI interactions on this
+  project (operator, 2026-10-30). Use service APIs and CLI tools, including for
+  OpenMetadata publication, inspection, deletion and reset. Report a precise
+  missing API/CLI capability instead of falling back to a UI.
+
 - Use the GitHub CLI (`gh`) for GitHub pull requests, issues, reviews and CI operations.
 - Before GitHub work, check `command -v gh`, `gh --version` and `gh auth status --hostname github.com`. Diagnose and repair executable, PATH, authentication or network failures. Report the exact failing command and error if `gh` remains blocked before using a fallback; attribute a failure to the sandbox only when the error establishes that cause.
 - Use `uv` for Python dependency management and Python command execution.
