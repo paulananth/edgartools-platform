@@ -30,6 +30,9 @@ def validate(config):
     for control in config['controls']:
         if any(item['stage'] not in stages for item in control['interactions']):
             raise ValueError('Unresolved control interaction')
+        if any(not isinstance(item.get('label'), str) or not item['label'].strip()
+               for item in control['interactions']):
+            raise ValueError('Control interaction needs a clear action label')
 
 
 def description(config):

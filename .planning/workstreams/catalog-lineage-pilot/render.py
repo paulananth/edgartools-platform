@@ -24,7 +24,7 @@ def render(config, receipt):
         for relation in control['interactions']:
             step = next(item for item in config['stages'] if item['name'] == relation['stage'])
             x = (positions[step['input']] + 210 + positions[step['output']]) / 2
-            svg.append(f'<path d="M{x} {y} V110" stroke="currentColor" stroke-dasharray="4 6" opacity=".4"/><text x="{x+28}" y="{y+33}" font-size="14">{escape(step["title"])}</text>')
+            svg.append(f'<g id="interaction-{escape(control["name"])}-{escape(step["name"])}"><title>{escape(relation["description"])}</title><path d="M{x} {y} V110" stroke="currentColor" stroke-dasharray="4 6" opacity=".4"/><text x="{x+28}" y="{y+33}" font-size="14">{escape(relation["label"])}</text></g>')
         svg.append('</g>')
     svg.append('</svg>')
     stages = []
