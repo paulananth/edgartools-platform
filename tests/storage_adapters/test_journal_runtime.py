@@ -23,6 +23,38 @@ def event(**changes):
     return envelope(**values)
 
 
+def test_normal_journal_cli_initializes_the_explicit_configured_database(database_factory, monkeypatch, capsys):
+    import json
+    from edgar_warehouse.change_journal.cli import main
+    with database_factory() as (owner, runtime, role):
+        monkeypatch.setenv("CHANGE_JOURNAL_MIGRATION_DATABASE_URL", owner.url.render_as_string(hide_password=False))
+        options = ["--runtime-role", role, "--database-name", owner.url.database]
+        assert main(["init", *options]) == 0
+        before = json.loads(capsys.readouterr().out)
+        assert main(["migrate", *options]) == 0
+        assert json.loads(capsys.readouterr().out) == before
+        assert ChangeJournal(runtime).status()["events"] == 0
+
+
+def test_populated_journal_migration_refuses_to_recreate_missing_event_storage(database_factory):
+    from sqlalchemy import inspect
+    from edgar_warehouse.control_contract import Blocked
+    with database_factory() as (owner, runtime, role):
+        options = dict(runtime_role=role, database_name=owner.url.database)
+        migrate(owner, **options)
+        ChangeJournal(runtime).append(event())
+        dialect = owner.dialect.name
+        with owner.begin() as conn:
+            if dialect == "postgresql":
+                conn.execute(text("DROP TABLE journal.event CASCADE"))
+            else:
+                conn.execute(text("DROP TABLE " + ("journal_event" if dialect == "mysql" else "journal.event")))
+        with pytest.raises((Blocked, DBAPIError)):
+            migrate(owner, existing_only=True, **options)
+        assert not inspect(owner).has_table("journal_event" if dialect == "mysql" else "event",
+                                          schema=None if dialect == "mysql" else "journal")
+
+
 @pytest.fixture(scope="module")
 def journal_database(database_factory):
     with database_factory() as value:

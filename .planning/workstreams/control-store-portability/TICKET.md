@@ -1,6 +1,6 @@
 # Complete Rules, Bookkeeping and Change Journal portability
 
-Status: claimed by Codex; Rules implemented and locally qualified; final CI and Bookkeeping remain incomplete.
+Status: Rules and its guidance merged; Bookkeeping/Journal normal PostgreSQL/MySQL implementation and local qualification complete on its follow-up branch; final CI/release and deferred SQL Server remain open.
 Base: current origin/main after Silver closeout; branch `codex/control-store-portability-20261029`.
 Parent: [Platform portability](../platform-three-databases/01-migrate.md).
 
@@ -9,10 +9,10 @@ Parent: [Platform portability](../platform-three-databases/01-migrate.md).
 - [x] Reconcile actual normal callers, existing selected-engine helpers, retained drafts and qualification evidence; preserve unrelated work — 2026-10-29 23:25 ET: live source/history and worktree inventory; Journal already has selected-engine storage, Rules and Bookkeeping still have normal-call gaps. Archived work and unrelated main changes preserved.
 - [x] Complete Rules owner migration and restricted agent/approval duties on PostgreSQL/MySQL with immutable historical migrations and populated recovery — 2026-10-29 23:43 ET: selected-engine tests and installed init/migrate passed on both engines; drift and interrupted-DDL cases refuse unsafe access.
 - [x] Complete Rules normal save/version/proof/approval/activation/export on both engines; preserve immutable content, exact evidence and authorization against direct bypass and concurrency — 2026-10-29 23:43 ET: normal/negative/concurrent tests, actual governed MDM handoff and installed CLI lifecycle passed.
-- [ ] Complete Bookkeeping normal initialization and worker/verifier grants on both engines.
-- [ ] Complete Bookkeeping normal start/claim/heartbeat/report/verify/completion/checkpoint/generated-work/resume/finalize and destination authority/recovery on both engines; keep durable state enforcement authoritative at its destination.
+- [x] Complete Bookkeeping normal initialization and worker/verifier grants on both engines — 2026-10-30 07:11 ET: PR #1237, isolated normal and installed runtime proof, restricted separate logins.
+- [x] Complete Bookkeeping normal start/claim/heartbeat/report/verify/completion/checkpoint/generated-work/resume/finalize and destination authority/recovery on both engines — 2026-10-30 07:11 ET: PR #1237; 22 MySQL control cases, retained PostgreSQL cohorts, independent control-only install and real worker pipeline pass.
 - [x] Verify and retain existing Change Journal selected-engine support and independent package; implement only demonstrated gaps in normal append/replay/read/receipt/delivery/migration/rights behavior — 2026-10-29 23:43 ET: nine retained normal cases passed on each selected engine; existing independent-package and SQL Server evidence unchanged; no Journal gap found.
-- [ ] Qualify normal configured callers and installed workers/verifiers, migration/health commands, rollback/recovery, unchanged replay and populated upgrades; reuse applicable existing proofs.
+- [x] Qualify normal configured callers and installed workers/verifiers, migration/health commands, rollback/recovery, unchanged replay and populated upgrades — 2026-10-30 07:11 ET: PR #1237 ticket retains per-case evidence; coupled five-wheel real worker pipeline passes on PostgreSQL/MySQL, with unchanged event counts after resume.
 - [ ] Review Standards, Spec and GoF; publish bounded implementation PRs and qualify final heads before merge.
 - [ ] ~~Full SQL Server qualification~~ deferred until the PostgreSQL/MySQL gate; retain existing SQL Server adapter checks and Journal qualification.
 - [x] Resolve Rules CLI overlap before editing that file — 2026-10-29 22:26 ET: operator explicitly assigned edgar_warehouse/rules/cli.py to Codex in this session; archived Claude work is preserved. The real guard continues to report that known overlap; no other overlap is authorized.
@@ -48,7 +48,7 @@ gate stay open below; this checkpoint does not claim the parent effort complete.
 - [x] Qualify committed Rules CLI from the independently installed five-wheel bundle on both engines — 2026-10-30 00:12 ET: final source head 2cd63adb passed installed init/save/record-proof/pending/approve/activate/status/export/populated migrate with bare backend URLs on both engines (113.70/115.96 seconds). Earlier source head b4829224 and the first MySQL installation also passed.
 - [x] Review Standards, Spec and GoF — 2026-10-29 23:43 ET: two independent Luna low reviewers; missing-guard/index drift finding reproduced and corrected, then re-reviewed with no remaining blocking finding. Existing facade/storage seam retained.
 - [x] Publish the bounded Rules PR — 2026-10-30 00:12 ET: PR #1235 publishes the implementation and local evidence; retained as draft until its final head passes CI.
-- [ ] Qualify final CI before readiness and merge.
+- [x] Qualify final CI before readiness and merge — 2026-10-30 06:51 ET: all 20 checks passed at Rules head 756ccfef; PR #1235 merged as 6423a4169. Guidance PR #1236 passed all 20 checks at 6d282783 and merged as b05d27513.
 - [x] Learning → skill: document only demonstrated reusable installation/qualification changes, on a separate skill branch/PR — 2026-10-30 00:12 ET: PR #1236, separate branch, 87 genericity checks and independent review passed.
 
 ## Final local evidence and review
@@ -99,3 +99,7 @@ owner install, grants and lifecycle still call PostgreSQL routines. Journal
 already selects its normal storage adapter. Reuse those interfaces and native
 control preparation rather than a parallel control engine, policy registry or
 store hierarchy. Inspect each actual transition and race before changing it.
+
+## Bookkeeping and Journal follow-up
+
+PR #1237 supplies normal PostgreSQL/MySQL Bookkeeping and the demonstrated Journal CLI/lost-history gaps. Eleven normal Journal cases pass on each engine; initialized missing event storage is refused before recreation. Independent control-only and coupled installed real-worker proofs pass. Final-head CI and release remain open. Separate guidance PR #1239 depends on the implementation.

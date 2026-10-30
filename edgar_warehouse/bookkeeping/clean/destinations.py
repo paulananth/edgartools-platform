@@ -10,6 +10,8 @@ from .config import Blocked, canonical
 
 
 def migrate_guard(engine, *, runtime_role: str):
+    if engine.dialect.name != "postgresql":
+        raise Blocked("Caller-held destination transactions require PostgreSQL; use the destination's atomic storage capability")
     schema = "bookkeeping_guard"
     sql = (Path(__file__).parent / "migrations" / "destination_guard.sql").read_text()
     checksum = hashlib.sha256(sql.encode()).hexdigest()
@@ -46,4 +48,6 @@ def guard(conn, claim):
     Proof never enters the business payload or idempotency key. Each retry
     keeps its original effects identity while obtaining fresh authority.
     """
+    if conn.dialect.name != "postgresql":
+        raise Blocked("Caller-held destination transactions require PostgreSQL; use the destination's atomic storage capability")
     conn.execute(text("SELECT bookkeeping_guard.authorize(CAST(:p AS jsonb))"), {"p": canonical(claim.proof)})
