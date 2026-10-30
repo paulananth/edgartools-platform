@@ -166,7 +166,7 @@ def _mapdoc(args):
     if args.only:
         found = {path: item for path, item in found.items() if item[0] == args.only}
         if not found:
-            print(f"No source or kind named {args.only} has a Mapping Document", file=sys.stderr)
+            print(f"No source, kind, pipeline or relationships named {args.only} has a Mapping Document", file=sys.stderr)
             return 2
     if args.action == "write":
         try:
@@ -210,7 +210,7 @@ def _catalog(args):
     try:
         result = (catalog.verify if args.action == "check" else catalog.publish)(plan, catalog.connect(url, token))
     except catalog.CatalogError as error:
-        print(f"The catalog was not published: {error}", file=sys.stderr)
+        print(f"The catalog operation failed: {error}", file=sys.stderr)
         return 1
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0 if result.get("ok", True) else 1
@@ -242,7 +242,7 @@ def register(subparsers):
     mapping.add_argument("action", choices=("write", "diff", "check"),
                          help="write: regenerate, keeping Notes; diff: what a workbook changed; "
                               "check: fail when any workbook differs from its rules")
-    mapping.add_argument("--only", help="One source (its folder name) or kind")
+    mapping.add_argument("--only", help="One source, kind, standalone pipeline or relationships")
     mapping.add_argument("--root", default=str(files.ROOT))
     mapping.set_defaults(handler=_mapdoc)
     catalog = commands.add_parser(

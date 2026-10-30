@@ -31,7 +31,9 @@ entity/source list. Catalog publication does not activate or run source pipeline
 - [x] Test with invented metadata before publishing configured metadata, then reset only task-owned catalog metadata before deployment — 2026-10-30 08:39 ET: real API proof passed (three tables, one pipeline/two tasks, two lineage links, stale cleanup, drift/repair, unchanged versions); API reset removed two synthetic services and verified zero owned services remain. Accounts, volumes, shared stores and source records untouched.
 - [ ] Verify catalog API readback and generated workbook cells; publish counts/outcomes only, retain private runtime details outside Git. The operator replaced UI inspection with API/CLI-only verification and prohibits computer use on this project (2026-10-30).
 - [x] Complete Standards, Spec and GoF review — 2026-10-30 08:47 ET: two independent reviewers found no blocking issue, including narrow description PATCH ownership and foreign-identity refusal.
-- [ ] Publish implementation/evidence in a PR and require final-head CI before readiness; catalog deployment remains a post-merge operation.
+- [x] Publish implementation/evidence in PR #1242 — 2026-10-30 08:56 ET: source a0327237 is published and independently installed; final-head CI remains a separate readiness gate.
+- [x] Qualify normal metadata CLI and all workbook contents from the installed five-wheel bundle outside the checkout — 2026-10-30 08:56 ET: committed source a0327237 passed in 137.43 seconds; catalog plan includes native pipelines/relationships, all bundled Mapping Documents pass check, missing catalog credentials refuse without a request. The subsequent CLI wording and parser checks passed 21 cases.
+- [ ] Require final-head CI before readiness; deploy configured metadata after merge.
 - [ ] Learning → skill: update reusable metadata coverage, publishing and verification guidance on a separate skill branch/PR.
 
 ## Initial GoF consult
