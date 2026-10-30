@@ -86,4 +86,4 @@ tables, traced to its fact and filing; an agent reads one company's measures.
 - [ ] PR, CI green, merged
 - [ ] The operator accepts the proof (the operator's decision, never ticked for them)
 - [ ] `skills/company-financials/SKILL.md`, "Status of each rule": the rules proved live, once accepted
-- [ ] Learning → skill
+- [ ] Learning → skill: `skills/mdm-engineering/SKILL.md`, "Choose the cheapest proof": a full-size proof runs once, with its final checks (reviewed, passed on a sample first); a rules file is read through `rules.files.ROOT` (PR #1246, ticked when merged)
