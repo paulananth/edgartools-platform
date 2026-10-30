@@ -384,6 +384,14 @@ passes for each selected engine and configured kind on the final revision.
 Exclude temporary-directory symlink aliases from artifact uploads; count each
 expected engine/kind/case once and refuse missing or contradictory outcomes.
 
+**Count a store through its record reader, never its tables.** Governed
+storage keeps the records in its own tables, so a count of the old `mdm`
+tables reads an empty store whatever the run did (ticket 135, 2026-10-29: a
+proof passed with every count 0). Count with `inspection.counts` and each
+source record's current pointer, and grant the verifier what the installed
+test grants. A proof whose counts are all zero proved nothing: treat it as
+failed.
+
 ### Retire redundant tests by their obligations
 
 Inventory collected cases for every selected engine, including fixture and

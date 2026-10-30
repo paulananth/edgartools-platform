@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections import Counter
 import shutil
 import signal
 import subprocess
@@ -51,7 +52,9 @@ from sqlalchemy import create_engine, text
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.bookkeeping.clean.database import grant_profile
 from edgar_warehouse.bookkeeping.clean.destinations import migrate_guard
-from edgar_warehouse.mdm.clean.store import migrate, register_policy
+from edgar_warehouse.mdm.clean import inspection
+from edgar_warehouse.mdm.clean.record_reads import RecordReader, for_connection
+from edgar_warehouse.mdm.clean.store import digest, migrate, register_policy
 from edgar_warehouse.rules import files
 from tests.engine.test_data_skill_bundle_postgres import _run, _stores, installed  # noqa: F401
 from tests.integration.test_configured_bookkeeping_postgres import databases  # noqa: F401
@@ -63,7 +66,7 @@ import importlib.util
 _OLD = importlib.util.spec_from_file_location(
     "census_proof", Path(__file__).resolve().parents[3] / ".planning/workstreams/whole-source-census/installed_proof.py")
 old = importlib.util.module_from_spec(_OLD)
-_OLD.loader.exec_module(old)  # counts, bindings, the GLEIF inputs and steps: unchanged from 2026-10-10
+_OLD.loader.exec_module(old)  # the GLEIF inputs and steps, unchanged from 2026-10-10; counts are read here
 
 WORK = Path(os.environ.get("COMPANY_PROOF_WORK", "~/.local/share/edgartools/clean-mdm/proving/cm27-raw")).expanduser()
 CAPTURE = Path("~/.local/share/edgartools/clean-mdm/captures/sec.submissions.company/all-76230").expanduser()
@@ -124,6 +127,8 @@ def test_installed_company_mastering(installed, databases, tmp_path):  # noqa: F
         register_dataset(conn, GLEIF, "1", files.mdm_contract("gleif", GLEIF))
         conn.exec_driver_sql("GRANT USAGE ON SCHEMA mdm TO bk_verifier")
         conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA mdm TO bk_verifier")
+        # Governed storage keeps its tables in `public` (since #1152), as the installed test grants them.
+        conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA public TO bk_verifier")
         assert conn.execute(text("SELECT count(*) FROM mdm.stage_record")).scalar() == 0
     mdm_reader = create_engine(mdm_admin.url.set(username="bk_verifier", password="test"))
     old.say(stage="provisioned", policy=policy, bundles=names)
@@ -201,15 +206,35 @@ def test_installed_company_mastering(installed, databases, tmp_path):  # noqa: F
         assert json.loads(cli("bookkeeping", "status", run_id))["run"]["state"] == "complete"
 
     def snapshot() -> tuple[dict, str]:
-        with mdm_reader.connect() as conn:
-            return old.counts(conn), old.bindings(conn)
+        """The store's counts and which record is bound to which master, read from governed storage
+        (since #1152 MDM's records live there, not in the `mdm` tables the 2026-10-10 counts read)."""
+        found = inspection.counts(mdm_reader)
+        stage, bound, groups, companies = Counter(), Counter(), {}, 0
+        with mdm_reader.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
+            reader = for_connection(conn)
+            # Open Companies as on 2026-10-10: current Company entities, an alias left out.
+            for page in inspection._pages(reader.adapter, conn, "entity"):
+                for _, row in page:
+                    body = RecordReader._body(row)
+                    companies += body.get("kind") == "company" and body.get("status") != "alias"
+            for page in inspection._pages(reader.adapter, conn, "source-record", lookup=True):
+                pointers = reader.current([key for key, _ in page])
+                reader._readings(pointers)  # each pointer checked against its retained reading
+                for subject, body in pointers.items():
+                    stage[f"{body['source_code']}:{body['kind']}"] += 1
+                    if body.get("entity_id"):
+                        bound[body["source_code"]] += 1
+                        groups.setdefault(body["entity_id"], []).append(subject)
+        return ({"companies_open": companies, "stage_records": dict(sorted(stage.items())),
+                 "stage_bound": dict(sorted(bound.items())), "open_reviews": found["open_reviews"],
+                 "decisions": found["decisions"]},
+                digest(sorted(sorted(g) for g in groups.values())))
 
     def writes() -> dict:
-        """Rows each MDM table and the change journal hold: what a pass wrote."""
-        with mdm_reader.connect() as conn:
-            found = {t: conn.execute(text(f"SELECT count(*) FROM mdm.{t}")).scalar() for t in (
-                "batch", "source_reading", "decision", "company", "current_record", "outbox", "checkpoint",
-                "match_proposal", "set_aside_record")}
+        """What a pass wrote: governed storage's change history, outbox and current records, and the
+        change journal's events."""
+        found = inspection.counts(mdm_reader)
+        found = {**found["changes"], "current_records_md5": found["current_records_md5"]}
         journal = create_engine(databases.admin.url.set(database=databases.ledger.engine.url.database))
         with journal.connect() as conn:
             found["journal_events"] = conn.execute(text("SELECT count(*) FROM journal.event")).scalar()
@@ -314,19 +339,22 @@ def test_installed_company_mastering(installed, databases, tmp_path):  # noqa: F
     old.say(stage="report", **report)
     assert report["second_pass_changed_nothing"]
     # Only changed data (017): merging the same records again queues no publication work.
-    assert second_writes["outbox"] == first_writes["outbox"], (first_writes, second_writes)
+    assert second_writes.get("outbox") == first_writes.get("outbox"), (first_writes, second_writes)
+    for key in ("batch_change", "current_records_md5"):  # the history and the current records, unchanged
+        assert second_writes.get(key) == first_writes.get(key), key
     assert changed_data["named_again"] == 0 and changed_data["runs_started_again"] == 0, changed_data
     assert changed_data["file_processed_events"] == changed_data["named_first"], changed_data
     if whole:
         assert first["stage_records"].get(f"{SEC}:company") == 6414, first["stage_records"]
         assert first["stage_bound"].get(SEC) == 6414
-        assert report["bindings_equal_checkout_replay"] in (True, None)
         if only != "sec":
             assert first["companies_open"] == 6414 and first["stage_bound"].get(GLEIF) == 3052
+            assert first["stage_records"].get(f"{GLEIF}:company") == 3716, first["stage_records"]
+            # Governed storage names a record's subject as the `mdm` tables did: the digest still compares.
             assert report["bindings_equal_checkout_replay"] is True
             if PIN:
                 replay = PIN["after_first_pass"]
-                for key in ("companies_open", "stage_records", "stage_bound", "decisions_by_rule"):
+                for key in ("companies_open", "stage_records", "stage_bound"):
                     assert first[key] == replay[key], key
                 # The replay counted the records GLEIF cannot bind apart; here they are open reviews.
                 assert first["open_reviews"] == {**replay["open_reviews"], **PIN["gleif_set_aside"]}
@@ -359,7 +387,8 @@ def kill_and_recover(python, entry, worker, root, run_id, items, snapshot) -> di
 
 def _gleif(old, store, tmp_path, policy) -> tuple[dict, int]:
     """The 2026-10-10 GLEIF units: the Level 1 reading with its approved scope filled."""
-    (cache,) = Path("~/.local/share/edgartools/clean-mdm/proving/cm27").expanduser().glob("gleif-rows-*.jsonl")
+    # The approved scope's LEIs: the 2026-10-10 row cache is gone; the scope rebuilt from the census (3,755) is in WORK.
+    (cache,) = WORK.glob("gleif-rows-*.jsonl")
     leis = sorted({json.loads(line)[1]["LEI"]["$"] for line in cache.open()})
     contract = files.load(files.ROOT / "sources/gleif/level1-json.yaml")
     contract["read"]["references"]["approved_scope"] = {lei: {"selected": True} for lei in leis}
