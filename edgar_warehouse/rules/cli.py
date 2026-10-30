@@ -63,14 +63,13 @@ def _test(args):
 
 
 def _handle(args):
-    from sqlalchemy import create_engine, text
     from .db import Rules, get_engine, migrate
     if args.rules_command == "approve" and args.rule:
         return _approve_rule(args)
     if args.rules_command in ("init", "migrate"):
-        owner = create_engine(os.environ["RULES_MIGRATION_DATABASE_URL"])
+        owner = get_engine(os.environ["RULES_MIGRATION_DATABASE_URL"])
         try:
-            result = migrate(owner, agent_role=args.agent_role)
+            result = migrate(owner, agent_role=args.agent_role, approver_role=args.approver_role, database_name=args.database_name)
         finally:
             owner.dispose()
     else:
@@ -93,8 +92,7 @@ def _handle(args):
                 path = Path(args.file)
                 result = rules.save(kind, name, args.version, files.LAYOUT[kind][0](path))
             elif operation == "status":
-                with rules_engine.connect() as conn:
-                    result = [dict(row) for row in conn.execute(text("SELECT kind,name,version,digest,status,proved_at,approved_by,approved_at,approved_words,approval_overrule FROM rules.rule_version WHERE kind=:k AND name=:n ORDER BY created_at"), {"k": kind, "n": name}).mappings()]
+                result = rules.history(kind, name)
             elif operation == "export":
                 rules.to_file(kind, name, args.version, Path(args.output))
                 result = {"path": args.output, "digest": rules.version(kind, name, args.version)["digest"]}
@@ -117,7 +115,7 @@ def _handle(args):
                 rules.prove(kind, name, args.version, proof)
                 result = {"proven": name, "version": args.version, "proof": args.proof_uri}
             elif operation == "activate":
-                mdm_owner = create_engine(os.environ["RULES_MDM_ACTIVATION_DATABASE_URL"]) if os.environ.get("RULES_MDM_ACTIVATION_DATABASE_URL") else None
+                mdm_owner = get_engine(os.environ["RULES_MDM_ACTIVATION_DATABASE_URL"]) if os.environ.get("RULES_MDM_ACTIVATION_DATABASE_URL") else None
                 try:
                     rules.activate(kind, name, args.version, mdm_engine=mdm_owner)
                 finally:
@@ -230,6 +228,8 @@ def register(subparsers):
                             ("migrate", "Upgrade the Rules Database schema after a new migration file lands")):
         schema = commands.add_parser(name, help=help_text)
         schema.add_argument("--agent-role", default="rules_agent")
+        schema.add_argument("--approver-role", default="rules_approver")
+        schema.add_argument("--database-name", default="rules", help="The configured isolated Rules database")
         schema.set_defaults(handler=_handle)
     load = commands.add_parser("load", help="Save every rules file under --root as a version in the Rules Database")
     unload = commands.add_parser("unload", help="Write the Rules Database's versions back to files under --root")
