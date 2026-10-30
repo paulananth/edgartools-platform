@@ -1,0 +1,19 @@
+{
+  "namespace": "catalog-lineage-review-20261030",
+  "name": "example-processing",
+  "title": "Example data processing",
+  "description": "Invented metadata for operator review. No source data or pipeline execution.",
+  "datasets": [
+    {"name": "captured", "title": "Captured input", "description": "Immutable captured values; example only.", "fields": [{"name": "raw_label", "description": "An invented input label."}]},
+    {"name": "prepared", "title": "Prepared records", "description": "Mapped values awaiting validation; example only.", "fields": [{"name": "label", "description": "A label with surrounding whitespace removed."}]},
+    {"name": "published", "title": "Published records", "description": "Values accepted by the configured quality check; example only.", "fields": [{"name": "label", "description": "An accepted, nonblank label."}]}
+  ],
+  "stages": [
+    {"name": "prepare", "title": "Prepare records", "operation": "example.prepare", "requires": [], "input": "captured", "output": "prepared", "description": "Map the captured label and remove surrounding whitespace.", "mappings": [{"from": ["raw_label"], "to": "label", "transformation": "trim surrounding whitespace"}], "checks": []},
+    {"name": "publish", "title": "Check and publish", "operation": "example.publish", "requires": ["prepare"], "input": "prepared", "output": "published", "description": "Publish only records whose label is present.", "mappings": [{"from": ["label"], "to": "label", "transformation": "retain the mapped value"}], "checks": [{"rule": "present", "field": "label", "failure_action": "withhold"}]}
+  ],
+  "controls": [
+    {"name": "bookkeeping", "title": "Bookkeeping", "description": "Controls declared stage dependencies and acceptance of verified outputs. It is not a data transformation.", "interactions": [{"stage": "prepare", "description": "Authorize the declared work and accept its verified output."}, {"stage": "publish", "description": "Require preparation before publication and accept the verified publication output."}], "reference": "edgar_warehouse/bookkeeping/store.py"},
+    {"name": "change-journal", "title": "Change Journal", "description": "Tracks file content and processing identity; processed-file recording follows verified processing. It is not a business dataset.", "interactions": [{"stage": "prepare", "description": "Use the file content and processing identity to determine whether work is needed."}, {"stage": "publish", "description": "Record the processed-file identity only after the configured processing is verified."}], "reference": "edgar_warehouse/workers/journal_record.py"}
+  ]
+}

@@ -1,0 +1,1 @@
+{"control_lanes": 2, "datasets": 3, "execution_results_created": 0, "field_lineage_edges": 2, "mapping_drift_detected": true, "native_api_verified": true, "native_control_lanes": false, "pipelines": 1, "repeat_pipeline_version_unchanged": true, "stages": 2}
