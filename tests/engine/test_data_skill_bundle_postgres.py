@@ -266,12 +266,26 @@ modules = [info.name for info in pkgutil.walk_packages(edgar_warehouse.__path__,
            if not info.name.endswith(".__main__")]  # a __main__ runs its command line on import
 for name in modules:
     importlib.import_module(name)
-print(json.dumps({{"shipped": shipped, "modules": modules}}))
+# An import inside a function runs only with its command: every module any shipped file names is installed.
+import ast, importlib.util, pathlib
+named = {{}}
+for dist in {list(WHEELS)!r}:
+    for p in m.files(dist):
+        if str(p).startswith("edgar_warehouse/") and str(p).endswith(".py"):
+            for node in ast.walk(ast.parse(pathlib.Path(p.locate()).read_text())):
+                found = ([node.module] if isinstance(node, ast.ImportFrom) and not node.level else
+                         [a.name for a in node.names] if isinstance(node, ast.Import) else [])
+                for module in found:
+                    if module and module.startswith("edgar_warehouse."):
+                        named.setdefault(module, str(p))
+absent = {{module: where for module, where in named.items() if importlib.util.find_spec(module) is None}}
+print(json.dumps({{"shipped": shipped, "modules": modules, "absent": absent}}))
 ''', cwd=root)
     assert result.returncode == 0, result.stderr
     found = json.loads(result.stdout)
     twice = [path for path, count in Counter(found["shipped"]).items() if count > 1]
     assert twice == []
+    assert found["absent"] == {}  # `silver line-items` failed so: financials was not shipped (ticket 48)
     assert {"edgar_warehouse.cli", "edgar_warehouse.workers.source_read", "edgar_warehouse.mdm.clean.merge",
             "edgar_warehouse.rules.cli", "edgar_warehouse.database_connections", "edgar_warehouse.database_types",
             "edgar_warehouse.rdm.storage", "edgar_warehouse.rdm.mysql_migration",
