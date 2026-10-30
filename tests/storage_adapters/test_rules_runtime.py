@@ -30,6 +30,10 @@ def test_normal_rules_lifecycle_and_populated_migration(database_factory, tmp_pa
                 approved = approver.approve("pipeline", "invented.pipeline", "v1", evidence=pending[0]["evidence_hash"],
                                             by="invented operator", words="Approve this exact tested version")
                 assert approved["approved_words"] == "Approve this exact tested version"
+                from sqlalchemy.exc import DBAPIError
+                with pytest.raises(DBAPIError, match="[Pp]roof.*immutable"):
+                    rules.prove("pipeline", "invented.pipeline", "v1", proof(saved, batch_hash="2" * 64))
+                assert rules.version("pipeline", "invented.pipeline", "v1") == approved
                 rules.activate("pipeline", "invented.pipeline", "v1")
                 before = rules.version("pipeline", "invented.pipeline", "v1")
                 assert before["status"] == "active" and before["approval_evidence"] == pending[0]["evidence_hash"]
@@ -159,7 +163,7 @@ def test_mysql_refuses_unknown_migration_history(database_factory, corruption):
             migrate(owner, **options)
             with owner.begin() as conn:
                 if corruption == "future":
-                    conn.execute(text("INSERT INTO rules_migrations SELECT 2,checksum,1 FROM rules_migrations WHERE id=1"))
+                    conn.execute(text("INSERT INTO rules_migrations SELECT 2,checksum,1,guard_checksum FROM rules_migrations WHERE id=1"))
                 else:
                     conn.execute(text("UPDATE rules_migrations SET complete=7 WHERE id=1"))
             with pytest.raises(Blocked, match="migration history"):
@@ -253,3 +257,34 @@ def test_concurrent_activation_keeps_one_active_version_and_immutable_proof(data
                 for result in results:
                     result.result(timeout=40)
             assert sorted(row["status"] for row in rules.history("pipeline", "invented.concurrent")) == ["active", "retired"]
+
+
+@pytest.mark.parametrize("drift", ["trigger", "index"])
+def test_mysql_completed_installation_refuses_guard_drift_and_revokes_runtime(database_factory, drift):
+    import os
+    from sqlalchemy import text
+    from sqlalchemy.exc import DBAPIError
+    from edgar_warehouse.control_contract import Blocked
+    if os.environ.get("SKILL_ADAPTER_TEST_ENGINE") != "mysql":
+        pytest.skip("MySQL completed-DDL qualification only")
+    with database_factory() as (_, _, approval_role):
+        with database_factory() as (owner, runtime, role):
+            options = dict(agent_role=role, approver_role=approval_role, database_name=owner.url.database)
+            migrate(owner, **options)
+            Rules(runtime).save("pipeline", "invented.drift", "v1", pipeline())
+            with owner.begin() as conn:
+                conn.execute(text("DROP TRIGGER rules_update" if drift == "trigger" else "ALTER TABLE rule_version DROP INDEX one_active"))
+            with pytest.raises(Blocked, match="storage differs"):
+                migrate(owner, **options)
+            with pytest.raises(DBAPIError):
+                Rules(runtime).save("pipeline", "invented.drift", "v2", pipeline())
+
+
+def test_postgres_rejects_migration_owner_as_approval_principal(database_factory):
+    import os
+    from edgar_warehouse.control_contract import Blocked
+    if os.environ.get("SKILL_ADAPTER_TEST_ENGINE") != "postgresql":
+        pytest.skip("PostgreSQL principal attributes only")
+    with database_factory() as (owner, _, role):
+        with pytest.raises(Blocked, match="[Rr]estricted"):
+            migrate(owner, agent_role=role, approver_role=owner.url.username, database_name=owner.url.database)

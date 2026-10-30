@@ -1,5 +1,6 @@
 """Recoverable owner installation for the normal MySQL Rules caller."""
 import hashlib
+import json
 import re
 from pathlib import Path
 
@@ -52,6 +53,23 @@ def _revoke(conn, account, target):
         _ddl(conn, "REVOKE SELECT ON " + target + " FROM " + account)
 
 
+def _fingerprint(conn):
+    """Owner readback includes actual guards, constraints and indexes, never rows."""
+    if "rule_version" not in inspect(conn).get_table_names():
+        return None
+    table = conn.execute(text("SHOW CREATE TABLE rule_version")).first()[1]
+    params = {"d": conn.engine.url.database}
+    triggers = [tuple(row) for row in conn.execute(text(
+        "SELECT TRIGGER_NAME,EVENT_MANIPULATION,EVENT_OBJECT_TABLE,ACTION_TIMING,ACTION_STATEMENT,SQL_MODE,DEFINER "
+        "FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=:d ORDER BY TRIGGER_NAME"), params)]
+    routines = [tuple(row) for row in conn.execute(text(
+        "SELECT ROUTINE_NAME,ROUTINE_TYPE,ROUTINE_DEFINITION,SECURITY_TYPE,SQL_DATA_ACCESS,SQL_MODE,DEFINER "
+        "FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA=:d ORDER BY ROUTINE_NAME"), params)]
+    if {row[0] for row in triggers} != {"rules_insert", "rules_update", "rules_delete"} or {row[0] for row in routines} != {"guard_rules_acquisition"}:
+        return None
+    return hashlib.sha256(json.dumps([table, triggers, routines], ensure_ascii=False).encode()).hexdigest()
+
+
 def migrate(engine, *, agent_role, approver_role, database_name):
     payload = PAYLOAD.read_text()
     checksum = hashlib.sha256(payload.encode()).hexdigest()
@@ -73,8 +91,8 @@ def migrate(engine, *, agent_role, approver_role, database_name):
             if "rules_migrations" not in names:
                 if names:
                     raise Blocked("Refusing to adopt untracked Rules storage")
-                _ddl(conn, "CREATE TABLE rules_migrations (id BIGINT PRIMARY KEY,checksum CHAR(64) NOT NULL,complete BIGINT NOT NULL) ENGINE=InnoDB COMMENT='rules-native:" + checksum + "'")
-            held = conn.execute(text("SELECT checksum,complete FROM rules_migrations WHERE id=1")).first()
+                _ddl(conn, "CREATE TABLE rules_migrations (id BIGINT PRIMARY KEY,checksum CHAR(64) NOT NULL,complete BIGINT NOT NULL,guard_checksum CHAR(64)) ENGINE=InnoDB COMMENT='rules-native:" + checksum + "'")
+            held = conn.execute(text("SELECT checksum,complete,guard_checksum FROM rules_migrations WHERE id=1")).first()
             if conn.scalar(text("SELECT COUNT(*) FROM rules_migrations WHERE id<>1 OR complete NOT IN (0,1)")):
                 raise Blocked("Rules migration history differs from this build")
             if held is None:
@@ -83,11 +101,11 @@ def migrate(engine, *, agent_role, approver_role, database_name):
                          for column in inspector.get_columns("rules_migrations")]
                 if (set(inspector.get_table_names()) != {"rules_migrations"}
                     or inspector.get_table_comment("rules_migrations")["text"] != "rules-native:" + checksum
-                    or shape != [("id", "BIGINT", False), ("checksum", "CHAR(64)", False), ("complete", "BIGINT", False)]
+                    or shape != [("id", "BIGINT", False), ("checksum", "CHAR(64)", False), ("complete", "BIGINT", False), ("guard_checksum", "CHAR(64)", True)]
                     or inspector.get_pk_constraint("rules_migrations")["constrained_columns"] != ["id"]
                     or conn.scalar(text("SELECT COUNT(*) FROM rules_migrations"))):
                     raise Blocked("Untracked Rules migration metadata")
-                conn.execute(text("INSERT INTO rules_migrations VALUES (1,:h,0)"), {"h": checksum})
+                conn.execute(text("INSERT INTO rules_migrations(id,checksum,complete) VALUES (1,:h,0)"), {"h": checksum})
             elif held.checksum != checksum:
                 raise Blocked("Rules migration checksum differs")
             if held is None or not held.complete:
@@ -98,7 +116,14 @@ def migrate(engine, *, agent_role, approver_role, database_name):
                     _revoke(conn, approver, target)
                 for statement in payload.strip().split("\n-- statement boundary\n"):
                     conn.execute(text(statement))
-                conn.execute(text("UPDATE rules_migrations SET complete=1 WHERE id=1"))
+                fingerprint = _fingerprint(conn)
+                if fingerprint is None:
+                    raise Blocked("Rules storage differs from its completed installation")
+                conn.execute(text("UPDATE rules_migrations SET complete=1,guard_checksum=:h WHERE id=1"), {"h": fingerprint})
+            elif not held.guard_checksum or _fingerprint(conn) != held.guard_checksum:
+                _revoke(conn, agent, target)
+                _revoke(conn, approver, target)
+                raise Blocked("Rules storage differs from its completed installation")
             for account in {agent, approver}:
                 _ddl(conn, "GRANT SELECT ON " + target + " TO " + account)
                 _ddl(conn, "GRANT UPDATE(" + ",".join(APPROVAL) + ") ON " + target + " TO " + account)

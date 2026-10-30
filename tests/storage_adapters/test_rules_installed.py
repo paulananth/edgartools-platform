@@ -1,5 +1,6 @@
 """Rules lifecycle from the committed, independently installed five-wheel bundle."""
 import json
+import os
 
 import pytest
 
@@ -7,12 +8,12 @@ from tests.engine.test_data_skill_bundle_postgres import installed, _run  # noqa
 from tests.integration.test_rules_approval_postgres import pipeline
 
 
+@pytest.mark.skipif(os.environ.get("SKILL_ADAPTER_TEST_ENGINE") == "mssql",
+                    reason="Full SQL Server Rules qualification follows PostgreSQL/MySQL")
 def test_installed_rules_cli_lifecycle(installed, database_factory):
     python, root = installed
     with database_factory() as (_, _, approval_role):
         with database_factory() as (owner, runtime, role):
-            if runtime.dialect.name == "mssql":
-                pytest.skip("Full SQL Server Rules qualification follows PostgreSQL/MySQL")
             config = root / "invented-pipeline.json"
             config.write_text(json.dumps(pipeline()))
             environment = {"RULES_MIGRATION_DATABASE_URL": owner.url.render_as_string(hide_password=False),

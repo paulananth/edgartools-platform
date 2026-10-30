@@ -43,11 +43,10 @@ def migrate(engine, *, agent_role: str = "rules_agent", approver_role: str = "ru
     with engine.begin() as conn:
         if conn.scalar(text("SELECT current_database()")) != database_name or int(conn.scalar(text("SHOW server_version_num"))) // 10000 != 16:
             raise Blocked("Rules migration requires its own rules database on PostgreSQL 16")
-        role = conn.execute(text("SELECT rolsuper,rolcreatedb,rolcreaterole FROM pg_roles WHERE rolname=:r"), {"r": agent_role}).first()
-        if not role or any(role) or conn.scalar(text("SELECT current_user")) == agent_role:
-            raise Blocked("Restricted Rules agent and separate migration owner required")
-        if not conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=:r)"), {"r": approver_role}):
-            raise Blocked("Create the configured approval role explicitly")
+        for principal in {agent_role, approver_role}:
+            role = conn.execute(text("SELECT rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls FROM pg_roles WHERE rolname=:r"), {"r": principal}).first()
+            if not role or any(role) or conn.scalar(text("SELECT current_user")) == principal:
+                raise Blocked("Restricted Rules principals and separate migration owner required")
         conn.execute(text("SELECT pg_advisory_xact_lock(730503)"))
         exists = conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname='rules')"))
         prior = conn.scalar(text("SELECT obj_description(oid,'pg_namespace') FROM pg_namespace WHERE nspname='rules'"))
@@ -81,8 +80,9 @@ def migrate(engine, *, agent_role: str = "rules_agent", approver_role: str = "ru
         # (operator, 2026-09-29, rules skill ticket 14); the trigger refuses
         # one without test evidence or without those words.
         conn.exec_driver_sql(f"GRANT UPDATE({APPROVAL_COLUMNS}) ON rules.rule_version TO {agent},{approver}")
-        if conn.scalar(text("SELECT has_schema_privilege(:r,'rules','CREATE')"), {"r": agent_role}):
-            raise Blocked("Rules agent owns the Rules schema")
+        for principal in {agent_role, approver_role}:
+            if conn.scalar(text("SELECT has_schema_privilege(:r,'rules','CREATE') OR has_table_privilege(:r,'rules.rule_version','INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')"), {"r": principal}):
+                raise Blocked("Rules principal inherits schema ownership or broad history writes")
     return checksums
 
 
