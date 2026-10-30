@@ -14,11 +14,12 @@ python = ["dep:pyo3"]
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["alloc", "std"] }
 csv = "1"
+# HTML5 parsing (Servo) builds a page's tree as a browser does.
+html5ever = "=0.27.0"
+markup5ever_rcdom = "=0.3.0"
 indexmap = { version = "2", features = ["serde"] }
 pyo3 = { version = "0.25", features = ["extension-module", "abi3-py312"], optional = true }
 quick-xml = "0.37"
-# HTML5 tokenizing (Servo): an unclosed or misnested tag never refuses a page.
-html5ever = "=0.27.0"
 serde_json = { version = "1", features = ["raw_value", "float_roundtrip", "preserve_order"] }
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
