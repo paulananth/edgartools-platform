@@ -14,9 +14,11 @@ Parent: control-store-portability and platform-three-databases.
 - [x] Qualify ordered/resource checkpoints, generated children, unchanged retries and populated migration recovery — 2026-10-30 00:48 ET: real normal callers and owner interruption/restore preserve committed work, cursor precision, roles and intent; missing tables are refused without recreation. Independent committed-install check remains separately open below.
 - [x] Qualify independent installed control CLI/workers, package independence and normal recovery with Change Journal — 2026-10-30 06:51 ET: final committed control-only CLI runs from empty stores, uses two external workload profiles/separate logins, finalizes/resumes/retries unchanged, and refuses missing Journal history; PostgreSQL 130.39 seconds, MySQL 69.73 seconds. No domain distribution in the controller installation.
 - [x] Complete Standards, Spec and GoF review — 2026-10-30 06:51 ET: two independent Luna low reviewers, including host/account and Journal safeguard increments, found no remaining blocking issue; keep the existing facade/storage seam.
-- [ ] Review Standards, Spec and GoF; publish implementation and final CI evidence in a PR before closeout.
+- [x] Publish reviewed implementation in PR #1237 — 2026-10-30 07:11 ET: production source 6b057fc8 and initial record head 07909421 are published; final-head CI remains a separate gate.
+- [x] Qualify the coupled installed Rules → Bookkeeping → real workers/verifier → Journal pipeline — 2026-10-30 07:11 ET: five-wheel installed source 07909421 passed on MySQL (132.29 seconds) and PostgreSQL (43.72 seconds); two verified steps, two Journal events, unchanged resume. Two independent reviewers found no Standards, Spec or GoF issue in the added test.
+- [ ] Qualify final published head in full CI before readiness and merge.
 - [ ] ~~SQL Server normal lifecycle~~ deferred until the PostgreSQL/MySQL gate; retain current adapter tests.
-- [ ] Learning → skill: separate reusable procedural corrections or record none.
+- [x] Learning → skill: bookkeeping and change-journal — 2026-10-30 07:11 ET: separate PR #1239 records configured initialization, role membership, host restrictions, interrupted install and lost-history recovery; 95 affected checks and independent review passed. Merge follows #1237.
 
 ## Scope and initial GoF consult
 
