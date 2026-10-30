@@ -1,18 +1,19 @@
 # Complete the normal Bookkeeping storage lifecycle on PostgreSQL and MySQL
 
-Status: normal PostgreSQL/MySQL control implemented and locally qualified; committed-install qualification, review, publication and CI remain open.
-Base: d18cbbb8c; branch codex/bookkeeping-storage-portability-20261029.
+Status: PostgreSQL/MySQL implementation, committed-install qualification and review complete; publication/final CI remain the release gate. SQL Server normal lifecycle remains deferred.
+Base: b05d27513; branch codex/bookkeeping-storage-portability-20261029.
 Parent: control-store-portability and platform-three-databases.
 
 ## Parts
 
 - [x] Reconcile live ownership and normal control callers; retain existing PostgreSQL guarantees and all selected-engine read/completion/resume evidence — 2026-10-30 00:48 ET: live code/history and overlap checks; source workers use destination-owned capabilities, with no import/call of the legacy caller-held guard. Historical migrations unchanged.
 - [x] Demonstrate the normal configured initialization/start failure on MySQL, using isolated databases and restricted worker/verifier logins — 2026-10-30 00:48 ET: normal owner initialization first failed on the missing configured-database argument; subsequent real default-driver, missing lifecycle capability, timestamp and migration/read boundaries were reproduced before fixes.
-- [ ] Implement owner migration, independent package contents, restricted runtime grants and profile duties on both engines.
+- [x] Implement owner migration, independent package contents, restricted runtime grants and profile duties on both engines — 2026-10-30 06:51 ET: committed independent control-only installation passed on both engines at source head 6b057fc8; real restricted worker/verifier duties and host-restricted MySQL account qualification passed.
 - [x] Complete ordinary start/claim/renew/report/verify/admit, delivery and finalization with actual normal callers — 2026-10-30 00:48 ET: selected-engine normal API flows pass; initial independent control-only CLI proofs passed from empty stores on both engines with two external workload profiles and separate logins (48.41/51.17 seconds, PostgreSQL run also included eight architecture cases).
 - [x] Qualify immutable frozen work, exact large integers/Unicode, issuer duties, stale/missing fences, expiry, runtime pins, concurrency and rollback — 2026-10-30 00:48 ET: 21 MySQL cases pass, including long exact keys/indexed reads, both duties on one login refusing self-verification, changed worker/verifier runtimes and completion delayed past expiry; retained PostgreSQL cohort passed 78 cases in 85.49 seconds.
 - [x] Qualify ordered/resource checkpoints, generated children, unchanged retries and populated migration recovery — 2026-10-30 00:48 ET: real normal callers and owner interruption/restore preserve committed work, cursor precision, roles and intent; missing tables are refused without recreation. Independent committed-install check remains separately open below.
-- [ ] Qualify independent installed control CLI/workers, package independence and normal recovery with Change Journal.
+- [x] Qualify independent installed control CLI/workers, package independence and normal recovery with Change Journal — 2026-10-30 06:51 ET: final committed control-only CLI runs from empty stores, uses two external workload profiles/separate logins, finalizes/resumes/retries unchanged, and refuses missing Journal history; PostgreSQL 130.39 seconds, MySQL 69.73 seconds. No domain distribution in the controller installation.
+- [x] Complete Standards, Spec and GoF review — 2026-10-30 06:51 ET: two independent Luna low reviewers, including host/account and Journal safeguard increments, found no remaining blocking issue; keep the existing facade/storage seam.
 - [ ] Review Standards, Spec and GoF; publish implementation and final CI evidence in a PR before closeout.
 - [ ] ~~SQL Server normal lifecycle~~ deferred until the PostgreSQL/MySQL gate; retain current adapter tests.
 - [ ] Learning → skill: separate reusable procedural corrections or record none.
@@ -55,8 +56,11 @@ prior PostgreSQL migrations remain unchanged.
 
 Change Journal storage is retained. Its API already supported an explicit isolated
 database name, but its normal CLI did not expose that choice. The small CLI flag
-addition is tested through real init/migrate commands; all ten current normal
-Journal cases pass on each selected engine. No Journal storage rewrite was needed.
+addition is tested through real init/migrate commands. A new populated-recovery
+case also proved that completed MySQL Journal migration recreated a missing event
+table; the owner now refuses that condition before DDL. All eleven current normal
+Journal cases pass on PostgreSQL/MySQL, and the installed proof includes the same
+refusal. The existing append/receipt protocol and historical SQL remain unchanged.
 
 The legacy guard for a caller-held destination transaction remains PostgreSQL-only.
 Both unsupported MySQL entry points now refuse before SQL, with the exact boundary
@@ -70,3 +74,38 @@ durable event is reconciled and no duplicate event appears on retry.
 
 No source run, provider request, production installation, activation or cutover
 was performed. SQL Server's normal control lifecycle remains a later gate.
+
+## Final source qualification and review
+
+Source head 6b057fc8 is the committed installation proof. The MySQL cohort has 22
+normal/security/recovery cases, including the final host-restricted account case;
+ambiguous account names refuse both migration and cached profile execution. The
+PostgreSQL selected read/completion/resume/control cohort passed 48 cases with ten
+explicit MySQL-only skips before that additional MySQL-only case. The retained
+78-case PostgreSQL regression cohort also passed. Eleven Journal cases pass on
+each selected engine. Every local invocation stayed below five minutes; source
+compile/import and whitespace checks pass. No Python typechecker is configured
+for these modules; CI runs the full repository cohorts.
+
+### Standards
+
+Independent review found no documented violation. Counters/positions use BIGINT;
+opaque document/cursor precision remains intact. Historical PostgreSQL migrations
+are immutable. Effective privileges, authenticated profile duties and installed
+definition readback remain storage responsibilities. Rendered MySQL metadata
+changes can require owner diagnosis after a server upgrade.
+
+### Spec
+
+Normal configured owner/runtime/CLI paths pass on both engines. An early review
+question about adding SQL privileges to profile groups was withdrawn after tracing
+the authenticated membership checks; only the runtime principal receives control
+capabilities. No extra group privileges were added. Missing initialized Journal
+history now refuses recovery rather than becoming empty replacement history.
+
+### GoF
+
+Keep the existing facade, typed observations, native run preparation and small
+storage adapter. A new registry, controller hierarchy or worker callback system
+has no demonstrated benefit. The unsupported legacy caller-held guard remains
+explicit rather than receiving a simulated commit boundary.

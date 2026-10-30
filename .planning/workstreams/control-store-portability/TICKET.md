@@ -1,6 +1,6 @@
 # Complete Rules, Bookkeeping and Change Journal portability
 
-Status: claimed by Codex; Rules implemented and locally qualified; final CI and Bookkeeping remain incomplete.
+Status: Rules and its guidance merged; Bookkeeping/Journal normal PostgreSQL/MySQL implementation and local qualification complete on its follow-up branch; final CI/release and deferred SQL Server remain open.
 Base: current origin/main after Silver closeout; branch `codex/control-store-portability-20261029`.
 Parent: [Platform portability](../platform-three-databases/01-migrate.md).
 
@@ -48,7 +48,7 @@ gate stay open below; this checkpoint does not claim the parent effort complete.
 - [x] Qualify committed Rules CLI from the independently installed five-wheel bundle on both engines — 2026-10-30 00:12 ET: final source head 2cd63adb passed installed init/save/record-proof/pending/approve/activate/status/export/populated migrate with bare backend URLs on both engines (113.70/115.96 seconds). Earlier source head b4829224 and the first MySQL installation also passed.
 - [x] Review Standards, Spec and GoF — 2026-10-29 23:43 ET: two independent Luna low reviewers; missing-guard/index drift finding reproduced and corrected, then re-reviewed with no remaining blocking finding. Existing facade/storage seam retained.
 - [x] Publish the bounded Rules PR — 2026-10-30 00:12 ET: PR #1235 publishes the implementation and local evidence; retained as draft until its final head passes CI.
-- [ ] Qualify final CI before readiness and merge.
+- [x] Qualify final CI before readiness and merge — 2026-10-30 06:51 ET: all 20 checks passed at Rules head 756ccfef; PR #1235 merged as 6423a4169. Guidance PR #1236 passed all 20 checks at 6d282783 and merged as b05d27513.
 - [x] Learning → skill: document only demonstrated reusable installation/qualification changes, on a separate skill branch/PR — 2026-10-30 00:12 ET: PR #1236, separate branch, 87 genericity checks and independent review passed.
 
 ## Final local evidence and review
