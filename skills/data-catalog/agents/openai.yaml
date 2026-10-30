@@ -1,0 +1,4 @@
+interface:
+  display_name: "Data Catalog"
+  short_description: "Model and qualify portable catalogs and lineage views"
+  default_prompt: "Use $data-catalog to model, qualify and publish understandable business metadata and lineage through a replaceable catalog adapter."
