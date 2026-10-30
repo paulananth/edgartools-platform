@@ -17,12 +17,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from edgar_warehouse.control_contract import Blocked
+from edgar_warehouse.rules import files
 
 from . import line_items, sql
 from .sql import lit
 
-ROOT = Path(__file__).resolve().parents[2]
-DEFINITIONS = ROOT / "rules" / "sources" / "sec.company-facts" / "measures.yaml"
+DEFINITIONS = files.ROOT / "sources" / "sec.company-facts" / "measures.yaml"
 FORMS = ("average", "beginning")
 # Values a measure reads that are not line items: computed per year below.
 DERIVED = {"fcf", "operating_income_after_tax", "invested_capital"}
