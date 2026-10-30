@@ -377,3 +377,47 @@ automatic_rules:
   rule_version: 2026-10-26.1
   verdict: bind
   activation: deterministic
+# sec-gleif-cascade-p5 ("Name and city", ticket 09): switched on by operator,
+# 2026-10-30 18:20 ET, in their words: P5 now, hold P1/P4/P6 (Recommended).
+# Its proof is every new link P5 makes on the installed Company proof's cohort
+# (6,414 Companies; 84 links today's two rules do not make, P3's folded in),
+# each labelled: 42 by Codex's independent review, 42 by the operator; 84 the
+# same entity. The adversarial fixture is P5's risky arms among them: linked
+# through a GLEIF other name, a conflict in place of incorporation, or a name
+# another candidate holds (39, none a different entity). P1, P4 and P6 cleared
+# the count on the operator's labels but are held: 6 pairs the operator
+# labelled the same entity read as a parent, subsidiary, spin-off or namesake
+# (ticket 09). The evidence is on the operator's machine,
+# ~/.local/share/edgartools/clean-mdm/proving/t09-cascade/.
+- kind: company
+  family: name_binding
+  rule_id: sec-gleif-cascade-p5
+  rule_version: 2026-09-28.1
+  verdict: bind
+  activation: measured
+  proof:
+    method: wilson_lower_bound
+    one_sided_confidence: 0.95
+    n: 84
+    correct: 84
+    lower_bound: 0.968796
+    adversarial:
+      fixture_sha256: 41bb780ea61234c4b165589907a1378d557f8dbe31ecd53572bc68a4745f01c8
+      n: 39
+      violations: 0
+    cohort:
+      companies: 6414
+      new_links: 84
+      files:
+        p5-labels.jsonl: 48f4ec9c18104eff19ba19b514fc4eb4773afb0e3b8a353135af5d3ce73d8fd3
+        p5-adversarial.jsonl: 41bb780ea61234c4b165589907a1378d557f8dbe31ecd53572bc68a4745f01c8
+        ticket09-labels.csv: ddc26bfdf0340ee57708cbf083bed00c13fe9e5396a80f1ccb29947d2625b1ae
+        ticket09-labels.codex-completed.csv: 475d7dd80db264bbbc7ba8c4bcf9082988d931ded0e2ffcb108738495d08a3c2
+        operator-answers.json: 640327dc14be3060b21afc9c967c24ed17c98d7ce6811f13d34b29965650fef6
+        operator-notes.json: 0e22f3ab43e8c3cf6554bcac510de014072190036e5386f3eff3c424740b1a19
+    approved_by: operator
+    approved_at: "2026-10-30T22:20:25Z"
+    reason: 'ticket 09, the cascade pass P5 (name and city): every new link on the 6,414-Company
+      cohort labelled, 84/84 the same entity (42 Codex independent review, 42 operator), 0 of 39
+      adversarial (other name, incorporation conflict, name held by another candidate)'
+    approved_words: "P5 now, hold P1/P4/P6 (Recommended)"

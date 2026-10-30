@@ -780,12 +780,13 @@ class TestTheNameMatchingRules:
         # then the three Form ADV matching rules (rebuild priorities ticket
         # 76, "Switch on all three (Recommended)", 2026-10-17 08:31 ET), then
         # the N-PORT registrant's (ticket 79, "Switch on all six (Recommended)",
-        # 2026-10-17 21:03 ET).
+        # 2026-10-17 21:03 ET), then the cascade pass P5 (ticket 09, "P5 now,
+        # hold P1/P4/P6 (Recommended)", 2026-10-30 18:20 ET).
         company = policy_layers.company_part(POLICY)["automatic_rules"]
         assert company[:2] == [APPROVED_ACTIVATION, CIK_ACTIVATION]
         assert [e["rule_id"] for e in company[2:]] == [
             "sec-gleif-name-jurisdiction", "sec-gleif-name-postal", *policy_layers.FORM_ADV_RULES,
-            "nport-registrant-cik"]
+            "nport-registrant-cik", "sec-gleif-cascade-p5"]
         check_policy(POLICY)
 
     def test_an_activation_needs_the_operators_approval(self):

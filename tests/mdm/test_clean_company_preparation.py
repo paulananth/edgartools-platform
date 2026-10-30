@@ -53,7 +53,7 @@ def census_capture(tmp_path, found, rows):
     census = tmp_path / "name-census.json"
     write_name_frequency(capture=str(folder), population=str(population), gleif_metadata=str(metadata),
                          gleif_reading=gleif_reading(tmp_path / "r", archive, _sec_population(filers)[1], len(GLEIF)),
-                         output=str(census))
+                         output=str(census), catalog=CATALOG)
     return folder, population, census
 
 

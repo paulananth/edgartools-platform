@@ -338,6 +338,10 @@ rules:
 # place of incorporation is flagged, and the proof decides (2026-09-28).
 # Declared, not switched on: each pass needs its own proof and the
 # operator's approval (ticket 20). The two rules above stay until then.
+# P5 is switched on (ticket 09; operator, 2026-10-30 18:20 ET: "P5 now, hold
+# P1/P4/P6 (Recommended)"; its proof is in policy.yaml). P1, P4 and P6 are held
+# on 6 labelled pairs that read as a parent, subsidiary, spin-off or namesake;
+# P7 stays off (a different entity among its labels).
 # P2 (street and postcode) and P3 (street and city) were deleted (ticket 09;
 # operator, 2026-10-17: "Delete both"): too few new links to prove (8 and 22
 # of 52 needed); a pair either matched shares the postcode (P4) or the city
