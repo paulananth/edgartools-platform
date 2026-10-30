@@ -113,3 +113,12 @@ The new detail propagation had replaced the stable public type-error prefix.
 Preserve that prefix and append the precise safe reason instead of replacing it;
 no test or precision rule is weakened. The exact failing integration test passes
 in 8.41 seconds after the fix. Required final-head CI remains pending.
+
+## Independent review follow-up
+
+Parallel Standards/GoF review found no confirmed violation. Spec review asked
+for proof that MySQL actually selects the partition index rather than merely
+listing it in possible_keys. The existing test now loads 1,001 invented rows,
+refreshes statistics and asserts the chosen key/access path. That exact check
+passes on MySQL (1.55 seconds) and PostgreSQL (1.15 seconds). The CI wording
+correction preserves the old type-refusal prefix and appends safe detail.

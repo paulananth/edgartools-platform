@@ -333,6 +333,9 @@ def test_configured_partition_index_exists_and_is_used(silver):
     owner, runtime, role = silver
     config = spec(partition=["visited_on", "visit_id"])
     register(owner, config, runtime_role=role)
+    values = [{"visit_id": n, "visited_on": "2026-09-01"} for n in range(1000)]
+    values.append({"visit_id": 1000, "visited_on": "2026-10-01"})
+    assert land(DatabaseSink(runtime), config["table"], values)["inserted"] == 1001
     schema = "silver" if owner.dialect.name == "postgresql" else None
     with owner.begin() as conn:
         indexes = inspect(conn).get_indexes(config["table"], schema=schema)
@@ -347,9 +350,9 @@ def test_configured_partition_index_exists_and_is_used(silver):
             import json
             assert chosen[0]["name"] in json.dumps(plan)
         else:
-            # Index eligibility is distinct from the optimizer's small-table cost choice.
+            conn.exec_driver_sql("ANALYZE TABLE " + conn.dialect.identifier_preparer.format_table(table)).all()
             plan = conn.execute(text("EXPLAIN " + sql)).mappings().one()
-            assert chosen[0]["name"] in (plan["possible_keys"] or "").split(",")
+            assert plan["key"] == chosen[0]["name"] and plan["type"] in {"const", "ref", "range"}
     assert not register(owner, config, runtime_role=role)["created"]
 
 
