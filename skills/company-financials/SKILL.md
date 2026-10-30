@@ -15,9 +15,14 @@ measure computed from it?**
 
 ## Status of each rule
 
-Every rule here is **decided**: ruled on a ticket of the rebuild map, not yet
-built or proved. The cohort proof (ticket 48) makes them live; until then, do
-not describe any of them as running.
+Every rule here is **live**: built in silver (`company_fact`, `company_line_item`,
+`company_measure`) and proved by the cohort proof (ticket 48), which the operator
+accepted (operator, 2026-10-30 14:35 ET: "yes"). The proof ran the installed
+commands over 368 filers once, with its final checks: every filed line item equal
+to a fact of its filing, every measure's inputs stored line items, no empty value
+without a reason, the hand-checked answer key equal. A rule changed after that
+proof is live only once its own change is proved
+([mdm-engineering](../mdm-engineering/SKILL.md), "Choose the cheapest proof").
 
 ## Hard stops
 
