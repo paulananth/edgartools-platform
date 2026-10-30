@@ -16,10 +16,28 @@ equal to the original sources to EOF on 2026-10-09 (`whole-source-census`, file 
 
 ## Parts
 
-- [ ] GoF consult on `name_frequency.py`, `name_census.py` and the combine engine
+Claude's (operator, 2026-10-29: "Close out ticket 135 then take 148"; "yes", to taking 148 while ticket 120's
+loads run). Built in slices: this PR moves the census's counting into configured reductions; the Bookkeeping
+target, its consumers and the Python's retirement follow on their own PRs.
+
+- [x] GoF consult on `name_frequency.py`, `name_census.py` and the combine engine: run late, as the review's GoF axis after slice 1's code (the rule asks for it before code); verdict leave it: `document()` is now a 6-line adapter onto `counted_document()`, one formatter, and the set-based fold retires in a later slice (2026-10-29 18:16 ET)
+- [ ] Slice 1, the counting configured: the SEC half read by `census-sec-names.yaml` (each filer's current and
+  former name keys beside its CIK) and counted by `census-sec-reduction.yaml` (`held`: each key's CIK count and
+  five smallest CIKs; `wanted`: the current-name keys); the GLEIF half counted by
+  `rules/sources/gleif/census-name-reduction.yaml` (`max_rows` 4,000,000 for the whole Golden Copy). Python only
+  assembles the document (`name_census.counted_document`); the cascade path keeps its own fold
+- [x] Slice 1, the SEC half on the whole population equals the recorded census (`cm27-raw/census.json`):
+  43,338 filers, 43,245 current-name keys, 0 differing, the population and receipts sha256 equal; 181 s
+  (`.scratch/company-mastering/census_sec_half.py`; its output written 2026-10-29 08:04 ET)
+- [x] Slice 1 tests: 335 pass over the census, combine, Company preparation, matching and CLI tests, rebased on
+  today's `main` (2026-10-29 18:11 ET)
+- [x] Slice 1, the whole census byte-identical to `cm27-raw/census.json` (2026-10-29 20:10 ET; 45 min, 19:25-20:10 ET; operator, 2026-10-29: "Run it this afternoon (Recommended)"): the SEC half counted by the reductions (43,245 current-name keys, 2 min); the captured Golden Copy of 2026-09-11 16:00 read through `census-complete-stream.yaml` by `source.read` (21 min) and verified by its recomputation (19 min); the census written by `write_name_frequency` with the configured reductions: **bytes equal** to the recorded census, the same file sha256, 43,245 entries, 0 differing (`.scratch/company-mastering/census_whole.py`). The 2026-10-12 GLEIF reading and metadata file were gone (`/private/tmp`); the metadata is the four values the recorded census holds, and the archive's sha256 is checked against it. No provider request
+- [x] Slice 1: three-axis review, findings fixed (2026-10-29 18:16 ET). No input on real data gives a different census from main's. Fixed: stale docstrings (`name_frequency.py`, `name_census.py`, `census-sec-reduction.yaml`, `docs/specs/mdm/local-operations.md`); a test holds the four copies of the SEC name-key chain equal (`census-filer.yaml` and `census-sec-names.yaml`, current and former), since a drift changes the census digest; tests through `write_name_frequency` for a crowded name (count 7, the five smallest CIKs and LEIs) and a GLEIF record with no LEI (left out, as main's fold leaves it: run on both, equal; the review expected a refusal from reading the code); the proof script prints counts only. Noted, not changed: the new path refuses where main had no limit, past 65,536 filers (256 readings of 256) or 4,000,000 GLEIF rows (3,021,317 measured); with the cascade on, the Golden Copy is read twice (once by the reduction, once by the fold) until the fold retires
+- [ ] Slice 1: PR, CI, merge (#1226, ready now the census is proven byte-identical)
 - [ ] The census as a configured Bookkeeping target (source extract, combine), each step verified by its own
   worker; equal to today's Python census on the whole capture (the 2026-10-09 sha256)
 - [ ] Its consumers read the target's output; the Python construction retired, an independent test-only oracle
   kept until the configured one is proven
-- [ ] Three-axis review; PR, CI, merge
+- [ ] The set-based Python fold retired (`name_census._sec_population`, `fold_reading`, `census`, `document`; `census-raw.yaml`, now read by no code), its tests moved onto the configured path
+- [ ] Three-axis review of the whole ticket; PR, CI, merge
 - [ ] Learning → skill

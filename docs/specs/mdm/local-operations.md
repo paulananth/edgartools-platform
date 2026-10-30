@@ -126,9 +126,9 @@ whole SEC population (each filer's current and former names) and a full GLEIF
 Level 1 Golden Copy (legal and other names, branches excluded). It refuses a
 delta. The population file lists the receipt keys of the main submissions
 documents counted; each is read from the capture folder (`receipts.jsonl` and
-`bronze/`) through `rules/sources/sec.submissions.company/census-raw.yaml` by the
-`source.read` worker and its verifier, two documents a unit, and must match its
-receipt. The matching cascade is refused while switched on: it has no configured
+`bronze/`) through `rules/sources/sec.submissions.company/census-sec-names.yaml` by the
+`source.read` worker and its verifier, up to 256 documents a unit, and must match its
+receipt; `census-sec-reduction.yaml` counts it. The matching cascade is refused while switched on: it has no configured
 reading here yet. The Golden Copy arrives as
 one verified `source.read` reading of `rules/sources/gleif/census-complete-stream.yaml`
 (about an hour for 3.4 million records); the command checks that the reading

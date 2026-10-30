@@ -196,3 +196,11 @@ def test_the_captured_combination_differs_only_in_the_sources_a_capture_holds():
     for name in ('forms','tickers'):
         captured['combine']['groups'][name]['source']=full['combine']['groups'][name]['source']
     assert captured==full
+
+
+def test_the_census_reads_every_sec_name_key_by_one_chain():
+    """`census-sec-names.yaml` builds each current and former name key by `census-filer.yaml`'s
+    chain, transform for transform: a drift in one copy would change the census digest."""
+    chains = [files.load(ROOT / name)["read"]["tables"][table]["columns"]["key"]["text"]["transforms"]
+              for name in ("census-filer.yaml", "census-sec-names.yaml") for table in ("current", "former")]
+    assert len(chains[0]) == 26 and all(chain == chains[0] for chain in chains)

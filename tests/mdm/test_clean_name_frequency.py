@@ -255,3 +255,31 @@ def test_late_partition_failure_publishes_no_census_and_preserves_existing_file(
         census_of(tmp_path, capture, gleif_reading=ref, output=str(target))
     assert seen == ['last']
     assert target.read_bytes() == prior if existing else not target.exists()
+
+
+def _crowded(tmp_path, records):
+    """Seven filers named "Crowd Co" and the given GLEIF records, through the configured reductions."""
+    filers = {cik: {"name": "Crowd Co"} for cik in (17, 3, 11, 5, 13, 7, 2)}
+    folder, population = write_capture(tmp_path / "capture", filers, catalog())
+    (tmp_path / "g").mkdir()
+    archive, metadata, _ = gleif_archive(tmp_path / "g", records)
+    wanted = {"CROWD CO"}
+    out = tmp_path / "x.json"
+    write_name_frequency(capture=str(folder), population=str(population), gleif_metadata=str(metadata),
+                         gleif_reading=gleif_reading(tmp_path / "r", archive, wanted, len(records)), output=str(out))
+    return json.loads(out.read_text())["entries"]["CROWD CO"]
+
+
+def test_a_crowded_name_keeps_its_count_and_its_five_smallest_holders(tmp_path):
+    leis = [f"5493000000000000{n:04d}" for n in (9, 1, 8, 2, 7, 3, 6)]
+    entry = _crowded(tmp_path, [gleif(lei, "Crowd Co") for lei in leis])
+    assert (entry["cik_count"], entry["ciks"]) == (7, ["0000000002", "0000000003", "0000000005", "0000000007",
+                                                       "0000000011"])
+    assert entry["lei_count"] == 7
+    assert [lei for lei, _ in entry["leis"]] == sorted(leis)[:5]
+
+
+def test_a_legal_entity_with_no_lei_holds_no_name(tmp_path):
+    # As main's Python fold read it (ticket 148): the reading leaves a blank LEI out before counting.
+    entry = _crowded(tmp_path, [gleif("5493000000000000001", "Crowd Co"), gleif("", "Crowd Co")])
+    assert (entry["lei_count"], entry["leis"]) == (1, [["5493000000000000001", "2026-09-01T00:00:00Z"]])

@@ -1,9 +1,13 @@
-# Local qualification recipe; no source activation or whole-census claim.
-# Pin canonical JSON of this recipe as the source.combine contract.
+# Name Frequency's GLEIF half, counted (ticket 148): each name key's legal holders
+# (their count and the five smallest LEIs with each one's last update in source
+# order) and its other-name holders who do not also hold it as their legal name.
+# It reads the verified `census-complete-stream.yaml` reading, whose rows are
+# only the names the SEC population holds; every table of it counts toward
+# `max_rows` (measured 2026-10-09: 3,021,317 rows, 13,423 legal keys, 752 other).
 execution:
   profile: source.combine
 reduce:
-  max_rows: 1000000
+  max_rows: 4000000
   max_input_bytes: 1073741824
   max_state_bytes: 67108864
   max_keys: 300000
