@@ -1,6 +1,6 @@
 # Complete Silver on PostgreSQL and MySQL
 
-Status: supported two-engine remainder implemented and locally qualified; PR #1231 published. Calendar intervals are deferred; required CI is pending.
+Status: the authorized supported-type remainder is qualified and merged in #1231. Overall Silver completion remains incomplete only for the operator-deferred calendar capability; SQL Server is still last.
 Parent: [Two-engine priority](../platform-three-databases/01-migrate.md).
 Branch: `codex/silver-two-engine-completion-20261029`, based on `f5f02a7d2`.
 
@@ -13,9 +13,9 @@ Branch: `codex/silver-two-engine-completion-20261029`, based on `f5f02a7d2`.
 - [x] Account for actual configured MDM master links and refresh on PostgreSQL and MySQL — 2026-10-29 21:19 ET: carry forward unchanged normal-reader/land/late-master/merge/reversal/refresh/replay evidence from #1210/#1212, tests/installed_workflow/test_mdm_workflow.py ids/silver and tests/storage_adapters/master_id_scenarios.py. Both configured kinds and engines retain the installed scenario; no duplicate test added.
 - [x] Qualify append/upsert/snapshot, quality, rollback, replay and populated registration through the normal callers on both engines — 2026-10-29 21:19 ET: retained shared suite plus the new exact-type/index cases passed on both engines. Installed committed-head proof remains below.
 - [x] Qualify the committed revision outside the checkout — 2026-10-29 21:35 ET: dfb0028a independently installed all five wheels; three normal CLI/typed readback cases passed per engine (append/upsert/snapshot): MySQL 183.92 seconds and PostgreSQL 42.53 seconds.
-- [ ] Verify required CI on the published head; this remains the merge gate.
+- [x] Verify required CI on the published head — 2026-10-29 23:00 ET: all 20 checks pass at b5644c21 in run 40990305336; #1231 merged as d18cbbb8 after named operator approval. The former failing type-refusal test remains unchanged.
 - [x] Review Standards, Spec and GoF and reconcile parent records against verified results — 2026-10-29 21:35 ET: review below and parent checkpoint preserve the calendar deferral, SQL Server gate and CI limit.
-- [x] Publish the implementation PR and verify its published head — 2026-10-29 21:39 ET: #1231 is published at 5b71c233, which contains the qualified runtime dfb0028a. This publication record changes no runtime or test bytes. Draft remains only while its required CI validation is pending.
+- [x] Publish the implementation PR and verify its published head — 2026-10-29 21:39 ET: #1231 is published at 5b71c233, which contains the qualified runtime dfb0028a. This publication record changes no runtime or test bytes. Its historical draft gate subsequently passed; the final CI and merge receipt are recorded above.
 - [x] Learning → skill — 2026-10-29 21:35 ET: separate PR #1229, head da7eb5ce, corrects data-operations support claims and adds “Qualify Silver storage”; 87 genericity checks and skill validator pass. Skill PR is ready; CI remains its merge gate.
 
 ## Boundaries
@@ -122,3 +122,15 @@ listing it in possible_keys. The existing test now loads 1,001 invented rows,
 refreshes statistics and asserts the chosen key/access path. That exact check
 passes on MySQL (1.55 seconds) and PostgreSQL (1.15 seconds). The CI wording
 correction preserves the old type-refusal prefix and appends safe detail.
+
+## Final closeout — 2026-10-29 23:00 ET
+
+All 20 final-head CI checks passed at b5644c21. PR #1231 merged after #1229,
+in the order the operator authorized. The implementation merge is d18cbbb8;
+the owning skill merge is 7e8fd545. Earlier pending-CI notes above are dated
+checkpoints superseded by this receipt. The source/test revision qualified by
+final CI includes the error-prefix correction and actual index-plan assertion.
+
+The calendar follow-up remains unchecked and deferred by explicit operator
+decision; no complete-calendar or SQL Server claim is made. No operational
+store, source activation or hosted cutover occurred.
