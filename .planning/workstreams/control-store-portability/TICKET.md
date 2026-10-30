@@ -1,6 +1,6 @@
 # Complete Rules, Bookkeeping and Change Journal portability
 
-Status: Rules and its guidance merged; Bookkeeping/Journal normal PostgreSQL/MySQL implementation and local qualification complete on its follow-up branch; final CI/release and deferred SQL Server remain open.
+Status: normal Rules, Bookkeeping and Journal PostgreSQL/MySQL scope merged and qualified. SQL Server Rules/Bookkeeping normal lifecycle remains deferred.
 Base: current origin/main after Silver closeout; branch `codex/control-store-portability-20261029`.
 Parent: [Platform portability](../platform-three-databases/01-migrate.md).
 
@@ -13,7 +13,7 @@ Parent: [Platform portability](../platform-three-databases/01-migrate.md).
 - [x] Complete Bookkeeping normal start/claim/heartbeat/report/verify/completion/checkpoint/generated-work/resume/finalize and destination authority/recovery on both engines — 2026-10-30 07:11 ET: PR #1237; 22 MySQL control cases, retained PostgreSQL cohorts, independent control-only install and real worker pipeline pass.
 - [x] Verify and retain existing Change Journal selected-engine support and independent package; implement only demonstrated gaps in normal append/replay/read/receipt/delivery/migration/rights behavior — 2026-10-29 23:43 ET: nine retained normal cases passed on each selected engine; existing independent-package and SQL Server evidence unchanged; no Journal gap found.
 - [x] Qualify normal configured callers and installed workers/verifiers, migration/health commands, rollback/recovery, unchanged replay and populated upgrades — 2026-10-30 07:11 ET: PR #1237 ticket retains per-case evidence; coupled five-wheel real worker pipeline passes on PostgreSQL/MySQL, with unchanged event counts after resume.
-- [ ] Review Standards, Spec and GoF; publish bounded implementation PRs and qualify final heads before merge.
+- [x] Review Standards, Spec and GoF; publish bounded implementation PRs and qualify final heads before merge — 2026-10-30 07:33 ET: Rules #1235/#1236 and Bookkeeping/Journal #1237/#1239 merged sequentially with all 20 checks green per final head; independent reviews found no remaining blocker.
 - [ ] ~~Full SQL Server qualification~~ deferred until the PostgreSQL/MySQL gate; retain existing SQL Server adapter checks and Journal qualification.
 - [x] Resolve Rules CLI overlap before editing that file — 2026-10-29 22:26 ET: operator explicitly assigned edgar_warehouse/rules/cli.py to Codex in this session; archived Claude work is preserved. The real guard continues to report that known overlap; no other overlap is authorized.
 - [x] Learning → skill: publish demonstrated reusable learning separately or record none — 2026-10-30 00:12 ET: PR #1236 updates mdm-engineering/references/storage-adapters.md with normal Rules handoff, approval-evidence and guard/index readback qualification; 87 genericity cases and independent review passed. Its CI remains a separate gate.
@@ -103,3 +103,7 @@ store hierarchy. Inspect each actual transition and race before changing it.
 ## Bookkeeping and Journal follow-up
 
 PR #1237 supplies normal PostgreSQL/MySQL Bookkeeping and the demonstrated Journal CLI/lost-history gaps. Eleven normal Journal cases pass on each engine; initialized missing event storage is refused before recreation. Independent control-only and coupled installed real-worker proofs pass. Final-head CI and release remain open. Separate guidance PR #1239 depends on the implementation.
+
+## PostgreSQL/MySQL closeout (2026-10-30 07:33 ET)
+
+Bookkeeping/Journal #1237 merged at abc7397e after all 20 checks passed on 6c4969bd. Guidance #1239 followed at 834b35b9 after all 20 checks passed on 5d7d4523. The coupled installed Rules submission, actual external worker/verifier processes, Journal delivery and unchanged resume pass on both engines. Final CI includes all retained engine cohorts. The unchecked SQL Server item remains deferred; this does not close the three-engine parent or authorize onboarding/activation.

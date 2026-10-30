@@ -263,3 +263,7 @@ covers the implemented PR. The wider portability checklist above remains open.
 - [x] Publish using the exact observed remote lease and inspect terminal CI — all nine checks passed on head 7786fc8e; 2026-10-22 19:50 ET.
 - [x] Mark PR #1121 ready and merge on explicit operator approval naming #1121 — merged as f001c3c4; #1120 closed as covered by the identical installation fix; 2026-10-22 19:50 ET.
 - [x] Learning → skill: none; existing schema documentation and immutable-migration requirements applied; 2026-10-22 19:50 ET.
+
+## Normal control PostgreSQL/MySQL checkpoint (2026-10-30 07:33 ET)
+
+Rules #1235/#1236 and Bookkeeping/Journal #1237/#1239 are merged, with all 20 checks green on each final head. Normal owner/runtime installation, independent installed callers, actual Rules-to-worker/verifier-to-Journal completion and unchanged replay are qualified on PostgreSQL/MySQL; details and release heads are in [control closeout](../control-store-portability/TICKET.md). SQL Server normal Rules/Bookkeeping, full three-engine parent rows and the explicitly deferred MySQL calendar interval remain open. No provider run, operational migration or activation was performed.
