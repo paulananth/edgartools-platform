@@ -57,14 +57,12 @@ queries; the migration owns installation, grants, checksums and readback.
 MDM's shared merge behavior and storage-adapter requirements belong to
 [MDM engineering](../mdm-engineering/SKILL.md#database-agnostic-merge-logic).
 
-**Current implementation gap:** the five commands below currently implement
-PostgreSQL 16 only. MySQL and SQL Server accept connections but their store
-initialization is missing. This is an implementation defect against the
-selected-engine contract, not a restriction on the operator's database choice.
-Record the exact missing capability and leave that target incomplete until
-its migration, runtime operations and restricted-role checks pass. Creating
-some tables or translating SQL does not establish a working store. Apply
-the same capability check to Rules setup through data-onboarding.
+**Check support per store and build.** Connection acceptance does not establish
+initialization or normal-caller support. Silver implements PostgreSQL and MySQL;
+SQL Server Silver remains deferred. For every store, verify its selected-engine
+migration, restricted-role operations and populated recovery before claiming
+readiness. Route a missing capability to engineering while leaving that target
+incomplete; retain the selected engine instead of substituting PostgreSQL.
 
 | Schema | Command | Owner connection |
 |---|---|---|
@@ -105,13 +103,14 @@ the whole list.
    the logical spec and does not. MDM engineering writes the MDM store's own
    migrations and does not apply a profile's silver spec.
    For each part with an approved spec, apply that spec to the engine named
-   by `SILVER_DATABASE_URL`. On PostgreSQL,
+   by `SILVER_DATABASE_URL`. On PostgreSQL or MySQL,
    `edgar-warehouse silver register <findings.yaml> --part <part> --runtime-role <role>`,
    then `edgar-warehouse silver describe <table>`. Numbers, identifiers and
    material commentary are the fields the spec already names. The same spec
-   is the logical input for MySQL and SQL Server Express as well. `silver
-   register` currently supports PostgreSQL only. The selected engine's
-   registration implementation must compile the spec through
+   is the logical input for MySQL and SQL Server Express as well. Silver
+   registration supports PostgreSQL and MySQL; SQL Server is deferred. Qualify
+   the selected engine's normal registration, not only its compiled table.
+   Registration must compile the spec through
    [sql-writer](../sql-writer/SKILL.md) and install the table, registry,
    comments and restricted grants through a recoverable registration path.
    Report success only after all of them read back correctly. A standalone compiled table
@@ -126,6 +125,26 @@ silver spec is a registered table. Report one line per domain: operational, or
 the blocker. The recurring loop below then loads that domain's entities from a
 finished delivery. This section does not download, does not invent a command,
 and does not mark a blocked domain complete.
+
+## Qualify Silver storage
+
+Use retained applicable evidence and the normal installed caller on each selected
+engine. Check owner-only initialization and registration, interrupted DDL repair,
+configured partition indexes, populated reruns and restricted runtime rights.
+Prove append/upsert/snapshot, quality, rollback, unchanged replay and actual master
+lookup/refresh; an ID callback alone is not the real master-link boundary.
+
+Test exact values through file parsing, binding **and readback**. An exact database
+column cannot repair decimal digits already lost to a JSON float decoder. Include
+nested JSON decimals, integer bounds and decimal-scale refusal independent of
+Python's arithmetic context. Keep original key distinctions when an index uses a
+prefix or digest; the full value remains authoritative.
+
+Elapsed durations and calendar intervals are different contracts. MySQL Silver
+currently preserves elapsed microseconds and does not support calendar-month/year
+storage. Refuse unsupported forms atomically, retain source evidence and record
+that engine's gap. Never silently turn a calendar month into a fixed day count.
+Complete other independent qualification while that capability is deferred.
 
 ## Install and enable one source
 
