@@ -1,6 +1,6 @@
 # Complete Silver on PostgreSQL and MySQL
 
-Status: implementing the authorized two-engine remainder; calendar intervals explicitly deferred by the operator.
+Status: supported two-engine remainder implemented and locally qualified; publishing the PR. Calendar intervals are deferred; CI remains pending.
 Parent: [Two-engine priority](../platform-three-databases/01-migrate.md).
 Branch: `codex/silver-two-engine-completion-20261029`, based on `f5f02a7d2`.
 
@@ -12,9 +12,11 @@ Branch: `codex/silver-two-engine-completion-20261029`, based on `f5f02a7d2`.
 - [ ] ~~Add exact calendar-month/year interval storage and populated-table conversion~~ deferred to [Calendar intervals](CALENDAR-INTERVALS.md): operator explicitly deferred this scope; MySQL refuses it atomically.
 - [x] Account for actual configured MDM master links and refresh on PostgreSQL and MySQL — 2026-10-29 21:19 ET: carry forward unchanged normal-reader/land/late-master/merge/reversal/refresh/replay evidence from #1210/#1212, tests/installed_workflow/test_mdm_workflow.py ids/silver and tests/storage_adapters/master_id_scenarios.py. Both configured kinds and engines retain the installed scenario; no duplicate test added.
 - [x] Qualify append/upsert/snapshot, quality, rollback, replay and populated registration through the normal callers on both engines — 2026-10-29 21:19 ET: retained shared suite plus the new exact-type/index cases passed on both engines. Installed committed-head proof remains below.
-- [ ] Qualify the committed revision outside the checkout and complete applicable CI.
-- [ ] Review Standards, Spec and GoF, publish a PR, and reconcile parent completion records only against verified results.
-- [ ] Learning → skill: publish any demonstrated reusable correction separately, or record none.
+- [x] Qualify the committed revision outside the checkout — 2026-10-29 21:35 ET: dfb0028a independently installed all five wheels; three normal CLI/typed readback cases passed per engine (append/upsert/snapshot): MySQL 183.92 seconds and PostgreSQL 42.53 seconds.
+- [ ] Verify required CI on the published head; this remains the merge gate.
+- [x] Review Standards, Spec and GoF and reconcile parent records against verified results — 2026-10-29 21:35 ET: review below and parent checkpoint preserve the calendar deferral, SQL Server gate and CI limit.
+- [ ] Publish the implementation PR and verify its published head.
+- [x] Learning → skill — 2026-10-29 21:35 ET: separate PR #1229, head da7eb5ce, corrects data-operations support claims and adds “Qualify Silver storage”; 87 genericity checks and skill validator pass. Skill PR is ready; CI remains its merge gate.
 
 ## Boundaries
 
@@ -88,3 +90,16 @@ package preparation; no installed behavior pass is claimed from it. Its owned
 processes stopped. Reuse the checkout's existing native target cache on retry;
 retain the same local test deadline. Exact JSON parsing also keeps the prior
 integral numeric master-key spelling through a bounded Decimal normalization.
+
+## Installed qualification — 2026-10-29 21:35 ET
+
+Both engines passed the committed five-wheel caller from dfb0028a, outside the
+checkout, with three modes and exact decimal/nested JSON/elapsed-duration readback
+and configured index verification. MySQL reused the native target cache and
+passed within the unchanged 280-second deadline; PostgreSQL reused the built
+wheel cache. All disposable databases/roles were cleaned by the fixture.
+The following record changes leave the tested runtime and test bytes unchanged.
+
+The authorized supported-type work is implemented; overall Silver completion
+still excludes the explicitly deferred calendar capability. Required PR CI and
+publication are still pending until recorded by their actual outcomes.

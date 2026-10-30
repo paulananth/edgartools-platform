@@ -197,3 +197,25 @@ and retirement. Ordinary/short-word and negative-only index plans passed on
 both engines alongside a 5,001-code unrelated version. PR CI and merge remain
 separate gates. SQL Server remains deferred; no production or hosted store was
 migrated and no operational source approval or activation occurred.
+
+## Silver supported-type two-engine qualification — 2026-10-29 21:35 ET
+
+The remaining concrete partition-index and value-transport gaps are implemented
+and locally qualified in [the current Silver ticket](../silver-two-engine-completion/TICKET.md).
+MySQL owner registration installs configured partition indexes and repairs an
+interrupted index CREATE or a populated pre-index registration. Runtime DDL is
+refused. JSON Lines decimal values and nested JSON fractional readback no longer
+pass through float; decimal-scale validation is independent of Python context.
+Existing day/time interval text is transported as exact elapsed microseconds.
+
+The storage cohorts pass 26 PostgreSQL / 37 MySQL cases. The committed five-wheel
+CLI and typed readback pass all three modes per engine outside the checkout
+(MySQL 183.92 seconds; PostgreSQL 42.53 seconds). Actual master-link land/refresh,
+late mastering, merge/reversal and replay already belong to the retained installed
+ids/silver family qualified in #1210/#1212; the older PostgreSQL-only MdmIds
+limitation above is historical and superseded. No duplicate scenario is added.
+
+Calendar-month/year MySQL interval storage is explicitly deferred by the
+operator. Its unsupported input is refused atomically; PostgreSQL's existing
+calendar forms remain unchanged. Final PR CI remains a merge gate. This is not
+SQL Server, production/hosted migration or source-activation qualification.

@@ -1,0 +1,35 @@
+{
+  "runtime_and_test_head": "dfb0028a",
+  "local_storage": {
+    "postgresql": {
+      "passed": 26,
+      "seconds": 11.16
+    },
+    "mysql": {
+      "passed": 37,
+      "seconds": 20.71
+    }
+  },
+  "local_unit": {
+    "passed": 29,
+    "seconds": 3.09
+  },
+  "installed_five_wheel_cli": {
+    "postgresql": {
+      "passed": 3,
+      "seconds": 42.53
+    },
+    "mysql": {
+      "passed": 3,
+      "seconds": 183.92
+    }
+  },
+  "installed_modes": [
+    "append",
+    "upsert",
+    "snapshot"
+  ],
+  "calendar_intervals_mysql": "deferred by operator; unsupported input atomically refused",
+  "production_or_hosted_changes": false,
+  "ci": "pending published head"
+}
