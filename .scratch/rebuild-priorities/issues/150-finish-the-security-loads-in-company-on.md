@@ -26,10 +26,21 @@ the only merge running? Fix the cause, then finish the open runs and N-PORT Secu
 
 ## Parts
 
-- [ ] Root cause of the merge's memory: measure one open run's merge (peak memory, time, rows), against the
+- [ ] Root cause of the merge's memory (measured 2026-10-29 20:35-21:55 ET, one bundle at a time, memory sampled every 15 s; then stopped on the operator's words "this is enough move on", 21:58 ET): 14 open runs, 0 finished; 4 merges killed with status -9, 3 "destination authority expired before save", 1 stopped by the deadline, 9 never started. No merge was seen above 1.55 GB, and free memory never fell under 19%, so a memory kill by the machine is not shown by these samples (a rise between two samples is not ruled out); what sends the kill is open. Next step: measure one open run's merge (peak memory, time, rows), against the
   machine's free memory with the shared server running
 - [ ] Root cause of "destination authority expired before save": the permission's lifetime against the merge's
-  time, and whether the heartbeat renews it
+  time, and whether the heartbeat renews it. Read in the code (2026-10-29 19:09 ET), to be confirmed by the
+  measurement: the heartbeat renews the lease every `heartbeat_seconds` and writes the new proof into the envelope
+  (`workers/__main__.py`, `Renewal`), but one save transaction records the proof it started with and, at commit,
+  requires that same proof unexpired (`adapter_sql.py`, the `destination_authority_expired_before_save` guard). So
+  one batch's save that runs longer than the lease fails, renewed or not. OpenFIGI's `mastering` targets set no
+  `lease_seconds`, so 120 s; N-PORT Security sets 900 (ticket 120, for FIGI steps since removed). A merge unit is a
+  bundle's prepared manifest: 53 batches of about 805 Securities (bundle 7: 31.6 MB), each batch its own
+  transaction (`execution.execute_manifest`). Whether a batch's save is slow by itself or slowed by memory pressure
+  is what the measurement decides
+- [ ] Evidence for the memory: one OpenFIGI merge worker held about 790 MB 20 s after it started and about 1.0 GB at
+  21 min (2026-10-29, `ps`), so its memory grows over the batches; `execute_manifest` keeps every batch's result
+  until the end (`committed`). Measure what each result holds
 - [ ] The fix, with its test (a merge of the measured size fits, and saves inside its permission)
 - [ ] Finish the OpenFIGI load: the same command finishes its open runs first
 - [ ] The N-PORT Security load (2026 Q2)
