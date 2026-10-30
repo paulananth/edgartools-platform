@@ -16,8 +16,8 @@ def test_installed_rules_cli_lifecycle(installed, database_factory):
         with database_factory() as (owner, runtime, role):
             config = root / "invented-pipeline.json"
             config.write_text(json.dumps(pipeline()))
-            environment = {"RULES_MIGRATION_DATABASE_URL": owner.url.render_as_string(hide_password=False),
-                           "RULES_DATABASE_URL": runtime.url.render_as_string(hide_password=False)}
+            environment = {"RULES_MIGRATION_DATABASE_URL": owner.url.set(drivername=owner.dialect.name).render_as_string(hide_password=False),
+                           "RULES_DATABASE_URL": runtime.url.set(drivername=runtime.dialect.name).render_as_string(hide_password=False)}
             program = '''
 import json, sys
 from pathlib import Path

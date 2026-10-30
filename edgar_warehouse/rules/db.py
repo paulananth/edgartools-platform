@@ -14,6 +14,7 @@ from pathlib import Path
 from datetime import UTC, datetime
 
 from sqlalchemy import create_engine, select, text, update
+from sqlalchemy.engine import make_url
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.bookkeeping.clean.config import Blocked, canonical, digest
@@ -28,7 +29,11 @@ APPROVAL_COLUMNS = "approved_by,approved_at,approved_words,approval_overrule,app
 
 
 def get_engine(url=None):
-    return create_engine(url or os.environ["RULES_DATABASE_URL"], pool_pre_ping=True, hide_parameters=True)
+    target = make_url(url or os.environ["RULES_DATABASE_URL"])
+    drivers = {"postgresql": "postgresql+psycopg2", "mysql": "mysql+pymysql"}
+    if target.drivername in drivers:
+        target = target.set(drivername=drivers[target.drivername])
+    return create_engine(target, pool_pre_ping=True, hide_parameters=True)
 
 
 def migrate(engine, *, agent_role: str = "rules_agent", approver_role: str = "rules_approver", database_name: str = "rules"):

@@ -2,7 +2,7 @@
 import json
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.rules.db import Rules, migrate
@@ -288,3 +288,21 @@ def test_postgres_rejects_migration_owner_as_approval_principal(database_factory
     with database_factory() as (owner, _, role):
         with pytest.raises(Blocked, match="[Rr]estricted"):
             migrate(owner, agent_role=role, approver_role=owner.url.username, database_name=owner.url.database)
+
+
+def test_rules_cli_accepts_the_selected_engine_default_driver(database_factory, monkeypatch, capsys):
+    from edgar_warehouse.rules.db import get_engine
+    from edgar_warehouse.cli import main
+    with database_factory() as (_, _, approval_role):
+        with database_factory() as (owner, runtime, role):
+            if owner.dialect.name == "mssql":
+                pytest.skip("Full SQL Server Rules qualification follows PostgreSQL/MySQL")
+            monkeypatch.setenv("RULES_MIGRATION_DATABASE_URL", owner.url.set(drivername=owner.dialect.name).render_as_string(hide_password=False))
+            assert main(["rules", "init", "--agent-role", role, "--approver-role", approval_role, "--database-name", owner.url.database]) == 0
+            assert json.loads(capsys.readouterr().out)
+            engine = get_engine(runtime.url.set(drivername=runtime.dialect.name).render_as_string(hide_password=False))
+            try:
+                with engine.connect() as conn:
+                    assert conn.scalar(text("SELECT 1")) == 1
+            finally:
+                engine.dispose()

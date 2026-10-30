@@ -63,12 +63,11 @@ def _test(args):
 
 
 def _handle(args):
-    from sqlalchemy import create_engine
     from .db import Rules, get_engine, migrate
     if args.rules_command == "approve" and args.rule:
         return _approve_rule(args)
     if args.rules_command in ("init", "migrate"):
-        owner = create_engine(os.environ["RULES_MIGRATION_DATABASE_URL"])
+        owner = get_engine(os.environ["RULES_MIGRATION_DATABASE_URL"])
         try:
             result = migrate(owner, agent_role=args.agent_role, approver_role=args.approver_role, database_name=args.database_name)
         finally:
@@ -116,7 +115,7 @@ def _handle(args):
                 rules.prove(kind, name, args.version, proof)
                 result = {"proven": name, "version": args.version, "proof": args.proof_uri}
             elif operation == "activate":
-                mdm_owner = create_engine(os.environ["RULES_MDM_ACTIVATION_DATABASE_URL"]) if os.environ.get("RULES_MDM_ACTIVATION_DATABASE_URL") else None
+                mdm_owner = get_engine(os.environ["RULES_MDM_ACTIVATION_DATABASE_URL"]) if os.environ.get("RULES_MDM_ACTIVATION_DATABASE_URL") else None
                 try:
                     rules.activate(kind, name, args.version, mdm_engine=mdm_owner)
                 finally:
