@@ -106,6 +106,34 @@ held transactions, exact schema/grant readback, inherited column write grants
 and unchanged historical prepared-effect fingerprints. Empty helper-created
 tables are not evidence of this owner workflow.
 
+### Rules handoff qualification
+
+Test the installed Rules CLI as well as its storage facade: initialization,
+save, proof recording, pending approval, approval, activation, status, export
+and populated migration. A successful save does not prove that a status reader
+or activation handoff uses the selected engine. Follow each normal call into
+its actual owner API; a query against a retired relation is a caller gap even
+when the replacement store has passed its own tests.
+
+Read an existing mastering registration through its current-reading API before
+registering it again. Compare the contract with registry evidence removed;
+changing the Rules version alone must reuse an unchanged dataset reading.
+Prove that reuse with two approved versions and the actual destination store.
+
+An approval names the evidence the selected Rules store showed. Its proof-text
+representation can differ between database engines, while the canonical Rules
+body digest remains identical. Obtain the approval evidence from that target's
+normal pending command and verify approved proof immutability there.
+
+On MySQL, a completed checksum marker also needs readback of the installed
+constraints, uniqueness indexes and guard bodies. Qualify deliberate guard and
+index loss: owner migration must refuse drift and deny runtime writes. During
+interrupted guard replacement, test an already-open restricted connection as
+well as a new one. Rebuilding guards and restoring grants must leave populated
+documents, proofs and approvals unchanged. Rendered metadata changes during a
+server upgrade require owner diagnosis and qualification before runtime access
+reopens.
+
 ### Qualify assessed saves and owner activation
 
 Keep an explicit pending marker while an owner installs or replaces governed
