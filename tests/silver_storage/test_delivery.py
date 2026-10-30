@@ -326,3 +326,102 @@ def test_text_transport_is_identical_for_native_scalar_inputs(silver):
     assert [row["words"] for row in stored(runtime, config)] == ["true", "false", "\\x00ff", "2026-10-01",
                                                                "2026-10-01T01:02:00", "1.50", "1.25"]
     assert land(sink, config["table"], values)["changed"] == 0
+
+
+def test_configured_partition_index_exists_and_is_used(silver):
+    from sqlalchemy import inspect
+    owner, runtime, role = silver
+    config = spec(partition=["visited_on", "visit_id"])
+    register(owner, config, runtime_role=role)
+    values = [{"visit_id": n, "visited_on": "2026-09-01"} for n in range(1000)]
+    values.append({"visit_id": 1000, "visited_on": "2026-10-01"})
+    assert land(DatabaseSink(runtime), config["table"], values)["inserted"] == 1001
+    schema = "silver" if owner.dialect.name == "postgresql" else None
+    with owner.begin() as conn:
+        indexes = inspect(conn).get_indexes(config["table"], schema=schema)
+        chosen = [i for i in indexes if i["column_names"] == config["partition"]]
+        assert len(chosen) == 1
+        table = data_table(config, owner.dialect.name)
+        query = select(table.c.visit_id).where(table.c.visited_on == "2026-10-01")
+        sql = str(query.compile(dialect=conn.dialect, compile_kwargs={"literal_binds": True}))
+        if conn.dialect.name == "postgresql":
+            conn.execute(text("SET LOCAL enable_seqscan=off"))
+            plan = conn.scalar(text("EXPLAIN (FORMAT JSON) " + sql))
+            import json
+            assert chosen[0]["name"] in json.dumps(plan)
+        else:
+            conn.exec_driver_sql("ANALYZE TABLE " + conn.dialect.identifier_preparer.format_table(table)).all()
+            plan = conn.execute(text("EXPLAIN " + sql)).mappings().one()
+            assert plan["key"] == chosen[0]["name"] and plan["type"] in {"const", "ref", "range"}
+    assert not register(owner, config, runtime_role=role)["created"]
+
+
+def test_json_file_and_nested_decimals_keep_exact_digits(silver, tmp_path):
+    from decimal import Decimal
+    from edgar_warehouse.silver_writer.rows import records
+    owner, runtime, role = silver
+    config = spec(columns=[{"name": "visit_id", "type": "BIGINT", "nullable": False},
+                           {"name": "amount", "type": "DECIMAL(30,8)", "nullable": True},
+                           {"name": "tags", "type": "JSON", "nullable": True}], partition=[],
+                  time={"as_of": None, "as_at": "loaded_at", "event_time": None})
+    register(owner, config, runtime_role=role)
+    path = tmp_path / "exact.jsonl"
+    path.write_text('{"visit_id": 1, "amount": 12345678901234567890.12345678, '
+                    '"tags": {"fraction": 0.123456789012345678901234567890123, "tiny": 1e-600}}\n')
+    sink = DatabaseSink(runtime)
+    assert land(sink, config["table"], records(path))["inserted"] == 1
+    result = stored(runtime, config)[0]
+    assert result["amount"] == Decimal("12345678901234567890.12345678")
+    assert result["tags"] == {"fraction": Decimal("0.123456789012345678901234567890123"),
+                               "tiny": Decimal("1e-600")}
+    assert land(sink, config["table"], records(path))["changed"] == 0
+
+
+def test_text_partition_index_keeps_original_values(silver):
+    from sqlalchemy import inspect
+    owner, runtime, role = silver
+    config = spec(partition=["member_id"])
+    register(owner, config, runtime_role=role)
+    values = [{"visit_id": n, "member_id": "x" * 2000 + end} for n, end in enumerate(["a", "A", "a "])]
+    sink = DatabaseSink(runtime)
+    assert land(sink, config["table"], values)["inserted"] == 3
+    assert [r["member_id"] for r in stored(runtime, config)] == [r["member_id"] for r in values]
+    with owner.connect() as conn:
+        indexes = inspect(conn).get_indexes(config["table"], schema="silver" if conn.dialect.name == "postgresql" else None)
+        assert any(i["column_names"] == ["member_id"] for i in indexes)
+    assert land(sink, config["table"], values)["changed"] == 0
+
+
+def test_decimal_scale_refusal_is_independent_of_python_context(silver):
+    from decimal import localcontext
+    owner, runtime, role = silver
+    config = spec(columns=[{"name": "visit_id", "type": "BIGINT", "nullable": False},
+                           {"name": "amount", "type": "DECIMAL(30,8)", "nullable": True}], partition=[],
+                  time={"as_of": None, "as_at": "loaded_at", "event_time": None})
+    register(owner, config, runtime_role=role)
+    with localcontext() as context:
+        context.prec = 4
+        with pytest.raises(Blocked):
+            land(DatabaseSink(runtime), config["table"], [{"visit_id": 1, "amount": "12345678901234567890.123456789"}])
+    assert stored(runtime, config) == []
+
+
+def test_elapsed_interval_text_and_precision_replay(silver):
+    from datetime import timedelta
+    owner, runtime, role = silver
+    config = spec(columns=[{"name": "visit_id", "type": "BIGINT", "nullable": False},
+                           {"name": "duration", "type": "INTERVAL", "nullable": True}], partition=[],
+                  time={"as_of": None, "as_at": "loaded_at", "event_time": None})
+    register(owner, config, runtime_role=role)
+    sink = DatabaseSink(runtime)
+    delivered = [{"visit_id": 1, "duration": "2 days 01:02:03.123456"},
+                 {"visit_id": 2, "duration": "-2 days +01:02:03.123456"},
+                 {"visit_id": 3, "duration": "-00:00:00.000001"}]
+    assert land(sink, config["table"], delivered)["inserted"] == 3
+    results = stored(runtime, config)
+    assert [r["duration"] for r in results] == [timedelta(days=2, hours=1, minutes=2, seconds=3, microseconds=123456),
+        timedelta(days=-2, hours=1, minutes=2, seconds=3, microseconds=123456), timedelta(microseconds=-1)]
+    assert land(sink, config["table"], delivered)["changed"] == 0
+    with pytest.raises(Blocked):
+        land(sink, config["table"], [{"visit_id": 4, "duration": "00:00:00.0000001"}])
+    assert stored(runtime, config) == results
