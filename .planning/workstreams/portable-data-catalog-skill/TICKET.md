@@ -9,7 +9,8 @@ No computer use, source requests, real records or production pipeline execution.
 - [x] Test one connected invented model through the native API before writing the skill; retain counts/outcomes and remove only exact test-owned objects. — 2026-10-30 15:44 ET: final rerun passed all associations, wrong-mapping and repeat checks; 14 objects and 1 edge removed, zero remaining.
 - [x] Create a vendor-neutral skill and separate OpenMetadata instructions; document Alation/Collibra terminology differences without claiming live support. — 2026-10-30 15:44 ET: data-catalog core plus MODEL/OPENMETADATA/PORTABILITY references; preserves both operator browsing/destination choices.
 - [x] Validate realistic skill use, source-neutrality, references and packaging discovery. — 2026-10-30 15:44 ET: independent forward-test; skill validator; 94 genericity/path tests; 5 exact wheel files; actual installer into both temporary runtime folders.
-- [ ] Publish a PR and report verified head; keep unfinished qualification explicit.
+- [x] Publish a PR and report verified head; keep unfinished qualification explicit. — 2026-10-30 15:46 ET: draft PR #1253 publishes the skill and evidence; local checks and native proof passed before publication.
+- [ ] Final-head CI and PR readiness; draft while CI is pending. No live Alation/Collibra qualification is included in this ticket.
 - [x] Learning → skill: data-catalog captures dimension separation, portable identity/mappings, honest native-versus-renderer capability and columns-plus-tags readback. — 2026-10-30 15:44 ET: native proof and independent behavioral test support these instructions.
 
 Operator decisions: each configured entity kind is a business domain; metadata
