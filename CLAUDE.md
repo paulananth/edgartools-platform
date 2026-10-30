@@ -132,10 +132,12 @@ Learned the hard way; each is a standing operator rule.
 - Merge when every CI check is green and the PR is ready, without asking:
   merging is automatic (operator, 2026-10-17: "auto merge and not ask for
   approval"). Watch CI, merge on green, and report the merge.
-  `main` requires no checks, so the watcher is the only gate: it merges only
-  when every check reads `pass` (or `skipping`), counted against all checks,
-  and stops on any other state. One that merged when nothing was pending put
-  a red unit job on `main` (2026-10-26, #1185).
+  `main` requires no checks, so the watcher is the only gate. Use
+  `bash scripts/dev/merge_on_green.sh <pr> [minutes]` in the background, never
+  a hand-written loop: it counts only the CI runs of the PR's current head
+  commit and merges that commit by name. Right after a push, `gh pr checks`
+  still lists the previous commit's green checks; loops that read it merged
+  code CI had not run (#1185, 2026-10-26; #1245, 2026-10-30).
 - Green means green on today's `main`: a PR whose base moved since its CI ran is
   updated (`gh pr update-branch`) and waits for CI again before it merges; two
   PRs each green alone broke `main` together (2026-10-18).
