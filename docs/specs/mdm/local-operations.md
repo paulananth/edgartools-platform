@@ -128,8 +128,8 @@ delta. The population file lists the receipt keys of the main submissions
 documents counted; each is read from the capture folder (`receipts.jsonl` and
 `bronze/`) through `rules/sources/sec.submissions.company/census-sec-names.yaml` by the
 `source.read` worker and its verifier, up to 256 documents a unit, and must match its
-receipt; `census-sec-reduction.yaml` counts it. The matching cascade is refused while switched on: it has no configured
-reading here yet. The Golden Copy arrives as
+receipt; `census-sec-reduction.yaml` counts it. With a cascade pass switched on, the census also runs the cascade
+through the Company chain's own readings (`--catalog`, below). The Golden Copy arrives as
 one verified `source.read` reading of `rules/sources/gleif/census-complete-stream.yaml`
 (about an hour for 3.4 million records); the command checks that the reading
 projected exactly the names this population holds. It needs local files only:
@@ -141,8 +141,13 @@ edgar-warehouse mdm name-census \
   --gleif-reading "$GLEIF_CENSUS_READING_JSON" \
   --gleif-reading-sha256 "$GLEIF_CENSUS_READING_SHA256" \
   --gleif-metadata "$GLEIF_LEVEL1_METADATA_JSON" \
+  --catalog "$SEC_EXCHANGE_CATALOG_KEY" \
   --output "$NAME_CENSUS_JSON"
 ```
+
+`--catalog` names the capture's exchange catalog. It is required while a
+cascade pass is switched on (P5 since ticket 09): the census then runs the
+cascade, which reads each filer's tickers, and refuses to run without it.
 
 The metadata file holds the archive's verified publication metadata
 (`format`, `cdf_version`, `content_date`, `file_content`, `record_count`); its

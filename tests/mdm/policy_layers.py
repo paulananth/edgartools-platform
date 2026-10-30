@@ -132,6 +132,15 @@ def without_p2_p3_deleted(policy: dict) -> dict:
     return body
 
 
+def without_p5_switch_on(policy: dict) -> dict:
+    """Rebuild priorities ticket 09 (operator, 2026-10-30 18:20 ET: "P5 now, hold
+    P1/P4/P6 (Recommended)"): cascade pass P5 switched on, on its labelled new
+    links and its adversarial arms. Peeled, P5 is declared only."""
+    body = _copy(policy)
+    body["automatic_rules"] = [r for r in body["automatic_rules"] if r["rule_id"] != "sec-gleif-cascade-p5"]
+    return body
+
+
 def without_one_value_per_identifier(policy: dict) -> dict:
     """Rebuild priorities ticket 138: each Company identifier states the one
     value per Company the engine always enforced (`claim.reverse: 1`), since
@@ -308,6 +317,8 @@ def without_place_codes(policy: dict) -> dict:
 # Newest first: each layer, and Company's policy digest with it and every
 # layer after it still on.
 LAYERS = [
+    # Switched on: "P5 now, hold P1/P4/P6 (Recommended)" (2026-10-30 18:20 ET, ticket 09).
+    (without_p5_switch_on, "68879d5e6a1e75489073021f7c72a34d2d601041ce3e7676b09577e0e761218c"),
     # The types in RDM: "Use RDM for keeping types and other information" (2026-10-27, ticket 132).
     (without_types_in_rdm, "a3bf10f406abe5d8cad20c698f1b51f2f81661a76a3944620edfc0c304f99cd5"),
     # Recorded under the standing rule on its tests (2026-10-25, ticket 138).

@@ -11,7 +11,7 @@ from edgar_warehouse.mdm.clean.name_frequency import write_name_frequency
 from edgar_warehouse.mdm.clean.store import Conflict, canonical
 from tests.support.name_census_inputs import gleif_archive, gleif_reading
 from tests.mdm.test_clean_name_census import gleif
-from tests.support.sec_capture import catalog, key, write_capture
+from tests.support.sec_capture import CATALOG, catalog, key, write_capture
 
 
 RECORDS = [gleif("HWUPKR0MPOU8FGXBT394", "Apple Inc.", other=["Old Name Inc"]),
@@ -37,8 +37,9 @@ def census_of(tmp_path, capture, **changes):
     folder, population, archive, metadata, wanted = capture
     if "gleif_reading" not in changes:
         changes["gleif_reading"] = gleif_reading(tmp_path / "r", archive, wanted, len(RECORDS))
+    # A switched-on pass (P5, ticket 09) runs the cascade on every census, which reads the capture's catalog.
     return write_name_frequency(capture=str(folder), population=str(population), gleif_metadata=str(metadata),
-                                **{"output": str(tmp_path / "x.json"), **changes})
+                                **{"output": str(tmp_path / "x.json"), "catalog": CATALOG, **changes})
 
 
 def test_it_writes_the_census(tmp_path, capture):
@@ -63,7 +64,9 @@ def test_it_writes_the_census(tmp_path, capture):
                           "other_name_holders": 1},
             "OLD NAME INC": {"ciks": ["0000000001", "0000320193"], "cik_count": 2, "leis": [], "lei_count": 0,
                              "other_name_holders": 1}}}
-    assert configured.read_bytes() == (canonical(expected) + "\n").encode()
+    # A pass is switched on (P5, ticket 09), so the census also holds the cascade's answers (tested below).
+    assert census.pop("cascade")["version"] == "sec-gleif-cascade-v1"
+    assert canonical(census) == canonical(expected)
     assert census["entries"]["APPLE INC"]["cik_count"] == 2  # two filers hold the name
     assert census["entries"]["APPLE INC"]["leis"] == [["HWUPKR0MPOU8FGXBT394", "2026-09-02T00:00:00Z"]]
     assert census["entries"]["APPLE INC"]["other_name_holders"] == 1
@@ -149,19 +152,17 @@ def test_metadata_the_publisher_would_not_have_written_is_refused(tmp_path, capt
 
 
 def test_a_switched_on_cascade_runs_and_the_census_holds_its_answers(tmp_path, capture):
-    # Today's policy declares the passes and switches none on, so `cascade=True` stands for switching one on.
+    # P5 is switched on (ticket 09): every census runs the cascade, asked for or not, and refuses to
+    # run without the capture's catalog, which the cascade reads each filer's tickers from.
     folder, population, archive, metadata, wanted = capture
     reading = gleif_reading(tmp_path / "r", archive, wanted, len(RECORDS))
     census_of(tmp_path, capture, gleif_reading=reading)
-    without = json.loads((tmp_path / "x.json").read_text())
-    assert "cascade" not in without
-    from tests.support.sec_capture import CATALOG
-
-    census_of(tmp_path, capture, gleif_reading=reading, output=str(tmp_path / "with.json"), cascade=True,
-              catalog=CATALOG)
-    found = json.loads((tmp_path / "with.json").read_text())
+    found = json.loads((tmp_path / "x.json").read_text())
     assert found["cascade"]["version"] == "sec-gleif-cascade-v1" and isinstance(found["cascade"]["assignments"], dict)
-    assert {k: v for k, v in found.items() if k != "cascade"} == without
+    census_of(tmp_path, capture, gleif_reading=reading, output=str(tmp_path / "asked.json"), cascade=True)
+    assert json.loads((tmp_path / "asked.json").read_text()) == found
+    with pytest.raises(Conflict, match="exchange catalog"):
+        census_of(tmp_path, capture, gleif_reading=reading, output=str(tmp_path / "none.json"), catalog=None)
 
 
 def _cascade_filers(tmp_path, found, rows):
@@ -266,7 +267,8 @@ def _crowded(tmp_path, records):
     wanted = {"CROWD CO"}
     out = tmp_path / "x.json"
     write_name_frequency(capture=str(folder), population=str(population), gleif_metadata=str(metadata),
-                         gleif_reading=gleif_reading(tmp_path / "r", archive, wanted, len(records)), output=str(out))
+                         gleif_reading=gleif_reading(tmp_path / "r", archive, wanted, len(records)), output=str(out),
+                         catalog=CATALOG)
     return json.loads(out.read_text())["entries"]["CROWD CO"]
 
 
