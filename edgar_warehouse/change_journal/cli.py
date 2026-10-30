@@ -20,7 +20,8 @@ def _handle(args):
         owner = get_engine(os.environ["CHANGE_JOURNAL_MIGRATION_DATABASE_URL"])
         try:
             result = migrate(owner, runtime_role=args.runtime_role,
-                             existing_only=args.journal_command == "migrate")
+                             existing_only=args.journal_command == "migrate",
+                             database_name=args.database_name)
         finally:
             owner.dispose()
     else:
@@ -47,6 +48,7 @@ def _commands(parser):
     for name in ("init", "migrate"):
         command = commands.add_parser(name)
         command.add_argument("--runtime-role", required=True)
+        command.add_argument("--database-name", default="change_journal", help="The configured isolated Journal database")
         command.set_defaults(handler=_handle)
     for name in ("status", "events"):
         command = commands.add_parser(name)

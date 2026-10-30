@@ -118,6 +118,9 @@ def migrate_storage(engine, *, runtime_role, existing_only=False, database_name=
             prior=conn.execute(text(f"SELECT checksum,complete FROM {table} WHERE id=1")).first()
             if not prior or prior[0]!=checksum:
                 raise Blocked("Installed journal migration checksum differs")
+            event_table = "journal_event" if kind == "mysql" else ("journal", "event")
+            if prior[1] and event_table not in tables:
+                raise Blocked("Installed journal event storage is missing; restore it before migration")
             _execute_sql(conn, f"UPDATE {table} SET complete=0 WHERE id=1")
             for statement in statements:
                 _execute_sql(conn, statement)

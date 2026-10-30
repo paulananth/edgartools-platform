@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager, nullcontext
 from functools import lru_cache
+import hashlib
 import json
 
 from sqlalchemy import (JSON, BigInteger, Boolean, Column, DateTime, LargeBinary,
@@ -171,6 +172,11 @@ def reported(engine, run_id, steps, limit):
 def checkpoint(engine, resource):
     table = tables(engine.dialect.name)["checkpoint"]
     statement = select(table).where(text_equal(engine, table.c.resource, resource))
+    if engine.dialect.name == "mysql":
+        # The same generated expression also works against retained fixtures
+        # with an ordinary resource index; original identity remains checked.
+        address = func.if_(table.c.resource.is_(None), None, func.unhex(func.sha2(table.c.resource, 256)))
+        statement = statement.where(address == hashlib.sha256(resource.encode()).digest())
     if engine.dialect.name == "mssql":
         statement = statement.with_hint(table, "WITH (FORCESEEK)", "mssql")
     with engine.connect() as conn:
