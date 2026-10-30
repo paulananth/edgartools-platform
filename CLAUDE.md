@@ -144,7 +144,12 @@ Learned the hard way; each is a standing operator rule.
   exit for every outcome, including the PR merging or closing. Stop test
   containers when a run ends, however it ends. macOS has no `timeout`
   command (a watcher wrapped in it exits at once and does nothing); give the
-  deadline with a background `sleep N; kill <pid>` instead.
+  deadline with a background `sleep N; pkill -P <pid>; kill <pid>` instead.
+  Stop the job's children first: `kill <pid>` alone leaves a process pool's
+  workers running (27 were left, idle up to 34 hours, 2026-10-30). Name each
+  process by its id, never by a name pattern (`pkill -f`) or with job control
+  (`set -m`): a test using both stopped two other runs and the Docker engine
+  (2026-10-30).
 - A run already going (a proof, a load, a recovery) is checked every 30
   minutes, not on a tighter loop (operator, 2026-10-24: "do not use token
   constantly polling the runs check every 30 min"). A check that finds
