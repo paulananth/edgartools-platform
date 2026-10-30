@@ -21,6 +21,12 @@ platform"; MDM's hosted target is Snowflake Postgres or Databricks Lakebase).
 one live AWS account, the decommissioned dev environments, the Snowflake rules
 and the deploy recipes.
 
+**Before any step that takes more than a few minutes** (a proof, a load, a full
+test run), check it against [the seven wastes](skills/data-platform/SKILL.md#the-seven-wastes)
+and drop what adds no value: run the cheap check that can fail it first, never
+repeat a full-size step only to confirm it, and keep a failed run's stores so it
+restarts at the failed step (ticket 48, 2026-10-30: two runs of 45 min, one lost).
+
 ## Parallel work (every runtime)
 
 - **One branch per runtime, never shared**, prefixed `claude/`, `codex/` or
