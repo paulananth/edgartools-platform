@@ -5,6 +5,13 @@ definitions in example.json are invented. The configuration drives both native
 API metadata and the review page; the code has no entity/provider rename list.
 It does not execute the example operations, load source records or call providers.
 
+Use these plain descriptions in the overview:
+
+- Bookkeeping records successful artifact processing so work can resume from
+  the last successful point.
+- Change Journal decides whether an artifact needs processing, avoiding
+  unnecessary repeat work. This removes the waste of overprocessing.
+
 From the repository root:
 
 ```bash

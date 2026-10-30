@@ -9,6 +9,7 @@ pipeline runs. User review precedes expansion. No computer use.
 - [x] Publish the pilot and evidence in a PR; ask the operator to check one example before expansion. — 2026-10-30 15:03 ET: draft PR #1252 contains the pilot and receipt; the Lavish review link was sent to the operator.
 - [ ] Final-head CI and PR readiness after operator review.
 - [ ] Operator review of the example.
+- [x] Apply the operator's wording: Bookkeeping records success for resuming; Change Journal decides whether processing is needed, preventing repeat work. — 2026-10-30 15:10 ET: corrected pipeline description passed native API readback and repeat-publication checks; the regenerated overview shows both definitions directly.
 - [x] Learning → skill: none in this bounded pilot; existing catalog guidance already requires invented API proof and explicit capability gaps. — 2026-10-30 15:02 ET: README records the native-versus-preview boundary; any production design lesson follows operator review.
 
 Design review: existing catalog.py already separates projection and API transport.

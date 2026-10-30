@@ -59,7 +59,7 @@ def connection():
         request = Request(base + endpoint, method=method,
                           data=None if body is None else json.dumps(body).encode(),
                           headers={'Authorization': 'Bearer ' + settings['OPENMETADATA_TOKEN'],
-                                   'Content-Type': 'application/json'})
+                                   'Content-Type': 'application/json-patch+json' if method == 'PATCH' else 'application/json'})
         try:
             with urlopen(request, timeout=30) as response:
                 data = response.read()
@@ -91,6 +91,12 @@ def exercise(config, call):
         result = call('PUT', endpoint, body)
         if result.get('fullyQualifiedName') != name:
             raise ValueError('Catalog identity differs from the configuration')
+        if html.unescape(result.get('description') or '') != body['description']:
+            identity = result['id']
+            result = call('PATCH', endpoint + '/' + identity,
+                          [{'op': 'add', 'path': '/description', 'value': body['description']}])
+            if result['id'] != identity or result.get('fullyQualifiedName') != name:
+                raise ValueError('Catalog identity changed while updating its description')
         objects.append((endpoint, name, body))
         return result
 
