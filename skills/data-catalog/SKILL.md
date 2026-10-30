@@ -1,0 +1,93 @@
+---
+name: data-catalog
+description: Model, qualify and publish understandable business domains, glossaries, assets and lineage through a replaceable catalog or visualization destination. Use for OpenMetadata catalog work, catalog portability and missing semantic or lineage coverage.
+---
+
+# Data catalog
+
+Start with business meaning, not the destination's screens or object names.
+Keep one configuration-derived description of the data; a catalog and a separate
+visualization can project it at the same time. Changing a destination must not
+change the business meaning, processing rules or stable logical identities.
+
+## Understand the model before publishing
+
+Read [MODEL.md](references/MODEL.md) when organizing domains, layers, glossaries,
+products, quality or lineage. These are different dimensions, not interchangeable
+folders. Browse by business domain first; processing layer is a separate filter.
+
+1. Discover the selected configuration, declared entity kinds, dataset grain,
+   field definitions, transformations, checks, matching rules and dependencies.
+   Each configured entity kind is a business domain, not each individual record.
+   Reuse the same method for every source and kind; no entity/provider lists or
+   rename dictionaries. Preserve the distinction between defined and qualified.
+2. Identify the business subject, vocabulary, processing layer, physical location
+   and responsible people independently. Use evidence-backed definitions and
+   understandable display names. Persist reviewed meaning in its owning
+   configuration. Propose uncertain meanings for review; do not invent them.
+   Give each subject domain its glossary; reuse shared concepts where their
+   meanings agree. Missing definitions go to profiling/onboarding; changes to
+   existing definitions go through refining-rules.
+3. Select the destinations and versions. Read only the applicable adapter
+   reference: [OPENMETADATA.md](references/OPENMETADATA.md) for OpenMetadata;
+   [PORTABILITY.md](references/PORTABILITY.md) for another catalog or renderer.
+   State each capability as tested, documented-only or unsupported.
+4. Map logical objects and relationships to native objects explicitly. Preserve
+   ownership, review state, term associations, transformation meaning and quality
+   failure actions. A native identifier belongs in the destination mapping,
+   not in business identity. Unmapped meaning is a visible gap, not success.
+
+## Show the flow without operational clutter
+
+Default to platform overview → pipeline → stage → field mappings. Show shared
+steps once, referenced by all relevant pipelines. Keep field detail expandable.
+Connect pipelines to their dataset lineage; a list of tasks alone is incomplete.
+Keep data movement, transformation and control interactions visibly distinct.
+
+- **Bookkeeping:** records successful artifact processing so work can resume from
+  the last successful point.
+- **Change Journal:** decides whether an artifact needs processing, avoiding
+  unnecessary repeat work.
+
+Give control links their own action labels; do not repeat data-stage names in
+the control lanes. Derive those actions from configuration and verified behavior.
+Show recorded evidence only when it exists and maps to the configured flow;
+label an unexecuted definition honestly. Route mismatches, execution checks,
+publication blocking, failures, retries, recovery and resource/log diagnostics to
+`data-operations`. The catalog explains the work; it does not become its runner.
+
+## Qualify one connected example first
+
+Use APIs/CLI only. Never use computer use or browser automation on this project.
+Use an existing authorized account and private credentials. Authorization to
+publish metadata does not authorize provider requests, source processing,
+deployment, account changes or pipeline activation.
+
+Before publishing real metadata, test an isolated invented example that connects
+the business model to technical assets and pipeline/field lineage. Read back
+associations, fields and dependency direction through the actual native API;
+verify identities and meanings, not just HTTP success or counts. Make an
+incorrect expected mapping fail. Repeat publication to check stable identities
+and relevant versions. A screenshot or renderer alone is not native API proof.
+
+Track exact created identities. Remove test-owned objects in dependency order;
+verify removal without recursive deletion of shared objects. An interrupted
+cleanup needs explicit remaining-object accounting before another test starts.
+Preserve other people's curation and assets. Reset only the reviewed task scope.
+
+Then ask the operator to check the one understandable example before expanding
+the presentation. Clearly distinguish tested native behavior, a separate visual
+preview and pending implementation. Keep this first proof small.
+
+## Completion
+
+Report the configured inventory against native readback: domain/term membership,
+layer classification, asset/field meaning, pipeline and column lineage, quality
+definitions, actual ownership and review states. Publish quality definitions
+without invented results. Catalog metadata ingestion is not source-data loading.
+
+Retain counts, outcomes, configuration references, destination version and scope;
+keep source records and credentials private. A future destination remains
+unqualified until its own connected example passes. When all mappings and
+readback pass, retain the neutral description and destination identity mapping
+so the catalog and visualization can be rebuilt independently.
