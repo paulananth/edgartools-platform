@@ -11,11 +11,13 @@ import os
 import re
 from pathlib import Path
 
-from sqlalchemy import create_engine, text
+from datetime import UTC, datetime
+
+from sqlalchemy import create_engine, select, text, update
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.bookkeeping.clean.config import Blocked, canonical, digest
-from . import files
+from . import files, storage
 
 
 # A version waits for approval once a test run is recorded and until approved.
@@ -26,23 +28,26 @@ APPROVAL_COLUMNS = "approved_by,approved_at,approved_words,approval_overrule,app
 
 
 def get_engine(url=None):
-    return create_engine(url or os.environ["RULES_DATABASE_URL"], pool_pre_ping=True)
+    return create_engine(url or os.environ["RULES_DATABASE_URL"], pool_pre_ping=True, hide_parameters=True)
 
 
-def migrate(engine, *, agent_role: str = "rules_agent", approver_role: str = "rules_approver"):
-    if approver_role != "rules_approver":
-        raise ValueError("Approval membership must be rules_approver")
+def migrate(engine, *, agent_role: str = "rules_agent", approver_role: str = "rules_approver", database_name: str = "rules"):
+    if engine.dialect.name == "mysql":
+        from .mysql import migrate as selected_migrate
+        return selected_migrate(engine, agent_role=agent_role, approver_role=approver_role, database_name=database_name)
+    if engine.dialect.name != "postgresql":
+        raise Blocked("Rules currently supports PostgreSQL and MySQL; SQL Server follows last")
     paths = sorted((Path(__file__).parent / "migrations").glob("[0-9]*.sql"))
     base_checksum = hashlib.sha256(paths[0].read_bytes()).hexdigest()
     quote = engine.dialect.identifier_preparer.quote
     with engine.begin() as conn:
-        if conn.scalar(text("SELECT current_database()")) != "rules" or int(conn.scalar(text("SHOW server_version_num"))) // 10000 != 16:
+        if conn.scalar(text("SELECT current_database()")) != database_name or int(conn.scalar(text("SHOW server_version_num"))) // 10000 != 16:
             raise Blocked("Rules migration requires its own rules database on PostgreSQL 16")
         role = conn.execute(text("SELECT rolsuper,rolcreatedb,rolcreaterole FROM pg_roles WHERE rolname=:r"), {"r": agent_role}).first()
         if not role or any(role) or conn.scalar(text("SELECT current_user")) == agent_role:
             raise Blocked("Restricted Rules agent and separate migration owner required")
-        if not conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='rules_approver')")):
-            raise Blocked("Create the rules_approver membership role explicitly")
+        if not conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=:r)"), {"r": approver_role}):
+            raise Blocked("Create the configured approval role explicitly")
         conn.execute(text("SELECT pg_advisory_xact_lock(730503)"))
         exists = conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname='rules')"))
         prior = conn.scalar(text("SELECT obj_description(oid,'pg_namespace') FROM pg_namespace WHERE nspname='rules'"))
@@ -66,16 +71,16 @@ def migrate(engine, *, agent_role: str = "rules_agent", approver_role: str = "ru
                 checksums[path.name] = checksum
         comment = canonical(checksums).replace("'", "''")
         conn.exec_driver_sql(f"COMMENT ON SCHEMA rules IS '{comment}'")
-        agent = quote(agent_role)
-        conn.exec_driver_sql(f"REVOKE ALL ON ALL TABLES IN SCHEMA rules FROM PUBLIC,{agent},rules_approver")
-        conn.exec_driver_sql(f"GRANT USAGE ON SCHEMA rules TO {agent},rules_approver")
-        conn.exec_driver_sql(f"GRANT SELECT ON rules.rule_version TO {agent},rules_approver")
+        agent, approver = quote(agent_role), quote(approver_role)
+        conn.exec_driver_sql(f"REVOKE ALL ON ALL TABLES IN SCHEMA rules FROM PUBLIC,{agent},{approver}")
+        conn.exec_driver_sql(f"GRANT USAGE ON SCHEMA rules TO {agent},{approver}")
+        conn.exec_driver_sql(f"GRANT SELECT ON rules.rule_version TO {agent},{approver}")
         conn.exec_driver_sql(f"GRANT INSERT(kind,name,version,body,digest) ON rules.rule_version TO {agent}")
         conn.exec_driver_sql(f"GRANT UPDATE(status,proof,batch_hash,clean_mdm) ON rules.rule_version TO {agent}")
         # The agent records the operator's approval in their name and words
         # (operator, 2026-09-29, rules skill ticket 14); the trigger refuses
         # one without test evidence or without those words.
-        conn.exec_driver_sql(f"GRANT UPDATE({APPROVAL_COLUMNS}) ON rules.rule_version TO {agent},rules_approver")
+        conn.exec_driver_sql(f"GRANT UPDATE({APPROVAL_COLUMNS}) ON rules.rule_version TO {agent},{approver}")
         if conn.scalar(text("SELECT has_schema_privilege(:r,'rules','CREATE')"), {"r": agent_role}):
             raise Blocked("Rules agent owns the Rules schema")
     return checksums
@@ -90,9 +95,10 @@ class Rules:
                 or not re.fullmatch(r"[a-z][a-z0-9_.-]*", name) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", version)):
             raise Blocked("A supported document kind, name and version are required")
         files.check_document(kind, body)
-        with self.engine.begin() as conn:
-            conn.execute(text("INSERT INTO rules.rule_version(kind,name,version,body,digest) VALUES(:k,:n,:v,:b,:d) ON CONFLICT DO NOTHING"),
-                         {"k": kind, "n": name, "v": version, "b": canonical(body), "d": digest(body)})
+        table = storage.versions(self.engine.dialect.name)
+        with storage.transaction(self.engine, kind, name) as conn:
+            storage.save(conn, table, {"kind": kind, "name": name, "version": version,
+                                       "body": canonical(body), "digest": digest(body)})
             row = self._version(conn, kind, name, version)
             if row["digest"] != digest(body) or row["body"] != canonical(body):
                 raise Blocked("The version label already names different immutable content")
@@ -100,7 +106,7 @@ class Rules:
 
     @staticmethod
     def _version(conn, kind, name, version):
-        row = conn.execute(text("SELECT * FROM rules.rule_version WHERE kind=:k AND name=:n AND version=:v"), {"k": kind, "n": name, "v": version}).mappings().first()
+        row = storage.version(conn, kind, name, version)
         if row is None:
             raise Blocked("Unknown Rules version")
         return dict(row)
@@ -108,6 +114,14 @@ class Rules:
     def version(self, kind, name, version):
         with self.engine.connect() as conn:
             return self._version(conn, kind, name, version)
+
+    def history(self, kind, name):
+        table = storage.versions(self.engine.dialect.name)
+        columns = ("kind", "name", "version", "digest", "status", "proved_at", "approved_by", "approved_at",
+                   "approved_words", "approval_overrule")
+        with self.engine.connect() as conn:
+            return storage.rows(conn, select(*(table.c[column] for column in columns)).where(
+                storage.identity(table, conn.dialect.name, kind, name)).order_by(table.c.created_at))
 
     def prove(self, kind, name, version, proof):
         """Record a test run of this version, passing or not. A passing one
@@ -126,21 +140,22 @@ class Rules:
         if "acquisition" in body and "acquisition" in proof and proof["passed"]:
             from edgar_warehouse.rules.acquisition_authority import validation_proof
             validation_proof(body, proof, artifacts=Artifacts())
-        with self.engine.begin() as conn:
-            conn.execute(text("UPDATE rules.rule_version SET status=:s,proof=CAST(:p AS jsonb),batch_hash=:h WHERE kind=:k AND name=:n AND version=:v"),
-                         {"s": "proven" if proof["passed"] else "draft", "p": canonical(proof), "h": proof["batch_hash"],
-                          "k": kind, "n": name, "v": version})
+        table = storage.versions(self.engine.dialect.name)
+        with storage.transaction(self.engine, kind, name) as conn:
+            conn.execute(update(table).where(storage.identity(table, conn.dialect.name, kind, name, version)).values(
+                status="proven" if proof["passed"] else "draft", proof=proof, batch_hash=proof["batch_hash"]))
 
     def pending(self) -> list[dict]:
         """Every version with a recorded test run and no approval yet, with its
         evidence, the hash an approval of it must name, and what it changes
         from the active version."""
+        table = storage.versions(self.engine.dialect.name)
         with self.engine.connect() as conn:
-            waiting = [dict(r) for r in conn.execute(text(
-                f"SELECT *,{EVIDENCE_HASH} AS evidence_hash FROM rules.rule_version WHERE {WAITING} "
-                "ORDER BY kind,name,proved_at DESC")).mappings()]
-            active = {(r["kind"], r["name"]): json.loads(r["body"]) for r in conn.execute(text(
-                "SELECT kind,name,body FROM rules.rule_version WHERE status='active'")).mappings()}
+            waiting = storage.rows(conn, select(table, storage.evidence(table, conn.dialect.name).label("evidence_hash")).where(
+                table.c.proof.is_not(None), table.c.approved_by.is_(None), table.c.status.in_(["draft", "proven"])).order_by(
+                table.c.kind, table.c.name, table.c.proved_at.desc()))
+            active = {(r["kind"], r["name"]): json.loads(r["body"]) for r in storage.rows(conn,
+                select(table.c.kind, table.c.name, table.c.body).where(table.c.status == "active"))}
         return [{"kind": r["kind"], "name": r["name"], "version": r["version"], "passed": r["proof"]["passed"],
                  "evidence": r["proof"].get("evidence"), "note": r["proof"].get("note"), "proved_at": r["proved_at"],
                  "evidence_hash": r["evidence_hash"],
@@ -152,10 +167,11 @@ class Rules:
         gave). A version or run recorded since is not what they read, so it is
         refused. No approval without test evidence; a failing run only with an
         overrule reason."""
-        with self.engine.begin() as conn:
-            row = conn.execute(text(f"SELECT *,{EVIDENCE_HASH} AS evidence_hash FROM rules.rule_version "
-                                    "WHERE kind=:k AND name=:n AND version=:v FOR UPDATE"),
-                               {"k": kind, "n": name, "v": version}).mappings().first()
+        table = storage.versions(self.engine.dialect.name)
+        with storage.transaction(self.engine, kind, name) as conn:
+            found = storage.rows(conn, select(table, storage.evidence(table, conn.dialect.name).label("evidence_hash")).where(
+                storage.identity(table, conn.dialect.name, kind, name, version)).with_for_update())
+            row = found[0] if found else None
             if row is None:
                 raise Blocked("Unknown Rules version")
             if row["proof"] is None:
@@ -166,16 +182,15 @@ class Rules:
                 raise Blocked("The test run failed: approving it needs an overrule reason")
             # Only an overruled failing run changes the status: it is what
             # makes that version proven. A passing one is proven already.
-            moves = ",status='proven'" if row["status"] == "draft" else ""
-            conn.execute(text("UPDATE rules.rule_version SET approved_by=:by,approved_words=:w,approval_overrule=:o,"
-                              f"approved_at=clock_timestamp(){moves} WHERE kind=:k AND name=:n AND version=:v"),
-                         {"by": by, "w": words, "o": overrule or None, "k": kind, "n": name, "v": version})
+            values = {"approved_by": by, "approved_words": words, "approval_overrule": overrule or None,
+                      "approved_at": datetime.now(UTC)}
+            if row["status"] == "draft": values["status"] = "proven"
+            conn.execute(update(table).where(storage.identity(table, conn.dialect.name, kind, name, version)).values(**values))
             return self._version(conn, kind, name, version)
 
     def activate(self, kind, name, version, *, mdm_engine=None):
-        with self.engine.begin() as conn:
-            # Serializes lifecycle changes for this document, not every source.
-            conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k,0))"), {"k": f"{kind}:{name}"})
+        table = storage.versions(self.engine.dialect.name)
+        with storage.transaction(self.engine, kind, name) as conn:
             selected = self._version(conn, kind, name, version)
             if selected["status"] == "active":
                 return
@@ -204,17 +219,19 @@ class Rules:
                         selected_export = self.envelope(selected)
                         for code, entry in body["mdm"].items():
                             registration_authority(selected_export, code, entry["contract"])
-                            existing = destination.execute(text("SELECT mapping_version,body FROM mdm.dataset_mapping WHERE source_code=:c ORDER BY mapping_version DESC LIMIT 1"), {"c": code}).mappings().first()
+                            existing_reading = current_reading(destination, code)
+                            existing = existing_reading[1] if existing_reading is not None else None
                             # A dataset belongs to the source that first registered it.
-                            owner = ((existing or {}).get("body", {}).get("registry_evidence", {}).get("rules") or {}).get("name")
+                            owner = (((existing or {}).get("registry_evidence") or {}).get("rules") or {}).get("name")
                             if owner is not None and owner != name:
                                 raise Blocked(f"Dataset {code} belongs to source {owner}, not {name}")
-                            if existing is None or {k: v for k, v in existing["body"].items() if k != "registry_evidence"} != entry["contract"]:
+                            if existing is None or {k: v for k, v in existing.items() if k != "registry_evidence"} != entry["contract"]:
                                 register_dataset(destination, code, entry["contract"], rules_authority=selected_export)
                             reading = current_reading(destination, code)
                             receipts["datasets"][code] = {"mapping_version": reading[0], "digest": digest(reading[1])}
-            conn.execute(text("UPDATE rules.rule_version SET status='retired' WHERE kind=:k AND name=:n AND status='active'"), {"k": kind, "n": name})
-            conn.execute(text("UPDATE rules.rule_version SET status='active',clean_mdm=CAST(:receipt AS jsonb) WHERE kind=:k AND name=:n AND version=:v"), {"k": kind, "n": name, "v": version, "receipt": canonical(receipts)})
+            conn.execute(update(table).where(storage.identity(table, conn.dialect.name, kind, name, active=True)).values(status="retired"))
+            conn.execute(update(table).where(storage.identity(table, conn.dialect.name, kind, name, version)).values(
+                status="active", clean_mdm=receipts))
 
     def export(self, kind, name, version, *, root: str, artifacts: Artifacts | None = None) -> dict:
         row = self.version(kind, name, version)
@@ -237,8 +254,10 @@ class Rules:
                 "registration": row["clean_mdm"]}
 
     def resolve(self, kind, name, *, root: str, artifacts: Artifacts | None = None) -> dict:
+        table = storage.versions(self.engine.dialect.name)
         with self.engine.connect() as conn:
-            selected = conn.execute(text("SELECT * FROM rules.rule_version WHERE kind=:k AND name=:n AND status='active'"), {"k": kind, "n": name}).mappings().first()
+            found = storage.rows(conn, select(table).where(storage.identity(table, conn.dialect.name, kind, name, active=True)))
+            selected = found[0] if found else None
             if selected is None:
                 raise Blocked("No active proven Rules version; authoring files cannot be executed")
             envelope = self.envelope(selected)
@@ -255,8 +274,9 @@ class Rules:
         return [self.save(kind, name, version, files.LAYOUT[kind][0](path)) for kind, name, path in files.documents(root)]
 
     def to_files(self, root: Path, version: str) -> list[dict]:
+        table = storage.versions(self.engine.dialect.name)
         with self.engine.connect() as conn:
-            documents = [dict(row) for row in conn.execute(text("SELECT * FROM rules.rule_version WHERE version=:v ORDER BY kind,name"), {"v": version}).mappings()]
+            documents = storage.rows(conn, select(table).where(table.c.version == version).order_by(table.c.kind, table.c.name))
         if sum(row["kind"] == "merge" for row in documents) > 1:
             raise Blocked("The authoring layout has one platform policy; export named merge documents separately")
         for row in documents:
