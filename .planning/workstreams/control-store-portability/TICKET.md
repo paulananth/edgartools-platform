@@ -16,7 +16,7 @@ Parent: [Platform portability](../platform-three-databases/01-migrate.md).
 - [ ] Review Standards, Spec and GoF; publish bounded implementation PRs and qualify final heads before merge.
 - [ ] ~~Full SQL Server qualification~~ deferred until the PostgreSQL/MySQL gate; retain existing SQL Server adapter checks and Journal qualification.
 - [x] Resolve Rules CLI overlap before editing that file — 2026-10-29 22:26 ET: operator explicitly assigned edgar_warehouse/rules/cli.py to Codex in this session; archived Claude work is preserved. The real guard continues to report that known overlap; no other overlap is authorized.
-- [ ] Learning → skill: publish demonstrated reusable learning separately or record none.
+- [x] Learning → skill: publish demonstrated reusable learning separately or record none — 2026-10-30 00:12 ET: PR #1236 updates mdm-engineering/references/storage-adapters.md with normal Rules handoff, approval-evidence and guard/index readback qualification; 87 genericity cases and independent review passed. Its CI remains a separate gate.
 
 ## Settled scope and seams
 
@@ -45,19 +45,28 @@ gate stay open below; this checkpoint does not claim the parent effort complete.
 - [x] Direct acquisition-proof bypass, immutable history/proof, stale approval evidence and concurrent activation — retained PostgreSQL approval tests plus new selected-engine negative tests passed, 2026-10-29 23:25 ET.
 - [x] MySQL empty/populated interrupted migration recovery, cached runtime revocation, unknown migration version and invalid completion flag — ten MySQL cases passed; five PostgreSQL normal cases passed and five MySQL-only cases skipped explicitly, 2026-10-29 23:25 ET.
 - [x] Retain current Journal qualification — nine normal Journal cases passed on each engine in combined runs (MySQL 18 passed; PostgreSQL 38 passed, five MySQL-only skips), 2026-10-29 23:25 ET. No Journal implementation change needed at this checkpoint.
-- [x] Qualify committed Rules CLI from the independently installed five-wheel bundle on both engines — 2026-10-29 23:43 ET: final source head b4829224 passed installed init/save/record-proof/pending/approve/activate/status/export/populated migrate on each engine. Initial MySQL install also passed at 4bd10963 in 227.71 seconds; final MySQL run took 23.53 seconds.
+- [x] Qualify committed Rules CLI from the independently installed five-wheel bundle on both engines — 2026-10-30 00:12 ET: final source head 2cd63adb passed installed init/save/record-proof/pending/approve/activate/status/export/populated migrate with bare backend URLs on both engines (113.70/115.96 seconds). Earlier source head b4829224 and the first MySQL installation also passed.
 - [x] Review Standards, Spec and GoF — 2026-10-29 23:43 ET: two independent Luna low reviewers; missing-guard/index drift finding reproduced and corrected, then re-reviewed with no remaining blocking finding. Existing facade/storage seam retained.
-- [ ] Publish the bounded Rules PR and qualify final CI before readiness.
-- [ ] Learning → skill: document only demonstrated reusable installation/qualification changes, on a separate skill branch/PR.
+- [x] Publish the bounded Rules PR — 2026-10-30 00:12 ET: PR #1235 publishes the implementation and local evidence; retained as draft until its final head passes CI.
+- [ ] Qualify final CI before readiness and merge.
+- [x] Learning → skill: document only demonstrated reusable installation/qualification changes, on a separate skill branch/PR — 2026-10-30 00:12 ET: PR #1236, separate branch, 87 genericity checks and independent review passed.
 
 ## Final local evidence and review
 
-At source head b4829224, the complete named PostgreSQL Rules/CLI regression cohort
+At the earlier source head b4829224, the complete named PostgreSQL Rules/CLI regression cohort
 passed 31 cases with seven explicitly MySQL-only cases skipped. MySQL passed 12
 normal/storage cases with the PostgreSQL-only principal case skipped. Both
 independently installed CLI cohorts passed. Every local invocation stayed below
 five minutes. Compile/import and whitespace checks pass; no repository Python
 typechecker is configured for this area. CI runs the full repository cohorts.
+
+Bookkeeping's normal CLI test exposed a shared connection-construction gap:
+bare MySQL URLs selected an unshipped default driver. The same Rules path failed
+before correction. Its existing factory now preserves explicit drivers and maps
+bare PostgreSQL/MySQL URLs to the shipped drivers; migration and MDM handoff
+connections use that factory too. The actual default-driver owner/init/runtime
+case passed on both engines, and two independent reviewers found no issue.
+The final committed independent installs at 2cd63adb cover that correction.
 
 ### Standards
 
