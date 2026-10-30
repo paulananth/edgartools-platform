@@ -363,6 +363,22 @@ claim, never by a multi-hour run that repeats it at scale (operator,
 Stop the proof's containers when it ends,
 whatever the outcome.
 
+**A full-size proof runs once, with its final checks** (operator, 2026-10-30:
+"stronger checks must run once with the appropriate checks"). Before it:
+review its checks (the Spec review included); run every step through the
+installed commands on a sample (the answer key's few records) until it
+passes; then run full size once. Each check states what it proves: the
+source record found is not a value equal to it. A failed run keeps its
+stores and restarts at the failed step; a rerun check (the second load
+changes nothing) runs on a slice, not the whole load. Ticket 48 ran its
+45-minute proof four times: two installed-bundle faults a sample finds in
+2 minutes, then checks the review found too weak.
+
+**A module reads a rules file through `rules.files.ROOT`**, never a path
+beside a checkout (`Path(__file__).parents[n] / "rules"`): the installed
+bundle ships `rules/` elsewhere, and the bundle test loads each such file
+from the installed bundle (ticket 48).
+
 ### Independent installed qualification
 
 Install the committed runtime and native libraries outside the checkout. Check
