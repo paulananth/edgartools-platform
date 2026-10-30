@@ -46,3 +46,13 @@ def test_predicate_presence_distinguishes_null_from_missing():
         dict(present=True, missing=False, null=True, not_null=False)]
     assert SourceEngine(contract).read(b'{}').tables['r'] == [
         dict(present=False, missing=True, null=True, not_null=False)]
+
+
+def test_a_text_document_is_kept_unread_within_its_size():
+    cfg = dict(format='text', required=[], allow_empty=False, max_bytes=16)
+    _complete(b'<html>s</html>', cfg)
+    _complete(b'not json at all', cfg)
+    for data in (b'<html>' + b'x' * 16, b'', b' \n'):
+        with pytest.raises(ValueError, match='completeness'):
+            _complete(data, cfg)
+    _complete(b'', {**cfg, 'allow_empty': True})

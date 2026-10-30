@@ -1,6 +1,7 @@
 """Configured HTTPS capture: frozen authority, one immutable snapshot, independent readback.
 
-Version 1 qualifies JSON object acquisition. The ZIP_STORED snapshot contains
+Version 1 qualifies JSON object acquisition, and a text document (ticket 149:
+an HTML registration statement) kept as its original bytes. The ZIP_STORED snapshot contains
 original payload bytes and bounded response metadata; retries reuse it without
 GET. Control, source activation and continuation orchestration remain external.
 """
@@ -75,9 +76,11 @@ def _load(envelope, artifacts):
     if type(request['requests_per_second']) is not int or not 1 <= request['requests_per_second'] <= 9:
         raise ValueError('Capture rate must be an exact integer from 1 to 9')
     completeness = configuration.get('page_completeness') if request['document'] == 'page' else configuration['completeness']
-    if (completeness is None or completeness['format'] not in ('json', 'json_array')
+    if (completeness is None or completeness['format'] not in ('json', 'json_array', 'text')
             or not 1 <= completeness['max_bytes'] <= transport.MAX_BYTES):
-        raise ValueError('Capture v1 supports bounded JSON object or array completeness only')
+        raise ValueError('Capture v1 supports bounded JSON object or array, or text document, completeness only')
+    if completeness['format'] == 'text' and completeness['required']:
+        raise ValueError('A text document is never read, so it names no required members')
     capability = configuration['capabilities']['fetch']
     if capability == 'https.post':
         # The body sits in the request document, itself at most HEADER_BYTES (1 MiB).
@@ -96,7 +99,8 @@ def _load(envelope, artifacts):
         raise ValueError('Capture output must be an explicit file or S3 object')
     if 'previous' in request:
         reference(request['previous'])
-    _completeness_engine(completeness)  # Native contract validation must precede every HTTP effect.
+    if completeness['format'] != 'text':
+        _completeness_engine(completeness)  # Native contract validation must precede every HTTP effect.
     return request, authority, completeness, url
 
 
@@ -132,6 +136,11 @@ def _completeness_engine(configuration):
 
 
 def _complete(data, configuration):
+    if configuration['format'] == 'text':
+        # A text document is kept as its bytes, unread: only its size and emptiness are checked.
+        if len(data) > configuration['max_bytes'] or not (data.strip() or configuration['allow_empty']):
+            raise ValueError('Capture payload failed its configured completeness')
+        return
     result = _completeness_engine(configuration).read(data)
     if result.deferred or len(result.tables['capture']) != 1:
         raise ValueError('Capture payload failed its configured completeness')

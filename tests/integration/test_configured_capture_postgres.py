@@ -5,6 +5,9 @@ Worker renewal invokes public control commands with its restricted login;
 independent readback/admission uses a separate verifier login.
 """
 from copy import deepcopy
+import io
+import zipfile
+from urllib.parse import urlparse
 from functools import partial
 from pathlib import Path
 from uuid import uuid4
@@ -44,6 +47,8 @@ def setup(databases, tmp_path, monkeypatch, request):
             'format': 'json', 'required': ['page'], 'allow_empty': False, 'max_bytes': 1024}
     elif getattr(request, 'param', None) in ('xml', 'zip', 'text', 'ticker_catalog'):
         body['acquisition']['feeds']['fixture']['completeness']['format'] = request.param
+    elif getattr(request, 'param', None) == 'text_document':  # ticket 149: an HTML document, kept unread
+        body['acquisition']['feeds']['fixture']['completeness'].update(format='text', required=[])
     elif getattr(request, 'param', None) == 'oversize_bound':
         body['acquisition']['feeds']['fixture']['completeness']['max_bytes'] = transport.MAX_BYTES + 1
     elif getattr(request, 'param', None) == 'post':  # ticket 92: a mapping API, a JSON array back
@@ -214,14 +219,45 @@ def test_page_uses_its_own_approved_completeness(setup, monkeypatch):
     finish(envelope, capture.execute(envelope, book.artifacts))
 
 
-@pytest.mark.parametrize('setup', ['xml', 'zip', 'text', 'ticker_catalog', 'oversize_bound'], indirect=True)
+@pytest.mark.parametrize('setup', ['xml', 'zip', 'ticker_catalog', 'oversize_bound'], indirect=True)
 def test_approved_unsupported_format_or_bound_refuses_before_get(setup, monkeypatch):
     book, start, _ = setup
     calls = []
     http(monkeypatch, lambda request: calls.append(request) or httpx.Response(200))
-    with pytest.raises(ValueError, match='bounded JSON object or array completeness'):
+    with pytest.raises(ValueError, match='bounded JSON object or array, or text document, completeness'):
         capture.execute(start(), book.artifacts)
     assert calls == []
+
+
+@pytest.mark.parametrize('setup', ['text'], indirect=True)
+def test_a_text_feed_naming_required_members_refuses_before_get(setup, monkeypatch):
+    book, start, _ = setup
+    calls = []
+    http(monkeypatch, lambda request: calls.append(request) or httpx.Response(200))
+    with pytest.raises(ValueError, match='names no required members'):
+        capture.execute(start(), book.artifacts)
+    assert calls == []
+
+
+@pytest.mark.parametrize('setup', ['text_document'], indirect=True)
+def test_a_text_document_is_captured_as_its_bytes(setup, monkeypatch):
+    book, start, finish = setup
+    page = b'<html><body>An invented registration statement</body></html>'
+    http(monkeypatch, lambda request: httpx.Response(200, content=page, headers={'Content-Type': 'text/html'}))
+    envelope = start()
+    receipt = capture.execute(envelope, book.artifacts)
+    finish(envelope, receipt)
+    snapshot = Path(urlparse(envelope['output'] + '.capture.zip').path)  # the worker's snapshot beside its receipt
+    with zipfile.ZipFile(io.BytesIO(snapshot.read_bytes())) as archive:
+        assert archive.read('payload') == page
+
+
+@pytest.mark.parametrize('setup', ['text_document'], indirect=True)
+def test_an_empty_text_document_is_refused(setup, monkeypatch):
+    book, start, _ = setup
+    http(monkeypatch, lambda request: httpx.Response(200, content=b'  \n'))
+    with pytest.raises(ValueError, match='completeness'):
+        capture.execute(start(), book.artifacts)
 
 
 @pytest.mark.parametrize('setup', ['invalid_native_contract'], indirect=True)
@@ -454,3 +490,22 @@ def test_a_failed_post_keeps_no_key_in_its_error(setup, monkeypatch):
     with pytest.raises(ValueError, match='Provider request failed: ConnectError') as refused:
         capture.execute(start(body=JOBS), book.artifacts)
     assert refused.value.__suppress_context__ and SECRET not in str(refused.value)  # the httpx error, with its headers, is not chained
+
+
+@pytest.mark.parametrize('setup', ['text_document'], indirect=True)
+def test_a_text_document_not_modified_reuses_its_previous_bytes(setup, monkeypatch):
+    book, start, finish = setup
+    calls = []
+    def respond(request):
+        calls.append(request)
+        if len(calls) == 1:
+            return httpx.Response(200, content=b'<html>invented</html>', headers={'etag': 'W/"one"'})
+        return httpx.Response(304)
+    http(monkeypatch, respond)
+    main = start()
+    original = capture.execute(main, book.artifacts)
+    finish(main, original)
+    envelope = start(previous=original)
+    receipt = book.artifacts.json(capture.execute(envelope, book.artifacts))
+    assert receipt['metadata']['status'] == 304 and receipt['metadata']['previous'] == original
+    assert len(calls) == 2
