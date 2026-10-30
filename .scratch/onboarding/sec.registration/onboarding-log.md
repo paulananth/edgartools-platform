@@ -48,3 +48,12 @@
   XML, SGML-wrapped XML and Parquet; no HTML reader, so profiling and the source extract of the
   offering terms need one (a code ticket, asked first). The IPO pipeline's dates are in the submissions
   JSON, which the engine reads today.
+
+## Questions and answers (2026-10-30)
+
+- Q: from 2022 about half the main documents hold no fee table (193 of 384); take offering terms from the
+  main document only, or also request each filing's fee exhibit? A: "Main doc only (Recommended)".
+- Gap: the profiler reads JSON Lines, CSV, Parquet, JSON and XML, not HTML. Profiling reads the configured
+  HTML reading's output (blocks and rows as JSON Lines), not the pages.
+- A document the SEC refuses stalls its Bookkeeping run (no unit is ever given up): set aside after 3
+  attempts, the rest of its bundle in a new run.
