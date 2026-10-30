@@ -68,7 +68,12 @@ FACTS = files.ROOT / "sources" / "sec.company-facts"
 SPECS = ("silver-company-fact.yaml", "silver-company-line-item.yaml", "silver-company-measure.yaml")
 SILVER_RUNTIME = "silver_runtime"
 PLACES = Decimal("1e-10")
-HALF_STEP = Decimal("0.5e-10") + Decimal("0.5e-12")
+KEY_HALF = Decimal("0.5e-12")  # the hand key's own rounding, at 12 places
+
+
+def rounds_to(key: Decimal, stored: Decimal) -> bool:
+    """Some exact value within the key's rounding rounds, once, to silver's stored value (a tie either way)."""
+    return stored - PLACES / 2 <= key + KEY_HALF and key - KEY_HALF <= stored + PLACES / 2
 
 
 def _module(name: str, path: Path):
@@ -262,24 +267,63 @@ def test_cohort_financials_end_to_end(installed, databases, tmp_path):  # noqa: 
                 "SELECT count(*) FROM silver.company_line_item l WHERE l.value IS NOT NULL AND EXISTS ("
                 "SELECT 1 FROM silver.company_fact f WHERE f.company_key = l.company_key "
                 "AND f.accession = l.accession)"),
+            "filed figures (a concept named)": one("SELECT count(*) FROM silver.company_line_item "
+                                                   "WHERE value IS NOT NULL AND concept <> 'computed'"),
+            "equal to a fact of that filing (concept, period end, value)": one(
+                "SELECT count(*) FROM silver.company_line_item l WHERE l.value IS NOT NULL AND l.concept <> 'computed' "
+                "AND EXISTS (SELECT 1 FROM silver.company_fact f WHERE f.company_key = l.company_key "
+                "AND f.accession = l.accession AND l.concept IN (f.concept, f.taxonomy || ':' || f.concept) "
+                "AND f.period_end = coalesce((l.inputs -> 0 ->> 'date')::date, l.period_end) AND f.value = l.value)"),
         }
+        # A filed figure that equals no fact of its filing: which part differs (concept, period end or value).
+        # A figure read as of the report (a cover page) is at its own date, kept in its trace, not the year's end.
+        unequal = groups(
+            "SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM silver.company_fact f WHERE f.company_key = l.company_key "
+            "AND f.accession = l.accession AND l.concept IN (f.concept, f.taxonomy || ':' || f.concept)) "
+            "THEN 'concept not in that filing' WHEN NOT EXISTS (SELECT 1 FROM silver.company_fact f "
+            "WHERE f.company_key = l.company_key AND f.accession = l.accession "
+            "AND l.concept IN (f.concept, f.taxonomy || ':' || f.concept) AND f.period_end = coalesce((l.inputs -> 0 ->> 'date')::date, l.period_end)) "
+            "THEN 'period end differs' ELSE 'value differs' END, count(*) FROM silver.company_line_item l "
+            "WHERE l.value IS NOT NULL AND l.concept <> 'computed' AND NOT EXISTS (SELECT 1 FROM silver.company_fact f "
+            "WHERE f.company_key = l.company_key AND f.accession = l.accession "
+            "AND l.concept IN (f.concept, f.taxonomy || ':' || f.concept) AND f.period_end = coalesce((l.inputs -> 0 ->> 'date')::date, l.period_end) "
+            "AND f.value = l.value) GROUP BY 1")
+        traced["not equal, by what differs"] = unequal
+        no_reason = {table: one(f"SELECT count(*) FROM silver.{table} WHERE value IS NULL AND null_reason IS NULL")
+                     for table in ("company_line_item", "company_measure")}
         got = {(r.company_key, r.measure, r.fiscal_year, r.window_years): r for r in conn.execute(text(
             "SELECT company_key, measure, fiscal_year, window_years, value, null_reason, inputs "
             "FROM silver.company_measure"))}
-        stored_lines = {(r.company_key, r.fiscal_year, r.value) for r in conn.execute(text(
-            "SELECT company_key, fiscal_year, value::text AS value FROM silver.company_line_item WHERE value IS NOT NULL"))}
+        stored_lines = {(r.company_key, r.fiscal_year, r.line_item): r.value for r in conn.execute(text(
+            "SELECT company_key, fiscal_year, line_item, value::text AS value FROM silver.company_line_item "
+            "WHERE value IS NOT NULL"))}
 
     # Each measure's line-item inputs among the stored line items.
     inputs, unstored = Counter(), Counter()
 
-    def traced_to_lines(cik: str, item: dict, year=None) -> bool:
-        """A stored line item; or a computed figure (free cash flow, NOPAT) whose every part is one.
-        A part names its value, concept and filing; its year is the figure's."""
+    from edgar_warehouse.financials import measures as measure_build
+    defined = measure_build.load()
+
+    def roles(measure: str) -> dict[str, str]:
+        """A measure names some inputs by role: a CAGR's `start` and `end` are its series; a return's
+        `return`, `balance` and `prior_balance` its two line items (measures.yaml)."""
+        if measure.endswith("_cagr"):
+            series = measure.removesuffix("_cagr")
+            return {"start": series, "end": series}
+        for base, (top, balance) in defined.returns.items():
+            if measure.startswith(base + "_"):
+                return {"return": top, "balance": balance, "prior_balance": balance}
+        return {}
+
+    def traced_to_lines(cik: str, name: str, item: dict, role: dict[str, str], year=None) -> bool:
+        """The stored line item of that name and year, with that value; or a computed figure (free cash flow,
+        NOPAT) whose every part is one. A part names its value, concept and filing; its year is the figure's."""
         year = item.get("fiscal_year", year)
-        if (cik, year, item.get("value")) in stored_lines:
+        line = role.get(name, name)
+        if stored_lines.get((cik, year, line)) == item.get("value") is not None:
             return True
-        parts = [p for p in item.values() if isinstance(p, dict) and "value" in p]
-        return bool(parts) and all(traced_to_lines(cik, p, year) for p in parts)
+        parts = {k: p for k, p in item.items() if isinstance(p, dict) and "value" in p}
+        return bool(parts) and all(traced_to_lines(cik, k, p, {}, year) for k, p in parts.items())
     for (cik, _, _, _), row in got.items():
         if row.value is None:
             continue
@@ -287,7 +331,8 @@ def test_cohort_financials_end_to_end(installed, databases, tmp_path):  # noqa: 
         # `inputs` maps each input (a line item, or a CAGR's start and end) to its fiscal year and figure.
         named = [(i.get("fiscal_year"), i.get("value")) for i in (row.inputs or {}).values() if isinstance(i, dict)]
         inputs["inputs named"] += bool(named)
-        found = bool(named) and all(traced_to_lines(cik, i) for i in row.inputs.values() if isinstance(i, dict))
+        found = bool(named) and all(traced_to_lines(cik, k, i, roles(row.measure)) for k, i in row.inputs.items()
+                                    if isinstance(i, dict))
         inputs["every input stored"] += found
         if not found:
             unstored[row.measure] += 1
@@ -298,7 +343,6 @@ def test_cohort_financials_end_to_end(installed, databases, tmp_path):  # noqa: 
     with ProcessPoolExecutor() as pool:
         for part in pool.map(expected, [(p, companies[p.name[:10]]) for p in paths], chunksize=4):
             want.update(part)
-    from edgar_warehouse.financials import measures as measure_build
     mastered = measure_build.from_company(mdm_reader, set(companies))
     masters = {"cohort": len(companies), "with a Company master": len(mastered),
                "master's SIC and place equal the submissions file's": sum(
@@ -307,7 +351,7 @@ def test_cohort_financials_end_to_end(installed, databases, tmp_path):  # noqa: 
     masters["how they differ"] = dict(Counter(
         f"{name}: master {shape(m)}, file {shape(f)}" + (", master ends with file" if m and f and str(m).endswith(str(f)) else "")
         for cik, fields in mastered.items() for name, m, f in zip(("sic", "place"), fields, companies[cik]) if m != f))
-    rules_match, differ = Counter(), Counter()
+    rules_match, differ, by_filer = Counter(), Counter(), []
     for key in set(want) | set(got):
         w, g = want.get(key), got.get(key)
         if w is None or g is None:
@@ -316,6 +360,11 @@ def test_cohort_financials_end_to_end(installed, databases, tmp_path):  # noqa: 
             rules_match["equal"] += 1
         else:
             rules_match["different"] += 1
+            if key[0] in mastered:
+                by_filer.append({"filer": key[0], "measure": key[1], "year": key[2], "window": key[3],
+                                 "silver": str(g.value), "silver_reason": g.null_reason, "rules": want[key]["value"],
+                                 "rules_reason": want[key]["reason"], "master": mastered[key[0]],
+                                 "file": companies[key[0]]})
             differ[("mastered" if key[0] in mastered else "no Company master") + ": "
                    + (g.null_reason or "(value differs)")] += 1
     hand = Counter()
@@ -328,20 +377,26 @@ def test_cohort_financials_end_to_end(installed, databases, tmp_path):  # noqa: 
             # to 10 places would round twice and move 4 of 1,600 by one in the last place.
             close = g is not None and m["reason"] == g.null_reason and (
                 (m["value"] is None and g.value is None) or (m["value"] is not None and g.value is not None
-                                                            and abs(Decimal(m["value"]) - g.value) <= HALF_STEP))
+                                                            and rounds_to(Decimal(m["value"]), g.value)))
             hand["equal" if close else "different"] += 1
     mark("read back")
 
     result = {"files": read, "masters": masters, "landed": {"first": first, "again": again}, "built": built, "stored": stored,
               "line_items": line_items, "line_item_null_reasons": line_reasons, "measures": measures,
-              "measure_null_reasons": measure_reasons, "coverage_by_year": by_year, "traced": traced,
+              "measure_null_reasons": measure_reasons, "coverage_by_year": by_year, "traced": traced, "nulls_without_reason": no_reason,
               "measure_inputs": dict(inputs), "inputs not stored, by measure": dict(unstored), "rules_match": dict(rules_match), "differences_by_reason": dict(differ),
               "answer_key": dict(hand), "agent_view": sorted(described) if isinstance(described, dict) else None,
               "minutes": timings}
     out.write_text(json.dumps(result, indent=1, default=str))
+    # Each difference on a mastered filer, by filer: on this machine only, beside the report, never committed.
+    out.with_name(out.stem + "-differences.json").write_text(json.dumps(by_filer, indent=1, default=str))
     print(json.dumps(result, indent=1, default=str))
     assert read["files"] == (3 if sample else 368)
     assert stored["company_fact"] == read["rows"] == first["inserted"]
     assert hand["equal"] == hand["compared"] > 0
     assert inputs["every input stored"] == inputs["measures with a value"] > 0
+    assert (traced["equal to a fact of that filing (concept, period end, value)"]
+            == traced["filed figures (a concept named)"] > 0)
+    assert no_reason == {"company_line_item": 0, "company_measure": 0}
+    assert set(rules_match) <= {"equal", "different"}  # no measure on one side only
     assert traced["filing found among the filer's facts"] == traced["with a filing"] == traced["line items with a value"]
