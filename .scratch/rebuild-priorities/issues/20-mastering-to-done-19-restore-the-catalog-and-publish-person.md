@@ -33,7 +33,11 @@ entity/source list. Catalog publication does not activate or run source pipeline
 - [x] Complete Standards, Spec and GoF review — 2026-10-30 08:47 ET: two independent reviewers found no blocking issue, including narrow description PATCH ownership and foreign-identity refusal.
 - [x] Publish implementation/evidence in PR #1242 — 2026-10-30 08:56 ET: source a0327237 is published and independently installed; final-head CI remains a separate readiness gate.
 - [x] Qualify normal metadata CLI and all workbook contents from the installed five-wheel bundle outside the checkout — 2026-10-30 08:56 ET: committed source a0327237 passed in 137.43 seconds; catalog plan includes native pipelines/relationships, all bundled Mapping Documents pass check, missing catalog credentials refuse without a request. The subsequent CLI wording and parser checks passed 21 cases.
-- [ ] Require final-head CI before readiness; deploy configured metadata after merge.
+- [x] Require final-head CI before readiness — 2026-10-30 12:44 ET: #1242 head b7ffce65 passed all 20 checks, then merged as 778bf332. Configured metadata deployment still waits for the separately requested named quality-case capability and its invented proof/reset.
+- [ ] Publish 18 configured contract checks and six Silver checks as named native quality test cases; retain five fixes as correction metadata and 43 profiling entries as proposals/evidence. Definitions only: no invented execution results (operator, 2026-10-30).
+- [ ] Qualify native definitions/cases and logical-suite membership, unchanged repeat, drift/stale cleanup and exact ownership on invented metadata; repeat the task-owned reset before deployment.
+- [ ] Create a native domain and glossary for each configured entity kind, with field/identifier/relationship terms, domain assignments and API coverage checks (operator, 2026-10-30).
+- [ ] Replace opaque primary labels with configured business names and contextual definitions; prove the three reported filing-identifier examples and keep technical identities for lineage.
 - [ ] Learning → skill: update reusable metadata coverage, publishing and verification guidance on a separate skill branch/PR.
 
 ## Initial GoF consult
@@ -73,3 +77,34 @@ assertion), plus the complete current coverage file, passed 13 cases. The two
 new PATCH-specific cases independently passed in the 12-case coverage run.
 The 15 offline rules checks, actual mapdoc check and source compile/whitespace
 checks pass. Final full CI remains a release gate.
+
+## Named quality-case scope and GoF consult
+
+The operator selected named quality test cases, definitions only. Keep engine
+checks and decisions unchanged; do not translate them into guessed SQL or
+invent execution results. Preserve every rule, failure action and configuration
+reference. Do not promote profiling proposals into active checks. Use the native
+catalog's external-test platform and logical grouping, with no execution schedule.
+
+The existing pure planner/callable publishing seam remains appropriate. Native
+quality entities use different global scopes and parent references from tables;
+keep that bounded projection/reconciliation behind one owning helper rather
+than growing a new engine, registry or class hierarchy. Preserve unrelated
+quality objects, prevent recursive deletion of their dependencies, and verify
+all native metadata through APIs only.
+
+## Business catalog correction (2026-10-30 13:01 ET)
+
+The base assets are now published: 62 tables, 13 pipelines, 37 lineage links.
+Native Markdown descriptions are HTML-escaped at rest; a narrowly scoped
+one-level decode now verifies every description without masking genuine changes.
+Base API readback passes with zero differences. This correction has five
+passing positive/negative encoding cases; no physical data was changed.
+
+The operator requires entity domains, glossaries and understandable business
+labels, not just technical paths and generic column labels. Keep those labels
+and meanings in catalog configuration. Every configured kind must have a domain
+and glossary; assets inherit only configured/declared associations. Preserve
+technical names as identities, distinguish proposed profile assets from
+registered definitions, and never invent business owners or approved glossary
+status. Use APIs only.
