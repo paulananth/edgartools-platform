@@ -99,9 +99,8 @@ class DatabaseSink:
                     if conn.dialect.name == "postgresql": stage.drop(conn)
                     else: conn.execute(delete(stage))
         except (DBAPIError, StatementError) as exc:
-            if isinstance(getattr(exc, "orig", None), Blocked):
-                raise exc.orig from None
-            raise Blocked(f"silver.{spec['table']}: a value is not its column's type or a storage constraint refused the delivery") from None
+            detail = f": {exc.orig}" if isinstance(getattr(exc, "orig", None), Blocked) else ""
+            raise Blocked(f"silver.{spec['table']}: a value is not its column's type or a storage constraint refused the delivery{detail}") from None
         return {"table": spec["table"], "rows": count, "inserted": inserted, "changed": changed,
                 "deleted": deleted, **updates}
 

@@ -103,3 +103,13 @@ The following record changes leave the tested runtime and test bytes unchanged.
 The authorized supported-type work is implemented; overall Silver completion
 still excludes the explicitly deferred calendar capability. Required PR CI and
 publication are still pending until recorded by their actual outcomes.
+
+## First PR CI correction
+
+The first published head passed 18 checks but failed PostgreSQL integration and
+its dependent gate: 302 integration cases passed; one retained numeric-refusal
+case rejected the changed error wording. The refusal and rollback were correct.
+The new detail propagation had replaced the stable public type-error prefix.
+Preserve that prefix and append the precise safe reason instead of replacing it;
+no test or precision rule is weakened. The exact failing integration test passes
+in 8.41 seconds after the fix. Required final-head CI remains pending.
