@@ -1,7 +1,8 @@
 """Logical Silver table definitions; source fields come only from a checked spec."""
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 import json
+import re
 
 from sqlalchemy import (BigInteger, Boolean, Column, Date, DateTime, Float, Interval,
                         LargeBinary, MetaData, Numeric, String, Table, Text, Time, Uuid)
@@ -11,6 +12,22 @@ from sqlalchemy.dialects.mysql import DATETIME, LONGTEXT, LONGBLOB, TIME
 from edgar_warehouse.control_contract import Blocked
 from edgar_warehouse.database_types import ExactJSON, UTCDateTime
 from . import spec as specs
+
+
+def elapsed_text(value):
+    """The existing day/time delivery spelling, with exact microseconds."""
+    match = re.fullmatch(r"\s*(?:([+-]?\d+)\s+days?\s+)?([+-]?)(\d+):(\d{2}):(\d{2}(?:\.\d+)?)\s*", value)
+    if match is None:
+        return value  # Preserve PostgreSQL's other forms; MySQL refuses them.
+    from fractions import Fraction
+    days, sign, hours, minutes, seconds = match.groups()
+    seconds = Fraction(seconds)
+    if int(minutes) >= 60 or seconds >= 60:
+        raise ValueError("Invalid elapsed duration")
+    microseconds = (int(hours) * 3600 + int(minutes) * 60 + seconds) * 1000000
+    if microseconds.denominator != 1:
+        raise ValueError("Elapsed duration exceeds microsecond precision")
+    return timedelta(days=int(days or 0), microseconds=int(microseconds) * (-1 if sign == "-" else 1))
 
 
 class Duration(TypeDecorator):
@@ -23,6 +40,8 @@ class Duration(TypeDecorator):
 
     def process_bind_param(self, value, dialect):
         if value is None or dialect.name != "mysql": return value
+        if not isinstance(value, timedelta):
+            raise Blocked("MySQL Silver supports elapsed durations; calendar intervals remain unsupported")
         return (value.days * 86400 + value.seconds) * 1000000 + value.microseconds
 
     def process_result_value(self, value, dialect):
@@ -42,7 +61,12 @@ class ExactDecimal(TypeDecorator):
         exact = Decimal(str(value))
         scale, whole = self.impl.scale, self.impl.precision - self.impl.scale
         # No more decimal places than the scale, no more whole digits than the rest.
-        if not exact.is_finite() or -exact.normalize().as_tuple().exponent > scale \
+        parts = exact.as_tuple()
+        digits = len(parts.digits)
+        while digits and parts.digits[digits - 1] == 0:
+            digits -= 1
+        exponent = parts.exponent + len(parts.digits) - digits if exact.is_finite() else 0
+        if not exact.is_finite() or (exact != 0 and -exponent > scale) \
                 or (exact != 0 and exact.adjusted() >= whole):
             raise Blocked(f"A figure does not fit DECIMAL({self.impl.precision},{scale}) exactly")
         return exact
@@ -50,6 +74,22 @@ class ExactDecimal(TypeDecorator):
 
 class RawJSON(str):
     """Validated JSON text: preserve decimal digits before database transport."""
+
+
+def json_text(value):
+    """Encode exact file/Parquet decimals without routing them through float."""
+    if isinstance(value, Decimal):
+        if not value.is_finite():
+            raise Blocked("Silver JSON requires finite numbers")
+        return str(value)
+    if isinstance(value, dict):
+        if not all(isinstance(key, str) for key in value):
+            raise Blocked("Silver JSON object keys must be strings")
+        return "{" + ",".join(json.dumps(key, ensure_ascii=False) + ":" + json_text(item)
+                               for key, item in value.items()) + "}"
+    if isinstance(value, (list, tuple)):
+        return "[" + ",".join(json_text(item) for item in value) + "]"
+    return json.dumps(value, ensure_ascii=False, allow_nan=False)
 
 
 class SilverJSON(ExactJSON):
@@ -62,16 +102,17 @@ class SilverJSON(ExactJSON):
         def bind(value):
             if value is None: return None
             import edgar_control
-            raw = str(value) if isinstance(value, RawJSON) else json.dumps(value, ensure_ascii=False, allow_nan=False)
+            raw = str(value) if isinstance(value, RawJSON) else json_text(value)
             return edgar_control.canonicalize_numeric_json(raw)
         return bind
 
+    def column_expression(self, column):
+        # Read raw JSON text before the driver's default float decoder loses digits.
+        from sqlalchemy import cast, type_coerce
+        return type_coerce(cast(column, Text), self)
+
     def process_result_value(self, value, dialect):
-        if dialect.name == "postgresql": return value
-        def number(raw):
-            exact = Decimal(raw)
-            return int(exact) if exact == exact.to_integral_value() else float(exact)
-        return json.loads(value, parse_float=number) if isinstance(value, str) else value
+        return json.loads(value, parse_float=Decimal) if isinstance(value, str) else value
 
 
 def logical_type(logical, dialect):
@@ -145,6 +186,7 @@ def bound_row(spec, row):
                     if not math.isfinite(value): raise ValueError()
                     value = repr(value)
                 else: value = str(value)
+            elif physical == "interval" and isinstance(value, str): value = elapsed_text(value)
             elif physical == "date" and isinstance(value, str): value = date.fromisoformat(value)
             elif physical == "time" and isinstance(value, str): value = time.fromisoformat(value)
             elif physical.startswith("timestamp") and isinstance(value, str): value = datetime.fromisoformat(value)

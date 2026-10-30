@@ -4,7 +4,7 @@ import hashlib
 import re
 from pathlib import Path
 
-from sqlalchemy import UniqueConstraint, inspect, insert, select, text
+from sqlalchemy import Index, UniqueConstraint, inspect, insert, select, text
 
 from edgar_warehouse.control_contract import Blocked, digest
 from . import spec as specs
@@ -106,6 +106,14 @@ def register(engine, spec, *, runtime_role):
         table = data_table(spec, "mysql")
         q = conn.dialect.identifier_preparer.quote_identifier
         table.append_constraint(UniqueConstraint(table.c._silver_key, name="silver_key"))
+        partition = None
+        if spec["partition"]:
+            # Text/blob fields need bounded prefixes for InnoDB's key budget.
+            # The original column predicate still verifies exact values.
+            width = min(191, max(1, (3072 - 32 * len(spec["partition"])) // (4 * len(spec["partition"]))))
+            types = {c["name"]: specs.postgres_type(c["type"]) for c in spec["columns"]}
+            lengths = {name: width for name in spec["partition"] if types[name] in {"text", "bytea", "jsonb"}}
+            partition = Index("silver_partition", *(table.c[name] for name in spec["partition"]), mysql_length=lengths)
         table.comment = "silver-spec:" + checksum
         for column in table.c:
             source = next((c for c in spec["columns"] if c["name"] == column.name), None)
@@ -132,6 +140,15 @@ def register(engine, spec, *, runtime_role):
                         for i in inspect(conn).get_indexes(physical.name)))
                     or conn.scalar(select(1).select_from(physical).limit(1)) is not None):
                     raise Blocked("Silver table exists without a registered spec; refusing to adopt it")
+        if partition is not None:
+            found = {item["name"]: item for item in inspect(conn).get_indexes(name)}
+            if partition.name in found:
+                if found[partition.name]["column_names"] != spec["partition"]:
+                    raise Blocked("Configured Silver partition index differs from physical storage")
+            else:
+                # Repair an interrupted CREATE INDEX or upgrade a populated table
+                # registered before partition indexes were installed.
+                partition.create(conn)
         if not held:
             # Table DDL commits implicitly. The registration becomes visible only
             # after physical storage exists; retries restore grants after a crash.

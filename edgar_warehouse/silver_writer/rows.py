@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import json
+from decimal import Decimal
 from pathlib import Path
 from typing import Iterator
 
@@ -34,7 +35,7 @@ def records(path: Path) -> Iterator[dict]:
             for number, line in enumerate(handle, 1):
                 if not line.strip():
                     continue
-                record = json.loads(line)
+                record = json.loads(line, parse_float=Decimal)
                 if not isinstance(record, dict):
                     raise Blocked(f"{path.name} line {number} is not a JSON object")
                 yield record
