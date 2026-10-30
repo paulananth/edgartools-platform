@@ -126,11 +126,14 @@ DROP PROCEDURE IF EXISTS bookkeeping_require
 CREATE PROCEDURE bookkeeping_require(IN r CHAR(32), IN s LONGTEXT, IN duty LONGTEXT)
 SQL SECURITY DEFINER
 BEGIN
- DECLARE profile LONGTEXT; DECLARE actor LONGTEXT;
+ DECLARE profile LONGTEXT; DECLARE actor LONGTEXT; DECLARE actor_host LONGTEXT;
  SELECT JSON_UNQUOTE(JSON_EXTRACT(submission,CONCAT('$.profiles.',JSON_QUOTE(s)))) INTO profile
   FROM bookkeeping_pipeline_run WHERE run_id=r;
  SET actor=SUBSTRING_INDEX(SESSION_USER(),'@',1);
- IF profile IS NULL OR NOT EXISTS(SELECT 1 FROM mysql.role_edges WHERE TO_USER=actor AND TO_HOST='%'
+ IF (SELECT COUNT(*) FROM mysql.user WHERE User=actor)<>1 THEN
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Control login must name one unambiguous account'; END IF;
+ SELECT Host INTO actor_host FROM mysql.user WHERE User=actor;
+ IF profile IS NULL OR NOT EXISTS(SELECT 1 FROM mysql.role_edges WHERE TO_USER=actor AND TO_HOST=actor_host
   AND FROM_HOST='%' AND (FROM_USER=CONCAT('bk_',duty,'_',LEFT(SHA2(profile,256),20))
    OR (duty='either' AND FROM_USER IN(CONCAT('bk_worker_',LEFT(SHA2(profile,256),20)),CONCAT('bk_verifier_',LEFT(SHA2(profile,256),20)))))) THEN
   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='This login has no required role for the frozen profile'; END IF;

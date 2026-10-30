@@ -18,17 +18,23 @@ OWNED_TABLES = {table.name for table in tables("mysql").values()}
 def _restricted(conn, principal):
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,31}", principal):
         raise Blocked("An existing restricted control login is required")
-    params = {"r": principal, "d": conn.engine.url.database, "g": "'" + principal + "'@'%'"}
-    if conn.scalar(text("SELECT COUNT(*) FROM mysql.user WHERE User=:r AND Host='%'"), params) != 1 or conn.scalar(text("SELECT COUNT(*) FROM mysql.user WHERE User=:r"), params) != 1:
-        raise Blocked("An existing restricted control login is required")
+    params = {"r": principal, "d": conn.engine.url.database}
+    if conn.scalar(text("SELECT COUNT(*) FROM mysql.user WHERE User=:r"), params) != 1:
+        raise Blocked("One unambiguous existing restricted control account is required")
+    host = conn.scalar(text("SELECT Host FROM mysql.user WHERE User=:r"), params)
+    params.update(h=host, g="'" + principal + "'@'" + host + "'")
+    quote = conn.dialect.identifier_preparer.quote_identifier
+    # text() escapes DBAPI percent signs itself; the identifier preparer has
+    # already escaped them for raw driver SQL, so remove that layer here.
+    account = (quote(principal) + "@" + quote(host)).replace("%%", "%")
     if conn.scalar(text("SELECT SUBSTRING_INDEX(CURRENT_USER(),'@',1)")) == principal:
         raise Blocked("A separate migration owner is required")
-    grants = [row[0] for row in conn.execute(text("SHOW GRANTS FOR " + params["g"]))]
+    grants = [row[0] for row in conn.execute(text("SHOW GRANTS FOR " + account))]
     if any((" ON *.* " in row and not row.startswith("GRANT USAGE ")) or "WITH GRANT OPTION" in row for row in grants):
         raise Blocked("Control runtime inherits administrative privileges")
     if conn.scalar(text("SELECT @@mandatory_roles")) not in ("", "NONE"):
         raise Blocked("Mandatory roles must be qualified before control installation")
-    for membership in conn.execute(text("SELECT FROM_USER,FROM_HOST,WITH_ADMIN_OPTION FROM mysql.role_edges WHERE TO_USER=:r AND TO_HOST='%'"), params):
+    for membership in conn.execute(text("SELECT FROM_USER,FROM_HOST,WITH_ADMIN_OPTION FROM mysql.role_edges WHERE TO_USER=:r AND TO_HOST=:h"), params):
         if membership.FROM_HOST != "%" or membership.WITH_ADMIN_OPTION != "N" or not re.fullmatch(r"bk_(worker|verifier)_[0-9a-f]{20}", membership.FROM_USER):
             raise Blocked("Control runtime inherits an unqualified role")
         role_account = "'" + membership.FROM_USER + "'@'%'"
@@ -43,10 +49,10 @@ def _restricted(conn, principal):
     for row in conn.execute(text("SELECT TABLE_NAME,PRIVILEGE_TYPE FROM information_schema.TABLE_PRIVILEGES WHERE GRANTEE=:g AND TABLE_SCHEMA=:d"), params):
         if row.TABLE_NAME not in owned or row.PRIVILEGE_TYPE != "SELECT":
             raise Blocked("Control runtime can mutate control storage")
-    for row in conn.execute(text("SELECT Routine_name,Proc_priv FROM mysql.procs_priv WHERE Db=:d AND User=:r AND Host='%'"), params):
+    for row in conn.execute(text("SELECT Routine_name,Proc_priv FROM mysql.procs_priv WHERE Db=:d AND User=:r AND Host=:h"), params):
         if row.Routine_name not in {"bookkeeping_" + name for name in (*CAPABILITIES, *NATIVE_CAPABILITIES)} or str(row.Proc_priv).lower() != "execute":
             raise Blocked("Control runtime can administer capabilities")
-    return params["g"]
+    return account
 
 
 def _revoke(conn, database):

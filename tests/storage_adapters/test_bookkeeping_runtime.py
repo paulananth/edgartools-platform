@@ -457,3 +457,50 @@ def test_worker_and_verifier_runtime_changes_rollback_without_repinning(control,
     assert book.status(run_id) == before
     book.verifier.admit(verification, original)
     assert book.status(run_id)["counts"] == {"verified": 2}
+
+
+def test_mysql_uses_the_existing_host_restricted_runtime_account(database_factory, tmp_path):
+    from sqlalchemy.exc import DBAPIError
+    from edgar_warehouse.control_contract import Blocked
+    if os.environ.get("SKILL_ADAPTER_TEST_ENGINE") != "mysql":
+        pytest.skip("MySQL authenticated account host only")
+    with database_factory() as (_, reader, reader_role):
+        with database_factory() as (owner, runtime, role):
+            def quote(value):
+                return owner.dialect.identifier_preparer.quote_identifier(value).replace("%%", "%")
+            with owner.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+                host = conn.scalar(text("SELECT SUBSTRING_INDEX(USER(),'@',-1)"))
+                original = quote(role) + "@" + quote("%")
+                restricted = quote(role) + "@" + quote(host)
+                conn.execute(text("RENAME USER " + original + " TO " + restricted))
+            verifier = create_engine(reader.url.set(database=owner.url.database), hide_parameters=True)
+            granted = {}
+            try:
+                migrate(owner, runtime_role=role, database_name=owner.url.database)
+                migrate(owner, runtime_role=reader_role, database_name=owner.url.database)
+                profile = "invented.host." + uuid4().hex
+                granted = grant_profile(owner, profile=profile, worker=role, verifier=reader_role)
+                book = Bookkeeping(runtime)
+                book.profile = profile
+                book.verifier = Bookkeeping(verifier, book.artifacts)
+                run_id, _, _ = submission(book, tmp_path, count=1)
+                complete(book, run_id, "0", profile=profile)
+                assert book.status(run_id)["counts"] == {"verified": 1}
+                with owner.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+                    conn.execute(text("CREATE USER " + original + " ACCOUNT LOCK"))
+                try:
+                    with pytest.raises(Blocked, match="unambiguous"):
+                        migrate(owner, runtime_role=role, database_name=owner.url.database)
+                    second, _, _ = submission(book, tmp_path / "ambiguous", count=1)
+                    with pytest.raises(DBAPIError, match="unambiguous"):
+                        book.claim(second, "s0", "0")
+                finally:
+                    with owner.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+                        conn.execute(text("DROP USER " + original))
+            finally:
+                verifier.dispose()
+                runtime.dispose()
+                with owner.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+                    for group in granted.values():
+                        conn.execute(text("DROP ROLE " + quote(group["role"]) + "@" + quote("%")))
+                    conn.execute(text("RENAME USER " + restricted + " TO " + original))
