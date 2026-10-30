@@ -1,0 +1,19 @@
+{
+  "namespace": "catalog-lineage-review-20261030",
+  "name": "example-processing",
+  "title": "Example data processing",
+  "description": "Invented metadata for operator review. No source data or pipeline execution.",
+  "datasets": [
+    {"name": "captured", "title": "Captured input", "description": "Immutable captured values; example only.", "fields": [{"name": "raw_label", "description": "An invented input label."}]},
+    {"name": "prepared", "title": "Prepared records", "description": "Mapped values awaiting validation; example only.", "fields": [{"name": "label", "description": "A label with surrounding whitespace removed."}]},
+    {"name": "published", "title": "Published records", "description": "Values accepted by the configured quality check; example only.", "fields": [{"name": "label", "description": "An accepted, nonblank label."}]}
+  ],
+  "stages": [
+    {"name": "prepare", "title": "Prepare records", "operation": "example.prepare", "requires": [], "input": "captured", "output": "prepared", "description": "Map the captured label and remove surrounding whitespace.", "mappings": [{"from": ["raw_label"], "to": "label", "transformation": "trim surrounding whitespace"}], "checks": []},
+    {"name": "publish", "title": "Check and publish", "operation": "example.publish", "requires": ["prepare"], "input": "prepared", "output": "published", "description": "Publish only records whose label is present.", "mappings": [{"from": ["label"], "to": "label", "transformation": "retain the mapped value"}], "checks": [{"rule": "present", "field": "label", "failure_action": "withhold"}]}
+  ],
+  "controls": [
+    {"name": "bookkeeping", "title": "Bookkeeping", "description": "Records successfully processed artifacts so work can resume from the last successful point.", "interactions": [{"stage": "prepare", "label": "Record prepared artifact", "description": "Record successful preparation so the next stage can use its artifact without preparing it again."}, {"stage": "publish", "label": "Record published artifact", "description": "Record successful publication so work can resume from that point."}], "reference": "edgar_warehouse/bookkeeping/store.py"},
+    {"name": "change-journal", "title": "Change Journal", "description": "Decides whether an artifact needs processing. Skip it when its content and processing rules are unchanged, avoiding unnecessary repeat work.", "interactions": [{"stage": "prepare", "label": "Needs processing?", "description": "Check whether this artifact needs processing before starting work."}, {"stage": "publish", "label": "Record processing identity", "description": "After successful processing, record what was processed so unchanged work can be skipped next time."}], "reference": "edgar_warehouse/workers/journal_record.py"}
+  ]
+}
