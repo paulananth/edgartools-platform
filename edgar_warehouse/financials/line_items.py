@@ -18,13 +18,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from edgar_warehouse.control_contract import Blocked
+from edgar_warehouse.rules import files
 
 from . import sql
 from .sql import lit as _lit, values as _values
 
-ROOT = Path(__file__).resolve().parents[2]
-MAP = ROOT / "rules" / "sources" / "sec.company-facts" / "line-items.yaml"
-PUBLISHED = ROOT / "rules" / "reference" / "published"
+MAP = files.ROOT / "sources" / "sec.company-facts" / "line-items.yaml"
+PUBLISHED = files.ROOT / "reference" / "published"
 TAXONOMIES = ("us-gaap", "ifrs-full")
 ANNUAL_REPORTS = ("10-K", "20-F", "40-F")
 NO_CONCEPT = "no concept filed"
