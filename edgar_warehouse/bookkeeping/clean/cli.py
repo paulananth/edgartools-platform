@@ -24,29 +24,29 @@ def _document(path: str) -> dict:
 
 
 def _handle(args):
-    from sqlalchemy import create_engine
-    from .database import migrate
+    from .database import get_engine, migrate
     from .destinations import migrate_guard
     operation = args.bookkeeping_command
     if operation in {"init", "migrate"}:
-        owner = create_engine(os.environ["BOOKKEEPING_MIGRATION_DATABASE_URL"])
+        owner = get_engine(os.environ["BOOKKEEPING_MIGRATION_DATABASE_URL"])
         try:
             result = migrate(
                 owner,
                 runtime_role=args.runtime_role,
                 existing_only=operation == "migrate",
+                database_name=args.database_name,
             )
         finally:
             owner.dispose()
     elif operation == "grant-profile":
         from .database import grant_profile
-        owner = create_engine(os.environ["BOOKKEEPING_MIGRATION_DATABASE_URL"])
+        owner = get_engine(os.environ["BOOKKEEPING_MIGRATION_DATABASE_URL"])
         try:
             result = grant_profile(owner, profile=args.profile, worker=args.worker, verifier=args.verifier)
         finally:
             owner.dispose()
     elif operation == "init-guard":
-        owner = create_engine(os.environ["DESTINATION_MIGRATION_DATABASE_URL"])
+        owner = get_engine(os.environ["DESTINATION_MIGRATION_DATABASE_URL"])
         result = migrate_guard(owner, runtime_role=args.runtime_role)
         owner.dispose()
     else:
@@ -96,6 +96,8 @@ def register(subparsers):
     for name in ("init", "migrate", "init-guard"):
         command = commands.add_parser(name)
         command.add_argument("--runtime-role", required=True)
+        if name != "init-guard":
+            command.add_argument("--database-name", default="bookkeeping", help="The configured isolated control database")
         command.set_defaults(handler=_handle)
     grant = commands.add_parser("grant-profile", help="Let one login report a profile's work and another verify it")
     grant.add_argument("--profile", required=True)

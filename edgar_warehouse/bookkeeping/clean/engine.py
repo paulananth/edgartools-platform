@@ -17,7 +17,7 @@ from uuid import uuid4, uuid5, UUID
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
-from . import storage
+from . import storage, lifecycle
 from .artifacts import Artifacts
 from .config import (RUN_CHECKS, STEP_CHECKS, Blocked, canonical, digest, generated_worklist, reference,
                      validate, worklist)
@@ -66,6 +66,9 @@ class Bookkeeping:
     def _call(self, sql: str, **params):
         with self.engine.begin() as conn:
             return conn.scalar(text(sql), params)
+
+    def _transition(self, operation, **params):
+        return lifecycle.call(self.engine, operation, params)
 
     def _run(self, run_id: str) -> dict:
         result = storage.run(self.engine, run_id)
@@ -130,7 +133,7 @@ class Bookkeeping:
                     raise Blocked("Stored work differs from frozen or generated manifest")
             return run, config, manifest, items
         except (Blocked, KeyError, TypeError) as exc:
-            self._call("SELECT bookkeeping.block_run(CAST(:r AS uuid),:m)", r=run_id, m=str(exc))
+            self._transition("block_run", r=run_id, m=str(exc))
             if isinstance(exc, Blocked):
                 raise
             raise Blocked("Corrupt frozen submission") from exc
@@ -179,7 +182,7 @@ class Bookkeeping:
                       # only that profile's roles to the step's work (to-do 20b).
                       "profiles": {step["name"]: step["operation"] for step in config["steps"]}}
         run_id = run_id or str(uuid4())
-        self._call("SELECT bookkeeping.start_run(CAST(:r AS uuid),CAST(:s AS jsonb),:h,CAST(:i AS jsonb))",
+        self._transition("start_run",
                    r=run_id, s=canonical(submission), h=digest(submission), i=canonical(items))
         return run_id
 
@@ -192,23 +195,23 @@ class Bookkeeping:
         attempt = str(uuid4())
         for n in range(retry["attempts"]):
             try:
-                proof = self._call("SELECT bookkeeping.claim(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),:d,CAST(:p AS jsonb))",
+                proof = self._transition("claim",
                                    r=run_id, s=step_name, k=key, a=attempt, d=config["lease_seconds"], p=canonical(step["requires"]))
                 if proof is None:
                     return None
                 return Claim(run_id, step_name, key, attempt, proof)
             except DBAPIError as exc:
-                if getattr(exc.orig, "pgcode", None) != "55P03":
+                if not lifecycle.contention(self.engine, exc):
                     raise
                 if n + 1 < retry["attempts"]:
                     sleep(random.uniform(0, min(retry["cap_ms"], retry["base_ms"] * 2 ** n)) / 1000)
-        self._call("SELECT bookkeeping.wait_work(CAST(:r AS uuid),:s,:k,:m,NULL,'[]'::jsonb)",
+        self._transition("wait_work",
                    r=run_id, s=step_name, k=key, m=CONTENTION)
         return None
 
     def heartbeat(self, claim: Claim) -> Claim:
         _, config, _, _ = self._frozen(claim.run_id)
-        proof = self._call("SELECT bookkeeping.heartbeat(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),:d)",
+        proof = self._transition("heartbeat",
                            r=claim.run_id, s=claim.step, k=claim.key, a=claim.attempt, p=canonical(claim.proof), d=config["lease_seconds"])
         return Claim(claim.run_id, claim.step, claim.key, claim.attempt, proof)
 
@@ -410,7 +413,7 @@ class Bookkeeping:
                     found.append(self.envelope(claim))
                 except (Blocked, KeyError, TypeError) as exc:
                     # Corrupt or missing prerequisite evidence: no work starts on it.
-                    self._call("SELECT bookkeeping.block_run(CAST(:r AS uuid),:m)", r=run_id, m=str(exc))
+                    self._transition("block_run", r=run_id, m=str(exc))
                     raise Blocked(str(exc)) from exc
         return found
 
@@ -426,7 +429,7 @@ class Bookkeeping:
         current = self._same_work(envelope, claim)
         if candidate["uri"] != current["output"]:
             raise Blocked("A candidate must be written to the work's intended output")
-        self._call("SELECT bookkeeping.report(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:c AS jsonb),:f,:t)",
+        self._transition("report",
                    r=claim.run_id, s=claim.step, k=claim.key, a=claim.attempt, p=canonical(claim.proof),
                    c=canonical({"uri": candidate["uri"], "sha256": candidate["sha256"]}), f=current["profile"], t=runtime)
         return {"reported": candidate, "step": claim.step, "key": claim.key}
@@ -449,11 +452,11 @@ class Bookkeeping:
             if len(found) >= limit:
                 break
             try:
-                proof = self._call("SELECT bookkeeping.verify_claim(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),:d)",
+                proof = self._transition("verify_claim",
                                    r=run_id, s=row["step"], k=row["unit_key"], a=str(row["attempt"]),
                                    d=config["lease_seconds"])
             except DBAPIError as exc:
-                if getattr(exc.orig, "pgcode", None) != "55P03":
+                if not lifecycle.contention(self.engine, exc):
                     raise
                 continue
             if proof:
@@ -520,26 +523,23 @@ class Bookkeeping:
             children = generated_worklist(expansion, config, {"step": claim.step, "key": claim.key,
                                                               "generated_step": generated_step,
                                                               "ordinal_base": cursor.get("ordinal_base")})
-            finish = ("SELECT bookkeeping.finish_expand(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid),CAST(:children AS jsonb),:child_step)",
+            finish = ("finish_expand",
                       {**parameters, "children": canonical(children), "child_step": generated_step})
         elif checkpoint is not None:
-            finish = ("SELECT bookkeeping.finish_resource(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid),:resource,:revision,:position)",
+            finish = ("finish_resource",
                       {**parameters, **checkpoint})
         else:
-            finish = ("SELECT bookkeeping.finish(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid))",
+            finish = ("finish",
                       parameters)
         # The verifier's runtime is pinned only with the completion it vouches for.
-        with self.engine.begin() as conn:
-            conn.execute(text("SELECT bookkeeping.pin_verifier(CAST(:r AS uuid),:s,:t)"),
-                         {"r": claim.run_id, "s": claim.step, "t": verifier_runtime})
-            conn.execute(text(finish[0]), finish[1])
+        lifecycle.complete(self.engine, finish[0], finish[1], verifier_runtime)
 
     def resource_checkpoint(self, resource: str) -> dict | None:
         found = storage.checkpoint(self.engine, resource)
         return found[0] if found else None
 
     def wait(self, claim: Claim, message: str):
-        self._call("SELECT bookkeeping.wait_work(CAST(:r AS uuid),:s,:k,:m,CAST(:a AS uuid),CAST(:p AS jsonb))",
+        self._transition("wait_work",
                    r=claim.run_id, s=claim.step, k=claim.key, m=message, a=claim.attempt, p=canonical(claim.proof))
 
     def _verify_completed(self, run_id: str, config: dict):
@@ -552,7 +552,7 @@ class Bookkeeping:
             for item in items:
                 self._verify_item(self._resolve_item(item, context=context), context)
         except (Blocked, KeyError, TypeError) as exc:
-            self._call("SELECT bookkeeping.block_run(CAST(:r AS uuid),:m)", r=run_id, m=str(exc))
+            self._transition("block_run", r=run_id, m=str(exc))
             raise Blocked(str(exc)) from exc
 
     def resume(self, run_id: str) -> dict:
@@ -648,7 +648,8 @@ class Bookkeeping:
         return envelope(producer="bookkeeping", event_key=str(event["event_id"]),
                         run_id=str(event["run_id"]), source=document.get("source", submission["name"]),
                         feed=scope.get("feed", document.get("bronze", {}).get("family", submission["target"])),
-                        event_type="work.verified", occurred_at=event["created_at"].astimezone(UTC).isoformat(),
+                        event_type="work.verified", occurred_at=(event["created_at"] if event["created_at"].tzinfo
+                            else event["created_at"].replace(tzinfo=UTC)).astimezone(UTC).isoformat(),
                         scope={"step": event["step"], "unit_key": event["unit_key"], "target": submission["target"]},
                         evidence=[event["payload"]["receipt"]["evidence"],
                                   {"uri": f"bookkeeping-outbox:///{event['event_id']}", "sha256": digest(event["payload"])}])
@@ -673,9 +674,9 @@ class Bookkeeping:
                 # exact envelope before acknowledging intent in Bookkeeping.
                 receipt = journal.append(self.journal_event(event))
                 journal.verify(receipt, expected=self.journal_event(event))
-                self._call("SELECT bookkeeping.delivery(CAST(:e AS uuid),NULL)", e=str(event["event_id"]))
+                self._transition("delivery", e=str(event["event_id"]))
                 delivered += 1
             except Exception as exc:
-                self._call("SELECT bookkeeping.delivery(CAST(:e AS uuid),:m)", e=str(event["event_id"]), m=type(exc).__name__)
+                self._transition("delivery", e=str(event["event_id"]), m=type(exc).__name__)
                 raise
         return delivered

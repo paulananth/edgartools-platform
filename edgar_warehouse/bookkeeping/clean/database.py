@@ -1,4 +1,4 @@
-"""Explicit PostgreSQL 16 migration, isolated DB, restricted runtime functions."""
+"""Explicit selected-engine migration and restricted control capabilities."""
 from __future__ import annotations
 
 import hashlib
@@ -7,21 +7,29 @@ import os
 from pathlib import Path
 
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
 
 from .config import Blocked, canonical
 
 
 def get_engine(url: str | None = None):
-    return create_engine(url or os.environ["BOOKKEEPING_DATABASE_URL"], pool_pre_ping=True)
+    target = make_url(url or os.environ["BOOKKEEPING_DATABASE_URL"])
+    drivers = {"postgresql": "postgresql+psycopg2", "mysql": "mysql+pymysql", "mssql": "mssql+pymssql"}
+    if target.drivername in drivers:
+        target = target.set(drivername=drivers[target.drivername])
+    return create_engine(target, pool_pre_ping=True, hide_parameters=True)
 
 
-def migrate(engine, *, runtime_role: str, existing_only: bool = False) -> dict:
+def migrate(engine, *, runtime_role: str, existing_only: bool = False, database_name: str = "bookkeeping") -> dict:
+    if engine.dialect.name == "mysql":
+        from .mysql import migrate as migrate_selected
+        return migrate_selected(engine, runtime_role=runtime_role, existing_only=existing_only, database_name=database_name)
     if engine.dialect.name != "postgresql":
-        raise Blocked("Bookkeeping requires PostgreSQL 16")
+        raise Blocked("Bookkeeping supports PostgreSQL/MySQL; SQL Server follows last")
     quote = engine.dialect.identifier_preparer.quote
     paths = sorted((Path(__file__).parent / "migrations").glob("[0-9]*.sql"))
     with engine.begin() as conn:
-        if conn.scalar(text("SELECT current_database()")) != "bookkeeping":
+        if conn.scalar(text("SELECT current_database()")) != database_name:
             raise Blocked("Refusing migration outside fresh bookkeeping")
         if int(conn.scalar(text("SHOW server_version_num"))) // 10000 != 16:
             raise Blocked("Bookkeeping requires PostgreSQL 16")
@@ -82,6 +90,9 @@ def grant_profile(engine, *, profile: str, worker: str, verifier: str) -> dict:
     import re
     if not re.fullmatch(r"[a-z][a-z0-9_.-]{0,99}", profile) or worker == verifier:
         raise Blocked("A profile needs a name and two different logins")
+    if engine.dialect.name == "mysql":
+        from .mysql import grant_profile as grant_selected
+        return grant_selected(engine, profile=profile, worker=worker, verifier=verifier)
     quote = engine.dialect.identifier_preparer.quote
     granted = {}
     with engine.begin() as conn:

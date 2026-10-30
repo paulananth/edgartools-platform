@@ -23,6 +23,19 @@ def event(**changes):
     return envelope(**values)
 
 
+def test_normal_journal_cli_initializes_the_explicit_configured_database(database_factory, monkeypatch, capsys):
+    import json
+    from edgar_warehouse.change_journal.cli import main
+    with database_factory() as (owner, runtime, role):
+        monkeypatch.setenv("CHANGE_JOURNAL_MIGRATION_DATABASE_URL", owner.url.render_as_string(hide_password=False))
+        options = ["--runtime-role", role, "--database-name", owner.url.database]
+        assert main(["init", *options]) == 0
+        before = json.loads(capsys.readouterr().out)
+        assert main(["migrate", *options]) == 0
+        assert json.loads(capsys.readouterr().out) == before
+        assert ChangeJournal(runtime).status()["events"] == 0
+
+
 @pytest.fixture(scope="module")
 def journal_database(database_factory):
     with database_factory() as value:

@@ -14,6 +14,7 @@ requires-python = ">=3.12"
 dependencies = ["edgartools-change-journal", "SQLAlchemy>=2.0.0,<2.1", "psycopg2-binary>=2.9.9", "PyYAML>=6.0.2"]
 
 [project.optional-dependencies]
+mysql = ["PyMySQL[rsa]>=1.1,<2"]
 # s3:// manifests and outputs; file:// needs nothing more.
 s3 = ["boto3>=1.34"]
 
@@ -36,6 +37,8 @@ bypass-selection = true
 "../../edgar_warehouse/bookkeeping/clean/engine.py" = "edgar_warehouse/bookkeeping/clean/engine.py"
 "../../edgar_warehouse/bookkeeping/clean/storage.py" = "edgar_warehouse/bookkeeping/clean/storage.py"
 "../../edgar_warehouse/bookkeeping/clean/run_storage.py" = "edgar_warehouse/bookkeeping/clean/run_storage.py"
+"../../edgar_warehouse/bookkeeping/clean/lifecycle.py" = "edgar_warehouse/bookkeeping/clean/lifecycle.py"
+"../../edgar_warehouse/bookkeeping/clean/mysql.py" = "edgar_warehouse/bookkeeping/clean/mysql.py"
 "../../edgar_warehouse/bookkeeping/clean/feeds.py" = "edgar_warehouse/bookkeeping/clean/feeds.py"
 "../../edgar_warehouse/bookkeeping/clean/migrations" = "edgar_warehouse/bookkeeping/clean/migrations"
 "../../edgar_warehouse/rules/__init__.py" = "edgar_warehouse/rules/__init__.py"
