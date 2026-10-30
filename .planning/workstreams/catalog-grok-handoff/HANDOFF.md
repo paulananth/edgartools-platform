@@ -76,5 +76,5 @@ checks when its future caller is added.
 - [x] Inspect live branches, worktrees, dirty state, main and merged PRs — 2026-10-30 18:28 ET; Git/gh inspection.
 - [x] Preserve pending code, tests and ticket in a fresh worktree — 2026-10-30 18:28 ET; patch applied, overlap guard passed.
 - [x] Record affected-test results and whitespace validation — 2026-10-30 18:29 ET; 29 catalog cases passed in 20.15 seconds with testmon, 95 genericity/guide-path checks passed in 0.43 seconds, git diff --check passed. Existing shared virtualenv reused without dependency installation.
-- [ ] Publish the draft PR and verify its remote head.
+- [x] Publish the draft PR and verify its remote head — 2026-10-30 18:30 ET; PR #1254 is OPEN/DRAFT with remote source head ef27b2c11ad553697de2ee98e884f37b27d6560d. This follow-up records the publication receipt; CI remains pending.
 - [x] Learning → skill: none for this handoff — 2026-10-30 18:29 ET; parent catalog learning assessment remains open.
