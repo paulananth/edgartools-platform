@@ -21,3 +21,14 @@
 - The configured capture (`provider.capture`) accepts JSON payloads only (`completeness.format` json or
   json_array); an S-1 main document is HTML. Code change approved (above).
 - `EDGAR_IDENTITY` is not set in the agent's environment; the operator sets it.
+
+## Capture (2026-10-29)
+
+- Units from the submissions index: 9,538 of 9,646 filings (78 with no electronic document, 30 repeated
+  co-registrant listings). The index's `size` is the whole filing (exhibits too: 89.7 GB in all), not the
+  main document, so the feed's bound is the transport's 128 MiB ceiling.
+- Main documents by extension: `.htm` 9,454, `.txt` 114, `.paper` 3, none 75.
+- Gap: the configured capture cannot run before its own acquisition proof exists, and no source has made
+  one yet (SEC Company, GLEIF and OpenFIGI moved theirs to ticket 71). The proof here is 5 documents through
+  the capture's transport, each kept with its receipt and read back.
+- Proof: 5 asked, 5 kept, 5 verified; 0.66 to 1.44 MB each.

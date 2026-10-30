@@ -61,3 +61,9 @@ sources:
     target: null
     requires: []
     after: [sec.submissions.company]
+  # Registration statements (ticket 149): captured first; the reading, and the
+  # links to the Company by CIK, come with onboarding.
+  sec.registration:
+    target: null
+    requires: []
+    after: [sec.submissions.company]
