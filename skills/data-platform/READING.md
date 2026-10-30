@@ -1584,3 +1584,47 @@ read:
         accession: {context: {name: accession}}
         period: {text: {path: periodOfReport.$}}
 ```
+
+## An HTML page: blocks of text and tables of cells
+
+`read.format: html` reads a web page as people read it, not as its tags nest:
+paths have no any-depth step, and a page nests its text and tables at any
+depth. The reader builds a flat tree:
+
+- `title`: the page's title text;
+- `block`: each run of text outside a table, in page order, cut where a block
+  element (paragraph, heading, list item, line break, division) starts or ends;
+- `row`: each table row in page order, as one record: `@table` is its table's
+  number in the page and `@row` its number in the table (from 1); its cells
+  are `c1`, `c2`... by position, as a CSV without a header. A table inside a
+  cell is a table of its own, numbered after the one holding it.
+
+Each is an element holding its text (`$`), so `each: block` and `each: row`
+iterate them; nothing repeats inside a record, so no `nest` is needed.
+
+Text is the visible text: entities decoded, script and style dropped,
+whitespace (the no-break space too) collapsed to one space and trimmed. Empty
+blocks, rows and cells are left out. The tokenizer is HTML5's, so an unclosed
+or misnested tag never refuses a page; a cell tag outside any table means
+nothing, as in a browser.
+
+```yaml
+read:
+  format: html
+  container: zip        # a capture snapshot keeps the page as its `payload`
+  member: payload
+  encoding: [utf-8, windows-1252]
+  limits: {max_bytes: 33554432, max_records: 100000}
+  tables:
+    blocks: {each: block, columns: {text: {text: {path: $}}}}
+    rows:
+      each: row
+      columns:
+        table: {text: {path: '@table'}}
+        first: {text: {path: c1.$}}
+        second: {text: {path: c2.$}}
+```
+
+`max_records` bounds blocks and table rows together. `read.encoding` works as
+for CSV. One block is at most a paragraph, so text transformations (1 MiB per
+input) apply to it; never build one value from the whole page.
