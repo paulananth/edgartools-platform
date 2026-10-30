@@ -1,5 +1,4 @@
 {
-  "runtime_and_test_head": "dfb0028a",
   "local_storage": {
     "postgresql": {
       "passed": 26,
@@ -31,5 +30,12 @@
   ],
   "calendar_intervals_mysql": "deferred by operator; unsupported input atomically refused",
   "production_or_hosted_changes": false,
-  "ci": "pending published head"
+  "ci": {
+    "passed": 20,
+    "run_id": 40990305336,
+    "merge_commit": "d18cbbb8c7b6ad200c199f25ade7ecc44edd5653"
+  },
+  "local_installed_initial_head": "dfb0028a",
+  "final_qualified_head": "b5644c218c46457c7513b51f15d733e215fd7e4c",
+  "skill_merge_commit": "7e8fd545b9bc5cd74bdde7468d3b2180d2d43e24"
 }
