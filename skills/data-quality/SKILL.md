@@ -225,3 +225,14 @@ A change worth a check becomes a check here (**plan**), not a note.
 - A sales sample's customer state column, where three of 41 rows for one
   area code name another state: each row is marked with the fix "the state
   38 of 41 rows have", for the steward.
+
+
+## Publish quality meaning to the business catalog
+
+Use [Business catalog](../data-onboarding/CATALOG.md) for catalog publication.
+Publish configured checks as named native test-case definitions, retaining their
+inputs, failure actions and configuration references. Keep fixes as corrections
+and profiling proposals as proposals. Do not translate engine checks into guessed
+SQL or manufacture pass/fail results. Result publication requires genuine matched
+execution evidence. A quality description in a column is not native test-case
+coverage; missing publisher support is an implementation gap.

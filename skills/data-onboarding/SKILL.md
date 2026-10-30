@@ -623,6 +623,15 @@ loads `quality` into each contract), and the data-quality skill's `QUALITY.md`.
 
 ### metadata: the Mapping Document and the Data Catalog
 
+For a platform-wide request, restoration, business naming, entity domains,
+glossaries or quality-case publication, follow [Business catalog](CATALOG.md). Discover all entities, relationships
+and source/standalone pipeline targets from configuration; omit `--only` when
+regenerating the entire catalog's workbooks. Require native entity domains,
+glossaries, meaningful business definitions/associations and named quality cases;
+technical tables alone are incomplete. Apply one evidence-driven method to all
+entities and fields, with no source-specific renaming code. Publishing metadata
+does not run or activate a pipeline.
+
 1. Generate the Mapping Document:
    ```bash
    edgar-warehouse rules mapdoc write --only <source>

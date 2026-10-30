@@ -336,13 +336,18 @@ or fix not in these tables is new code: log it for a ticket.
 
 ## Mapping Documents
 
-`edgar-warehouse rules mapdoc write|diff|check [--only <source or kind>]`
+`edgar-warehouse rules mapdoc write|diff|check [--only <source, kind, pipeline or relationships>]`
 works from the rules files alone, with no database.
 
 | Workbook | Sheets |
 |---|---|
-| `rules/sources/<source>/MAPPING.xlsx` (only a source with an `mdm` section) | Source, Fields (MDM field or matching only), Identifiers, Critical data elements (a `present@1` check with `on_fail: exception`), Data quality, Who wins, Notes |
+| `rules/sources/<source>/MAPPING.xlsx` (every configured source) | Source, Fields (MDM field or matching only), Identifiers, Critical data elements (a `present@1` check with `on_fail: exception`), Data quality, Who wins, Notes |
 | `rules/merge/kinds/<kind>.xlsx` | Kind, Preferred sources, Who wins each field, Classification, Matching rules (each condition in plain words), Notes |
+
+Source workbooks also contain Pipeline targets and Pipeline steps. Standalone
+pipelines have `rules/pipelines/<pipeline>/MAPPING.xlsx`; pinned relationship
+types and capacities have `rules/merge/relationships.xlsx`. A workbook keeps
+Notes when regenerated. For complete business coverage, semantic naming and recovery, read [CATALOG.md](CATALOG.md).
 
 Every row names its rules path. A list longer than 12 values shows as a
 count. Critical data elements are the checks with `on_fail: exception`. Notes (Note, About, Who, When) is kept on `write`. A new workbook
@@ -351,10 +356,10 @@ cell, and `check` fails on any.
 
 ## The Data Catalog
 
-`edgar-warehouse rules catalog plan|publish [--root <rules>]` works from
+`edgar-warehouse rules catalog plan|publish|check [--root <rules>]` works from
 the rules files alone. `plan` prints the catalog as JSON; `publish` makes
 the OpenMetadata catalog equal to it, with `OPENMETADATA_URL` and
-`OPENMETADATA_TOKEN` (a bot's token: Settings > Bots). It is one database
+`OPENMETADATA_TOKEN` (an authorized bot token from the private environment). It is one database
 service, `edgartools-rules`:
 
 | Database | Schema | Tables | Columns |
@@ -371,8 +376,22 @@ updates what the rules name and hard-deletes, inside `edgartools-rules`
 only, the tables, schemas and lineage they no longer name; publishing the
 same rules again changes nothing.
 
+The catalog also publishes pinned relationship type definitions and capacities,
+all dataset quality rules, and native pipeline definitions for every source and
+standalone target, with task operations, checks and downstream dependencies.
+These definitions are not activation evidence. `check` reads back the owned
+metadata and lineage, including pipeline tasks, and fails on drift.
+
+Full business completion also requires native entity domains, glossaries,
+meaningful asset/column definitions and associations, and named quality cases.
+Discover kinds from configuration; do not hardcode entity lists or patch examples
+with rename dictionaries. The technical plan/publish/check commands do not prove
+these additional native objects exist; inspect support and record capability gaps.
+See [Business catalog](CATALOG.md) for test-first, scoped reset and API-only checks.
+
 A catalog server on a laptop: `docker compose -f
-infra/openmetadata/docker-compose.yml up -d`, then http://localhost:8585.
+infra/openmetadata/docker-compose.yml up -d`. Verify the pinned server version
+through `GET /api/v1/system/version`; use APIs/CLI only, never a browser.
 
 ## Examples (worked)
 
