@@ -377,3 +377,52 @@ automatic_rules:
   rule_version: 2026-10-26.1
   verdict: bind
   activation: deterministic
+# sec-gleif-cascade-p5 ("Name and city or postcode", ticket 09): switched on by
+# operator, 2026-10-30 18:20 ET (P5 now, hold P1/P4/P6 (Recommended)), comparing
+# the city; then, the same evening, in their words: do not use p1 or p4, p5 can
+# match on postel code; and, of the 4 flagged pairs it then links: Link them
+# (Recommended). P5 now compares the city or the postcode and P1 and P4 are
+# deleted. Its proof is every new link it makes over the whole SEC population
+# (251 links today's two rules do not make: 84 of the old P5, 68 of P4, 99 of
+# P1), each labelled: 110 by Codex's independent review, 141 by the operator;
+# 251 the same entity. The adversarial fixture is its risky arms among them:
+# linked through a GLEIF other name, a conflict in place of incorporation, or a
+# name another candidate holds (159, none a different entity; the operator
+# labelled 3 the same after Claude flagged a renamed predecessor). The evidence
+# is on the operator's machine, ~/.local/share/edgartools/clean-mdm/proving/t09-cascade/.
+- kind: company
+  family: name_binding
+  rule_id: sec-gleif-cascade-p5
+  rule_version: 2026-10-30.1
+  verdict: bind
+  activation: measured
+  proof:
+    method: wilson_lower_bound
+    one_sided_confidence: 0.95
+    n: 251
+    correct: 251
+    lower_bound: 0.989335
+    adversarial:
+      fixture_sha256: ce9b393cc598d58bef8ab4bd0b04e57236af7eaa8870539da72555144663b1c8
+      n: 159
+      violations: 0
+    cohort:
+      companies: 43338
+      new_links: 251
+      files:
+        p5-postcode-labels.jsonl: 2772053ce51381e337deb23c003cb20d8dc005139412dfc2aa3a5eabc1bbc8a3
+        p5-postcode-adversarial.jsonl: ce9b393cc598d58bef8ab4bd0b04e57236af7eaa8870539da72555144663b1c8
+        p5-postcode-sheet.csv: 80b56f8e1933cca6c83ecfae656954300b5d3fe4e501d2b1801ce8e88e0e4da6
+        p5-postcode-answers.json: aec2ce88fa51cecc09fa9472369ad848af7237520878014589d2199c6cbf6e9b
+        p5-postcode-notes.json: 26787ebe175fc04536d8a51e4500fb08b3f73e94a688b87d16aab9118b2dc757
+        ticket09-labels.codex-completed.csv: 475d7dd80db264bbbc7ba8c4bcf9082988d931ded0e2ffcb108738495d08a3c2
+        operator-answers.json: 640327dc14be3060b21afc9c967c24ed17c98d7ce6811f13d34b29965650fef6
+        operator-notes.json: 0e22f3ab43e8c3cf6554bcac510de014072190036e5386f3eff3c424740b1a19
+        census.json: 64096f1fa4c25308d4f6ce73e7112e2ff65eca6e97cfe4322785d10d10d942cf
+    approved_by: operator
+    approved_at: "2026-10-31T01:06:03Z"
+    reason: 'ticket 09, the cascade pass P5 (name and city or postcode; P1 and P4 deleted): every new
+      link over the whole SEC population labelled, 251/251 the same entity (110 Codex independent
+      review, 141 operator), 0 of 159 adversarial (other name, incorporation conflict, name held by
+      another candidate)'
+    approved_words: "do not use p1 or p4, p5 can match on postel code; Link them (Recommended)"

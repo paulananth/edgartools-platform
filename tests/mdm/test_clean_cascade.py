@@ -138,3 +138,26 @@ def test_the_passes_come_from_the_company_rules_in_order():
     found = spec(policy)
     assert [p["pass"] for p in found["passes"]] == ["P1", "P2"] and found["over_shared"] == 25
     assert found["entity_statuses"] == ["ACTIVE"]
+
+
+EITHER = [{"pass": "P5", "compare": [["city", "postcode"]]}]  # operator, 2026-10-30
+
+
+def _either(where):
+    return assign([_filer("1")], [_entity("L1", where=where)], EITHER, address_counts=Counter(), over_shared=25)
+
+
+def test_a_part_listed_as_alternatives_agrees_on_the_city_alone():
+    assert _either(_place(street="9 ELM ST", postcode="10001"))["1"]["pass"] == "P5"
+
+
+def test_a_part_listed_as_alternatives_agrees_on_the_postcode_alone():
+    assert _either(_place(street="9 ELM ST", city="DALLAS"))["1"]["pass"] == "P5"
+
+
+def test_a_part_listed_as_alternatives_needs_one_of_them():
+    assert _either(_place(city="DALLAS", postcode="75201")) == {}
+
+
+def test_a_part_listed_as_alternatives_still_needs_the_country():
+    assert _either(_place(country="CA")) == {}

@@ -103,7 +103,7 @@ def test_complete_census_general_projection_matches_active_cascade_without_insta
     if case == "bad_lines": entity["LegalAddress"]["AdditionalAddressLine"] = [42]
     if case == "branch": entity["EntityCategory"] = {"$": "BRANCH"}
     spec = cascade.spec(sec_company.POLICY)
-    assert len(spec["passes"]) == 5
+    assert len(spec["passes"]) == 3
     contract = dataset_contract("level1")
     expected = cascade_entity(row, {"spec": spec, "gleif_contract": contract}, {"EXAMPLE"})
     recipe = files.load(files.ROOT / "sources/gleif/census-cascade-record.yaml")
