@@ -307,16 +307,6 @@ def _relationships(root: Path, policy: dict) -> tuple[list[dict], list[dict]]:
                        "columns": [{"name": key, "dataType": TEXT,
                                     "description": json.dumps(value, ensure_ascii=False, sort_keys=True)}
                                    for key, value in sorted(props.items())]})
-    for path in sorted((root / "sources").glob("*/source.yaml")):
-        body = files.load_source(path)
-        for code, entry in sorted((body.get("mdm") or {}).items()):
-            adapter = (entry.get("contract") or {}).get("adapter") or {}
-            names = {name for rel in adapter.get("relationships") or []
-                     for name in ([rel["type"]] if rel.get("type") else (rel.get("type_values") or {}).values())}
-            for name in sorted(names & roots.keys()):
-                lineage.append({"from": fqn(SERVICE, SOURCES, body.get("source") or path.parent.name, code),
-                                "to": fqn(SERVICE, MDM, "relationships", name), "columns": [],
-                                "description": f"`{code}` declares relationships of type `{name}`."})
     return tables, lineage
 
 
@@ -403,10 +393,6 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) 
     membership: dict[str, set[str]] = defaultdict(set)
     for name, kind in kind_tables.items():
         membership[name].add(kind)
-    for row in roots:
-        props = row.get("properties") or {}
-        mapped = {ENDPOINT_CATALOG_NAME.get(code, code) for code in (props.get("from") or []) + (props.get("to") or [])}
-        membership[fqn(SERVICE, MDM, "relationships", row["code"])].update(mapped & set(names))
     for edge in lineage:
         if edge["to"] in kind_tables:
             membership[edge["from"]].add(kind_tables[edge["to"]])
@@ -646,6 +632,20 @@ def _publish_vocabulary(plan: dict, call: Call) -> None:
         _allow_several_domains(call)
 
 
+def _drop_invented_domain_edges(plan: dict, call: Call) -> None:
+    """A table on two domains makes the server draw a domain-to-domain edge.
+    That edge is not a relationship type. Remove it."""
+    for domain in plan.get("domains") or []:
+        graph = call("GET", "/lineage/domain/name/" + escape(domain["name"], safe=""),
+                     params={"upstreamDepth": 1, "downstreamDepth": 1}) or {}
+        edges = (graph.get("upstreamEdges") or []) + (graph.get("downstreamEdges") or [])
+        for edge in edges:
+            details = edge.get("lineageDetails") or {}
+            if details.get("source") != "ChildAssets":
+                continue
+            call("DELETE", f"/lineage/domain/{edge['fromEntity']}/domain/{edge['toEntity']}")
+
+
 def _publish_marks(plan: dict, call: Call, ids: dict[str, str]) -> None:
     days = _validity_days(call)
     now = int(time.time() * 1000)
@@ -685,10 +685,15 @@ def publish(plan: dict, call: Call) -> dict:
         if name in domains_of:
             body["domains"] = domains_of[name]
         name, answer = name, _upsert(call, "/tables", body)
+        if table["databaseSchema"].endswith(".relationships"):
+            # A put that omits domains leaves the old ends in place, and each
+            # end is stored as another relationship. Clear them.
+            call("PATCH", f"/tables/{answer['id']}", [{"op": "replace", "path": "/domains", "value": []}])
         if answer["fullyQualifiedName"] != name:  # lineage names columns by this name
             raise CatalogError(f"The server named table {name} {answer['fullyQualifiedName']}")
         ids[name] = answer["id"]
     _publish_marks(plan, call, ids)
+    _drop_invented_domain_edges(plan, call)
     pipeline_ids = {}
     if plan.get("pipeline_service"):
         _upsert(call, "/services/pipelineServices", plan["pipeline_service"])

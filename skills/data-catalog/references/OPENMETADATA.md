@@ -52,14 +52,18 @@ do not invent a type.
   already writes that description. Keep it.
 - A child code is a capacity of its parent type. It is not another asset, not
   another domain, and not another relationship.
-- The asset is a member of every endpoint domain. Map an endpoint code that is
-  not a catalog domain name onto the approved catalog name. `venue` maps to
-  `market_venue`. The other endpoint codes match the domain names. A domain
-  with no kind file still receives the type when it is an endpoint.
+- The type is one asset. Do not place that asset on every endpoint domain.
+  Each placement is stored as another relationship, so sixteen types become
+  one link per end. The ends stay on the type. Map an endpoint code that is
+  not a catalog domain name onto the approved catalog name when an end is
+  read: `venue` maps to `market_venue`.
 - A profile on an end is a profile, not a domain and not a type.
 - A prepared-store row that points at masters is a transaction. It is not a
-  domain relationship. A lineage edge from a dataset to a type says that
-  dataset declares the type. It is not a second relationship between subjects.
+  domain relationship. Do not publish a lineage edge from a dataset to a
+  relationship type. That edge is not the relationship, and it is counted
+  again beside the type. Lineage is the data flow: a feed to the dataset that
+  reads it, a dataset to the kind whose fields it fills, and a code set to the
+  prepared table that uses it.
 - Do not draw these types as `relatedTo` edges between glossary terms. A
   glossary term for a type uses the code's definition and is associated only
   with that type's table.
@@ -70,9 +74,8 @@ domain. Code sets and profiled silver parts whose identifier kind is not a
 declared domain are members of the domain that holds the instrument. A profiled
 part that names no subject stays without a domain. Keep the plan description. A
 display name may use the profiled part path when that path differs from the
-table name. Publish lineage from each code set to the silver table that uses
-it, and from each declaring dataset to its relationship type, when both ends
-are registered.
+table name. Publish lineage from each code set to the prepared table that
+uses it. Do not publish lineage from a dataset to a relationship type.
 
 An asset that fills or links more than one subject is a member of each of those
 domains. The default entity rule "Multiple Domains are not allowed" rejects

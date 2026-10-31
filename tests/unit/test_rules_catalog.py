@@ -138,8 +138,9 @@ def test_the_plan_names_domains_glossaries_and_store_certification():
     plan = catalog.plan()
     names = {domain["name"] for domain in plan["domains"]}
     assert "company" in names and "market_venue" in names and "venue" not in names
-    issued = next(item for item in plan["memberships"] if item["table"].endswith("relationships.ISSUED_BY"))
-    assert {"security", "company"} <= set(issued["domains"])
+    assert not [item for item in plan["memberships"] if item["table"].startswith("edgartools-rules.mdm.relationships.")]
+    assert not [edge for edge in plan["lineage"] if edge["to"].startswith("edgartools-rules.mdm.relationships.")]
+    assert sum(1 for table in plan["tables"] if table["databaseSchema"].endswith(".relationships")) == 16
     certified = {item["table"]: item["tag"] for item in plan["certifications"]}
     assert certified["edgartools-rules.mdm.clean.company"] == "Certification.Gold"
     assert any(name.startswith("edgartools-rules.silver.") and tag == "Certification.Silver"
