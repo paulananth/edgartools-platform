@@ -25,8 +25,9 @@ The catalog is one OpenMetadata database service, `edgartools-rules`:
   uses it;
 - one subject domain per mastered kind and per relationship endpoint, the
   glossaries for those domains, and Gold on the master store and Silver on
-  the prepared store. A relationship type is that asset on its endpoint
-  domains. A mention is not a relation.
+  the prepared store. A relationship type is one asset. The glossary
+  Relations Graph is the identity term of each end linked to that type
+  term. A mention in a definition is not a relation.
 
 `plan` is pure: the rules in, the catalog as data out. `publish` sends it.
 """
@@ -469,6 +470,35 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) 
         description = row["code"] + ": " + (row.get("definition") or row["label"])
         for domain in ends:
             domain_lineage.append({"domain": domain, "table": table, "description": description})
+    identity_of = {}
+    by_glossary: dict[str, list[dict]] = defaultdict(list)
+    for term in by_term.values():
+        by_glossary[term["glossary"]].append(term)
+    for domain in domains:
+        display = domain["displayName"]
+        in_glossary = by_glossary.get(domain["name"]) or []
+        chosen = next((term for name in (f"{display} Identity", display)
+                       for term in in_glossary if term["name"] == name), None)
+        if chosen is None and len(in_glossary) == 1:
+            chosen = in_glossary[0]
+        if chosen is not None:
+            identity_of[domain["name"]] = f"{chosen['glossary']}.{quote(chosen['name'])}"
+    glossary_relations = []
+    seen_relations = set()
+    for row in roots:
+        type_term = f"shared.{quote(row['code'])}"
+        props = row.get("properties") or {}
+        for code in (props.get("from") or []) + (props.get("to") or []):
+            domain = ENDPOINT_CATALOG_NAME.get(code, code)
+            identity = identity_of.get(domain)
+            if not identity or identity == type_term:
+                continue
+            key = (identity, type_term)
+            if key in seen_relations:
+                continue
+            seen_relations.add(key)
+            glossary_relations.append(
+                {"from": identity, "to": type_term, "relationType": "relatedTo"})
     def subject_assets(domain: str) -> list[str]:
         prefix = fqn(SERVICE, MDM, CLEAN, domain)
         return sorted(name for name, domains_ in membership.items()
@@ -497,7 +527,8 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) 
     return {"domains": domains, "glossaries": glossaries,
             "glossary_terms": [by_term[name] for name in sorted(by_term)],
             "memberships": memberships, "certifications": certifications,
-            "domain_lineage": domain_lineage, "products": products}
+            "domain_lineage": domain_lineage, "glossary_relations": glossary_relations,
+            "products": products}
 
 
 def _rule_text(kind: str, rule: dict, version: str, path: str) -> str:
@@ -789,8 +820,53 @@ def _publish_vocabulary(plan: dict, call: Call) -> None:
         if answer.get("fullyQualifiedName") != expected:
             raise CatalogError(f"The server named glossary term {expected} {answer.get('fullyQualifiedName')}")
         term["fullyQualifiedName"] = expected
+        if answer.get("id"):
+            term["id"] = answer["id"]
     if any(len(item["domains"]) > 1 for item in plan.get("memberships") or []):
         _allow_several_domains(call)
+    _publish_glossary_relations(plan, call)
+
+
+def _term_id(call: Call, fqn_name: str, known: dict[str, str]) -> str | None:
+    if fqn_name in known:
+        return known[fqn_name]
+    answer = call("GET", "/glossaryTerms/name/" + escape(fqn_name, safe=".")) or {}
+    found = answer.get("id")
+    if found:
+        known[fqn_name] = found
+    return found
+
+
+def _publish_glossary_relations(plan: dict, call: Call) -> None:
+    """The glossary Relations Graph is identity-term to type-term. The server
+    accepts only its own relation types; the type itself is the node."""
+    known = {term["fullyQualifiedName"]: term["id"]
+             for term in plan.get("glossary_terms") or []
+             if term.get("fullyQualifiedName") and term.get("id")}
+    planned: dict[str, set[str]] = defaultdict(set)
+    for edge in plan.get("glossary_relations") or []:
+        planned[edge["from"]].add(edge["to"])
+        from_id = _term_id(call, edge["from"], known)
+        to_id = _term_id(call, edge["to"], known)
+        if not from_id or not to_id:
+            raise CatalogError(f"The server has no glossary terms {edge['from']} {edge['to']}")
+        call("POST", f"/glossaryTerms/{from_id}/relations",
+             {"relationType": edge["relationType"], "term": {"id": to_id, "type": "glossaryTerm"}})
+    type_terms = {edge["to"] for edge in plan.get("glossary_relations") or []}
+    for identity, wanted in planned.items():
+        from_id = _term_id(call, identity, known)
+        if not from_id:
+            continue
+        body = call("GET", f"/glossaryTerms/{from_id}", params={"fields": "relatedTerms"}) or {}
+        for item in body.get("relatedTerms") or []:
+            if item.get("relationType") != "relatedTo":
+                continue
+            other = (item.get("term") or {})
+            other_fqn = other.get("fullyQualifiedName")
+            other_id = other.get("id")
+            if other_fqn in type_terms and other_fqn not in wanted and other_id:
+                call("DELETE", f"/glossaryTerms/{from_id}/relations/{other_id}",
+                     params={"relationType": "relatedTo"})
 
 
 def _drop_invented_domain_edges(plan: dict, call: Call) -> None:

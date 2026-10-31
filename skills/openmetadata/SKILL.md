@@ -101,9 +101,14 @@ do not invent a type.
   again beside the type. Lineage is the data flow: a feed to the dataset that
   reads it, a dataset to the kind whose fields it fills, and a code set to the
   prepared table that uses it.
-- Do not draw these types as `relatedTo` edges between glossary terms. A
-  glossary term for a type uses the code's definition and is associated only
-  with that type's table.
+- Draw each type on the glossary Relations Graph as one `relatedTo` edge
+  from the identity term of each end to that type's glossary term. The
+  server accepts only its own relation types (`relatedTo`, `synonym`,
+  `antonym`, `broader`, `narrower`, `partOf`, `hasPart`, `calculatedFrom`,
+  `usedToCalculate`, `seeAlso`). A pinned type code with underscores is
+  rejected as a relation type, so the type is the node. Do not add
+  `relatedTo` from a definition mention. A glossary term for a type uses
+  the code's definition and is associated only with that type's table.
 
 Place each profiled code set in `rdm.code_sets` and keep a proposed set labeled
 proposed. A profiled identifier kind that is not a declared domain is not a new
@@ -173,15 +178,21 @@ per domain pair is overwritten by the next type, so the type disappears.
 `rules catalog publish` writes these edges.
 
 The glossary Relations Graph is a different API,
-`GET /glossaryTerms/{id}/relationsGraph`. A term that mentions another term is
-not a relation. Do not add `relatedTo` from a definition, a display name, or an
-Avoid line. Add an edge only when the operator names the two terms and the
-relation type. The separate RDF glossary graph stays unused unless that
-service is enabled.
+`GET /glossaryTerms/{id}/relationsGraph`. A domain glossary's Relations Graph
+page starts at that domain's identity term.
+A term that mentions another term is not a relation. Do not add `relatedTo`
+from a definition, a display name, or an Avoid line.
+`rules catalog publish` writes `POST /glossaryTerms/{id}/relations` with
+`{"relationType": "relatedTo", "term": {"id": "<type-term-id>", "type":
+"glossaryTerm"}}` from each end's identity term to each type that names
+that end. Duplicate POST is idempotent. Remove a stale type with
+`DELETE /glossaryTerms/{id}/relations/{toTermId}?relationType=relatedTo`.
+The separate RDF glossary graph stays unused unless that service is enabled.
 
 `rules catalog publish` applies the built-in certification and no other
 classification. Do not add `data_class` or `processing_layer` tags in a second
-write. A second write is how endpoint links and `relatedTo` edges come back.
+write. A second write of mention `relatedTo` or endpoint domain links is how
+overstatement comes back.
 The class and the layer are named here so a later publisher change has one
 meaning. They are not a reason to edit the live catalog by hand.
 

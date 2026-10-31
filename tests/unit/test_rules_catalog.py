@@ -175,6 +175,12 @@ def test_the_plan_names_domains_glossaries_and_store_certification():
     term = next(term for term in plan["glossary_terms"] if term["name"] == "AUDITED_BY")
     assert term["glossary"] == "shared" and term["table"].endswith("relationships.AUDITED_BY")
     assert "relatedTo" not in term
+    company_graph = {edge["to"] for edge in plan["glossary_relations"]
+                     if edge["from"] == "company.Company Identity"}
+    assert company_graph >= {"shared.AUDITED_BY", "shared.ISSUED_BY", "shared.IS_SUBSIDIARY_OF"}
+    assert "shared.IS_SEGMENT_OF_EXCHANGE" not in company_graph
+    assert all(edge["relationType"] == "relatedTo" for edge in plan["glossary_relations"])
+    assert len(company_graph) == 15
 
 
 def test_publish_deletes_only_what_the_rules_no_longer_name():
@@ -187,6 +193,9 @@ def test_publish_deletes_only_what_the_rules_no_longer_name():
     assert deletes == ["/tables/id-old", "/databaseSchemas/id-gone", f"/lineage/table/{feed}/table/{company}"]
     assert result["removed"] == {"tables": 1, "schemas": 1, "databases": 0, "lineage": 1}
     assert sum(1 for method, path in server.calls if (method, path) == ("PUT", "/lineage")) == len(plan["lineage"])
+    posts = [path for method, path in server.calls if method == "POST" and path.endswith("/relations")]
+    assert any(path.startswith("/glossaryTerms/Company Identity/") for path in posts)
+    assert len(posts) == len(plan["glossary_relations"])
 
 
 def test_publish_stops_when_the_server_names_a_table_otherwise():

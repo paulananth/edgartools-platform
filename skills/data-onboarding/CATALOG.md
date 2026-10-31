@@ -53,7 +53,7 @@ name is not semantic enrichment.
 | Ownership | Existing authorized business owners where specified; otherwise an explicit unassigned responsibility, never the ingestion bot as a fabricated business owner |
 | Data product | Three named packages: the mastered legal entity, the mastered instrument, and fundamental measures. Each takes that subject's domain. The test is in `skills/data-catalog/references/MODEL.md` |
 | Classification | Data class from the data-modeling skill, one processing-layer tag per catalog-plan database, and the built-in certification: Gold on the master store, Silver on the prepared store. A proposed prepared-store table is Silver and has no data class. A source dataset has a layer and no data class |
-| Domain relationship | One pinned relationship type from `mdm-relationship-types`. One asset, not one link per endpoint. A capacity stays on its type. Not a `relatedTo` edge and not a lineage edge. Storage is the openmetadata skill |
+| Domain relationship | One pinned relationship type from `mdm-relationship-types`. One asset, not one link per endpoint. A capacity stays on its type. Not a lineage edge. The glossary Relations Graph is identity-term to type-term `relatedTo`. Storage is the openmetadata skill |
 
 Include registered Silver/RDM metadata. Label profiling proposals as proposed;
 never present them as existing registered tables or approved code sets. Do not
@@ -76,10 +76,12 @@ native object, semantic association or readback is absent, record a demonstrated
 capability gap and route it to implementation. `rules catalog publish` writes
 the subject domains, the glossaries, and the Gold and Silver certifications.
 It writes native quality cases for configured checks and corrections for
-configured fixes. It does not write a profile proposal as a case, and it does
-not write a `relatedTo`
-edge. Read those links back. A green publish that omits them is a publisher
-gap, not a finished catalog. OpenMetadata storage is the openmetadata skill.
+configured fixes. It does not write a profile proposal as a case. It writes
+a `relatedTo` edge from each identity term to each relationship type that
+names that end, so the glossary Relations Graph shows the types. It does
+not write `relatedTo` from a definition mention. Read those links back. A
+green publish that omits them is a publisher gap, not a finished catalog.
+OpenMetadata storage is the openmetadata skill.
 
 ## Quality definitions are not execution results
 
