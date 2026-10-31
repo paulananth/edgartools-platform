@@ -10,6 +10,13 @@ subject domains, the glossary words, and what a relationship type is stay in
 the data-catalog skill. This skill says how that meaning is stored on
 OpenMetadata 2.0.2, and `rules catalog publish` is the only write.
 
+The page at `/lineage` is the service view. It draws a line only when lineage
+crosses from one service to another. Edges between tables in the same database
+service do not appear there. `rules catalog publish` also writes a pipeline-to-dataset
+edge for each source pipeline, so that page shows the pipeline service feeding
+the database service. The column-by-column flow is on the table's own Lineage
+tab, `GET /api/v1/lineage/table/name/{fqn}`.
+
 Write a plain display name and a plain first sentence on every domain, table,
 product, and relationship type. The technical name stays the identity. Do not
 open a description with a file path, a rules version, or a JSON list. A person

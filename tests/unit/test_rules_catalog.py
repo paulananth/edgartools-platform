@@ -158,6 +158,8 @@ def test_the_plan_names_domains_glossaries_and_store_certification():
         "company_fact", "company_line_item"}
     assert all(f".{catalog.SOURCES}." in name for name in products["company_master"]["inputs"])
     assert all(f".{catalog.SOURCES}." in name for name in products["security_master"]["inputs"])
+    gleif = [edge for edge in plan["service_lineage"] if edge["pipeline"].endswith("source:gleif:mastering")]
+    assert gleif and all("sources.gleif" in edge["table"] for edge in gleif)
     cases = {case["name"]: case for case in plan["quality_cases"]}
     assert "sec.submissions.company.v1.name_present" in cases
     assert cases["sec.submissions.company.v1.dc_state_is_empty"]["description"].startswith("Correction")

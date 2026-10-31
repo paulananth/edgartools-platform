@@ -286,6 +286,29 @@ def _pipelines(root: Path) -> list[dict]:
     return result
 
 
+def _service_lineage(pipelines: list[dict], tables: list[dict]) -> list[dict]:
+    """The Lineage page draws a line only between services. Dataset edges stay
+    inside one database service, so that page stays blank until a pipeline
+    points at a table."""
+    by_source: dict[str, list[str]] = defaultdict(list)
+    for table in tables:
+        schema = table["databaseSchema"]
+        if ".sources." not in schema:
+            continue
+        source = schema.split(".sources.", 1)[1].strip('"')
+        by_source[source].append(_table_name(table))
+    edges = []
+    for pipeline in pipelines:
+        scope, _, rest = pipeline["name"].partition(":")
+        source, _, target = rest.partition(":")
+        if scope != "source" or not by_source.get(source):
+            continue
+        for table in by_source[source]:
+            edges.append({"pipeline": fqn(PIPELINES_SERVICE, pipeline["name"]), "table": table,
+                          "description": f"The {target} pipeline of {source} reads or writes this dataset."})
+    return edges
+
+
 def _relationships(root: Path, policy: dict) -> tuple[list[dict], list[dict]]:
     """Pinned type definitions and the declared datasets that supply them."""
     from .mapdoc import relationship_rows
@@ -647,6 +670,7 @@ def plan(root: Path | None = None) -> dict:
                              "description": f"Configured pipeline definitions; rules digest `{rules_digest(root)}`. "
                                             "This catalog does not enable schedules or run workloads."},
         "pipelines": _pipelines(root),
+        "service_lineage": _service_lineage(_pipelines(root), tables),
         **_meaning(root, policy, tables, lineage),
         **_quality(root, tables),
     }
@@ -869,6 +893,10 @@ def publish(plan: dict, call: Call) -> dict:
             if answer["fullyQualifiedName"] != name:
                 raise CatalogError(f"The server named pipeline {name} {answer['fullyQualifiedName']}")
             pipeline_ids[name] = answer["id"]
+    for edge in plan.get("service_lineage") or []:
+        call("PUT", "/lineage/pipeline/name/" + escape(edge["pipeline"], safe="")
+             + "/table/name/" + escape(edge["table"], safe=""),
+             {"description": edge["description"], "source": "PipelineLineage"})
     service = plan["service"]["name"]
     removed = {"tables": 0, "schemas": 0, "databases": 0, "lineage": 0}
     for table in _listed(call, "/tables", {"service": service}, service):
