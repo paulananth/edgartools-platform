@@ -40,7 +40,9 @@ A proposed table in the prepared store is still Silver certified and still has
 no data class. Do not invent a class, a domain, or a certification the data
 model does not name.
 
-A domain relationship is a pinned relationship type between subject domains.
+`rules catalog publish` writes the subject domains, the glossaries, and the
+Gold and Silver certifications in the plan. It does not write a `relatedTo`
+edge. A domain relationship is a pinned relationship type between subject domains.
 It is not a `relatedTo` link, not a certification, and not a processing layer.
 Read the type, its ends, and its capacities from the pinned code set, and
 project them as [OPENMETADATA.md](references/OPENMETADATA.md) says.

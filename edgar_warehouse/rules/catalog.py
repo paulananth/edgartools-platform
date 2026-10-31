@@ -22,7 +22,11 @@ The catalog is one OpenMetadata database service, `edgartools-rules`:
   column per silver field, each with the data quality rules it needs; and
   database `rdm`, schema `code_sets`: a
   table per code set the data needs, with lineage from each silver table that
-  uses it.
+  uses it;
+- one subject domain per mastered kind and per relationship endpoint, the
+  glossaries for those domains, and Gold on the master store and Silver on
+  the prepared store. A relationship type is that asset on its endpoint
+  domains. A mention is not a relation.
 
 `plan` is pure: the rules in, the catalog as data out. `publish` sends it.
 """
@@ -31,6 +35,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Callable
@@ -41,13 +47,16 @@ from urllib.request import Request, urlopen
 from edgar_warehouse.silver_writer import spec as silver_spec
 
 from . import files
-from .mapdoc import critical_elements, mapped, paths, winners
+from .mapdoc import critical_elements, mapped, paths, relationship_rows, winners
 
 SERVICE = "edgartools-rules"
 PIPELINES_SERVICE = SERVICE + "-pipelines"
 SOURCES, MDM, CLEAN = "sources", "mdm", "clean"
 SILVER, RDM, CODE_SETS = "silver", "rdm", "code_sets"
 TEXT = "STRING"  # the catalog shows what a value means, not a database type
+# One relationship endpoint the rules name differently from its catalog domain.
+ENDPOINT_CATALOG_NAME = {"venue": "market_venue"}
+GOLD, SILVER_MARK = "Certification.Gold", "Certification.Silver"
 # A silver field's logical type, as the catalog names it (OpenMetadata calls a 32-bit
 # integer INT); any other type is text.
 TYPES = {"BIGINT": "BIGINT", "INTEGER": "INT", "DOUBLE": "DOUBLE", "DECIMAL": "DECIMAL", "BOOLEAN": "BOOLEAN",
@@ -310,6 +319,117 @@ def _relationships(root: Path, policy: dict) -> tuple[list[dict], list[dict]]:
     return tables, lineage
 
 
+def _display(name: str) -> str:
+    return " ".join(part.capitalize() for part in name.split("_"))
+
+
+def _table_name(table: dict) -> str:
+    return f"{table['databaseSchema']}.{quote(table['name'])}"
+
+
+def _store(name: str) -> str:
+    """The plan database in a table's fully qualified name."""
+    return name[len(SERVICE) + 1:].split(".", 1)[0].strip('"')
+
+
+def _context_terms(root: Path) -> list[tuple[str, str]]:
+    """Bold terms in the two glossary sections of CONTEXT.md, when that file
+    sits beside the rules. A copy of the rules alone has no second glossary."""
+    path = root.parent / "CONTEXT.md"
+    if not path.is_file():
+        return []
+    text = path.read_text()
+    chunks = []
+    for heading in ("### MDM identities and mastering", "### Data classes, reference data and agent context"):
+        start = text.find(heading)
+        if start < 0:
+            continue
+        rest = text[start + len(heading):]
+        stop = rest.find("\n### ")
+        chunks.append(rest if stop < 0 else rest[:stop])
+    found = []
+    for match in re.finditer(r"\*\*(.+?)\*\*:\n(.*?)(?=\n\*\*|\Z)", "\n".join(chunks), re.S):
+        block = match.group(2).strip()
+        definition, _, avoid = block.partition("_Avoid_:")
+        description = " ".join(definition.split())
+        if avoid.strip():
+            description += "\n\nAvoid: " + " ".join(avoid.split())
+        found.append((match.group(1).strip(), description))
+    return found
+
+
+def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) -> dict:
+    """Subject domains, their glossaries, and store certifications. A domain
+    relationship is one pinned type on its endpoint domains, not a relatedTo edge."""
+    rows = relationship_rows(root, policy)
+    kinds = set((policy.get("kinds") or {}))
+    ends = set()
+    roots = []
+    for row in rows:
+        if row.get("parent_code"):
+            continue
+        roots.append(row)
+        props = row.get("properties") or {}
+        for code in (props.get("from") or []) + (props.get("to") or []):
+            ends.add(ENDPOINT_CATALOG_NAME.get(code, code))
+    names = sorted(kinds | ends)
+    kind_tables = {fqn(SERVICE, MDM, CLEAN, kind): kind for kind in kinds}
+    domains = []
+    for name in names:
+        if name in kind_tables.values():
+            description = f"The mastered kind `{name}`. Rules: rules/merge/kinds/{name}.yaml."
+        else:
+            description = f"A relationship endpoint `{name}` with no kind file."
+        domains.append({"name": name, "displayName": _display(name), "description": description,
+                        "domainType": "Source-aligned"})
+    by_display = sorted(domains, key=lambda domain: len(domain["displayName"]), reverse=True)
+
+    def glossary_of(heading: str) -> str:
+        for domain in by_display:
+            display = domain["displayName"]
+            if heading == display or heading == f"{display} Identity" or heading.startswith(display + " "):
+                return domain["name"]
+        return "shared"
+
+    terms = [{"name": heading, "displayName": heading, "description": description,
+              "glossary": glossary_of(heading)} for heading, description in _context_terms(root)]
+    by_term = {term["name"]: term for term in terms}
+    for row in roots:
+        by_term[row["code"]] = {
+            "name": row["code"], "displayName": row.get("label") or row["code"],
+            "description": row.get("definition") or row["label"], "glossary": "shared",
+            "table": fqn(SERVICE, MDM, "relationships", row["code"])}
+    membership: dict[str, set[str]] = defaultdict(set)
+    for name, kind in kind_tables.items():
+        membership[name].add(kind)
+    for row in roots:
+        props = row.get("properties") or {}
+        mapped = {ENDPOINT_CATALOG_NAME.get(code, code) for code in (props.get("from") or []) + (props.get("to") or [])}
+        membership[fqn(SERVICE, MDM, "relationships", row["code"])].update(mapped & set(names))
+    for edge in lineage:
+        if edge["to"] in kind_tables:
+            membership[edge["from"]].add(kind_tables[edge["to"]])
+    present = {_table_name(table) for table in tables}
+    memberships = [{"table": name, "domains": sorted(domains_)} for name, domains_ in sorted(membership.items()) if name in present and domains_]
+    certifications = []
+    for table in tables:
+        name = _table_name(table)
+        store = _store(name)
+        if store == MDM:
+            certifications.append({"table": name, "tag": GOLD})
+        elif store == SILVER:
+            certifications.append({"table": name, "tag": SILVER_MARK})
+    glossaries = [{"name": domain["name"], "displayName": domain["displayName"], "description":
+                   "The words for this subject, taken from the platform glossary. A projection. Not an approval.",
+                   "domains": [domain["name"]]} for domain in domains]
+    glossaries.append({"name": "shared", "displayName": "Shared", "description":
+                       "Words that apply to more than one subject, or to mastering and reference data, "
+                       "taken from the platform glossary. A projection. Not an approval."})
+    return {"domains": domains, "glossaries": glossaries,
+            "glossary_terms": [by_term[name] for name in sorted(by_term)],
+            "memberships": memberships, "certifications": certifications}
+
+
 def plan(root: Path | None = None) -> dict:
     """The whole catalog the rules under `root` describe, sorted, so the same
     rules always give the same plan."""
@@ -404,6 +524,7 @@ def plan(root: Path | None = None) -> dict:
                              "description": f"Configured pipeline definitions; rules digest `{rules_digest(root)}`. "
                                             "This catalog does not enable schedules or run workloads."},
         "pipelines": _pipelines(root),
+        **_meaning(root, policy, tables, lineage),
     }
 
 
@@ -478,21 +599,90 @@ def _upsert(call: Call, endpoint: str, body: dict) -> dict:
     return answer
 
 
+def _allow_several_domains(call: Call) -> None:
+    """A relationship type belongs to every endpoint. The server's default
+    refuses more than one domain, so that rule is switched off when a plan
+    needs it. Other rules stay as the server has them."""
+    page = call("GET", "/system/settings") or {}
+    row = next((item for item in page.get("data") or [] if item.get("config_type") == "entityRulesSettings"), None)
+    rules = ((row or {}).get("config_value") or {}).get("entitySemantics") or []
+    changed = False
+    for rule in rules:
+        if rule.get("name") == "Multiple Domains are not allowed" and rule.get("enabled", True):
+            rule["enabled"] = False
+            changed = True
+    if changed:
+        call("PUT", "/system/settings", {"config_type": row["config_type"], "config_value": row["config_value"]})
+
+
+def _validity_days(call: Call) -> int | None:
+    page = call("GET", "/system/settings") or {}
+    row = next((item for item in page.get("data") or [] if item.get("config_type") == "assetCertificationSettings"), None)
+    period = ((row or {}).get("config_value") or {}).get("validityPeriod") or ""
+    if period.startswith("P") and period.endswith("D") and period[1:-1].isdigit():
+        return int(period[1:-1])
+    return None
+
+
+def _publish_vocabulary(plan: dict, call: Call) -> None:
+    for domain in plan.get("domains") or []:
+        _upsert(call, "/domains", domain)
+    for glossary in plan.get("glossaries") or []:
+        _upsert(call, "/glossaries", glossary)
+    for term in plan.get("glossary_terms") or []:
+        body = {key: term[key] for key in ("name", "displayName", "description", "glossary")}
+        expected = f"{body['glossary']}.{quote(body['name'])}"
+        answer = call("PUT", "/glossaryTerms", body) or {}
+        if answer.get("fullyQualifiedName") != expected:
+            raise CatalogError(f"The server named glossary term {expected} {answer.get('fullyQualifiedName')}")
+        term["fullyQualifiedName"] = expected
+    if any(len(item["domains"]) > 1 for item in plan.get("memberships") or []):
+        _allow_several_domains(call)
+
+
+def _publish_marks(plan: dict, call: Call, ids: dict[str, str]) -> None:
+    days = _validity_days(call)
+    now = int(time.time() * 1000)
+    for item in plan.get("certifications") or []:
+        if days is None or item["table"] not in ids:
+            continue
+        call("PATCH", f"/tables/{ids[item['table']]}", [{
+            "op": "add", "path": "/certification",
+            "value": {"tagLabel": {"tagFQN": item["tag"], "source": "Classification",
+                                   "labelType": "Manual", "state": "Confirmed"},
+                      "appliedDate": now, "expiryDate": now + days * 24 * 60 * 60 * 1000}}])
+    for term in plan.get("glossary_terms") or []:
+        table = term.get("table")
+        if table not in ids:
+            continue
+        call("PATCH", f"/tables/{ids[table]}", [{
+            "op": "add", "path": "/tags/-",
+            "value": {"tagFQN": term["fullyQualifiedName"], "source": "Glossary",
+                      "labelType": "Manual", "state": "Suggested"}}])
+
+
 def publish(plan: dict, call: Call) -> dict:
     """Make the catalog equal to `plan`: create or update everything it names,
     then delete, inside its own service only, the tables, schemas and lineage
     it no longer names. Publishing the same plan again changes nothing."""
     _upsert(call, "/services/databaseServices", plan["service"])
+    _publish_vocabulary(plan, call)
     for database in plan["databases"]:
         _upsert(call, "/databases", database)
     for schema in plan["schemas"]:
         _upsert(call, "/databaseSchemas", schema)
     ids = {}  # a planned table's name -> its id
+    domains_of = {item["table"]: item["domains"] for item in plan.get("memberships") or []}
     for table in plan["tables"]:
-        name, answer = f"{table['databaseSchema']}.{quote(table['name'])}", _upsert(call, "/tables", table)
+        body = dict(table)
+        name = f"{table['databaseSchema']}.{quote(table['name'])}"
+        if name in domains_of:
+            body["domains"] = domains_of[name]
+        name, answer = name, _upsert(call, "/tables", body)
         if answer["fullyQualifiedName"] != name:  # lineage names columns by this name
             raise CatalogError(f"The server named table {name} {answer['fullyQualifiedName']}")
         ids[name] = answer["id"]
+    _publish_marks(plan, call, ids)
     pipeline_ids = {}
     if plan.get("pipeline_service"):
         _upsert(call, "/services/pipelineServices", plan["pipeline_service"])

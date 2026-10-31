@@ -39,6 +39,8 @@ MDM, RDM and silver are processing layers: databases `mdm`, `rdm` and `silver`
 on the rules service. They are not subject domains. Do not create a domain
 named after a layer.
 
+`rules catalog publish` writes these domains, glossaries, and the Gold and
+Silver certifications. A green publish that omits them is a publisher gap.
 A domain relationship is one pinned relationship type. Read it from the code
 set the data-modeling skill names, `mdm-relationship-types`, pinned in
 `rules/merge/reference-pins.yaml`. Do not copy that list into this skill, and

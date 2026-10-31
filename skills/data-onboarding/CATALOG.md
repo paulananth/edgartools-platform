@@ -73,13 +73,12 @@ contains pinned types and capacities. Check workbook cells against configuration
 
 **Capability gate:** inspect the actual plan and publisher. If any required
 native object, semantic association or readback is absent, record a demonstrated
-capability gap and route it to implementation. The established technical plan,
-publish and check commands do not assign domains, glossaries or native quality
-cases. Domain type, multi-domain membership and MDM, RDM and silver layer
-placement for the master-data subjects, and the glossary and classification
-projection, are settled in `skills/data-catalog/references/OPENMETADATA.md`.
-Follow that mapping on the API. Do not treat a green `rules catalog publish` as proof those links
-exist, and do not invent a CLI flag to bridge the gap.
+capability gap and route it to implementation. `rules catalog publish` writes
+the subject domains, the glossaries, and the Gold and Silver certifications.
+It does not write native quality cases, and it does not write a `relatedTo`
+edge. Read those links back. A green publish that omits them is a publisher
+gap, not a finished catalog. The projection is in
+`skills/data-catalog/references/OPENMETADATA.md`.
 
 ## Quality definitions are not execution results
 
