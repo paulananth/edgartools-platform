@@ -50,7 +50,12 @@ from tests.support.rules_authority import register_dataset
 
 PROVING = Path("~/.local/share/edgartools/clean-mdm/proving").expanduser()
 SLICE = PROVING / "p08" / "inputs"
-CENSUS = PROVING / "cm27-raw"
+POPULATION = PROVING / "cm27-raw" / "population.json"
+# The Name Census the Company chain reads. With a matching cascade pass switched on, it must be built from
+# the same rules (`mdm name-census --catalog`): a census without the cascade links nothing through it.
+CENSUS = Path(os.environ.get("RECREATION_CENSUS", PROVING / "t32-census-p5" / "census.json"))
+# A sample run checks the harness on a few documents and LEIs before the one full run (ticket 48's rule).
+SAMPLE = os.environ.get("RECREATION_SAMPLE") == "1"
 CAPTURE = Path("~/.local/share/edgartools/clean-mdm/captures/sec.submissions.company/all-76230").expanduser()
 GOLDEN = Path("~/.local/share/edgartools/clean-mdm/captures/gleif/20260911-1600").expanduser()
 LEVEL1 = (GOLDEN / "01-20260911-1600-gleif-goldencopy-lei2-golden-copy.json.zip", 3428477)
@@ -73,7 +78,10 @@ READ = {"name": "read", "operation": "source.read", "requires": [], "key": "{bat
 
 
 def _steps(source: str) -> list[dict]:
-    return files.source(source)["bookkeeping"]["targets"]["mastering"]["steps"]
+    """A source's mastering steps, without the planning keys a version-2 configuration strips itself:
+    this pipeline is version 1, and its runs take an input manifest made beforehand."""
+    return [{k: v for k, v in step.items() if k not in ("units", "input")}
+            for step in files.source(source)["bookkeeping"]["targets"]["mastering"]["steps"]]
 
 
 PIPELINE = {"pipeline": "recreation-baseline", "bookkeeping": {"version": 1, "targets": {
@@ -89,13 +97,35 @@ def cohort() -> tuple[list[str], list[str]]:
     """The cohort's main submissions documents: those the Name Census counted, and all."""
     keys = sorted(json.loads(line)["key"] for line in (SLICE / "sec" / "receipts.jsonl").open())
     main = [k for k in keys if "/main/" in k]
-    counted = set(json.loads((CENSUS / "population.json").read_text()))
-    return [k for k in main if k in counted], main
+    counted = set(json.loads(POPULATION.read_text()))
+    counted_main = [k for k in main if k in counted]
+    if SAMPLE:  # people are among the filers the census did not count: take some of each
+        return counted_main[:5], counted_main[:4] + [k for k in main if k not in counted][:4]
+    return counted_main, main
 
 
 def scope() -> list[str]:
     """The slice's GLEIF Level 1 LEIs: the approved scope of both GLEIF readings."""
-    return sorted({json.loads(line)["record"]["LEI"]["$"] for line in (SLICE / "gleif" / "level1.jsonl").open()})
+    leis = sorted({json.loads(line)["record"]["LEI"]["$"] for line in (SLICE / "gleif" / "level1.jsonl").open()})
+    if not SAMPLE:
+        return leis
+    # Both ends of the slice's first ten relationships, so the sample's relationships pass reads some.
+    ends = set()
+    for line in (SLICE / "gleif" / "relationships.jsonl").open():
+        node = json.loads(line)["record"]["RelationshipRecord"]["Relationship"]
+        ends |= {node["StartNode"]["NodeID"]["$"], node["EndNode"]["NodeID"]["$"]}
+        if len(ends) >= 20:
+            break
+    return sorted(ends & set(leis))
+
+
+def census_identity() -> dict:
+    """The census this run reads: its sha256 and the matching cascade it holds (none: no pass links)."""
+    body = json.loads(CENSUS.read_text())
+    cascade = body.get("cascade") or {}
+    return {"path": str(CENSUS), "sha256": hashlib.sha256(CENSUS.read_bytes()).hexdigest(),
+            "cascade_version": cascade.get("version"), "cascade_passes": [p["pass"] for p in cascade.get("passes", [])],
+            "cascade_assignments": len(cascade.get("assignments") or {})}
 
 
 def rules_files() -> dict[str, str]:
@@ -161,7 +191,7 @@ def test_recreation_baseline(installed, databases, tmp_path):  # noqa: F811
     # The two SEC manifests, by the installed CLI.
     company = json.loads(cli(
         "mdm", "prepare-clean-company", "--capture", str(CAPTURE), "--documents", str(documents("company", counted)),
-        "--population", str(CENSUS / "population.json"), "--name-census", str(CENSUS / "census.json"),
+        "--population", str(POPULATION), "--name-census", str(CENSUS),
         "--catalog", CATALOG, "--capture-run", "p08-company", "--catalog-run", CATALOG_RUN,
         "--observed-at", OBSERVED_AT, "--output", str(tmp_path / "company"), "--as-of", AS_OF, "--revision", "0"))
     person = json.loads(cli(
@@ -308,14 +338,16 @@ def test_recreation_baseline(installed, databases, tmp_path):  # noqa: F811
 
     report = {"goal": "Recreation proof (ticket 32): one rules folder mastered on the 500-entity cohort",
               "rules_root": str(files.ROOT), "rules_files": rules_files(), "code_sets": code_sets(),
-              "policy": policy, "company_documents": len(counted), "person_documents": len(everyone),
+              "sample": SAMPLE, "census": census_identity(), "policy": policy, "company_documents": len(counted), "person_documents": len(everyone),
               "gleif_scope_leis": len(leis), "after_first_pass": first, "digests": first_digests,
               "second_pass_changed_nothing": (first, first_digests) == (second, second_digests),
               "second_pass_digests": second_digests, "minutes_since_start": timings, "minutes": minutes()}
     out.write_text(json.dumps(report, sort_keys=True, indent=1) + "\n")
     say(stage="report", second_pass_changed_nothing=report["second_pass_changed_nothing"], minutes=minutes())
     # No silent zeros: every source staged and bound something.
-    for code in (COMPANY, PERSON, LEVEL1_CODE):
+    # A sample's few LEIs need not name a sampled filer, so only the SEC sources must bind there.
+    for code in (COMPANY, PERSON) if SAMPLE else (COMPANY, PERSON, LEVEL1_CODE):
         assert first["stage_bound"].get(code, 0) > 0, (code, first["stage_bound"])
-    assert first["relationships"] > 0 and not first["identifiers_on_two_masters"], first
+    assert SAMPLE or first["relationships"] > 0, first
+    assert not first["identifiers_on_two_masters"], first
     assert report["second_pass_changed_nothing"], (first, second, first_digests, second_digests)
