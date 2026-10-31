@@ -350,8 +350,8 @@ def _context_terms(root: Path) -> list[tuple[str, str]]:
 
 
 def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) -> dict:
-    """Subject domains, their glossaries, and store certifications. A domain
-    relationship is one pinned type on its endpoint domains, not a relatedTo edge."""
+    """Subject domains, their glossaries, and store certifications. A
+    relationship type is one asset. Its ends are not extra domain links."""
     rows = relationship_rows(root, policy)
     kinds = set((policy.get("kinds") or {}))
     ends = set()
@@ -501,7 +501,7 @@ def plan(root: Path | None = None) -> dict:
         "schemas": schemas + [{"name": CLEAN, "database": fqn(SERVICE, MDM),
                                "description": "The kinds MDM masters."}]
                    + ([{"name": "relationships", "database": fqn(SERVICE, MDM),
-                        "description": "Pinned relationship type definitions and their declared source lineage."}]
+                        "description": "Pinned relationship types. One asset per type. The ends stay on the type."}]
                       if relationship_tables else []) + silver_schemas
                    + ([{"name": CODE_SETS, "database": fqn(SERVICE, RDM), "description": "Code sets, by name."}]
                       if silver_schemas else []),

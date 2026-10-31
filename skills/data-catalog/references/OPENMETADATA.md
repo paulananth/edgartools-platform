@@ -77,11 +77,13 @@ display name may use the profiled part path when that path differs from the
 table name. Publish lineage from each code set to the prepared table that
 uses it. Do not publish lineage from a dataset to a relationship type.
 
-An asset that fills or links more than one subject is a member of each of those
-domains. The default entity rule "Multiple Domains are not allowed" rejects
-that assignment. Disable that rule in `entityRulesSettings` before publishing
-the asset. Do not drop a subject to satisfy the default, and do not copy the
-asset so each domain has its own table.
+A dataset is a member of the kind it becomes. A relationship type is not a
+member of its endpoint domains. Putting the type on each end stores one link
+per end and makes the server draw a domain-to-domain edge for every pair of
+ends. Those edges are not types. Do not create them. If a publish finds a
+domain-to-domain edge whose source is `ChildAssets`, delete it. Disable
+"Multiple Domains are not allowed" only for an asset that itself is more than
+one kind. Do not disable it to spread a relationship type.
 
 Domains and glossaries are independent native resources; assigning one does not
 create the other. Term annotation uses a tag label whose `source` is `Glossary`;
@@ -116,10 +118,10 @@ that glossary. Every other term from the two sections goes in one shared
 glossary named `shared`. A shared spelling with a different definition stays a
 different term.
 
-Associate a term with a registered table only when the table name equals the
-term heading, or when the term is that domain's own glossary entry and the
-domain has a kind table. A domain with no kind table still has its glossary.
-A proposed table is not a kind table.
+Associate a glossary term with a table only when the term is one relationship
+type and the table is that type. Do not tag the kind table with every term
+whose heading starts with the domain name. A domain with no kind table still
+has its glossary. A proposed table is not a kind table.
 
 The Relations Graph is the typed edges between terms. Read it from
 `GET /glossaryTerms/{id}/relationsGraph`. A term that mentions another term is
@@ -128,8 +130,11 @@ Avoid line. Add an edge only when the operator names the two terms and the
 relation type. The separate RDF glossary graph stays unused unless that
 service is enabled.
 
-Two classifications are created for this catalog. The built-in certification
-is applied as well. Do not add another classification.
+`rules catalog publish` applies the built-in certification and no other
+classification. Do not add `data_class` or `processing_layer` tags in a second
+write. A second write is how endpoint links and `relatedTo` edges come back.
+The class and the layer are named here so a later publisher change has one
+meaning. They are not a reason to edit the live catalog by hand.
 
 - `data_class`. One tag for each class the data-modeling skill names and this
   catalog can hold: master data on a kind table, reference data on a code-set

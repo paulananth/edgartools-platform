@@ -40,12 +40,14 @@ A proposed table in the prepared store is still Silver certified and still has
 no data class. Do not invent a class, a domain, or a certification the data
 model does not name.
 
-`rules catalog publish` writes the subject domains, the glossaries, and the
-Gold and Silver certifications in the plan. It does not write a `relatedTo`
-edge. A domain relationship is a pinned relationship type between subject domains.
-It is not a `relatedTo` link, not a certification, and not a processing layer.
+`rules catalog publish` is the only write into OpenMetadata. It writes the
+subject domains, the glossaries, the Gold and Silver certifications, and the
+data-flow lineage. It writes one asset per pinned relationship type and leaves
+the ends on that asset. It does not write a `relatedTo` edge, a lineage edge
+from a dataset to a relationship type, or a domain link for each end of a type.
 Read the type, its ends, and its capacities from the pinned code set, and
-project them as [OPENMETADATA.md](references/OPENMETADATA.md) says.
+follow [OPENMETADATA.md](references/OPENMETADATA.md). Do not publish those
+objects a second time by hand.
 
 ## Understand the model before publishing
 
