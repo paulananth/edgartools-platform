@@ -75,7 +75,9 @@ contains pinned types and capacities. Check workbook cells against configuration
 native object, semantic association or readback is absent, record a demonstrated
 capability gap and route it to implementation. `rules catalog publish` writes
 the subject domains, the glossaries, and the Gold and Silver certifications.
-It does not write native quality cases, and it does not write a `relatedTo`
+It writes native quality cases for configured checks and corrections for
+configured fixes. It does not write a profile proposal as a case, and it does
+not write a `relatedTo`
 edge. Read those links back. A green publish that omits them is a publisher
 gap, not a finished catalog. OpenMetadata storage is the openmetadata skill.
 

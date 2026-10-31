@@ -58,7 +58,14 @@ bulk asset body. Read them with `GET /api/v1/dataProducts/name/{fqn}/inputPorts`
 A mastered package takes the source datasets that fill it as input ports.
 The fundamental-measures package takes the filed-figure table and the line-item
 table as input ports. The measure table is an asset, not an input port.
-A green publish that omits them is a publisher gap.
+`rules catalog publish` also writes every configured check and every
+registered prepared-table check as a quality case, and every configured fix
+as a correction. A profile proposal is not a case. A case has no pass or fail
+result. The definitions are `edgartools-configured-table-check` and
+`edgartools-configured-column-check`, platform Other, and OpenMetadata does
+not execute them. A case whose column is on the table uses
+`<#E::table::{fqn}::columns::{column}>`. Any other case uses
+`<#E::table::{fqn}>`. A green publish that omits them is a publisher gap.
 A domain relationship is one pinned relationship type. Read it from the code
 set the data-modeling skill names, `mdm-relationship-types`, pinned in
 `rules/merge/reference-pins.yaml`. Do not copy that list into this skill, and

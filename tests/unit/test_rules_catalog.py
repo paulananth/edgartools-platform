@@ -101,6 +101,11 @@ class _Server:
 
     def __call__(self, method, path, body=None, params=None):
         self.calls.append((method, path))
+        if method == "PUT" and path == "/dataQuality/testCases":
+            link = body.get("entityLink") or ""
+            table = link.removeprefix("<#E::table::").split("::columns::")[0].removesuffix(">")
+            column = link.split("::columns::", 1)[1].removesuffix(">") + "." if "::columns::" in link else ""
+            return {**body, "id": body["name"], "fullyQualifiedName": f"{table}.{column}{catalog.quote(body['name'])}"}
         if method == "PUT" and path == "/glossaryTerms":
             return {**body, "id": body["name"],
                     "fullyQualifiedName": body["glossary"] + "." + catalog.quote(body["name"])}
@@ -153,6 +158,11 @@ def test_the_plan_names_domains_glossaries_and_store_certification():
         "company_fact", "company_line_item"}
     assert all(f".{catalog.SOURCES}." in name for name in products["company_master"]["inputs"])
     assert all(f".{catalog.SOURCES}." in name for name in products["security_master"]["inputs"])
+    cases = {case["name"]: case for case in plan["quality_cases"]}
+    assert "sec.submissions.company.v1.name_present" in cases
+    assert cases["sec.submissions.company.v1.dc_state_is_empty"]["description"].startswith("Correction")
+    assert cases["openfigi_listing.figi_valid"]["testDefinition"] == "edgartools-configured-column-check"
+    assert all("testCaseResult" not in case for case in plan["quality_cases"])
     assert any(name.endswith("mdm.clean.security") for name in products["security_master"]["tables"])
     assert sum(1 for table in plan["tables"] if table["databaseSchema"].endswith(".relationships")) == 16
     certified = {item["table"]: item["tag"] for item in plan["certifications"]}

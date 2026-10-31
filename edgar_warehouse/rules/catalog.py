@@ -462,6 +462,82 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) 
             "domain_lineage": domain_lineage, "products": products}
 
 
+def _rule_text(kind: str, rule: dict, version: str, path: str) -> str:
+    parts = ["Correction, not a check. It changes a value. It is not a test result."
+             if kind == "fix" else
+             "Configured check. The catalog stores the definition only. It does not record a pass or a fail."]
+    parts.append(f"Id `{rule.get('id')}`.")
+    if rule.get("test"):
+        parts.append(f"Test `{rule['test']}`.")
+    if rule.get("check"):
+        parts.append(f"Check `{rule['check']}`.")
+    if rule.get("value"):
+        parts.append(f"Value `{rule['value']}`.")
+    if rule.get("column"):
+        parts.append(f"Column `{rule['column']}`.")
+    if rule.get("on_fail"):
+        parts.append(f"On fail: {rule['on_fail']}.")
+    if rule.get("why"):
+        parts.append(str(rule["why"]))
+    if rule.get("args"):
+        parts.append("Arguments: " + json.dumps(rule["args"], sort_keys=True, ensure_ascii=False))
+    if version:
+        parts.append(f"Rules version `{version}`.")
+    parts.append(f"Rules file `{path}`.")
+    return " ".join(parts)
+
+
+def _quality_case(table: str, columns: set[str], code: str, kind: str, rule: dict, version: str, path: str) -> dict:
+    column = rule.get("column")
+    if column in columns:
+        link = f"<#E::table::{table}::columns::{column}>"
+        definition = "edgartools-configured-column-check"
+    else:
+        link = f"<#E::table::{table}>"
+        definition = "edgartools-configured-table-check"
+    return {"name": f"{code}.{rule['id']}", "displayName": rule["id"], "description": _rule_text(kind, rule, version, path),
+            "testDefinition": definition, "entityLink": link, "kind": kind}
+
+
+def _quality(root: Path, tables: list[dict]) -> dict:
+    """Configured checks and fixes. A profile proposal is not a case, and a
+    case has no pass or fail result."""
+    by_name = {_table_name(table): table for table in tables}
+    cases = []
+    for path in sorted((root / "sources").glob("*/source.yaml")):
+        body = files.load_source(path)
+        source = body.get("source") or path.parent.name
+        for code, entry in sorted((body.get("mdm") or {}).items()):
+            quality = ((entry.get("contract") or {}).get("quality") or {})
+            table_name = fqn(SERVICE, SOURCES, source, code)
+            table = by_name.get(table_name)
+            if not table or not quality:
+                continue
+            columns = {column["name"] for column in table["columns"]}
+            version, rules_path = quality.get("version") or "", path.parent.joinpath("quality.yaml").relative_to(root).as_posix()
+            for kind, key in (("check", "checks"), ("fix", "fixes")):
+                for rule in quality.get(key) or []:
+                    cases.append(_quality_case(table_name, columns, code, kind, rule, version, rules_path))
+    for path in sorted((root / "sources").glob("*/silver-*.yaml")):
+        spec = files.load(path)
+        table_name = fqn(SERVICE, SILVER, path.parent.name, spec["table"])
+        table = by_name.get(table_name)
+        if not table:
+            continue
+        columns = {column["name"] for column in table["columns"]}
+        rules_path = path.relative_to(root).as_posix()
+        for rule in spec.get("checks") or []:
+            cases.append(_quality_case(table_name, columns, spec["table"], "check", rule, "", rules_path))
+    definitions = [
+        {"name": "edgartools-configured-table-check", "displayName": "Configured table check",
+         "description": "A check or a correction from the rules. OpenMetadata does not execute it.",
+         "entityType": "TABLE", "testPlatforms": ["Other"]},
+        {"name": "edgartools-configured-column-check", "displayName": "Configured column check",
+         "description": "A check on one column from the rules. OpenMetadata does not execute it.",
+         "entityType": "COLUMN", "testPlatforms": ["Other"]}]
+    return {"quality_definitions": definitions, "quality_cases": cases}
+
+
 def plan(root: Path | None = None) -> dict:
     """The whole catalog the rules under `root` describe, sorted, so the same
     rules always give the same plan."""
@@ -557,6 +633,7 @@ def plan(root: Path | None = None) -> dict:
                                             "This catalog does not enable schedules or run workloads."},
         "pipelines": _pipelines(root),
         **_meaning(root, policy, tables, lineage),
+        **_quality(root, tables),
     }
 
 
@@ -737,6 +814,18 @@ def publish(plan: dict, call: Call) -> dict:
         if answer["fullyQualifiedName"] != name:  # lineage names columns by this name
             raise CatalogError(f"The server named table {name} {answer['fullyQualifiedName']}")
         ids[name] = answer["id"]
+    for definition in plan.get("quality_definitions") or []:
+        _upsert(call, "/dataQuality/testDefinitions", definition)
+    for case in plan.get("quality_cases") or []:
+        body = {key: case[key] for key in ("name", "displayName", "description", "testDefinition", "entityLink")}
+        answer = call("PUT", "/dataQuality/testCases", body) or {}
+        table = case["entityLink"].removeprefix("<#E::table::").split("::columns::")[0].removesuffix(">")
+        column = ""
+        if "::columns::" in case["entityLink"]:
+            column = case["entityLink"].split("::columns::", 1)[1].removesuffix(">") + "."
+        expected = f"{table}.{column}{quote(case['name'])}"
+        if answer.get("fullyQualifiedName") != expected:
+            raise CatalogError(f"The server named quality case {expected} {answer.get('fullyQualifiedName')}")
     _publish_marks(plan, call, ids)
     _drop_invented_domain_edges(plan, call)
     for product in plan.get("products") or []:
