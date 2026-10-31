@@ -58,7 +58,9 @@ def blocks(lines: list[str]):
 
 def main() -> None:
     rulings, seen = [], set()
-    for path in sorted((ROOT / ".scratch").rglob("*.md")):
+    # CLAUDE.md holds the standing rulings (approvals recorded as given, the seven wastes, ...);
+    # the sandbox leaves the file out, so its rulings come in here (ticket 32's first run lacked them).
+    for path in [ROOT / "CLAUDE.md", *sorted((ROOT / ".scratch").rglob("*.md"))]:
         # Trial logs and research notes hold answers and findings, not rulings.
         if HERE in path.parents or {"trials", "research"} & set(path.relative_to(ROOT).parts):
             continue
@@ -78,7 +80,8 @@ def main() -> None:
             f.write(json.dumps(ruling, ensure_ascii=False) + "\n")
     by_map = {}
     for ruling in rulings:
-        name = ruling["ticket"].split("/")[1]
+        parts = ruling["ticket"].split("/")
+        name = parts[1] if len(parts) > 1 else parts[0]
         by_map[name] = by_map.get(name, 0) + 1
     print(json.dumps({"rulings": len(rulings), "by_map": dict(sorted(by_map.items()))}, indent=1))
 
