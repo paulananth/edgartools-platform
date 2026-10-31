@@ -28,11 +28,47 @@ or create a business domain for every storage folder. Keep domain-first browsing
 and a separate layer filter even when a destination's native hierarchy differs.
 Do not create a physical asset twice just to place it under two browse headings.
 
+A data product exists only when configuration names the package, its purpose
+and the assets it contains. An owner is a separate fact. Do not invent one.
+
+Fundamental analytics is that package. The rules name three silver tables and
+the measure definitions: one holds every filed figure, one holds the standard
+line items for a fiscal year, and one holds one fundamental measure for a
+subject, a fiscal year and a window. The measure list is that source's
+measures file, version `measures-2026-10-29.first-build`: margins, leverage
+and per-share ratios, returns on the average balance and on the beginning
+balance, and CAGR over 1, 3, 5 and 10 years. It belongs to the subject those
+tables are already members of. It is not a new subject. The local catalog
+already holds those three tables. The rules do not name a native data product,
+and the catalog plan does not emit one. Do not create that native object until
+the rules name it.
+
+The older gold factor chain is a separate earlier factor table. It is not this
+package. Do not publish it as the fundamental analytics package.
+
+These are not that package:
+
+- A subject domain, a processing layer, a table, or a pipeline.
+- A provider publication. A delivery the provider calls a product is a source
+  or a feed.
+- A fund arrangement. A series under a fund registrant is a subject, not a
+  selected set of catalog assets.
+- The Agent Decision Surface, the Decision Graph Bundle, gold, or the Human
+  Audit View. Those are a consumer contract, an analytics layer, and a screen.
+  The Human Audit View is not the primary product surface. A destination enum
+  such as decision support is not a product definition.
+
+Do not create a Consumer-aligned domain to hold a product that has no definition.
+
 Use logical stable keys from owning configuration and separate destination IDs.
 Each association has an explicit type: containment, domain membership, term
 annotation, classification, product membership, data lineage or control link.
 A relationship between mastered records is another relationship type; it is
 not evidence that one dataset was produced from another.
+
+Glossary terms are a projection. The words stay in `CONTEXT.md`. The class
+choice stays in the data-modeling skill. OpenMetadata storage of that
+projection is the openmetadata skill. Do not keep a second copy here.
 
 For semantic enrichment, read the definition, grain, field role, constraints,
 relationships and transformation together. A technical identifier or title case

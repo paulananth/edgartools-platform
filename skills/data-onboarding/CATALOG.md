@@ -43,7 +43,7 @@ name is not semantic enrichment.
 | Object | Completion evidence |
 |---|---|
 | Entity domain | One native domain for every declared entity kind; distinguish definition-only kinds from operationally qualified ones |
-| Business glossary | A glossary for each entity domain, with entity, field, identifier and applicable relationship meanings; shared concepts may be reused |
+| Business glossary | One glossary per entity domain, plus the shared glossary, projected from `CONTEXT.md`. Suggested, not approved. OpenMetadata storage is the openmetadata skill |
 | Business terms | Definitions and asset/column associations derived from the model and contracts; actual review status recorded |
 | Datasets and fields | Clear business names, definitions, grain, provenance, master links and system-of-record boundaries |
 | Pipelines | Every source and standalone target, its purpose, declared tasks, operations and dependencies; definitions do not imply enabled execution |
@@ -51,6 +51,9 @@ name is not semantic enrichment.
 | Data quality | Named native test cases for configured checks, preserving semantics and failure action; corrections and proposals remain distinct |
 | Mapping Documents | All configured sources, kinds, standalone pipelines and pinned relationship definitions; steward Notes preserved |
 | Ownership | Existing authorized business owners where specified; otherwise an explicit unassigned responsibility, never the ingestion bot as a fabricated business owner |
+| Data product | A configured package with a purpose and selected assets. Fundamental analytics is that package: three silver tables of filed figures, line items and measures. Create no native product until the rules name it. The test is in `skills/data-catalog/references/MODEL.md` |
+| Classification | Data class from the data-modeling skill, one processing-layer tag per catalog-plan database, and the built-in certification: Gold on the master store, Silver on the prepared store. A proposed prepared-store table is Silver and has no data class. A source dataset has a layer and no data class |
+| Domain relationship | One pinned relationship type from `mdm-relationship-types`. One asset, not one link per endpoint. A capacity stays on its type. Not a `relatedTo` edge and not a lineage edge. Storage is the openmetadata skill |
 
 Include registered Silver/RDM metadata. Label profiling proposals as proposed;
 never present them as existing registered tables or approved code sets. Do not
@@ -70,10 +73,11 @@ contains pinned types and capacities. Check workbook cells against configuration
 
 **Capability gate:** inspect the actual plan and publisher. If any required
 native object, semantic association or readback is absent, record a demonstrated
-capability gap and route it to implementation. The established technical plan,
-publish and check commands alone do not prove domains, glossaries or native
-quality cases exist. Never invent a CLI command, payload field or completion
-claim to bridge an unsupported capability.
+capability gap and route it to implementation. `rules catalog publish` writes
+the subject domains, the glossaries, and the Gold and Silver certifications.
+It does not write native quality cases, and it does not write a `relatedTo`
+edge. Read those links back. A green publish that omits them is a publisher
+gap, not a finished catalog. OpenMetadata storage is the openmetadata skill.
 
 ## Quality definitions are not execution results
 
@@ -96,26 +100,10 @@ The native API objects are domains, glossaries, glossary terms, quality test
 definitions, logical test suites and test cases. Verify their supported schema
 against the pinned server before implementation; never guess a payload.
 
-## Restore the local catalog
-
-Use the existing Docker context and documented named volumes:
-
-```bash
-docker compose -f infra/openmetadata/docker-compose.yml up -d
-```
-
-Check Docker first. If unreachable, recover through an approved API/CLI lifecycle
-or report the exact blocker; do not launch or operate a GUI. Preserve other users'
-containers and existing volumes. A cold start may take 10–20 minutes. The compose
-file accepts `CATALOG_SERVER_HEAP_OPTS` and `CATALOG_SEARCH_HEAP_OPTS`; size them
-against available memory and running stores.
-
-Verify the running version through the API. Use an existing bot authorized for
-the intended metadata operations; authentication alone does not prove authority.
-Supply `OPENMETADATA_URL` and `OPENMETADATA_TOKEN` privately. Never print them,
-commit them, or broaden permissions to hide a failed authorization check.
-
 ## Test first, reset the approved scope, then deploy
+
+Starting, resetting, and calling the OpenMetadata API are the openmetadata
+skill. Do not copy those steps here.
 
 Before first deployment or a publisher change, qualify the pinned real API using
 invented metadata in a separate task-owned namespace. Test all required object
@@ -132,20 +120,6 @@ When the operator requests a reset, settle the target first. Reset only the
 explicitly authorized metadata and synthetic assets. Preserve accounts, volumes,
 shared stores, captures and business records. Verify the scope is empty before
 deployment and retain a separate reset receipt.
-
-For an authorized whole-service reset, process pipeline services then database
-services using their documented API:
-
-1. `GET /api/v1/services/<type>/name/<exact-owned-name>`; verify both the name
-   and fully qualified name against the approved inventory.
-2. `DELETE /api/v1/services/<type>/<returned-id>?recursive=true&hardDelete=true`.
-3. Repeat the GET and require 404; record removed and remaining counts.
-
-Domains, glossaries, terms and quality objects have independent/global scopes.
-Do not assume service deletion removes them. Track only task-owned objects,
-remove their references in dependency order, and preserve shared governance and
-foreign test cases. Never recursively delete global definitions to bypass a
-foreign dependency. A broad prefix is not proof of reset ownership.
 
 After the implementation PR is merged, publish the selected committed rules:
 

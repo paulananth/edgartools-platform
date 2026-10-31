@@ -39,7 +39,13 @@ check (data-quality), or approve anything.
 Read these before deciding, and use their words:
 
 - `CONTEXT.md`: the glossary (data classes, code set, crosswalk, reference
-  and master data hierarchies, the kinds and their profiles).
+  and master data hierarchies, the kinds and their profiles). The data catalog
+  projects these words and the classes below. It does not decide them, and this
+  skill does not publish the catalog. Projection rules are the data-catalog skill.
+  Gold and Silver certification of a store is that projection, not a class decision.
+  A domain relationship is one type in `mdm-relationship-types`. The catalog
+  keeps that type as one asset. It does not place the type on each endpoint,
+  and it does not turn the type into a `relatedTo` edge.
 - `edgar_warehouse/mdm/clean/evidence.py`: `KINDS` (the master kinds) and
   `PROFILE_KINDS` (a profile and the kinds it may hang on).
 - `rules/merge/kinds/<kind>.yaml`, `identifiers`: the kind's Identifier

@@ -101,6 +101,9 @@ class _Server:
 
     def __call__(self, method, path, body=None, params=None):
         self.calls.append((method, path))
+        if method == "PUT" and path == "/glossaryTerms":
+            return {**body, "id": body["name"],
+                    "fullyQualifiedName": body["glossary"] + "." + catalog.quote(body["name"])}
         if method == "PUT" and path == "/pipelines":
             return {**body, "fullyQualifiedName": catalog.fqn(body["service"], body["name"]), "id": "pipeline-" + body["name"]}
         if method == "PUT" and path == "/tables":
@@ -129,6 +132,23 @@ class _Server:
             return {**body, "id": body["name"], "fullyQualifiedName":
                     parent + "." + catalog.quote(body["name"]) if parent else body["name"]}
         return {"data": []} if method == "GET" else {}
+
+
+def test_the_plan_names_domains_glossaries_and_store_certification():
+    plan = catalog.plan()
+    names = {domain["name"] for domain in plan["domains"]}
+    assert "company" in names and "market_venue" in names and "venue" not in names
+    assert not [item for item in plan["memberships"] if item["table"].startswith("edgartools-rules.mdm.relationships.")]
+    assert not [edge for edge in plan["lineage"] if edge["to"].startswith("edgartools-rules.mdm.relationships.")]
+    assert sum(1 for table in plan["tables"] if table["databaseSchema"].endswith(".relationships")) == 16
+    certified = {item["table"]: item["tag"] for item in plan["certifications"]}
+    assert certified["edgartools-rules.mdm.clean.company"] == "Certification.Gold"
+    assert any(name.startswith("edgartools-rules.silver.") and tag == "Certification.Silver"
+               for name, tag in certified.items())
+    assert not any(name.startswith(("edgartools-rules.sources.", "edgartools-rules.rdm.")) for name in certified)
+    term = next(term for term in plan["glossary_terms"] if term["name"] == "AUDITED_BY")
+    assert term["glossary"] == "shared" and term["table"].endswith("relationships.AUDITED_BY")
+    assert "relatedTo" not in term
 
 
 def test_publish_deletes_only_what_the_rules_no_longer_name():

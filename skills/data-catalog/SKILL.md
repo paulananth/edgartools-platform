@@ -10,6 +10,39 @@ Keep one configuration-derived description of the data; a catalog and a separate
 visualization can project it at the same time. Changing a destination must not
 change the business meaning, processing rules or stable logical identities.
 
+## Know the data, then the catalog
+
+The catalog is a projection of the data. It is not a second model. Read the
+data before changing the catalog, and read the catalog before claiming it
+already holds something.
+
+- `CONTEXT.md` holds the words.
+- [data-modeling](../data-modeling/SKILL.md) decides the class, the kind, the
+  code set, the relationship, and which store each class lives in.
+- The rules catalog plan is the list of assets, fields, lineage, and pipelines
+  that configuration actually emits.
+- The live catalog is what was stored. Read it back. A missing field is not
+  proof a link is absent, and a successful write is not proof the read matches.
+
+Three different facts, kept as different tags:
+
+- A subject domain says what the data is about.
+- A processing layer says which plan database holds it.
+- A certification says how finished that store is. Gold certifies the master
+  store. Silver certifies the prepared store. The reference store and a
+  captured source dataset stay uncertified. Gold is not a layer and not a
+  subject. How a destination stores that certification is in the
+  [openmetadata](../openmetadata/SKILL.md) skill.
+
+A proposed table in the prepared store is still Silver certified and still has
+no data class. Do not invent a class, a domain, or a certification the data
+model does not name.
+
+A domain relationship is one pinned type. Its ends stay on that asset. They
+are not extra links, and a dataset that declares a type is not lineage to that
+type. The [openmetadata](../openmetadata/SKILL.md) skill is the only write of
+this model into OpenMetadata. Do not publish it a second time by hand.
+
 ## Understand the model before publishing
 
 Read [MODEL.md](references/MODEL.md) when organizing domains, layers, glossaries,
@@ -21,21 +54,49 @@ folders. Browse by business domain first; processing layer is a separate filter.
    Each configured entity kind is a business domain, not each individual record.
    Reuse the same method for every source and kind; no entity/provider lists or
    rename dictionaries. Preserve the distinction between defined and qualified.
+   Read the settled domain type in the
+   [openmetadata](../openmetadata/SKILL.md) skill before asking the operator
+   to choose a type again.
 2. Identify the business subject, vocabulary, processing layer, physical location
    and responsible people independently. Use evidence-backed definitions and
    understandable display names. Persist reviewed meaning in its owning
    configuration. Propose uncertain meanings for review; do not invent them.
-   Give each subject domain its glossary; reuse shared concepts where their
-   meanings agree. Missing definitions go to profiling/onboarding; changes to
-   existing definitions go through refining-rules.
+   Project the glossary as this skill describes. The OpenMetadata write is the
+   [openmetadata](../openmetadata/SKILL.md) skill. Create a data product
+   only when [MODEL.md](references/MODEL.md) says a product definition exists.
+   Missing definitions go to profiling or onboarding; changes to existing
+   definitions go through refining-rules.
 3. Select the destinations and versions. Read only the applicable adapter
-   reference: [OPENMETADATA.md](references/OPENMETADATA.md) for OpenMetadata;
-   [PORTABILITY.md](references/PORTABILITY.md) for another catalog or renderer.
+   reference: the [openmetadata](../openmetadata/SKILL.md) skill for
+   OpenMetadata; [PORTABILITY.md](references/PORTABILITY.md) for another
+   catalog or renderer.
    State each capability as tested, documented-only or unsupported.
 4. Map logical objects and relationships to native objects explicitly. Preserve
    ownership, review state, term associations, transformation meaning and quality
    failure actions. A native identifier belongs in the destination mapping,
    not in business identity. Unmapped meaning is a visible gap, not success.
+
+## Use the skill that owns the decision
+
+The catalog projects meaning. It does not author it. Before writing a term, a
+class or a layer tag, read the owner and use its words:
+
+- The words are `CONTEXT.md`. Changing a word is domain modeling.
+- Class, kind, code set and relationship type are
+  [data-modeling](../data-modeling/SKILL.md).
+- A new feed or a new kind is [data-onboarding](../data-onboarding/SKILL.md).
+- A change to a live mapping or a match is
+  [refining-rules](../refining-rules/SKILL.md).
+- A check or a fix is [data-quality](../data-quality/SKILL.md).
+- Filed figures and fundamental measures are the financials skill. An
+  instrument's identifiers and listings are
+  [security-master](../security-master/SKILL.md).
+- How a merge decides is [mdm-engineering](../mdm-engineering/SKILL.md).
+- A load, a recovery or a resource limit is
+  [data-operations](../data-operations/SKILL.md).
+
+Do not copy those skills into this one. A term the owner has not written stays
+unprojected. A class the data-modeling skill does not name stays untagged.
 
 ## Show the flow without operational clutter
 
