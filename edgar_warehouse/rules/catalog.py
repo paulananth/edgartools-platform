@@ -397,6 +397,12 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) 
         if edge["to"] in kind_tables:
             membership[edge["from"]].add(kind_tables[edge["to"]])
     present = {_table_name(table) for table in tables}
+    for table in tables:
+        name = _table_name(table)
+        if table["name"] in {"company_fact", "company_line_item", "company_measure"}:
+            membership[name].add("company")
+        elif table["name"] == "openfigi_listing":
+            membership[name].add("security")
     memberships = [{"table": name, "domains": sorted(domains_)} for name, domains_ in sorted(membership.items()) if name in present and domains_]
     certifications = []
     for table in tables:
@@ -425,10 +431,30 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) 
         description = row["code"] + ": " + (row.get("definition") or row["label"])
         for domain in ends:
             domain_lineage.append({"domain": domain, "table": table, "description": description})
+    def subject_assets(domain: str) -> list[str]:
+        prefix = fqn(SERVICE, MDM, CLEAN, domain)
+        return sorted(name for name, domains_ in membership.items()
+                      if domain in domains_ and (name == prefix or f".{SOURCES}." in name) and name in present)
+    facts = sorted(name for name in membership if name.endswith(("company_fact", "company_line_item", "company_measure")) and "company" in membership[name])
+    listing = sorted(name for name in membership if name.endswith("openfigi_listing") and "security" in membership[name])
+    products = [
+        {"name": "company_master", "displayName": "Company master", "domains": ["company"],
+         "dataProductType": "DATASET",
+         "description": "The mastered legal entity and the datasets that fill it.",
+         "tables": subject_assets("company")},
+        {"name": "security_master", "displayName": "Security master", "domains": ["security"],
+         "dataProductType": "DATASET",
+         "description": "The mastered instrument, the datasets that fill it, and its registered listing.",
+         "tables": sorted(set(subject_assets("security")) | set(listing))},
+        {"name": "company_fundamentals", "displayName": "Company fundamentals", "domains": ["company"],
+         "dataProductType": "DERIVED_DATA",
+         "description": "Filed figures, standard line items, and fundamental measures for one subject.",
+         "tables": facts},
+    ]
     return {"domains": domains, "glossaries": glossaries,
             "glossary_terms": [by_term[name] for name in sorted(by_term)],
             "memberships": memberships, "certifications": certifications,
-            "domain_lineage": domain_lineage}
+            "domain_lineage": domain_lineage, "products": products}
 
 
 def plan(root: Path | None = None) -> dict:
@@ -708,6 +734,15 @@ def publish(plan: dict, call: Call) -> dict:
         ids[name] = answer["id"]
     _publish_marks(plan, call, ids)
     _drop_invented_domain_edges(plan, call)
+    for product in plan.get("products") or []:
+        answer = call("PUT", "/dataProducts", {key: product[key] for key in
+                      ("name", "displayName", "description", "domains", "dataProductType")}) or {}
+        if answer.get("fullyQualifiedName") not in (None, product["name"]):
+            raise CatalogError(f"The server named data product {product['name']} {answer.get('fullyQualifiedName')}")
+        assets = [{"id": ids[table], "type": "table"} for table in product["tables"] if table in ids]
+        if assets:
+            call("PUT", f"/dataProducts/{escape(product['name'], safe='')}/assets/add",
+                 {"assets": assets, "dryRun": False})
     for edge in plan.get("domain_lineage") or []:
         call("PUT", "/lineage/domain/name/" + escape(edge["domain"], safe="")
              + "/table/name/" + escape(edge["table"], safe=""),
