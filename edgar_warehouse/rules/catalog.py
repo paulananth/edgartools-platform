@@ -25,8 +25,9 @@ The catalog is one OpenMetadata database service, `edgartools-rules`:
   uses it;
 - one subject domain per mastered kind and per relationship endpoint, the
   glossaries for those domains, and Gold on the master store and Silver on
-  the prepared store. A relationship type is that asset on its endpoint
-  domains. A mention is not a relation.
+  the prepared store. A relationship type is one asset. The glossary
+  Relations Graph is the identity term of the from end linked to that type
+  term. A mention in a definition is not a relation.
 
 `plan` is pure: the rules in, the catalog as data out. `publish` sends it.
 """
@@ -122,23 +123,17 @@ def _dataset(source: str, code: str, contract: dict, kinds: list[str], fills: di
     for path in classified:
         uses[path].append("Read by the classification rule")
     critical = [f"`{field}`: {test}" for _, field, test in critical_elements(contract.get("quality") or {})]
-    about = [f"Dataset Contract `{code}` from {contract.get('provider') or source}.",
-             f"One record is: {contract.get('record_key') or 'not stated'}."]
+    record = contract.get("record_key") or "one source record"
+    subjects = " and ".join(_display(kind) for kind in kinds) or "no mastered subject"
+    about = [f"One record is {record}.", f"These records become {subjects}."]
     for kind in kinds:
         filled = sorted(fills.get(kind, set()) & set(to_field))
-        about.append(f"Its records become {kind}; " + (f"it fills {len(filled)} {kind} fields." if filled
-                                                       else f"it fills no {kind} field."))
+        label = _display(kind)
+        about.append(f"It supplies {len(filled)} {label} fields." if filled else f"It supplies no {label} fields.")
     if critical:
-        about.append("Critical data elements (a record missing one is an exception, never merged): "
-                     + "; ".join(critical) + ".")
-    for section in ("checks", "fixes"):
-        for rule in (contract.get("quality") or {}).get(section) or []:
-            about.append(f"Data quality {section}: `{rule.get('id')}` "
-                         + json.dumps(rule, sort_keys=True, ensure_ascii=False) + ".")
-    if adapter.get("relationships"):
-        about.append("Declared relationship mappings: "
-                     + json.dumps(adapter["relationships"], sort_keys=True, ensure_ascii=False) + ".")
-    table = {"name": code, "databaseSchema": fqn(SERVICE, SOURCES, source), "description": " ".join(about),
+        about.append("A record missing a required item is held back and is not merged.")
+    table = {"name": code, "displayName": _sentence(f"One record is {record}", 80),
+             "databaseSchema": fqn(SERVICE, SOURCES, source), "description": " ".join(about),
              "columns": [{"name": path, "dataType": TEXT, "description": "; ".join(used) + "."}
                          for path, used in sorted(uses.items())]}
     at = fqn(SERVICE, SOURCES, source, code)
@@ -213,8 +208,10 @@ def _registered(source: str, spec: dict) -> dict:
     about = [spec.get("definition") or "", f"Grain: {spec['grain']}." if spec.get("grain") else "",
              f"Key: {', '.join(spec['key'])}; load mode {spec['load_mode']}."]
     about += [f"Data quality: {c}." for c in checks.get(None, [])]
-    return {"name": spec["table"], "databaseSchema": fqn(SERVICE, SILVER, source),
-            "description": " ".join(a for a in about if a), "columns": columns}
+    description = " ".join(a for a in about if a)
+    return {"name": spec["table"], "displayName": _sentence(spec.get("definition") or spec["table"], 80),
+            "databaseSchema": fqn(SERVICE, SILVER, source),
+            "description": description, "columns": columns}
 
 
 def _profiles(root: Path) -> tuple[list[dict], list[dict], list[dict]]:
@@ -290,6 +287,29 @@ def _pipelines(root: Path) -> list[dict]:
     return result
 
 
+def _service_lineage(pipelines: list[dict], tables: list[dict]) -> list[dict]:
+    """The Lineage page draws a line only between services. Dataset edges stay
+    inside one database service, so that page stays blank until a pipeline
+    points at a table."""
+    by_source: dict[str, list[str]] = defaultdict(list)
+    for table in tables:
+        schema = table["databaseSchema"]
+        if ".sources." not in schema:
+            continue
+        source = schema.split(".sources.", 1)[1].strip('"')
+        by_source[source].append(_table_name(table))
+    edges = []
+    for pipeline in pipelines:
+        scope, _, rest = pipeline["name"].partition(":")
+        source, _, target = rest.partition(":")
+        if scope != "source" or not by_source.get(source):
+            continue
+        for table in by_source[source]:
+            edges.append({"pipeline": fqn(PIPELINES_SERVICE, pipeline["name"]), "table": table,
+                          "description": f"The {target} pipeline of {source} reads or writes this dataset."})
+    return edges
+
+
 def _relationships(root: Path, policy: dict) -> tuple[list[dict], list[dict]]:
     """Pinned type definitions and the declared datasets that supply them."""
     from .mapdoc import relationship_rows
@@ -300,10 +320,17 @@ def _relationships(root: Path, policy: dict) -> tuple[list[dict], list[dict]]:
         props = row.get("properties") or {}
         capacities = [{"code": r["code"], "label": r["label"], "properties": r.get("properties") or {}}
                       for r in rows if r.get("parent_code") == name]
-        tables.append({"name": name, "databaseSchema": fqn(SERVICE, MDM, "relationships"),
-                       "description": f"Configured relationship type: {row.get('definition') or row['label']}. "
-                                      f"From: {props.get('from') or []}. To: {props.get('to') or []}. "
-                                      f"Capacities: {capacities}. Definition metadata, not relationship records.",
+        origin = ", ".join(_display(ENDPOINT_CATALOG_NAME.get(code, code)) for code in (props.get("from") or []))
+        destination = ", ".join(_display(ENDPOINT_CATALOG_NAME.get(code, code)) for code in (props.get("to") or []))
+        roles = ", ".join(item["label"] for item in capacities if item.get("label"))
+        text = row.get("definition") or row["label"]
+        if origin or destination:
+            text += f" From {origin or 'one subject'} to {destination or 'one subject'}."
+        if roles:
+            text += f" Roles: {roles}."
+        tables.append({"name": name, "displayName": row.get("label") or _display(name),
+                       "databaseSchema": fqn(SERVICE, MDM, "relationships"),
+                       "description": text,
                        "columns": [{"name": key, "dataType": TEXT,
                                     "description": json.dumps(value, ensure_ascii=False, sort_keys=True)}
                                    for key, value in sorted(props.items())]})
@@ -311,7 +338,15 @@ def _relationships(root: Path, policy: dict) -> tuple[list[dict], list[dict]]:
 
 
 def _display(name: str) -> str:
-    return " ".join(part.capitalize() for part in name.split("_"))
+    return " ".join(part.capitalize() for part in name.replace("-", " ").split("_"))
+
+
+def _sentence(text: str, limit: int = 220) -> str:
+    plain = " ".join(str(text).replace("`", "").split())
+    sentence = plain.split(". ")[0].strip(" .")
+    if len(sentence) > limit:
+        sentence = sentence[: limit - 1].rstrip() + "…"
+    return sentence
 
 
 def _table_name(table: dict) -> str:
@@ -365,13 +400,17 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) 
             ends.add(ENDPOINT_CATALOG_NAME.get(code, code))
     names = sorted(kinds | ends)
     kind_tables = {fqn(SERVICE, MDM, CLEAN, kind): kind for kind in kinds}
+    words = {heading: _sentence(description.split("Avoid:")[0], 240)
+             for heading, description in _context_terms(root)}
     domains = []
     for name in names:
-        if name in kind_tables.values():
-            description = f"The mastered kind `{name}`. Rules: rules/merge/kinds/{name}.yaml."
-        else:
-            description = f"A relationship endpoint `{name}` with no kind file."
-        domains.append({"name": name, "displayName": _display(name), "description": description,
+        display = _display(name)
+        description = words.get(f"{display} Identity") or words.get(display)
+        if not description and name in kinds:
+            description = f"One {display} in the master data."
+        if not description:
+            description = f"A {display} that a relationship can point to."
+        domains.append({"name": name, "displayName": display, "description": description,
                         "domainType": "Source-aligned"})
     by_display = sorted(domains, key=lambda domain: len(domain["displayName"]), reverse=True)
 
@@ -397,6 +436,12 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) 
         if edge["to"] in kind_tables:
             membership[edge["from"]].add(kind_tables[edge["to"]])
     present = {_table_name(table) for table in tables}
+    for table in tables:
+        name = _table_name(table)
+        if table["name"] in {"company_fact", "company_line_item", "company_measure"}:
+            membership[name].add("company")
+        elif table["name"] == "openfigi_listing":
+            membership[name].add("security")
     memberships = [{"table": name, "domains": sorted(domains_)} for name, domains_ in sorted(membership.items()) if name in present and domains_]
     certifications = []
     for table in tables:
@@ -412,9 +457,160 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) 
     glossaries.append({"name": "shared", "displayName": "Shared", "description":
                        "Words that apply to more than one subject, or to mastering and reference data, "
                        "taken from the platform glossary. A projection. Not an approval."})
+    domain_lineage = []
+    known = set(names)
+    for row in roots:
+        props = row.get("properties") or {}
+        ends = []
+        for code in (props.get("from") or []) + (props.get("to") or []):
+            domain = ENDPOINT_CATALOG_NAME.get(code, code)
+            if domain in known and domain not in ends:
+                ends.append(domain)
+        table = fqn(SERVICE, MDM, "relationships", row["code"])
+        description = row["code"] + ": " + (row.get("definition") or row["label"])
+        for domain in ends:
+            domain_lineage.append({"domain": domain, "table": table, "description": description})
+    identity_of = {}
+    by_glossary: dict[str, list[dict]] = defaultdict(list)
+    for term in by_term.values():
+        by_glossary[term["glossary"]].append(term)
+    for domain in domains:
+        display = domain["displayName"]
+        in_glossary = by_glossary.get(domain["name"]) or []
+        chosen = next((term for name in (f"{display} Identity", display)
+                       for term in in_glossary if term["name"] == name), None)
+        if chosen is None and len(in_glossary) == 1:
+            chosen = in_glossary[0]
+        if chosen is not None:
+            identity_of[domain["name"]] = f"{chosen['glossary']}.{quote(chosen['name'])}"
+    glossary_relations = []
+    seen_relations = set()
+
+    def add_relation(identity: str | None, type_term: str) -> None:
+        if not identity or identity == type_term:
+            return
+        key = (identity, type_term)
+        if key in seen_relations:
+            return
+        seen_relations.add(key)
+        glossary_relations.append(
+            {"from": identity, "to": type_term, "relationType": "relatedTo"})
+
+    for row in roots:
+        type_term = f"shared.{quote(row['code'])}"
+        props = row.get("properties") or {}
+        for code in props.get("from") or []:
+            domain = ENDPOINT_CATALOG_NAME.get(code, code)
+            add_relation(identity_of.get(domain), type_term)
+    holdings = by_term.get("Holdings")
+    if holdings is not None:
+        add_relation(identity_of.get("security"), f"{holdings['glossary']}.{quote(holdings['name'])}")
+    def subject_assets(domain: str) -> list[str]:
+        prefix = fqn(SERVICE, MDM, CLEAN, domain)
+        return sorted(name for name, domains_ in membership.items()
+                      if domain in domains_ and (name == prefix or f".{SOURCES}." in name) and name in present)
+    facts = sorted(name for name in membership if name.endswith(("company_fact", "company_line_item", "company_measure")) and "company" in membership[name])
+    listing = sorted(name for name in membership if name.endswith("openfigi_listing") and "security" in membership[name])
+    company_assets = subject_assets("company")
+    security_assets = sorted(set(subject_assets("security")) | set(listing))
+    products = [
+        {"name": "company_master", "displayName": "Company master", "domains": ["company"],
+         "dataProductType": "DATASET",
+         "description": "The mastered legal entity and the datasets that fill it.",
+         "tables": company_assets,
+         "inputs": [name for name in company_assets if f".{SOURCES}." in name]},
+        {"name": "security_master", "displayName": "Security master", "domains": ["security"],
+         "dataProductType": "DATASET",
+         "description": "The mastered instrument, the datasets that fill it, and its registered listing.",
+         "tables": security_assets,
+         "inputs": [name for name in security_assets if f".{SOURCES}." in name]},
+        {"name": "company_fundamentals", "displayName": "Company fundamentals", "domains": ["company"],
+         "dataProductType": "DERIVED_DATA",
+         "description": "Filed figures, standard line items, and fundamental measures for one subject.",
+         "tables": facts,
+         "inputs": [name for name in facts if name.endswith(("company_fact", "company_line_item"))]},
+    ]
     return {"domains": domains, "glossaries": glossaries,
             "glossary_terms": [by_term[name] for name in sorted(by_term)],
-            "memberships": memberships, "certifications": certifications}
+            "memberships": memberships, "certifications": certifications,
+            "domain_lineage": domain_lineage, "glossary_relations": glossary_relations,
+            "products": products}
+
+
+def _rule_text(kind: str, rule: dict, version: str, path: str) -> str:
+    parts = ["Correction, not a check. It changes a value. It is not a test result."
+             if kind == "fix" else
+             "Configured check. The catalog stores the definition only. It does not record a pass or a fail."]
+    parts.append(f"Id `{rule.get('id')}`.")
+    if rule.get("test"):
+        parts.append(f"Test `{rule['test']}`.")
+    if rule.get("check"):
+        parts.append(f"Check `{rule['check']}`.")
+    if rule.get("value"):
+        parts.append(f"Value `{rule['value']}`.")
+    if rule.get("column"):
+        parts.append(f"Column `{rule['column']}`.")
+    if rule.get("on_fail"):
+        parts.append(f"On fail: {rule['on_fail']}.")
+    if rule.get("why"):
+        parts.append(str(rule["why"]))
+    if rule.get("args"):
+        parts.append("Arguments: " + json.dumps(rule["args"], sort_keys=True, ensure_ascii=False))
+    if version:
+        parts.append(f"Rules version `{version}`.")
+    parts.append(f"Rules file `{path}`.")
+    return " ".join(parts)
+
+
+def _quality_case(table: str, columns: set[str], code: str, kind: str, rule: dict, version: str, path: str) -> dict:
+    column = rule.get("column")
+    if column in columns:
+        link = f"<#E::table::{table}::columns::{column}>"
+        definition = "edgartools-configured-column-check"
+    else:
+        link = f"<#E::table::{table}>"
+        definition = "edgartools-configured-table-check"
+    return {"name": f"{code}.{rule['id']}", "displayName": rule["id"], "description": _rule_text(kind, rule, version, path),
+            "testDefinition": definition, "entityLink": link, "kind": kind}
+
+
+def _quality(root: Path, tables: list[dict]) -> dict:
+    """Configured checks and fixes. A profile proposal is not a case, and a
+    case has no pass or fail result."""
+    by_name = {_table_name(table): table for table in tables}
+    cases = []
+    for path in sorted((root / "sources").glob("*/source.yaml")):
+        body = files.load_source(path)
+        source = body.get("source") or path.parent.name
+        for code, entry in sorted((body.get("mdm") or {}).items()):
+            quality = ((entry.get("contract") or {}).get("quality") or {})
+            table_name = fqn(SERVICE, SOURCES, source, code)
+            table = by_name.get(table_name)
+            if not table or not quality:
+                continue
+            columns = {column["name"] for column in table["columns"]}
+            version, rules_path = quality.get("version") or "", path.parent.joinpath("quality.yaml").relative_to(root).as_posix()
+            for kind, key in (("check", "checks"), ("fix", "fixes")):
+                for rule in quality.get(key) or []:
+                    cases.append(_quality_case(table_name, columns, code, kind, rule, version, rules_path))
+    for path in sorted((root / "sources").glob("*/silver-*.yaml")):
+        spec = files.load(path)
+        table_name = fqn(SERVICE, SILVER, path.parent.name, spec["table"])
+        table = by_name.get(table_name)
+        if not table:
+            continue
+        columns = {column["name"] for column in table["columns"]}
+        rules_path = path.relative_to(root).as_posix()
+        for rule in spec.get("checks") or []:
+            cases.append(_quality_case(table_name, columns, spec["table"], "check", rule, "", rules_path))
+    definitions = [
+        {"name": "edgartools-configured-table-check", "displayName": "Configured table check",
+         "description": "A check or a correction from the rules. OpenMetadata does not execute it.",
+         "entityType": "TABLE", "testPlatforms": ["Other"]},
+        {"name": "edgartools-configured-column-check", "displayName": "Configured column check",
+         "description": "A check on one column from the rules. OpenMetadata does not execute it.",
+         "entityType": "COLUMN", "testPlatforms": ["Other"]}]
+    return {"quality_definitions": definitions, "quality_cases": cases}
 
 
 def plan(root: Path | None = None) -> dict:
@@ -479,14 +675,14 @@ def plan(root: Path | None = None) -> dict:
         columns = []
         for field, (sources, row) in sorted(by_kind.get(kind, {}).items()):
             _, _, which, at = row
-            filled = ", then ".join(f"`{s}`" for s in sources) or "no dataset yet"
+            filled = ", then ".join(s for s in sources) or "no dataset yet"
             columns.append({"name": field, "dataType": TEXT, "description":
                             f"Filled by {filled}: the first with a value wins. "
                             f"Rule: {which} (rules/{at})."})
-        tables.append({"name": kind, "databaseSchema": fqn(SERVICE, MDM, CLEAN), "columns": columns,
-                       "description": f"The MDM kind `{kind}`, rules version `{rules.get('version')}`. "
-                                      "Preferred datasets, in order: " + ", ".join(f"`{s}`" for s in order)
-                                      + f". Rules: rules/merge/kinds/{kind}.yaml."})
+        tables.append({"name": kind, "displayName": _display(kind),
+                       "databaseSchema": fqn(SERVICE, MDM, CLEAN), "columns": columns,
+                       "description": f"One {_display(kind)} in the master data. "
+                                      "The first dataset with a value fills each field."})
     return {
         "service": {"name": SERVICE, "serviceType": "CustomDatabase",
                     "description": "The Data Catalog, published one way from the rules; change the rules, "
@@ -511,7 +707,9 @@ def plan(root: Path | None = None) -> dict:
                              "description": f"Configured pipeline definitions; rules digest `{rules_digest(root)}`. "
                                             "This catalog does not enable schedules or run workloads."},
         "pipelines": _pipelines(root),
+        "service_lineage": _service_lineage(_pipelines(root), tables),
         **_meaning(root, policy, tables, lineage),
+        **_quality(root, tables),
     }
 
 
@@ -628,8 +826,52 @@ def _publish_vocabulary(plan: dict, call: Call) -> None:
         if answer.get("fullyQualifiedName") != expected:
             raise CatalogError(f"The server named glossary term {expected} {answer.get('fullyQualifiedName')}")
         term["fullyQualifiedName"] = expected
+        if answer.get("id"):
+            term["id"] = answer["id"]
     if any(len(item["domains"]) > 1 for item in plan.get("memberships") or []):
         _allow_several_domains(call)
+    _publish_glossary_relations(plan, call)
+
+
+def _term_id(call: Call, fqn_name: str, known: dict[str, str]) -> str | None:
+    if fqn_name in known:
+        return known[fqn_name]
+    answer = call("GET", "/glossaryTerms/name/" + escape(fqn_name, safe=".")) or {}
+    found = answer.get("id")
+    if found:
+        known[fqn_name] = found
+    return found
+
+
+def _publish_glossary_relations(plan: dict, call: Call) -> None:
+    """The glossary Relations Graph is identity-term to type-term. The server
+    accepts only its own relation types; the type itself is the node."""
+    known = {term["fullyQualifiedName"]: term["id"]
+             for term in plan.get("glossary_terms") or []
+             if term.get("fullyQualifiedName") and term.get("id")}
+    planned: dict[str, set[str]] = defaultdict(set)
+    for edge in plan.get("glossary_relations") or []:
+        planned[edge["from"]].add(edge["to"])
+        from_id = _term_id(call, edge["from"], known)
+        to_id = _term_id(call, edge["to"], known)
+        if not from_id or not to_id:
+            raise CatalogError(f"The server has no glossary terms {edge['from']} {edge['to']}")
+        call("POST", f"/glossaryTerms/{from_id}/relations",
+             {"relationType": edge["relationType"], "term": {"id": to_id, "type": "glossaryTerm"}})
+    for identity, wanted in planned.items():
+        from_id = _term_id(call, identity, known)
+        if not from_id:
+            continue
+        body = call("GET", f"/glossaryTerms/{from_id}", params={"fields": "relatedTerms"}) or {}
+        for item in body.get("relatedTerms") or []:
+            if item.get("relationType") != "relatedTo":
+                continue
+            other = (item.get("term") or {})
+            other_fqn = other.get("fullyQualifiedName")
+            other_id = other.get("id")
+            if other_fqn not in wanted and other_id:
+                call("DELETE", f"/glossaryTerms/{from_id}/relations/{other_id}",
+                     params={"relationType": "relatedTo"})
 
 
 def _drop_invented_domain_edges(plan: dict, call: Call) -> None:
@@ -692,8 +934,37 @@ def publish(plan: dict, call: Call) -> dict:
         if answer["fullyQualifiedName"] != name:  # lineage names columns by this name
             raise CatalogError(f"The server named table {name} {answer['fullyQualifiedName']}")
         ids[name] = answer["id"]
+    for definition in plan.get("quality_definitions") or []:
+        _upsert(call, "/dataQuality/testDefinitions", definition)
+    for case in plan.get("quality_cases") or []:
+        body = {key: case[key] for key in ("name", "displayName", "description", "testDefinition", "entityLink")}
+        answer = call("PUT", "/dataQuality/testCases", body) or {}
+        table = case["entityLink"].removeprefix("<#E::table::").split("::columns::")[0].removesuffix(">")
+        column = ""
+        if "::columns::" in case["entityLink"]:
+            column = case["entityLink"].split("::columns::", 1)[1].removesuffix(">") + "."
+        expected = f"{table}.{column}{quote(case['name'])}"
+        if answer.get("fullyQualifiedName") != expected:
+            raise CatalogError(f"The server named quality case {expected} {answer.get('fullyQualifiedName')}")
     _publish_marks(plan, call, ids)
     _drop_invented_domain_edges(plan, call)
+    for product in plan.get("products") or []:
+        answer = call("PUT", "/dataProducts", {key: product[key] for key in
+                      ("name", "displayName", "description", "domains", "dataProductType")}) or {}
+        if answer.get("fullyQualifiedName") not in (None, product["name"]):
+            raise CatalogError(f"The server named data product {product['name']} {answer.get('fullyQualifiedName')}")
+        assets = [{"id": ids[table], "type": "table"} for table in product["tables"] if table in ids]
+        if assets:
+            call("PUT", f"/dataProducts/{escape(product['name'], safe='')}/assets/add",
+                 {"assets": assets, "dryRun": False})
+        inputs = [{"id": ids[table], "type": "table"} for table in product.get("inputs") or [] if table in ids]
+        if inputs:
+            call("PUT", f"/dataProducts/{escape(product['name'], safe='')}/inputPorts/add",
+                 {"assets": inputs, "dryRun": False})
+    for edge in plan.get("domain_lineage") or []:
+        call("PUT", "/lineage/domain/name/" + escape(edge["domain"], safe="")
+             + "/table/name/" + escape(edge["table"], safe=""),
+             {"description": edge["description"], "source": "Manual"})
     pipeline_ids = {}
     if plan.get("pipeline_service"):
         _upsert(call, "/services/pipelineServices", plan["pipeline_service"])
@@ -703,6 +974,10 @@ def publish(plan: dict, call: Call) -> dict:
             if answer["fullyQualifiedName"] != name:
                 raise CatalogError(f"The server named pipeline {name} {answer['fullyQualifiedName']}")
             pipeline_ids[name] = answer["id"]
+    for edge in plan.get("service_lineage") or []:
+        call("PUT", "/lineage/pipeline/name/" + escape(edge["pipeline"], safe="")
+             + "/table/name/" + escape(edge["table"], safe=""),
+             {"description": edge["description"], "source": "PipelineLineage"})
     service = plan["service"]["name"]
     removed = {"tables": 0, "schemas": 0, "databases": 0, "lineage": 0}
     for table in _listed(call, "/tables", {"service": service}, service):

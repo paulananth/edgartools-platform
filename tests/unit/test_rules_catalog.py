@@ -30,12 +30,12 @@ def test_every_source_feed_dataset_and_mdm_field_is_in_the_catalog():
     company = tables["edgartools-rules.mdm.clean.company"]
     assert {"name", "address", "jurisdiction", "state_of_incorporation"} <= {c["name"] for c in company["columns"]}
     name = next(c for c in company["columns"] if c["name"] == "name")
-    assert ("`sec.submissions.company.v1`, then `gleif.level1.v1`, then `iapd.adv.filings.v1`, then "
-            "`iapd.adv.custodians.v1`, then `sec.nport.registrant.v1`: the first with a value wins") in name["description"]
+    assert ("sec.submissions.company.v1, then gleif.level1.v1, then iapd.adv.filings.v1, then "
+            "iapd.adv.custodians.v1, then sec.nport.registrant.v1: the first with a value wins") in name["description"]
     relationships = tables['edgartools-rules.sources.gleif."gleif.relationships.v1"']
-    assert "it fills no company field" in relationships["description"]
+    assert "It supplies no Company fields." in relationships["description"]
     assert "Read by the classification rule" in next(c for c in sec["columns"] if c["name"] == "sic")["description"]
-    assert "Critical data elements" in sec["description"]
+    assert "held back and is not merged" in sec["description"]
 
 
 def test_lineage_runs_column_by_column_and_leaves_matching_out():
@@ -101,6 +101,11 @@ class _Server:
 
     def __call__(self, method, path, body=None, params=None):
         self.calls.append((method, path))
+        if method == "PUT" and path == "/dataQuality/testCases":
+            link = body.get("entityLink") or ""
+            table = link.removeprefix("<#E::table::").split("::columns::")[0].removesuffix(">")
+            column = link.split("::columns::", 1)[1].removesuffix(">") + "." if "::columns::" in link else ""
+            return {**body, "id": body["name"], "fullyQualifiedName": f"{table}.{column}{catalog.quote(body['name'])}"}
         if method == "PUT" and path == "/glossaryTerms":
             return {**body, "id": body["name"],
                     "fullyQualifiedName": body["glossary"] + "." + catalog.quote(body["name"])}
@@ -140,6 +145,27 @@ def test_the_plan_names_domains_glossaries_and_store_certification():
     assert "company" in names and "market_venue" in names and "venue" not in names
     assert not [item for item in plan["memberships"] if item["table"].startswith("edgartools-rules.mdm.relationships.")]
     assert not [edge for edge in plan["lineage"] if edge["to"].startswith("edgartools-rules.mdm.relationships.")]
+    issued = [edge for edge in plan["domain_lineage"] if edge["table"].endswith(".ISSUED_BY")]
+    assert {edge["domain"] for edge in issued} >= {"security", "company"}
+    assert all(edge["domain"] != edge["table"] for edge in plan["domain_lineage"])
+    products = {product["name"]: product for product in plan["products"]}
+    assert set(products) == {"company_master", "security_master", "company_fundamentals"}
+    assert products["company_master"]["domains"] == ["company"]
+    assert products["security_master"]["domains"] == ["security"]
+    assert products["company_fundamentals"]["domains"] == ["company"]
+    assert any(name.endswith("company_measure") for name in products["company_fundamentals"]["tables"])
+    assert {name.rsplit(".", 1)[-1] for name in products["company_fundamentals"]["inputs"]} == {
+        "company_fact", "company_line_item"}
+    assert all(f".{catalog.SOURCES}." in name for name in products["company_master"]["inputs"])
+    assert all(f".{catalog.SOURCES}." in name for name in products["security_master"]["inputs"])
+    gleif = [edge for edge in plan["service_lineage"] if edge["pipeline"].endswith("source:gleif:mastering")]
+    assert gleif and all("sources.gleif" in edge["table"] for edge in gleif)
+    cases = {case["name"]: case for case in plan["quality_cases"]}
+    assert "sec.submissions.company.v1.name_present" in cases
+    assert cases["sec.submissions.company.v1.dc_state_is_empty"]["description"].startswith("Correction")
+    assert cases["openfigi_listing.figi_valid"]["testDefinition"] == "edgartools-configured-column-check"
+    assert all("testCaseResult" not in case for case in plan["quality_cases"])
+    assert any(name.endswith("mdm.clean.security") for name in products["security_master"]["tables"])
     assert sum(1 for table in plan["tables"] if table["databaseSchema"].endswith(".relationships")) == 16
     certified = {item["table"]: item["tag"] for item in plan["certifications"]}
     assert certified["edgartools-rules.mdm.clean.company"] == "Certification.Gold"
@@ -149,6 +175,17 @@ def test_the_plan_names_domains_glossaries_and_store_certification():
     term = next(term for term in plan["glossary_terms"] if term["name"] == "AUDITED_BY")
     assert term["glossary"] == "shared" and term["table"].endswith("relationships.AUDITED_BY")
     assert "relatedTo" not in term
+    company_graph = {edge["to"] for edge in plan["glossary_relations"]
+                     if edge["from"] == "company.Company Identity"}
+    assert company_graph >= {"shared.AUDITED_BY", "shared.IS_SUBSIDIARY_OF"}
+    assert "shared.ISSUED_BY" not in company_graph
+    assert "shared.IS_SEGMENT_OF_EXCHANGE" not in company_graph
+    assert "shared.EMPLOYED_BY" not in company_graph
+    assert all(edge["relationType"] == "relatedTo" for edge in plan["glossary_relations"])
+    assert len(company_graph) == 11
+    security_graph = {edge["to"] for edge in plan["glossary_relations"]
+                      if edge["from"] == "security.Security Identity"}
+    assert security_graph == {"shared.ISSUED_BY", "shared.Holdings"}
 
 
 def test_publish_deletes_only_what_the_rules_no_longer_name():
@@ -161,6 +198,9 @@ def test_publish_deletes_only_what_the_rules_no_longer_name():
     assert deletes == ["/tables/id-old", "/databaseSchemas/id-gone", f"/lineage/table/{feed}/table/{company}"]
     assert result["removed"] == {"tables": 1, "schemas": 1, "databases": 0, "lineage": 1}
     assert sum(1 for method, path in server.calls if (method, path) == ("PUT", "/lineage")) == len(plan["lineage"])
+    posts = [path for method, path in server.calls if method == "POST" and path.endswith("/relations")]
+    assert any(path.startswith("/glossaryTerms/Company Identity/") for path in posts)
+    assert len(posts) == len(plan["glossary_relations"])
 
 
 def test_publish_stops_when_the_server_names_a_table_otherwise():

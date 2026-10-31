@@ -51,9 +51,9 @@ name is not semantic enrichment.
 | Data quality | Named native test cases for configured checks, preserving semantics and failure action; corrections and proposals remain distinct |
 | Mapping Documents | All configured sources, kinds, standalone pipelines and pinned relationship definitions; steward Notes preserved |
 | Ownership | Existing authorized business owners where specified; otherwise an explicit unassigned responsibility, never the ingestion bot as a fabricated business owner |
-| Data product | A configured package with a purpose and selected assets. Fundamental analytics is that package: three silver tables of filed figures, line items and measures. Create no native product until the rules name it. The test is in `skills/data-catalog/references/MODEL.md` |
+| Data product | Three named packages: the mastered legal entity, the mastered instrument, and fundamental measures. Each takes that subject's domain. The test is in `skills/data-catalog/references/MODEL.md` |
 | Classification | Data class from the data-modeling skill, one processing-layer tag per catalog-plan database, and the built-in certification: Gold on the master store, Silver on the prepared store. A proposed prepared-store table is Silver and has no data class. A source dataset has a layer and no data class |
-| Domain relationship | One pinned relationship type from `mdm-relationship-types`. One asset, not one link per endpoint. A capacity stays on its type. Not a `relatedTo` edge and not a lineage edge. Storage is the openmetadata skill |
+| Domain relationship | One pinned relationship type from `mdm-relationship-types`. One asset, not one link per endpoint. A capacity stays on its type. Not a lineage edge. The glossary Relations Graph is identity-term to type-term `relatedTo`. Storage is the openmetadata skill |
 
 Include registered Silver/RDM metadata. Label profiling proposals as proposed;
 never present them as existing registered tables or approved code sets. Do not
@@ -75,9 +75,14 @@ contains pinned types and capacities. Check workbook cells against configuration
 native object, semantic association or readback is absent, record a demonstrated
 capability gap and route it to implementation. `rules catalog publish` writes
 the subject domains, the glossaries, and the Gold and Silver certifications.
-It does not write native quality cases, and it does not write a `relatedTo`
-edge. Read those links back. A green publish that omits them is a publisher
-gap, not a finished catalog. OpenMetadata storage is the openmetadata skill.
+It writes native quality cases for configured checks and corrections for
+configured fixes. It does not write a profile proposal as a case. It writes
+a `relatedTo` edge from the identity term of each type's `from` end to
+that type, so the glossary Relations Graph shows the types without walking
+every other subject's types through a shared type node. It does
+not write `relatedTo` from a definition mention. Read those links back. A
+green publish that omits them is a publisher gap, not a finished catalog.
+OpenMetadata storage is the openmetadata skill.
 
 ## Quality definitions are not execution results
 

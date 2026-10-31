@@ -10,6 +10,18 @@ subject domains, the glossary words, and what a relationship type is stay in
 the data-catalog skill. This skill says how that meaning is stored on
 OpenMetadata 2.0.2, and `rules catalog publish` is the only write.
 
+The page at `/lineage` is the service view. It draws a line only when lineage
+crosses from one service to another. Edges between tables in the same database
+service do not appear there. `rules catalog publish` also writes a pipeline-to-dataset
+edge for each source pipeline, so that page shows the pipeline service feeding
+the database service. The column-by-column flow is on the table's own Lineage
+tab, `GET /api/v1/lineage/table/name/{fqn}`.
+
+Write a plain display name and a plain first sentence on every domain, table,
+product, and relationship type. The technical name stays the identity. Do not
+open a description with a file path, a rules version, or a JSON list. A person
+should understand the first sentence without knowing the rules layout.
+
 Read the running version from `GET /api/v1/system/version`. The API behavior
 below was checked on 2.0.2; refresh the selected version's schema before another
 deployment. Treat rolling documentation as concept guidance, not proof of the
@@ -49,8 +61,23 @@ MDM, RDM and silver are processing layers: databases `mdm`, `rdm` and `silver`
 on the rules service. They are not subject domains. Do not create a domain
 named after a layer.
 
-`rules catalog publish` writes these domains, glossaries, and the Gold and
-Silver certifications. A green publish that omits them is a publisher gap.
+`rules catalog publish` writes these domains, glossaries, the Gold and
+Silver certifications, and the three named data products. A product's domain
+must be a domain of every asset it contains. Assets are added after the
+product exists. Input ports are a second assignment, not the asset list.
+Add them with `PUT /api/v1/dataProducts/{name}/inputPorts/add` and the same
+bulk asset body. Read them with `GET /api/v1/dataProducts/name/{fqn}/inputPorts`.
+A mastered package takes the source datasets that fill it as input ports.
+The fundamental-measures package takes the filed-figure table and the line-item
+table as input ports. The measure table is an asset, not an input port.
+`rules catalog publish` also writes every configured check and every
+registered prepared-table check as a quality case, and every configured fix
+as a correction. A profile proposal is not a case. A case has no pass or fail
+result. The definitions are `edgartools-configured-table-check` and
+`edgartools-configured-column-check`, platform Other, and OpenMetadata does
+not execute them. A case whose column is on the table uses
+`<#E::table::{fqn}::columns::{column}>`. Any other case uses
+`<#E::table::{fqn}>`. A green publish that omits them is a publisher gap.
 A domain relationship is one pinned relationship type. Read it from the code
 set the data-modeling skill names, `mdm-relationship-types`, pinned in
 `rules/merge/reference-pins.yaml`. Do not copy that list into this skill, and
@@ -74,9 +101,19 @@ do not invent a type.
   again beside the type. Lineage is the data flow: a feed to the dataset that
   reads it, a dataset to the kind whose fields it fills, and a code set to the
   prepared table that uses it.
-- Do not draw these types as `relatedTo` edges between glossary terms. A
-  glossary term for a type uses the code's definition and is associated only
-  with that type's table.
+- Draw each type on the glossary Relations Graph as one `relatedTo` edge
+  from the identity term of the type's `from` end to that type's glossary
+  term. Do not draw the `to` ends: those identities already star every
+  type they belong to, so the graph walks through the type and paints
+  every other subject's types onto this one. The server accepts only its
+  own relation types (`relatedTo`, `synonym`, `antonym`, `broader`,
+  `narrower`, `partOf`, `hasPart`, `calculatedFrom`, `usedToCalculate`,
+  `seeAlso`). A pinned type code with underscores is rejected as a
+  relation type, so the type is the node. A reported position that is
+  silver, not a mastered type, is the glossary term for that position,
+  linked from the instrument identity only. Do not add `relatedTo` from a
+  definition mention. A glossary term for a type uses the code's
+  definition and is associated only with that type's table.
 
 Place each profiled code set in `rdm.code_sets` and keep a proposed set labeled
 proposed. A profiled identifier kind that is not a declared domain is not a new
@@ -133,16 +170,34 @@ type and the table is that type. Do not tag the kind table with every term
 whose heading starts with the domain name. A domain with no kind table still
 has its glossary. A proposed table is not a kind table.
 
-The Relations Graph is the typed edges between terms. Read it from
-`GET /glossaryTerms/{id}/relationsGraph`. A term that mentions another term is
-not a relation. Do not add `relatedTo` from a definition, a display name, or an
-Avoid line. Add an edge only when the operator names the two terms and the
-relation type. The separate RDF glossary graph stays unused unless that
-service is enabled.
+A domain has no `relationsGraph` endpoint. Its graph is lineage. Read it with
+`GET /api/v1/lineage/domain/name/{domain}?upstreamDepth=1&downstreamDepth=1`.
+Add one edge from the domain to the relationship-type table, for each end of
+that type:
+
+`PUT /api/v1/lineage/domain/name/{domain}/table/name/{typeFqn}`
+
+with `{"description": "<type>: <definition>", "source": "Manual"}`. The node
+on the graph is the type. Do not add an edge from domain to domain. One edge
+per domain pair is overwritten by the next type, so the type disappears.
+`rules catalog publish` writes these edges.
+
+The glossary Relations Graph is a different API,
+`GET /glossaryTerms/{id}/relationsGraph`. A domain glossary's Relations Graph
+page starts at that domain's identity term.
+A term that mentions another term is not a relation. Do not add `relatedTo`
+from a definition, a display name, or an Avoid line.
+`rules catalog publish` writes `POST /glossaryTerms/{id}/relations` with
+`{"relationType": "relatedTo", "term": {"id": "<type-term-id>", "type":
+"glossaryTerm"}}` from the `from` end's identity term to each type that
+names that end. Duplicate POST is idempotent. Remove a stale type with
+`DELETE /glossaryTerms/{id}/relations/{toTermId}?relationType=relatedTo`.
+The separate RDF glossary graph stays unused unless that service is enabled.
 
 `rules catalog publish` applies the built-in certification and no other
 classification. Do not add `data_class` or `processing_layer` tags in a second
-write. A second write is how endpoint links and `relatedTo` edges come back.
+write. A second write of mention `relatedTo` or endpoint domain links is how
+overstatement comes back.
 The class and the layer are named here so a later publisher change has one
 meaning. They are not a reason to edit the live catalog by hand.
 
@@ -215,6 +270,21 @@ Use native test definitions/cases when supported, retaining configured semantics
 and failure actions. An externally executed check is not a runnable native SQL
 test. The `Other` platform is available in the pinned definition schema; select
 the tested mapping rather than relabeling the existing execution engine.
+
+A PUT of a case on a table auto-creates that table's basic suite
+`{tableFQN}.testSuite` and attaches the case. Do not create a second suite for
+the same table.
+
+The Summary page at `/data-quality` defaults to Last 30 days. It counts a table
+as Covered only when a case on that table has `testCaseResult.timestamp` in
+that window. The query is `GET /dataQuality/testSuites/dataQualityReport` with
+`index=testCase` and
+`aggregationQuery=bucketName=entityWithTests:aggType=cardinality:field=originEntityFQN`,
+plus a `range` on `testCaseResult.timestamp`. A definition-only case has no
+result, so Covered stays 0 and Not Covered is every table. The Test Cases tab
+counts distinct `originEntityFQN` of published cases and does not apply that
+range. Do not POST test-case results to fill the Summary donut. Real results
+come from executing the checks.
 
 A logical suite is a metadata grouping, not an executable/basic suite. Verify
 the native API for creating it and linking cases. Do not call result endpoints
