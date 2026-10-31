@@ -177,10 +177,15 @@ def test_the_plan_names_domains_glossaries_and_store_certification():
     assert "relatedTo" not in term
     company_graph = {edge["to"] for edge in plan["glossary_relations"]
                      if edge["from"] == "company.Company Identity"}
-    assert company_graph >= {"shared.AUDITED_BY", "shared.ISSUED_BY", "shared.IS_SUBSIDIARY_OF"}
+    assert company_graph >= {"shared.AUDITED_BY", "shared.IS_SUBSIDIARY_OF"}
+    assert "shared.ISSUED_BY" not in company_graph
     assert "shared.IS_SEGMENT_OF_EXCHANGE" not in company_graph
+    assert "shared.EMPLOYED_BY" not in company_graph
     assert all(edge["relationType"] == "relatedTo" for edge in plan["glossary_relations"])
-    assert len(company_graph) == 15
+    assert len(company_graph) == 11
+    security_graph = {edge["to"] for edge in plan["glossary_relations"]
+                      if edge["from"] == "security.Security Identity"}
+    assert security_graph == {"shared.ISSUED_BY", "shared.Holdings"}
 
 
 def test_publish_deletes_only_what_the_rules_no_longer_name():

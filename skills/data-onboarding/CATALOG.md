@@ -77,8 +77,9 @@ capability gap and route it to implementation. `rules catalog publish` writes
 the subject domains, the glossaries, and the Gold and Silver certifications.
 It writes native quality cases for configured checks and corrections for
 configured fixes. It does not write a profile proposal as a case. It writes
-a `relatedTo` edge from each identity term to each relationship type that
-names that end, so the glossary Relations Graph shows the types. It does
+a `relatedTo` edge from the identity term of each type's `from` end to
+that type, so the glossary Relations Graph shows the types without walking
+every other subject's types through a shared type node. It does
 not write `relatedTo` from a definition mention. Read those links back. A
 green publish that omits them is a publisher gap, not a finished catalog.
 OpenMetadata storage is the openmetadata skill.

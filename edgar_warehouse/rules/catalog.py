@@ -26,7 +26,7 @@ The catalog is one OpenMetadata database service, `edgartools-rules`:
 - one subject domain per mastered kind and per relationship endpoint, the
   glossaries for those domains, and Gold on the master store and Silver on
   the prepared store. A relationship type is one asset. The glossary
-  Relations Graph is the identity term of each end linked to that type
+  Relations Graph is the identity term of the from end linked to that type
   term. A mention in a definition is not a relation.
 
 `plan` is pure: the rules in, the catalog as data out. `publish` sends it.
@@ -485,20 +485,26 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) 
             identity_of[domain["name"]] = f"{chosen['glossary']}.{quote(chosen['name'])}"
     glossary_relations = []
     seen_relations = set()
+
+    def add_relation(identity: str | None, type_term: str) -> None:
+        if not identity or identity == type_term:
+            return
+        key = (identity, type_term)
+        if key in seen_relations:
+            return
+        seen_relations.add(key)
+        glossary_relations.append(
+            {"from": identity, "to": type_term, "relationType": "relatedTo"})
+
     for row in roots:
         type_term = f"shared.{quote(row['code'])}"
         props = row.get("properties") or {}
-        for code in (props.get("from") or []) + (props.get("to") or []):
+        for code in props.get("from") or []:
             domain = ENDPOINT_CATALOG_NAME.get(code, code)
-            identity = identity_of.get(domain)
-            if not identity or identity == type_term:
-                continue
-            key = (identity, type_term)
-            if key in seen_relations:
-                continue
-            seen_relations.add(key)
-            glossary_relations.append(
-                {"from": identity, "to": type_term, "relationType": "relatedTo"})
+            add_relation(identity_of.get(domain), type_term)
+    holdings = by_term.get("Holdings")
+    if holdings is not None:
+        add_relation(identity_of.get("security"), f"{holdings['glossary']}.{quote(holdings['name'])}")
     def subject_assets(domain: str) -> list[str]:
         prefix = fqn(SERVICE, MDM, CLEAN, domain)
         return sorted(name for name, domains_ in membership.items()
@@ -852,7 +858,6 @@ def _publish_glossary_relations(plan: dict, call: Call) -> None:
             raise CatalogError(f"The server has no glossary terms {edge['from']} {edge['to']}")
         call("POST", f"/glossaryTerms/{from_id}/relations",
              {"relationType": edge["relationType"], "term": {"id": to_id, "type": "glossaryTerm"}})
-    type_terms = {edge["to"] for edge in plan.get("glossary_relations") or []}
     for identity, wanted in planned.items():
         from_id = _term_id(call, identity, known)
         if not from_id:
@@ -864,7 +869,7 @@ def _publish_glossary_relations(plan: dict, call: Call) -> None:
             other = (item.get("term") or {})
             other_fqn = other.get("fullyQualifiedName")
             other_id = other.get("id")
-            if other_fqn in type_terms and other_fqn not in wanted and other_id:
+            if other_fqn not in wanted and other_id:
                 call("DELETE", f"/glossaryTerms/{from_id}/relations/{other_id}",
                      params={"relationType": "relatedTo"})
 
