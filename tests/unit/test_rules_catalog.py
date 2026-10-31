@@ -132,6 +132,10 @@ class _Server:
             ours = self.ids['edgartools-rules.sources.gleif."gleif.relationships.v1"']
             return {"upstreamEdges": [{"fromEntity": ours, "toEntity": company},
                                       {"fromEntity": "id-other", "toEntity": company}]}
+        if method == "GET" and path == "/system/settings/glossaryTermRelationSettings":
+            return {"config_type": "glossaryTermRelationSettings",
+                    "config_value": {"relationTypes": [
+                        {"name": "relatedTo", "displayName": "Related To", "isSystemDefined": True}]}}
         if method == "PUT" and "name" in body:
             parent = body.get("database") or body.get("service")
             return {**body, "id": body["name"], "fullyQualifiedName":
@@ -175,17 +179,27 @@ def test_the_plan_names_domains_glossaries_and_store_certification():
     term = next(term for term in plan["glossary_terms"] if term["name"] == "AUDITED_BY")
     assert term["glossary"] == "shared" and term["table"].endswith("relationships.AUDITED_BY")
     assert "relatedTo" not in term
-    company_graph = {edge["to"] for edge in plan["glossary_relations"]
+    assert catalog.glossary_relation_type_name("ISSUED_BY") == "issuedBy"
+    assert catalog.glossary_relation_type_name("IS_FUND-MANAGED_BY") == "isFundManagedBy"
+    company_graph = {edge["to"]: edge["relationType"] for edge in plan["glossary_relations"]
                      if edge["from"] == "company.Company Identity"}
-    assert company_graph >= {"shared.AUDITED_BY", "shared.IS_SUBSIDIARY_OF"}
+    assert company_graph["shared.AUDITED_BY"] == "auditedBy"
+    assert company_graph["shared.IS_SUBSIDIARY_OF"] == "isSubsidiaryOf"
     assert "shared.ISSUED_BY" not in company_graph
     assert "shared.IS_SEGMENT_OF_EXCHANGE" not in company_graph
     assert "shared.EMPLOYED_BY" not in company_graph
-    assert all(edge["relationType"] == "relatedTo" for edge in plan["glossary_relations"])
+    assert "relatedTo" not in {edge["relationType"] for edge in plan["glossary_relations"]}
     assert len(company_graph) == 11
-    security_graph = {edge["to"] for edge in plan["glossary_relations"]
+    security_graph = {edge["to"]: edge["relationType"] for edge in plan["glossary_relations"]
                       if edge["from"] == "security.Security Identity"}
-    assert security_graph == {"shared.ISSUED_BY", "shared.Holdings"}
+    assert security_graph == {"shared.ISSUED_BY": "issuedBy", "shared.Holdings": "heldBy"}
+    person_graph = {edge["to"]: edge["relationType"] for edge in plan["glossary_relations"]
+                    if edge["from"] == "person.Person Identity"}
+    assert person_graph["shared.EMPLOYED_BY"] == "employedBy"
+    by_type = {item["name"]: item["displayName"] for item in plan["glossary_relation_types"]}
+    assert by_type["issuedBy"] == "Issued by"
+    assert by_type["heldBy"] == "Held by"
+    assert by_type["employedBy"] == "Employed by"
 
 
 def test_publish_deletes_only_what_the_rules_no_longer_name():
@@ -201,6 +215,7 @@ def test_publish_deletes_only_what_the_rules_no_longer_name():
     posts = [path for method, path in server.calls if method == "POST" and path.endswith("/relations")]
     assert any(path.startswith("/glossaryTerms/Company Identity/") for path in posts)
     assert len(posts) == len(plan["glossary_relations"])
+    assert ("PUT", "/system/settings") in server.calls
 
 
 def test_publish_stops_when_the_server_names_a_table_otherwise():

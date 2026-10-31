@@ -27,7 +27,7 @@ The catalog is one OpenMetadata database service, `edgartools-rules`:
   glossaries for those domains, and Gold on the master store and Silver on
   the prepared store. A relationship type is one asset. The glossary
   Relations Graph is the identity term of the from end linked to that type
-  term. A mention in a definition is not a relation.
+  term, with the type as the edge. A mention in a definition is not a relation.
 
 `plan` is pure: the rules in, the catalog as data out. `publish` sends it.
 """
@@ -73,6 +73,37 @@ def quote(name: str) -> str:
 
 def fqn(*parts: str) -> str:
     return ".".join(quote(p) for p in parts)
+
+
+def glossary_relation_type_name(code: str) -> str:
+    """OpenMetadata relationType is a letter then alphanumerics. A pinned
+    type code uses underscores, so ISSUED_BY is issuedBy on the graph."""
+    parts = [p for p in re.sub(r"[^A-Za-z0-9]+", "_", code).split("_") if p]
+    if not parts:
+        raise ValueError(f"No glossary relation type name in {code!r}")
+    return parts[0].lower() + "".join(p.capitalize() for p in parts[1:])
+
+
+def _glossary_relation_type(name: str, display: str, description: str) -> dict:
+    return {
+        "name": name,
+        "displayName": display,
+        "description": description,
+        "rdfPredicate": f"https://edgartools.org/ontology/{name}",
+        "domain": [],
+        "range": [],
+        "isSymmetric": False,
+        "isTransitive": False,
+        "isFunctional": False,
+        "isInverseFunctional": False,
+        "isReflexive": False,
+        "isIrreflexive": False,
+        "isAsymmetric": True,
+        "isCrossGlossaryAllowed": True,
+        "category": "associative",
+        "isSystemDefined": False,
+        "color": "#067647",
+    }
 
 
 def rules_digest(root: Path) -> str:
@@ -484,27 +515,36 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) 
         if chosen is not None:
             identity_of[domain["name"]] = f"{chosen['glossary']}.{quote(chosen['name'])}"
     glossary_relations = []
+    glossary_relation_types: dict[str, dict] = {}
     seen_relations = set()
 
-    def add_relation(identity: str | None, type_term: str) -> None:
+    def add_relation(identity: str | None, type_term: str, relation_type: str,
+                     display: str, description: str) -> None:
         if not identity or identity == type_term:
             return
-        key = (identity, type_term)
+        key = (identity, type_term, relation_type)
         if key in seen_relations:
             return
         seen_relations.add(key)
+        glossary_relation_types[relation_type] = _glossary_relation_type(
+            relation_type, display, description)
         glossary_relations.append(
-            {"from": identity, "to": type_term, "relationType": "relatedTo"})
+            {"from": identity, "to": type_term, "relationType": relation_type})
 
     for row in roots:
         type_term = f"shared.{quote(row['code'])}"
+        relation_type = glossary_relation_type_name(row["code"])
+        display = row["label"]
+        description = row.get("definition") or display
         props = row.get("properties") or {}
         for code in props.get("from") or []:
             domain = ENDPOINT_CATALOG_NAME.get(code, code)
-            add_relation(identity_of.get(domain), type_term)
+            add_relation(identity_of.get(domain), type_term, relation_type, display, description)
     holdings = by_term.get("Holdings")
     if holdings is not None:
-        add_relation(identity_of.get("security"), f"{holdings['glossary']}.{quote(holdings['name'])}")
+        add_relation(identity_of.get("security"),
+                     f"{holdings['glossary']}.{quote(holdings['name'])}",
+                     "heldBy", "Held by", holdings.get("description") or "Held by")
     def subject_assets(domain: str) -> list[str]:
         prefix = fqn(SERVICE, MDM, CLEAN, domain)
         return sorted(name for name, domains_ in membership.items()
@@ -534,6 +574,8 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) 
             "glossary_terms": [by_term[name] for name in sorted(by_term)],
             "memberships": memberships, "certifications": certifications,
             "domain_lineage": domain_lineage, "glossary_relations": glossary_relations,
+            "glossary_relation_types": [glossary_relation_types[name]
+                                        for name in sorted(glossary_relation_types)],
             "products": products}
 
 
@@ -830,6 +872,7 @@ def _publish_vocabulary(plan: dict, call: Call) -> None:
             term["id"] = answer["id"]
     if any(len(item["domains"]) > 1 for item in plan.get("memberships") or []):
         _allow_several_domains(call)
+    _publish_glossary_relation_types(plan, call)
     _publish_glossary_relations(plan, call)
 
 
@@ -843,15 +886,35 @@ def _term_id(call: Call, fqn_name: str, known: dict[str, str]) -> str | None:
     return found
 
 
+def _publish_glossary_relation_types(plan: dict, call: Call) -> None:
+    """The graph draws displayName. Register each pinned type as a camelCase
+    relationType so the edge says Issued by, not Related To."""
+    wanted = {item["name"]: item for item in plan.get("glossary_relation_types") or [] if item.get("name")}
+    if not wanted:
+        return
+    page = call("GET", "/system/settings/glossaryTermRelationSettings") or {}
+    existing = ((page.get("config_value") or {}).get("relationTypes") or [])
+    if not existing:
+        raise CatalogError("The server has no glossary relation types")
+    by_name = {item["name"]: item for item in existing if item.get("name")}
+    for name, spec in wanted.items():
+        current = by_name.get(name) or {}
+        by_name[name] = {**current, **spec, "isSystemDefined": False}
+    call("PUT", "/system/settings", {
+        "config_type": "glossaryTermRelationSettings",
+        "config_value": {"relationTypes": list(by_name.values())},
+    })
+
+
 def _publish_glossary_relations(plan: dict, call: Call) -> None:
-    """The glossary Relations Graph is identity-term to type-term. The server
-    accepts only its own relation types; the type itself is the node."""
+    """The glossary Relations Graph is identity-term to type-term. The edge
+    is the type; the node is the type term. Do not draw the to ends."""
     known = {term["fullyQualifiedName"]: term["id"]
              for term in plan.get("glossary_terms") or []
              if term.get("fullyQualifiedName") and term.get("id")}
-    planned: dict[str, set[str]] = defaultdict(set)
+    planned: dict[str, set[tuple[str, str]]] = defaultdict(set)
     for edge in plan.get("glossary_relations") or []:
-        planned[edge["from"]].add(edge["to"])
+        planned[edge["from"]].add((edge["to"], edge["relationType"]))
         from_id = _term_id(call, edge["from"], known)
         to_id = _term_id(call, edge["to"], known)
         if not from_id or not to_id:
@@ -864,14 +927,13 @@ def _publish_glossary_relations(plan: dict, call: Call) -> None:
             continue
         body = call("GET", f"/glossaryTerms/{from_id}", params={"fields": "relatedTerms"}) or {}
         for item in body.get("relatedTerms") or []:
-            if item.get("relationType") != "relatedTo":
-                continue
             other = (item.get("term") or {})
             other_fqn = other.get("fullyQualifiedName")
             other_id = other.get("id")
-            if other_fqn not in wanted and other_id:
+            relation_type = item.get("relationType")
+            if other_id and (other_fqn, relation_type) not in wanted:
                 call("DELETE", f"/glossaryTerms/{from_id}/relations/{other_id}",
-                     params={"relationType": "relatedTo"})
+                     params={"relationType": relation_type})
 
 
 def _drop_invented_domain_edges(plan: dict, call: Call) -> None:
