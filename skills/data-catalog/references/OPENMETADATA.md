@@ -14,24 +14,125 @@ installed API. Use the existing private endpoint and bot credentials.
 | Classification / Tag | Category taxonomy and assigned categories. Use a configured taxonomy for processing layers; do not conflate its tags with glossary terms. |
 | DatabaseService → Database → DatabaseSchema → Table → Column | Technical containment. A logical registration is metadata, not proof a physical database table exists. |
 | PipelineService → Pipeline → Task | Declared processing and dependencies. Pipeline lineage association must be published in addition to tasks. A metadata-ingestion pipeline is a different workflow from the data pipeline it describes. |
-| DataProduct | Configured consumer-facing asset collection, assigned to domains. Only create one when a real product definition exists. |
+| DataProduct | Configured consumer-facing asset collection, assigned to domains. Create one only when [MODEL.md](MODEL.md) says a product definition exists. |
 | TestDefinition / TestCase / TestSuite | Reusable check definition, asset-specific configured check and grouping. Actual results are separate. |
 
 The pinned domain types are `Source-aligned`, `Consumer-aligned` and `Aggregate`.
-This required native attribute is not the logical subject identity. If the
-governance configuration does not select a type, ask for that mapping decision
-before real publication; do not infer it from a source name or silently copy the
-type used by a synthetic test.
+This required native attribute is not the logical subject identity.
+
+Master-data subject domains use `Source-aligned`. The operator approved that
+type on 2026-10-30 for every domain `CONTEXT.md` names as a master-data domain.
+Do not ask again for that type, and do not apply it to a source, a feed, a
+pipeline or a storage folder. Ask again only for a subject that is not one of
+those domains.
+
+A declared domain with a kind file is qualified and receives the mastered kind,
+the datasets whose records become that kind or fill its fields, and the
+registered silver tables whose links name that kind. A declared domain with no
+kind file is created from its definition and receives no kind table and no
+dataset. Use the kind code as the native name when configuration has one
+(`branch`, `government`). International Organization and Market/Venue have no
+kind code. Their approved catalog names are `international_organization` and
+`market_venue`. Those names are destination identities, not kind codes.
+
+MDM, RDM and silver are processing layers: databases `mdm`, `rdm` and `silver`
+on the rules service. They are not subject domains. Do not create a domain
+named after a layer.
+
+Place each configured relationship type in `mdm.relationships` and make it a
+member of every endpoint domain. When a configured endpoint code differs from
+the approved catalog name, map that code onto the catalog name. `venue` maps
+to `market_venue`. The other configured endpoint codes match the domain names.
+A declared domain with no kind file still receives a relationship definition
+when it is an endpoint.
+
+Place each profiled code set in `rdm.code_sets` and keep a proposed set labeled
+proposed. A profiled identifier kind that is not a declared domain is not a new
+domain. Code sets and profiled silver parts whose identifier kind is not a
+declared domain are members of the domain that holds the instrument. A profiled
+part that names no subject stays without a domain. Keep the plan description. A
+display name may use the profiled part path when that path differs from the
+table name. Publish lineage from each code set to the silver table that uses
+it, and from each declaring dataset to its relationship type, when both ends
+are registered.
+
+An asset that fills or links more than one subject is a member of each of those
+domains. The default entity rule "Multiple Domains are not allowed" rejects
+that assignment. Disable that rule in `entityRulesSettings` before publishing
+the asset. Do not drop a subject to satisfy the default, and do not copy the
+asset so each domain has its own table.
 
 Domains and glossaries are independent native resources; assigning one does not
 create the other. Term annotation uses a tag label whose `source` is `Glossary`;
 classification annotation uses `Classification`. Keep label state, term review
 state and execution state separate. Never infer approval from creation.
 
+On 2.0.2 a data product create requires `name`, `description` and `domains`.
+Assets are a separate assignment. Read product membership with
+`fields=dataProducts` on its own. On the local server the default rule
+"Multiple Data Products are not allowed" is disabled, so an asset may belong
+to more than one real product. "Data Product Domain Validation" stays enabled:
+a product on an asset must match that asset's domains. Do not disable it to
+force a product onto an asset in another domain. Do not invent owners. The
+local catalog had no native data products on 2026-10-30. The fundamental
+analytics package in [MODEL.md](MODEL.md) is already three tables of that
+subject, not one of these native objects.
+
+## Glossary and classification
+
+Project. Do not author a second glossary, and do not mark a term approved.
+
+Read `CONTEXT.md`. Take the bold terms in **MDM identities and mastering** and
+in **Data classes, reference data and agent context**. Leave the other sections
+there until the skill that owns them asks for a term. The description is the
+definition paragraph plus the Avoid line. Review state on an asset is
+`Suggested`. Create no owners.
+
+Give each published subject domain its own glossary. Its native name is the
+domain name, and its display name is the domain's display name. A term whose
+heading is that display name, or that display name plus " Identity", goes in
+that glossary. Every other term from the two sections goes in one shared
+glossary named `shared`. A shared spelling with a different definition stays a
+different term.
+
+Associate a term with a registered table only when the table name equals the
+term heading, or when the term is that domain's own glossary entry and the
+domain has a kind table. A domain with no kind table still has its glossary.
+A proposed table is not a kind table.
+
+The Relations Graph is the typed edges between terms. Read it from
+`GET /glossaryTerms/{id}/relationsGraph`. Add a `relatedTo` edge when a term's
+definition, and not its Avoid line, names another published term. A subject
+domain's display name in that definition names that domain's identity term.
+An Avoid line does not make an edge. The separate RDF glossary graph stays
+unused unless that service is enabled.
+
+Two mutually exclusive classifications, and no others:
+
+- `data_class`. One tag for each class the data-modeling skill names and this
+  catalog can hold: master data on a kind table, reference data on a code-set
+  table, relationship on a relationship-type table, transaction data on a
+  registered silver table. Copy the class sentence from `CONTEXT.md` where it
+  has one, and from data-modeling where it does not. A proposed silver table
+  has no data class. A source dataset has no data class: data-modeling does not
+  name a source class. The metadata class stays unused until that store is in
+  the catalog.
+- `processing_layer`. One tag per database the rules catalog plan already
+  emits. The tag name is that database name. It is a category. It is not a
+  subject domain, and it does not follow from a folder name the plan does not
+  use.
+
+Leave the built-in classifications in place. A repeat put keeps the same
+glossary, term, classification and tag identity. Read tags back on their own.
+A glossary is global: resetting a database service does not remove it.
+
 Pinned create schemas expose `domains` as FQN strings on applicable resources.
 Table registration can also name `dataProducts`. Readback resolves these into
-entity references; compare the intended associations using returned IDs/FQNs.
-Do not compare an input string list directly to a returned reference list.
+entity references. Request `fields=domains` on its own. The default table
+payload omits domain membership, so a missing field is not proof the link is
+absent. Compare returned domain FQNs as a set: the server does not keep the
+submitted order. Do not compare an input string list directly to a returned
+reference list.
 
 ## Readback and reconciliation traps
 

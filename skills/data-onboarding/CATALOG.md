@@ -43,7 +43,7 @@ name is not semantic enrichment.
 | Object | Completion evidence |
 |---|---|
 | Entity domain | One native domain for every declared entity kind; distinguish definition-only kinds from operationally qualified ones |
-| Business glossary | A glossary for each entity domain, with entity, field, identifier and applicable relationship meanings; shared concepts may be reused |
+| Business glossary | One glossary per entity domain, plus the shared glossary, projected from `CONTEXT.md` as `skills/data-catalog/references/OPENMETADATA.md` describes. Suggested, not approved |
 | Business terms | Definitions and asset/column associations derived from the model and contracts; actual review status recorded |
 | Datasets and fields | Clear business names, definitions, grain, provenance, master links and system-of-record boundaries |
 | Pipelines | Every source and standalone target, its purpose, declared tasks, operations and dependencies; definitions do not imply enabled execution |
@@ -51,6 +51,8 @@ name is not semantic enrichment.
 | Data quality | Named native test cases for configured checks, preserving semantics and failure action; corrections and proposals remain distinct |
 | Mapping Documents | All configured sources, kinds, standalone pipelines and pinned relationship definitions; steward Notes preserved |
 | Ownership | Existing authorized business owners where specified; otherwise an explicit unassigned responsibility, never the ingestion bot as a fabricated business owner |
+| Data product | A configured package with a purpose and selected assets. Fundamental analytics is that package: three silver tables of filed figures, line items and measures. Create no native product until the rules name it. The test is in `skills/data-catalog/references/MODEL.md` |
+| Classification | Two mutually exclusive classifications: data class, from the data-modeling skill, and processing layer, one tag per catalog-plan database. A proposed silver table has a layer and no data class. A source dataset has a layer and no data class |
 
 Include registered Silver/RDM metadata. Label profiling proposals as proposed;
 never present them as existing registered tables or approved code sets. Do not
@@ -71,9 +73,12 @@ contains pinned types and capacities. Check workbook cells against configuration
 **Capability gate:** inspect the actual plan and publisher. If any required
 native object, semantic association or readback is absent, record a demonstrated
 capability gap and route it to implementation. The established technical plan,
-publish and check commands alone do not prove domains, glossaries or native
-quality cases exist. Never invent a CLI command, payload field or completion
-claim to bridge an unsupported capability.
+publish and check commands do not assign domains, glossaries or native quality
+cases. Domain type, multi-domain membership and MDM, RDM and silver layer
+placement for the master-data subjects, and the glossary and classification
+projection, are settled in `skills/data-catalog/references/OPENMETADATA.md`.
+Follow that mapping on the API. Do not treat a green `rules catalog publish` as proof those links
+exist, and do not invent a CLI flag to bridge the gap.
 
 ## Quality definitions are not execution results
 

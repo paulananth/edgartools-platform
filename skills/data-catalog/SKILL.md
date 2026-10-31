@@ -21,13 +21,18 @@ folders. Browse by business domain first; processing layer is a separate filter.
    Each configured entity kind is a business domain, not each individual record.
    Reuse the same method for every source and kind; no entity/provider lists or
    rename dictionaries. Preserve the distinction between defined and qualified.
+   Read the settled domain type, the multi-domain rule and the MDM, RDM and
+   silver layer placement in [OPENMETADATA.md](references/OPENMETADATA.md)
+   before asking the operator to choose a type again.
 2. Identify the business subject, vocabulary, processing layer, physical location
    and responsible people independently. Use evidence-backed definitions and
    understandable display names. Persist reviewed meaning in its owning
    configuration. Propose uncertain meanings for review; do not invent them.
-   Give each subject domain its glossary; reuse shared concepts where their
-   meanings agree. Missing definitions go to profiling/onboarding; changes to
-   existing definitions go through refining-rules.
+   Project the glossary and the classifications as
+   [OPENMETADATA.md](references/OPENMETADATA.md) describes. Create a data product
+   only when [MODEL.md](references/MODEL.md) says a product definition exists.
+   Missing definitions go to profiling or onboarding; changes to existing
+   definitions go through refining-rules.
 3. Select the destinations and versions. Read only the applicable adapter
    reference: [OPENMETADATA.md](references/OPENMETADATA.md) for OpenMetadata;
    [PORTABILITY.md](references/PORTABILITY.md) for another catalog or renderer.
@@ -36,6 +41,28 @@ folders. Browse by business domain first; processing layer is a separate filter.
    ownership, review state, term associations, transformation meaning and quality
    failure actions. A native identifier belongs in the destination mapping,
    not in business identity. Unmapped meaning is a visible gap, not success.
+
+## Use the skill that owns the decision
+
+The catalog projects meaning. It does not author it. Before writing a term, a
+class or a layer tag, read the owner and use its words:
+
+- The words are `CONTEXT.md`. Changing a word is domain modeling.
+- Class, kind, code set and relationship type are
+  [data-modeling](../data-modeling/SKILL.md).
+- A new feed or a new kind is [data-onboarding](../data-onboarding/SKILL.md).
+- A change to a live mapping or a match is
+  [refining-rules](../refining-rules/SKILL.md).
+- A check or a fix is [data-quality](../data-quality/SKILL.md).
+- Filed figures and fundamental measures are the financials skill. An
+  instrument's identifiers and listings are
+  [security-master](../security-master/SKILL.md).
+- How a merge decides is [mdm-engineering](../mdm-engineering/SKILL.md).
+- A load, a recovery or a resource limit is
+  [data-operations](../data-operations/SKILL.md).
+
+Do not copy those skills into this one. A term the owner has not written stays
+unprojected. A class the data-modeling skill does not name stays untagged.
 
 ## Show the flow without operational clutter
 
