@@ -34,6 +34,7 @@ The catalog is one OpenMetadata database service, `edgartools-rules`:
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import re
 import time
@@ -574,22 +575,27 @@ def _listed(call: Call, path: str, params: dict, service: str = SERVICE) -> list
             return found
 
 
-def _upsert(call: Call, endpoint: str, body: dict) -> dict:
+def _description_equal(expected, actual):
+    # The native Markdown API HTML-escapes characters once at rest.
+    return expected == html.unescape(actual) if isinstance(expected, str) and isinstance(actual, str) else expected == actual
+
+
+def _upsert(call: Call, endpoint: str, body: dict, expected_name: str | None = None) -> dict:
     """Reconcile rule-owned descriptions even when a bot PUT preserves them."""
     parent = body.get("databaseSchema") or body.get("database") or body.get("service")
-    expected = parent + "." + quote(body["name"]) if parent else body["name"]
+    expected = expected_name or (parent + "." + quote(body["name"]) if parent else body["name"])
     answer = call("PUT", endpoint, body)
     if answer.get("fullyQualifiedName") != expected:
         kind = "table" if endpoint == "/tables" else "pipeline" if endpoint == "/pipelines" else endpoint
         raise CatalogError(f"The server named {kind} {expected} {answer.get('fullyQualifiedName')}")
     changes = []
-    if "description" in body and answer.get("description") != body["description"]:
+    if "description" in body and not _description_equal(body["description"], answer.get("description")):
         changes.append({"op": "add", "path": "/description", "value": body["description"]})
     columns = {column["name"]: index for index, column in enumerate(answer.get("columns") or [])}
     for column in body.get("columns") or []:
         if column["name"] in columns and "description" in column:
             index = columns[column["name"]]
-            if answer["columns"][index].get("description") != column["description"]:
+            if not _description_equal(column["description"], answer["columns"][index].get("description")):
                 changes.append({"op": "add", "path": f"/columns/{index}/description", "value": column["description"]})
     if changes:
         updated = call("PATCH", endpoint + "/" + answer["id"], changes)
@@ -740,6 +746,8 @@ def verify(plan: dict, call: Call) -> dict:
     differences = []
 
     def compare(expected, actual, where):
+        if where.endswith(".description") and isinstance(actual, str):
+            actual = html.unescape(actual)
         if isinstance(expected, str) and isinstance(actual, dict) and "fullyQualifiedName" in actual:
             actual = actual["fullyQualifiedName"]
         if expected == [] and actual is None:

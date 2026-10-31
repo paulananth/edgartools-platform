@@ -195,23 +195,26 @@ def count_addresses(places: Iterable[Place]) -> Counter:
     return Counter(p.key for p in places if p.key)
 
 
-def agrees(sec: Place, gleif: Place, compare: list[str] | None) -> bool:
+def agrees(sec: Place, gleif: Place, compare: list | None) -> bool:
     """Whether two places agree on a pass's parts. `None`: the name alone;
-    `[]`: the country alone."""
+    `[]`: the country alone. A part given as a list agrees when any one of
+    its parts does (P5: the city or the postcode; operator, 2026-10-30)."""
     if compare is None:
         return True
     if not sec.country or sec.country != gleif.country:
         return False
-    for part in compare:
-        if part not in PARTS:
-            raise ValueError(f"A pass compares an unknown address part: {part}")
-        if part == "street" and not sec.street & gleif.street:
-            return False
-        if part == "city" and not (sec.city and sec.city == gleif.city):
-            return False
-        if part == "postcode" and not postal_codes_agree(sec.postcode, sec.country, gleif.postcode, gleif.country):
-            return False
-    return True
+    return all(any(_part_agrees(sec, gleif, one) for one in (part if isinstance(part, list) else [part]))
+               for part in compare)
+
+
+def _part_agrees(sec: Place, gleif: Place, part: str) -> bool:
+    if part == "street":
+        return bool(sec.street & gleif.street)
+    if part == "city":
+        return bool(sec.city) and sec.city == gleif.city
+    if part == "postcode":
+        return postal_codes_agree(sec.postcode, sec.country, gleif.postcode, gleif.country)
+    raise ValueError(f"A pass compares an unknown address part: {part}")
 
 
 def _usable(p: Place, counts: Counter, over_shared: int) -> Place:

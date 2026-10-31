@@ -829,6 +829,9 @@ class TestTheNameMatchingRules:
 
 @pytest.mark.parametrize("changes", [
     {"compare": ["street", "county"]},
+    {"compare": [["city", "county"]]},
+    {"compare": [[]]},
+    {"compare": [["city", ["postcode"]]]},
     {"over_shared": 0},
     {"refused_flags": ["anything"]},
     {"pass": None},
@@ -837,7 +840,7 @@ def test_a_cascade_pass_with_invalid_arguments_is_refused(changes):
     from edgar_warehouse.mdm.clean.activation import check_name_binding_rule
 
     rule = copy.deepcopy(next(r for r in POLICY["kinds"]["company"]["rules"]
-                              if r["rule_id"] == "sec-gleif-cascade-p1"))
+                              if r["rule_id"] == "sec-gleif-cascade-p5"))
     rule["when"][0]["args"] = {**rule["when"][0]["args"], **changes}
     with pytest.raises(Conflict, match="invalid pass arguments"):
         check_name_binding_rule("company", rule, POLICY["kinds"])
@@ -858,8 +861,8 @@ def test_two_cascade_passes_with_one_name_are_refused():
 
     body = copy.deepcopy(POLICY)
     rules = body["kinds"]["company"]["rules"]
-    second = next(r for r in rules if r["rule_id"] == "sec-gleif-cascade-p4")
-    second["when"][0]["args"]["pass"] = "P1"
+    second = next(r for r in rules if r["rule_id"] == "sec-gleif-cascade-p6")
+    second["when"][0]["args"]["pass"] = "P5"
     with pytest.raises(Conflict, match="must be unique"):
         check_policy(body)
 
