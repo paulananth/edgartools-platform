@@ -149,6 +149,10 @@ def test_the_plan_names_domains_glossaries_and_store_certification():
     assert products["security_master"]["domains"] == ["security"]
     assert products["company_fundamentals"]["domains"] == ["company"]
     assert any(name.endswith("company_measure") for name in products["company_fundamentals"]["tables"])
+    assert {name.rsplit(".", 1)[-1] for name in products["company_fundamentals"]["inputs"]} == {
+        "company_fact", "company_line_item"}
+    assert all(f".{catalog.SOURCES}." in name for name in products["company_master"]["inputs"])
+    assert all(f".{catalog.SOURCES}." in name for name in products["security_master"]["inputs"])
     assert any(name.endswith("mdm.clean.security") for name in products["security_master"]["tables"])
     assert sum(1 for table in plan["tables"] if table["databaseSchema"].endswith(".relationships")) == 16
     certified = {item["table"]: item["tag"] for item in plan["certifications"]}

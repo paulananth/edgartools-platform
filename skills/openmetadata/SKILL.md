@@ -52,7 +52,13 @@ named after a layer.
 `rules catalog publish` writes these domains, glossaries, the Gold and
 Silver certifications, and the three named data products. A product's domain
 must be a domain of every asset it contains. Assets are added after the
-product exists. A green publish that omits them is a publisher gap.
+product exists. Input ports are a second assignment, not the asset list.
+Add them with `PUT /api/v1/dataProducts/{name}/inputPorts/add` and the same
+bulk asset body. Read them with `GET /api/v1/dataProducts/name/{fqn}/inputPorts`.
+A mastered package takes the source datasets that fill it as input ports.
+The fundamental-measures package takes the filed-figure table and the line-item
+table as input ports. The measure table is an asset, not an input port.
+A green publish that omits them is a publisher gap.
 A domain relationship is one pinned relationship type. Read it from the code
 set the data-modeling skill names, `mdm-relationship-types`, pinned in
 `rules/merge/reference-pins.yaml`. Do not copy that list into this skill, and

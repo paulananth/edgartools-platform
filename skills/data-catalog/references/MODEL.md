@@ -43,7 +43,9 @@ already holds those three tables. The operator named three native packages: the 
 datasets that fill it, the mastered instrument and the datasets that fill it
 plus its registered listing, and the three prepared tables of filed figures,
 line items, and fundamental measures. Each package takes that subject's
-domain. The publisher creates those three and no others.
+domain. A mastered package's input ports are the datasets that fill it. The
+fundamental-measures package's input ports are the filed figures and the line
+items. The publisher creates those three and no others.
 
 The older gold factor chain is a separate earlier factor table. It is not this
 package. Do not publish it as the fundamental analytics package.

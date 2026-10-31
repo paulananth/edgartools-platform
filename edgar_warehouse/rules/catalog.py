@@ -437,19 +437,24 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) 
                       if domain in domains_ and (name == prefix or f".{SOURCES}." in name) and name in present)
     facts = sorted(name for name in membership if name.endswith(("company_fact", "company_line_item", "company_measure")) and "company" in membership[name])
     listing = sorted(name for name in membership if name.endswith("openfigi_listing") and "security" in membership[name])
+    company_assets = subject_assets("company")
+    security_assets = sorted(set(subject_assets("security")) | set(listing))
     products = [
         {"name": "company_master", "displayName": "Company master", "domains": ["company"],
          "dataProductType": "DATASET",
          "description": "The mastered legal entity and the datasets that fill it.",
-         "tables": subject_assets("company")},
+         "tables": company_assets,
+         "inputs": [name for name in company_assets if f".{SOURCES}." in name]},
         {"name": "security_master", "displayName": "Security master", "domains": ["security"],
          "dataProductType": "DATASET",
          "description": "The mastered instrument, the datasets that fill it, and its registered listing.",
-         "tables": sorted(set(subject_assets("security")) | set(listing))},
+         "tables": security_assets,
+         "inputs": [name for name in security_assets if f".{SOURCES}." in name]},
         {"name": "company_fundamentals", "displayName": "Company fundamentals", "domains": ["company"],
          "dataProductType": "DERIVED_DATA",
          "description": "Filed figures, standard line items, and fundamental measures for one subject.",
-         "tables": facts},
+         "tables": facts,
+         "inputs": [name for name in facts if name.endswith(("company_fact", "company_line_item"))]},
     ]
     return {"domains": domains, "glossaries": glossaries,
             "glossary_terms": [by_term[name] for name in sorted(by_term)],
@@ -743,6 +748,10 @@ def publish(plan: dict, call: Call) -> dict:
         if assets:
             call("PUT", f"/dataProducts/{escape(product['name'], safe='')}/assets/add",
                  {"assets": assets, "dryRun": False})
+        inputs = [{"id": ids[table], "type": "table"} for table in product.get("inputs") or [] if table in ids]
+        if inputs:
+            call("PUT", f"/dataProducts/{escape(product['name'], safe='')}/inputPorts/add",
+                 {"assets": inputs, "dryRun": False})
     for edge in plan.get("domain_lineage") or []:
         call("PUT", "/lineage/domain/name/" + escape(edge["domain"], safe="")
              + "/table/name/" + escape(edge["table"], safe=""),
