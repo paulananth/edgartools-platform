@@ -49,8 +49,16 @@ MDM, RDM and silver are processing layers: databases `mdm`, `rdm` and `silver`
 on the rules service. They are not subject domains. Do not create a domain
 named after a layer.
 
-`rules catalog publish` writes these domains, glossaries, and the Gold and
-Silver certifications. A green publish that omits them is a publisher gap.
+`rules catalog publish` writes these domains, glossaries, the Gold and
+Silver certifications, and the three named data products. A product's domain
+must be a domain of every asset it contains. Assets are added after the
+product exists. Input ports are a second assignment, not the asset list.
+Add them with `PUT /api/v1/dataProducts/{name}/inputPorts/add` and the same
+bulk asset body. Read them with `GET /api/v1/dataProducts/name/{fqn}/inputPorts`.
+A mastered package takes the source datasets that fill it as input ports.
+The fundamental-measures package takes the filed-figure table and the line-item
+table as input ports. The measure table is an asset, not an input port.
+A green publish that omits them is a publisher gap.
 A domain relationship is one pinned relationship type. Read it from the code
 set the data-modeling skill names, `mdm-relationship-types`, pinned in
 `rules/merge/reference-pins.yaml`. Do not copy that list into this skill, and
@@ -133,7 +141,19 @@ type and the table is that type. Do not tag the kind table with every term
 whose heading starts with the domain name. A domain with no kind table still
 has its glossary. A proposed table is not a kind table.
 
-The Relations Graph is the typed edges between terms. Read it from
+A domain has no `relationsGraph` endpoint. Its graph is lineage. Read it with
+`GET /api/v1/lineage/domain/name/{domain}?upstreamDepth=1&downstreamDepth=1`.
+Add one edge from the domain to the relationship-type table, for each end of
+that type:
+
+`PUT /api/v1/lineage/domain/name/{domain}/table/name/{typeFqn}`
+
+with `{"description": "<type>: <definition>", "source": "Manual"}`. The node
+on the graph is the type. Do not add an edge from domain to domain. One edge
+per domain pair is overwritten by the next type, so the type disappears.
+`rules catalog publish` writes these edges.
+
+The glossary Relations Graph is a different API,
 `GET /glossaryTerms/{id}/relationsGraph`. A term that mentions another term is
 not a relation. Do not add `relatedTo` from a definition, a display name, or an
 Avoid line. Add an edge only when the operator names the two terms and the

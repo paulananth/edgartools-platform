@@ -140,6 +140,20 @@ def test_the_plan_names_domains_glossaries_and_store_certification():
     assert "company" in names and "market_venue" in names and "venue" not in names
     assert not [item for item in plan["memberships"] if item["table"].startswith("edgartools-rules.mdm.relationships.")]
     assert not [edge for edge in plan["lineage"] if edge["to"].startswith("edgartools-rules.mdm.relationships.")]
+    issued = [edge for edge in plan["domain_lineage"] if edge["table"].endswith(".ISSUED_BY")]
+    assert {edge["domain"] for edge in issued} >= {"security", "company"}
+    assert all(edge["domain"] != edge["table"] for edge in plan["domain_lineage"])
+    products = {product["name"]: product for product in plan["products"]}
+    assert set(products) == {"company_master", "security_master", "company_fundamentals"}
+    assert products["company_master"]["domains"] == ["company"]
+    assert products["security_master"]["domains"] == ["security"]
+    assert products["company_fundamentals"]["domains"] == ["company"]
+    assert any(name.endswith("company_measure") for name in products["company_fundamentals"]["tables"])
+    assert {name.rsplit(".", 1)[-1] for name in products["company_fundamentals"]["inputs"]} == {
+        "company_fact", "company_line_item"}
+    assert all(f".{catalog.SOURCES}." in name for name in products["company_master"]["inputs"])
+    assert all(f".{catalog.SOURCES}." in name for name in products["security_master"]["inputs"])
+    assert any(name.endswith("mdm.clean.security") for name in products["security_master"]["tables"])
     assert sum(1 for table in plan["tables"] if table["databaseSchema"].endswith(".relationships")) == 16
     certified = {item["table"]: item["tag"] for item in plan["certifications"]}
     assert certified["edgartools-rules.mdm.clean.company"] == "Certification.Gold"

@@ -39,9 +39,13 @@ measures file, version `measures-2026-10-29.first-build`: margins, leverage
 and per-share ratios, returns on the average balance and on the beginning
 balance, and CAGR over 1, 3, 5 and 10 years. It belongs to the subject those
 tables are already members of. It is not a new subject. The local catalog
-already holds those three tables. The rules do not name a native data product,
-and the catalog plan does not emit one. Do not create that native object until
-the rules name it.
+already holds those three tables. The operator named three native packages: the mastered legal entity and the
+datasets that fill it, the mastered instrument and the datasets that fill it
+plus its registered listing, and the three prepared tables of filed figures,
+line items, and fundamental measures. Each package takes that subject's
+domain. A mastered package's input ports are the datasets that fill it. The
+fundamental-measures package's input ports are the filed figures and the line
+items. The publisher creates those three and no others.
 
 The older gold factor chain is a separate earlier factor table. It is not this
 package. Do not publish it as the fundamental analytics package.
