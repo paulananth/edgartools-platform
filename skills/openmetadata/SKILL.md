@@ -266,6 +266,21 @@ and failure actions. An externally executed check is not a runnable native SQL
 test. The `Other` platform is available in the pinned definition schema; select
 the tested mapping rather than relabeling the existing execution engine.
 
+A PUT of a case on a table auto-creates that table's basic suite
+`{tableFQN}.testSuite` and attaches the case. Do not create a second suite for
+the same table.
+
+The Summary page at `/data-quality` defaults to Last 30 days. It counts a table
+as Covered only when a case on that table has `testCaseResult.timestamp` in
+that window. The query is `GET /dataQuality/testSuites/dataQualityReport` with
+`index=testCase` and
+`aggregationQuery=bucketName=entityWithTests:aggType=cardinality:field=originEntityFQN`,
+plus a `range` on `testCaseResult.timestamp`. A definition-only case has no
+result, so Covered stays 0 and Not Covered is every table. The Test Cases tab
+counts distinct `originEntityFQN` of published cases and does not apply that
+range. Do not POST test-case results to fill the Summary donut. Real results
+come from executing the checks.
+
 A logical suite is a metadata grouping, not an executable/basic suite. Verify
 the native API for creating it and linking cases. Do not call result endpoints
 to populate a definition-only catalog. A populated glossary or check list is
