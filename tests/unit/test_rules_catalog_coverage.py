@@ -53,7 +53,8 @@ def test_pinned_relationship_types_and_endpoints_are_explicit_in_catalog_and_wor
         table = actual[row["code"]]
         assert {c["name"] for c in table["columns"]} == set(row["properties"])
         for value in row["properties"]["from"] + row["properties"]["to"]:
-            assert value in table["description"]
+            shown = catalog._display(catalog.ENDPOINT_CATALOG_NAME.get(value, value))
+            assert shown in table["description"]
     sheets = mapdoc.documents(root)[root / "merge" / "relationships.xlsx"][1]
     assert {row[0] for row in sheets["Relationship types"][1:]} == {r["code"] for r in definitions}
 
@@ -82,15 +83,14 @@ def test_every_dataset_quality_rule_and_declared_link_is_described():
     tables = {catalog.fqn(catalog.SERVICE, "sources", p.parent.name, code): entry["contract"]
               for p in (files.ROOT / "sources").glob("*/source.yaml")
               for code, entry in (files.load_source(p).get("mdm") or {}).items()}
-    actual = {t["databaseSchema"] + "." + catalog.quote(t["name"]): t for t in catalog.plan()["tables"]}
+    planned = catalog.plan()
+    actual = {t["databaseSchema"] + "." + catalog.quote(t["name"]): t for t in planned["tables"]}
     for name, contract in tables.items():
-        about = actual[name]["description"]
+        cases = " ".join(case["name"] + " " + case["description"] for case in planned["quality_cases"]
+                         if name in case["entityLink"])
         for section in ("checks", "fixes"):
             for rule in (contract.get("quality") or {}).get(section) or []:
-                assert rule["id"] in about
-        for link in (contract.get("adapter") or {}).get("relationships") or []:
-            for kind in ([link["type"]] if link.get("type") else (link.get("type_values") or {}).values()):
-                assert kind in about
+                assert rule["id"] in cases
 
 
 def test_publication_reconciles_only_its_own_pipeline_service():

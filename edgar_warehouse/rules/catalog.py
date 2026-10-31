@@ -122,23 +122,17 @@ def _dataset(source: str, code: str, contract: dict, kinds: list[str], fills: di
     for path in classified:
         uses[path].append("Read by the classification rule")
     critical = [f"`{field}`: {test}" for _, field, test in critical_elements(contract.get("quality") or {})]
-    about = [f"Dataset Contract `{code}` from {contract.get('provider') or source}.",
-             f"One record is: {contract.get('record_key') or 'not stated'}."]
+    record = contract.get("record_key") or "one source record"
+    subjects = " and ".join(_display(kind) for kind in kinds) or "no mastered subject"
+    about = [f"One record is {record}.", f"These records become {subjects}."]
     for kind in kinds:
         filled = sorted(fills.get(kind, set()) & set(to_field))
-        about.append(f"Its records become {kind}; " + (f"it fills {len(filled)} {kind} fields." if filled
-                                                       else f"it fills no {kind} field."))
+        label = _display(kind)
+        about.append(f"It supplies {len(filled)} {label} fields." if filled else f"It supplies no {label} fields.")
     if critical:
-        about.append("Critical data elements (a record missing one is an exception, never merged): "
-                     + "; ".join(critical) + ".")
-    for section in ("checks", "fixes"):
-        for rule in (contract.get("quality") or {}).get(section) or []:
-            about.append(f"Data quality {section}: `{rule.get('id')}` "
-                         + json.dumps(rule, sort_keys=True, ensure_ascii=False) + ".")
-    if adapter.get("relationships"):
-        about.append("Declared relationship mappings: "
-                     + json.dumps(adapter["relationships"], sort_keys=True, ensure_ascii=False) + ".")
-    table = {"name": code, "databaseSchema": fqn(SERVICE, SOURCES, source), "description": " ".join(about),
+        about.append("A record missing a required item is held back and is not merged.")
+    table = {"name": code, "displayName": _sentence(f"One record is {record}", 80),
+             "databaseSchema": fqn(SERVICE, SOURCES, source), "description": " ".join(about),
              "columns": [{"name": path, "dataType": TEXT, "description": "; ".join(used) + "."}
                          for path, used in sorted(uses.items())]}
     at = fqn(SERVICE, SOURCES, source, code)
@@ -213,8 +207,10 @@ def _registered(source: str, spec: dict) -> dict:
     about = [spec.get("definition") or "", f"Grain: {spec['grain']}." if spec.get("grain") else "",
              f"Key: {', '.join(spec['key'])}; load mode {spec['load_mode']}."]
     about += [f"Data quality: {c}." for c in checks.get(None, [])]
-    return {"name": spec["table"], "databaseSchema": fqn(SERVICE, SILVER, source),
-            "description": " ".join(a for a in about if a), "columns": columns}
+    description = " ".join(a for a in about if a)
+    return {"name": spec["table"], "displayName": _sentence(spec.get("definition") or spec["table"], 80),
+            "databaseSchema": fqn(SERVICE, SILVER, source),
+            "description": description, "columns": columns}
 
 
 def _profiles(root: Path) -> tuple[list[dict], list[dict], list[dict]]:
@@ -300,10 +296,17 @@ def _relationships(root: Path, policy: dict) -> tuple[list[dict], list[dict]]:
         props = row.get("properties") or {}
         capacities = [{"code": r["code"], "label": r["label"], "properties": r.get("properties") or {}}
                       for r in rows if r.get("parent_code") == name]
-        tables.append({"name": name, "databaseSchema": fqn(SERVICE, MDM, "relationships"),
-                       "description": f"Configured relationship type: {row.get('definition') or row['label']}. "
-                                      f"From: {props.get('from') or []}. To: {props.get('to') or []}. "
-                                      f"Capacities: {capacities}. Definition metadata, not relationship records.",
+        origin = ", ".join(_display(ENDPOINT_CATALOG_NAME.get(code, code)) for code in (props.get("from") or []))
+        destination = ", ".join(_display(ENDPOINT_CATALOG_NAME.get(code, code)) for code in (props.get("to") or []))
+        roles = ", ".join(item["label"] for item in capacities if item.get("label"))
+        text = row.get("definition") or row["label"]
+        if origin or destination:
+            text += f" From {origin or 'one subject'} to {destination or 'one subject'}."
+        if roles:
+            text += f" Roles: {roles}."
+        tables.append({"name": name, "displayName": row.get("label") or _display(name),
+                       "databaseSchema": fqn(SERVICE, MDM, "relationships"),
+                       "description": text,
                        "columns": [{"name": key, "dataType": TEXT,
                                     "description": json.dumps(value, ensure_ascii=False, sort_keys=True)}
                                    for key, value in sorted(props.items())]})
@@ -311,7 +314,15 @@ def _relationships(root: Path, policy: dict) -> tuple[list[dict], list[dict]]:
 
 
 def _display(name: str) -> str:
-    return " ".join(part.capitalize() for part in name.split("_"))
+    return " ".join(part.capitalize() for part in name.replace("-", " ").split("_"))
+
+
+def _sentence(text: str, limit: int = 220) -> str:
+    plain = " ".join(str(text).replace("`", "").split())
+    sentence = plain.split(". ")[0].strip(" .")
+    if len(sentence) > limit:
+        sentence = sentence[: limit - 1].rstrip() + "…"
+    return sentence
 
 
 def _table_name(table: dict) -> str:
@@ -365,13 +376,17 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) 
             ends.add(ENDPOINT_CATALOG_NAME.get(code, code))
     names = sorted(kinds | ends)
     kind_tables = {fqn(SERVICE, MDM, CLEAN, kind): kind for kind in kinds}
+    words = {heading: _sentence(description.split("Avoid:")[0], 240)
+             for heading, description in _context_terms(root)}
     domains = []
     for name in names:
-        if name in kind_tables.values():
-            description = f"The mastered kind `{name}`. Rules: rules/merge/kinds/{name}.yaml."
-        else:
-            description = f"A relationship endpoint `{name}` with no kind file."
-        domains.append({"name": name, "displayName": _display(name), "description": description,
+        display = _display(name)
+        description = words.get(f"{display} Identity") or words.get(display)
+        if not description and name in kinds:
+            description = f"One {display} in the master data."
+        if not description:
+            description = f"A {display} that a relationship can point to."
+        domains.append({"name": name, "displayName": display, "description": description,
                         "domainType": "Source-aligned"})
     by_display = sorted(domains, key=lambda domain: len(domain["displayName"]), reverse=True)
 
@@ -600,14 +615,14 @@ def plan(root: Path | None = None) -> dict:
         columns = []
         for field, (sources, row) in sorted(by_kind.get(kind, {}).items()):
             _, _, which, at = row
-            filled = ", then ".join(f"`{s}`" for s in sources) or "no dataset yet"
+            filled = ", then ".join(s for s in sources) or "no dataset yet"
             columns.append({"name": field, "dataType": TEXT, "description":
                             f"Filled by {filled}: the first with a value wins. "
                             f"Rule: {which} (rules/{at})."})
-        tables.append({"name": kind, "databaseSchema": fqn(SERVICE, MDM, CLEAN), "columns": columns,
-                       "description": f"The MDM kind `{kind}`, rules version `{rules.get('version')}`. "
-                                      "Preferred datasets, in order: " + ", ".join(f"`{s}`" for s in order)
-                                      + f". Rules: rules/merge/kinds/{kind}.yaml."})
+        tables.append({"name": kind, "displayName": _display(kind),
+                       "databaseSchema": fqn(SERVICE, MDM, CLEAN), "columns": columns,
+                       "description": f"One {_display(kind)} in the master data. "
+                                      "The first dataset with a value fills each field."})
     return {
         "service": {"name": SERVICE, "serviceType": "CustomDatabase",
                     "description": "The Data Catalog, published one way from the rules; change the rules, "

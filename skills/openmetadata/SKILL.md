@@ -10,6 +10,11 @@ subject domains, the glossary words, and what a relationship type is stay in
 the data-catalog skill. This skill says how that meaning is stored on
 OpenMetadata 2.0.2, and `rules catalog publish` is the only write.
 
+Write a plain display name and a plain first sentence on every domain, table,
+product, and relationship type. The technical name stays the identity. Do not
+open a description with a file path, a rules version, or a JSON list. A person
+should understand the first sentence without knowing the rules layout.
+
 Read the running version from `GET /api/v1/system/version`. The API behavior
 below was checked on 2.0.2; refresh the selected version's schema before another
 deployment. Treat rolling documentation as concept guidance, not proof of the
