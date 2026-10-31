@@ -133,7 +133,19 @@ type and the table is that type. Do not tag the kind table with every term
 whose heading starts with the domain name. A domain with no kind table still
 has its glossary. A proposed table is not a kind table.
 
-The Relations Graph is the typed edges between terms. Read it from
+A domain has no `relationsGraph` endpoint. Its graph is lineage. Read it with
+`GET /api/v1/lineage/domain/name/{domain}?upstreamDepth=1&downstreamDepth=1`.
+Add one edge from the domain to the relationship-type table, for each end of
+that type:
+
+`PUT /api/v1/lineage/domain/name/{domain}/table/name/{typeFqn}`
+
+with `{"description": "<type>: <definition>", "source": "Manual"}`. The node
+on the graph is the type. Do not add an edge from domain to domain. One edge
+per domain pair is overwritten by the next type, so the type disappears.
+`rules catalog publish` writes these edges.
+
+The glossary Relations Graph is a different API,
 `GET /glossaryTerms/{id}/relationsGraph`. A term that mentions another term is
 not a relation. Do not add `relatedTo` from a definition, a display name, or an
 Avoid line. Add an edge only when the operator names the two terms and the

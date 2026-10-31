@@ -412,9 +412,23 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) 
     glossaries.append({"name": "shared", "displayName": "Shared", "description":
                        "Words that apply to more than one subject, or to mastering and reference data, "
                        "taken from the platform glossary. A projection. Not an approval."})
+    domain_lineage = []
+    known = set(names)
+    for row in roots:
+        props = row.get("properties") or {}
+        ends = []
+        for code in (props.get("from") or []) + (props.get("to") or []):
+            domain = ENDPOINT_CATALOG_NAME.get(code, code)
+            if domain in known and domain not in ends:
+                ends.append(domain)
+        table = fqn(SERVICE, MDM, "relationships", row["code"])
+        description = row["code"] + ": " + (row.get("definition") or row["label"])
+        for domain in ends:
+            domain_lineage.append({"domain": domain, "table": table, "description": description})
     return {"domains": domains, "glossaries": glossaries,
             "glossary_terms": [by_term[name] for name in sorted(by_term)],
-            "memberships": memberships, "certifications": certifications}
+            "memberships": memberships, "certifications": certifications,
+            "domain_lineage": domain_lineage}
 
 
 def plan(root: Path | None = None) -> dict:
@@ -694,6 +708,10 @@ def publish(plan: dict, call: Call) -> dict:
         ids[name] = answer["id"]
     _publish_marks(plan, call, ids)
     _drop_invented_domain_edges(plan, call)
+    for edge in plan.get("domain_lineage") or []:
+        call("PUT", "/lineage/domain/name/" + escape(edge["domain"], safe="")
+             + "/table/name/" + escape(edge["table"], safe=""),
+             {"description": edge["description"], "source": "Manual"})
     pipeline_ids = {}
     if plan.get("pipeline_service"):
         _upsert(call, "/services/pipelineServices", plan["pipeline_service"])
