@@ -226,6 +226,27 @@ For example: a cascade pass, a name rule, or records waiting for review.
    in APPROVE.md. A rule short of its bar stays off, and its records go to
    review.
 
+**Name matching across two sources.** When two sources share no issued
+identifier, a record joins the other source's master by name, and only
+where the name is unique on both sides:
+1. **Count every name over both whole sources first**: the Name Census, one
+   file built from the complete captures of both (never from what a Stage
+   holds, so load order cannot change an answer), each name normalized the
+   same way on both sides (legal form kept), the other source's other and
+   transliterated names counted too. Rebuild it whenever a source's names or
+   the matching rules change: it carries the passes' answers.
+2. **A name rule** binds a pair whose name the census counts once on each
+   side, plus one more agreeing value (a jurisdiction, a postal code);
+   **a cascade** runs passes strict to loose (name and address parts, then
+   fewer parts), each pass binding one to one over what earlier passes left.
+   A pass part given as a list agrees when any one of its parts does.
+3. The preparation of the source whose records bind reads the census file,
+   and the Merge Stage re-checks each pair on its own rows.
+4. Measure every new link a rule adds against the rules already on (**Measure it**,
+   above): label each one, plus the risky arms (a match through another
+   name, a conflict in place of incorporation, a name another candidate
+   holds) as the adversarial fixture.
+
 A rule that asks whether two records state the same time compares them as
 instants, never as text: the Stage stores a record's `effective_at` in UTC
 (`+00:00`), while a census or a source keeps the provider's spelling (`Z`, an
@@ -268,6 +289,15 @@ Never invent a command.
   about 3 minutes per 1,000 documents on a laptop.
 - Open work on the live SEC Company and GLEIF pipelines: see data-onboarding's
   Examples, "Unfinished live pipelines" (one list, kept there).
+- Name matching across two sources: SEC Company to GLEIF. The census is
+  `edgar-warehouse mdm name-census` (readings in
+  `rules/sources/sec.submissions.company/census-*.yaml` and
+  `rules/sources/gleif/census-*.yaml`; about 11 minutes over the whole
+  population); the name rules `sec-gleif-name-jurisdiction` and
+  `sec-gleif-name-postal`; the cascade passes `sec-gleif-cascade-p5` to `-p7`
+  (`cascade_pass@1`; P5 compares `[[city, postcode]]`); the code in
+  `edgar_warehouse/mdm/clean/name_census.py` and `cascade.py`
+  (ticket 09).
 - Issued identifiers: those with an Identifier Contract in a kind file (today `cik`; GLEIF states `lei`). Name-rule proofs:
   `.scratch/company-mastering/research/08-*` and `12-*`. A proving run:
   `.scratch/company-mastering/research/27_proving_run.py`.

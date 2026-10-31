@@ -569,10 +569,14 @@ starting from its "Defaults".
   most 33554432 and `read.limits.max_records` from 1 to 100000. Choose bounds
   from measured inputs and split oversized captures into explicit units;
   see [READING.md](../data-platform/READING.md) for output and preparation limits. The `acquisition` section (how
-  the platform captures the files) and the `bookkeeping` section (how it
-  runs them) belong to the Bookkeeping skill. Leave them out for a feed
-  onboarded from files already captured, and keep them as they are in an
-  existing file.
+  the platform captures the files) belongs to the Bookkeeping skill: leave it
+  out for a feed onboarded from files already captured. The `bookkeeping`
+  section is required: its `mastering` target (version 2, each step with its
+  `units` and `input`) is what runs the feed into MDM, and without it nothing
+  is mastered and **test** cannot run it. Write it with the
+  [bookkeeping skill](../bookkeeping/SKILL.md) and its
+  [SPEC](../bookkeeping/SPEC.md), shaped like an existing source's target
+  (Examples); keep both sections as they are in an existing file.
 
 **A new domain** also needs `rules/merge/kinds/<kind>.yaml`. Copy the shape
 of an existing kind's file, and declare:
@@ -597,7 +601,13 @@ of an existing kind's file, and declare:
 
 Never add the new rules to `automatic_rules` in `rules/merge/policy.yaml`;
 that happens only at **approve**. A matching rule on names is never written
-here: it needs a measured proof, which is **refining-rules** work.
+here: it needs a measured proof, which is **refining-rules** work. When a
+source's records can join another source's master only by name (they share
+no issued identifier), list that name matching as its own part in
+**plan-parts**, after the identifier rules, and take it through
+refining-rules' **change-matching** ("Name matching across two sources"):
+the kind is not mastered end to end until it is done. Say so in the log
+rather than stopping silently.
 
 **Execution target:** use the data-platform Parse and Master flow to declare
 `source.read` → `mdm.prepare` → `mdm.merge` and any required publication
@@ -931,6 +941,15 @@ These name today's sources only as examples; nothing above depends on them.
   (`rules/merge/kinds/company.yaml`). `person-cik` on `cik` is shaped like
   `company-cik`. SEC submissions carry no effective date, so Company sets
   `allow_unknown_effective`.
+- **A mastering target to copy:** `rules/sources/sec.submissions.person/source.yaml`,
+  `bookkeeping.targets.mastering` (read, prepare, merge, with each step's
+  units and input).
+- **Platform facts the SEC Company chain needs:** its code reads the
+  switched-on `sec-company-candidate` from the policy when it loads, so a
+  proving run stamps it into its copy of the policy first (**test**); its
+  preparation (`edgar-warehouse mdm prepare-clean-company`) reads the Name
+  Census file (`--name-census`, built by `edgar-warehouse mdm name-census`,
+  with `--catalog` while a cascade pass is on) and the exchange catalog.
 - **Source checks in code:** for Company,
   `merge.check_company_sources(files.policy(), assertions)`.
 - **Pinned digests:** `tests/mdm/` (757 tests, under a minute) holds them;
