@@ -43,6 +43,8 @@ Read these before deciding, and use their words:
   projects these words and the classes below. It does not decide them, and this
   skill does not publish the catalog. Projection rules are the data-catalog skill.
   Gold and Silver certification of a store is that projection, not a class decision.
+  A domain relationship is a type in `mdm-relationship-types`. The catalog places
+  that type on its endpoint domains. It does not turn the type into a `relatedTo` edge.
 - `edgar_warehouse/mdm/clean/evidence.py`: `KINDS` (the master kinds) and
   `PROFILE_KINDS` (a profile and the kinds it may hang on).
 - `rules/merge/kinds/<kind>.yaml`, `identifiers`: the kind's Identifier

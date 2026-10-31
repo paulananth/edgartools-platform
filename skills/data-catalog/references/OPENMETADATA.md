@@ -39,12 +39,28 @@ MDM, RDM and silver are processing layers: databases `mdm`, `rdm` and `silver`
 on the rules service. They are not subject domains. Do not create a domain
 named after a layer.
 
-Place each configured relationship type in `mdm.relationships` and make it a
-member of every endpoint domain. When a configured endpoint code differs from
-the approved catalog name, map that code onto the catalog name. `venue` maps
-to `market_venue`. The other configured endpoint codes match the domain names.
-A declared domain with no kind file still receives a relationship definition
-when it is an endpoint.
+A domain relationship is one pinned relationship type. Read it from the code
+set the data-modeling skill names, `mdm-relationship-types`, pinned in
+`rules/merge/reference-pins.yaml`. Do not copy that list into this skill, and
+do not invent a type.
+
+- A code with no parent is one type and one catalog asset, under
+  `mdm.relationships`. Its description is the code's definition, and it states
+  the `from` ends, the `to` ends, and the capacities. The rules catalog plan
+  already writes that description. Keep it.
+- A child code is a capacity of its parent type. It is not another asset, not
+  another domain, and not another relationship.
+- The asset is a member of every endpoint domain. Map an endpoint code that is
+  not a catalog domain name onto the approved catalog name. `venue` maps to
+  `market_venue`. The other endpoint codes match the domain names. A domain
+  with no kind file still receives the type when it is an endpoint.
+- A profile on an end is a profile, not a domain and not a type.
+- A prepared-store row that points at masters is a transaction. It is not a
+  domain relationship. A lineage edge from a dataset to a type says that
+  dataset declares the type. It is not a second relationship between subjects.
+- Do not draw these types as `relatedTo` edges between glossary terms. A
+  glossary term for a type uses the code's definition and is associated only
+  with that type's table.
 
 Place each profiled code set in `rdm.code_sets` and keep a proposed set labeled
 proposed. A profiled identifier kind that is not a declared domain is not a new
