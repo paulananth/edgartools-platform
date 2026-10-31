@@ -159,7 +159,7 @@ def test_an_identifier_rule_needs_its_report_and_a_contract_verified_once(identi
         files.approve_identifier_rule(IDENTIFIER_RULE, proof=tmp_path / "none.json", reason="r", by="Operator",
                                       words="yes", at=AT, root=root)
     with pytest.raises(files.RulesFileError, match="does not join on an identifier"):
-        files.approve_identifier_rule("sec-gleif-cascade-p1", proof=report, reason="r", by="Operator", words="yes",
+        files.approve_identifier_rule("sec-gleif-cascade-p6", proof=report, reason="r", by="Operator", words="yes",
                                       at=AT, root=root)
     with pytest.raises(files.RulesFileError, match="exact words"):
         files.approve_identifier_rule(IDENTIFIER_RULE, proof=report, reason="r", by="Operator", words=" ",

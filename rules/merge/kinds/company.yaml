@@ -339,77 +339,19 @@ rules:
 # Declared, not switched on: each pass needs its own proof and the
 # operator's approval (ticket 20). The two rules above stay until then.
 # P5 is switched on (ticket 09; operator, 2026-10-30 18:20 ET: "P5 now, hold
-# P1/P4/P6 (Recommended)"; its proof is in policy.yaml). P1, P4 and P6 are held
-# on 6 labelled pairs that read as a parent, subsidiary, spin-off or namesake;
-# P7 stays off (a different entity among its labels).
+# P1/P4/P6 (Recommended)"; its proof is in policy.yaml). P5 compares the city or
+# the postcode, and P1 (street, city and postcode) and P4 (postcode) were
+# deleted (operator, 2026-10-30: "do not use p1 or p4, p5 can match on postel
+# code"): a pair either matched agrees on the city or the postcode, so P5 takes
+# their links, the 4 flagged ones included ("Link them (Recommended)"). P6 is
+# held on 2 labelled pairs that read as a parent or namesake; P7 stays off (a
+# different entity among its labels).
 # P2 (street and postcode) and P3 (street and city) were deleted (ticket 09;
 # operator, 2026-10-17: "Delete both"): too few new links to prove (8 and 22
 # of 52 needed); a pair either matched shares the postcode (P4) or the city
 # (P5). The other passes keep their names.
-- rule_id: sec-gleif-cascade-p1
-  version: 2026-09-28.1
-  family: name_binding
-  source: gleif.level1.v1
-  holder_source: sec.submissions.company.v1
-  applies_to_verdict: company
-  emits:
-  - bind
-  on_no_match: wait
-  when:
-  - primitive: cascade_pass@1
-    args:
-      pass: P1
-      compare:
-      - street
-      - city
-      - postcode
-      over_shared: 25
-      refused_flags: []
-      sec_normalizer: normalize_text@sec-legal-form-kept-v1
-      gleif_normalizer: normalize_text@legal-form-kept-v1
-  - primitive: gleif_entity_eligible@1
-    args:
-      categories:
-      - GENERAL
-      entity_statuses:
-      - ACTIVE
-      refused_registration_statuses:
-      - ANNULLED
-      - DUPLICATE
-  - primitive: holds_no_other_lei@1
-    args: {}
-- rule_id: sec-gleif-cascade-p4
-  version: 2026-09-28.1
-  family: name_binding
-  source: gleif.level1.v1
-  holder_source: sec.submissions.company.v1
-  applies_to_verdict: company
-  emits:
-  - bind
-  on_no_match: wait
-  when:
-  - primitive: cascade_pass@1
-    args:
-      pass: P4
-      compare:
-      - postcode
-      over_shared: 25
-      refused_flags: []
-      sec_normalizer: normalize_text@sec-legal-form-kept-v1
-      gleif_normalizer: normalize_text@legal-form-kept-v1
-  - primitive: gleif_entity_eligible@1
-    args:
-      categories:
-      - GENERAL
-      entity_statuses:
-      - ACTIVE
-      refused_registration_statuses:
-      - ANNULLED
-      - DUPLICATE
-  - primitive: holds_no_other_lei@1
-    args: {}
 - rule_id: sec-gleif-cascade-p5
-  version: 2026-09-28.1
+  version: 2026-10-30.1
   family: name_binding
   source: gleif.level1.v1
   holder_source: sec.submissions.company.v1
@@ -422,7 +364,8 @@ rules:
     args:
       pass: P5
       compare:
-      - city
+      - - city
+        - postcode
       over_shared: 25
       refused_flags: []
       sec_normalizer: normalize_text@sec-legal-form-kept-v1
