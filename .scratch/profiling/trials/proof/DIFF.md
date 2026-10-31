@@ -81,3 +81,37 @@ repository's guides; that cannot be audited.
 
 N-PORT, OpenFIGI, Form ADV (operator, 2026-10-29: "Keep the 10-07 scope"),
 GLEIF reporting exceptions, and the 13F rows (silver, ticket 06).
+
+## Second run, after the skills were fixed (sandbox at 9f74acc5)
+
+The three skill gaps were fixed (#1258) and the rulings file grew to 909
+(CLAUDE.md's standing rulings added). A new fresh agent, 32 minutes
+(06:28-07:00 ET, 2026-10-31); every one of its 176 tool calls stayed in the
+sandbox, but the harness gave it the repository's CLAUDE.md and the
+operator's memory index, which the sandbox cannot stop.
+
+| | First run | Second run |
+|---|---|---|
+| `rules check` | passes | passes |
+| Run definitions (`bookkeeping` mastering targets) | none | all four, each writing its input manifest offline |
+| Registers on the stores (policy, four contracts) | not reached | yes |
+| Mastering on the cohort (sample) | stops at once (no target) | stops at Company preparation: nothing is switched on, and the Company chain reads its switched-on classification rule |
+| SEC Company / Person (its own reading) | 373 / 50 | 315 / 50 (145 held back, 40 undetermined) |
+| GLEIF Level 1 Companies; consolidation links | 1,577; 1,943 | 1,577; 1,943 |
+| SEC-to-GLEIF matching | none | none: it found 165 one-to-one exact-name pairs but built no Name Census, judging a binding rule out of reach without a measured proof |
+| Questions: answered by rulings / unanswered | 22 / 11 of 36 | 19 / 11 of 30 |
+
+What stays out of reach of the skills alone, and why:
+1. **Switch-on.** Every rule version the agent writes is new, so no recorded
+   approval covers it, and its proofs need labels only the operator gives
+   (the Person bar needs 381 people; the cohort has 50). This is by design:
+   approvals are the operator's.
+2. **Name matching.** With the recipe in refining-rules, the agent still
+   stopped before building the census, since the rule it feeds cannot be
+   switched on without labels (point 1).
+3. **Two platform faults** it found:
+   - the MDM merge workers load the Company census reading
+     (`census-filer.yaml`) for every source, so a rules folder without it
+     cannot merge anything;
+   - the cohort slice is not in the capture layout the reader expects (the
+     proof's slice, not the platform).
