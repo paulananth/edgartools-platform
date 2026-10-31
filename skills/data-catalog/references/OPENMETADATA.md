@@ -101,11 +101,11 @@ domain has a kind table. A domain with no kind table still has its glossary.
 A proposed table is not a kind table.
 
 The Relations Graph is the typed edges between terms. Read it from
-`GET /glossaryTerms/{id}/relationsGraph`. Add a `relatedTo` edge when a term's
-definition, and not its Avoid line, names another published term. A subject
-domain's display name in that definition names that domain's identity term.
-An Avoid line does not make an edge. The separate RDF glossary graph stays
-unused unless that service is enabled.
+`GET /glossaryTerms/{id}/relationsGraph`. A term that mentions another term is
+not a relation. Do not add `relatedTo` from a definition, a display name, or an
+Avoid line. Add an edge only when the operator names the two terms and the
+relation type. The separate RDF glossary graph stays unused unless that
+service is enabled.
 
 Two classifications are created for this catalog. The built-in certification
 is applied as well. Do not add another classification.
