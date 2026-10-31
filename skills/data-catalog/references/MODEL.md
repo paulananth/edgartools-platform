@@ -66,10 +66,9 @@ annotation, classification, product membership, data lineage or control link.
 A relationship between mastered records is another relationship type; it is
 not evidence that one dataset was produced from another.
 
-Glossary terms and the two classifications are a projection. The words stay in
-`CONTEXT.md`. The class choice stays in the data-modeling skill. The projection
-steps are in [OPENMETADATA.md](OPENMETADATA.md). Do not keep a second copy of
-either here.
+Glossary terms are a projection. The words stay in `CONTEXT.md`. The class
+choice stays in the data-modeling skill. OpenMetadata storage of that
+projection is the openmetadata skill. Do not keep a second copy here.
 
 For semantic enrichment, read the definition, grain, field role, constraints,
 relationships and transformation together. A technical identifier or title case

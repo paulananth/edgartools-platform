@@ -28,26 +28,20 @@ Three different facts, kept as different tags:
 
 - A subject domain says what the data is about.
 - A processing layer says which plan database holds it.
-- A certification says how finished that store is. The built-in certification
-  is a field on the asset, not a tag in the tag list, and it is mutually
-  exclusive. Gold certifies the master store. Silver certifies the prepared
-  store. The reference store and a captured source dataset stay uncertified.
-  There is no gold database in the plan, so Gold is not a layer and not a
-  subject. The server sets how long the certification lasts. Read that period
-  and the expiry back. Do not invent a longer one.
+- A certification says how finished that store is. Gold certifies the master
+  store. Silver certifies the prepared store. The reference store and a
+  captured source dataset stay uncertified. Gold is not a layer and not a
+  subject. How a destination stores that certification is in the
+  [openmetadata](../openmetadata/SKILL.md) skill.
 
 A proposed table in the prepared store is still Silver certified and still has
 no data class. Do not invent a class, a domain, or a certification the data
 model does not name.
 
-`rules catalog publish` is the only write into OpenMetadata. It writes the
-subject domains, the glossaries, the Gold and Silver certifications, and the
-data-flow lineage. It writes one asset per pinned relationship type and leaves
-the ends on that asset. It does not write a `relatedTo` edge, a lineage edge
-from a dataset to a relationship type, or a domain link for each end of a type.
-Read the type, its ends, and its capacities from the pinned code set, and
-follow [OPENMETADATA.md](references/OPENMETADATA.md). Do not publish those
-objects a second time by hand.
+A domain relationship is one pinned type. Its ends stay on that asset. They
+are not extra links, and a dataset that declares a type is not lineage to that
+type. The [openmetadata](../openmetadata/SKILL.md) skill is the only write of
+this model into OpenMetadata. Do not publish it a second time by hand.
 
 ## Understand the model before publishing
 
@@ -60,21 +54,22 @@ folders. Browse by business domain first; processing layer is a separate filter.
    Each configured entity kind is a business domain, not each individual record.
    Reuse the same method for every source and kind; no entity/provider lists or
    rename dictionaries. Preserve the distinction between defined and qualified.
-   Read the settled domain type, the multi-domain rule and the MDM, RDM and
-   silver layer placement in [OPENMETADATA.md](references/OPENMETADATA.md)
-   before asking the operator to choose a type again.
+   Read the settled domain type in the
+   [openmetadata](../openmetadata/SKILL.md) skill before asking the operator
+   to choose a type again.
 2. Identify the business subject, vocabulary, processing layer, physical location
    and responsible people independently. Use evidence-backed definitions and
    understandable display names. Persist reviewed meaning in its owning
    configuration. Propose uncertain meanings for review; do not invent them.
-   Project the glossary and the classifications as
-   [OPENMETADATA.md](references/OPENMETADATA.md) describes. Create a data product
+   Project the glossary as this skill describes. The OpenMetadata write is the
+   [openmetadata](../openmetadata/SKILL.md) skill. Create a data product
    only when [MODEL.md](references/MODEL.md) says a product definition exists.
    Missing definitions go to profiling or onboarding; changes to existing
    definitions go through refining-rules.
 3. Select the destinations and versions. Read only the applicable adapter
-   reference: [OPENMETADATA.md](references/OPENMETADATA.md) for OpenMetadata;
-   [PORTABILITY.md](references/PORTABILITY.md) for another catalog or renderer.
+   reference: the [openmetadata](../openmetadata/SKILL.md) skill for
+   OpenMetadata; [PORTABILITY.md](references/PORTABILITY.md) for another
+   catalog or renderer.
    State each capability as tested, documented-only or unsupported.
 4. Map logical objects and relationships to native objects explicitly. Preserve
    ownership, review state, term associations, transformation meaning and quality

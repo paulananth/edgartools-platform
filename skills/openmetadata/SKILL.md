@@ -1,4 +1,14 @@
-# OpenMetadata adapter reference
+---
+name: openmetadata
+description: Write and read this platform's catalog on OpenMetadata. Use before rules catalog publish, a catalog reset, or any OpenMetadata API call. Business meaning stays in the data-catalog skill.
+---
+
+# OpenMetadata
+
+This is the only place for OpenMetadata implementation. Business meaning, the
+subject domains, the glossary words, and what a relationship type is stay in
+the data-catalog skill. This skill says how that meaning is stored on
+OpenMetadata 2.0.2, and `rules catalog publish` is the only write.
 
 Read the running version from `GET /api/v1/system/version`. The API behavior
 below was checked on 2.0.2; refresh the selected version's schema before another
@@ -14,7 +24,7 @@ installed API. Use the existing private endpoint and bot credentials.
 | Classification / Tag | Category taxonomy and assigned categories. Use a configured taxonomy for processing layers; do not conflate its tags with glossary terms. |
 | DatabaseService → Database → DatabaseSchema → Table → Column | Technical containment. A logical registration is metadata, not proof a physical database table exists. |
 | PipelineService → Pipeline → Task | Declared processing and dependencies. Pipeline lineage association must be published in addition to tasks. A metadata-ingestion pipeline is a different workflow from the data pipeline it describes. |
-| DataProduct | Configured consumer-facing asset collection, assigned to domains. Create one only when [MODEL.md](MODEL.md) says a product definition exists. |
+| DataProduct | Configured consumer-facing asset collection, assigned to domains. Create one only when the data-catalog model says a product definition exists. |
 | TestDefinition / TestCase / TestSuite | Reusable check definition, asset-specific configured check and grouping. Actual results are separate. |
 
 The pinned domain types are `Source-aligned`, `Consumer-aligned` and `Aggregate`.
@@ -98,7 +108,7 @@ to more than one real product. "Data Product Domain Validation" stays enabled:
 a product on an asset must match that asset's domains. Do not disable it to
 force a product onto an asset in another domain. Do not invent owners. The
 local catalog had no native data products on 2026-10-30. The fundamental
-analytics package in [MODEL.md](MODEL.md) is already three tables of that
+analytics package in the data-catalog model is already three tables of that
 subject, not one of these native objects.
 
 ## Glossary and classification
@@ -228,3 +238,33 @@ receipt and any additional qualification in the task record, not this skill.
 - [Versioned create schemas](https://github.com/open-metadata/OpenMetadata/tree/2.0.2-release/openmetadata-spec/src/main/resources/json/schema/api)
 - [Lineage schema](https://github.com/open-metadata/OpenMetadata/blob/2.0.2-release/openmetadata-spec/src/main/resources/json/schema/type/entityLineage.json)
 - [Column-tag readback implementation](https://github.com/open-metadata/OpenMetadata/blob/2.0.2-release/openmetadata-service/src/main/java/org/openmetadata/service/jdbi3/TableRepository.java)
+
+## Local server
+
+Use the existing Docker context and the named volumes in
+`infra/openmetadata/docker-compose.yml`:
+
+```bash
+docker compose -f infra/openmetadata/docker-compose.yml up -d
+```
+
+Check Docker first. If it is unreachable, report that blocker. Preserve other
+users' containers and volumes. A cold start may take 10–20 minutes. The compose
+file accepts `CATALOG_SERVER_HEAP_OPTS` and `CATALOG_SEARCH_HEAP_OPTS`.
+
+Supply `OPENMETADATA_URL` and `OPENMETADATA_TOKEN` from the private environment.
+Never print them. The URL passed to `catalog.connect` is the server root. That
+function adds `/api/v1`.
+
+A whole-service reset deletes the owned pipeline service, then the owned
+database service:
+
+1. `GET /api/v1/services/<type>/name/<exact-owned-name>`. Check the name and
+   the fully qualified name.
+2. `DELETE /api/v1/services/<type>/<returned-id>?recursive=true&hardDelete=true`.
+3. Repeat the GET and require 404.
+
+Domains, glossaries, and terms are global. Deleting the database service does
+not remove them. A volume wipe (`docker compose down -v` on that compose file
+only) is a from-scratch server, including those global objects. Do not wipe
+any other project's volumes.
