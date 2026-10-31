@@ -159,11 +159,20 @@ fn prepared_address(record: &Object, names: &[String]) -> Result<Object, String>
         country.unwrap_or(values::write_value(&())?),
     )]))
 }
+/// One part a pass compares, or a list of parts any one of which agreeing is
+/// enough (P5: the city or the postcode; operator, 2026-10-30).
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum Part {
+    One(String),
+    Any(Vec<String>),
+}
+
 fn addresses_agree(left: &Object, right: &Object, raw: &Document) -> Result<bool, String> {
     if raw.get() == "null" {
         return Ok(true);
     }
-    let parts: Vec<String> = values::read_value(raw)?;
+    let parts: Vec<Part> = values::read_value(raw)?;
     if !values::has_value(left, "country")
         || !values::values_match(
             &values::read_optional_value(left, "country")?,
@@ -173,51 +182,57 @@ fn addresses_agree(left: &Object, right: &Object, raw: &Document) -> Result<bool
         return Ok(false);
     }
     for part in parts {
-        match part.as_str() {
-            "street" => {
-                let lines = |body: &Object| -> Result<BTreeSet<String>, String> {
-                    let mut result = BTreeSet::new();
-                    for name in ["street", "street2"] {
-                        let raw = values::read_optional_value(body, name)?;
-                        if values::has_content(&raw) {
-                            result.extend(
-                                display_text(&raw)?
-                                    .split('\n')
-                                    .filter(|line| !line.is_empty())
-                                    .map(str::to_owned),
-                            );
-                        }
-                    }
-                    Ok(result)
-                };
-                if lines(left)?.is_disjoint(&lines(right)?) {
-                    return Ok(false);
-                }
+        let options = match part {
+            Part::One(one) => vec![one],
+            Part::Any(any) => any,
+        };
+        let mut agreed = false;
+        for option in options {
+            if part_agrees(left, right, &option)? {
+                agreed = true;
+                break;
             }
-            "city" => {
-                if !values::has_value(left, "city")
-                    || !values::values_match(
-                        &values::read_optional_value(left, "city")?,
-                        &values::read_optional_value(right, "city")?,
-                    )?
-                {
-                    return Ok(false);
-                }
-            }
-            "postcode" => {
-                if !matching_values::postal_codes_agree(
-                    &display_text(&values::read_optional_value(left, "postcode")?)?,
-                    read_optional_text(values::read_optional_value(left, "country")?)?.as_deref(),
-                    &display_text(&values::read_optional_value(right, "postcode")?)?,
-                    read_optional_text(values::read_optional_value(right, "country")?)?.as_deref(),
-                ) {
-                    return Ok(false);
-                }
-            }
-            _ => return Err(format!("A pass compares an unknown address part: {part}")),
+        }
+        if !agreed {
+            return Ok(false);
         }
     }
     Ok(true)
+}
+
+fn part_agrees(left: &Object, right: &Object, part: &str) -> Result<bool, String> {
+    match part {
+        "street" => {
+            let lines = |body: &Object| -> Result<BTreeSet<String>, String> {
+                let mut result = BTreeSet::new();
+                for name in ["street", "street2"] {
+                    let raw = values::read_optional_value(body, name)?;
+                    if values::has_content(&raw) {
+                        result.extend(
+                            display_text(&raw)?
+                                .split('\n')
+                                .filter(|line| !line.is_empty())
+                                .map(str::to_owned),
+                        );
+                    }
+                }
+                Ok(result)
+            };
+            Ok(!lines(left)?.is_disjoint(&lines(right)?))
+        }
+        "city" => Ok(values::has_value(left, "city")
+            && values::values_match(
+                &values::read_optional_value(left, "city")?,
+                &values::read_optional_value(right, "city")?,
+            )?),
+        "postcode" => Ok(matching_values::postal_codes_agree(
+            &display_text(&values::read_optional_value(left, "postcode")?)?,
+            read_optional_text(values::read_optional_value(left, "country")?)?.as_deref(),
+            &display_text(&values::read_optional_value(right, "postcode")?)?,
+            read_optional_text(values::read_optional_value(right, "country")?)?.as_deref(),
+        )),
+        _ => Err(format!("A pass compares an unknown address part: {part}")),
+    }
 }
 
 fn test_record_pair(

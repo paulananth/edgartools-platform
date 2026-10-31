@@ -68,6 +68,9 @@ def compare(primitive, args):
 def census(): return compare("name_census_match@1", names)
 def eligible(): return compare("gleif_entity_eligible@1", eligibility)
 def cascade(): return compare("cascade_pass@1", {**names, "pass": "P1", "compare": ["street", "city", "postcode"], "refused_flags": []})
+def either(**changes):  # P5's shape: the city or the postcode
+    right["provenance"]["matching"]["invented_preferred"] = {**place, **changes}
+    return compare("cascade_pass@1", {**names, "pass": "P1", "compare": [["city", "postcode"]], "refused_flags": []})
 '''
 
 
@@ -85,6 +88,10 @@ SCENARIOS = {
     "cascade": 'assert cascade() == [[True, False]]',
     "cascade_mismatch": 'right["provenance"]["matching"]["invented_preferred"] = {**place, "street": "2 ELSEWHERE"}; assert cascade() == [[False, False]]',
     "cascade_fallback": 'del right["provenance"]["matching"]["invented_preferred"]; right["provenance"]["matching"]["invented_fallback"] = place; assert cascade() == [[True, False]]',
+    "cascade_either_city": 'assert either(postcode="99999") == [[True, False]]',
+    "cascade_either_postcode": 'assert either(city="ELSEWHERE") == [[True, False]]',
+    "cascade_either_neither": 'assert either(city="ELSEWHERE", postcode="99999") == [[False, False]]',
+    "cascade_either_country": 'assert either(country="YY") == [[False, False]]',
     "cascade_stale_version": 'right["effective_at"] = "2026-02-01T00:00:00Z"; assert cascade() == [[False, False]]',
     "unknown_profile": '''
 try:

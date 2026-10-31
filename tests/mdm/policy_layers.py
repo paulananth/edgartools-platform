@@ -132,6 +132,67 @@ def without_p2_p3_deleted(policy: dict) -> dict:
     return body
 
 
+# P5's measured entry as switched on at 18:20 ET (ticket 09), before it compared the postcode too.
+P5_CITY_ENTRY = {
+    "kind": "company",
+    "family": "name_binding",
+    "rule_id": "sec-gleif-cascade-p5",
+    "rule_version": "2026-09-28.1",
+    "verdict": "bind",
+    "activation": "measured",
+    "proof": {
+        "method": "wilson_lower_bound",
+        "one_sided_confidence": 0.95,
+        "n": 84,
+        "correct": 84,
+        "lower_bound": 0.968796,
+        "adversarial": {
+            "fixture_sha256": "41bb780ea61234c4b165589907a1378d557f8dbe31ecd53572bc68a4745f01c8",
+            "n": 39,
+            "violations": 0
+        },
+        "cohort": {
+            "companies": 6414,
+            "new_links": 84,
+            "files": {
+                "p5-labels.jsonl": "48f4ec9c18104eff19ba19b514fc4eb4773afb0e3b8a353135af5d3ce73d8fd3",
+                "p5-adversarial.jsonl": "41bb780ea61234c4b165589907a1378d557f8dbe31ecd53572bc68a4745f01c8",
+                "ticket09-labels.csv": "ddc26bfdf0340ee57708cbf083bed00c13fe9e5396a80f1ccb29947d2625b1ae",
+                "ticket09-labels.codex-completed.csv": "475d7dd80db264bbbc7ba8c4bcf9082988d931ded0e2ffcb108738495d08a3c2",
+                "operator-answers.json": "640327dc14be3060b21afc9c967c24ed17c98d7ce6811f13d34b29965650fef6",
+                "operator-notes.json": "0e22f3ab43e8c3cf6554bcac510de014072190036e5386f3eff3c424740b1a19"
+            }
+        },
+        "approved_by": "operator",
+        "approved_at": "2026-10-30T22:20:25Z",
+        "reason": "ticket 09, the cascade pass P5 (name and city): every new link on the 6,414-Company cohort labelled, 84/84 the same entity (42 Codex independent review, 42 operator), 0 of 39 adversarial (other name, incorporation conflict, name held by another candidate)",
+        "approved_words": "P5 now, hold P1/P4/P6 (Recommended)"
+    }
+}
+
+
+def without_p5_postcode(policy: dict) -> dict:
+    """Rebuild priorities ticket 09 (operator, 2026-10-30: "do not use p1 or p4,
+    p5 can match on postel code"; "Link them (Recommended)"): P5 compares the
+    city or the postcode, and P1 and P4 are deleted. Peeled, P1 and P4 stand
+    again before P5, which compares the city alone under its first proof."""
+    body = _copy(policy)
+    rules = body["kinds"]["company"]["rules"]
+    at = next(i for i, r in enumerate(rules) if r["rule_id"] == "sec-gleif-cascade-p5")
+    rules[at]["version"] = "2026-09-28.1"
+    rules[at]["when"][0]["args"]["compare"] = ["city"]
+    restored = []
+    for name, parts in (("P1", ["street", "city", "postcode"]), ("P4", ["postcode"])):
+        rule = _copy(rules[at])
+        rule["rule_id"] = f"sec-gleif-cascade-{name.lower()}"
+        rule["when"][0]["args"].update({"pass": name, "compare": parts})
+        restored.append(rule)
+    rules[at:at] = restored
+    body["automatic_rules"] = [_copy(P5_CITY_ENTRY) if r.get("rule_id") == "sec-gleif-cascade-p5" else r
+                               for r in body["automatic_rules"]]
+    return body
+
+
 def without_p5_switch_on(policy: dict) -> dict:
     """Rebuild priorities ticket 09 (operator, 2026-10-30 18:20 ET: "P5 now, hold
     P1/P4/P6 (Recommended)"): cascade pass P5 switched on, on its labelled new
@@ -317,6 +378,9 @@ def without_place_codes(policy: dict) -> dict:
 # Newest first: each layer, and Company's policy digest with it and every
 # layer after it still on.
 LAYERS = [
+    # P5 compares the city or the postcode; P1 and P4 deleted: "do not use p1 or p4, p5 can match on
+    # postel code" and "Link them (Recommended)" (2026-10-30, ticket 09).
+    (without_p5_postcode, "939847064fb977b01787a7d473f7cc8dca1f29dafa888e3e977063a17e68179c"),
     # Switched on: "P5 now, hold P1/P4/P6 (Recommended)" (2026-10-30 18:20 ET, ticket 09).
     (without_p5_switch_on, "68879d5e6a1e75489073021f7c72a34d2d601041ce3e7676b09577e0e761218c"),
     # The types in RDM: "Use RDM for keeping types and other information" (2026-10-27, ticket 132).

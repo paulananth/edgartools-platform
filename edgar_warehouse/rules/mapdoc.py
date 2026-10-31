@@ -310,7 +310,7 @@ def _compare(parts: list | None) -> str:
     alone; none at all is the name alone."""
     if parts is None:
         return "the name alone"
-    return "the country" + "".join(f", {p}" for p in parts)
+    return "the country" + "".join(f", {' or '.join(p) if isinstance(p, list) else p}" for p in parts)
 
 
 def _count(args: dict) -> str:
