@@ -348,8 +348,8 @@ rules:
 # different entity among its labels).
 # P2 (street and postcode) and P3 (street and city) were deleted (ticket 09;
 # operator, 2026-10-17: "Delete both"): too few new links to prove (8 and 22
-# of 52 needed); a pair either matched shares the postcode (P4) or the city
-# (P5). The other passes keep their names.
+# of 52 needed); a pair either matched shares the postcode or the city, which
+# P5 now compares. The other passes keep their names.
 - rule_id: sec-gleif-cascade-p5
   version: 2026-10-30.1
   family: name_binding

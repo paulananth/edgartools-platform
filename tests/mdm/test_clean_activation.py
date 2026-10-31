@@ -831,6 +831,7 @@ class TestTheNameMatchingRules:
     {"compare": ["street", "county"]},
     {"compare": [["city", "county"]]},
     {"compare": [[]]},
+    {"compare": [["city", ["postcode"]]]},
     {"over_shared": 0},
     {"refused_flags": ["anything"]},
     {"pass": None},

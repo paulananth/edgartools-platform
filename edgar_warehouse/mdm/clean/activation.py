@@ -590,7 +590,8 @@ def _check_cascade_pass(rule_id: str, rule: dict, tests: list) -> None:
     if (
         not isinstance(args.get("pass"), str)
         or not (compare is None or (isinstance(compare, list) and all(
-            set(part if isinstance(part, list) else [part]) <= set(PARTS) and part != [] for part in compare)))
+            part != [] and all(one in PARTS for one in (part if isinstance(part, list) else [part]))
+            for part in compare)))
         or type(args.get("over_shared")) is not int
         or args["over_shared"] < 1
         or args.get("sec_normalizer") not in NORMALIZERS

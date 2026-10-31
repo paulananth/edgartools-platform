@@ -208,13 +208,13 @@ def agrees(sec: Place, gleif: Place, compare: list | None) -> bool:
 
 
 def _part_agrees(sec: Place, gleif: Place, part: str) -> bool:
-    if part not in PARTS:
-        raise ValueError(f"A pass compares an unknown address part: {part}")
     if part == "street":
         return bool(sec.street & gleif.street)
     if part == "city":
         return bool(sec.city) and sec.city == gleif.city
-    return postal_codes_agree(sec.postcode, sec.country, gleif.postcode, gleif.country)
+    if part == "postcode":
+        return postal_codes_agree(sec.postcode, sec.country, gleif.postcode, gleif.country)
+    raise ValueError(f"A pass compares an unknown address part: {part}")
 
 
 def _usable(p: Place, counts: Counter, over_shared: int) -> Place:
