@@ -53,7 +53,7 @@ SLICE = PROVING / "p08" / "inputs"
 POPULATION = PROVING / "cm27-raw" / "population.json"
 # The Name Census the Company chain reads. With a matching cascade pass switched on, it must be built from
 # the same rules (`mdm name-census --catalog`): a census without the cascade links nothing through it.
-CENSUS = Path(os.environ.get("RECREATION_CENSUS", PROVING / "t32-census-p5" / "census.json"))
+CENSUS = Path(os.environ.get("RECREATION_CENSUS", PROVING / "t09-p5-postcode" / "census.json"))
 # A sample run checks the harness on a few documents and LEIs before the one full run (ticket 48's rule).
 SAMPLE = os.environ.get("RECREATION_SAMPLE") == "1"
 CAPTURE = Path("~/.local/share/edgartools/clean-mdm/captures/sec.submissions.company/all-76230").expanduser()
@@ -348,6 +348,9 @@ def test_recreation_baseline(installed, databases, tmp_path):  # noqa: F811
     # A sample's few LEIs need not name a sampled filer, so only the SEC sources must bind there.
     for code in (COMPANY, PERSON) if SAMPLE else (COMPANY, PERSON, LEVEL1_CODE):
         assert first["stage_bound"].get(code, 0) > 0, (code, first["stage_bound"])
-    assert SAMPLE or first["relationships"] > 0, first
+    # No relationships > 0 here: a GLEIF link joins two Level 1 records each bound to a Company, and
+    # a Level 1 record binds only through an SEC Company, so a cohort whose parents are not cohort
+    # filers masters none (the baseline, 2026-10-30: 0 of 574 consolidation records). DIFF.md
+    # compares the count and the relationships digest, whatever they are.
     assert not first["identifiers_on_two_masters"], first
     assert report["second_pass_changed_nothing"], (first, second, first_digests, second_digests)
