@@ -107,22 +107,36 @@ domain's display name in that definition names that domain's identity term.
 An Avoid line does not make an edge. The separate RDF glossary graph stays
 unused unless that service is enabled.
 
-Two mutually exclusive classifications, and no others:
+Two classifications are created for this catalog. The built-in certification
+is applied as well. Do not add another classification.
 
 - `data_class`. One tag for each class the data-modeling skill names and this
   catalog can hold: master data on a kind table, reference data on a code-set
   table, relationship on a relationship-type table, transaction data on a
-  registered silver table. Copy the class sentence from `CONTEXT.md` where it
-  has one, and from data-modeling where it does not. A proposed silver table
-  has no data class. A source dataset has no data class: data-modeling does not
-  name a source class. The metadata class stays unused until that store is in
-  the catalog.
+  registered prepared-store table. Copy the class sentence from `CONTEXT.md`
+  where it has one, and from data-modeling where it does not. A proposed table
+  in the prepared store has no data class. A source dataset has no data class:
+  data-modeling does not name a source class. The metadata class stays unused
+  until that store is in the catalog.
 - `processing_layer`. One tag per database the rules catalog plan already
   emits. The tag name is that database name. It is a category. It is not a
   subject domain, and it does not follow from a folder name the plan does not
   use.
+- Built-in `Certification`, which is mutually exclusive. It is the asset field
+  `certification`, read with `fields=certification`. The screen reads
+  `certification.tagLabel`. It is not a member of `tags`. A patch that adds
+  `Certification.Gold` or `Certification.Silver` to `/tags` can echo the tag
+  and leave the version unchanged; that did not certify the asset. Set
+  `certification` itself. `Certification.Gold` on every table in the master
+  store. `Certification.Silver` on every table in the prepared store, including
+  a proposed table. Do not certify the reference store or a captured source
+  dataset. Do not put Gold on the prepared store or Silver on the master store.
+  Bronze stays unused until a captured-source certification is configured.
+  `assetCertificationSettings` supplies the validity period. On this server it
+  is 30 days. Record the applied date and the expiry, and apply it again when
+  it expires. Do not invent a longer window.
 
-Leave the built-in classifications in place. A repeat put keeps the same
+Leave every other built-in classification in place. A repeat put keeps the same
 glossary, term, classification and tag identity. Read tags back on their own.
 A glossary is global: resetting a database service does not remove it.
 

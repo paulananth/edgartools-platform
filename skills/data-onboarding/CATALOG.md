@@ -52,7 +52,7 @@ name is not semantic enrichment.
 | Mapping Documents | All configured sources, kinds, standalone pipelines and pinned relationship definitions; steward Notes preserved |
 | Ownership | Existing authorized business owners where specified; otherwise an explicit unassigned responsibility, never the ingestion bot as a fabricated business owner |
 | Data product | A configured package with a purpose and selected assets. Fundamental analytics is that package: three silver tables of filed figures, line items and measures. Create no native product until the rules name it. The test is in `skills/data-catalog/references/MODEL.md` |
-| Classification | Two mutually exclusive classifications: data class, from the data-modeling skill, and processing layer, one tag per catalog-plan database. A proposed silver table has a layer and no data class. A source dataset has a layer and no data class |
+| Classification | Data class from the data-modeling skill, one processing-layer tag per catalog-plan database, and the built-in certification: Gold on the master store, Silver on the prepared store. A proposed prepared-store table is Silver and has no data class. A source dataset has a layer and no data class |
 
 Include registered Silver/RDM metadata. Label profiling proposals as proposed;
 never present them as existing registered tables or approved code sets. Do not

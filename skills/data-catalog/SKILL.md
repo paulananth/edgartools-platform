@@ -10,6 +10,36 @@ Keep one configuration-derived description of the data; a catalog and a separate
 visualization can project it at the same time. Changing a destination must not
 change the business meaning, processing rules or stable logical identities.
 
+## Know the data, then the catalog
+
+The catalog is a projection of the data. It is not a second model. Read the
+data before changing the catalog, and read the catalog before claiming it
+already holds something.
+
+- `CONTEXT.md` holds the words.
+- [data-modeling](../data-modeling/SKILL.md) decides the class, the kind, the
+  code set, the relationship, and which store each class lives in.
+- The rules catalog plan is the list of assets, fields, lineage, and pipelines
+  that configuration actually emits.
+- The live catalog is what was stored. Read it back. A missing field is not
+  proof a link is absent, and a successful write is not proof the read matches.
+
+Three different facts, kept as different tags:
+
+- A subject domain says what the data is about.
+- A processing layer says which plan database holds it.
+- A certification says how finished that store is. The built-in certification
+  is a field on the asset, not a tag in the tag list, and it is mutually
+  exclusive. Gold certifies the master store. Silver certifies the prepared
+  store. The reference store and a captured source dataset stay uncertified.
+  There is no gold database in the plan, so Gold is not a layer and not a
+  subject. The server sets how long the certification lasts. Read that period
+  and the expiry back. Do not invent a longer one.
+
+A proposed table in the prepared store is still Silver certified and still has
+no data class. Do not invent a class, a domain, or a certification the data
+model does not name.
+
 ## Understand the model before publishing
 
 Read [MODEL.md](references/MODEL.md) when organizing domains, layers, glossaries,
