@@ -166,13 +166,24 @@ that glossary. Every other term from the two sections goes in one shared
 glossary named `shared`. A shared spelling with a different definition stays a
 different term.
 
+Publish a term only when real data backs it (operator, 2026-11-01: "the skill
+must be intelligent, can not create fake domains"). A relationship type is a
+glossary term only when a file under `rules/sources/` uses its code. A type
+that `CONTEXT.md` or a ticket plans, with no rules file and no loaded feed, is
+not published (`HAS_MARKET_OPERATOR` and `IS_SEGMENT_OF_EXCHANGE`, removed
+2026-11-01: no market-code feed is loaded). Create a subject domain, its
+glossary or a term in it only for a domain with a rules file or a mastered
+kind; never create one to hold planned or invented terms. A type or subtype of
+one domain (a role only that domain's identity can hold) goes in that
+domain's glossary, never in `shared`.
+
 `shared` names a Glossary only. It is not a Domain, a domain tag, or a domain
 assignment. Never create or assign a domain named `Shared`.
 
 Associate a glossary term with a table only when the term is one relationship
 type and the table is that type. Do not tag the kind table with every term
-whose heading starts with the domain name. A domain with no kind table still
-has its glossary. A proposed table is not a kind table.
+whose heading starts with the domain name. A domain with no kind table but with
+a rules file still has its glossary. A proposed table is not a kind table.
 
 A domain has no `relationsGraph` endpoint. Its graph is lineage. Read it with
 `GET /api/v1/lineage/domain/name/{domain}?upstreamDepth=1&downstreamDepth=1`.
