@@ -2,7 +2,7 @@
 
 Priority: 151. Map: [Rebuild priorities](../map.md). Opened 2026-11-01 11:03 ET, from [ticket 32](32-profiling-08-recreation-proof.md).
 
-Type: task. Status: open. Blocked by: none.
+Type: task. Status: resolved on merge of the PR below (Claude, branch `claude/t151-review-counts`). Blocked by: none.
 
 ## Question
 
@@ -12,7 +12,7 @@ that reason? A steward reading the report cannot see those 37 today.
 
 ## Parts
 
-- [ ] A test states the expected counts with an `unresolved_endpoint` review present
-- [ ] The report counts that reason, or the ticket records why it does not
+- [x] A test states the expected counts with an `unresolved_endpoint` review present: the waiting-link scenario in `worker_publication_scenarios.py` asserts `waiting_links == {"unresolved_endpoint": 1}` and `open_reviews == {}`, then `{}` once the other end resolves; the installed `review_recovery` case passes on MySQL (2 tests, 7 min; 2026-11-01 17:47 ET)
+- [x] The report counts that reason: `inspection.counts` gains `waiting_links`, by reason. Cause: a link waiting for its other end is stored `open: False, waiting_for_end: True` by design (`merge.py`, "Wait quietly", 2026-10-02), so `open_reviews` never held it, and `waiting` means set-aside records. The link is no steward's review, so it has its own key (2026-11-01 17:50 ET)
 - [ ] PR, CI green, merged
-- [ ] `Learning → skill`
+- [x] `Learning → skill`: none; the reason is in the code comment beside the new count (2026-11-01 17:50 ET)

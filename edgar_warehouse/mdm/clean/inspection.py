@@ -31,7 +31,7 @@ def _pages(api, conn, kind, *, immutable=False, lookup=False):
 def counts(engine):
     """Report a full store's counts; only counts and a byte digest leave this read."""
     result = {name: Counter() for name in ("masters", "stage_records", "waiting",
-              "open_reviews", "set_aside", "decisions", "changes", "identifiers_on_two_masters")}
+              "open_reviews", "waiting_links", "set_aside", "decisions", "changes", "identifiers_on_two_masters")}
     checksum = hashlib.md5((HASH_CONTRACT + "\n").encode())
     holders = defaultdict(set)
     with engine.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
@@ -71,6 +71,9 @@ def counts(engine):
                         result["open_reviews"][reason] += 1
                         if ("deferred-record", key) in deferred and not body.get("retired"):
                             result["waiting"][reason] += 1
+                    elif kind == "review" and body.get("waiting_for_end") and not body.get("retired"):
+                        # A link waiting for its other end is no steward's review, so it is not "open"; count it by itself.
+                        result["waiting_links"][body.get("reason") or "(none)"] += 1
         for part, table in (("batch_change", "history"), ("outbox", "outbox")):
             count = conn.scalar(select(func.count()).select_from(api.tables[table]))
             if count:
