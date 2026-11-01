@@ -76,6 +76,18 @@ folders. Browse by business domain first; processing layer is a separate filter.
    failure actions. A native identifier belongs in the destination mapping,
    not in business identity. Unmapped meaning is a visible gap, not success.
 
+### Find source inventories at the right level
+
+Distinguish configured source scopes from top-level source groups. A configured
+scope is a `rules/sources/<folder>/source.yaml` and its `source:` identifier;
+the catalog may show each scope as a schema. That inventory is not automatically
+the top-level source list. When asked for top-level sources, use the explicit
+source hierarchy or operator-approved grouping. Do not infer groups by splitting
+identifiers on dots, matching provider display names, or reading catalog schema
+names as roots. If no grouping is recorded, ask before reporting a top-level
+count. List pipelines separately: some belong to a source group, and others are
+standalone.
+
 ## Use the skill that owns the decision
 
 The catalog projects meaning. It does not author it. Before writing a term, a
