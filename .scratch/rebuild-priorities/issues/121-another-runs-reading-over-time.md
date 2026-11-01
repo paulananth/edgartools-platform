@@ -3,7 +3,7 @@
 Priority: 121. Map: [Rebuild priorities](../map.md). Found by ticket 120's
 reviews (2026-10-19 18:15 ET).
 
-Type: task. Status: open. Blocked by: none.
+Type: task. Status: resolved on merge of the PR below (Claude, branch `claude/t121-reading-over-time`). Blocked by: none.
 
 ## What is open
 
@@ -45,7 +45,7 @@ or the latest unit per identifier), and how a producing run's units are kept
 - [x] Corrected (2026-10-20 08:32 ET): one capture's answers come in several runs (2026 Q2: 8 per kind), so "latest run" would read an eighth of them; asked again: "All runs of latest capture (Recommended)": every complete run made from the newest capture of the named target, pinned while read (Bookkeeping's compaction already skips a pinned run)
 - [x] Implement (2026-10-20 08:53 ET): a manifest names its capture (`target_manifest.py`); the submission keeps it; `verified_units` takes the newest capture's runs; migration 007 keeps a run another live run reads from compaction. Tests: newest capture only, a capture named as text only, kept while read then compacted (`test_configured_bookkeeping_postgres.py`, 65 passed), the manifest's capture (`test_target_manifest.py`, 30 passed), `rules test` end to end (9 passed), the wheel and generated work (7 passed). A forced rerun of the newest capture: same outputs, listed once by sha256 (ticket 120's test)
 - [ ] ~~Over 256 units in one capture~~ stays refused with its count ("a reading takes 1..256"); one capture's OpenFIGI answers are 240 and 243 units. Raise only when a capture needs it
-- [ ] Existing stores take migration 007 by `bookkeeping migrate` (a function replaced; no table change) before the next Securities run
+- [x] Existing stores take migration 007 by `bookkeeping migrate` (a function replaced; no table change) before the next Securities run: run on the shared `company-on` store (operator, 2026-11-01: "yes, run the migrate"); it listed 001-010 with `007_keep_runs_being_read.sql`, exit 0 (2026-11-01 18:03 ET)
 - [x] Spec review fixes (2026-10-20 11:02 ET): the newest capture is the one whose first run started last (a rerun of an older capture never stands in), refused while any of its runs is running or waiting (a blocked run is abandoned, left out) and when any is compacted. Tests in `test_configured_bookkeeping_postgres.py` (65 passed)
-- [ ] Known gap: between a manifest choosing another run's units and the reading run's submission, a run over 30 days old could be compacted; the submitted run then blocks when it fills the slot. Short window; leave unless it happens
-- [ ] Learning → skill
+- [ ] ~~Known gap~~ deferred, no ticket: between a manifest choosing another run's units and the reading run's submission, a run over 30 days old could be compacted; the submitted run then blocks when it fills the slot. Short window; leave unless it happens
+- [x] Learning → skill: none (2026-11-01 18:03 ET); "init, then migrate" is already in `skills/data-operations`, "Stores" table
