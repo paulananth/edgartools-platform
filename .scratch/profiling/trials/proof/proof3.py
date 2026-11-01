@@ -1,6 +1,17 @@
 """Ticket 32, third run: the sandbox's rules mastered once more, by this script and not the agent's, on fresh
 stores: the agent's inputs read-only, every output outside the sandbox. All four parts merged a second time under
-new batch ids and consumers (the agent left Company out). Counts and digests only."""
+new batch ids and consumers (the agent left Company out). Counts and digests only.
+
+The rules use the source names before #1262, so run it from a checkout at 9f74acc5, on stores made by
+`infra/scripts/local-test-stores.py --root <out>/stores up <name>`:
+
+    source <sandbox>/env.sh; EDGAR_RULES_ROOT=<sandbox>/rules .venv/bin/python proof3.py <sandbox> \\
+      <out>/stores/environments/<name> <out> "--capture <sandbox>/work/capture-sec \\
+      --documents <sandbox>/work/census/population.json --population <sandbox>/work/census/population.json \\
+      --catalog <the key in work/census/catalog-key.txt> --capture-run proof3-capture --catalog-run proof3-catalog \\
+      --observed-at 2026-09-12T00:00:00+00:00 --name-census <sandbox>/work/census/census.json \\
+      --as-of 2026-10-31T10:00:00+00:00 --revision 1 --all"
+"""
 import hashlib, json, os, shlex, sys, time
 from collections import Counter
 from pathlib import Path
