@@ -211,6 +211,12 @@ edgar-warehouse load \
   those files.
 - Add `--fact name=value` and `--file name=path` for each input the target's
   `run` declares.
+- **Plan first.** Add `--plan` (no `--capture-run` needed) before claiming or
+  starting a load. It changes nothing and prints which open runs `load` would
+  finish, which it would leave and why (a run pinned to old worker code is
+  left, and its documents load again in a new run), a blocked run that would
+  stop it, and the documents and bundles. Ticket 150 spent an hour on a load
+  whose 14 open runs the plan shows as pinned in one call.
 
 What it does, in order:
 

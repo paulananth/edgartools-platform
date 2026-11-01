@@ -165,6 +165,25 @@ class Loader:
             raise RunStopped(f"{len(stopped)} of {len(done)} did not finish: " + " | ".join(stopped))
         return done
 
+    def cut(self, capture: Path) -> list[list[str]]:
+        """The capture's documents this target reads, in bundles of the source's limit."""
+        return bundles(documents(self.reading, self.target, capture), self.reading["execution"]["max_artifacts"])
+
+    def plan(self, *, capture: Path) -> dict:
+        """What `load` would do, read-only: no bundle is prepared, no run submitted or driven. The runs it
+        would finish, the runs it would leave and why (their documents then load again in new runs), a
+        blocked run that would stop it, and the documents and bundles."""
+        plan = {"source": self.source, "target": self.target, "blocked": None}
+        try:
+            plan["finishable_runs"], plan["left_as_they_are"] = self.open_runs()
+        except RunStopped as stopped:
+            # The blocked run stopped the listing: the other runs are unknown (None), not none.
+            plan["blocked"], plan["finishable_runs"], plan["left_as_they_are"] = str(stopped), None, None
+        cut = self.cut(capture)
+        plan.update(documents=sum(len(b) for b in cut), bundle_size=self.reading["execution"]["max_artifacts"],
+                    bundles=len(cut))
+        return plan
+
     def load(self, *, capture: Path, capture_run: str, as_of: str, facts: list[str], run_files: list[str]) -> dict:
         result = {"source": self.source, "target": self.target, "finished_open_runs": [], "bundles": []}
         unfinished, result["left_as_they_are"] = self.open_runs()
@@ -174,9 +193,9 @@ class Loader:
             self.say(f"Finishing run {run_id}, left open before")
         self.at_once([(f"run {run_id}", lambda run_id=run_id: self.drive(run_id)) for run_id in unfinished])
         result["finished_open_runs"] = unfinished
-        keys = documents(self.reading, self.target, capture)
-        cut = bundles(keys, self.reading["execution"]["max_artifacts"])
-        self.say(f"{self.source} {self.target}: {len(keys)} documents in {len(cut)} bundles, {self.at_a_time} at once")
+        cut = self.cut(capture)
+        self.say(f"{self.source} {self.target}: {sum(len(b) for b in cut)} documents in {len(cut)} bundles, "
+                 f"{self.at_a_time} at once")
         extra = [*(a for fact in facts for a in ("--fact", fact)), *(a for f in run_files for a in ("--file", f))]
         folder = self.root / as_of.replace(":", "")
         result["bundles"] = self.at_once([
@@ -193,6 +212,11 @@ def _handle(args) -> int:
     try:
         loader = Loader(source=args.source, target=args.target, stores=args.stores.expanduser(),
                         workers=args.workers, minutes=args.minutes, at_a_time=args.bundles)
+        if args.plan:
+            print(json.dumps(loader.plan(capture=args.capture.expanduser()), indent=1, sort_keys=True))
+            return 0
+        if not args.capture_run:
+            raise RunStopped("--capture-run is required unless --plan")
         result = loader.load(capture=args.capture.expanduser(), capture_run=args.capture_run,
                              as_of=args.as_of or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                              facts=args.fact or [], run_files=args.file or [])
@@ -211,7 +235,10 @@ def register(subparsers) -> None:
     parser.add_argument("--source", required=True, help="The source, a folder under rules/sources/")
     parser.add_argument("--target", default="mastering", help="Its Bookkeeping target (default mastering)")
     parser.add_argument("--capture", required=True, type=Path, help="The capture folder (receipts.jsonl and its files)")
-    parser.add_argument("--capture-run", required=True, help="The capture's approved run ID")
+    parser.add_argument("--capture-run", help="The capture's approved run ID (not needed with --plan)")
+    parser.add_argument("--plan", action="store_true",
+                        help="Print what this load would do (runs it would finish or leave and why, documents, "
+                             "bundles) and change nothing")
     parser.add_argument("--stores", required=True, type=Path,
                         help="The stores' environment folder, holding worker.env, verifier.env and governance.env")
     parser.add_argument("--workers", type=int, default=1, help="Worker processes on each step of a run (one verifier a run)")
