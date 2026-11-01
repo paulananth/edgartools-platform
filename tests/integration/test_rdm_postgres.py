@@ -84,7 +84,7 @@ def _import_table(rdm):
         version="1", created_by="claude/data-profiling (test)",
         crosswalk=["iso=iso-3166@outside:exact", "type=sec-place-types@1:broad"],
         definition="The codes a filer writes for its state or country of incorporation and of each address",
-        used_in=["mdm:company:state_of_incorporation:upper_trimmed", "source:sec.submissions.company:stateOfIncorporation"],
+        used_in=["mdm:company:state_of_incorporation:upper_trimmed", "source:sec.company:stateOfIncorporation"],
         hint=["meaning=A US state reads as its postal code; X1 is the United States with no state; XX is unknown",
               "example_question=Which companies are incorporated in Delaware? (state_of_incorporation = DE)",
               "avoid_when=Comparing with a GLEIF jurisdiction: use the iso-3166 crosswalk instead"]))

@@ -1,6 +1,6 @@
 # Source registry and evidence contract
 
-Acquisition boundary: on 2026-09-29 `sec.submissions.company/submissions`
+Acquisition boundary: on 2026-09-29 `sec.company/submissions`
 was the sole active feed, controlled by Rules, fresh Bookkeeping and Change
 Journal. Since 2026-10-11 no configured capture worker exists (Issue 20 L8);
 Company records reach MDM from a raw capture by

@@ -5,7 +5,7 @@
 # 512 documents, so a bundle names at most 512 documents.
 # The execution pin authenticates the complete input, including empty tables.
 # Reusing a proven census is not proof of configured whole-source construction.
-source: sec.submissions.company
+source: sec.company
 execution:
   profile: source.read
   workers: 1

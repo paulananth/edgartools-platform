@@ -31,7 +31,7 @@ DEFAULTS = {
 
 def audit(contract=None):
     """The cases where the engine's tables, or its refusal, differ from the matrix."""
-    engine = SourceEngine(contract if contract is not None else files.source("sec.submissions.company"))
+    engine = SourceEngine(contract if contract is not None else files.source("sec.company"))
     differences = []
     for case in MATRIX:
         context = {**CONTEXT, "recent_limit": case["recent_limit"]}
@@ -57,7 +57,7 @@ def test_main_output_and_refusal_matrix_has_exact_typed_parity():
 
 @pytest.mark.parametrize("fault", ["root-assertion", "address-assertion", "business-selection", "place-coercion"])
 def test_deliberate_configuration_faults_are_detected(fault):
-    contract = deepcopy(files.source("sec.submissions.company"))
+    contract = deepcopy(files.source("sec.company"))
     read = contract["read"]
     if fault == "root-assertion":
         read["assertions"].pop(0)
@@ -76,7 +76,7 @@ def test_document_shape_failure_produces_no_worker_output(tmp_path, payload):
     store = Artifacts()
     raw = store.put_bytes((tmp_path / "source.json").as_uri(), json.dumps(payload).encode())
     context = store.put(tmp_path.as_uri(), {"version": 1, "input": raw, "values": CONTEXT})
-    contract = store.put(tmp_path.as_uri(), files.source("sec.submissions.company"))
+    contract = store.put(tmp_path.as_uri(), files.source("sec.company"))
     manifest = store.put(tmp_path.as_uri(), {"version": 2, "contract": contract,
                                           "artifacts": [{"input": raw, "context": context}]})
     output = tmp_path / "reading.json"

@@ -33,7 +33,7 @@ def cohort():
     }
     fixture = json.loads(FIXTURE.read_text())
     readings = []
-    company = [("sec.submissions.company.v1", row) for row in fixture["sec"]
+    company = [("sec.company.v1", row) for row in fixture["sec"]
                if row["entity_type"] == "operating"]
     person_file = FIXTURE.with_name("person_raw.jsonl")
     person = [("sec.submissions.person.v1", json.loads(line))

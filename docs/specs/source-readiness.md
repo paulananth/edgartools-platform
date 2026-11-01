@@ -114,7 +114,7 @@ document on disk is not proof of runtime readiness.
 
 | Source | Current source-owned mastering target | Missing work or prerequisite |
 | --- | --- | --- |
-| `sec.submissions.company` | Read, prepare, merge, processed | Source-specific `prepare-clean-company` still constructs the manifest; capture/catalog/Name Frequency inputs need a common path. |
+| `sec.company` | Read, prepare, merge, processed | Source-specific `prepare-clean-company` still constructs the manifest; capture/catalog/Name Frequency inputs need a common path. |
 | `sec.submissions.person` | Read, prepare, merge, processed | Separate `prepare-capture`. Reads the files Company's feed captures; switches on without a feed of its own. |
 | `gleif` | Merge only | Complete member read/combine/prepare/processed path; publication validation remains outside it. |
 | `iapd.adv` | None | Monthly context, grouping/joins and complete run wiring. |

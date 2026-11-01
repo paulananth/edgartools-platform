@@ -1258,7 +1258,7 @@ The sources this repository reads today, and where each rule above is applied.
   through `census.yaml`, `catalog.yaml`) and joins them with `combine-census.yaml`.
 - The installed object-records trial assembles the two raw Person fixture records
   and verifies them through preparation and the actual Person MDM contract.
-- Name Frequency keys: `sec.submissions.company/name-key.yaml` and
+- Name Frequency keys: `sec.company/name-key.yaml` and
   `gleif/name-key.yaml` keep legal forms and unify their spelling; the SEC recipe
   removes the trailing state suffix before normalizing.
 - All 309 SEC place codes and their lowercase and whitespace variants are
@@ -1274,7 +1274,7 @@ The sources this repository reads today, and where each rule above is applied.
 
 ### The SEC Company main document
 
-`rules/sources/sec.submissions.company/source.yaml` now declares a generic
+`rules/sources/sec.company/source.yaml` now declares a generic
 `source.read` block for its main submissions document. It emits `company`,
 `filings` and `addresses` tables. Company fields retain their captured types;
 filings use the qualified parallel-array, date, numeric and first-N rules;
@@ -1292,7 +1292,7 @@ Join the resulting tables with a declared `source.combine` contract, then use
 `mdm.prepare` to write immutable input batches. The read block alone is neither a source activation nor complete mastering.
 
 For a captured continuation page, use the packaged
-`rules/sources/sec.submissions.company/pagination.yaml` contract. It reads
+`rules/sources/sec.company/pagination.yaml` contract. It reads
 column arrays at the raw page root and emits all eighteen filing fields;
 it has no recent-limit context. Bind `cik`, `sync_run_id`, `raw_object_id`
 and `load_mode` to the page receipt. `raw_object_id` retains the caller's
@@ -1340,12 +1340,12 @@ decision and does not replace the later MDM checks.
 
 ### Name Frequency contracts
 
-- Name Frequency reuse binds the file's SHA into `sources/sec.submissions.company/census.yaml`;
+- Name Frequency reuse binds the file's SHA into `sources/sec.company/census.yaml`;
   Company captures are read through `census-main.yaml` and combined with
   `combine-census.yaml`.
 
 The bundled `gleif/census-record.yaml` and
-`sec.submissions.company/census-filer.yaml` use these primitives for Name Frequency
+`sec.company/census-filer.yaml` use these primitives for Name Frequency
 name extraction and canonical keys. `gleif/census-identity.yaml` projects
 eligibility and legal keys selectively; `gleif/census-update.yaml` reads
 registration only for a wanted legal key. Preserve the caller order: Name Frequency

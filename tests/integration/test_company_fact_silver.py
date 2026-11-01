@@ -27,7 +27,7 @@ from tests.integration import test_nport_link_start as cusip
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
 
 FOLDER = files.ROOT / "sources" / "sec.company-facts"
-COMPANY = "sec.submissions.company.v1"
+COMPANY = "sec.company.v1"
 FILING = {"accn": "0000000042-26-000001", "fy": 2025, "fp": "FY", "form": "10-K", "filed": "2026-02-01"}
 
 

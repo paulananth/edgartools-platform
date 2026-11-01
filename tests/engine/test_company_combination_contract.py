@@ -15,7 +15,7 @@ from tests.engine.test_company_preparation import company_row, CONTEXT
 from tests.engine.test_source_combine import envelope
 from tests.support.exact import require_tables
 
-ROOT = files.ROOT / 'sources/sec.submissions.company'
+ROOT = files.ROOT / 'sources/sec.company'
 
 
 def read(store, root, name, rules, payload, context, *, more_payloads=()):
@@ -54,7 +54,7 @@ def captures(store, root, *, pages=True, foreign=None):
             '1': {'cik_str': 1, 'ticker': 'C'}, '2': {'cik_str': 2, 'ticker': 'OTHER'}}}
     refs = {}
     main_context = {**CONTEXT, 'sync_run_id': 'foreign' if foreign == 'main' else 'capture'}
-    refs['main'], actual_context = read(store, root, 'main', files.source('sec.submissions.company'), main_payload, main_context)
+    refs['main'], actual_context = read(store, root, 'main', files.source('sec.company'), main_payload, main_context)
     if pages:
         page_context = {key: CONTEXT[key] for key in ('cik', 'sync_run_id', 'raw_object_id', 'load_mode')}
         page_context['sync_run_id'] = 'foreign' if foreign == 'pages' else 'capture'
@@ -88,7 +88,7 @@ def test_shipped_blueprint_combines_all_raw_readings_then_prepares_exact_rows(tm
     assert actual[0]['business_address']['country'] == 'GB'
     assert store.json(store.json(result)['artifacts'][0]['input'])['readings'] == refs
     prepare = {'input': result, 'output': (tmp_path / 'mdm/manifest.json').as_uri(),
-        'checks': ['mdm.prepared'], 'keys': {'table': 'company', 'dataset': 'sec.submissions.company.v1',
+        'checks': ['mdm.prepared'], 'keys': {'table': 'company', 'dataset': 'sec.company.v1',
             'policy': '0' * 64, 'consumer': 'trial', 'batch_id': 'all-inputs', 'as_of': CONTEXT['last_synced_at']}}
     prepared = mdm_prepare.execute(prepare, store)
     assert mdm_prepare.verify({**prepare, 'candidate': prepared}, store) == ({'mdm.prepared': True}, [])

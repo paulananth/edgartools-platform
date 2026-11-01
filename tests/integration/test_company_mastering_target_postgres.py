@@ -35,7 +35,7 @@ def run_without_merge(databases, tmp_path, book, report):
     """Submit the target as configured, less its merge step (no MDM here)."""
     for profile in WORKERS:
         grant_profile(databases.admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")
-    target = deepcopy(files.source("sec.submissions.company")["bookkeeping"]["targets"]["mastering"])
+    target = deepcopy(files.source("sec.company")["bookkeeping"]["targets"]["mastering"])
     assert [step["name"] for step in target["steps"][-2:]] == ["merge", "processed"]
     target["steps"] = target["steps"][:-2]
     body = {"source": f"company-{uuid4().hex}", "bookkeeping": {"version": 1, "targets": {"mastering": target}}}

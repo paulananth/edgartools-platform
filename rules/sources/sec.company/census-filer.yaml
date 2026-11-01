@@ -1,5 +1,5 @@
 # Every current/former name supplied by the authenticated SEC population.
-source: sec.submissions.company
+source: sec.company
 execution:
   profile: source.read
   workers: 1

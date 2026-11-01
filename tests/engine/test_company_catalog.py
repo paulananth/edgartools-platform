@@ -6,7 +6,7 @@ from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 from tests.support.exact import require_tables
 
-CONTRACT = files.load(Path('rules/sources/sec.submissions.company/catalog.yaml'))
+CONTRACT = files.load(Path('rules/sources/sec.company/catalog.yaml'))
 CONTEXT = {'sync_run_id': 'catalog', 'source_name': 'company_tickers_exchange',
            'last_synced_at': '2026-10-05T00:00:00Z'}
 

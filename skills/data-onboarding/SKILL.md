@@ -80,6 +80,13 @@ them in PRs. [REFERENCE.md](REFERENCE.md) is the contract language.
 | `rules/sources/<source>/MAPPING.xlsx`, `rules/merge/kinds/<kind>.xlsx` | The Mapping Documents, generated for stewards (**metadata**) |
 | The Data Catalog (OpenMetadata) | Every feed, dataset and MDM field, published from the files (**metadata**) |
 
+When renaming an existing source identity, update its folder and `source:`
+identifier, Dataset Contract IDs, source-sequence entry, Bookkeeping bindings,
+cross-source references and generated Mapping Document together. Treat the
+rename as a new Rules version; retain prior run/capture evidence under the
+identity that produced it, and use the normal review and approval gates before
+activation.
+
 The files in `rules/sources/` show Dataset Contracts and publication rules.
 For configured complete JSON source extract, find a feed that keeps each
 document whole (`grep -l "format: json" rules/sources/*/source.yaml`, then
@@ -923,11 +930,11 @@ These name today's sources only as examples; nothing above depends on them.
   comments, `docs/specs/`, and the published code sets.
 - **Names:** GLEIF is one folder, `gleif`, for three files, with codes
   `gleif.level1.v1` and `gleif.relationships.v1`. SEC submissions feed
-  Company (`sec.submissions.company`); Person from the same files is
+  Company (`sec.company`); Person from the same files is
   `sec.submissions.person` and `sec.submissions.person.v1`.
 - **A record key's order:** GLEIF relationships: start, end, type.
 - **Fields:** Company's are its contract reading's `fields` column
-  (`rules/sources/sec.submissions.company/source.yaml`, and the Fields sheet
+  (`rules/sources/sec.company/source.yaml`, and the Fields sheet
   of its `MAPPING.xlsx`); Person has none in code, so
   its consumer spec (`docs/specs/person/consumer.md`, "The Person
   projection") holds them. A list-shaped field: Person's `name_variants[]`.

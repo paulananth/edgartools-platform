@@ -49,7 +49,7 @@ def main():
     refs = refs[:args.limit]
     if len(refs) != args.limit or len({ref['key'] for ref in refs}) != args.limit:
         raise ValueError('Need requested distinct receipt-pinned main captures')
-    paths = [root / 'rules/sources/sec.submissions.company/name-key.yaml', root / 'rules/sources/gleif/name-key.yaml']
+    paths = [root / 'rules/sources/sec.company/name-key.yaml', root / 'rules/sources/gleif/name-key.yaml']
     contracts = [yaml.safe_load(path.read_text()) for path in paths]
     engines = [source_engine.SourceEngine(contract) for contract in contracts]
     pinned = [Path(__file__), Path(names.__file__), *source_engine.runtime_files(), *paths, receipts]

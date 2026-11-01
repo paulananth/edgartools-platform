@@ -1,5 +1,5 @@
 # Both raw catalog shapes; offline qualification, no source activation.
-source: sec.submissions.company
+source: sec.company
 execution:
   profile: source.read
   workers: 1

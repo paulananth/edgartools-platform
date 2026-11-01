@@ -16,7 +16,7 @@ def test_company_address_comes_from_one_source_with_other_address_retained():
         "postcode": "95014", "country": "US",
     }
     sec = assertion(
-        source_code="sec.submissions.company.v1", record_key="0000320193",
+        source_code="sec.company.v1", record_key="0000320193",
         publication_key="sec-bronze-1", revision=1, effective_at=None,
         kind="company", fields={"address": sec_address},
     )

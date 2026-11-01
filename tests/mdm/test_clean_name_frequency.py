@@ -191,7 +191,7 @@ def test_each_filer_reaches_the_cascade_as_the_full_company_chain_prepares_it(tm
 
     filers = _cascade_filers(tmp_path, documents(), CATALOG_ROWS)
     answers = json.loads((Path(__file__).parents[1] / "integration/fixtures/company-mastering-records.json").read_text())
-    contract = files.source("sec.submissions.company")["mdm"]["sec.submissions.company.v1"]["contract"]
+    contract = files.source("sec.company")["mdm"]["sec.company.v1"]["contract"]
     expected = [cascade.filer_of(adapters.normalize(json.loads(line), source_code=b["source_code"], contract=contract,
                                                     policy=files.policy(), publication={
                                                         **name_frequency.CASCADE_PUBLICATION, "record_locator": "x"}))

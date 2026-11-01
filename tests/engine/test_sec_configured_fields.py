@@ -13,7 +13,7 @@ from edgar_warehouse.mdm.clean import adapters
 from edgar_warehouse.rules import files,source_engine
 from tests.support.company_fields import before_ticket_129
 
-SOURCES=('sec.submissions.company','sec.submissions.person')
+SOURCES=('sec.company','sec.submissions.person')
 RETIRED=json.loads(Path(__file__).with_name('retired_mapper_outcomes.json').read_text())
 
 
@@ -28,7 +28,7 @@ def contracts(source):
     else:
         # Rebuild ticket 129 took the SIC code's label out of the Company; the
         # retired mapper's outcomes are compared with it put back.
-        contract=before_ticket_129(contract,'sec.submissions.company.v1')
+        contract=before_ticket_129(contract,'sec.company.v1')
     return contract
 
 

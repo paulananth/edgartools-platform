@@ -30,12 +30,12 @@ def test_every_source_feed_dataset_and_mdm_field_is_in_the_catalog():
     assert [s["name"] for s in plan["schemas"] if s["database"].endswith(".sources")] == sources
     tables = _tables(plan)
     assert 'edgartools-rules.sources."sec.adv".adv_bulk' not in tables
-    sec = tables['edgartools-rules.sources."sec.submissions.company"."sec.submissions.company.v1"']
+    sec = tables['edgartools-rules.sources."sec.company"."sec.company.v1"']
     assert {"cik", "entity_name", "business_address.postal_code", "name_census"} <= {c["name"] for c in sec["columns"]}
     company = tables["edgartools-rules.mdm.clean.company"]
     assert {"name", "address", "jurisdiction", "state_of_incorporation"} <= {c["name"] for c in company["columns"]}
     name = next(c for c in company["columns"] if c["name"] == "name")
-    assert ("sec.submissions.company.v1, then gleif.level1.v1, then iapd.adv.filings.v1, then "
+    assert ("sec.company.v1, then gleif.level1.v1, then iapd.adv.filings.v1, then "
             "iapd.adv.custodians.v1, then sec.nport.registrant.v1: the first with a value wins") in name["description"]
     relationships = tables['edgartools-rules.sources.gleif."gleif.relationships.v1"']
     assert "It supplies no Company fields." in relationships["description"]
@@ -45,11 +45,11 @@ def test_every_source_feed_dataset_and_mdm_field_is_in_the_catalog():
 
 def test_lineage_runs_column_by_column_and_leaves_matching_out():
     plan = catalog.plan()
-    edge = next(e for e in plan["lineage"] if e["from"].endswith('"sec.submissions.company.v1"'))
+    edge = next(e for e in plan["lineage"] if e["from"].endswith('"sec.company.v1"'))
     by_field = {c["toColumn"].rsplit(".", 1)[1]: c["fromColumns"] for c in edge["columns"]}
     assert len(by_field["address"]) == 6  # an address's parts fill one MDM field
     assert "name_census" not in {c.rsplit(".", 1)[1].strip('"') for cols in by_field.values() for c in cols}
-    feed = next(e for e in plan["lineage"] if e["to"].endswith('"sec.submissions.company.v1"'))
+    feed = next(e for e in plan["lineage"] if e["to"].endswith('"sec.company.v1"'))
     assert feed["from"].endswith(".submissions") and feed["columns"] == []
 
 
@@ -58,7 +58,7 @@ def test_a_second_kind_from_another_sources_files_has_its_feed_lineage():
     # no feed of its own (platform validation 05c, item 11).
     plan = catalog.plan()
     feed = [e for e in plan["lineage"] if e["to"].endswith('"sec.submissions.person.v1"')]
-    assert [e["from"] for e in feed] == ['edgartools-rules.sources."sec.submissions.company".submissions']
+    assert [e["from"] for e in feed] == ['edgartools-rules.sources."sec.company".submissions']
     # A source whose family no feed captures gets no feed lineage; GLEIF's own feed leads to it.
     assert not [e for e in plan["lineage"] if e["to"].endswith('"iapd.adv.filings.v1"')]
     assert [e["from"] for e in plan["lineage"] if e["to"].endswith('"gleif.level1.v1"')] == [
@@ -78,7 +78,7 @@ def test_each_feed_that_captures_the_family_gives_lineage(tmp_path: Path):
     files.write_source(body, path.parent)
     plan = catalog.plan(root)
     sources = sorted(e["from"] for e in plan["lineage"] if e["to"].endswith('"sec.submissions.person.v1"'))
-    assert sources == ['edgartools-rules.sources."sec.submissions.company".submissions',
+    assert sources == ['edgartools-rules.sources."sec.company".submissions',
                        "edgartools-rules.sources.openfigi.more_submissions"]
 
 
@@ -86,9 +86,9 @@ def test_the_same_rules_give_the_same_catalog_and_a_change_shows(tmp_path: Path)
     assert catalog.plan() == catalog.plan()
     root = tmp_path / "rules"
     shutil.copytree(files.ROOT, root)
-    path = root / "sources" / "sec.submissions.company" / "source.yaml"
+    path = root / "sources" / "sec.company" / "source.yaml"
     body = files.load_source(path)
-    del mapdoc.mapped(body["mdm"]["sec.submissions.company.v1"]["contract"]["adapter"], "fields")["description"]
+    del mapdoc.mapped(body["mdm"]["sec.company.v1"]["contract"]["adapter"], "fields")["description"]
     files.write_source(body, path.parent)
     changed = catalog.plan(root)
     assert changed["service"]["description"] != catalog.plan()["service"]["description"]  # a new digest
@@ -170,8 +170,8 @@ def test_the_plan_names_domains_glossaries_and_store_certification():
     gleif = [edge for edge in plan["service_lineage"] if edge["pipeline"].endswith("source:gleif:mastering")]
     assert gleif and all("sources.gleif" in edge["table"] for edge in gleif)
     cases = {case["name"]: case for case in plan["quality_cases"]}
-    assert "sec.submissions.company.v1.name_present" in cases
-    assert cases["sec.submissions.company.v1.dc_state_is_empty"]["description"].startswith("Correction")
+    assert "sec.company.v1.name_present" in cases
+    assert cases["sec.company.v1.dc_state_is_empty"]["description"].startswith("Correction")
     assert cases["openfigi_listing.figi_valid"]["testDefinition"] == "edgartools-configured-column-check"
     assert all("testCaseResult" not in case for case in plan["quality_cases"])
     assert any(name.endswith("mdm.clean.security") for name in products["security_master"]["tables"])

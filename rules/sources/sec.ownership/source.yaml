@@ -94,7 +94,7 @@ mdm:
         - type: EMPLOYED_BY
           capacity: director
           target_key: [issuer_cik]
-          target_source: sec.submissions.company.v1
+          target_source: sec.company.v1
           on: period_of_report
           held: is_director
           time_format: date
@@ -104,7 +104,7 @@ mdm:
         - type: EMPLOYED_BY
           capacity: officer
           target_key: [issuer_cik]
-          target_source: sec.submissions.company.v1
+          target_source: sec.company.v1
           on: period_of_report
           held: is_officer
           title: officer_title
@@ -115,7 +115,7 @@ mdm:
         - type: BENEFICIAL_OWNER_OF
           capacity: ten_percent_owner
           target_key: [issuer_cik]
-          target_source: sec.submissions.company.v1
+          target_source: sec.company.v1
           on: period_of_report
           held: is_ten_percent_owner
           time_format: date

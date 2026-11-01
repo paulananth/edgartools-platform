@@ -26,7 +26,7 @@ def qualify(capture,limit):
     refs=[ref for ref in refs if '/submissions/' in ref['key'] and '/main/' in ref['key']]
     refs.sort(key=lambda ref:hashlib.sha256(ref['key'].encode()).hexdigest());refs=refs[:limit]
     if len(refs)!=limit or len({ref['key'] for ref in refs})!=limit:raise ValueError('distinct capture count')
-    sources=('sec.submissions.company','sec.submissions.person')
+    sources=('sec.company','sec.submissions.person')
     contracts={source:next(iter(files.source(source)['mdm'].values()))['contract'] for source in sources}
     retained=copy.deepcopy(contracts)
     for body in retained.values():body['adapter'].pop('reading')

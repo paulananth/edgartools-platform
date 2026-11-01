@@ -26,11 +26,11 @@ checked by a separate verifier. Nothing makes a request to SEC here.
 
    ```bash
    uv run --extra mdm --extra s3 edgar-warehouse rules run \
-     --source sec.submissions.company --target mastering \
+     --source sec.company --target mastering \
      --input-manifest <URI> --input-sha256 <SHA256>
    ```
 
-   Its steps, in `rules/sources/sec.submissions.company/source.yaml`:
+   Its steps, in `rules/sources/sec.company/source.yaml`:
    `main` and `keys` read each document (`census-main.yaml`,
    `census-keys.yaml`, two a unit); `catalog` reads the ticker catalog
    (`catalog.yaml`); `census` reads the Name Frequency file narrowed to the

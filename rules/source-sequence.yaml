@@ -4,7 +4,7 @@
 # Rules, RDM, capture completeness and frozen-input checks stay in the runtime.
 version: 1
 sources:
-  sec.submissions.company:
+  sec.company:
     target: mastering
     requires: []
     after: []
@@ -12,7 +12,7 @@ sources:
     # Level 1 from a captured Golden Copy through the Merge Stage (ticket 114).
     target: mastering
     requires: []
-    after: [sec.submissions.company]
+    after: [sec.company]
   sec.submissions.person:
     target: mastering
     requires: []
@@ -32,7 +32,7 @@ sources:
   sec.nport.registrant:
     target: mastering
     requires: []
-    after: [sec.submissions.company]
+    after: [sec.company]
   sec.nport.fund:
     target: mastering
     requires: []
@@ -60,10 +60,10 @@ sources:
   sec.company-facts:
     target: null
     requires: []
-    after: [sec.submissions.company]
+    after: [sec.company]
   # Registration statements (ticket 149): captured first; the reading, and the
   # links to the Company by CIK, come with onboarding.
   sec.registration:
     target: null
     requires: []
-    after: [sec.submissions.company]
+    after: [sec.company]

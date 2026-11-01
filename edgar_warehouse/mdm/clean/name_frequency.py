@@ -43,8 +43,8 @@ from .gleif_publication import validate_metadata
 from .matching import active_rules
 from .store import Conflict, canonical, digest
 
-SEC_READING = rules_files.ROOT / "sources/sec.submissions.company/census-sec-names.yaml"
-SEC_REDUCTION = rules_files.ROOT / "sources/sec.submissions.company/census-sec-reduction.yaml"
+SEC_READING = rules_files.ROOT / "sources/sec.company/census-sec-names.yaml"
+SEC_REDUCTION = rules_files.ROOT / "sources/sec.company/census-sec-reduction.yaml"
 GLEIF_READING = rules_files.ROOT / "sources/gleif/census-complete-stream.yaml"
 GLEIF_REDUCTION = rules_files.ROOT / "sources/gleif/census-name-reduction.yaml"
 # The saved Golden Copy reading: 13.25 GB expanded projects to about 211 MB
@@ -56,7 +56,7 @@ GLEIF_ROWS = 10_000_000
 CONTRACT_BYTES = 1024**2
 METADATA_BYTES = 64 * 1024
 POPULATION_BYTES = 64 * 1024**2
-COMPANY, COMPANY_CODE = "sec.submissions.company", "sec.submissions.company.v1"
+COMPANY, COMPANY_CODE = "sec.company", "sec.company.v1"
 COMPANY_ROOT = rules_files.ROOT / "sources" / COMPANY
 # The run ids and times bound into the cascade's readings and combination: its rows are read
 # for the cascade only, never staged.

@@ -26,7 +26,7 @@ DEFINITIONS = files.ROOT / "sources" / "sec.company-facts" / "measures.yaml"
 FORMS = ("average", "beginning")
 # Values a measure reads that are not line items: computed per year below.
 DERIVED = {"fcf", "operating_income_after_tax", "invested_capital"}
-COMPANY_SOURCE = "sec.submissions.company.v1"
+COMPANY_SOURCE = "sec.company.v1"
 NO_CONCEPT = line_items.NO_CONCEPT
 MIXED = "mixed currencies"
 FINANCIAL_SERVICES = "financial services"

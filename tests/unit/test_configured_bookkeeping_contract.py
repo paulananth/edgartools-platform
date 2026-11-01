@@ -13,7 +13,7 @@ from edgar_warehouse.workers import PROFILES
                                  "checks_map", "duplicate_checks", "final_checks_map", "broken_template",
                                  "run_check_on_step", "unknown_final_check"])
 def test_invalid_configuration(edit):
-    body = deepcopy(source("sec.submissions.company"))
+    body = deepcopy(source("sec.company"))
     target = body["bookkeeping"]["targets"]["capture"]
     step = target["steps"][0]
     if edit == "unknown":
@@ -48,7 +48,7 @@ def test_invalid_configuration(edit):
 
 
 def test_manifest_duplicates_missing_references_and_template_fields():
-    selected = validate(source("sec.submissions.company"), "capture")
+    selected = validate(source("sec.company"), "capture")
     unit = {"keys": {"artifact_id": "one", "destination": "s3://bucket/key"},
             "input": {"uri": "s3://bucket/source", "sha256": "a"*64}, "output": "s3://bucket/key", "cursor": 0}
     for units in ([unit, unit], [{**unit, "keys": {}}], [{**unit, "input": {"uri": "missing-hash"}}], [{**unit, "business_rows": []}]):
@@ -98,7 +98,7 @@ def test_cli_commands_remain_available_and_resume_is_bounded():
 
 
 def stage_manifest():
-    selected = validate(source("sec.submissions.company"), "capture")
+    selected = validate(source("sec.company"), "capture")
     selected["steps"] = [
         {**selected["steps"][0], "name": "capture", "requires": [], "key": "{artifact_id}"},
         {**selected["steps"][0], "name": "parse", "requires": ["capture"], "key": "{artifact_id}"},

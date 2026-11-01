@@ -42,7 +42,7 @@ Dataset Contracts declares `read` at the source, contract or adapter level.
 
 | Current configuration | What is configured | Raw reading/preparation boundary |
 | --- | --- | --- |
-| [`SEC Company`](../../rules/sources/sec.submissions.company/source.yaml#L1) | Acquisition completeness, Bookkeeping stages, MDM mapping and quality | Selects `company.silver` and `company.prepare`; Python implements the extraction and joins below. |
+| [`SEC Company`](../../rules/sources/sec.company/source.yaml#L1) | Acquisition completeness, Bookkeeping stages, MDM mapping and quality | Selects `company.silver` and `company.prepare`; Python implements the extraction and joins below. |
 | [`SEC Person`](../../rules/sources/sec.submissions.person/source.yaml#L1) | Raw submissions paths for CIK and legal name, classification and quality | No dedicated Person reader is declared. This mapping does not establish an executable raw-file-to-Person pipeline. |
 | [`GLEIF`](../../rules/sources/gleif/source.yaml#L1) | Three datasets' field/identifier/relationship mappings and quality | Native bytes and intermediate relationship records are decoded by Python below. |
 

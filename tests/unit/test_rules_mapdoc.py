@@ -90,7 +90,7 @@ def test_notes_are_kept_when_the_workbook_is_regenerated(rules_copy):
 
 def test_a_new_workbook_keeps_the_decisions_the_rules_comments_hold(rules_copy):
     found = mapdoc.documents(rules_copy)
-    path = rules_copy / "sources" / "sec.submissions.company" / "MAPPING.xlsx"
+    path = rules_copy / "sources" / "sec.company" / "MAPPING.xlsx"
     path.unlink(missing_ok=True)
     _, sheets, sources = found[path]
     mapdoc.write(path, sheets, sources)
@@ -115,11 +115,11 @@ def test_text_that_looks_like_a_formula_stays_text(tmp_path):
 
 def test_the_sheets_say_what_the_rules_say():
     found = {name: sheets for name, sheets, _ in mapdoc.documents().values()}
-    sec = found["sec.submissions.company"]
-    assert ["sec.submissions.company.v1", "cik", "cik", "sec_cik", "Yes", "Only with a new dataset code",
-            "mdm.sec.submissions.company.v1.contract.adapter.identifiers.cik"] in sec["Identifiers"]
+    sec = found["sec.company"]
+    assert ["sec.company.v1", "cik", "cik", "sec_cik", "Yes", "Only with a new dataset code",
+            "mdm.sec.company.v1.contract.adapter.identifiers.cik"] in sec["Identifiers"]
     assert [row[1] for row in sec["Critical data elements"][1:]] == ["name"]
-    assert ["company", "name", "sec.submissions.company.v1, gleif.level1.v1, iapd.adv.filings.v1, iapd.adv.custodians.v1, sec.nport.registrant.v1", "sec.submissions.company.v1",
+    assert ["company", "name", "sec.company.v1, gleif.level1.v1, iapd.adv.filings.v1, iapd.adv.custodians.v1, sec.nport.registrant.v1", "sec.company.v1",
             "Kind default", "merge/kinds/company.yaml defaults.sources"] in sec["Who wins"]
     kind = found["company"]
     assert [row[1] for row in kind["Matching rules"][1:]] == [
@@ -207,23 +207,23 @@ def test_a_field_with_its_own_rule_shows_its_own_winner(rules_copy):
     it is reported."""
     kind_file = rules_copy / "merge" / "kinds" / "company.yaml"
     body = files.load(kind_file)
-    body["fields"] = {"address": {"sources": ["gleif.level1.v1", "sec.submissions.company.v1"]}}
+    body["fields"] = {"address": {"sources": ["gleif.level1.v1", "sec.company.v1"]}}
     kind_file.write_text(files.dumps(body), encoding="utf-8")
     found = _write_all(rules_copy)
     by_name = {name: sheets for name, sheets, _ in found.values()}
-    assert ["address", "gleif.level1.v1, sec.submissions.company.v1", "gleif.level1.v1", "Its own rule",
+    assert ["address", "gleif.level1.v1, sec.company.v1", "gleif.level1.v1", "Its own rule",
             "merge/kinds/company.yaml fields.address"] in by_name["company"]["Who wins each field"]
-    assert ["name", "sec.submissions.company.v1, gleif.level1.v1, iapd.adv.filings.v1, iapd.adv.custodians.v1, sec.nport.registrant.v1", "sec.submissions.company.v1", "Kind default",
+    assert ["name", "sec.company.v1, gleif.level1.v1, iapd.adv.filings.v1, iapd.adv.custodians.v1, sec.nport.registrant.v1", "sec.company.v1", "Kind default",
             "merge/kinds/company.yaml defaults.sources"] in by_name["company"]["Who wins each field"]
-    assert ["company", "address", "gleif.level1.v1, sec.submissions.company.v1", "gleif.level1.v1",
+    assert ["company", "address", "gleif.level1.v1, sec.company.v1", "gleif.level1.v1",
             "Its own rule", "merge/kinds/company.yaml fields.address"] in by_name["gleif"]["Who wins"]
     path = rules_copy / "merge" / "kinds" / "company.xlsx"
     rows = found[path][1]["Who wins each field"]
     row = next(i for i, r in enumerate(rows) if r[0] == "address") + 1
-    _edit(path, lambda book: book["Who wins each field"].cell(row, 3, "sec.submissions.company.v1"))
+    _edit(path, lambda book: book["Who wins each field"].cell(row, 3, "sec.company.v1"))
     assert mapdoc.differences(path, found[path][1]) == [
         f'Who wins each field row {row} (address), Winner: rules say "gleif.level1.v1", '
-        'workbook says "sec.submissions.company.v1"'
+        'workbook says "sec.company.v1"'
     ]
 
 
@@ -233,7 +233,7 @@ def test_a_field_rule_without_its_own_order_says_the_order_is_the_default(rules_
     body["fields"] = {"name": {"max_age_days": 400}}
     kind_file.write_text(files.dumps(body), encoding="utf-8")
     sheets = {name: s for name, s, _ in mapdoc.documents(rules_copy).values()}["company"]
-    assert ["name", "sec.submissions.company.v1, gleif.level1.v1, iapd.adv.filings.v1, iapd.adv.custodians.v1, sec.nport.registrant.v1", "sec.submissions.company.v1",
+    assert ["name", "sec.company.v1, gleif.level1.v1, iapd.adv.filings.v1, iapd.adv.custodians.v1, sec.nport.registrant.v1", "sec.company.v1",
             "Its own rule (max_age_days: 400), order from the kind default",
             "merge/kinds/company.yaml fields.name; merge/kinds/company.yaml defaults.sources"] in (
         sheets["Who wins each field"])

@@ -69,7 +69,7 @@ links:
 - columns:
   - company_key
   kind: company
-  source_code: sec.submissions.company.v1
+  source_code: sec.company.v1
   to_part: company
   source_key: company_key
   mdm_id_column: company_mdm_id

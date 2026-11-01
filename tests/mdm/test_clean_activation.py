@@ -352,7 +352,7 @@ CIK_RULE = {
     "applies_to_verdict": "company",
     "emits": ["bind"],
     "on_no_match": "mint",
-    "source": "sec.submissions.company.v1",
+    "source": "sec.company.v1",
     "when": [
         {"primitive": "identifier_match@1", "args": {"namespace": "cik"}},
         {"primitive": "identifier_cardinality@1", "args": {"namespace": "cik"}},
@@ -360,7 +360,7 @@ CIK_RULE = {
 }
 CIK_CONTRACT = {
     "authority": "SEC/EDGAR",
-    "sources": ["sec.submissions.company.v1"],
+    "sources": ["sec.company.v1"],
     "normalizer": "normalize_identifier@sec-cik-v1",
     "claim": {"forward": 1, "reverse": 1},
     "compatibility": {"field": "kind", "predicate": "kind_equal@1"},

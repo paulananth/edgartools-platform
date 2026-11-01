@@ -14,7 +14,7 @@ TRICKY_TEXT = [
     "yes", "no", "on", "off", "y", "n", "Yes", "TRUE", "True", "Null", "null",
     "true", "false", "~", "", " ", ".inf", ".nan",
     "a: b", "#x", "- x", "'q'", '"dq"', "  lead", "trail ", "multi\nline", "é",
-    "sec.submissions.company.v1", "Entity.LegalName.$",
+    "sec.company.v1", "Entity.LegalName.$",
 ]
 VALUES = [0, 1, -3, 600, 1.5, 0.995511, 0.9910621278248719, 1e-05, 1e16, None,
           True, False, [], {}, {"8": {"n": 300}}, [{"a": [1, "1", None]}]]

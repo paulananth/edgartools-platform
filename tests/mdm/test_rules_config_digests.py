@@ -79,7 +79,7 @@ SEC_READING_V7 = "5d9ed22b068f2387a851590e385a7fd4da3447f3fcbea92f73c9c0fba89d9b
 # and the contract is the one below.
 WITH_PINNED_PLACE_CHECK = "472295c9222ac017ceeac3705693ea9ca94ebdcb151a78c8cc56e1f2bd39e7ba"
 SEC_CONFIGURED_FIELDS = {
-    "sec.submissions.company": "f01b9d7077376cc4adc3a5bae8f82a294992ed76c7f729d58b5f43198ed1259e",
+    "sec.company": "f01b9d7077376cc4adc3a5bae8f82a294992ed76c7f729d58b5f43198ed1259e",
     "sec.submissions.person": "9ab5f191e7f18f58c1be5cedda3841d86c577f6074f9904a14c4f3eb1d875605",
 }
 PERSON_BEFORE_CONFIGURED_FIELDS = "a740357f911d531ae72a995409d5630b1eeced83c5c8b8078f5d806d8563dd9a"
@@ -94,8 +94,9 @@ PERSON_ONE_PUBLICATION_A_DOCUMENT = "exact captured submissions document (member
 # `field_shape`) left the contracts. With them put back, each contract is the
 # one pinned before. Their values: `retired_mapping_lists.json`.
 RETIRED_LISTS = json.loads((Path(__file__).with_name("retired_mapping_lists.json")).read_text())
+HISTORIC_SEC_CODE = "sec.submissions.company.v1"
 ONE_STATEMENT = {
-    "sec.submissions.company.v1": "a05633a7509f533f4e64d40485ea3a701513a10d88b0ce4503fbaadbc9ba5872",
+    "sec.company.v1": "a05633a7509f533f4e64d40485ea3a701513a10d88b0ce4503fbaadbc9ba5872",
     "sec.submissions.person.v1": "51a849b62316e130f7c6e0f104face7b0d7193f5200125b596fc00b77dc2ce36",
     "gleif.level1.v1": "c370b924e8f5e42789c9cd58d2c18a0c73df8e0ca47cfa5f927d90baff75fc8d",
     "gleif.relationships.v1": "c2c536fae34512ded9219b2cec74c11f69f5fc8e257f87e7ea7f52e8937b744b",
@@ -122,37 +123,58 @@ def _without_ticket_10_checks(contract: dict) -> dict:
 # dates and the SIC code's label left the Company; with them put back, each
 # contract is the one pinned before.
 WITHOUT_TICKET_129_FIELDS = {
-    "sec.submissions.company.v1": "7786ffdd0187f24b4206762125ae09535cdc1c98b009406e174b8175a25006c4",
+    "sec.company.v1": "7786ffdd0187f24b4206762125ae09535cdc1c98b009406e174b8175a25006c4",
     "gleif.level1.v1": "d03454b6e1f76e3d98378193dce2e5fd60df0a95180e3a1aeb7397a3cd8cc8b0",
 }
 def _with_company_fields_back(contract: dict, code: str) -> dict:
-    assert digest(contract) == WITHOUT_TICKET_129_FIELDS[code], code
+    assert _historic_digest(contract) == WITHOUT_TICKET_129_FIELDS[HISTORIC_SEC_CODE], code
     return before_ticket_129(contract, code)
 
 
+def _restore_company_identity(value):
+    """Restore the identity used by historical approval and mapping digests."""
+    if isinstance(value, dict):
+        return {_restore_company_identity(key): _restore_company_identity(item)
+                for key, item in value.items()}
+    if isinstance(value, list):
+        return [_restore_company_identity(item) for item in value]
+    if isinstance(value, str):
+        return {"sec.company.v1": HISTORIC_SEC_CODE,
+                "sec.company": "sec.submissions.company",
+                "company-2026-10-31.sec-company-source-identity":
+                    "company-2026-10-25.one-value-per-identifier"}.get(value, value)
+    return value
+
+
+def _historic_digest(value) -> str:
+    return digest(_restore_company_identity(value))
+
+
 def _with_retired_lists(contract: dict, code: str) -> dict:
-    assert digest(contract) == ONE_STATEMENT[code], code
-    return {**contract, "adapter": {**contract["adapter"], **RETIRED_LISTS[code]}}
+    assert _historic_digest(contract) == ONE_STATEMENT[HISTORIC_SEC_CODE], code
+    return {**contract, "adapter": {**contract["adapter"], **RETIRED_LISTS[HISTORIC_SEC_CODE]}}
 
 
 def test_the_company_configuration_is_unchanged():
-    # Rules skill ticket 08 added the SEC place-code table to the policy body;
-    # without it the policy is the one that moved here.
-    assert policy_layers.digests(COMPANY) == policy_layers.PINNED
+    # The source rename gets a new policy version. Normalize only its identity
+    # and version to verify the historic approval lineage; the current digest
+    # remains new and requires its own review before activation.
+    assert policy_layers.digests(_restore_company_identity(COMPANY)) == policy_layers.PINNED
+    assert digest(COMPANY) != policy_layers.PINNED[-1]
     assert policy_layers.PINNED[-1] == BEFORE["policy"]
     # Ticket 18 made the SEC reading v7 (a region only for a state or
     # province; each ticker once); with v6 the contract is the one before.
     company = _with_company_fields_back(sec_company.CONTRACT, sec_company.SOURCE_CODE)
     company = _with_retired_lists(company, sec_company.SOURCE_CODE)
-    assert digest(company) == WITH_PINNED_PLACE_CHECK
-    assert digest(_with_yaml_place_check(company)) == SEC_CONFIGURED_FIELDS["sec.submissions.company"]
+    assert _historic_digest(company) == WITH_PINNED_PLACE_CHECK
+    assert _historic_digest(_with_yaml_place_check(company)) == SEC_CONFIGURED_FIELDS["sec.company"]
     contract = _without_configured_reading(_with_yaml_place_check(company))
-    assert digest(contract) == SEC_READING_V7
+    assert _historic_digest(contract) == SEC_READING_V7
     v6 = {**contract, "adapter": {**contract["adapter"],
                                                   "version": "sec-company-landing-v6"}}
-    assert digest(v6) == WITH_QUALITY["contract"]
-    assert digest(_without_quality(v6)) == BEFORE["contract"]
-    assert digest(RETIRED_LISTS[sec_company.SOURCE_CODE]["fields"]) == BEFORE["fields"]
+    assert _historic_digest(v6) == WITH_QUALITY["contract"]
+    assert _historic_digest(_without_quality(v6)) == BEFORE["contract"]
+    assert digest(RETIRED_LISTS[HISTORIC_SEC_CODE]["fields"]) == BEFORE["fields"]
     assert digest(sec_company.PROOF) == BEFORE["proof"]
     assert digest(sec_company.APPROVED_ACTIVATION) == BEFORE["approved_activation"]
     assert digest(policy_layers.company_proofs(sec_company.NAME_PROOFS, COMPANY)) == BEFORE["name_proofs"]

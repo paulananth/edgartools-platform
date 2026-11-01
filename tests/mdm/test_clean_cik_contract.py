@@ -42,5 +42,5 @@ def test_each_feed_maps_only_the_identifiers_it_issues():
         for code, body in (files.source(folder.name).get("mdm") or {}).items():
             for namespace in ((body.get("contract") or {}).get("adapter") or {}).get("identifiers") or {}:
                 mapped[(code, namespace)] = code in issuers.get(namespace, set())
-    assert {("sec.submissions.company.v1", "cik"), ("gleif.level1.v1", "lei")} <= set(mapped)
+    assert {("sec.company.v1", "cik"), ("gleif.level1.v1", "lei")} <= set(mapped)
     assert all(mapped.values()), {pair for pair, issued in mapped.items() if not issued}

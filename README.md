@@ -44,7 +44,7 @@ One provider or captured delivery can therefore support several contracts.
 
 | Source definition | What its rules describe |
 | --- | --- |
-| [SEC Company submissions](rules/sources/sec.submissions.company/source.yaml) | Company evidence and identity from SEC submissions documents. |
+| [SEC Company submissions](rules/sources/sec.company/source.yaml) | Company evidence and identity from SEC submissions documents. |
 | [SEC Person submissions](rules/sources/sec.submissions.person/source.yaml) | Person evidence from the same submissions family, under separate classification and mapping rules. |
 | [GLEIF](rules/sources/gleif/source.yaml) | Legal-entity evidence, accounting-parent relationships and reporting exceptions. |
 | [IAPD Form ADV](rules/sources/iapd.adv/source.yaml) | Adviser filings and custodians mapped to Company identities; custody amounts remain separate facts. |
@@ -315,8 +315,8 @@ contract's declared reasons; a rejected record must remain visible in the report
   [refining-rules](skills/refining-rules/SKILL.md) for changes to an existing feed.
 
 For a concrete example, read the
-[Company source contract](rules/sources/sec.submissions.company/source.yaml),
-its [quality rules](rules/sources/sec.submissions.company/quality.yaml) and
+[Company source contract](rules/sources/sec.company/source.yaml),
+its [quality rules](rules/sources/sec.company/quality.yaml) and
 the [Company merge policy](rules/merge/kinds/company.yaml) together. The
 [contract reference](skills/data-onboarding/REFERENCE.md) explains the full language.
 
