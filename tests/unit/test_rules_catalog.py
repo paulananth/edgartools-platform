@@ -256,6 +256,20 @@ def test_catalog_plan_is_read_only_and_reports_pending(capsys, monkeypatch):
     assert "PENDING" in output.err and "Nothing was sent" in output.err
 
 
+def test_catalog_publish_missing_configuration_preserves_usage_exit_code(capsys, monkeypatch):
+    monkeypatch.setattr(catalog, "plan", lambda root: _outcome_plan())
+    monkeypatch.delenv("OPENMETADATA_URL", raising=False)
+    monkeypatch.delenv("OPENMETADATA_TOKEN", raising=False)
+    monkeypatch.setattr(catalog, "connect", lambda *args: pytest.fail("missing config must stop before connect"))
+
+    assert rules_cli._catalog(Namespace(action="publish", root="rules")) == 2
+
+    output = capsys.readouterr()
+    report = json.loads(output.out)
+    assert report["status"] == "failed" and report["failed_stage"] == "configuration"
+    assert "OPENMETADATA_TOKEN" in output.err
+
+
 def test_catalog_publish_requires_matching_readback_and_returns_structured_result(capsys, monkeypatch):
     plan = _outcome_plan()
     calls = []

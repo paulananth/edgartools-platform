@@ -228,10 +228,10 @@ def _catalog_removed_text(removed: dict) -> str:
     return f"{total} owned objects" + (f" ({', '.join(counts)})" if counts else "")
 
 
-def _catalog_output(report: dict) -> int:
+def _catalog_output(report: dict, *, failure_code: int = 1) -> int:
     print(report["summary"], file=sys.stderr)
     print(json.dumps(report, indent=2, sort_keys=True))
-    return 0 if report["ok"] else 1
+    return 0 if report["ok"] else failure_code
 
 
 def _catalog(args):
@@ -261,9 +261,9 @@ def _catalog(args):
                   "publish": {"status": "not_run"}, "readback": {"status": "not_run"},
                   "cause": "OpenMetadata endpoint or bot token is not configured",
                   "next_action": "Set OPENMETADATA_URL and OPENMETADATA_TOKEN, then rerun the command."}
-        report["summary"] = f"FAILED: catalog configuration for {endpoint or 'OpenMetadata'}; " \
-                             "set the endpoint and bot token, then retry."
-        return _catalog_output(report)
+        report["summary"] = (f"FAILED: catalog configuration for {endpoint or 'OpenMetadata'}; "
+                             "set OPENMETADATA_URL and OPENMETADATA_TOKEN, then retry.")
+        return _catalog_output(report, failure_code=2)
 
     try:
         api_call = catalog.connect(url, token)
