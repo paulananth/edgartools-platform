@@ -9,6 +9,6 @@
 - [x] Diagnose the PR #1262 CI failures from the failing job logs: stale dynamic source paths, historical test lookups using the retired ID, stale MapDocs, and a pre-rename policy digest pin (2026-11-01 07:28 ET).
 - [x] Repair the affected fixtures and comparisons while preserving retired historical evidence; regenerate all MapDocs from canonical rules and refresh the current Company mastering policy digest fixture (2026-11-01 07:28 ET).
 - [x] Run focused rule, MDM, source-mapping, activation, and cohort checks: 49 passed; run the two affected PostgreSQL integration files: 8 passed; run the affected storage-adapter case: 1 passed; skill genericity and path checks: 95 passed (2026-11-01 07:28 ET).
-- [ ] Verify the installed `edgartools-data` bundle against the committed Mapping Documents, then push the fix and confirm PR CI is green.
+- [x] Verify the installed `edgartools-data` bundle against the committed Mapping Documents (1 passed); push the rebased fix and confirm all PR CI jobs and the CI gate pass on head `989f1e47` in run `41306881783` (2026-11-01 08:02 ET).
 - [x] Create and publish a ready (non-draft) PR: https://github.com/paulananth/edgartools-platform/pull/1262, head `6345c47f` (2026-10-31 21:35 ET).
 - [x] Learning → skill: `skills/data-onboarding/SKILL.md` requires coordinated source folder/ID, Dataset Contract, sequence, Bookkeeping, cross-source reference, and Mapping Document updates, and verifies generated workbooks in the installed bundle; retain prior evidence and use normal Rules review/approval (2026-11-01 07:28 ET).
