@@ -13,17 +13,20 @@ machine (`~/.local/share/edgartools/clean-mdm/proving/p08/`).
 **A cold agent, resumed once with replayed approvals, recreates a working set of
 rules, but not an equal one.** The agent was not fresh for that step: the third run
 continued the second agent, in its sandbox, with the skills as #1258 left them. Its
-rules master all four parts, and a separate script gets the same counts. They reach
-315 of today's 325 Companies and 203 of today's 206 GLEIF links, on a Name Census
-that covers only the cohort. The third-run section at the end holds the numbers. The
-tables below this line are the first run, when the rules could not be mastered.
+rules run for all four parts and master Companies, People and GLEIF links; neither
+side masters a relationship. A separate script gets the same counts: 315 Companies
+against today's 325 and 203 GLEIF links against today's 206, on a Name Census that
+covers only the cohort. These are counts: the pairs were not compared with the
+baseline's, whose stores are gone. The third-run section at the end holds the numbers.
+The next sections are the first run, when the rules could not be mastered; then the
+second run.
 
 ## Mastering
 
 | | Baseline | Sandbox |
 |---|---|---|
 | Ran on the cohort | yes, 24 min, once | no: stops at once (no `bookkeeping` section in any source file) |
-| Company masters | 325 | not run (the agent's own reading: 373 Company records, 127 held back) |
+| Company masters | 325 | not run (the agent's own source extract: 373 Company records, 127 held back) |
 | Person masters | 50 | not run (agent: 50 Person records) |
 | GLEIF Level 1 linked to a Company | 206 of 1,577 | not run; by its rules none can link (see "Matching") |
 | Relationships | 0 of 574 consolidation records (both ends must be Companies; the cohort's parents are not cohort filers) | not run (agent: 1,943 parent links read, none could attach) |
@@ -99,9 +102,9 @@ operator's memory index, which the sandbox cannot stop.
 | Run definitions (`bookkeeping` mastering targets) | none | all four, each writing its input manifest offline |
 | Registers on the stores (policy, four contracts) | not reached | yes |
 | Mastering on the cohort (sample) | stops at once (no target) | stops at Company preparation: nothing is switched on, and the Company chain reads its switched-on classification rule |
-| SEC Company / Person (its own reading) | 373 / 50 | 315 / 50 (145 held back, 40 undetermined) |
+| SEC Company / Person (its own source extract) | 373 / 50 | 315 / 50 (145 held back, 40 undetermined) |
 | GLEIF Level 1 Companies; consolidation links | 1,577; 1,943 | 1,577; 1,943 |
-| SEC-to-GLEIF matching | none | none: it found 165 one-to-one exact-name pairs but built no Name Census, judging a binding rule out of reach without a measured proof |
+| SEC-to-GLEIF matching | none | none: it found 165 one-to-one exact-name pairs but built no Name Census, judging a matching rule out of reach without a measured proof |
 | Questions: answered by rulings / unanswered | 22 / 11 of 36 | 19 / 11 of 30 |
 
 What stays out of reach of the skills alone, and why:
@@ -112,20 +115,20 @@ What stays out of reach of the skills alone, and why:
 2. **Name matching.** With the recipe in refining-rules, the agent still
    stopped before building the census, since the rule it feeds cannot be
    switched on without labels (point 1).
-3. **Two platform faults** it found:
-   - the MDM merge workers load the Company census reading
+3. **Two faults** it found:
+   - in the platform: the MDM merge workers load the Company census file
      (`census-filer.yaml`) for every source, so a rules folder without it
-     cannot merge anything;
-   - the cohort slice is not in the capture layout the reader expects (the
-     proof's slice, not the platform).
+     cannot merge anything (ticket 152);
+   - in this proof: the cohort slice is not in the capture layout the reader expects.
 
 ## Third run, approvals replayed (sandbox at 9f74acc5)
 
 Operator, 2026-10-31: "One more run, approvals replayed". **Not a fresh agent:** the
 second run's agent was told to continue (`SendMessage`), with its context and its
 `work/` files, for 34 more minutes (10:01-10:35 ET, 2026-11-01). So this shows what
-one agent reaches with the skills in two sittings, not what a cold start reaches. It
-switched on 7 rules by `approved_by: replayed-ruling`, valid only in the sandbox.
+one agent reaches in two sittings, not what a cold start reaches. It had the skills and
+the platform's code (it rebuilt its Company chain to match what `prepare-clean-company`
+writes), so the run cannot say which of the two taught it what. It switched on 7 rules by `approved_by: replayed-ruling`, valid only in the sandbox.
 
 Isolation, over both sittings: 339 of 341 tool calls name the sandbox and the other
 2 read its own task output. It also reports two Docker containers and their volumes
@@ -134,7 +137,8 @@ harness gave it the repository's CLAUDE.md and the operator's memory index, whic
 the sandbox cannot stop.
 
 The agent's rules were then mastered again by `proof3.py`, not by the agent's
-script, from a checkout at 9f74acc5 on fresh stores, with the agent's inputs read
+script, from a checkout at 9f74acc5 (from the baseline's e606b189 only the skills and
+`rules/catalog.py` differ; mastering does not use that file) on fresh stores, with the agent's inputs read
 only: 7.6 min, once. `baseline.py` could not run them: its GLEIF step reads today's
 file layout and the whole capture, and the agent's census counts its own 500-document
 capture. Its counts and writes equal the agent's run (the agent's report kept no digests).
@@ -151,33 +155,41 @@ capture. Its counts and writes equal the agent's run (the agent's report kept no
 | Second pass changed nothing | yes | yes, Company included (the agent left Company out) |
 | Name Census scope | 43,338 filers, 3,428,477 GLEIF records | 500 filers, 2,545 GLEIF records |
 | Cascade passes in the census | P5, P6, P7 | P5 |
-| Bindings digest | d7ea6ea8ae90 | a8f7c0fc7332 (differs, as the counts do) |
+| Open reviews: needs a matching rule | 1,371 | 1,374 (the other side of 206 and 203 of 1,577) |
+| Open reviews: classification deferred / undetermined | 522 / 48 | 547 / 88 (the agent's rebuilt rules hold back more; not explained further) |
+| Writes: batch changes / outbox | 5,217 / 174 | 4,536 / 59 (not explained line by line; the inputs differ) |
 | SEC documents read for Company | 445 of the whole capture | 500, the agent's own capture of the cohort |
-| GLEIF input | the published archives, through the configured reading, the cohort's LEIs as its approved scope | the agent's pre-cut JSON Lines files of the same cohort |
+| GLEIF input | the published archives, through the configured source extract, the cohort's LEIs as its approved scope | the agent's pre-cut JSON Lines files: 2,545 Level 1 and 2,892 relationship records |
+| Rules switched on | 22, in-scope and other feeds | 7, each with the same name as today's in-scope rule; no P6 or P7 |
+| RDM code sets | 10 pinned sets | 3 of its own first versions, so no hash can match; `edgar-place-codes` in place of `sec-place-codes` |
 
 What the differences mean:
 
-1. **The census covers only the cohort, and it did not change these links.** The
+1. **The census covers only the cohort, and each link it made still stands.** The
    sandbox holds only the cohort, so names look rarer than they are: of the 303 names
    its census finds one-to-one, 6 are shared by several filers on the whole population,
    and of its 141 P5 answers, 9 are not P5 there. But none of those reaches a link:
    each of the agent's 203 pairs (its measured pairs, equal to what it bound) stands on
    today's whole-population census with the same LEI, 184 by a one-to-one name and 19
    by P5. Only the name and the pair were checked here, not the jurisdiction or
-   postcode the name rules also need. A cohort-only census is still not a way to run
-   on real data.
+   postcode the name rules also need. It cannot show links the small census lost, or
+   say which 3 links separate 203 from 206. The census also labels its GLEIF input
+   `GLEIF_FULL_PUBLISHED` while holding the slice. A cohort-only census is not a way
+   to run on real data.
 2. **Ten fewer Companies.** The agent's Company step holds back 185 of 500 filers;
    today's holds back 120 of 445. If the 55 filers the baseline does not read for
    Company are all among the agent's held back (assumed, not measured), that is 130
    against 120. The agent rebuilt the classification rule without independent
    labels. Which ten was not read: the baseline's stores are gone.
 3. **Relationships are unproved on both sides.** Neither run masters one: no link
-   record has both ends bound in this cohort. The agent also staged 314 fewer records,
-   and its rules send unsupported types to a different review (1,917 against 968
-   `unsupported_identity_kind`; the baseline has 1,683 `unsupported_relationship_type`).
+   record has both ends bound in this cohort. The two read different inputs: the agent
+   2,892 records (1,943 staged, 949 set aside as `unsupported_identity_kind`), the
+   baseline 3,940 (2,257 staged, 1,683 `unsupported_relationship_type`), so 1,943
+   against 2,257 is not a like-for-like gap. Why the baseline read more was not measured.
 4. **The agent's 37 unexplained reviews are explained.** They are `unresolved_endpoint`
-   reviews: relationship records waiting for a missing end (read on the stores: 1,374,
-   547, 88, 37 and 1,917 sum to 3,963). The run report's review counts leave that reason out.
+   reviews: relationship records waiting for a missing end (1,374, 547, 88, 37 and 1,917
+   sum to 3,963). Read once on the stores before they were removed; no kept file holds
+   it. The run report's review counts leave that reason out (ticket 151).
 5. **What the replay stands on.** No record or pair was labelled: each proof's
    `correct` repeats its `n` on a replayed ruling's authority, so the 7 switch-ons show
    the rules run, not that they are right. The Person proof carries a ruling's 841

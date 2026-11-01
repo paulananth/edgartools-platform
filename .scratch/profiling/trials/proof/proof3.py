@@ -5,7 +5,7 @@ new batch ids and consumers (the agent left Company out). Counts and digests onl
 The rules use the source names before #1262, so run it from a checkout at 9f74acc5, on stores made by
 `infra/scripts/local-test-stores.py --root <out>/stores up <name>`:
 
-    source <sandbox>/env.sh; EDGAR_RULES_ROOT=<sandbox>/rules .venv/bin/python proof3.py <sandbox> \\
+    source <sandbox>/env.sh; EDGAR_RULES_ROOT=<sandbox>/rules .venv/bin/python <path to this file> <sandbox> \\
       <out>/stores/environments/<name> <out> "--capture <sandbox>/work/capture-sec \\
       --documents <sandbox>/work/census/population.json --population <sandbox>/work/census/population.json \\
       --catalog <the key in work/census/catalog-key.txt> --capture-run proof3-capture --catalog-run proof3-catalog \\
@@ -116,6 +116,8 @@ for tag, folder in batches.items():
     source = "gleif" if tag.startswith("gleif") else "sec.submissions.person" if "person" in tag else "sec.submissions.company"
     run(source, f"replay-{tag}", manifest, [MERGE])
 second = snapshot(); say(stage="second pass", counts=second[0], digests=second[1], writes=second[2])
-report = {"first": first, "second": second, "second_pass_changed_nothing": first[:2] == second[:2] and first[2] == second[2], "minutes": round((time.monotonic() - start) / 60, 1)}
+report = {"first": first, "second": second, "second_pass_changed_nothing": first == second, "minutes": round((time.monotonic() - start) / 60, 1)}
 (OUT / "report.json").write_text(json.dumps(report, indent=1, sort_keys=True, default=str))
 say(stage="end", second_pass_changed_nothing=report["second_pass_changed_nothing"])
+assert report["second_pass_changed_nothing"], (first, second)
+assert not first[0]["identifiers_on_two_masters"], first[0]["identifiers_on_two_masters"]

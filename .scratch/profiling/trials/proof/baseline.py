@@ -1,8 +1,9 @@
 """Recreation proof (ticket 32), steps 4 and 6: one rules folder mastered on the 500-entity cohort.
 
-The same script masters today's rules (the baseline) and the cold agent's regenerated rules
-(the sandbox): `EDGAR_RULES_ROOT` names the rules folder for this process and for the
-installed workers, and the report names the folder and every rules file's sha256.
+It masters today's rules (the baseline). Written to master the cold agent's rules too, but the
+third run's rules read their own capture and GLEIF files, so `proof3.py` masters those.
+`EDGAR_RULES_ROOT` names the rules folder for this process and for the installed workers, and
+the report names the folder and every rules file's sha256.
 
 One set of empty stores, loaded only by the installed bundle's workers, each step checked by
 a verifier under its own login (as ticket 135's proof, `.scratch/mastering-to-done/proof/
