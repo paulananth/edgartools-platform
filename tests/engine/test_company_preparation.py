@@ -13,7 +13,7 @@ from tests.support import sec_rows
 from tests.support.exact import require_tables
 
 
-CONTRACT = files.source('sec.submissions.company')
+CONTRACT = files.source('sec.company')
 CONTEXT = {'cik': 1, 'sync_run_id': 'capture', 'raw_object_id': '0' * 64,
            'load_mode': 'default', 'recent_limit': None, 'last_synced_at': '2026-10-04T00:00:00Z'}
 
@@ -80,7 +80,7 @@ def test_receipt_bound_main_read_combine_prepare_and_repeat(tmp_path):
     company = company_row(context, entity_name='Example', forms=['10-K', '8-K'],
                           business_address=retained_address(payload))
     assert store.json(combined)['artifacts'][0]['tables']['company'] == [company]
-    keys = {'table': 'company', 'dataset': 'sec.submissions.company.v1', 'policy': '0' * 64,
+    keys = {'table': 'company', 'dataset': 'sec.company.v1', 'policy': '0' * 64,
             'consumer': 'trial', 'batch_id': 'main', 'as_of': CONTEXT['last_synced_at']}
     prepare = {'input': combined, 'output': (tmp_path / 'mdm/manifest.json').as_uri(), 'keys': keys, 'checks': ['mdm.prepared']}
     prepared = mdm_prepare.execute(prepare, store)

@@ -11,7 +11,7 @@ from edgar_warehouse.bookkeeping.clean.feeds import resolve_feed
 
 ROOT = Path(__file__).resolve().parents[2] / "rules"
 PAIRS = [
-    ("sec.submissions.company", "submissions", "sec.submissions.company.v1"),
+    ("sec.company", "submissions", "sec.company.v1"),
 ]
 
 
@@ -24,14 +24,14 @@ def test_existing_feed_and_dataset_resolve_same_scope(source, feed, code):
 
 
 def test_only_declared_company_acquisition_resolves():
-    assert resolve_feed(ROOT, "SEC", "submissions")["source"] == "sec.submissions.company"
+    assert resolve_feed(ROOT, "SEC", "submissions")["source"] == "sec.company"
     with pytest.raises(ValueError):
         resolve_feed(ROOT, "GLEIF", "level1")
 
 
 @pytest.mark.parametrize("source,feed", [("", "level1"), ("gleif", ""), ("unknown", "level1"),
                                          ("gleif", "capture"), ("gleif", "submissions"),
-                                         ("sec.submissions.company", "level1"),
+                                         ("sec.company", "level1"),
                                          ("sec.adv", "adv_bulk"), ("sec.filings", "filing_artifact"),
                                          ("sec.company-facts", "company_facts")])
 def test_missing_unknown_or_cross_source_selections_fail(source, feed):

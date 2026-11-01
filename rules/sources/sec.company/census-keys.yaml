@@ -1,22 +1,28 @@
-# Offline name-key recipe; no policy activation. Legal forms are kept.
-source: sec.submissions.company
+# The census keys of one bundle's main documents: the name key (the bundled
+# name-key.yaml recipe) and the CIK without leading zeros, one row a document;
+# one reading names a bundle (at most 512); census.yaml derives its lookup sets
+# from it (Issue 20 slice 20c).
+source: sec.company
 execution:
   profile: source.read
   workers: 1
-  max_artifacts: 1
+  max_artifacts: 512
 read:
   format: json
+  assertions:
+  - test:
+      test:
+        path: .
+        kind: object
+    reason: Company submissions must be a JSON object
   limits:
     max_bytes: 33554432
     max_records: 100000
   tables:
-    names:
-      each: names
+    keys:
+      each: .
       columns:
-        name:
-          value:
-            path: name
-        key:
+        _name_key:
           text:
             path: name
             coerce: python
@@ -87,3 +93,12 @@ read:
                 to: ' INTL '
             - trim: true
             - remove_prefix: 'THE '
+        _cik_key:
+          text:
+            path: cik
+            coerce: python
+            trim: false
+            transforms:
+            - regex_replace:
+                pattern: ^0+
+                with: ''

@@ -206,7 +206,7 @@ class TestTheCompanyRule:
         assert "company" in sec_company.POLICY["kinds"]
         assert sec_company.POLICY["kinds"]["company"] == files.load(file)
         assert sec_company.POLICY["kinds"]["company"]["defaults"]["sources"] == [
-            "sec.submissions.company.v1",
+            "sec.company.v1",
             "gleif.level1.v1",
             "gleif.relationships.v1",
             "iapd.adv.filings.v1",

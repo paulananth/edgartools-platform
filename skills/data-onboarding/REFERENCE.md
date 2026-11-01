@@ -408,7 +408,7 @@ The examples above in plain words, from today's sources:
   child's Level 1 record. A matching address: GLEIF's headquarters address
   beside the legal address MDM shows.
 - One field's own sources: `fields: {address: {sources: [gleif.level1.v1,
-  sec.submissions.company.v1]}}` makes GLEIF win the address while SEC wins
+  sec.company.v1]}}` makes GLEIF win the address while SEC wins
   every other field.
 - A native operation: GLEIF's. A state tag: SEC's `/DE`. An ISO 17442
   identifier: the LEI.

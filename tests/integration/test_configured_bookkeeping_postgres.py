@@ -254,7 +254,7 @@ def test_two_way_rules_migration_preserves_all_document_digests(databases, tmp_p
     exported = databases.rules.to_files(tmp_path, version)
     assert {r["digest"] for r in rows} == {r["digest"] for r in exported}
     assert digest(files.policy(tmp_path)) == digest(files.policy())
-    for name in ("gleif", "sec.submissions.company"):
+    for name in ("gleif", "sec.company"):
         assert digest(files.source(name, tmp_path)) == digest(files.source(name))
     assert digest(files.pipeline("graph-publication", tmp_path)) == digest(files.pipeline("graph-publication"))
     assert files.identifiers(tmp_path) == files.identifiers()  # the build's identifier types travel with it
@@ -1163,7 +1163,7 @@ def test_two_workers_in_their_own_processes_complete_a_cli_submitted_run(databas
 def test_source_configs_use_same_control_contract():
     from edgar_warehouse.rules.files import source
     from edgar_warehouse.bookkeeping.clean.config import validate
-    for name in ("sec.submissions.company",):
+    for name in ("sec.company",):
         selected = validate(source(name), "capture")
         assert selected["lease_seconds"] == 120 and selected["heartbeat_seconds"] == 30
 

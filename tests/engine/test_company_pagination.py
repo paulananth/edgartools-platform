@@ -12,7 +12,7 @@ from tests.support.exact import require_tables
 from tests.engine.test_company_preparation import filing_row
 from tests.engine.test_source_combine import envelope, group, join, plan, table
 
-CONTRACT = files.load(Path('rules/sources/sec.submissions.company/pagination.yaml'))
+CONTRACT = files.load(Path('rules/sources/sec.company/pagination.yaml'))
 CONTEXT = {'cik': 1, 'sync_run_id': 'capture', 'raw_object_id': '0' * 64, 'load_mode': 'default'}
 
 
@@ -64,7 +64,7 @@ def read(store, root, name, body, payload, context):
 
 def test_recent_and_raw_pages_combine_prepare_and_keep_capture_scope(tmp_path):
     store = Artifacts()
-    main_body = files.source('sec.submissions.company')
+    main_body = files.source('sec.company')
     main = read(store, tmp_path, 'main', main_body, {'name': 'Company', 'filings': {'recent': {
         'accessionNumber': ['recent'], 'form': ['10-K']}}},
         {**CONTEXT, 'recent_limit': None, 'last_synced_at': '2026-10-04T00:00:00Z'})
@@ -80,7 +80,7 @@ def test_recent_and_raw_pages_combine_prepare_and_keep_capture_scope(tmp_path):
     scope = store.json(store.json(result)['artifacts'][0]['input'])
     assert scope['readings'] == {'main': main, 'page': page}
     prepare = {'input': result, 'output': (tmp_path / 'mdm/manifest.json').as_uri(), 'checks': ['mdm.prepared'],
-        'keys': {'table': 'company', 'dataset': 'sec.submissions.company.v1', 'policy': '0' * 64,
+        'keys': {'table': 'company', 'dataset': 'sec.company.v1', 'policy': '0' * 64,
                  'consumer': 'trial', 'batch_id': 'page', 'as_of': '2026-10-04T00:00:00Z'}}
     prepared = mdm_prepare.execute(prepare, store)
     assert mdm_prepare.verify({**prepare, 'candidate': prepared}, store) == ({'mdm.prepared': True}, [])

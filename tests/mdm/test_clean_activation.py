@@ -352,7 +352,7 @@ CIK_RULE = {
     "applies_to_verdict": "company",
     "emits": ["bind"],
     "on_no_match": "mint",
-    "source": "sec.submissions.company.v1",
+    "source": "sec.company.v1",
     "when": [
         {"primitive": "identifier_match@1", "args": {"namespace": "cik"}},
         {"primitive": "identifier_cardinality@1", "args": {"namespace": "cik"}},
@@ -360,7 +360,7 @@ CIK_RULE = {
 }
 CIK_CONTRACT = {
     "authority": "SEC/EDGAR",
-    "sources": ["sec.submissions.company.v1"],
+    "sources": ["sec.company.v1"],
     "normalizer": "normalize_identifier@sec-cik-v1",
     "claim": {"forward": 1, "reverse": 1},
     "compatibility": {"field": "kind", "predicate": "kind_equal@1"},
@@ -572,7 +572,7 @@ class TestTheCompanyPolicy:
         # 08 added the SEC place-code table to the body.
         pending = policy_layers.peel(policy_layers.company_part(POLICY))
         pending["automatic_rules"] = []
-        assert digest(pending) == (
+        assert digest(_historic_company_identity(pending)) == (
             "cbee08506a55c299a7a1d4b5c43f21ee1007181566b500f07fb28072e32d97cf"
         )
 
@@ -683,8 +683,37 @@ def _name_rules():
 
 
 NAME_RULES = _name_rules()
-NAME_STATE = NAME_RULES[("sec-gleif-name-jurisdiction", "2026-09-25.1")]
-NAME_POSTCODE = NAME_RULES[("sec-gleif-name-postal", "2026-09-25.2")]
+
+
+def _current_company_identity(value):
+    """Apply the Company source rename to frozen, pre-rename policy evidence."""
+    if isinstance(value, dict):
+        return {_current_company_identity(key): _current_company_identity(item)
+                for key, item in value.items()}
+    if isinstance(value, list):
+        return [_current_company_identity(item) for item in value]
+    if isinstance(value, str):
+        return {"sec.submissions.company.v1": "sec.company.v1",
+                "sec.submissions.company": "sec.company"}.get(value, value)
+    return value
+
+
+def _historic_company_identity(value):
+    if isinstance(value, dict):
+        return {_historic_company_identity(key): _historic_company_identity(item)
+                for key, item in value.items()}
+    if isinstance(value, list):
+        return [_historic_company_identity(item) for item in value]
+    if isinstance(value, str):
+        return {"sec.company.v1": "sec.submissions.company.v1",
+                "sec.company": "sec.submissions.company",
+                "company-2026-10-31.sec-company-source-identity":
+                    "company-2026-10-25.one-value-per-identifier"}.get(value, value)
+    return value
+
+
+NAME_STATE = _current_company_identity(NAME_RULES[("sec-gleif-name-jurisdiction", "2026-09-25.1")])
+NAME_POSTCODE = _current_company_identity(NAME_RULES[("sec-gleif-name-postal", "2026-09-25.2")])
 
 
 def name_policy(rule=None, activate=True, bar=True):

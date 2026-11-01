@@ -437,7 +437,7 @@ No AWS rollout, legacy database reset or retirement is performed here.
 
 ## Examples
 
-- Acquisition on 2026-09-29: only `sec.submissions.company/submissions` was
+- Acquisition on 2026-09-29: only the Company submissions feed was
   active. Its Company target was removed on 2026-10-11, unrun (Issue 20 20c);
   capture returns with the configured capture worker (L8). Today's Company
   route is in `docs/company-only-acquisition.md`.

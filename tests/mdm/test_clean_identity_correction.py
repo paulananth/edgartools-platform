@@ -9,7 +9,7 @@ from edgar_warehouse.mdm.clean.identity import replay
 from edgar_warehouse.mdm.clean.store import Conflict
 
 AS_OF = "2026-09-30T00:00:00+00:00"
-SEC, GLEIF = "sec.submissions.company.v1:0000824142", "gleif.level1.v1:549300ZHF0E5VM7PUD37"
+SEC, GLEIF = "sec.company.v1:0000824142", "gleif.level1.v1:549300ZHF0E5VM7PUD37"
 AAON, OTHER = "00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002"
 IDENTITIES = [{"entity_id": e, "kind": "company", "published_at": "2026-01-01T00:00:00+00:00"}
               for e in (AAON, OTHER)]

@@ -12,7 +12,7 @@ from edgar_warehouse.workers import source_read, source_combine, mdm_prepare
 from tests.engine.test_company_combination_contract import captures,read,blueprint
 from tests.engine.test_source_combine import envelope
 
-ROOT=files.ROOT/'sources/sec.submissions.company'
+ROOT=files.ROOT/'sources/sec.company'
 ZERO='0'*64
 ORIGIN='bronze/sec/cik=1/main/document.json'  # the main document's bronze object
 
@@ -79,7 +79,7 @@ def test_census_and_optional_cascade_match_retained_helper_through_preparation(t
     refs,payload,_,_,context=captures(store,tmp_path)
     if case=='empty_name': payload['name']=''
     baseline_refs={**refs}
-    if case=='empty_name': baseline_refs['main'],_=read(store,tmp_path,'baseline-empty',files.source('sec.submissions.company'),payload,context)
+    if case=='empty_name': baseline_refs['main'],_=read(store,tmp_path,'baseline-empty',files.source('sec.company'),payload,context)
     baseline=source_combine.execute(envelope(store,tmp_path/'baseline',blueprint(),baseline_refs),store)
     expected=store.json(baseline)['artifacts'][0]['tables']['company'][0]
     refs['main'],_=read(store,tmp_path,'census-main',files.load(ROOT/'census-main.yaml'),payload,{**context,'bronze_object':ORIGIN})
@@ -94,7 +94,7 @@ def test_census_and_optional_cascade_match_retained_helper_through_preparation(t
     assert digest(actual)==digest([expected]) and '_name_key' not in actual[0]
     assert store.json(store.json(result)['artifacts'][0]['input'])['readings']==refs
     prepare={'input':result,'output':(tmp_path/'prepared/manifest.json').as_uri(),'checks':['mdm.prepared'],
-        'keys':{'table':'company','dataset':'sec.submissions.company.v1','policy':ZERO,'consumer':'trial','batch_id':'census','as_of':context['last_synced_at']}}
+        'keys':{'table':'company','dataset':'sec.company.v1','policy':ZERO,'consumer':'trial','batch_id':'census','as_of':context['last_synced_at']}}
     prepared=mdm_prepare.execute(prepare,store)
     assert mdm_prepare.verify({**prepare,'candidate':prepared},store)==({'mdm.prepared':True},[])
     batch=store.json(prepared)['batches'][0]
@@ -147,7 +147,7 @@ def test_deliberate_configuration_faults_are_observable(tmp_path,fault):
 def test_census_main_inherits_company_reading_and_canonical_name_recipe():
     """Fail when either upstream blueprint changes without updating this copy; filings are a
     narrowed copy (only the columns combine's `forms` group uses), so a dropped column may change."""
-    source = files.source('sec.submissions.company')
+    source = files.source('sec.company')
     census = deepcopy(files.load(ROOT/'census-main.yaml'))
     recipe = census['read']['tables']['company']['columns'].pop('_name_key')
     census['read']['tables']['company']['columns'].pop('_origin')  # each row's bronze origin (20c)

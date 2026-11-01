@@ -375,7 +375,7 @@ workers/verifiers directly, not the installed full Company pipeline. Its
 
 ### The SEC Company preparation blueprint
 
-Use the bundled `sources/sec.submissions.company/combine.yaml` with source extracts
+Use the bundled `sources/sec.company/combine.yaml` with source extracts
 from the bundled main `source.yaml`, `pagination.yaml` and `catalog.yaml`.
 The four source-extract names are `main`, `pages`, `catalog_exchange` and
 `catalog_tickers`. Preserve every input's independently verified source-extract

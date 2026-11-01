@@ -36,13 +36,13 @@ def keys(config, samples):
     return [row['key'] for row in reading.tables['names']]
 
 
-@pytest.mark.parametrize('source,oracle', [('sec.submissions.company', sec_legal_form_key), ('gleif', legal_form_key)])
+@pytest.mark.parametrize('source,oracle', [('sec.company', sec_legal_form_key), ('gleif', legal_form_key)])
 def test_shipped_recipe_matches_retained_normalizer(source, oracle):
     assert keys(contract(source), SAMPLES) == [oracle(s) for s in SAMPLES]
 
 
 def test_missing_name_uses_empty_key_and_legal_forms_remain_distinct():
-    config = contract('sec.submissions.company')
+    config = contract('sec.company')
     reading = SourceEngine(config).read(b'{"names":[{}]}')
     assert reading.tables['names'][0]['key'] == ''
     values = keys(config, ['Wayfair Inc.', 'Wayfair LLC', 'COUSINS PROPERTIES INC', 'COUSINS PROPERTIES LP'])
@@ -52,7 +52,7 @@ def test_missing_name_uses_empty_key_and_legal_forms_remain_distinct():
 @pytest.mark.parametrize('operation,sample', [('unicode','𝑨 Company'), ('strip_combining','Électricité Company'),
                                             ('remove_prefix','THE COMPANY'), ('replace','A&B Company')])
 def test_deliberate_missing_operation_changes_required_key(operation, sample):
-    config = deepcopy(contract('sec.submissions.company'))
+    config = deepcopy(contract('sec.company'))
     ops = config['read']['tables']['names']['columns']['key']['text']['transforms']
     # Keep only the first replace fault: remove ampersand handling, not aliases.
     index = next(i for i, op in enumerate(ops) if operation in op)
@@ -61,18 +61,18 @@ def test_deliberate_missing_operation_changes_required_key(operation, sample):
 
 
 def test_deliberate_state_suffix_and_legal_form_alias_faults_are_observable():
-    config = deepcopy(contract('sec.submissions.company'))
+    config = deepcopy(contract('sec.company'))
     ops = config['read']['tables']['names']['columns']['key']['text']['transforms']
     del ops[1]
     assert keys(config, ['A INC /DE/']) != ['A INC']
-    config = deepcopy(contract('sec.submissions.company'))
+    config = deepcopy(contract('sec.company'))
     ops = config['read']['tables']['names']['columns']['key']['text']['transforms']
     ops[:] = [op for op in ops if op.get('replace', {}).get('from') != ' CORPORATION ']
     assert keys(config, ['A Corporation']) != ['A CORP']
 
 
 def test_python_facade_refuses_regex_and_output_growth():
-    config = deepcopy(contract('sec.submissions.company'))
+    config = deepcopy(contract('sec.company'))
     text = config['read']['tables']['names']['columns']['key']['text']
     text['transforms'] = [{'regex_replace': {'pattern': '(', 'with': ''}}]
     with pytest.raises(SourceRejected, match='contract'):

@@ -1,6 +1,6 @@
 # SEC Person: the MDM mapping of the SEC submissions document of each filer, read for
 # the Person kind (sec.submissions.person.v1). Same captured files as
-# sec.submissions.company; a second kind gets its own folder (data-onboarding, Names).
+# sec.company; a second kind gets its own folder (data-onboarding, Names).
 # Every filer's document is read; the classification rule below decides which are
 # people. Configured reading preserves the complete raw document; it does not
 # classify or rename its fields. The acquisition

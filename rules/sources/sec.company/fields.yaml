@@ -1,5 +1,5 @@
 # Native mapped values; no source activation.
-source: sec.submissions.company
+source: sec.company
 read:
   format: json
   limits:

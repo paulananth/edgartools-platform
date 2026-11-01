@@ -1,6 +1,6 @@
 # Offline-qualified raw continuation page reader; not a source activation.
 # Columns are at the page root. The retained loader oracle expects a wrapper.
-source: sec.submissions.company
+source: sec.company
 execution:
   profile: source.read
   workers: 2

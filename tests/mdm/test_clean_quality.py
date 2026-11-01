@@ -124,7 +124,7 @@ class TestTheBlock:
             quality.check_quality(block(**change))
 
     def test_the_repo_quality_rules_are_valid(self):
-        for name in ("sec.submissions.company", "gleif", "sec.submissions.person", "sec.ownership"):
+        for name in ("sec.company", "gleif", "sec.submissions.person", "sec.ownership"):
             for entry in files.source(name)["mdm"].values():
                 if "quality" in entry["contract"]:
                     quality.check_quality(entry["contract"]["quality"])
@@ -160,20 +160,20 @@ class TestTheBlock:
 
 class TestTheFiles:
     def test_quality_rides_in_the_contract_and_writes_back_to_its_own_file(self, tmp_path):
-        body = files.source("sec.submissions.company")
-        assert body["mdm"]["sec.submissions.company.v1"]["contract"]["quality"]["version"] == (
+        body = files.source("sec.company")
+        assert body["mdm"]["sec.company.v1"]["contract"]["quality"]["version"] == (
             "sec-company-quality-v1"
         )
         files.write_source(body, tmp_path)
         assert (tmp_path / "quality.yaml").exists()
-        assert "quality" not in files.load(tmp_path / "source.yaml")["mdm"]["sec.submissions.company.v1"]["contract"]
+        assert "quality" not in files.load(tmp_path / "source.yaml")["mdm"]["sec.company.v1"]["contract"]
         assert files.load_source(tmp_path / "source.yaml") == body
 
     def test_quality_written_inside_the_contract_is_refused(self, tmp_path):
-        body = copy.deepcopy(files.source("sec.submissions.company"))
+        body = copy.deepcopy(files.source("sec.company"))
         files.write_source(body, tmp_path)
         text = files.load(tmp_path / "source.yaml")
-        text["mdm"]["sec.submissions.company.v1"]["contract"]["quality"] = {"version": "x"}
+        text["mdm"]["sec.company.v1"]["contract"]["quality"] = {"version": "x"}
         (tmp_path / "source.yaml").write_text(files.dumps(text), encoding="utf-8")
         with pytest.raises(files.RulesFileError, match="not in the contract"):
             files.load_source(tmp_path / "source.yaml")
@@ -272,7 +272,7 @@ class TestTheRunReport:
         # Each batch's run report profile goes to the run, which keeps it with
         # the batch's finished event and sums it in its report (rebuild ticket 10).
         assert kept["b0"]["as_of"] == "t"
-        assert kept["b0"]["profile"]["sec.submissions.company.v1"]["records"] == 1
+        assert kept["b0"]["profile"]["sec.company.v1"]["records"] == 1
 
 
 class TestTheReviewFixes:
@@ -306,8 +306,8 @@ class TestTheReviewFixes:
         assert found["provenance"]["matching"]["address"]["street"] == "3050 BOWERS AVE"
 
     def test_a_refused_export_writes_nothing(self, tmp_path):
-        body = copy.deepcopy(files.source("sec.submissions.company"))
-        body["mdm"]["sec.submissions.company.v1"]["contract"]["quality"].pop("version")
+        body = copy.deepcopy(files.source("sec.company"))
+        body["mdm"]["sec.company.v1"]["contract"]["quality"].pop("version")
         with pytest.raises(files.RulesFileError, match="named quality version"):
             files.write_source(body, tmp_path)
         assert not list(tmp_path.iterdir())
@@ -333,7 +333,7 @@ class TestExceptions:
             register_dataset(None, SOURCE_CODE, contract)
 
     def test_every_repo_exception_is_non_blocking(self):
-        for name in ("sec.submissions.company", "gleif", "sec.submissions.person", "sec.ownership"):
+        for name in ("sec.company", "gleif", "sec.submissions.person", "sec.ownership"):
             for entry in files.source(name)["mdm"].values():
                 if "quality" in entry["contract"]:
                     assert quality.exception_reasons(entry["contract"]["quality"]) <= set(

@@ -70,7 +70,7 @@ def test_a_store_that_already_holds_records_is_refused(tmp_path, stores):
 
 def test_a_source_whose_section_states_no_plan_stops_the_test(tmp_path, stores):
     with pytest.raises(proving.TestRunError, match="must be version 2"):
-        run(tmp_path, stores, source="sec.submissions.company")
+        run(tmp_path, stores, source="sec.company")
 
 
 def test_a_run_is_recorded_as_the_version_it_names(tmp_path, stores, databases, monkeypatch):

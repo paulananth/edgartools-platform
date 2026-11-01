@@ -5,7 +5,7 @@ left the Company (operator, 2026-10-22), so every projection and record id moved
 import copy
 
 FIELDS_BACK = {
-    "sec.submissions.company.v1": ("sic", {"sic_description": {"value": {
+    "sec.company.v1": ("sic", {"sic_description": {"value": {
         "path": "sic_description", "path_mode": "literal", "type": "text", "null_if_blank": True}}}),
     "gleif.level1.v1": ("gleif_initial_registration", {name: {"value": {
         "path": f"Registration.{path}.$", "null_if_blank": True, "type": "text", "path_mode": "literal"}}

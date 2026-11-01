@@ -1,7 +1,7 @@
 # Company merge rules: source priority, field rules, the classification rule and
 # the declared SEC-to-GLEIF name rules. Rules are data (operator, 2026-09-24):
 # adding a kind is a new file here, not an edit to a source.
-version: company-2026-10-25.one-value-per-identifier
+version: company-2026-10-31.sec-company-source-identity
 defaults:
   # Shared fields (operator, 2026-09-24): `name` and `address` are one field
   # each across sources, SEC first. SEC fills `address` from its business
@@ -9,7 +9,7 @@ defaults:
   # go to matching only). `jurisdiction` is GLEIF's alone; SEC's state of
   # incorporation stays SEC's own field, as SEC writes it.
   sources:
-  - sec.submissions.company.v1
+  - sec.company.v1
   - gleif.level1.v1
   # GLEIF's accounting-parent links (platform validation 06a); it maps no
   # fields, so it fills none.
@@ -27,7 +27,7 @@ rules:
 - rule_id: sec-company-candidate
   version: 2026-09-25.13
   family: classification
-  source: sec.submissions.company.v1
+  source: sec.company.v1
   emits:
   - company
   - deferred
@@ -229,7 +229,7 @@ rules:
 - rule_id: company-cik
   version: "2026-09-24"
   family: binding
-  source: sec.submissions.company.v1
+  source: sec.company.v1
   applies_to_verdict: company
   emits:
   - bind
@@ -266,7 +266,7 @@ rules:
   version: 2026-09-25.1
   family: name_binding
   source: gleif.level1.v1
-  holder_source: sec.submissions.company.v1
+  holder_source: sec.company.v1
   applies_to_verdict: company
   emits:
   - bind
@@ -296,7 +296,7 @@ rules:
   version: 2026-09-25.2
   family: name_binding
   source: gleif.level1.v1
-  holder_source: sec.submissions.company.v1
+  holder_source: sec.company.v1
   applies_to_verdict: company
   emits:
   - bind
@@ -354,7 +354,7 @@ rules:
   version: 2026-10-30.1
   family: name_binding
   source: gleif.level1.v1
-  holder_source: sec.submissions.company.v1
+  holder_source: sec.company.v1
   applies_to_verdict: company
   emits:
   - bind
@@ -385,7 +385,7 @@ rules:
   version: 2026-09-28.1
   family: name_binding
   source: gleif.level1.v1
-  holder_source: sec.submissions.company.v1
+  holder_source: sec.company.v1
   applies_to_verdict: company
   emits:
   - bind
@@ -414,7 +414,7 @@ rules:
   version: 2026-09-28.1
   family: name_binding
   source: gleif.level1.v1
-  holder_source: sec.submissions.company.v1
+  holder_source: sec.company.v1
   applies_to_verdict: company
   emits:
   - bind
@@ -660,7 +660,7 @@ identifiers:
   cik:
     authority: SEC/EDGAR
     sources:
-    - sec.submissions.company.v1
+    - sec.company.v1
     - sec.nport.registrant.v1
     normalizer: normalize_identifier@sec-cik-v1
     claim:

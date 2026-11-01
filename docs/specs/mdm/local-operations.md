@@ -126,7 +126,7 @@ whole SEC population (each filer's current and former names) and a full GLEIF
 Level 1 Golden Copy (legal and other names, branches excluded). It refuses a
 delta. The population file lists the receipt keys of the main submissions
 documents counted; each is read from the capture folder (`receipts.jsonl` and
-`bronze/`) through `rules/sources/sec.submissions.company/census-sec-names.yaml` by the
+`bronze/`) through `rules/sources/sec.company/census-sec-names.yaml` by the
 `source.read` worker and its verifier, up to 256 documents a unit, and must match its
 receipt; `census-sec-reduction.yaml` counts it. With a cascade pass switched on, the census also runs the cascade
 through the Company chain's own readings (`--catalog`, below). The Golden Copy arrives as
@@ -173,7 +173,7 @@ edgar-warehouse mdm prepare-clean-company \
 
 It writes the input manifest of the source's `mastering` target and prints
 its report (`manifest`, `publication`, `scope`); `rules run --source
-sec.submissions.company --target mastering --input-manifest <uri>
+sec.company --target mastering --input-manifest <uri>
 --input-sha256 <sha>` then runs it (`docs/company-only-acquisition.md`). The
 manifest names each main submissions document in `--documents` (at most 512
 receipt keys, all in the population the Name Census counted) by its receipt

@@ -302,7 +302,7 @@ class TestTheReadPathRunsTheNamedRule:
 
         return normalize(
             row,
-            source_code="sec.submissions.company.v1",
+            source_code="sec.company.v1",
             contract=self.contract(),
             publication={
                 "publication_key": "p",
@@ -368,7 +368,7 @@ class TestTheReadPathRunsTheNamedRule:
         legacy_contract["adapter"]["kind_values"] = {"operating": "company"}
         by_table = normalize(
             self.ROW,
-            source_code="sec.submissions.company.v1",
+            source_code="sec.company.v1",
             contract=legacy_contract,
             publication={
                 "publication_key": "p",

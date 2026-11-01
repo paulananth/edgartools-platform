@@ -4,7 +4,7 @@
 # uses it; `exception` sets the record aside without stopping the run; `flag` only counts.
 version: sec-company-quality-v1
 quality:
-  sec.submissions.company.v1:
+  sec.company.v1:
     fixes:
     # SEC writes "DC" for companies that are not incorporated there (Applied
     # Materials, Shell). The proving run lists every one for the operator.

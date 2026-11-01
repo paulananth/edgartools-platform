@@ -49,7 +49,7 @@ legal_form_key = NORMALIZERS[GLEIF_NORMALIZER]
 CAP = 5
 
 
-SEC_READING = rules_files.load(rules_files.ROOT / "sources/sec.submissions.company/census-filer.yaml")
+SEC_READING = rules_files.load(rules_files.ROOT / "sources/sec.company/census-filer.yaml")
 
 
 def _sec_population(filers):

@@ -13,7 +13,7 @@ from edgar_warehouse.mdm.clean import adapters
 from edgar_warehouse.rules import files,source_engine
 from tests.support.company_fields import before_ticket_129
 
-SOURCES=('sec.submissions.company','sec.submissions.person')
+SOURCES=('sec.company','sec.submissions.person')
 RETIRED=json.loads(Path(__file__).with_name('retired_mapper_outcomes.json').read_text())
 
 
@@ -28,14 +28,25 @@ def contracts(source):
     else:
         # Rebuild ticket 129 took the SIC code's label out of the Company; the
         # retired mapper's outcomes are compared with it put back.
-        contract=before_ticket_129(contract,'sec.submissions.company.v1')
+        contract=before_ticket_129(contract,'sec.company.v1')
     return contract
 
 
 def retired(key, outcome):
     """The outcome as the retired mapping gave it for this case."""
+    key = key.replace("sec/exact/sec.company/", "sec/exact/sec.submissions.company/")
+    key = key.replace("sec/normalize/sec.company/", "sec/normalize/sec.submissions.company/")
     assert key in RETIRED, key
     assert json.loads(json.dumps(outcome))==RETIRED[key]
+
+
+def historical_assertion(assertion):
+    """Compare the rename's output with the retained pre-rename oracle."""
+    body = dict(assertion)
+    body["source_code"] = "sec.submissions.company.v1"
+    body["subject"] = digest([body["source_code"], body["record_key"]])
+    body["assertion_id"] = digest({k: v for k, v in body.items() if k != "assertion_id"})
+    return body
 
 
 def row(source):
@@ -89,8 +100,11 @@ def test_normalization_preserves_assertion_ids_classification_quality_and_deferr
     publication={'publication_key':'fixture','revision':1,'artifact_sha256':'a'*64,'member':'fixture'}
     code=next(iter(files.source(source)['mdm']))
     try:
-        normalized=('assertion',digest(adapters.normalize(record,source_code=code,contract=contracts(source),
-                    publication=publication,policy=files.policy())))
+        assertion=adapters.normalize(record,source_code=code,contract=contracts(source),
+                                     publication=publication,policy=files.policy())
+        if source == 'sec.company':
+            assertion = historical_assertion(assertion)
+        normalized=('assertion',digest(assertion))
     except adapters.UnsupportedRecord as error:
         normalized=('deferred',error.reason,digest(error.detail),error.probable_kind)
     retired(f'sec/normalize/{source}/{case}',normalized)

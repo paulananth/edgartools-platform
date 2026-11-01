@@ -32,7 +32,7 @@ from tests.integration.test_silver_writer_postgres import RUNTIME, silver_databa
 
 FOLDER = files.ROOT / "sources" / "sec.ownership"
 LINES = ("non_derivative_transaction", "non_derivative_holding", "derivative_transaction", "derivative_holding")
-PERSON, COMPANY = "sec.ownership.reporting_owner.v1", "sec.submissions.company.v1"
+PERSON, COMPANY = "sec.ownership.reporting_owner.v1", "sec.company.v1"
 ISSUER, HOLDER, FUND = "0000000001", "0000000002", "0000000003"  # invented CIKs
 SECOND_OWNER = (f"<reportingOwner><reportingOwnerId><rptOwnerCik>{FUND}</rptOwnerCik>"
                 "<rptOwnerName>Example Fund LP</rptOwnerName></reportingOwnerId>"

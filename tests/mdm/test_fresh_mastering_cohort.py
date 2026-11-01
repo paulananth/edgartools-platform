@@ -20,10 +20,20 @@ def test_removing_person_fixture_conversion_preserves_all_assertion_ids_and_prov
     import json
 
     from edgar_warehouse.rules import files
+    from edgar_warehouse.mdm.clean.store import digest
     from tests.mdm.test_rules_config_digests import WITHOUT_TICKET_129_FIELDS, _with_company_fields_back
     from tests.support import person_quality
 
-    actual = json.dumps(cohort()[2], sort_keys=True).encode()
+    def historical_cohort():
+        records = cohort()[2]
+        for record in records:
+            if record["source_code"] == "sec.company.v1":
+                record["source_code"] = "sec.submissions.company.v1"
+                record["subject"] = digest([record["source_code"], record["record_key"]])
+                record["assertion_id"] = digest({k: v for k, v in record.items() if k != "assertion_id"})
+        return records
+
+    actual = json.dumps(historical_cohort(), sort_keys=True).encode()
     assert hashlib.sha256(actual).hexdigest() == "a539af8021c6704a95d63d28301a5b322b1ddc0c6009fa35cadb846ddf82155b"
     # Ticket 129 took the SIC code's label out of the Company; with it put back
     # the cohort is the one pinned before.
@@ -34,7 +44,7 @@ def test_removing_person_fixture_conversion_preserves_all_assertion_ids_and_prov
         return _with_company_fields_back(found, code) if code in WITHOUT_TICKET_129_FIELDS else found
 
     monkeypatch.setattr(files, "mdm_contract", with_company_fields)
-    actual = json.dumps(cohort()[2], sort_keys=True).encode()
+    actual = json.dumps(historical_cohort(), sort_keys=True).encode()
     assert hashlib.sha256(actual).hexdigest() == "e908d67bbdf589e1081ff77aa025d2e83b89ad154ea0846428f46bdbff10e8d2"
     # Rebuild ticket 10 made Person's quality v2 (one more check, which the
     # cohort passes); a record names its quality version. Under v1 the hash is
@@ -49,5 +59,5 @@ def test_removing_person_fixture_conversion_preserves_all_assertion_ids_and_prov
         return person_quality.before_ticket_10(found)
 
     monkeypatch.setattr(files, "mdm_contract", before_ticket_10)
-    actual = json.dumps(cohort()[2], sort_keys=True).encode()
+    actual = json.dumps(historical_cohort(), sort_keys=True).encode()
     assert hashlib.sha256(actual).hexdigest() == "35220d0129283863f957b93fee8317c4ce9ec390003d57d74d52e3709c29640c"

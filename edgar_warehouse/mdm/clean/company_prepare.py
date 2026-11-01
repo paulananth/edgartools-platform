@@ -5,7 +5,7 @@ raw capture. This writer checks the caller's inputs (the documents are main
 documents the capture's receipts name, in the population the Name Census
 counted), binds the approved run IDs and the census digest into the
 contracts, and freezes every unit's input. Bookkeeping runs the target's steps
-(`rules run --source sec.submissions.company --target mastering`) and the
+(`rules run --source sec.company --target mastering`) and the
 registered workers do the work:
 
 - `main`: the documents read by `census-main.yaml`, cut into units of at most
@@ -38,7 +38,7 @@ from .raw_capture import read_bounded
 from .sec_company import CONTRACT, POLICY, SOURCE_CODE
 from .store import Conflict, canonical, digest
 
-SOURCE = "sec.submissions.company"
+SOURCE = "sec.company"
 ROOT = rules_files.ROOT / "sources" / SOURCE
 TARGET = "mastering"
 DOCUMENTS_BYTES = 1024**2

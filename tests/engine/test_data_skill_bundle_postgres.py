@@ -141,7 +141,7 @@ names = ["Électricité Holdings Corporation /DE/", "THE A&B L.L.C.", "Wayfair I
 raw = store.put_bytes((root / "names.json").as_uri(), json.dumps({"names":[{"name":name} for name in names]}).encode())
 context = store.put(root.as_uri(), {"version":1,"input":raw,"values":{}})
 proof = {}
-for source, first in [("sec.submissions.company", "ELECTRICITE HLDGS CORP"), ("gleif", "ELECTRICITE HLDGS CORP DE")]:
+for source, first in [("sec.company", "ELECTRICITE HLDGS CORP"), ("gleif", "ELECTRICITE HLDGS CORP DE")]:
     config = files.load(files.ROOT / "sources" / source / "name-key.yaml")
     contract = store.put(root.as_uri(), config)
     manifest = store.put(root.as_uri(), {"version":2,"contract":contract,"artifacts":[{"input":raw,"context":context}]})
@@ -157,7 +157,7 @@ for source, first in [("sec.submissions.company", "ELECTRICITE HLDGS CORP"), ("g
 print(json.dumps(proof))
 ''', cwd=root)
     assert result.returncode == 0, result.stderr
-    assert set(json.loads(result.stdout)) == {"sec.submissions.company", "gleif"}
+    assert set(json.loads(result.stdout)) == {"sec.company", "gleif"}
 
 
 @pytest.fixture(scope="module")
@@ -323,7 +323,7 @@ def test_source_sequence_runs_from_installed_bundle_without_checkout(installed):
     assert delayed.returncode == 3, delayed.stderr
     report = json.loads(delayed.stdout)
     # OpenFIGI is one target since ticket 138, so it is ordered, before Securities.
-    assert report["order"] == ["sec.submissions.company", "sec.nport.registrant", "sec.submissions.person",
+    assert report["order"] == ["sec.company", "sec.nport.registrant", "sec.submissions.person",
                                "sec.nport.fund", "openfigi", "sec.nport.security"]
     assert report["sources"]["gleif"]["status"] == "deferred"
     assert report["runtime_readiness"] == "not_checked"
@@ -588,7 +588,7 @@ def test_parsing_runs_through_the_installed_bundle(installed, databases, tmp_pat
                           (contract_path.parent / "fixtures/one-row.xml").read_bytes())
     input_ref = store.put(tmp_path.as_uri(), {"version": 1, "contract": contract, "artifacts": [xml]})
     if reading_mode == 'company-main':
-        probe = _run(python, '-c', 'import json; from edgar_warehouse.rules import files; print(json.dumps(files.source("sec.submissions.company")))', cwd=root)
+        probe = _run(python, '-c', 'import json; from edgar_warehouse.rules import files; print(json.dumps(files.source("sec.company")))', cwd=root)
         assert probe.returncode == 0, probe.stderr
         contract = store.put(tmp_path.as_uri(), json.loads(probe.stdout))
         raw = store.put_bytes((tmp_path / 'company.json').as_uri(), b'{"name":"Example","addresses":{"business":{"stateOrCountry":"DE"}}}')
@@ -597,7 +597,7 @@ def test_parsing_runs_through_the_installed_bundle(installed, databases, tmp_pat
             'recent_limit': None, 'last_synced_at': '2026-10-04T00:00:00Z'}})
         input_ref = store.put(tmp_path.as_uri(), {'version': 2, 'contract': contract, 'artifacts': [{'input': raw, 'context': context}]})
     if reading_mode == 'company-page':
-        probe = _run(python, '-c', 'import json; from edgar_warehouse.rules import files; print(json.dumps(files.load(files.ROOT / "sources/sec.submissions.company/pagination.yaml")))', cwd=root)
+        probe = _run(python, '-c', 'import json; from edgar_warehouse.rules import files; print(json.dumps(files.load(files.ROOT / "sources/sec.company/pagination.yaml")))', cwd=root)
         assert probe.returncode == 0, probe.stderr
         contract = store.put(tmp_path.as_uri(), json.loads(probe.stdout))
         raw = store.put_bytes((tmp_path / 'page.json').as_uri(), b'{"accessionNumber":["old","older"],"form":["20-F","10-K"],"size":["1234","1,234"]}')
@@ -605,7 +605,7 @@ def test_parsing_runs_through_the_installed_bundle(installed, databases, tmp_pat
             'cik': 1, 'sync_run_id': 'capture', 'raw_object_id': '0' * 64, 'load_mode': 'default'}})
         input_ref = store.put(tmp_path.as_uri(), {'version': 2, 'contract': contract, 'artifacts': [{'input': raw, 'context': context}]})
     if reading_mode in ('company-catalog', 'company-dictionary'):
-        probe = _run(python, '-c', 'import json; from edgar_warehouse.rules import files; print(json.dumps(files.load(files.ROOT / "sources/sec.submissions.company/catalog.yaml")))', cwd=root)
+        probe = _run(python, '-c', 'import json; from edgar_warehouse.rules import files; print(json.dumps(files.load(files.ROOT / "sources/sec.company/catalog.yaml")))', cwd=root)
         assert probe.returncode == 0, probe.stderr
         contract = store.put(tmp_path.as_uri(), json.loads(probe.stdout))
         payload = (b'{"fields":["ticker","exchange","cik"],"data":[["A","NYSE",1],["A-B",null,1]]}'
@@ -1143,7 +1143,7 @@ store = Artifacts()
 with_census = WITH_CENSUS
 folder = Path("company-composition-census" if with_census else "company-composition").resolve()
 folder.mkdir()
-blueprints = files.ROOT / "sources/sec.submissions.company"
+blueprints = files.ROOT / "sources/sec.company"
 date = "2026-10-04T00:00:00Z"
 context = {"cik":1,"sync_run_id":"capture","raw_object_id":"0"*64,"load_mode":"default"}
 def read(name, template, payload, context):
@@ -1208,7 +1208,7 @@ if with_census:
         "cascade":{"census":raw["sha256"],"version":census["cascade"]["version"],"lei":"L1","pass":"P1"}}
     assert row["name_census"] == expected and "_name_key" not in row
 prepare = {"input":combined,"output":(folder / "mdm/manifest.json").as_uri(),"checks":["mdm.prepared"],
-    "keys":{"table":"company","dataset":"sec.submissions.company.v1","policy":"0"*64,
+    "keys":{"table":"company","dataset":"sec.company.v1","policy":"0"*64,
         "consumer":"trial","batch_id":"composition","as_of":date}}
 prepared = mdm_prepare.execute(prepare,store)
 assert mdm_prepare.verify({**prepare,"candidate":prepared},store) == ({"mdm.prepared":True},[])
@@ -1250,7 +1250,7 @@ def test_gleif_configured_mapping_publishes_and_recovers_from_installed_bundle(i
                 if row["LEI"]["$"] in {CHILD_LEI, PARENT_LEI}]
         assert len(rows) == 2
         sec_records = [
-            {"source": "sec.submissions.company", "row": row}
+            {"source": "sec.company", "row": row}
             for row in json.loads(FIXTURE.read_text())["sec"] if row["entity_type"] == "operating"
         ] + [
             {"source": "sec.submissions.person", "row": json.loads(line)}
@@ -1258,7 +1258,7 @@ def test_gleif_configured_mapping_publishes_and_recovers_from_installed_bundle(i
         ]
         from edgar_warehouse.mdm.clean.adapters import normalize
         for record in sec_records:
-            if record["source"]=="sec.submissions.company":  # a Delaware business address, as SEC writes it
+            if record["source"]=="sec.company":  # a Delaware business address, as SEC writes it
                 record["row"]["business_address"]={"street":"  Source Street  ","street2":None,"city":"City",
                                                    "region":" de ","postal_code":"12345","country":"US"}
         readings=[]
@@ -1272,7 +1272,7 @@ def test_gleif_configured_mapping_publishes_and_recovers_from_installed_bundle(i
         from edgar_warehouse.mdm.clean import name_census
         census_archive = archive(rows)
         census_filers = [(f"{r['row']['cik']:010d}", r['row']['entity_name'], [])
-                         for r in sec_records if r['source'] == 'sec.submissions.company']
+                         for r in sec_records if r['source'] == 'sec.company']
         census_arguments = {"filers": census_filers,
                             "sec_population": {"capture_run_id": "installed-census", "filers": len(census_filers)},
                             "gleif_metadata": metadata(len(rows)),
@@ -1373,12 +1373,12 @@ expected=body["checkout_census"]
 assert census==expected
 census_assertions=[]
 for record in body["sec_records"]:
-    if record["source"]!="sec.submissions.company":continue
+    if record["source"]!="sec.company":continue
     row=copy.deepcopy(record["row"])
     row["name_census"]=name_census.entry(census,row["entity_name"],census_digest=digest(census))
     old_row=copy.deepcopy(row)
     old_row["name_census"]=body["checkout_entries"][str(row["cik"])]
-    kwargs={"source_code":"sec.submissions.company.v1","contract":files.mdm_contract("sec.submissions.company","sec.submissions.company.v1"),
+    kwargs={"source_code":"sec.company.v1","contract":files.mdm_contract("sec.company","sec.company.v1"),
             "policy":files.policy(),"publication":{"publication_key":f"installed-census/{row['cik']}","revision":2,
             "artifact_sha256":digest(row),"member":"four_companies_v1.json","record_locator":str(row["cik"])}}
     actual=adapters.normalize(row,**kwargs)
@@ -1419,11 +1419,11 @@ for sql in ("DELETE FROM public.mdm_store_evidence","DELETE FROM public.mdm_stor
 pins={str(path):hashlib.sha256(Path(path).read_bytes()).hexdigest()
       for path in [*source_engine.runtime_files(),Path(source_mapping.__file__),Path(adapters.__file__),
                    files.ROOT/"sources/gleif/source.yaml",
-                   files.ROOT/"sources/sec.submissions.company/source.yaml",
+                   files.ROOT/"sources/sec.company/source.yaml",
                    files.ROOT/"sources/sec.submissions.person/source.yaml",Path(sec_company.__file__),
                    Path(name_census.__file__),
                    files.ROOT/"sources/gleif/census-complete-stream.yaml",
-                   files.ROOT/"sources/sec.submissions.company/census-filer.yaml"]}
+                   files.ROOT/"sources/sec.company/census-filer.yaml"]}
 print(json.dumps({"pins":pins,"generation":census_result["generation"],"counts":counts,
                   "installed_gleif_mapping":True,"installed_sec_mapping":True,"installed_census_caller":True,"census_digest":digest(census),"publication_recovery":True,"full_population":False}))
 engine.dispose()
@@ -1433,7 +1433,7 @@ engine.dispose()
                          "checkout_census": checkout_census,
                          "census_archive": base64.b64encode(census_archive).decode(),
                          "checkout_entries": {str(r['row']['cik']): name_census.entry(checkout_census,r['row']['entity_name'],census_digest=digest(checkout_census))
-                                                for r in sec_records if r['source']=='sec.submissions.company'}, "leis": [CHILD_LEI, PARENT_LEI], "as_of": "2026-01-01T00:00:00+00:00",
+                                                for r in sec_records if r['source']=='sec.company'}, "leis": [CHILD_LEI, PARENT_LEI], "as_of": "2026-01-01T00:00:00+00:00",
                          "consumers": policy["required_consumers"]})
         assert done.returncode == 0, done.stderr
         proof = json.loads(done.stdout)
@@ -1482,7 +1482,7 @@ import json,sys
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.bookkeeping.clean.config import validate, worklist
 from edgar_warehouse.rules import files
-config = validate(files.source("sec.submissions.company"), "mastering")
+config = validate(files.source("sec.company"), "mastering")
 items = worklist(Artifacts().json(json.load(sys.stdin)["manifest"]), config)
 print(json.dumps(sorted({i["step"] for i in items})))
 """, cwd=root, document=report)
