@@ -1,6 +1,5 @@
 """Durable manifest progress over opaque destination-owned execution metadata."""
 from collections import Counter
-import hashlib
 import json
 from uuid import uuid4
 
@@ -31,7 +30,7 @@ def start(store, run_id, expected_batches, *, manifest_digest, mapping_versions=
 def batches(store, run_id, expected, *, connection=None):
     api = adapter(store)
     return (api.observed_batches(run_id, connection=connection),
-            {bytes(row["batch_bytes"]).decode() for row in api.read_batches(expected, connection=connection)})
+            api.retained_batches(expected, connection=connection))
 
 
 def execute(store, run_id, batch_id, action, *, checks=None):
@@ -67,14 +66,19 @@ def receipt(store, manifest, run_id, manifest_digest):
                 or frozen.get("expected_batches") != expected):
             raise ValueError("MDM run scope differs from the input manifest")
         observed = api.observed_batches(run_id, connection=conn)
-        rows = api.read_batches(expected, connection=conn)
-    if set(expected) != observed or len(rows) != len(expected):
-        raise ValueError("MDM has not committed every batch of this run")
+        if set(expected) != observed:
+            raise ValueError("MDM has not committed every batch of this run")
+        found = _receipt_rows(api, expected, manifest, conn)
+    if len(found) != len(expected):
+        raise ValueError("MDM holds fewer retained batches than this run expects")
+    return canonical({"version":1,"mdm_run":run_id,"policy_digest":manifest["policy_digest"],
+                      "batches":sorted(found,key=lambda row:row["batch_id"])}).encode()
+
+
+def _receipt_rows(api, expected, manifest, conn):
+    """One receipt row per batch, read a chunk at a time (the adapter checks each intent's digest)."""
     found = []
-    for row in rows:
-        raw = bytes(row["intent"])
-        if hashlib.sha256(raw).hexdigest() != row["request_hash"]:
-            raise Conflict("Retained batch request hash differs from original bytes")
+    for row in api.iter_batches(expected, connection=conn):
         effects = json.loads(bytes(row["assessment"]))["effects"]
         batch = bytes(row["batch_bytes"]).decode()
         if effects["batch_id"] != batch or effects["policy_digest"] != manifest["policy_digest"]:
@@ -82,8 +86,7 @@ def receipt(store, manifest, run_id, manifest_digest):
         found.append({"batch_id":batch,"request_hash":row["request_hash"],
             "policy_digest":effects["policy_digest"],"consumer":effects["consumer"],
             "checkpoint":int(row["position"]),"generation":int(row["generation"])})
-    return canonical({"version":1,"mdm_run":run_id,"policy_digest":manifest["policy_digest"],
-                      "batches":sorted(found,key=lambda row:row["batch_id"])}).encode()
+    return found
 
 
 def waiting(api, conn):
@@ -126,20 +129,21 @@ def reconcile(store, run_id):
         generation = api.generation(connection=conn)
         expected = set(frozen["expected_batches"])
         observed = api.observed_batches(run_id,connection=conn)
-        saved = api.read_batches(sorted(observed),connection=conn)
-        reviews = set()
-        for row in saved:
+        reviews, produced = set(), set()
+        run_key = storage_adapter().key(run_id)
+        for row in api.iter_batches(sorted(observed),connection=conn):
             effects = json.loads(bytes(row["assessment"]))["effects"]
             reviews.update(item["object_id"] for item in effects["projections"] if item["object_type"] == "review")
+            if row["run_key"] == run_key:
+                produced.add(bytes(row["batch_bytes"]).decode())
         latest = api.read_origins([("review",key) for key in sorted(reviews)],connection=conn)
         required = observed | {row["origin"]["batch"] for row in latest.values()}
-        _, publications = publication_rows(api,required,connection=conn)
+        _, publications = publication_rows(api,required,connection=conn,light=True)
         pending = sum(not row["verified"] for row in publications)
         unresolved = sum(RecordReader._body(row).get("open") is True and
                          RecordReader._body(row).get("blocking") is not False for row in latest.values())
         waiting_count, waiting_rows = waiting(api,conn)
         events, profiles = Counter(), {}
-        produced = {bytes(row["batch_bytes"]).decode() for row in saved if row["run_key"] == storage_adapter().key(run_id)}
         for _,row in api.iter_type(RecordReader.group("run_attempts",run_id),metadata=True,connection=conn):
             body = RecordReader._body(row)
             if body["event"] not in ("started","finished","error") or body["batch_id"] not in expected:

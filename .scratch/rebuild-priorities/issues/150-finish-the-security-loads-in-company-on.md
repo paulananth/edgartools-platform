@@ -4,7 +4,7 @@ Priority: 150. Map: [Rebuild priorities](../map.md). Opened 2026-10-29 18:21 ET,
 (operator, 2026-10-29: "Stop, count, close (Recommended)": ticket 120 closes on the counts already loaded, and
 the rest of the load moves here).
 
-Type: task. Status: open. Blocked by: none.
+Type: task. Status: claimed (Claude, 2026-11-01 15:41 ET, branch `claude/t150-merge-memory`). Blocked by: none.
 
 ## Question
 
@@ -41,8 +41,18 @@ the only merge running? Fix the cause, then finish the open runs and N-PORT Secu
 - [ ] Evidence for the memory: one OpenFIGI merge worker held about 790 MB 20 s after it started and about 1.0 GB at
   21 min (2026-10-29, `ps`), so its memory grows over the batches; `execute_manifest` keeps every batch's result
   until the end (`committed`). Measure what each result holds
+- [x] The tail of a merge (start check, receipt, run report) reads one batch at a time: bundle 10's receipt 493 s to 29 s, footprint 9.5 GB to 1.7 GB, receipt byte-identical to the stored one; publication check 38 s, 960 MB (2026-11-01 16:22 ET; profiled on the real bundle; storage-adapter tests on MySQL; PR below)
 - [ ] The fix, with its test (a merge of the measured size fits, and saves inside its permission)
 - [ ] Finish the OpenFIGI load: the same command finishes its open runs first
 - [ ] The N-PORT Security load (2026 Q2)
 - [ ] Counts; no identifier on two masters
 - [ ] Learning → skill (data-operations, "Fit a load into the window": what a merge needs on this machine)
+
+## Measurement (Claude, 2026-11-01 15:45-16:07 ET)
+
+Bundle 10 of the OpenFIGI load (52 batches, all saved on 2026-10-29 08:50-09:17 ET, 27 min; no receipt written):
+
+- Nine of the merges that "failed" had saved all 52 batches (25-33 min each); only 3 bundles have a receipt. The failure is after the saves, in the tail the merge worker runs once the batches are saved.
+- The tail reads every saved batch's intent (`read_batches`, 400 per chunk, so all 52 in one `.all()`): 2,747 MB for this bundle (biggest batch 69 MB; 668 batches hold 32 GB of intent). Measured alone: `read_batches` 217 s, `receipt()` 273 s (reads them again), 493 s in total. Peak resident 813 MB, but macOS reports a peak memory footprint of 9.5 GB (compressed pages), the same footprint that sends an 8 GB machine into swap and a kill.
+- `execute_manifest` calls `batches()` (the same read) at its start, and the verifier calls `receipt()` again: three full reads of the bundle's intents per merge.
+- Not yet shown: that the saves themselves are slow ("destination authority expired before save"); a first-attempt merge was not measured.

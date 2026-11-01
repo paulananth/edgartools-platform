@@ -214,6 +214,46 @@ def test_generically_persists_all_requested_and_unrelated_types(adapters, storag
     assert count(owner, "outbox") == 2
 
 
+def test_batches_are_read_one_at_a_time_and_their_names_without_intents(adapters, storage_api, monkeypatch):
+    owner, runtime, _ = adapters
+    names = [f"batch-{n}" for n in range(3)]
+    for n, name in enumerate(names):
+        request = batch(storage_api, batch=name, scope=f"fixture-stream-{n}", expected_generation=n,
+                        objects=(storage_api.Effect("company", f"invented-{n}", {"n": n}),))
+        runtime.apply(request, runtime.claim(request.scope, "writer"))
+    queries = []
+    statement = runtime.batch_statement
+
+    def spy(chunk, **kwargs):
+        queries.append((len(chunk), kwargs.get("outboxes", False), kwargs.get("columns")))
+        return statement(chunk, **kwargs)
+
+    monkeypatch.setattr(runtime, "batch_statement", spy)
+    streamed = list(runtime.iter_batches(names))
+    published = list(runtime.iter_batches(names, outboxes=True))
+    assert [size for size, _, _ in queries] == [1] * 6, "intents and payloads are read one batch per query"
+    queries.clear()
+    assert runtime.retained_batches([*names, "batch-absent"]) == set(names)
+    assert queries and all(columns is not None for _, _, columns in queries)
+    selected = {column.name for _, _, columns in queries for column in columns}
+    assert selected == {"batch_key", "batch_bytes"}, "retained names read no intent or assessment"
+    monkeypatch.undo()
+    assert {bytes(row["batch_bytes"]).decode() for row in streamed} == set(names)
+    assert len(published) == 6
+    assert runtime.read_batches(names) == streamed
+
+
+def test_a_retained_intent_that_differs_from_its_digest_is_refused(adapters, storage_api):
+    owner, runtime, _ = adapters
+    request = batch(storage_api)
+    runtime.apply(request, runtime.claim(request.scope, "writer"))
+    table = owner.tables["batch"]
+    with owner.engine.begin() as conn:
+        conn.execute(update(table).values(request_hash="0" * 64))
+    with pytest.raises(storage_api.AdapterError, match="Batch intent differs from retained digest"):
+        list(runtime.iter_batches([request.batch]))
+
+
 def test_keyed_native_scope_reads_paginate_and_retain_the_callers_transaction(adapters, storage_api):
     owner, runtime, _ = adapters
     lookup = "fixture.lookup/Café/資料"

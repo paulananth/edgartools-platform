@@ -14,22 +14,30 @@ def adapter(store):
     return api
 
 
-def publication_rows(api, batches, *, connection):
-    """Refuse missing delivery intent instead of reporting false completion."""
-    names = set(batches)
-    commands = api.read_batches(sorted(names), connection=connection)
-    if len(commands) != len(names):
-        raise Conflict("Unknown publication batch")
-    publications = api.read_batches(sorted(names),outboxes=True,connection=connection)
-    found = {}
-    for row in publications:
+def publication_rows(api, batches, *, connection, light=False):
+    """Refuse missing delivery intent instead of reporting false completion.
+
+    Rows are read one batch at a time. `light` keeps only each publication's
+    batch, consumer and verified flag (and no commands), so a whole run's
+    intents and payloads are never held together.
+    """
+    names = sorted(set(batches))
+    publications, found = [], {}
+    for row in api.iter_batches(names, outboxes=True, connection=connection):
         found.setdefault(row["batch_key"],set()).add(bytes(row["consumer_bytes"]).decode())
-    for command in commands:
+        publications.append({k: row[k] for k in ("batch_key","consumer_bytes","verified")} if light else row)
+    commands, count = [], 0
+    for command in api.iter_batches(names, connection=connection):
+        count += 1
         intent = json.loads(bytes(command["intent"]))
         consumers = {bytes.fromhex(item["consumer"]).decode() for item in intent["consumers"]}
         expected = consumers if command["changed"] else set()
         if found.get(command["batch_key"],set()) != expected:
             raise Conflict("Required consumer publications differ from the retained batch")
+        if not light:
+            commands.append(command)
+    if count != len(names):
+        raise Conflict("Unknown publication batch")
     return commands, publications
 
 

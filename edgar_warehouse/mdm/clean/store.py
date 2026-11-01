@@ -550,7 +550,7 @@ class Store:
         api = adapter(self)
         with self.engine.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
             observed = api.observed_batches(run_id, connection=conn)
-            _, publications = publication_rows(api,observed,connection=conn)
+            _, publications = publication_rows(api,observed,connection=conn,light=True)
         batches = len({row["batch_key"] for row in publications})
         pending = sum(not row["verified"] for row in publications)
         return {"batches": batches, "pending": pending,
