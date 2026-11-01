@@ -46,7 +46,7 @@ the only merge running? Fix the cause, then finish the open runs and N-PORT Secu
 - [ ] Finish the OpenFIGI load: the same command finishes its open runs first
 - [ ] The N-PORT Security load (2026 Q2)
 - [ ] Counts; no identifier on two masters
-- [ ] Learning → skill (data-operations, "Fit a load into the window": what a merge needs on this machine)
+- [x] Learning → skill: `data-operations` "Fit a load into the window" (a merge's tail memory; count applied batches before blaming saves; measure a never-run merge) and "While a load runs" (finish open runs with `load`, not by hand) (2026-11-01 17:12 ET; genericity lint passes; PR below)
 
 ## Measurement (Claude, 2026-11-01 15:45-16:07 ET)
 
