@@ -32,6 +32,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from dataclasses import replace
+from functools import cache
 
 from . import cascade as cascaded
 from .primitives import NORMALIZERS
@@ -49,14 +50,17 @@ legal_form_key = NORMALIZERS[GLEIF_NORMALIZER]
 CAP = 5
 
 
-SEC_READING = rules_files.load(rules_files.ROOT / "sources/sec.company/census-filer.yaml")
+@cache
+def sec_reading():
+    """The SEC filer reading, loaded when the census first counts, so a merge of any other source needs no such file."""
+    return rules_files.load(rules_files.ROOT / "sources/sec.company/census-filer.yaml")
 
 
 def _sec_population(filers):
     held: dict[str, set] = defaultdict(set)
     wanted = set()
     for cik, name, former in filers:
-        reading = read_record({"name": name, "former": former}, SEC_READING)
+        reading = read_record({"name": name, "former": former}, sec_reading())
         for table in ("current", "former"):
             for row in reading.tables[table]:
                 if key := row["key"]:

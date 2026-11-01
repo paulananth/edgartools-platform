@@ -178,7 +178,7 @@ def test_truthy_non_object_containers_still_refuse_eligible_records(container):
 def test_census_name_transforms_equal_the_canonical_normalizer_recipes():
     for source, recipe in [('gleif',files.load(COMPLETE_READING)),
                            ('gleif',files.load(files.ROOT / 'sources/gleif/census-names-stream.yaml')),
-                           ('sec.company',name_census.SEC_READING)]:
+                           ('sec.company',name_census.sec_reading())]:
         canonical = files.load(files.ROOT / f'sources/{source}/name-key.yaml')
         transforms = canonical['read']['tables']['names']['columns']['key']['text']['transforms']
         found = []
