@@ -458,6 +458,9 @@ class Lease:
     expires: int
 
 
+# Batches per read of intents and payloads: one is up to tens of megabytes.
+BATCH_CHUNK = 1
+
 ERRORS = frozenset(
     {
         "invalid_counter",
@@ -1345,8 +1348,12 @@ class Adapter:
                 connection.execute(statement)
         return {"generation": observed, "changed": len(entries)}
 
-    def batch_statement(self, batches, *, outboxes=False):
-        """Exact batch seeks, optionally followed by its outbox primary-key prefix."""
+    def batch_statement(self, batches, *, outboxes=False, columns=None):
+        """Exact batch seeks, optionally followed by its outbox primary-key prefix.
+
+        `columns` narrows a plain batch read to the columns the caller needs;
+        an outbox read always returns the outbox columns and ignores it.
+        """
         names = list(dict.fromkeys(batches))
         if not names:
             raise AdapterError("A nonempty batch key collection is required")
@@ -1358,7 +1365,7 @@ class Adapter:
             columns = [*table.c, batch.c.batch_bytes, batch.c.generation]
             source = table.join(batch, table.c.batch_key == batch.c.batch_key)
         else:
-            table, columns, source = batch, list(batch.c), batch
+            table, columns, source = batch, list(columns or batch.c), batch
         condition = table.c.batch_key == wanted.c.batch_key
         if self.engine.dialect.name == "postgresql":
             probe = select(*columns).select_from(source).where(condition).offset(0).lateral("probe")
@@ -1367,15 +1374,20 @@ class Adapter:
                 .prefix_with("STRAIGHT_JOIN", dialect="mysql")
                 .with_hint(table, "FORCE INDEX (PRIMARY)", dialect_name="mysql"))
 
-    def read_batches(self, batches, *, outboxes=False, connection=None):
-        names, found = list(dict.fromkeys(batches)), []
-        for offset in range(0, len(names), 400):
-            chunk = names[offset:offset + 400]
+    def iter_batches(self, batches, *, outboxes=False, connection=None):
+        """Verified batch rows, BATCH_CHUNK batches per query.
+
+        A batch intent or publication payload can be megabytes. A caller that
+        folds each row as it arrives holds one chunk, never the whole set.
+        """
+        names = list(dict.fromkeys(batches))
+        for offset in range(0, len(names), BATCH_CHUNK):
+            wanted = names[offset:offset + BATCH_CHUNK]
             with self.engine.connect() if connection is None else nullcontext(connection) as conn:
-                rows = conn.execute(self.batch_statement(chunk, outboxes=outboxes)).mappings().all()
+                rows = conn.execute(self.batch_statement(wanted, outboxes=outboxes)).mappings().all()
             for row in rows:
                 name = bytes(row["batch_bytes"]).decode()
-                if name not in chunk or key(name) != row["batch_key"]:
+                if name not in wanted or key(name) != row["batch_key"]:
                     raise AdapterError("Batch key digest collision")
                 if outboxes:
                     if key(bytes(row["consumer_bytes"]).decode()) != row["consumer_key"]:
@@ -1392,7 +1404,25 @@ class Adapter:
                         raise AdapterError("Invalid retained batch intent") from None
                     if assessment != bytes(row["assessment"]):
                         raise AdapterError("Batch assessment differs from retained intent")
-                found.append(dict(row))
+                yield dict(row)
+
+    def read_batches(self, batches, *, outboxes=False, connection=None):
+        return list(self.iter_batches(batches, outboxes=outboxes, connection=connection))
+
+    def retained_batches(self, batches, *, connection=None):
+        """The names among `batches` that are retained; reads no intent."""
+        names, found = list(dict.fromkeys(batches)), set()
+        table = self.tables["batch"]
+        for offset in range(0, len(names), 400):
+            chunk = names[offset:offset + 400]
+            statement = self.batch_statement(chunk, columns=(table.c.batch_key, table.c.batch_bytes))
+            with self.engine.connect() if connection is None else nullcontext(connection) as conn:
+                rows = conn.execute(statement).mappings().all()
+            for row in rows:
+                name = bytes(row["batch_bytes"]).decode()
+                if name not in chunk or key(name) != row["batch_key"]:
+                    raise AdapterError("Batch key digest collision")
+                found.add(name)
         return found
 
     def generation_batch(self, generation, *, connection=None):
