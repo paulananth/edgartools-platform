@@ -262,6 +262,44 @@ reference list.
   explicit ownership receipt. Domains, glossaries, terms and quality resources
   are global and are not assumed removed when a service is reset.
 
+## Operator outcome report
+
+Keep configuration, send and confirmation as three separate facts:
+
+1. `edgar-warehouse rules catalog plan --root <rules>` describes the configured
+   inventory and makes no API request. Count domains, glossaries, terms,
+   tables, products, quality definitions/cases, pipelines and each lineage
+   family from this plan.
+2. `edgar-warehouse rules catalog publish --root <rules>` sends the plan and
+   reconciles only its owned scope. Record what the command reports as sent or
+   removed. A successful HTTP response or command exit does not prove readback.
+3. `edgar-warehouse rules catalog check --root <rules>` is read-only. A matching
+   readback is required before calling publication confirmed.
+
+Use **pending** for plan-only work, **partial** when a send may have occurred
+but confirmation is absent or reports drift, **failed** when the send could
+not complete, and **confirmed** only when the relevant native readback matches.
+For failures, name the stage, give a short cause, and state the next action.
+Show the destination as scheme and host only. Never include user info, tokens,
+query strings, or raw response bodies in an operator report.
+
+The current CLI does not provide trustworthy per-object created-versus-updated
+counts; do not infer these from plan counts or a successful PUT. Mark them
+unavailable unless a later publisher receipt or API evidence distinguishes
+them. The current `publish` result reports service, table, pipeline and lineage
+totals plus removals. The current `check` verifies the service, database and
+schema inventory, tables, pipelines (including tasks), and table lineage. It
+does not verify every configured domain/glossary association, product
+membership/input port, quality object, domain lineage edge, pipeline-to-table
+edge, or all table annotations. Do not describe the entire catalog as confirmed
+from that check alone; read the missing objects through the native API and
+report any remaining gap as unverified until CLI coverage exists.
+
+The shared glossary identity is `shared`. It is a vocabulary container, not a
+business domain. Never create a domain named `Shared`. Publishing catalog
+metadata documents configured work; it does not execute the described data
+pipelines or create run evidence.
+
 The native schema does not by itself prove a UI can render separate control
 lanes, expandable stage detail or shared-step navigation. Preserve control-link
 meaning as metadata and declare a separate renderer or a capability gap. Never
