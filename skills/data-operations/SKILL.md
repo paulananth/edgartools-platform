@@ -296,7 +296,22 @@ Work it out from counts before starting:
    a time, and measure one merge's peak memory against the free memory
    before choosing `--bundles` (ticket 150).
 
+   **Problem:** merges that had saved all 52 batches still died, with no
+   receipt (9 of them). **Root cause:** after the saves, the receipt, the
+   resumed-start check and the run report each read every saved batch's intent
+   and publication payload at once (2.7 GB of intents for one bundle; 9.5 GB
+   peak footprint, so swap and a kill). **Fix:** they read one batch at a
+   time (receipt 493 s to 29 s, 1.7 GB). **Lesson:** a failed merge may have
+   saved everything, so count its applied batches before blaming the saves;
+   and a rerun of a saved merge only writes the receipt, so it measures
+   nothing about saving. Measure a merge that has never run.
+
 ### While a load runs
+
+- **Finish open runs with `load`, never by hand.** `load` finishes what is
+  open, verifies each step and runs the later ones. Driving `workers work`
+  and `workers verify` yourself skips the later steps, and a bare `--reports`
+  path (it needs a `file://` address) marks the unit `waiting` (ticket 150).
 
 - **Leave worker code alone** (`edgar_warehouse/workers/*`). A run pins its
   worker runtime and stops on a change ("Pinned worker runtime changed;
