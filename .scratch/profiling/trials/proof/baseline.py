@@ -17,6 +17,9 @@ Inputs, on this machine only (no provider request; operator, 2026-10-07: "Local 
 - GLEIF: the captured Golden Copy of 2026-09-11 16:00, Level 1 and relationships, each read by its
   configured Rust reading with the slice's 2,545 LEIs as `approved_scope`.
 
+A rules folder written before #1262 renamed the source (`sec.submissions.company`, ticket 32's
+baseline and both sandboxes) runs with this script as of its commit, from a checkout there.
+
 Passes: SEC Company, SEC Person, GLEIF Level 1, GLEIF relationships; then the second pass: each
 target's verified records merged again under new batch ids and consumers, which must change
 nothing. The report holds counts and digests only.
@@ -63,7 +66,7 @@ RELATIONSHIPS = (GOLDEN / "01-20260911-1600-gleif-goldencopy-rr-golden-copy.json
 CATALOG = "warehouse/bronze/reference/sec/company_tickers_exchange/2026/09/02/company_tickers_exchange.json"
 OBSERVED_AT, CATALOG_RUN = "2026-09-30T02:20:28+00:00", "local-cm27-tickers-20260902"
 AS_OF = "2026-09-29T15:00:00+00:00"
-COMPANY, PERSON = "sec.submissions.company.v1", "sec.submissions.person.v1"
+COMPANY, PERSON = "sec.company.v1", "sec.submissions.person.v1"
 LEVEL1_CODE, RELATIONSHIP_CODE = "gleif.level1.v1", "gleif.relationships.v1"
 LIMIT = "1000"
 TARGET = lambda steps: {"lease_seconds": 300, "heartbeat_seconds": 20,  # noqa: E731
@@ -85,7 +88,7 @@ def _steps(source: str) -> list[dict]:
 
 
 PIPELINE = {"pipeline": "recreation-baseline", "bookkeeping": {"version": 1, "targets": {
-    "company": TARGET(_steps("sec.submissions.company")),
+    "company": TARGET(_steps("sec.company")),
     "person": TARGET(_steps("sec.submissions.person")),
     "gleif": TARGET([READ, {**PREPARE, "requires": ["read"]}, {**MERGE, "requires": ["prepare"]}]),
     "replay": TARGET([MERGE]),
@@ -161,7 +164,7 @@ def test_recreation_baseline(installed, databases, tmp_path):  # noqa: F811
     migrate_guard(mdm_admin, runtime_role="clean_application")
     with mdm_admin.begin() as conn:
         policy = register_policy(conn, files.policy())
-        register_dataset(conn, COMPANY, "1", files.mdm_contract("sec.submissions.company", COMPANY))
+        register_dataset(conn, COMPANY, "1", files.mdm_contract("sec.company", COMPANY))
         register_dataset(conn, PERSON, "1", files.mdm_contract("sec.submissions.person", PERSON))
         register_dataset(conn, LEVEL1_CODE, "1", files.mdm_contract("gleif", LEVEL1_CODE))
         register_dataset(conn, RELATIONSHIP_CODE, "1", files.mdm_contract("gleif", RELATIONSHIP_CODE))
