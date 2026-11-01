@@ -368,6 +368,9 @@ if os.environ["READ_WORKER_CASE"] == "review_recovery":
     report = coordinator.reconcile(root)
     assert report["waiting_links"] == 1 and report["unresolved_reviews"] == 0
     assert len(report["waiting_link_list"]) == 1 and not report["end_to_end_complete"]
+    from edgar_warehouse.mdm.clean.inspection import counts
+    inspected = counts(stage.store.engine)
+    assert inspected["waiting_links"] == {"unresolved_endpoint": 1} and inspected["open_reviews"] == {}
     sink = LocalContractSink(folder/"delivered")
     while stage.store.deliver_one("invented-export","invented-worker",sink):
         pass
@@ -378,6 +381,7 @@ if os.environ["READ_WORKER_CASE"] == "review_recovery":
         "as_of":"2026-04-01T00:00:00+00:00","assertions":[target],"identities":[identity],"decisions":[decision]})
     corrected = coordinator.reconcile(root)
     assert corrected["waiting_links"] == 0 and corrected["waiting_link_list"] == []
+    assert counts(stage.store.engine)["waiting_links"] == {}
     assert corrected["pending_publications"] == 1 and not corrected["end_to_end_complete"]
     assert stage.store.deliver_one("invented-export","invented-worker",sink)
     assert coordinator.reconcile(root)["end_to_end_complete"]
