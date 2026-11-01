@@ -127,7 +127,7 @@ WITHOUT_TICKET_129_FIELDS = {
     "gleif.level1.v1": "d03454b6e1f76e3d98378193dce2e5fd60df0a95180e3a1aeb7397a3cd8cc8b0",
 }
 def _with_company_fields_back(contract: dict, code: str) -> dict:
-    assert _historic_digest(contract) == WITHOUT_TICKET_129_FIELDS[HISTORIC_SEC_CODE], code
+    assert _historic_digest(contract) == WITHOUT_TICKET_129_FIELDS[code], code
     return before_ticket_129(contract, code)
 
 
@@ -151,8 +151,9 @@ def _historic_digest(value) -> str:
 
 
 def _with_retired_lists(contract: dict, code: str) -> dict:
-    assert _historic_digest(contract) == ONE_STATEMENT[HISTORIC_SEC_CODE], code
-    return {**contract, "adapter": {**contract["adapter"], **RETIRED_LISTS[HISTORIC_SEC_CODE]}}
+    historic_code = HISTORIC_SEC_CODE if code == "sec.company.v1" else code
+    assert _historic_digest(contract) == ONE_STATEMENT[code], code
+    return {**contract, "adapter": {**contract["adapter"], **RETIRED_LISTS[historic_code]}}
 
 
 def test_the_company_configuration_is_unchanged():

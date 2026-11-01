@@ -28,8 +28,11 @@ CHILD_LEI, PARENT_LEI = "HWUPKR0MPOU8FGXBT394", "INR2EJN1ERAN0W5ZP974"
 def cohort():
     policy = files.policy()
     contracts = {
-        f"sec.submissions.{kind}.v1": files.mdm_contract(f"sec.submissions.{kind}", f"sec.submissions.{kind}.v1")
-        for kind in ("company", "person")
+        code: files.mdm_contract(source, code)
+        for source, code in (
+            ("sec.company", "sec.company.v1"),
+            ("sec.submissions.person", "sec.submissions.person.v1"),
+        )
     }
     fixture = json.loads(FIXTURE.read_text())
     readings = []

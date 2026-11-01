@@ -661,7 +661,9 @@ does not run or activate a pipeline.
 3. Check that it matches the rules:
    `edgar-warehouse rules mapdoc check`. It succeeds
    silently, with exit 0. A difference fails it, and CI too. Commit the
-   workbook with the rules.
+   workbook with the rules. The installed `edgartools-data` bundle includes
+   these workbooks; for changes to catalog identities or merge rules, verify
+   the installed bundle sees the committed Mapping Documents as well.
 4. Before the PR, see what would be published:
    `edgar-warehouse rules catalog plan`. This runs
    offline.
