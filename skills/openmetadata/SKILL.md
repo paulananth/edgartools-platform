@@ -166,6 +166,9 @@ that glossary. Every other term from the two sections goes in one shared
 glossary named `shared`. A shared spelling with a different definition stays a
 different term.
 
+`shared` names a Glossary only. It is not a Domain, a domain tag, or a domain
+assignment. Never create or assign a domain named `Shared`.
+
 Associate a glossary term with a table only when the term is one relationship
 type and the table is that type. Do not tag the kind table with every term
 whose heading starts with the domain name. A domain with no kind table still
@@ -295,10 +298,10 @@ edge, or all table annotations. Do not describe the entire catalog as confirmed
 from that check alone; read the missing objects through the native API and
 report any remaining gap as unverified until CLI coverage exists.
 
-The shared glossary identity is `shared`. It is a vocabulary container, not a
-business domain. Never create a domain named `Shared`. Publishing catalog
-metadata documents configured work; it does not execute the described data
-pipelines or create run evidence.
+The `shared` object is a glossary identity only, not a business domain, domain
+tag or domain assignment. Never create or assign a domain named `Shared`.
+Publishing catalog metadata documents configured work; it does not execute the
+described data pipelines or create run evidence.
 
 The native schema does not by itself prove a UI can render separate control
 lanes, expandable stage detail or shared-step navigation. Preserve control-link

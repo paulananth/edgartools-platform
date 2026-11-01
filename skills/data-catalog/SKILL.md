@@ -164,7 +164,8 @@ API provides reliable evidence for them; otherwise mark those counts unavailable
 Identify the destination by its host, never by a credential-bearing URL. Keep
 tokens, user info, query strings, response bodies that may echo credentials, and
 private endpoint paths out of reports. A shared glossary may be named `shared`;
-never create a business domain named `Shared`. Metadata publication describes
+`shared` is a glossary identity only, never a domain name, domain tag, or domain
+assignment. Do not create a domain named `Shared`. Metadata publication describes
 processing and does not load data, run a source pipeline, or activate one.
 
 ## Completion
