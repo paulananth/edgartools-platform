@@ -88,6 +88,52 @@ names as roots. If no grouping is recorded, ask before reporting a top-level
 count. List pipelines separately: some belong to a source group, and others are
 standalone.
 
+### Trace a source and domain through the pipeline
+
+When asked how a source supplies a domain, trace the configured path end to
+end. A domain tag or a source name alone does not establish a pipeline, and the
+relationship is not necessarily one-to-one: one source can supply several
+domains, and one domain can receive data from several sources.
+
+1. Resolve the source to its exact `rules/sources/<folder>/source.yaml` and
+   `source:` identifier. Read its `mdm` contracts to find the datasets and
+   declared kinds it supplies. Follow those kinds to
+   `rules/merge/kinds/<kind>.yaml` and the applicable merge policy. Do not
+   infer the source from a domain label or split a dotted identifier.
+2. Trace execution from that source document's `bookkeeping.targets` and
+   ordered `steps`: record each operation, prerequisite, input and output
+   asset. Follow `rules/source-sequence.yaml` for the inventory target and
+   preferred source order only. Its `after` entries are not Bookkeeping step
+   dependencies and do not cause another source to run.
+3. Trace reference data independently. Follow code sets declared by the
+   source findings/contracts to their RDM definitions and catalog assets;
+   identify which configured steps consume them. RDM is a distinct reference
+   store, not an assumed stage in every source's Bookkeeping target.
+4. Trace prepared outputs from each `rules/sources/<source>/silver-*.yaml`
+   specification to its target table and link keys. Join these with the
+   Bookkeeping steps that produce/register the output. Keep MDM masters,
+   RDM reference data and Silver transaction/prepared data as distinct store
+   paths; do not imply that every record passes through all three stores.
+5. Cross-check the rules catalog plan for emitted assets, pipeline definitions
+   and dataset/field lineage, then use read-only catalog check/readback for
+   what the destination actually contains. The plan is configuration evidence;
+   it is not run evidence.
+6. Account for every source folder in both `rules/source-sequence.yaml` and
+   its `source.yaml` Bookkeeping registration. A missing file, missing
+   `bookkeeping` declaration or missing sequence entry is an unregistered
+   source and a concrete gap. A sequence `target: null` means no source target
+   is registered there; report it as not runnable through that declared
+   target. For a runnable target, verify its steps and profiles against the
+   Bookkeeping specification and implemented worker registry. Configuration
+   alone does not prove a worker exists or that a run completed.
+
+Report the trace as source → declared datasets/kinds → Bookkeeping steps →
+MDM, RDM and/or Silver outputs, naming only the stores that configuration
+actually connects. Include missing registrations, unsupported worker
+profiles, absent lineage and unverified execution as separate gaps. Do not
+call a catalog pipeline an operationally runnable or completed pipeline until
+its Bookkeeping registration, worker support and run evidence are verified.
+
 ## Use the skill that owns the decision
 
 The catalog projects meaning. It does not author it. Before writing a term, a
