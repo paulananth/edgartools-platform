@@ -138,6 +138,54 @@ def test_a_blocked_run_under_retired_rules_stays_as_it_is_and_the_load_goes_on(t
     assert [b["run_id"] for b in result["bundles"]] == ["new-1"]
 
 
+def test_the_plan_names_what_load_would_finish_leave_and_load_and_does_nothing(tmp_path, monkeypatch):
+    commands = Recorded(open_runs=[("old-1", "example", "by_letter", "waiting"),
+                                   ("pinned-1", "example", "by_letter", "running"),
+                                   ("old-rules-1", "example", "by_letter", "blocked")],
+                        versions={"old-rules-1": "example-1"},
+                        pinned={"pinned-1": {"source.read": "other-checkout"}})
+    folder = capture(tmp_path / "c", "letters/a.json", "letters/b.json", "letters/c.json", "numbers/1.json")
+
+    plan = loader(tmp_path, monkeypatch, commands).plan(capture=folder)
+
+    assert plan == {"source": "example", "target": "by_letter", "documents": 3, "bundle_size": 2, "bundles": 2,
+                    "finishable_runs": ["old-1"],
+                    "left_as_they_are": {"old-rules-1": "blocked under retired rules version example-1",
+                                         "pinned-1": "pinned to other worker code (source.read)"},
+                    "blocked": None}
+    # Only reads: the rules status, the runs and their pins. Nothing is prepared, submitted or driven.
+    assert {c[:2] for c in commands.calls} <= {("rules", "status"), ("bookkeeping", "runs"), ("workers", "describe")}
+
+
+def test_the_plan_reports_a_blocked_run_instead_of_stopping(tmp_path, monkeypatch):
+    commands = Recorded(open_runs=[("stuck-1", "example", "by_letter", "blocked")])
+    folder = capture(tmp_path / "c", "letters/a.json")
+
+    plan = loader(tmp_path, monkeypatch, commands).plan(capture=folder)
+
+    assert "Run stuck-1 of example by_letter is blocked" in plan["blocked"]
+    assert plan["documents"] == 1
+    assert plan["finishable_runs"] is None and plan["left_as_they_are"] is None  # not listed, not "none"
+
+
+def test_the_plan_flag_prints_the_plan_and_the_capture_run_is_only_needed_to_load(tmp_path, monkeypatch, capsys):
+    class Stub:
+        def __init__(self, **_):
+            pass
+
+        def plan(self, *, capture):
+            return {"documents": 3, "capture": str(capture)}
+
+    monkeypatch.setattr(loading, "Loader", Stub)
+    base = dict(source="example", target="by_letter", capture=tmp_path, stores=tmp_path, workers=1, bundles=1,
+                minutes=1, as_of=None, fact=None, file=None)
+
+    assert loading._handle(type("Args", (), {**base, "plan": True, "capture_run": None})()) == 0
+    assert json.loads(capsys.readouterr().out) == {"documents": 3, "capture": str(tmp_path)}
+    assert loading._handle(type("Args", (), {**base, "plan": False, "capture_run": None})()) == 1
+    assert "--capture-run is required unless --plan" in capsys.readouterr().err
+
+
 def test_a_target_the_source_does_not_declare_is_refused(monkeypatch):
     monkeypatch.setattr(loading.files, "source", lambda name: READING)
 
