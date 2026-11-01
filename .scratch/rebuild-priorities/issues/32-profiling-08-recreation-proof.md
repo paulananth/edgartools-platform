@@ -2,7 +2,7 @@
 
 Priority: 32, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md). Moved from `.scratch/profiling/issues/08-recreation-proof.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
-Type: task. Phase: B. Blocked by: all above. Map: [map](../../profiling/map.md). Plan: [plan](../../profiling/plan.md).
+Type: task. Status: resolved (2026-11-01 15:33 ET, accepted). Phase: B. Blocked by: all above. Map: [map](../../profiling/map.md). Plan: [plan](../../profiling/plan.md).
 
 ## Ruling (operator, 2026-10-07)
 
@@ -48,6 +48,6 @@ hand, and DIFF.md lists every other feed as not covered. No production read.
 - [ ] ~~Merge workers load `census-filer.yaml` for every source~~ deferred to [152](152-merge-workers-load-only-their-source.md): found by the second agent, not fixed
 - [x] Three-axis review of #1263: GoF no findings. Spec: all checked numbers match; subset, census and relationship claims narrowed, rules and RDM compared, inputs stated. Standards: words, checklist form, script docstrings fixed; `proof3.py` now asserts its two checks (added after its one run, whose report shows both true; not rerun); LEIs and home paths masked in `rulings.jsonl` and by `rulings.py`, which were not rerun over today's tickets. 2026-11-01 11:03 ET
 - [ ] Real company names quoted in older tickets on `main` reach `rulings.jsonl` (the operator's own words among them, kept as written): not fixed here
-- [ ] CI, merge on the operator's word
-- [ ] Operator accepts — program ends
-- [ ] `Learning → skill`: none yet; the skill fixes so far are in #1258
+- [x] CI green on #1263, merged on the operator's word (operator, 2026-11-01 15:33 ET: "Accept, merge (Recommended)"); this commit's own CI runs before the merge
+- [x] Operator accepts (operator, 2026-11-01 15:33 ET: "Accept, merge (Recommended)", asked with the limits in DIFF.md: a resumed agent, replayed approvals, no labels, a cohort-only census, 315 against 325 Companies, 203 against 206 links). With ticket 48 accepted 2026-10-30, the map's destination is reached
+- [x] `Learning → skill`: `skills/data-onboarding/SKILL.md` and `skills/refining-rules/SKILL.md` (#1258: the mastering target required, name matching a planned part, the SEC Company chain's platform facts); the third run added none 2026-11-01 15:33 ET
