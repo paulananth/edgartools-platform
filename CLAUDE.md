@@ -145,6 +145,9 @@ Learned the hard way; each is a standing operator rule.
   retired code. To retire such an oracle, write its answers into the test (or an
   answer file written once while the two still agree), change each answer once
   to see the test fail, and compute any value that follows the clock (ticket 88).
+- A fix PR names the test that failed before the fix and how it failed (the
+  assertion, not just "red"): a test that passes on the old code proves nothing
+  (ticket 152's first test did, 2026-11-01). The Standards reviewer checks the line.
 - A conclusion reached by reading code is not proof of behaviour: test each
   case the claim covers (one test per kind, per source), since the untested
   case is where a gap hides.
