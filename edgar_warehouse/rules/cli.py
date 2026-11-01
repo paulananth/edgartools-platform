@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -194,26 +195,183 @@ def _check(args):
     return 0 if all(value == "ok" for value in results.values()) else 1
 
 
+def _catalog_cause(error, catalog) -> str:
+    """Summarize API failures without returning response bodies or endpoint data."""
+    if not isinstance(error, catalog.CatalogError):
+        return type(error).__name__
+    message = str(error)
+    status = re.search(r"\bHTTP (\d{3})\b", message)
+    if status:
+        return f"OpenMetadata returned HTTP {status.group(1)}"
+    if "did not answer" in message:
+        return "OpenMetadata endpoint did not answer"
+    if "invalid JSON" in message:
+        return "OpenMetadata returned an invalid response"
+    if "named" in message or "identity" in message:
+        return "OpenMetadata returned an unexpected object identity"
+    return "OpenMetadata request failed"
+
+
+def _catalog_counts_text(counts: dict) -> str:
+    lineage = counts["lineage"]
+    return (f"{counts['domains']} domains, {counts['glossaries']} glossaries, "
+            f"{counts['glossary_terms']} terms, {counts['assets']} assets, "
+            f"{counts['quality_definitions']} quality definitions, {counts['quality_cases']} quality cases, "
+            f"{counts['products']} products, "
+            f"{counts['pipelines']} pipelines, "
+            f"{sum(lineage.values())} lineage edges")
+
+
+def _catalog_removed_text(removed: dict) -> str:
+    counts = [f"{count} {kind}" for kind, count in sorted(removed.items()) if count]
+    total = sum(removed.values())
+    return f"{total} owned objects" + (f" ({', '.join(counts)})" if counts else "")
+
+
+def _catalog_output(report: dict) -> int:
+    print(report["summary"], file=sys.stderr)
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 0 if report["ok"] else 1
+
+
 def _catalog(args):
-    """The Data Catalog, from the rules files alone: `plan` prints what would
-    be published; `publish` makes the OpenMetadata catalog equal to it."""
+    """Plan, reconcile and read back the catalog with stage-specific outcomes."""
     from . import catalog
 
-    plan = catalog.plan(Path(args.root))
+    try:
+        plan = catalog.plan(Path(args.root))
+    except (catalog.CatalogError, ValueError) as error:
+        cause = _catalog_cause(error, catalog)
+        report = {"ok": False, "status": "failed", "failed_stage": "plan", "cause": cause,
+                  "next_action": "Correct the Rules configuration and rerun `rules catalog plan`.",
+                  "summary": f"FAILED: catalog plan: {cause}. Correct the Rules configuration and retry."}
+        return _catalog_output(report)
+
+    counts = catalog.plan_counts(plan)
     if args.action == "plan":
+        print(f"PENDING: catalog plan only; {_catalog_counts_text(counts)}. Nothing was sent.", file=sys.stderr)
         print(json.dumps(plan, indent=2, sort_keys=True))
         return 0
+
     url, token = os.environ.get("OPENMETADATA_URL"), os.environ.get("OPENMETADATA_TOKEN")
+    endpoint = catalog.endpoint_identity(url)
     if not url or not token:
-        print("Set OPENMETADATA_URL and OPENMETADATA_TOKEN (a bot's token: Settings > Bots)", file=sys.stderr)
-        return 2
+        report = {"ok": False, "status": "failed", "failed_stage": "configuration",
+                  "endpoint": endpoint, "plan": {"status": "ready", "counts": counts},
+                  "publish": {"status": "not_run"}, "readback": {"status": "not_run"},
+                  "cause": "OpenMetadata endpoint or bot token is not configured",
+                  "next_action": "Set OPENMETADATA_URL and OPENMETADATA_TOKEN, then rerun the command."}
+        report["summary"] = f"FAILED: catalog configuration for {endpoint or 'OpenMetadata'}; " \
+                             "set the endpoint and bot token, then retry."
+        return _catalog_output(report)
+
     try:
-        result = (catalog.verify if args.action == "check" else catalog.publish)(plan, catalog.connect(url, token))
+        api_call = catalog.connect(url, token)
+    except (catalog.CatalogError, ValueError) as error:
+        cause = _catalog_cause(error, catalog)
+        report = {"ok": False, "status": "failed", "failed_stage": "connect", "endpoint": endpoint,
+                  "plan": {"status": "ready", "counts": counts}, "publish": {"status": "not_run"},
+                  "readback": {"status": "not_run"}, "cause": cause,
+                  "next_action": "Check the OpenMetadata endpoint and bot token, then retry."}
+        report["summary"] = f"FAILED: cannot connect to {endpoint}: {cause}. Check endpoint and token."
+        return _catalog_output(report)
+
+    completed_writes = 0
+
+    def call(method, path, body=None, params=None):
+        nonlocal completed_writes
+        answer = api_call(method, path, body, params)
+        if method in ("POST", "PUT", "PATCH", "DELETE"):
+            completed_writes += 1
+        return answer
+
+    if args.action == "check":
+        try:
+            result = catalog.verify(plan, call)
+        except catalog.CatalogError as error:
+            cause = _catalog_cause(error, catalog)
+            report = {"ok": False, "status": "partial", "failed_stage": "readback", "endpoint": endpoint,
+                      "plan": {"status": "ready", "counts": counts}, "publish": {"status": "not_run"},
+                      "readback": {"status": "failed", "ok": False}, "cause": cause,
+                      "next_action": "Restore API access and rerun the read-only `rules catalog check`."}
+            report["summary"] = f"PARTIAL: readback from {endpoint} failed: {cause}. Retry the read-only check."
+            return _catalog_output(report)
+        report = {"ok": result["ok"], "status": "confirmed" if result["ok"] else "partial",
+                  "endpoint": endpoint, "plan": {"status": "ready", "counts": counts},
+                  "publish": {"status": "not_run"},
+                  "readback": {"status": "matched" if result["ok"] else "drift",
+                               **result,
+                               "scope": ["database service", "databases", "schemas", "tables", "pipelines",
+                                         "table lineage"]},
+                  "next_action": None if result["ok"] else
+                      "Review readback differences, then rerun `rules catalog publish` and `check`."}
+        report["summary"] = (f"CONFIRMED: readback from {endpoint} matches its checked scope; "
+                             f"{_catalog_counts_text(counts)}." if result["ok"] else
+                             f"PARTIAL: readback from {endpoint} found {len(result['differences'])} difference(s). "
+                             "Review the differences and reconcile the catalog.")
+        return _catalog_output(report)
+
+    try:
+        sent = catalog.publish(plan, call)
     except catalog.CatalogError as error:
-        print(f"The catalog operation failed: {error}", file=sys.stderr)
-        return 1
-    print(json.dumps(result, indent=2, sort_keys=True))
-    return 0 if result.get("ok", True) else 1
+        cause = _catalog_cause(error, catalog)
+        rejected = re.search(r"HTTP 4\d\d\b", cause) is not None and completed_writes == 0
+        status = "failed" if rejected else "partial"
+        report = {"ok": False, "status": status, "failed_stage": "publish", "endpoint": endpoint,
+                  "plan": {"status": "ready", "counts": counts},
+                  "publish": {"status": "failed" if rejected else "partial", "completed_write_requests": completed_writes,
+                              "created": None, "updated": None,
+                              "created_updated_counts": "unavailable", "removed": None,
+                              "removed_counts_status": "unavailable"},
+                  "readback": {"status": "not_run"}, "cause": cause,
+                  "next_action": ("Correct the rejected request or bot permissions, then retry publication."
+                                  if rejected else
+                                  "Run the read-only `rules catalog check` before retrying publication.")}
+        report["summary"] = (f"FAILED: publish to {endpoint} was rejected: {cause}. Correct the request and retry."
+                              if rejected else
+                              f"PARTIAL: publish to {endpoint} stopped after {completed_writes} confirmed write "
+                              f"request(s): {cause}. Check readback before retrying.")
+        return _catalog_output(report)
+
+    try:
+        verified = catalog.verify(plan, call)
+    except catalog.CatalogError as error:
+        cause = _catalog_cause(error, catalog)
+        report = {"ok": False, "status": "partial", "failed_stage": "readback", "endpoint": endpoint,
+                  "plan": {"status": "ready", "counts": counts},
+                  "publish": {"status": "sent", "completed_write_requests": completed_writes,
+                              "created": None, "updated": None,
+                              "created_updated_counts": "unavailable", "removed": sent["removed"],
+                              "removed_counts_status": "available",
+                              "response": sent},
+                  "readback": {"status": "failed", "ok": False}, "cause": cause,
+                  "next_action": "Restore API access and rerun the read-only `rules catalog check`."}
+        report["summary"] = f"PARTIAL: publish reached {endpoint}, but readback failed: {cause}. Retry check."
+        return _catalog_output(report)
+
+    report = {"ok": verified["ok"], "status": "confirmed" if verified["ok"] else "partial",
+              "endpoint": endpoint, "plan": {"status": "ready", "counts": counts},
+              "publish": {"status": "sent", "completed_write_requests": completed_writes,
+                          "created": None, "updated": None,
+                          "created_updated_counts": "unavailable", "removed": sent["removed"],
+                          "removed_counts_status": "available",
+                          "response": sent},
+              "readback": {"status": "matched" if verified["ok"] else "drift",
+                           **verified,
+                           "scope": ["database service", "databases", "schemas", "tables", "pipelines",
+                                     "table lineage"]},
+              "next_action": None if verified["ok"] else
+                  "Review readback differences, then rerun `rules catalog publish` and `check`."}
+    if verified["ok"]:
+        report["summary"] = (f"CONFIRMED: publish and checked readback scope matched at {endpoint}; "
+                             f"{_catalog_counts_text(counts)}. Removed {_catalog_removed_text(sent['removed'])}; "
+                             "created/updated counts unavailable.")
+    else:
+        report["failed_stage"] = "readback"
+        report["summary"] = (f"PARTIAL: publish reached {endpoint}, but readback found "
+                             f"{len(verified['differences'])} difference(s). Removed "
+                             f"{_catalog_removed_text(sent['removed'])}; review and reconcile.")
+    return _catalog_output(report)
 
 
 def register(subparsers):

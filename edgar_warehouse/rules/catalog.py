@@ -43,7 +43,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote as escape, urlencode
+from urllib.parse import quote as escape, urlencode, urlsplit
 from urllib.request import Request, urlopen
 
 from edgar_warehouse.silver_writer import spec as silver_spec
@@ -777,6 +777,45 @@ def plan(root: Path | None = None) -> dict:
     }
 
 
+def plan_counts(plan: dict) -> dict:
+    """Configured catalog counts, kept separate from send and readback results."""
+    return {
+        "domains": len(plan.get("domains") or []),
+        "glossaries": len(plan.get("glossaries") or []),
+        "glossary_terms": len(plan.get("glossary_terms") or []),
+        "assets": len(plan.get("tables") or []),
+        "quality_definitions": len(plan.get("quality_definitions") or []),
+        "quality_cases": len(plan.get("quality_cases") or []),
+        "products": len(plan.get("products") or []),
+        "pipelines": len(plan.get("pipelines") or []),
+        "lineage": {
+            "table": len(plan.get("lineage") or []),
+            "pipeline": len(plan.get("service_lineage") or []),
+            "domain": len(plan.get("domain_lineage") or []),
+            "glossary": len(plan.get("glossary_relations") or []),
+        },
+    }
+
+
+def endpoint_identity(url: str | None) -> str | None:
+    """Return only scheme and host; never echo credentials, path or query data."""
+    if not url:
+        return None
+    try:
+        parsed = urlsplit(url)
+        host = parsed.hostname
+        port = parsed.port
+    except ValueError:
+        return "configured endpoint"
+    if not host:
+        return "configured endpoint"
+    if ":" in host:
+        host = f"[{host}]"
+    authority = host + (f":{port}" if port is not None else "")
+    scheme = parsed.scheme or "https"
+    return f"{scheme}://{authority}"
+
+
 # --- publishing -------------------------------------------------------------------
 
 class CatalogError(RuntimeError):
@@ -788,7 +827,7 @@ Call = Callable[..., Any]  # call(method, path, body=None, params=None) -> the J
 
 def connect(url: str, token: str) -> Call:
     """Requests to one OpenMetadata server's API, as a bot. The token goes in
-    a header only; an error names the request and the server's answer."""
+    a header only; errors omit response bodies, which may echo credentials."""
     base = url.rstrip("/") + "/api/v1"
 
     def call(method: str, path: str, body: Any = None, params: dict | None = None) -> Any:
@@ -802,10 +841,13 @@ def connect(url: str, token: str) -> Call:
         except HTTPError as error:
             if error.code == 404 and method in ("GET", "DELETE"):
                 return None
-            raise CatalogError(f"{method} {path}: {error.code} {error.read()[:500]!r}") from None
-        except URLError as error:
-            raise CatalogError(f"{method} {path}: the catalog server did not answer ({error.reason})") from None
-        return json.loads(text) if text else None
+            raise CatalogError(f"{method} {path}: HTTP {error.code}") from None
+        except URLError:
+            raise CatalogError(f"{method} {path}: the catalog server did not answer") from None
+        try:
+            return json.loads(text) if text else None
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            raise CatalogError(f"{method} {path}: invalid JSON response") from None
 
     return call
 

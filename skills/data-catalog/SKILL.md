@@ -208,18 +208,19 @@ Keep these stages distinct in every run report:
    side-effect free. Count configured domains, glossaries and terms, assets,
    quality definitions, products, pipelines and lineage from its output.
 2. **Publish:** what the publisher sent, including any removals inside the
-   catalog's owned scope. A successful request or publish command alone does
-   not confirm that OpenMetadata stored the plan.
-3. **Readback:** what the native API confirms. Run `rules catalog check` after
-   publishing; it is read-only. Only a successful check that finds no relevant
-   differences supports the status **confirmed**.
+   catalog's owned scope. The `publish` command runs a readback after sending;
+   its structured result keeps the send and readback stages separate.
+3. **Readback:** what the native API confirms. `rules catalog check` repeats
+   the check independently and is read-only. Only a matching readback supports
+   the status **confirmed** for the dimensions that check covers.
 
-Use **pending** when only a plan exists, **partial** when publication was sent
-but readback failed, drifted or was not run, **failed** when publication could
-not complete, and **confirmed** only after a matching readback. Name the failed
-stage, summarize the cause and state the next action. Do not call planned counts
-published counts. Report created and updated counts only when the publisher or
-API provides reliable evidence for them; otherwise mark those counts unavailable.
+Use **pending** when only a plan exists, **partial** when a publish may have
+partly applied or an API request/readback failed or drifted, **failed** when
+planning or configuration prevented a publish attempt, and
+**confirmed** only after a matching readback. Name the failed stage, summarize
+the cause and state the next action. Do not call planned counts sent counts.
+Report created and updated counts only when the publisher or API provides
+reliable evidence for them; otherwise mark those counts unavailable.
 
 Identify the destination by its host, never by a credential-bearing URL. Keep
 tokens, user info, query strings, response bodies that may echo credentials, and

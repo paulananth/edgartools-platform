@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+from io import BytesIO
+import json
 import shutil
+from argparse import Namespace
 from pathlib import Path
+from urllib.error import HTTPError
 
 import pytest
 
 from edgar_warehouse.rules import catalog, files, mapdoc
+from edgar_warehouse.rules import cli as rules_cli
 
 
 def _tables(plan: dict) -> dict[str, dict]:
@@ -200,6 +205,170 @@ def test_the_plan_names_domains_glossaries_and_store_certification():
     assert by_type["issuedBy"] == "Issued by"
     assert by_type["heldBy"] == "Held by"
     assert by_type["employedBy"] == "Employed by"
+
+
+def _outcome_plan():
+    return {
+        "domains": [{}], "glossaries": [{}], "glossary_terms": [{}, {}], "tables": [{}, {}, {}],
+        "quality_definitions": [{}], "quality_cases": [{}, {}], "products": [{}], "pipelines": [{}, {}],
+        "lineage": [{}, {}], "service_lineage": [{}], "domain_lineage": [{}], "glossary_relations": [{}, {}],
+    }
+
+
+def test_catalog_plan_counts_cover_configured_catalog_objects():
+    assert catalog.plan_counts(_outcome_plan()) == {
+        "domains": 1, "glossaries": 1, "glossary_terms": 2, "assets": 3,
+        "quality_definitions": 1, "quality_cases": 2, "products": 1, "pipelines": 2,
+        "lineage": {"table": 2, "pipeline": 1, "domain": 1, "glossary": 2},
+    }
+
+
+def test_catalog_endpoint_identity_omits_credentials_path_and_query():
+    assert catalog.endpoint_identity("https://user:private@catalog.example:8585/private/path?token=secret") == \
+        "https://catalog.example:8585"
+
+
+def test_catalog_http_error_does_not_expose_response_body(monkeypatch):
+    def fail_request(*args, **kwargs):
+        raise HTTPError("https://catalog.example/api/v1", 401, "unauthorized", {},
+                        BytesIO(b"response echoed bearer-secret"))
+
+    monkeypatch.setattr(catalog, "urlopen", fail_request)
+    with pytest.raises(catalog.CatalogError) as error:
+        catalog.connect("https://catalog.example", "bearer-secret")("GET", "/services")
+
+    assert "HTTP 401" in str(error.value)
+    assert "bearer-secret" not in str(error.value)
+    assert "response echoed" not in str(error.value)
+
+
+def test_catalog_plan_is_read_only_and_reports_pending(capsys, monkeypatch):
+    plan = _outcome_plan()
+    monkeypatch.setattr(catalog, "plan", lambda root: plan)
+    monkeypatch.setattr(catalog, "connect", lambda *args: pytest.fail("plan must not connect"))
+    monkeypatch.delenv("OPENMETADATA_URL", raising=False)
+    monkeypatch.delenv("OPENMETADATA_TOKEN", raising=False)
+
+    assert rules_cli._catalog(Namespace(action="plan", root="rules")) == 0
+
+    output = capsys.readouterr()
+    assert json.loads(output.out) == plan
+    assert "PENDING" in output.err and "Nothing was sent" in output.err
+
+
+def test_catalog_publish_requires_matching_readback_and_returns_structured_result(capsys, monkeypatch):
+    plan = _outcome_plan()
+    calls = []
+    monkeypatch.setenv("OPENMETADATA_URL", "https://user:private@catalog.example:8585/private?token=url-secret")
+    monkeypatch.setenv("OPENMETADATA_TOKEN", "header-secret")
+    monkeypatch.setattr(catalog, "plan", lambda root: plan)
+    monkeypatch.setattr(catalog, "connect", lambda url, token: calls.append((url, token)) or (lambda *args, **kwargs: {}))
+    monkeypatch.setattr(catalog, "publish", lambda selected, call: calls.append("publish") or {
+        "service": "edgartools-rules", "tables": 3, "pipelines": 2, "lineage": 2,
+        "removed": {"tables": 0, "schemas": 0, "databases": 0, "lineage": 0},
+    })
+    monkeypatch.setattr(catalog, "verify", lambda selected, call: calls.append("readback") or {
+        "ok": True, "tables": 3, "pipelines": 2, "differences": [],
+    })
+
+    assert rules_cli._catalog(Namespace(action="publish", root="rules")) == 0
+
+    output = capsys.readouterr()
+    report = json.loads(output.out)
+    assert report["status"] == "confirmed"
+    assert report["endpoint"] == "https://catalog.example:8585"
+    assert report["plan"]["counts"] == catalog.plan_counts(plan)
+    assert report["publish"]["created"] is None and report["publish"]["updated"] is None
+    assert report["publish"]["removed"]["tables"] == 0
+    assert report["readback"]["status"] == "matched"
+    assert calls[-2:] == ["publish", "readback"]
+    assert "CONFIRMED" in output.err
+    assert all(secret not in output.out + output.err for secret in ("private", "url-secret", "header-secret"))
+
+
+def test_catalog_publish_failure_names_stage_and_redacts_error_details(capsys, monkeypatch):
+    monkeypatch.setenv("OPENMETADATA_URL", "https://catalog.example")
+    monkeypatch.setenv("OPENMETADATA_TOKEN", "do-not-print")
+    monkeypatch.setattr(catalog, "plan", lambda root: _outcome_plan())
+    monkeypatch.setattr(catalog, "connect", lambda url, token: lambda *args, **kwargs: {})
+
+    def fail_publish(plan, call):
+        raise catalog.CatalogError("PUT /tables: HTTP 401 body contains do-not-print")
+
+    monkeypatch.setattr(catalog, "publish", fail_publish)
+    monkeypatch.setattr(catalog, "verify", lambda *args: pytest.fail("failed publish cannot be confirmed"))
+
+    assert rules_cli._catalog(Namespace(action="publish", root="rules")) == 1
+
+    output = capsys.readouterr()
+    report = json.loads(output.out)
+    assert report["status"] == "failed" and report["failed_stage"] == "publish"
+    assert report["cause"] == "OpenMetadata returned HTTP 401"
+    assert report["next_action"].startswith("Correct the rejected request")
+    assert "do-not-print" not in output.out + output.err
+
+
+def test_catalog_partial_publish_failure_requires_readback_before_retry(capsys, monkeypatch):
+    monkeypatch.setenv("OPENMETADATA_URL", "http://localhost:8585")
+    monkeypatch.setenv("OPENMETADATA_TOKEN", "local-token")
+    monkeypatch.setattr(catalog, "plan", lambda root: _outcome_plan())
+    monkeypatch.setattr(catalog, "connect", lambda url, token: lambda *args, **kwargs: {"ok": True})
+
+    def fail_after_write(plan, call):
+        call("PUT", "/tables", {})
+        raise catalog.CatalogError("PUT /tables: HTTP 503")
+
+    monkeypatch.setattr(catalog, "publish", fail_after_write)
+    monkeypatch.setattr(catalog, "verify", lambda *args: pytest.fail("readback is deferred after failure"))
+
+    assert rules_cli._catalog(Namespace(action="publish", root="rules")) == 1
+
+    output = capsys.readouterr()
+    report = json.loads(output.out)
+    assert report["status"] == "partial" and report["failed_stage"] == "publish"
+    assert report["publish"]["completed_write_requests"] == 1
+    assert report["next_action"].startswith("Run the read-only")
+
+
+def test_catalog_publish_with_remote_drift_is_partial(capsys, monkeypatch):
+    monkeypatch.setenv("OPENMETADATA_URL", "http://localhost:8585")
+    monkeypatch.setenv("OPENMETADATA_TOKEN", "local-token")
+    monkeypatch.setattr(catalog, "plan", lambda root: _outcome_plan())
+    monkeypatch.setattr(catalog, "connect", lambda url, token: lambda *args, **kwargs: {})
+    monkeypatch.setattr(catalog, "publish", lambda plan, call: {
+        "service": "edgartools-rules", "removed": {"tables": 0},
+    })
+    monkeypatch.setattr(catalog, "verify", lambda plan, call: {
+        "ok": False, "tables": 3, "pipelines": 2, "differences": ["tables: different membership"],
+    })
+
+    assert rules_cli._catalog(Namespace(action="publish", root="rules")) == 1
+
+    output = capsys.readouterr()
+    report = json.loads(output.out)
+    assert report["status"] == "partial" and report["failed_stage"] == "readback"
+    assert report["publish"]["status"] == "sent"
+    assert report["readback"]["status"] == "drift"
+    assert report["readback"]["differences"] == ["tables: different membership"]
+
+
+def test_catalog_check_is_read_only_and_reports_confirmed_readback(capsys, monkeypatch):
+    monkeypatch.setenv("OPENMETADATA_URL", "http://localhost:8585")
+    monkeypatch.setenv("OPENMETADATA_TOKEN", "local-token")
+    monkeypatch.setattr(catalog, "plan", lambda root: _outcome_plan())
+    monkeypatch.setattr(catalog, "connect", lambda url, token: lambda *args, **kwargs: {})
+    monkeypatch.setattr(catalog, "publish", lambda *args: pytest.fail("check must not publish"))
+    monkeypatch.setattr(catalog, "verify", lambda plan, call: {
+        "ok": True, "tables": 3, "pipelines": 2, "differences": [],
+    })
+
+    assert rules_cli._catalog(Namespace(action="check", root="rules")) == 0
+
+    output = capsys.readouterr()
+    report = json.loads(output.out)
+    assert report["status"] == "confirmed"
+    assert report["publish"]["status"] == "not_run"
+    assert report["readback"]["status"] == "matched"
 
 
 def test_publish_deletes_only_what_the_rules_no_longer_name():
