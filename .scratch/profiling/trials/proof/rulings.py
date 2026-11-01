@@ -1,6 +1,6 @@
 """Profiling ticket 08: the rulings file the cold agent replays.
 
-Every operator ruling recorded in a ticket or map under `.scratch/` (not in
+Every operator ruling recorded in CLAUDE.md, or in a ticket or map under `.scratch/` (not in
 trial logs or research notes, which hold answers) is harvested as written: the operator's exact words, the date, the ticket and line, and the
 sentence around it (the question it answered). Nothing is paraphrased or
 invented. Each entry is marked `"replayed": true` and `"valid_only_in":
@@ -56,9 +56,16 @@ def blocks(lines: list[str]):
             block.append(line)
 
 
+def masked(line: str) -> str:
+    """This repository is public: an LEI or a home folder quoted in an old ticket stays out of this file."""
+    return re.sub(r"/Users/[^/\s]+", "~", re.sub(r"\b[0-9A-Z]{18}[0-9]{2}\b", "<LEI>", line))
+
+
 def main() -> None:
     rulings, seen = [], set()
-    for path in sorted((ROOT / ".scratch").rglob("*.md")):
+    # CLAUDE.md holds the standing rulings (approvals recorded as given, the seven wastes, ...);
+    # the sandbox leaves the file out, so its rulings come in here (ticket 32's first run lacked them).
+    for path in [ROOT / "CLAUDE.md", *sorted((ROOT / ".scratch").rglob("*.md"))]:
         # Trial logs and research notes hold answers and findings, not rulings.
         if HERE in path.parents or {"trials", "research"} & set(path.relative_to(ROOT).parts):
             continue
@@ -75,10 +82,11 @@ def main() -> None:
     rulings.sort(key=lambda r: (r["first_date"], r["ticket"], r["line"]))
     with (HERE / "rulings.jsonl").open("w") as f:
         for ruling in rulings:
-            f.write(json.dumps(ruling, ensure_ascii=False) + "\n")
+            f.write(masked(json.dumps(ruling, ensure_ascii=False)) + "\n")
     by_map = {}
     for ruling in rulings:
-        name = ruling["ticket"].split("/")[1]
+        parts = ruling["ticket"].split("/")
+        name = parts[1] if len(parts) > 1 else parts[0]
         by_map[name] = by_map.get(name, 0) + 1
     print(json.dumps({"rulings": len(rulings), "by_map": dict(sorted(by_map.items()))}, indent=1))
 
