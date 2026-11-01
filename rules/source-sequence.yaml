@@ -48,7 +48,7 @@ sources:
     target: mastering
     requires: []
     after: [sec.nport.fund]
-  # Its runs read GLEIF's `umbrellas` runs (ticket 120); no OpenFIGI run
+  # Its runs read GLEIF's `lei` runs (ticket 120); no OpenFIGI run
   # since ticket 138. It joins the Securities OpenFIGI and 13F created and
   # creates the rest.
   sec.nport.security:

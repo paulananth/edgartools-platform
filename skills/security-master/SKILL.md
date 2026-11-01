@@ -461,7 +461,7 @@ Ticket 138 (built in the files, parts B1 and B2; its OpenFIGI rules wait
 for their switch-on after the merge part A2):
 
 1. N-PORT's read decides which identifiers OpenFIGI is asked (the capture).
-2. GLEIF `umbrellas` (sub-fund pairs; read only).
+2. GLEIF `lei` (sub-fund pairs; read only).
 3. N-PORT funds.
 4. OpenFIGI `mastering`: one target over the CUSIP and the ISIN answers
    together, every bundle in parallel. Each record carries the identifier

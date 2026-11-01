@@ -82,7 +82,29 @@ Resolve `source` to an existing Rules document, accepting a provider name only
 when the repository identifies its source document unambiguously. Resolve
 `feed` only from an active `acquisition.feeds` declaration, and only for live
 acquisition: a run over captured files names no feed and needs only the
-version's test-run proof and approval. Read documents through `edgar_warehouse.rules.files`.
+version's test-run proof and approval. Read documents through
+`edgar_warehouse.rules.files`.
+
+### Source registration and pipeline discovery
+
+For a source inventory or source-to-domain trace, account for every folder in
+`rules/sources/`: each needs its matching `source.yaml`, a `bookkeeping`
+declaration with the intended target and step graph, and an entry in
+`rules/source-sequence.yaml`. Treat a missing declaration or sequence entry as
+an onboarding gap, not an implicit default. A sequence entry with
+`target: null` is inventory-only and has no registered source target; do not
+report it as runnable through Bookkeeping. The sequence's `after` value is
+preferred ordering, not a step dependency or a request to run that source.
+
+To trace a source into a domain, read its `mdm` dataset contracts and follow
+their declared kinds to the merge rules. Then follow the source's
+`bookkeeping.targets` steps, inputs, operations and prerequisites to their
+outputs. Trace any RDM code sets and Silver table specs as separate configured
+paths; neither store is an automatic stage in every target. Confirm each
+operation's worker profile is implemented before calling the target
+executable. A registration or catalog plan proves configuration only; run
+completion requires the validated run and admitted verification evidence in
+this skill's **Validate**, **Run** and **Result** modes.
 
 For live acquisition only, resolve the feed binding deterministically first:
 

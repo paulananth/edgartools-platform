@@ -706,7 +706,7 @@ bookkeeping:
   # (ticket 120; `mastering_isin` retired with sec.nport.security_isin.v1). One
   # input comes from another run (ticket 120; operator, 2026-10-19: "Read
   # another run (Recommended)"): the umbrella pair set from GLEIF's
-  # `umbrellas` runs. OpenFIGI's answers are no longer read (ticket 138).
+  # `lei` runs. OpenFIGI's answers are no longer read (ticket 138).
   targets:
     mastering:
       # Set for the FIGI steps ticket 138 removed (73 s each, measured
@@ -759,7 +759,7 @@ bookkeeping:
                      max_input_bytes: 268435456, max_input_rows: 10000000}
               filed: {from: submissions, table: filed, column: accession, value_column: filed,
                      max_input_bytes: 67108864, max_input_rows: 1000000}
-              umbrella: {run: {source: gleif, target: umbrellas, step: pairs}, table: subfund, column: fund,
+              umbrella: {run: {source: gleif, target: lei, step: pairs}, table: subfund, column: fund,
                          value_column: umbrella, max_input_bytes: 67108864, max_input_rows: 1000000}
         - name: reduce
           operation: source.combine

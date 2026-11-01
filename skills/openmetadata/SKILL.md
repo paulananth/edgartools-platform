@@ -166,6 +166,9 @@ that glossary. Every other term from the two sections goes in one shared
 glossary named `shared`. A shared spelling with a different definition stays a
 different term.
 
+`shared` names a Glossary only. It is not a Domain, a domain tag, or a domain
+assignment. Never create or assign a domain named `Shared`.
+
 Associate a glossary term with a table only when the term is one relationship
 type and the table is that type. Do not tag the kind table with every term
 whose heading starts with the domain name. A domain with no kind table still
@@ -261,6 +264,48 @@ reference list.
 - List all pages and constrain ownership by exact service membership or an
   explicit ownership receipt. Domains, glossaries, terms and quality resources
   are global and are not assumed removed when a service is reset.
+
+## Operator outcome report
+
+Keep configuration, send and confirmation as three separate facts:
+
+1. `edgar-warehouse rules catalog plan --root <rules>` describes the configured
+   inventory and makes no API request. Count domains, glossaries, terms,
+   tables, products, quality definitions/cases, pipelines and each lineage
+   family from this plan.
+2. `edgar-warehouse rules catalog publish --root <rules>` sends the plan and
+   reconciles only its owned scope, then runs a readback. Its report keeps the
+   send and confirmation stages distinct. A successful HTTP response alone
+   does not confirm publication.
+3. `edgar-warehouse rules catalog check --root <rules>` repeats the readback
+   independently and is read-only. A matching readback is required before
+   calling the checked scope confirmed.
+
+Use **pending** for plan-only work, **partial** when a send may have occurred
+but confirmation is absent or an API request/readback reports failure or drift,
+**failed** when planning or configuration prevented a publish attempt, and
+**confirmed** only when
+the relevant native readback matches.
+For failures, name the stage, give a short cause, and state the next action.
+Show the destination as scheme and host only. Never include user info, tokens,
+query strings, or raw response bodies in an operator report.
+
+The current CLI does not provide trustworthy per-object created-versus-updated
+counts; do not infer these from plan counts or a successful PUT. Mark them
+unavailable unless a later publisher receipt or API evidence distinguishes
+them. The structured `publish` result reports configured counts, the publisher
+response and removals separately from readback. The current `check` verifies the service, database and
+schema inventory, tables, pipelines (including tasks), and table lineage. It
+does not verify every configured domain/glossary association, product
+membership/input port, quality object, domain lineage edge, pipeline-to-table
+edge, or all table annotations. Do not describe the entire catalog as confirmed
+from that check alone; read the missing objects through the native API and
+report any remaining gap as unverified until CLI coverage exists.
+
+The `shared` object is a glossary identity only, not a business domain, domain
+tag or domain assignment. Never create or assign a domain named `Shared`.
+Publishing catalog metadata documents configured work; it does not execute the
+described data pipelines or create run evidence.
 
 The native schema does not by itself prove a UI can render separate control
 lanes, expandable stage detail or shared-step navigation. Preserve control-link
