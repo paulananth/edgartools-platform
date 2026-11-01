@@ -4,7 +4,7 @@ Priority: 150. Map: [Rebuild priorities](../map.md). Opened 2026-10-29 18:21 ET,
 (operator, 2026-10-29: "Stop, count, close (Recommended)": ticket 120 closes on the counts already loaded, and
 the rest of the load moves here).
 
-Type: task. Status: resolved (2026-11-01 17:30 ET, closed by the operator's word "close ticket 150"); incomplete: the loads and two root causes moved to [153](153-reload-the-security-loads-on-current-code.md). Blocked by: none.
+Type: task. Status: resolved (2026-11-01 17:24 ET, closed by the operator's word "close ticket 150"); incomplete: the loads and two root causes moved to [153](153-reload-the-security-loads-on-current-code.md). Blocked by: none.
 
 ## Question
 
@@ -59,4 +59,4 @@ Bundle 10 of the OpenFIGI load (52 batches, all saved on 2026-10-29 08:50-09:17 
 
 ## Answer
 
-Incomplete. The merge's tail (receipt, resumed start, run report) read every saved batch at once; it reads one at a time now (#1264: receipt 493 s to 29 s, footprint 9.5 GB to 1.7 GB). The skill learned it (#1265). No load finished: the 14 open runs are pinned to worker code from 2026-10-29, so `load` leaves them and reloads all 16 bundles. That reload and the N-PORT Security load are ticket 153. Elapsed: about 2 h of measurement and fixes, 2026-11-01 15:41-17:30 ET.
+Incomplete. The merge's tail (receipt, resumed start, run report) read every saved batch at once; it reads one at a time now (#1264: receipt 493 s to 29 s, footprint 9.5 GB to 1.7 GB). The skill learned it (#1265). No load finished: the 14 open runs are pinned to worker code from 2026-10-29, so `load` leaves them and reloads all 16 bundles. That reload and the N-PORT Security load are ticket 153. Elapsed: about 2 h of measurement and fixes, 2026-11-01 15:41-17:24 ET.
