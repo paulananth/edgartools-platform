@@ -161,6 +161,9 @@ Learned the hard way; each is a standing operator rule.
   process by its id, never by a name pattern (`pkill -f`) or with job control
   (`set -m`): a test using both stopped two other runs and the Docker engine
   (2026-10-30).
+  Start `merge_on_green.sh` itself as the background command, with no trailing `&`
+  and no redirect: the harness reports its real exit; a detached copy reported
+  "completed" at once and its merge result went unseen (2026-11-01).
 - A run already going (a proof, a load, a recovery) is checked every 30
   minutes, not on a tighter loop (operator, 2026-10-24: "do not use token
   constantly polling the runs check every 30 min"). A check that finds
