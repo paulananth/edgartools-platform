@@ -12,7 +12,10 @@
 # commit its PR merged holds only its uncommitted files: after a squash merge
 # its commits look unmerged, and main may have changed their files since.
 #
-# Exit 0: no overlap. Exit 1: each overlapping file and who holds it.
+# It also fails on an ET stamp later than the clock in what this branch adds under
+# .scratch/ (scripts/dev/future_stamps.py): a guessed stamp, not a read one.
+#
+# Exit 0: no overlap. Exit 1: each overlapping file and who holds it, or a future stamp.
 # Usage: bash scripts/dev/overlap_guard.sh  [--base origin/main]
 set -euo pipefail
 
@@ -25,6 +28,8 @@ if [[ -z "$branch" || "$branch" != */* ]]; then
   exit 1
 fi
 mine="${branch%%/*}"
+
+python3 "$(dirname "$0")/future_stamps.py" "$base" || exit 1
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
