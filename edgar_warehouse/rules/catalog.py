@@ -302,7 +302,25 @@ def _pipelines(root: Path) -> list[dict]:
                                     ("pipelines", "pipeline", "pipeline.yaml")):
         for path in sorted((root / folder).glob("*/" + filename)):
             body = files.load_source(path) if scope == "source" else files.load(path)
-            for name, target in sorted(((body.get("bookkeeping") or {}).get("targets") or {}).items()):
+            catalog_metadata = body.get("catalog") or {}
+            if not isinstance(catalog_metadata, dict):
+                raise CatalogError(f"{path}: catalog must be a mapping")
+            catalog_pipelines = catalog_metadata.get("pipelines") or {}
+            if (not isinstance(catalog_pipelines, dict)
+                    or any(not isinstance(metadata, dict) for metadata in catalog_pipelines.values())):
+                raise CatalogError(f"{path}: catalog.pipelines must map target names to metadata")
+            targets = (body.get("bookkeeping") or {}).get("targets") or {}
+            unknown = set(catalog_pipelines) - set(targets)
+            if unknown:
+                raise CatalogError(f"{path}: catalog.pipelines names undeclared targets {sorted(unknown)}")
+            for name, target in sorted(targets.items()):
+                pipeline_metadata = catalog_pipelines.get(name, {})
+                if (not isinstance(pipeline_metadata, dict)
+                        or set(pipeline_metadata) - {"display_name"}
+                        or ("display_name" in pipeline_metadata
+                            and (not isinstance(pipeline_metadata["display_name"], str)
+                                 or not pipeline_metadata["display_name"].strip()))):
+                    raise CatalogError(f"{path}: catalog.pipelines.{name} supports a nonempty display_name only")
                 steps = target.get("steps") or []
                 tasks = [{"name": step["name"], "taskType": step["operation"],
                           "description": f"Key: {step.get('key')}. Leases: {step.get('leases') or []}. "
@@ -310,11 +328,14 @@ def _pipelines(root: Path) -> list[dict]:
                           "downstreamTasks": [other["name"] for other in steps
                                               if step["name"] in (other.get("requires") or [])]}
                          for step in steps]
-                result.append({"name": f"{scope}:{path.parent.name}:{name}", "service": PIPELINES_SERVICE,
+                pipeline = {"name": f"{scope}:{path.parent.name}:{name}", "service": PIPELINES_SERVICE,
                                "description": f"Configured {scope} `{path.parent.name}`, target `{name}`. "
                                               f"Definition only; approval, activation and runs are separate. "
                                               f"Run checks: {target.get('checks') or []}.",
-                               "pipelineLocation": path.relative_to(root).as_posix(), "tasks": tasks})
+                               "pipelineLocation": path.relative_to(root).as_posix(), "tasks": tasks}
+                if pipeline_metadata.get("display_name"):
+                    pipeline["displayName"] = pipeline_metadata["display_name"]
+                result.append(pipeline)
     return result
 
 
@@ -336,8 +357,9 @@ def _service_lineage(pipelines: list[dict], tables: list[dict]) -> list[dict]:
         if scope != "source" or not by_source.get(source):
             continue
         for table in by_source[source]:
+            pipeline_label = pipeline.get("displayName") or target
             edges.append({"pipeline": fqn(PIPELINES_SERVICE, pipeline["name"]), "table": table,
-                          "description": f"The {target} pipeline of {source} reads or writes this dataset."})
+                          "description": f"The {pipeline_label} pipeline of {source} reads or writes this dataset."})
     return edges
 
 

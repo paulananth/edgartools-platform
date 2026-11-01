@@ -104,7 +104,9 @@ domains, and one domain can receive data from several sources.
    ordered `steps`: record each operation, prerequisite, input and output
    asset. Follow `rules/source-sequence.yaml` for the inventory target and
    preferred source order only. Its `after` entries are not Bookkeeping step
-   dependencies and do not cause another source to run.
+   dependencies and do not cause another source to run. An optional
+   `catalog.pipelines.<target>.display_name` sets the catalog label while
+   preserving the Bookkeeping target and its downstream references.
 3. Trace reference data independently. Follow code sets declared by the
    source findings/contracts to their RDM definitions and catalog assets;
    identify which configured steps consume them. RDM is a distinct reference
