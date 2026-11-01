@@ -89,7 +89,8 @@ any runtime edits any path. Run the guard before every commit and push:
 file an open PR or worktree of another runtime also touches). On an overlap,
 build on that work once it merges, or rebase onto it; never edit beside it.
 Run it on its own, never piped (`guard | tail -1 && git commit` takes `tail`'s
-exit status, so a STOP lets the commit and push run; it did, 2026-10-22).
+exit status, so a STOP lets the commit and push run; it did, 2026-10-22). The guard also fails an ET stamp in `.scratch/` that is
+later than the clock (ticket 155).
 
 ## Task checklists (MUST, every ticket, every runtime)
 
