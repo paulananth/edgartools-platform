@@ -1,6 +1,6 @@
 # 153: Reload the Security loads on current code
 
-Priority: 153. Map: [Rebuild priorities](../map.md). Opened 2026-11-01 17:30 ET, from [ticket 150](150-finish-the-security-loads-in-company-on.md).
+Priority: 153. Map: [Rebuild priorities](../map.md). Opened 2026-11-01 17:24 ET, from [ticket 150](150-finish-the-security-loads-in-company-on.md).
 
 Type: task. Status: open. Blocked by: none.
 
