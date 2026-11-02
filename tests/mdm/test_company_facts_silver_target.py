@@ -36,16 +36,22 @@ def capture(tmp_path, ciks):
             "revision": 0, "journal": MemoryJournal()}
 
 
-def test_the_silver_target_reads_lands_and_records_each_file(tmp_path):
+def test_the_silver_target_reads_lands_derives_and_records_each_file(tmp_path):
     report = write_manifest(**capture(tmp_path, [42, 43]))
     steps = Artifacts().json(report["manifest"])["steps"]
 
-    assert {name: len(units) for name, units in steps.items()} == {"facts": 1, "land": 1, "processed": 1}
+    assert {name: len(units) for name, units in steps.items()} == {
+        "facts": 1, "land": 1, "line_items": 1, "measures": 1, "processed": 1}
     (read,) = steps["facts"]
     (land,) = steps["land"]
     assert land["keys"]["table"] == "company_fact" and land["keys"]["silver"] == "company_fact"
     assert land["input"] == {"from": {"step": "facts", "key": read["keys"]["unit"]}}
     assert land["output"].endswith(f"/land/{read['keys']['unit']}.json")
+    for name in ("line_items", "measures"):  # each derived table is one unit, named by its build
+        (derive,) = steps[name]
+        assert derive["keys"]["build"] == name
+        assert Artifacts().json(derive["input"]) == {"version": 1, "build": name, "silver": derive["keys"]["silver"],
+                                                     "reads": derive["keys"]["reads"]}
     recorded = Artifacts().json(steps["processed"][0]["input"])["files"]
     assert [f["key"] for f in recorded] == [key(42), key(43)]
 
@@ -103,3 +109,10 @@ def test_a_landing_that_names_no_table_is_refused():
     with pytest.raises(ValueError, match="table and silver"):
         tm.FORMS["silver.land"]({"name": "land", "requires": ["facts"], "input": {"keys": {"table": "company_fact"}}},
                                 None, {"facts": []})
+
+
+def test_a_derivation_that_names_no_build_is_refused():
+    from edgar_warehouse.mdm.clean import target_manifest as tm
+
+    with pytest.raises(ValueError, match="build, silver"):
+        tm.FORMS["silver.derive"]({"name": "line_items", "requires": ["land"], "input": {"keys": {"build": "x"}}}, None, {"land": []})

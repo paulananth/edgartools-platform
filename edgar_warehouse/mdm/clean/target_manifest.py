@@ -178,9 +178,19 @@ def _land(step: dict, run: _Run, units: dict) -> list[dict]:
             for u in units[before]]
 
 
+def _derive(step: dict, run: _Run, units: dict) -> list[dict]:
+    """One unit: a silver table built from other silver tables, after the one step it follows."""
+    shape = step.get("input", {}).get("keys", {})
+    if len(step["requires"]) != 1 or set(shape) != {"build", "silver", "reads"}:
+        raise ValueError(f"Step {step['name']}: a derivation follows one step and names its keys: "
+                         "build, silver (the table it writes) and reads (the table it reads)")
+    return [read_units.unit(f"{run.root}/{step['name']}.json", {"unit": step["name"], **shape},
+                            run.store.put(run.inputs, {"version": 1, **shape}))]
+
+
 # Each operation's units, from the step, the run and the units of the steps before it.
 FORMS = {"source.read": _read, "source.combine": _combine, "mdm.prepare": _prepare, "mdm.merge": _merge, "journal.record": _record,
-         "silver.land": _land}
+         "silver.land": _land, "silver.derive": _derive}
 OPERATIONS = tuple(FORMS)
 
 

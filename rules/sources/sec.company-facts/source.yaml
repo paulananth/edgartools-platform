@@ -3,8 +3,8 @@
 # read by facts.yaml, one table per taxonomy (ticket 40). Its rows are
 # transactions for silver (`company_fact`, ticket 43), linked to the Company by
 # CIK; nothing goes to MDM. Its Bookkeeping target `silver` (ticket 169) reads
-# the files, lands them in `company_fact` and records each file in the Change
-# Journal.
+# the files, lands them in `company_fact`, rebuilds the line items and measures
+# and records each file in the Change Journal.
 source: sec.company-facts
 execution: {profile: source.read, workers: 1, max_artifacts: 512}
 bronze:
@@ -29,14 +29,32 @@ bookkeeping:
           operation: silver.land
           requires: [facts]
           key: "{unit}"
-          leases: ["artifact:{destination}"]
+          leases: ["silver:{silver}"]
           checks: [input.hash, output.receipt, silver.landed]
           input: {keys: {table: company_fact, silver: company_fact}}
-        # The Change Journal records each file the run landed, so a later run
-        # names only changed files (ticket 22).
+        # Each derived table is rebuilt whole (both are snapshots), and only when
+        # the Change Journal names a changed file.
+        - name: line_items
+          operation: silver.derive
+          requires: [land]
+          key: "{unit}"
+          # Held while it writes company_line_item and reads company_fact, so another run
+          # cannot land facts or rebuild the table meanwhile.
+          leases: ["silver:{silver}", "silver:{reads}"]
+          checks: [input.hash, output.receipt, silver.derived]
+          input: {keys: {build: line_items, silver: company_line_item, reads: company_fact}}
+        - name: measures
+          operation: silver.derive
+          requires: [line_items]
+          key: "{unit}"
+          leases: ["silver:{silver}", "silver:{reads}"]
+          checks: [input.hash, output.receipt, silver.derived]
+          input: {keys: {build: measures, silver: company_measure, reads: company_line_item}}
+        # The Change Journal records each file the run landed and derived from, so
+        # a later run names only changed files (ticket 22).
         - name: processed
           operation: journal.record
-          requires: [land]
+          requires: [measures]
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, journal.recorded]
