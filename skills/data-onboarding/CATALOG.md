@@ -52,7 +52,7 @@ name is not semantic enrichment.
 | Mapping Documents | All configured sources, kinds, standalone pipelines and pinned relationship definitions; steward Notes preserved |
 | Ownership | Existing authorized business owners where specified; otherwise an explicit unassigned responsibility, never the ingestion bot as a fabricated business owner |
 | Data product | Three named packages: the mastered legal entity, the mastered instrument, and fundamental measures. Each takes that subject's domain. The test is in `skills/data-catalog/references/MODEL.md` |
-| Classification | Data class from the data-modeling skill, one processing-layer tag per catalog-plan database, and the built-in certification: Gold on the master store, Silver on the prepared store. A proposed prepared-store table is Silver and has no data class. A source dataset has a layer and no data class |
+| Classification | Data class from the data-modeling skill, and the built-in certification that marks the store: Gold on the master and reference stores, Silver on the prepared store. A proposed prepared-store table is Silver and has no data class. A source dataset has no certification and no data class |
 | Domain relationship | One pinned relationship type from `mdm-relationship-types`. One asset, not one link per endpoint. A capacity stays on its type. Not a lineage edge. The glossary Relations Graph is identity-term to type-term, with the type as the edge. Storage is the openmetadata skill |
 
 Include registered Silver/RDM metadata. Label profiling proposals as proposed;

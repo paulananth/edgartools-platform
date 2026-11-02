@@ -611,7 +611,7 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict], 
     for table in tables:
         name = _table_name(table)
         store = _store(name)
-        if store == MDM:
+        if store in (MDM, RDM):
             certifications.append({"table": name, "tag": GOLD})
         elif store == SILVER:
             certifications.append({"table": name, "tag": SILVER_MARK})
@@ -1396,5 +1396,13 @@ def verify(plan: dict, call: Call) -> dict:
         if (latest.get("timestamp"), latest.get("rowCount"), latest.get("columnCount")) != (
                 mark["timestamp"], mark["rowCount"], mark["columnCount"]):
             differences.append(mark["table"] + ": profile changed, publish again")
+    for mark in plan.get("data_class_marks") or []:
+        held = call("GET", f"/tables/name/{escape(mark['table'], safe='')}", params={"fields": "tags"}) or {}
+        if mark["tag"] not in {tag.get("tagFQN") for tag in held.get("tags") or []}:
+            differences.append(mark["table"] + ": missing tag " + mark["tag"])
+    for mark in plan.get("certifications") or []:
+        held = call("GET", f"/tables/name/{escape(mark['table'], safe='')}", params={"fields": "certification"}) or {}
+        if ((held.get("certification") or {}).get("tagLabel") or {}).get("tagFQN") != mark["tag"]:
+            differences.append(mark["table"] + ": not certified " + mark["tag"])
     return {"ok": not differences, "tables": len(plan["tables"]),
             "pipelines": len(plan.get("pipelines") or []), "differences": differences}

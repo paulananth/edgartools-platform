@@ -271,8 +271,9 @@ A second write of mention edges or endpoint domain links is how overstatement
 comes back. A relationship type that no file under `rules/sources/` names gets
 "(planned: no rule reads this type yet and no link is loaded)" in its asset
 description and no term. Each data product carries the identity term of its
-domain, `Suggested`. The `processing_layer` tag is named for a later publisher
-change and is not written yet.
+domain, `Suggested`. The store of a table is its native Certification, not a custom
+tag (operator, 2026-11-02: "rdm = Gold, MDM = Gold, Silver = Silver"). `check`
+reports a table whose class tag or certification is missing.
 
 - `data_class`. One tag for each class the data-modeling skill names and this
   catalog can hold: master data on a kind table, reference data on a code-set
@@ -282,18 +283,14 @@ change and is not written yet.
   in the prepared store has no data class. A source dataset has no data class:
   data-modeling does not name a source class. The metadata class stays unused
   until that store is in the catalog.
-- `processing_layer`. One tag per database the rules catalog plan already
-  emits. The tag name is that database name. It is a category. It is not a
-  subject domain, and it does not follow from a folder name the plan does not
-  use.
 - Built-in `Certification`, which is mutually exclusive. It is the asset field
   `certification`, read with `fields=certification`. The screen reads
   `certification.tagLabel`. It is not a member of `tags`. A patch that adds
   `Certification.Gold` or `Certification.Silver` to `/tags` can echo the tag
   and leave the version unchanged; that did not certify the asset. Set
   `certification` itself. `Certification.Gold` on every table in the master
-  store. `Certification.Silver` on every table in the prepared store, including
-  a proposed table. Do not certify the reference store or a captured source
+  store and the reference store. `Certification.Silver` on every table in the
+  prepared store, including a proposed table. Do not certify a captured source
   dataset. Do not put Gold on the prepared store or Silver on the master store.
   Bronze stays unused until a captured-source certification is configured.
   `assetCertificationSettings` supplies the validity period. On this server it
