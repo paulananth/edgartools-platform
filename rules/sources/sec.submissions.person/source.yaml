@@ -21,7 +21,7 @@ read:
         record: {value: {path: .}}
 bronze:
   family: submissions
-mdm:
+dataset_contracts:
   sec.submissions.person.v1:
     contract:
       provider: SEC

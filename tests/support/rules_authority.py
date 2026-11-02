@@ -30,7 +30,7 @@ def authority(code: str, body: dict, version: str) -> dict:
     document = {
         "source": name,
         "acquisition": {"version": 1, "feeds": {"fixture": feed}},
-        "mdm": {code: {"contract": body}},
+        "dataset_contracts": {code: {"contract": body}},
     }
     content_hash = digest(document)
     proof = {

@@ -90,7 +90,7 @@ def thirteenf_records(root: Path, rows: str | None = None) -> list[dict]:
         "table": "security", "dataset": THIRTEENF_CODE, "policy": "0" * 64,
         "consumer": "check", "batch_id": "check-class", "as_of": "2026-10-16T00:00:00+00:00"})
     return chain.records(store, root / "mdm", prepared, THIRTEENF_CODE,
-                         files.source(THIRTEENF)["mdm"][THIRTEENF_CODE]["contract"])
+                         files.source(THIRTEENF)["dataset_contracts"][THIRTEENF_CODE]["contract"])
 
 
 def test_nport_names_the_one_class_its_equity_titles_agree_on(tmp_path):

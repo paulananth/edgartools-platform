@@ -96,7 +96,7 @@ an onboarding gap, not an implicit default. A sequence entry with
 report it as runnable through Bookkeeping. The sequence's `after` value is
 preferred ordering, not a step dependency or a request to run that source.
 
-To trace a source into a domain, read its `mdm` dataset contracts and follow
+To trace a source into a domain, read its `dataset_contracts` and follow
 their declared kinds to the merge rules. Then follow the source's
 `bookkeeping.targets` steps, inputs, operations and prerequisites to their
 outputs. Trace any RDM code sets and Silver table specs as separate configured

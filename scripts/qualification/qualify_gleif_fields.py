@@ -39,7 +39,7 @@ def qualify(reports: Path, limit: int):
         if sha(path)!=archive['sha256']: raise ValueError('archive hash mismatch')
         recipe=files.ROOT/'sources/gleif'/f'{member.replace("_","-")}-fields.yaml'
         config=files.load(recipe); engine=source_engine.SourceEngine(config)
-        configured=files.source('gleif')['mdm'][f'gleif.{member}.v1']['contract']
+        configured=files.source('gleif')['dataset_contracts'][f'gleif.{member}.v1']['contract']
         retained=copy.deepcopy(configured)
         retained['adapter'].pop('reading',None)
         mapping=retained['adapter']

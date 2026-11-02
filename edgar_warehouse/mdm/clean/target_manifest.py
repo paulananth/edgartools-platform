@@ -302,7 +302,7 @@ def write_manifest(
         raise ValueError("A target prepares one publication: at most one mdm.prepare step")
     keys_of = prepare[0].get("input", {}).get("keys", {}) if prepare else {}
     if prepare and (set(keys_of) != {"table", "record_column", "dataset"}
-                    or keys_of["dataset"] not in (reading.get("mdm") or {})):
+                    or keys_of["dataset"] not in (reading.get("dataset_contracts") or {})):
         raise ValueError("The mdm.prepare step's keys name its table, record column and one of the source's datasets")
     for step in steps:
         if step["operation"] != "source.read" and "units" in step:
@@ -343,7 +343,7 @@ def write_manifest(
     # the steps read with, the Dataset Contracts, the policy): a rerun under
     # other rules or another time is a new consumer, not a reused batch key.
     # A contract is digested whole, so an edit to its steps' units is one too.
-    bundle = digest([publication_key, revision, as_of, contracts, reading.get("mdm"), policy,
+    bundle = digest([publication_key, revision, as_of, contracts, reading.get("dataset_contracts"), policy,
                      *([shared] if shared else [])])
     publication = {"publication_key": publication_key, "revision": revision, "as_of": as_of,
                    "consumer": f"{dataset or source}/{bundle}", "batch_id": f"{source}:{bundle}"}

@@ -118,7 +118,7 @@ def security_records(store, root: Path, holdings, issuer_reading, *, batch_id: s
     prepared = chain.prepare(store, root / "mdm", recorded(store, root / "record", combined), {
         "table": "security", "record_column": "record", "dataset": CODE, "policy": "0" * 64, "consumer": "check",
         "batch_id": batch_id, "as_of": "2026-10-16T00:00:00+00:00", **publication})
-    return chain.records(store, root / "mdm", prepared, CODE, files.source(NAME)["mdm"][CODE]["contract"])
+    return chain.records(store, root / "mdm", prepared, CODE, files.source(NAME)["dataset_contracts"][CODE]["contract"])
 
 
 def policy_body() -> dict:

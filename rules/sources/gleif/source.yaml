@@ -106,7 +106,7 @@ bookkeeping:
       checks: [manifest.hash, work.accounting, journal.delivered]
 bronze:
   family: gleif
-mdm:
+dataset_contracts:
   gleif.level1.v1:
     contract:
       provider: GLEIF

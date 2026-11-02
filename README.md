@@ -260,7 +260,7 @@ They answer different questions; one rule should not silently answer another.
 | Question | Where the answer lives | In plain words |
 | --- | --- | --- |
 | How do we read this file? | The source's `read:` block or accompanying reading YAML | Locate records and extract typed fields from the captured format. |
-| What does a row mean? | Dataset Contracts under `mdm:` in `source.yaml` | Name its kind, record key, identifiers, fields, links and time. |
+| What does a row mean? | Dataset Contracts under `dataset_contracts:` in `source.yaml` | Name its kind, record key, identifiers, fields, links and time. |
 | Is a value usable? | `quality.yaml` | Apply declared fixes, check the result and report what was set aside or withheld. |
 | Do records describe the same subject? | `rules/merge/kinds/<kind>.yaml` | Approved matching rules use identity evidence; lookup references alone do not join records. |
 | Which source supplies a field? | The kind's `defaults.sources` and `fields.<field>` | Rank eligible claims after identity has been resolved. |

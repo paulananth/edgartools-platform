@@ -17,7 +17,7 @@ source: iapd.adv
 bronze:
   # Bronze: reference/iapd_adv_bulk/<YYYY-MM>/ADV_Filing_Data_<from>_<to>.zip
   family: iapd_adv_bulk
-mdm:
+dataset_contracts:
   iapd.adv.filings.v1:
     contract:
       provider: SEC Investment Adviser Public Disclosure (IAPD)

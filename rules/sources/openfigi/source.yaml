@@ -1244,7 +1244,7 @@ bookkeeping:
           checks: [input.hash, output.receipt, journal.recorded]
       checks: [manifest.hash, work.accounting, journal.delivered]
 
-mdm:
+dataset_contracts:
   # One contract for both kinds asked (ticket 138): it replaces
   # openfigi.security.v1 (CUSIPs) and openfigi.security_isin.v2 (ISINs). A new
   # source code, since a Rules database holds both and an identifier cannot be

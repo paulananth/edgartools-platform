@@ -10,7 +10,7 @@ source: <source>                     # the folder name, e.g. acme.registry
 bookkeeping: {...}                   # the Bookkeeping skill's section; leave it alone
 bronze:
   family: <bronze family>            # the main captured-file family; name any other in a comment
-mdm:
+dataset_contracts:
   <source_code>:                     # e.g. acme.registry.firms.v1; one per record type
     contract:
       provider: <who publishes it>

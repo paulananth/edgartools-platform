@@ -178,9 +178,9 @@ def loads(path: Path, source_code: str) -> set[str]:
 
     with tempfile.TemporaryDirectory() as folder:
         stub = Path(folder) / "source.yaml"
-        stub.write_text(yaml.safe_dump({"mdm": {source_code: {"contract": {}}}}), encoding="utf-8")
+        stub.write_text(yaml.safe_dump({"dataset_contracts": {source_code: {"contract": {}}}}), encoding="utf-8")
         (Path(folder) / "quality.yaml").write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
-        block = files.load_source(stub)["mdm"][source_code]["contract"]["quality"]
+        block = files.load_source(stub)["dataset_contracts"][source_code]["contract"]["quality"]
     quality.check_quality(block)
     return quality.exception_reasons(block)
 

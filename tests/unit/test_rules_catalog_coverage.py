@@ -82,7 +82,7 @@ def test_all_source_workbooks_include_declared_pipeline_steps():
 def test_every_dataset_quality_rule_and_declared_link_is_described():
     tables = {catalog.fqn(catalog.SERVICE, "sources", p.parent.name, code): entry["contract"]
               for p in (files.ROOT / "sources").glob("*/source.yaml")
-              for code, entry in (files.load_source(p).get("mdm") or {}).items()}
+              for code, entry in (files.load_source(p).get("dataset_contracts") or {}).items()}
     planned = catalog.plan()
     actual = {t["databaseSchema"] + "." + catalog.quote(t["name"]): t for t in planned["tables"]}
     for name, contract in tables.items():
@@ -178,3 +178,13 @@ def test_wrong_entity_identity_is_refused_before_any_description_patch():
         return {"id": "foreign-id", "fullyQualifiedName": "other-service.db.schema.invented", "description": "old"}
     with pytest.raises(catalog.CatalogError, match="server named table"):
         catalog._upsert(call, "/tables", body)
+
+
+def test_a_rules_file_with_the_old_mdm_key_is_refused(tmp_path):
+    """The Dataset Contracts section was named `mdm` until ticket 171; an old file says what to rename."""
+    from edgar_warehouse.rules import files
+
+    path = tmp_path / "source.yaml"
+    path.write_text("source: invented\nmdm: {}\n", encoding="utf-8")
+    with pytest.raises(files.RulesFileError, match="now `dataset_contracts`"):
+        files.load_source(path)

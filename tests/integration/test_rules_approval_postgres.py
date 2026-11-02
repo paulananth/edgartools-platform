@@ -82,7 +82,7 @@ def populated(pg):
     old = {}
     for label in ("draft", "proven", "approved"):
         body = pipeline()
-        body["mdm"] = {"fixture": {"contract": {}}}
+        body["dataset_contracts"] = {"fixture": {"contract": {}}}
         saved = agent.save("pipeline", f"old-{label}-{uuid4().hex[:8]}", "1", body)
         old[label] = saved
         if label != "draft":
@@ -152,7 +152,7 @@ def test_approval_by_saying_so_records_name_words_evidence_and_login(pg, populat
 def test_a_failing_run_is_kept_and_approved_only_with_an_overrule(pg, populated):
     agent = pg["agent"]
     body = pipeline()
-    body["mdm"] = {"fixture": {"contract": {}}}
+    body["dataset_contracts"] = {"fixture": {"contract": {}}}
     saved = agent.save("pipeline", f"fail-{uuid4().hex[:8]}", "1", body)
     agent.prove("pipeline", saved["name"], "1", proof(saved, passed=False, note="first run"))
     assert row(pg, saved["name"])["status"] == "draft"

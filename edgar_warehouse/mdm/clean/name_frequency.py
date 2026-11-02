@@ -97,7 +97,7 @@ def _cascade_filers(capture: Path, receipts: dict, keys: list[str], catalog: str
         COMPANY_ROOT / "catalog.yaml"), [{"input": catalog_ref, "context": store.put(folder.as_uri(), {
             "version": 1, "input": catalog_ref, "values": company_prepare.catalog_context(CASCADE_PINS)})}])
     combination = _cascade_combination()
-    contract = rules_files.source(COMPANY)["mdm"][COMPANY_CODE]["contract"]
+    contract = rules_files.source(COMPANY)["dataset_contracts"][COMPANY_CODE]["contract"]
     policy = rules_files.policy()
     filers = []
     for n, unit in enumerate(company_prepare.main_units(capture, receipts, keys, main["execution"]["max_artifacts"])):

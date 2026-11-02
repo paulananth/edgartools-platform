@@ -183,7 +183,7 @@ def registration_authority(export: dict, code: str, contract: dict) -> dict:
     # A dataset is registered when its pipes switch on: the processing
     # authority, not its live acquisition's.
     frozen = processing_authority(export)
-    if export["body"].get("mdm", {}).get(code, {}).get("contract") != contract:
+    if export["body"].get("dataset_contracts", {}).get(code, {}).get("contract") != contract:
         raise Blocked(
             "Dataset contract differs from the frozen approved Rules document"
         )

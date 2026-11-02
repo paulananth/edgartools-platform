@@ -136,7 +136,7 @@ def submit(databases, tmp_path, count=3, *, body=None, book=None, output_root=No
                       "cursor": cursor(n) if cursor else {"offset": n}})
     inputs = artifacts.put(tmp_path.as_uri() + "/manifests", {"version": 1, "units": units})
     databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True})
-    if body.get("mdm"):
+    if body.get("dataset_contracts"):
         approve(databases.approver, "source", name, "1")
     databases.rules.activate("source", name, "1")
     rules = databases.rules.resolve("source", name, root=tmp_path.as_uri() + "/rules")
@@ -190,7 +190,7 @@ def test_bookkeeping_cli_init_and_migrate_use_owner_and_preserve_empty_control(m
 
 def test_pipeline_rules_and_approval_authority(databases, tmp_path):
     body = config()
-    body["mdm"] = {"fixture": {"contract": {}}}
+    body["dataset_contracts"] = {"fixture": {"contract": {}}}
     name = "approval-" + uuid4().hex
     saved = databases.rules.save("pipeline", name, "1", body)
     with pytest.raises(DBAPIError), databases.rules.engine.begin() as conn:
@@ -234,7 +234,7 @@ def test_submission_rejects_invalid_proof_or_unapproved_mastering(databases, tmp
         # kind is pipeline and its target has a different name.
         invalid["kind"] = "pipeline"
         invalid["body"]["bookkeeping"]["targets"]["silver"]["steps"][0]["operation"] = "mdm.merge"
-        invalid["body"]["mdm"] = {"fixture": {"contract": {}}}
+        invalid["body"]["dataset_contracts"] = {"fixture": {"contract": {}}}
         invalid["digest"] = digest(invalid["body"])
         invalid["proof"]["digest"] = invalid["digest"]
     ref = book.artifacts.put(tmp_path.as_uri() + "/invalid", invalid)
@@ -1292,3 +1292,10 @@ def test_rules_run_submits_a_source_with_acquisition_over_captured_files(databas
                  "--input-manifest", inputs["uri"], "--input-sha256", inputs["sha256"]]) == 0
     submitted = json.loads(capsys.readouterr().out)
     assert submitted["run"]["submission"]["scope"] == {"kind": "source", "name": name, "source": name, "target": "silver"}
+
+
+def test_a_source_version_with_the_old_mdm_key_cannot_be_saved(databases):
+    body = config()
+    body["mdm"] = {"fixture": {"contract": {}}}
+    with pytest.raises(DBAPIError, match="dataset_contracts, not mdm"):
+        databases.rules.save("source", "old-key-" + uuid4().hex, "1", body)

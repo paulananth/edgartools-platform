@@ -3,7 +3,7 @@ from edgar_warehouse.bookkeeping.clean.engine import needs_mdm_approval
 
 def test_a_merge_document_or_an_mdm_section_needs_approval():
     assert needs_mdm_approval({"kind": "merge", "body": {}})
-    assert needs_mdm_approval({"kind": "source", "body": {"mdm": {"sec.company.v1": {}}}})
+    assert needs_mdm_approval({"kind": "source", "body": {"dataset_contracts": {"sec.company.v1": {}}}})
 
 
 def test_the_name_of_a_target_decides_nothing():

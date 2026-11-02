@@ -16,7 +16,7 @@ CONTRACT = {"family": "fixture"}
 
 def export(proof=None, approved=True):
     body = {"source": "fixture", "acquisition": {"version": 1, "feeds": {"fixture": FEED}},
-            "mdm": {"fixture.v1": {"contract": CONTRACT}}}
+            "dataset_contracts": {"fixture.v1": {"contract": CONTRACT}}}
     content = digest(body)
     return {"kind": "source", "name": "fixture", "version": "1", "status": "active", "body": body,
             "digest": content, "proof": {"passed": True, "digest": content, **(proof or {})},
@@ -46,7 +46,7 @@ def test_neither_runs_without_the_operators_approval():
 
 
 def test_a_source_with_no_feed_of_its_own_registers_its_datasets():
-    body = {"source": "fixture", "bronze": {"family": "fixture"}, "mdm": {"fixture.v1": {"contract": CONTRACT}}}
+    body = {"source": "fixture", "bronze": {"family": "fixture"}, "dataset_contracts": {"fixture.v1": {"contract": CONTRACT}}}
     content = digest(body)
     bare = {"kind": "source", "name": "fixture", "version": "1", "status": "active", "body": body, "digest": content,
             "proof": {"passed": True, "digest": content},
@@ -60,7 +60,7 @@ def test_a_source_whose_feeds_miss_a_dataset_is_refused():
 
 
 def test_a_source_with_no_feed_names_the_family_it_reads():
-    body = {"source": "fixture", "bronze": {"family": "other"}, "mdm": {"fixture.v1": {"contract": CONTRACT}}}
+    body = {"source": "fixture", "bronze": {"family": "other"}, "dataset_contracts": {"fixture.v1": {"contract": CONTRACT}}}
     content = digest(body)
     bare = {"kind": "source", "name": "fixture", "version": "1", "status": "active", "body": body, "digest": content,
             "proof": {"passed": True, "digest": content},

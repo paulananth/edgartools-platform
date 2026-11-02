@@ -128,7 +128,7 @@ def test_rules_activation_reuses_the_actual_selected_master_reading(database_fac
                                 "record_key": "key", "publication_key": "version", "effective_time": "effective_at",
                                 "semantics": "patch", "adapter": {"kind": catalog.CATALOG["kinds"][0], "record_key": ["key"]}}
                     body = {"source": "invented-handoff", "bronze": {"family": "invented-family"},
-                            "mdm": {"invented.dataset": {"contract": contract}}}
+                            "dataset_contracts": {"invented.dataset": {"contract": contract}}}
                     previous = None
                     for version in ("v1", "v2"):
                         saved = rules.save("source", "invented-handoff", version, body)

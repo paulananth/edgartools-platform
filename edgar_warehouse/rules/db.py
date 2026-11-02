@@ -205,7 +205,7 @@ class Rules:
             if "acquisition" in body and "acquisition" in selected["proof"]:
                 from edgar_warehouse.rules.acquisition_authority import validation_proof
                 validation_proof(body, selected["proof"], artifacts=Artifacts())
-            requires_handoff = kind == "merge" or (kind == "source" and "mdm" in body)
+            requires_handoff = kind == "merge" or (kind == "source" and "dataset_contracts" in body)
             receipts = None
             if requires_handoff:
                 if not selected["approved_by"]:
@@ -222,7 +222,7 @@ class Rules:
                     else:
                         from edgar_warehouse.rules.acquisition_authority import registration_authority
                         selected_export = self.envelope(selected)
-                        for code, entry in body["mdm"].items():
+                        for code, entry in body["dataset_contracts"].items():
                             registration_authority(selected_export, code, entry["contract"])
                             existing_reading = current_reading(destination, code)
                             existing = existing_reading[1] if existing_reading is not None else None

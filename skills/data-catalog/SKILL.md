@@ -96,7 +96,7 @@ relationship is not necessarily one-to-one: one source can supply several
 domains, and one domain can receive data from several sources.
 
 1. Resolve the source to its exact `rules/sources/<folder>/source.yaml` and
-   `source:` identifier. Read its `mdm` contracts to find the datasets and
+   `source:` identifier. Read its `dataset_contracts` to find the datasets and
    declared kinds it supplies. Follow those kinds to
    `rules/merge/kinds/<kind>.yaml` and the applicable merge policy. Do not
    infer the source from a domain label or split a dotted identifier.
