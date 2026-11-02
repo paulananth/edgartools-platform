@@ -158,18 +158,17 @@ subject, not one of these native objects.
 
 Project. Do not author a second glossary, and do not mark a term approved.
 
-Read `CONTEXT.md`. Take the bold terms in **MDM identities and mastering** and
-in **Data classes, reference data and agent context**. Leave the other sections
-there until the skill that owns them asks for a term. The description is the
-definition paragraph plus the Avoid line. Review state on an asset is
-`Suggested`. Create no owners.
+Read `CONTEXT.md`. A glossary holds only entity terms: the domain identity
+terms, the kinds of one domain's identity, and the relationship types. The
+description is the definition paragraph plus the Avoid line. Review state on
+an asset is `Suggested`. Create no owners.
 
 Give each published subject domain its own glossary. Its native name is the
 domain name, and its display name is the domain's display name. A term whose
 heading is that display name, or that display name plus " Identity", goes in
 that glossary. There is no `shared` glossary (operator, 2026-11-01: "i dont
 want any shared"), no domain named `Shared`, and no `Shared` tag. Place every
-other term from the two sections by its kind:
+other entity term by its kind:
 
 - A kind of one domain's identity, such as a registration that shares that
   identity, goes in that domain's glossary. Name it by the kind itself. Never
@@ -178,10 +177,17 @@ other term from the two sections by its kind:
 - A relationship type goes in the glossary of the domain its `from` list names
   first in the pinned list. A type whose `from` list names several domains
   still has that one home.
-- Any other term goes in a glossary named after its `CONTEXT.md` section: the
-  section name in snake case is the native name, and the section name is the
-  display name. Ticket 158 is moving platform words and process records to
-  Context Center Articles (below); until it closes they stay here.
+- A platform word is not a glossary term, and `CONTEXT.md` is its one home
+  (operator, 2026-11-01: "they are steps in the system and documentation, it
+  can be part of lineage, not in glossary"). That covers a pipeline step or
+  stage, a rules file and its parts, a store or a file. The catalog shows the
+  steps as pipeline tasks on lineage, so a term would repeat them. Do not
+  create a glossary named after a `CONTEXT.md` section, and do not copy these
+  definitions into Articles.
+- A data class is a `data_class` tag, a code-set grouping is text in the
+  code-set descriptions, and a fact about a relationship (its capacity or its
+  dated interval) is text in the relationship-type descriptions. The publisher
+  writes these; do not edit the live catalog by hand.
 - A silver field or a silver row set is not a glossary term. Its definition
   goes on the silver column or table. A `CONTEXT.md` entry that describes
   silver data is not published.
@@ -204,7 +210,8 @@ it only for a real domain; never create one to hold planned or invented terms.
 
 OpenMetadata 2.0 replaced the Knowledge Center with the Context Center. A
 glossary holds entity terms and a `data_class` tag holds a data class; a
-definition of a platform word, a process record or a how-to is an Article.
+platform word stays in `CONTEXT.md`. A process record that nothing else holds,
+or a how-to, is an Article.
 Articles are pages (found in the server's `/swagger.json`, tested 2026-11-01 on
 version 2.0.2):
 
