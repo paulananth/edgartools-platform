@@ -207,7 +207,7 @@ def _profile(source: str, profile: dict) -> tuple[list[dict], dict[str, set]]:
             about = [f"{'Nullable' if field['nullable'] else 'Always filled'}; sensitivity {field['sensitivity']}."]
             if field.get("code_set"):
                 about.append(f"A code of RDM code set `{field['code_set']}`.")
-                uses[field["code_set"]].add(fqn(SERVICE, SILVER, source, silver["table"]))
+                uses[field["code_set"]].add((fqn(SERVICE, SILVER, source, silver["table"]), field["name"]))
             about += [f"Data quality: {r}." for r in rules.get(field["name"], [])]
             columns.append({"name": field["name"], "dataType": TYPES.get(str(field["type"]).upper(), TEXT),
                             "description": " ".join(about)})
@@ -299,8 +299,13 @@ def _profiles(root: Path) -> tuple[list[dict], list[dict], list[dict]]:
                        + f": {known['codes']} codes when profiled. Used by " + ", ".join(sorted(known["columns"])) + ".",
                        "columns": [{"name": "code", "dataType": TEXT, "description": "The code."},
                                    {"name": "label", "dataType": TEXT, "description": "What the code means."}]})
-        lineage += [{"from": fqn(SERVICE, RDM, CODE_SETS, name), "to": at, "columns": [],
-                     "description": f"Values of `{at}` are codes of `{name}`."} for at in sorted(used_by[name])]
+        shown = {_table_name(table): {c["name"] for c in table["columns"]} for table in tables}
+        for at in sorted({table for table, _ in used_by[name]}):
+            mapped = sorted(column for table, column in used_by[name] if table == at and column in shown.get(at, ()))
+            lineage.append({"from": fqn(SERVICE, RDM, CODE_SETS, name), "to": at,
+                            "columns": [{"fromColumns": [fqn(SERVICE, RDM, CODE_SETS, name, "code")],
+                                         "toColumn": f"{at}.{quote(column)}"} for column in mapped],
+                            "description": f"Values of `{at}` are codes of `{name}`."})
     return silver_schemas, tables, lineage
 
 
