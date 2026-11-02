@@ -215,6 +215,42 @@ Every MDM run keeps `checks` in its report, per source. They never block:
   data is fresh.
 A change worth a check becomes a check here (**plan**), not a note.
 
+## Check kinds: what outside standards add (DataKitchen TestGen)
+
+Research note: `docs/research/datakitchen-testgen-test-types-2026-11-02.md` (the
+open-source TestGen repository, 89 test types, each one declarative file).
+Take its design, not its tool:
+
+- **A check is a rule, never code.** Each check is a row in the rules file
+  (`id`, `check` kind, the columns, the kind's parameters, `on_fail`, `why`).
+  TestGen does the same: a type is a file naming its description, parameters,
+  default severity, scope (column, table, referential) and a threshold that
+  counts the bad rows tolerated. The engine holds only generic kinds; a column
+  or a table name in engine code is a defect. A rule no kind carries is a new
+  kind (one generic function plus its tests), then declared in the rules.
+- **Read the column's type first.** A kind has a column type it accepts
+  (`in_set` reads text columns only; the catalog refuses a number). A numeric
+  closed list needs a kind that accepts numbers, not a text copy of the column.
+- **Values come from rules, not from a sample.** TestGen's baseline types fill
+  their lists from a profile of the data; here a closed list comes from the
+  rules file or its code list in the reference store, and a count measured on
+  the delivery goes in the comment (see above), never into the list.
+- **Order by what a defect costs.** After the kinds this engine has
+  (`identifier`, `in_set`, `one_value`), the kinds that find most are: a unique
+  key (an append-only table shows a replay as a repeated key; a snapshot shows
+  a rebuild that did not replace), a required column (a null key defeats the
+  uniqueness check), a bound or date order (start after end, a date in the
+  future), a row condition over columns, a pattern, a second-table match, and
+  volume or freshness per delivery. Statistical drift types need a baseline run
+  this platform does not keep; leave them out of a first set.
+- **`one_value` has no TestGen twin.** "Within a group one value, flag the
+  minority" is this engine's own kind; it carries rules such as the rows of one
+  document agreeing on what the document is. Keep it for group consistency.
+- **Name the dimension in the `why`** (completeness, validity, consistency,
+  uniqueness, timeliness): the business catalog groups cases by it.
+- **Start with the checks that run today**, measure each on the delivery, and
+  list the others as the work for a new kind.
+
 ## Examples
 
 - A legal-entity register's identifier column with a mod 97-10 check digit
