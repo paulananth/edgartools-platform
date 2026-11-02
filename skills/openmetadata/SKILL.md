@@ -180,7 +180,8 @@ other term from the two sections by its kind:
   still has that one home.
 - Any other term goes in a glossary named after its `CONTEXT.md` section: the
   section name in snake case is the native name, and the section name is the
-  display name.
+  display name. Ticket 158 is moving platform words and process records to
+  Context Center Articles (below); until it closes they stay here.
 - A silver field or a silver row set is not a glossary term. Its definition
   goes on the silver column or table. A `CONTEXT.md` entry that describes
   silver data is not published.
@@ -198,6 +199,27 @@ Test a domain by its own data before ruling it out: the market/venue domain
 looked empty through those two links, but its MIC code set and the listing rules
 make it real. Create a subject domain, its glossary or a term in
 it only for a real domain; never create one to hold planned or invented terms.
+
+## Context Center
+
+OpenMetadata 2.0 replaced the Knowledge Center with the Context Center. A
+glossary holds entity terms and a `data_class` tag holds a data class; a
+definition of a platform word, a process record or a how-to is an Article.
+Articles are pages (found in the server's `/swagger.json`, tested 2026-11-01 on
+version 2.0.2):
+
+- Create with `POST /api/v1/contextCenter/pages`: `name`, `pageType`
+  `"Article"` and `page` `{}` are required; the text goes in `description`,
+  which the server stores HTML-escaped. Set `entityStatus` to `Draft`; do not
+  mark an Article approved. The `page` object holds only `publicationDate` and
+  `relatedArticles`.
+- Read `GET .../pages/{id}`, list `GET .../pages`, and change the text with a
+  JSON patch on `/description`. A short fact is a Memory
+  (`/api/v1/contextCenter/memories`); an uploaded file is in
+  `/api/v1/contextCenter/drive`.
+- Not tested: how an Article looks in the screen, and whether an AI agent finds
+  it. The documentation says the agent search reads only the facts extracted
+  from uploaded files, not Articles or hand-written Memories.
 
 Associate a glossary term with a table only when the term is one relationship
 type and the table is that type. Do not tag the kind table with every term
