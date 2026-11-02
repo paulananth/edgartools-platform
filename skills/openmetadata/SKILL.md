@@ -353,6 +353,17 @@ reference list.
   kind table (the Lineage tab, columns shown), not a column of the table page.
   A page with an empty Quality tab is a table with no configured check.
 
+- A profile has one native place, the table profile. `PUT /api/v1/tables/{id}/tableProfile`
+  takes `{"tableProfile": {"timestamp": <ms>, "rowCount": n, "columnCount": n}}`; read it with
+  `GET /api/v1/tables/{fqn}/tableProfile/latest` (the `profile` field); remove one with
+  `DELETE /api/v1/tables/{fqn}/table/{timestamp}/profile`. The publisher writes it for every
+  silver table of a source that has a `profile.yaml`: the profile date is the timestamp, and
+  the counts are the part's rows and the silver table's columns, counts only. The source
+  schema and each kind table say which profile feeds them, or "Not profiled yet". `catalog check`
+  reads the latest profile back and reports "profile changed, publish again" for a table whose
+  profile differs. Try the API on a throwaway table, never on a catalog table: a test value
+  written to a real table must then be deleted by its timestamp.
+
 ## Operator outcome report
 
 Keep configuration, send and confirmation as three separate facts:
