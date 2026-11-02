@@ -59,6 +59,18 @@ TEXT = "STRING"  # the catalog shows what a value means, not a database type
 # One relationship endpoint the rules name differently from its catalog domain.
 ENDPOINT_CATALOG_NAME = {"venue": "market_venue"}
 GOLD, SILVER_MARK = "Certification.Gold", "Certification.Silver"
+# The kinds of an identity: the domain whose glossary holds the term, for a heading
+# that does not start with a domain's display name (ticket 158, ticket 159).
+KIND_HOME = {"Adviser": "company", "Audit Firm": "company", "Fund": "company", "Fund Company": "company",
+             "Fund Series": "fund_structure", "Market/Venue": "market_venue"}
+PLANNED = "(planned: no rule reads this type yet and no link is loaded)"
+RELATIONSHIP_FACTS = (" Each link has a capacity, and holds over one or more dated intervals, "
+                      "stated by a filing or observed from one.")
+# The four data classes: tag name, its CONTEXT.md heading, and the words when CONTEXT.md has none.
+DATA_CLASSES = (("master_data", "Master Data", "The mastered subjects."),
+                ("reference_data", "Reference Data", "Code sets and crosswalks."),
+                ("relationship", "", "A link between two mastered subjects, with a capacity and dated intervals."),
+                ("transaction_data", "Transaction Data", "Rows landed from a source."))
 # A silver field's logical type, as the catalog names it (OpenMetadata calls a 32-bit
 # integer INT); any other type is text.
 TYPES = {"BIGINT": "BIGINT", "INTEGER": "INT", "DOUBLE": "DOUBLE", "DECIMAL": "DECIMAL", "BOOLEAN": "BOOLEAN",
@@ -280,7 +292,8 @@ def _profiles(root: Path) -> tuple[list[dict], list[dict], list[dict]]:
                                               f"(rules/sources/{source}/silver-*.yaml)."})
     for name, known in sorted(code_sets.items()):
         tables.append({"name": name, "databaseSchema": fqn(SERVICE, RDM, CODE_SETS),
-                       "description": f"RDM code set `{name}`" + (" (published)" if known["existing"] else
+                       "description": f"RDM code set `{name}` (reference data; a code may have a Reference Hierarchy)"
+                       + (" (published)" if known["existing"] else
                                                                  " (proposed: a draft until approved in RDM)")
                        + f": {known['codes']} codes when profiled. Used by " + ", ".join(sorted(known["columns"])) + ".",
                        "columns": [{"name": "code", "dataType": TEXT, "description": "The code."},
@@ -288,6 +301,12 @@ def _profiles(root: Path) -> tuple[list[dict], list[dict], list[dict]]:
         lineage += [{"from": fqn(SERVICE, RDM, CODE_SETS, name), "to": at, "columns": [],
                      "description": f"Values of `{at}` are codes of `{name}`."} for at in sorted(used_by[name])]
     return silver_schemas, tables, lineage
+
+
+def _registered_names(root: Path) -> set[str]:
+    """Full names of the silver tables a `silver-*.yaml` registers."""
+    return {_table_name(_registered(path.parent.name, files.load(path)))
+            for path in sorted((root / "sources").glob("*/silver-*.yaml"))}
 
 
 def _feeds(body: dict) -> list[tuple[str, dict]]:
@@ -363,7 +382,14 @@ def _service_lineage(pipelines: list[dict], tables: list[dict]) -> list[dict]:
     return edges
 
 
-def _relationships(root: Path, policy: dict) -> tuple[list[dict], list[dict]]:
+def _codes_read(root: Path, codes: list[str]) -> set[str]:
+    """The relationship type codes some file under `sources/` names: a type no
+    rule reads is planned, not real."""
+    text = "\n".join(path.read_text() for path in sorted((root / "sources").rglob("*.yaml")))
+    return {code for code in codes if re.search(rf"(?<![A-Za-z0-9_-]){re.escape(code)}(?![A-Za-z0-9_-])", text)}
+
+
+def _relationships(root: Path, policy: dict, read: set[str]) -> tuple[list[dict], list[dict]]:
     """Pinned type definitions and the declared datasets that supply them."""
     from .mapdoc import relationship_rows
     rows = relationship_rows(root, policy)
@@ -381,6 +407,9 @@ def _relationships(root: Path, policy: dict) -> tuple[list[dict], list[dict]]:
             text += f" From {origin or 'one subject'} to {destination or 'one subject'}."
         if roles:
             text += f" Roles: {roles}."
+        text += RELATIONSHIP_FACTS
+        if name not in read:
+            text += " " + PLANNED
         tables.append({"name": name, "displayName": row.get("label") or _display(name),
                        "databaseSchema": fqn(SERVICE, MDM, "relationships"),
                        "description": text,
@@ -437,7 +466,36 @@ def _context_terms(root: Path) -> list[tuple[str, str]]:
     return found
 
 
-def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) -> dict:
+def _data_classes(root: Path, tables: list[dict], kinds) -> dict:
+    """The `data_class` tags and the tables that carry one. A source dataset and
+    a proposed silver table carry none (data-modeling names no such class)."""
+    words = dict(_context_terms(root))
+    tags = [{"name": name, "displayName": _display(name),
+             "description": _sentence(words.get(heading) or fallback, 300)}
+            for name, heading, fallback in DATA_CLASSES]
+    registered = _registered_names(root)
+    kind_names = {fqn(SERVICE, MDM, CLEAN, kind) for kind in kinds}
+    marks = []
+    for table in tables:
+        name = _table_name(table)
+        schema = table["databaseSchema"]
+        if name in kind_names:
+            tag = "master_data"
+        elif schema == fqn(SERVICE, MDM, "relationships"):
+            tag = "relationship"
+        elif schema == fqn(SERVICE, RDM, CODE_SETS):
+            tag = "reference_data"
+        elif name in registered:
+            tag = "transaction_data"
+        else:
+            continue
+        marks.append({"table": name, "tag": f"data_class.{tag}"})
+    return {"classifications": [{"name": "data_class", "description": "The class of data a table holds.",
+                                 "tags": tags}],
+            "data_class_marks": sorted(marks, key=lambda item: item["table"])}
+
+
+def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict], read: set[str]) -> dict:
     """Subject domains, their glossaries, and store certifications. A
     relationship type is one asset. Its ends are not extra domain links."""
     rows = relationship_rows(root, policy)
@@ -467,20 +525,31 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) 
                         "domainType": "Source-aligned"})
     by_display = sorted(domains, key=lambda domain: len(domain["displayName"]), reverse=True)
 
-    def glossary_of(heading: str) -> str:
+    def glossary_of(heading: str) -> str | None:
+        """The glossary of the domain a CONTEXT.md term names; none for a word
+        that is no entity (a platform word, a data class, silver data)."""
+        if KIND_HOME.get(heading) in names:
+            return KIND_HOME[heading]
         for domain in by_display:
             display = domain["displayName"]
             if heading == display or heading == f"{display} Identity" or heading.startswith(display + " "):
                 return domain["name"]
-        return "shared"
+        return None
 
     terms = [{"name": heading, "displayName": heading, "description": description,
-              "glossary": glossary_of(heading)} for heading, description in _context_terms(root)]
+              "glossary": home} for heading, description in _context_terms(root)
+             if (home := glossary_of(heading)) and not heading.endswith(" Profile")]
     by_term = {term["name"]: term for term in terms}
+    home_of = {}  # a real relationship type's code -> the glossary of its first `from` domain
     for row in roots:
+        first = next(iter((row.get("properties") or {}).get("from") or []), None)
+        home = ENDPOINT_CATALOG_NAME.get(first, first)
+        if row["code"] not in read or home not in names:
+            continue
+        home_of[row["code"]] = home
         by_term[row["code"]] = {
             "name": row["code"], "displayName": row.get("label") or row["code"],
-            "description": row.get("definition") or row["label"], "glossary": "shared",
+            "description": row.get("definition") or row["label"], "glossary": home,
             "table": fqn(SERVICE, MDM, "relationships", row["code"])}
     membership: dict[str, set[str]] = defaultdict(set)
     for name, kind in kind_tables.items():
@@ -507,9 +576,6 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) 
     glossaries = [{"name": domain["name"], "displayName": domain["displayName"], "description":
                    "The words for this subject, taken from the platform glossary. A projection. Not an approval.",
                    "domains": [domain["name"]]} for domain in domains]
-    glossaries.append({"name": "shared", "displayName": "Shared", "description":
-                       "Words that apply to more than one subject, or to mastering and reference data, "
-                       "taken from the platform glossary. A projection. Not an approval."})
     domain_lineage = []
     known = set(names)
     for row in roots:
@@ -554,7 +620,9 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) 
             {"from": identity, "to": type_term, "relationType": relation_type})
 
     for row in roots:
-        type_term = f"shared.{quote(row['code'])}"
+        if row["code"] not in home_of:
+            continue
+        type_term = f"{home_of[row['code']]}.{quote(row['code'])}"
         relation_type = glossary_relation_type_name(row["code"])
         display = row["label"]
         description = row.get("definition") or display
@@ -562,11 +630,6 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) 
         for code in props.get("from") or []:
             domain = ENDPOINT_CATALOG_NAME.get(code, code)
             add_relation(identity_of.get(domain), type_term, relation_type, display, description)
-    holdings = by_term.get("Holdings")
-    if holdings is not None:
-        add_relation(identity_of.get("security"),
-                     f"{holdings['glossary']}.{quote(holdings['name'])}",
-                     "heldBy", "Held by", holdings.get("description") or "Held by")
     def subject_assets(domain: str) -> list[str]:
         prefix = fqn(SERVICE, MDM, CLEAN, domain)
         return sorted(name for name, domains_ in membership.items()
@@ -592,7 +655,11 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) 
          "tables": facts,
          "inputs": [name for name in facts if name.endswith(("company_fact", "company_line_item"))]},
     ]
+    for product in products:
+        identity = identity_of.get(product["domains"][0])
+        product["tags"] = [identity] if identity else []
     return {"domains": domains, "glossaries": glossaries,
+            **_data_classes(root, tables, kinds),
             "glossary_terms": [by_term[name] for name in sorted(by_term)],
             "memberships": memberships, "certifications": certifications,
             "domain_lineage": domain_lineage, "glossary_relations": glossary_relations,
@@ -688,7 +755,8 @@ def plan(root: Path | None = None) -> dict:
     silver_schemas, profiled, profiled_lineage = _profiles(root)
     tables += profiled
     lineage += profiled_lineage
-    relationship_tables, relationship_lineage = _relationships(root, policy)
+    read = _codes_read(root, [row["code"] for row in relationship_rows(root, policy) if row.get("parent_code") is None])
+    relationship_tables, relationship_lineage = _relationships(root, policy, read)
     tables += relationship_tables
     lineage += relationship_lineage
     bodies = [(path, files.load_source(path)) for path in sorted((root / "sources").glob("*/source.yaml"))]
@@ -772,7 +840,7 @@ def plan(root: Path | None = None) -> dict:
                                             "This catalog does not enable schedules or run workloads."},
         "pipelines": _pipelines(root),
         "service_lineage": _service_lineage(_pipelines(root), tables),
-        **_meaning(root, policy, tables, lineage),
+        **_meaning(root, policy, tables, lineage, read),
         **_quality(root, tables),
     }
 
@@ -920,13 +988,23 @@ def _validity_days(call: Call) -> int | None:
     return None
 
 
+def _publish_classifications(plan: dict, call: Call) -> None:
+    for classification in plan.get("classifications") or []:
+        call("PUT", "/classifications", {"name": classification["name"],
+                                         "description": classification["description"]})
+        for tag in classification["tags"]:
+            call("PUT", "/tags", {"classification": classification["name"], **tag})
+
+
 def _publish_vocabulary(plan: dict, call: Call) -> None:
+    _publish_classifications(plan, call)
     for domain in plan.get("domains") or []:
         _upsert(call, "/domains", domain)
     for glossary in plan.get("glossaries") or []:
         _upsert(call, "/glossaries", glossary)
     for term in plan.get("glossary_terms") or []:
         body = {key: term[key] for key in ("name", "displayName", "description", "glossary")}
+        body["entityStatus"] = "Draft"
         expected = f"{body['glossary']}.{quote(body['name'])}"
         answer = call("PUT", "/glossaryTerms", body) or {}
         if answer.get("fullyQualifiedName") != expected:
@@ -1025,6 +1103,12 @@ def _publish_marks(plan: dict, call: Call, ids: dict[str, str]) -> None:
             "value": {"tagLabel": {"tagFQN": item["tag"], "source": "Classification",
                                    "labelType": "Manual", "state": "Confirmed"},
                       "appliedDate": now, "expiryDate": now + days * 24 * 60 * 60 * 1000}}])
+    for item in plan.get("data_class_marks") or []:
+        if item["table"] in ids:
+            call("PATCH", f"/tables/{ids[item['table']]}", [{
+                "op": "add", "path": "/tags/-",
+                "value": {"tagFQN": item["tag"], "source": "Classification",
+                          "labelType": "Manual", "state": "Suggested"}}])
     for term in plan.get("glossary_terms") or []:
         table = term.get("table")
         if table not in ids:
@@ -1075,8 +1159,10 @@ def publish(plan: dict, call: Call) -> dict:
     _publish_marks(plan, call, ids)
     _drop_invented_domain_edges(plan, call)
     for product in plan.get("products") or []:
-        answer = call("PUT", "/dataProducts", {key: product[key] for key in
-                      ("name", "displayName", "description", "domains", "dataProductType")}) or {}
+        body = {key: product[key] for key in ("name", "displayName", "description", "domains", "dataProductType")}
+        body["tags"] = [{"tagFQN": tag, "source": "Glossary", "labelType": "Manual", "state": "Suggested"}
+                        for tag in product.get("tags") or []]
+        answer = call("PUT", "/dataProducts", body) or {}
         if answer.get("fullyQualifiedName") not in (None, product["name"]):
             raise CatalogError(f"The server named data product {product['name']} {answer.get('fullyQualifiedName')}")
         assets = [{"id": ids[table], "type": "table"} for table in product["tables"] if table in ids]
