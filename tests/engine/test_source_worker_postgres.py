@@ -17,8 +17,8 @@ def test_rules_submitted_13f_work_is_completed_by_separate_worker_and_verifier(
     root = Path(__file__).resolve().parents[2]
     store = Artifacts()
     grant_profile(databases.admin, profile="source.read", worker="bk_runtime", verifier="bk_verifier")
-    body = files.pipeline("sec-13f-reading")
-    saved = databases.rules.save("pipeline", "sec-13f-reading", "1", body)
+    body = files.pipeline("sec.thirteenf.extract")
+    saved = databases.rules.save("pipeline", "sec.thirteenf.extract", "1", body)
     contract_path = root / "crates/source-contract/contracts/thirteenf/contract.yaml"
     contract = store.put_bytes((tmp_path / "contract.yaml").as_uri(), contract_path.read_bytes())
     xml = store.put_bytes((tmp_path / "filing.xml").as_uri(),
@@ -27,9 +27,9 @@ def test_rules_submitted_13f_work_is_completed_by_separate_worker_and_verifier(
     output = (tmp_path / "holdings.json").as_uri()
     manifest = store.put(tmp_path.as_uri(), {"version": 1, "units": [{
         "keys": {"batch_id": "sample"}, "input": input_ref, "output": output, "cursor": {"offset": 0}}]})
-    databases.rules.prove("pipeline", "sec-13f-reading", "1",
+    databases.rules.prove("pipeline", "sec.thirteenf.extract", "1",
                           {"digest": saved["digest"], "batch_hash": manifest["sha256"], "passed": True})
-    databases.rules.activate("pipeline", "sec-13f-reading", "1")
+    databases.rules.activate("pipeline", "sec.thirteenf.extract", "1")
     env = {**os.environ,
            "BOOKKEEPING_DATABASE_URL": databases.runtime.url.render_as_string(hide_password=False),
            "RULES_DATABASE_URL": databases.rules.engine.url.render_as_string(hide_password=False),
@@ -37,7 +37,7 @@ def test_rules_submitted_13f_work_is_completed_by_separate_worker_and_verifier(
            "BOOKKEEPING_MANIFEST_ROOT": (tmp_path / "control").as_uri()}
     for name, value in env.items():
         monkeypatch.setenv(name, value)
-    assert main(["rules", "run", "--pipeline", "sec-13f-reading", "--target", "read",
+    assert main(["rules", "run", "--pipeline", "sec.thirteenf.extract", "--target", "extract",
                  "--input-manifest", manifest["uri"], "--input-sha256", manifest["sha256"]]) == 0
     run_id = json.loads(capsys.readouterr().out)["run"]["run_id"]
 

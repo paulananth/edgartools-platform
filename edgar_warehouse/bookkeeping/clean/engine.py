@@ -43,6 +43,13 @@ def _authority(export: dict, scope: dict, artifacts) -> dict:
     return processing_authority(export)
 
 
+def needs_mdm_approval(export: dict, config: dict) -> bool:
+    """MDM work needs the approved digest: a merge document, a document with an `mdm`
+    section, or a target with a merge step. A target's name decides nothing."""
+    return bool(export["kind"] == "merge" or export["body"].get("mdm")
+                or any(step["operation"] == "mdm.merge" for step in config["steps"]))
+
+
 @dataclass(frozen=True)
 class Claim:
     run_id: str
@@ -165,7 +172,7 @@ class Bookkeeping:
                 raise Blocked("A capture runs only as live acquisition, with its feed")
         # An approval is pinned to the exact immutable body, including its
         # Bookkeeping section. No automatic approval from an earlier version.
-        if export["kind"] == "merge" or export["body"].get("mdm") or target == "mdm":
+        if needs_mdm_approval(export, config):
             approval = export.get("approval") or {}
             if approval.get("digest") != export["digest"] or not approval.get("by") or not approval.get("at"):
                 raise Blocked("MDM configuration requires approval of its exact digest")

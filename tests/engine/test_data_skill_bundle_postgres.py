@@ -578,8 +578,8 @@ def test_parsing_runs_through_the_installed_bundle(installed, databases, tmp_pat
     python, root = installed
     store = Artifacts()
     grant_profile(databases.admin, profile="source.read", worker="bk_runtime", verifier="bk_verifier")
-    body = files.pipeline("sec-13f-reading")
-    pipeline_name = 'sec-13f-reading' if reading_mode == '13f' else f'{reading_mode}-reading'
+    body = files.pipeline("sec.thirteenf.extract")
+    pipeline_name = 'sec.thirteenf.extract' if reading_mode == '13f' else f'{reading_mode}-reading'
     body['pipeline'] = pipeline_name
     saved = databases.rules.save("pipeline", pipeline_name, "1", body)
     contract_path = ROOT / "crates/source-contract/contracts/thirteenf/contract.yaml"
@@ -631,7 +631,7 @@ def test_parsing_runs_through_the_installed_bundle(installed, databases, tmp_pat
         assert done.returncode == 0, done.stderr
         return done.stdout
 
-    submitted = command("edgar_warehouse.cli", "rules", "run", "--pipeline", pipeline_name, "--target", "read",
+    submitted = command("edgar_warehouse.cli", "rules", "run", "--pipeline", pipeline_name, "--target", "extract",
                         "--input-manifest", manifest["uri"], "--input-sha256", manifest["sha256"])
     run_id = json.loads(submitted)["run"]["run_id"]
     command("edgar_warehouse.cli", "workers", "work", "source.read", run_id)

@@ -17,6 +17,10 @@
 # Left out: the phone number (personal, profiling). An LEI of all zeros is a
 # stand-in for none (4 registrants, profiling) and is blank here.
 source: sec.nport.registrant
+catalog:
+  pipelines:
+    mastering:
+      display_name: N-PORT registrants → Company
 bronze:
   family: sec.nport-datasets
 # The quarter's registrants through the Merge Stage (ticket 118): the filing
