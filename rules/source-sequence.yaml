@@ -26,7 +26,7 @@ sources:
     requires: []
     after: [sec.submissions.person]
   sec.thirteenf.securities:
-    target: null
+    target: mastering
     requires: []
     after: [gleif, openfigi]
   sec.nport.registrant:

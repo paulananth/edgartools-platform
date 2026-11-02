@@ -141,6 +141,65 @@ read:
           text: {path: cusip.$, default: "", transforms: [{case: upper}]}
         figi:
           text: {path: figi.$, default: "", transforms: [{case: upper}]}
+bookkeeping:
+  version: 2
+  targets:
+    # The Securities of one data set (ticket 172): every information table is
+    # read, reduced by CUSIP, combined to one row each, recorded, prepared for
+    # the Dataset Contract and merged; each file is then noted in the Change
+    # Journal, so an unchanged file is not read again.
+    mastering:
+      steps:
+        - name: read
+          operation: source.read
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {slices: {bytes: 8388608}}
+        - name: reduce
+          operation: source.combine
+          requires: [read]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input: {contract: reduce.yaml, readings: {units: {all: read}}}
+        - name: combine
+          operation: source.combine
+          requires: [reduce]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.combined]
+          input: {contract: combine.yaml, readings: {securities: {step: reduce}}}
+        - name: record
+          operation: source.read
+          requires: [combine]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          input: {contract: record.yaml, pieces: {step: combine}}
+        - name: prepare
+          operation: mdm.prepare
+          requires: [record]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, mdm.prepared]
+          input:
+            keys: {table: security, record_column: record, dataset: sec.thirteenf.securities.v1}
+            readings: {record: {all: record}}
+        - name: merge
+          operation: mdm.merge
+          requires: [prepare]
+          key: "{batch_id}"
+          leases: ["mdm:consumer:{consumer}"]
+          checks: [input.hash, output.receipt, mdm.committed]
+        - name: processed
+          operation: journal.record
+          requires: [merge]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, journal.recorded]
+      checks: [manifest.hash, work.accounting, journal.delivered]
 dataset_contracts:
   sec.thirteenf.securities.v1:
     contract:
