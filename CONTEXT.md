@@ -117,8 +117,8 @@ A government body represented in its own right, distinct from a legally incorpor
 _Avoid_: Government ownership as an identity kind, International Organization
 
 **Market/Venue**:
-A trading market or venue distinct from the organization operating it: HAS_MARKET_OPERATOR links it to its market operator, and IS_SEGMENT_OF_EXCHANGE a market segment to its exchange.
-_Avoid_: Operator Company, corporate ownership hierarchy
+A trading market or venue distinct from the organization operating it, identified by its ISO 10383 MIC from RDM's `iso-10383-mic` code set. That set carries each segment under its operating MIC. A Security's listing names its venue by MIC.
+_Avoid_: Operator Company, corporate ownership hierarchy, a data vendor's exchange code as the venue's identity
 
 **International Organization**:
 An organization accepted as that kind from its source category, distinct from a Company and from a Government Entity. It keeps the source classification it was accepted under.
