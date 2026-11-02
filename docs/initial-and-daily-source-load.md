@@ -117,8 +117,9 @@ many unchanged files for recomputation. Do not use `--all` for either normal run
 | OpenFIGI | Every retained request and response in the declared complete mapping capture. | Mapping responses cover requested identifiers, not the provider's entire instrument universe. No automatic new requests or re-download: the operator previously ruled that the capture is reused. Standalone listing enrichment still needs onboarding. |
 
 This scope covers master/reference data and relationships accepted by the
-contracts. Transactions and financial facts remain in their captured evidence;
-they are not converted into MDM attributes because silver is excluded.
+contracts. Financial facts are not converted into MDM attributes. They land in
+silver through the `silver` target of `sec.company-facts` (read, land, record in
+the Change Journal), linked to each Company by CIK.
 
 ## What exists and what blocks the full load
 

@@ -262,3 +262,13 @@ Evidence and sources: ticket 39, research 02 section 3; the build, ticket 47.
 - **The statement format is read from Company, never copied onto a row**: it
   comes from the Company master's SIC code, and is "unknown" until Company is
   mastered (ticket 37; ticket 46).
+
+## Running the facts through Bookkeeping (ticket 169)
+
+`sec.company-facts` has one Bookkeeping target, `silver`: `facts` (`source.read`,
+filers' files in slices of at most 8 MiB), `land` (`silver.land`: the reading's
+`company_fact` table into silver, once per filer file) and `processed`
+(`journal.record`). The Change Journal skips a file recorded under the same
+rules and content, and a changed facts, line-item or measure rule is a new
+processing identity. Line items and measures are not steps yet: `silver
+line-items` and `silver measures` stay manual until the derive step exists.
