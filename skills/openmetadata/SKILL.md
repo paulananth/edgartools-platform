@@ -139,7 +139,7 @@ member of its endpoint domains. Putting the type on each end stores one link
 per end and makes the server draw a domain-to-domain edge for every pair of
 ends. Those edges are not types. Do not create them. If a publish finds a
 domain-to-domain edge whose source is `ChildAssets`, delete it. Disable
-"Multiple Domains are not allowed" only for an asset that itself is more than
+"Multiple Domains are not allowed" (a rule in `entityRulesSettings`) only for an asset that itself is more than
 one kind. Do not disable it to spread a relationship type.
 
 Domains and glossaries are independent native resources; assigning one does not
