@@ -66,6 +66,11 @@ recovery, use [data-operations](skills/data-operations/SKILL.md).
   `infra/scripts/local-test-stores.py`. The procedure is
   [Initialize shared local PostgreSQL](docs/local-agent-testing.md).
   Source its private `worker.env` before work and `verifier.env` before verification.
+  `worker.env` holds `RULES_DATABASE_URL` too; it is never missing, so never ask for it
+  (operator, 2026-11-02: "This must be documented, you cannot keep on asking").
+  To record a `rules test` run, pass a disposable stores folder as `--stores`
+  (`local-test-stores.py up <name>`; `stop` it after) and the shared `worker.env` as the
+  Rules Database ([data-onboarding](skills/data-onboarding/SKILL.md), "test").
 - Separate Git worktrees isolate code edits; routine lookups and development
   use the existing shared server, without creating a server per agent.
   Use its private runtime connection file outside Git; never print its values.
