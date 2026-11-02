@@ -15,13 +15,16 @@ in bounded chunks); a part too large for that is landed in several deliveries.
 
 from __future__ import annotations
 
+import os
 from decimal import Decimal
+from pathlib import Path
 from typing import Iterable
 
 
 from edgar_warehouse.control_contract import Blocked
 
 from . import checks
+from . import results as quality_results
 from .sink import Sink
 
 
@@ -45,7 +48,7 @@ class MdmIds:
             return for_connection(conn).master_ids(source_code, kind, keys)
 
 
-def land(sink: Sink, table: str, records: Iterable[dict], ids=None) -> dict:
+def land(sink: Sink, table: str, records: Iterable[dict], ids=None, results: Path | None = None) -> dict:
     """Write records into a registered table: fields are the spec's columns (a
     field the spec does not name is refused), and each link's MDM id is looked up.
     `mdm_keys_found` counts the distinct source keys MDM knows, over all links."""
@@ -58,6 +61,9 @@ def land(sink: Sink, table: str, records: Iterable[dict], ids=None) -> dict:
             raise Blocked(f"Record {number} holds fields silver.{table} does not name: {sorted(unknown)}")
         rows.append(record)
     rows, quality = checks.run(spec, rows)
+    results = results or os.environ.get(quality_results.ENVIRONMENT)
+    if quality and results:
+        quality_results.record(Path(results), table, quality)
     links = spec["links"] or []
     if links and ids is None:
         raise Blocked(f"silver.{table} links to masters: MDM ids need the MDM database (MDM_DATABASE_URL)")

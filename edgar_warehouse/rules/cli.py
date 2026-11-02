@@ -195,6 +195,13 @@ def _check(args):
     return 0 if all(value == "ok" for value in results.values()) else 1
 
 
+def _results(args) -> dict:
+    from edgar_warehouse.silver_writer import results
+
+    path = getattr(args, "results", None)
+    return results.load(path) if path else {}
+
+
 def _catalog_cause(error, catalog) -> str:
     """Summarize API failures without returning response bodies or endpoint data."""
     if not isinstance(error, catalog.CatalogError):
@@ -238,6 +245,7 @@ def _catalog(args):
     """Plan, reconcile and read back the catalog with stage-specific outcomes."""
     from . import catalog
 
+    results = _results(args)
     try:
         plan = catalog.plan(Path(args.root))
     except (catalog.CatalogError, ValueError) as error:
@@ -287,7 +295,7 @@ def _catalog(args):
 
     if args.action == "check":
         try:
-            result = catalog.verify(plan, call)
+            result = catalog.verify(plan, call, results=results)
         except catalog.CatalogError as error:
             cause = _catalog_cause(error, catalog)
             report = {"ok": False, "status": "partial", "failed_stage": "readback", "endpoint": endpoint,
@@ -312,7 +320,7 @@ def _catalog(args):
         return _catalog_output(report)
 
     try:
-        sent = catalog.publish(plan, call, draft_terms=args.draft_terms)
+        sent = catalog.publish(plan, call, draft_terms=args.draft_terms, results=results)
     except catalog.CatalogError as error:
         cause = _catalog_cause(error, catalog)
         rejected = re.search(r"HTTP 4\d\d\b", cause) is not None and completed_writes == 0
@@ -334,7 +342,7 @@ def _catalog(args):
         return _catalog_output(report)
 
     try:
-        verified = catalog.verify(plan, call)
+        verified = catalog.verify(plan, call, results=results)
     except catalog.CatalogError as error:
         cause = _catalog_cause(error, catalog)
         report = {"ok": False, "status": "partial", "failed_stage": "readback", "endpoint": endpoint,
@@ -408,6 +416,9 @@ def register(subparsers):
     catalog.add_argument("action", choices=("plan", "publish", "check"),
                          help="plan: preview; publish: reconcile OpenMetadata; check: read back metadata and lineage")
     catalog.add_argument("--root", default=str(files.ROOT))
+    catalog.add_argument("--results", type=Path,
+                         help="publish, check: the quality results file a silver load wrote "
+                              "(QUALITY_RESULTS_FILE); each result is sent to, and read back from, its case")
     catalog.add_argument("--draft-terms", action="store_true",
                          help="publish: set every glossary term to Draft (a steward approves it); "
                               "by default the server's own status is left alone")

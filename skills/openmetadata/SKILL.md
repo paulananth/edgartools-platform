@@ -76,8 +76,9 @@ The fundamental-measures package takes the filed-figure table and the line-item
 table as input ports. The measure table is an asset, not an input port.
 `rules catalog publish` also writes every configured check and every
 registered prepared-table check as a quality case, and every configured fix
-as a correction. A profile proposal is not a case. A case has no pass or fail
-result. The definitions are `edgartools-configured-table-check` and
+as a correction. A profile proposal is not a case. A case has a pass or fail only
+when a silver load wrote a results file (`QUALITY_RESULTS_FILE`, or
+`land(..., results=path)`) and `publish --results FILE` sent it. The definitions are `edgartools-configured-table-check` and
 `edgartools-configured-column-check`, platform Other, and OpenMetadata does
 not execute them. A case whose column is on the table uses
 `<#E::table::{fqn}::columns::{column}>`. Any other case uses
@@ -419,6 +420,17 @@ Use native test definitions/cases when supported, retaining configured semantics
 and failure actions. An externally executed check is not a runnable native SQL
 test. The `Other` platform is available in the pinned definition schema; select
 the tested mapping rather than relabeling the existing execution engine.
+
+A result is `POST /api/v1/dataQuality/testCases/testCaseResults/{caseFQN}` with
+`timestamp`, `testCaseStatus` (`Success` or `Failed`), `testResultValue`,
+`passedRows` and `failedRows`; read it as `testCaseResult` with
+`fields=testCaseResult`. A failed result opens an incident. `check --results FILE`
+reports "result changed, publish again". A silver load's file keeps the latest
+report per check (`<table>.<check id>`). Only silver checks write one so far; the
+source checks and the master identifier limits have no results file yet. Probe
+the API with a throwaway case on a real table, never a real case, and delete the
+case and its empty suite (`DELETE /dataQuality/testCases/{id}?hardDelete=true&recursive=true`,
+then `DELETE /dataQuality/testSuites/basic/name/{suite}?hardDelete=true&recursive=true`).
 
 A PUT of a case on a table auto-creates that table's basic suite
 `{tableFQN}.testSuite` and attaches the case. Do not create a second suite for
