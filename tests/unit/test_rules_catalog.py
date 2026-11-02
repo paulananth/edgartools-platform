@@ -672,3 +672,14 @@ def test_publish_writes_the_profile_and_check_says_when_it_is_stale():
     assert f"{mark['table']}: profile changed, publish again" in report["differences"]
     server.profiles = {item["table"]: item for item in plan["profiles"]}
     assert not [d for d in catalog.verify(plan, server)["differences"] if "profile changed" in d]
+
+
+def test_each_identifier_limit_of_a_kind_is_a_check_on_its_master_table():
+    plan = catalog.plan(files.ROOT)
+    cases = {case["name"]: case for case in plan["quality_cases"]}
+    forward, reverse = cases["company.cik-per-master"], cases["company.cik-masters-per-value"]
+    assert forward["entityLink"].endswith("mdm.clean.company>")
+    assert forward["testDefinition"] == "edgartools-configured-table-check"
+    assert "at most 1 `cik` value" in forward["description"] and "merge/kinds/company.yaml" in reverse["description"]
+    assert "security.cusip-per-master" in cases and not any(n.startswith("security.") and n.endswith("masters-per-value")
+                                                            for n in cases)
