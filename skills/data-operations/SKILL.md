@@ -115,8 +115,9 @@ the whole list.
    comments and restricted grants through a recoverable registration path.
    Report success only after all of them read back correctly. A standalone compiled table
    leaves registration incomplete. A part with no approved spec, or a pipeline silver step
-   with no worker, stays blocked and is reported. `silver land` is the manual
-   write until that worker exists
+   with no worker, stays blocked and is reported. A source whose target has a
+   `silver.land` step lands through it; `silver land` stays the manual write
+   for a table whose source has none
    ([data-onboarding](../data-onboarding/SKILL.md), Two targets).
 
 A domain is operational when its MDM source and merge policy are the active

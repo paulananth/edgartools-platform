@@ -2,10 +2,42 @@
 # (ticket 45). This file names the source; it reads nothing itself. Each file is
 # read by facts.yaml, one table per taxonomy (ticket 40). Its rows are
 # transactions for silver (`company_fact`, ticket 43), linked to the Company by
-# CIK; nothing goes to MDM. A Bookkeeping target comes with the silver landing
-# (ticket 46).
+# CIK; nothing goes to MDM. Its Bookkeeping target `silver` (ticket 169) reads
+# the files, lands them in `company_fact` and records each file in the Change
+# Journal.
 source: sec.company-facts
+execution: {profile: source.read, workers: 1, max_artifacts: 512}
 bronze:
   # Bronze: company_facts/, the family the repo has named for these files;
   # the cohort's local copies are one gzip file per filer.
   family: company_facts
+bookkeeping:
+  version: 2
+  targets:
+    silver:
+      steps:
+        - name: facts
+          operation: source.read
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          # The filers' files in units of at most 8 MiB.
+          units: {slices: {bytes: 8388608}}
+          input: {contract: facts.yaml}
+        - name: land
+          operation: silver.land
+          requires: [facts]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, silver.landed]
+          input: {keys: {table: company_fact, silver: company_fact}}
+        # The Change Journal records each file the run landed, so a later run
+        # names only changed files (ticket 22).
+        - name: processed
+          operation: journal.record
+          requires: [land]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, journal.recorded]
+      checks: [manifest.hash, work.accounting, journal.delivered]

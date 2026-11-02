@@ -56,9 +56,10 @@ sources:
     requires: []
     after: [sec.thirteenf.information_table]
   # Company facts (ticket 45): silver rows linked to the Company by CIK, so they
-  # run after it. Its silver landing target comes with ticket 46.
+  # run after it. Its `silver` target (ticket 169) reads the files, lands
+  # company_fact and records each file in the Change Journal.
   sec.company-facts:
-    target: null
+    target: silver
     requires: []
     after: [sec.company]
   # Registration statements (ticket 149): captured first; the reading, and the

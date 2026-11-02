@@ -166,8 +166,21 @@ def _record(step: dict, run: _Run, units: dict) -> list[dict]:
                   for key in run.keys for other, sha256 in run.companions[key])])))]
 
 
+def _land(step: dict, run: _Run, units: dict) -> list[dict]:
+    """One unit for each unit of the read step it follows: that reading's table into a silver table."""
+    shape = step.get("input", {}).get("keys", {})
+    if len(step["requires"]) != 1 or set(shape) != {"table", "silver"}:
+        raise ValueError(f"Step {step['name']}: a landing follows one read step and names its keys: table and silver")
+    (before,) = step["requires"]
+    return [read_units.unit(f"{run.root}/{step['name']}/{u['keys']['unit']}.json",
+                            {"unit": u["keys"]["unit"], "table": shape["table"], "silver": shape["silver"]},
+                            {"from": {"step": before, "key": u["keys"]["unit"]}})
+            for u in units[before]]
+
+
 # Each operation's units, from the step, the run and the units of the steps before it.
-FORMS = {"source.read": _read, "source.combine": _combine, "mdm.prepare": _prepare, "mdm.merge": _merge, "journal.record": _record}
+FORMS = {"source.read": _read, "source.combine": _combine, "mdm.prepare": _prepare, "mdm.merge": _merge, "journal.record": _record,
+         "silver.land": _land}
 OPERATIONS = tuple(FORMS)
 
 
@@ -330,7 +343,7 @@ def write_manifest(
     # the steps read with, the Dataset Contracts, the policy): a rerun under
     # other rules or another time is a new consumer, not a reused batch key.
     # A contract is digested whole, so an edit to its steps' units is one too.
-    bundle = digest([publication_key, revision, as_of, contracts, reading["mdm"], policy,
+    bundle = digest([publication_key, revision, as_of, contracts, reading.get("mdm"), policy,
                      *([shared] if shared else [])])
     publication = {"publication_key": publication_key, "revision": revision, "as_of": as_of,
                    "consumer": f"{dataset or source}/{bundle}", "batch_id": f"{source}:{bundle}"}

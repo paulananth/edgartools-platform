@@ -22,10 +22,10 @@ The company financials (facts, line items, measures) are built by hand: `rules/s
 ## Parts
 
 - [x] GoF consult before any code (2026-11-02 09:12 ET): leave the target manifest and the worker registry; both are built for a new step ("a new profile is a new module and an entry in `PROFILES`; Bookkeeping does not change"); add, do not refactor
-- [ ] `sec.company-facts` gets one Bookkeeping target (`silver`) with three steps in order: land `company_fact`, line items, measures; each step reads the previous step's verified output (`run:` binding). The source sequence, the feed resolver and the load doc ("financial facts remain in their captured evidence") say so
-- [ ] The Change Journal records the captured facts files; the processing identity is the digest of the facts, line-item and measure rules; no source-specific code in the Journal (its independence stays)
+- [x] (slice 1: read and land; line items and measures are slice 2) `sec.company-facts` gets one Bookkeeping target (`silver`) with three steps in order: land `company_fact`, line items, measures; each step reads the previous step's verified output (`run:` binding). The source sequence, the feed resolver and the load doc ("financial facts remain in their captured evidence") say so (2026-11-02 09:34 ET: target `silver`, steps `facts`, `land`, `processed`; `tests/mdm/test_company_facts_silver_target.py`, `tests/integration/test_silver_land_worker_postgres.py`; 150 unit and manifest tests pass)
+- [x] The Change Journal records the captured facts files (2026-11-02 09:34 ET: the `processed` step; an unchanged repeat names no file, force names all, one changed file is the only one named); the processing identity is the digest of the facts, line-item and measure rules; no source-specific code in the Journal (its independence stays)
 - [ ] Find out whether line items and measures can rebuild only the Companies whose facts changed; if not, the first version rebuilds all and the ticket says why
-- [ ] A limited proof only: one Company's facts file, both orders, a second pass that changes nothing, an unchanged file skipped, a changed rule reprocessed. No full cohort rerun
+- [x] (slice 1) A limited proof only: one Company's facts file, both orders, a second pass that changes nothing, an unchanged file skipped, a changed rule reprocessed. No full cohort rerun. Slice 1 done: a retry changes nothing and the verifier refuses when silver holds fewer keys
 - [ ] One real run is timed and its deadline sized from the measure (say the time before starting it)
 - [ ] The landing step writes `QUALITY_RESULTS_FILE`; the three silver tables get their first quality checks (operator decides the checks)
 - [ ] Stores and containers a test run leaves are removed
@@ -47,3 +47,11 @@ Read-only, from the code. Bookkeeping and the Journal are already source-neutral
 1. **Land the facts.** New worker \`silver.land\` (reads a verified \`source.read\` output, calls \`silver_writer.land\`, writes the quality results file), its \`FORMS\` entry, a \`silver\` target on \`sec.company-facts\` with steps \`facts\` (source.read), \`land\` (silver.land), \`processed\` (journal.record). Proof: one Company's file, a second pass changes nothing, an unchanged file is skipped, a changed rule reprocesses.
 2. **Derive line items and measures.** New worker \`silver.derive\` (calls \`line_items.build\` and \`measures.build\`), two more steps after \`land\`. First check whether they can rebuild only the Companies whose facts changed.
 3. **Time one real run, then size the deadline**; add the first quality checks (operator decides them); update the sequence file, the load doc and the three skills.
+
+## Slice 1 review (2026-11-02 09:38 ET)
+
+Three-axis review of the first slice. Applied: the byte budget is spent across a unit's artifacts; the unused `restricted` argument is gone (the silver and master logins are the process's own `SILVER_DATABASE_URL` and `MDM_DATABASE_URL`); the receipt is built in the same pass that lands the rows (no second read); the verifier asks silver for the rows of the unit's own filers and refuses when a key is missing, so other units' rows cannot hide one (`test_other_units_rows_cannot_hide_a_missing_key`); a changed rule names every file again (`test_changed_rules_name_every_file_again`); dead test code removed.
+
+Checked in the Bookkeeping SQL (`claim` in `001_control.sql`): a unit cannot be claimed while any unit of a required step is not verified, so `processed` waits for every `land` unit and a file is never recorded before it landed. The silver writer takes its own table lock, so two land units cannot write one table at once. "Both orders" does not apply here: silver land has no merge order; the proof is retry-safe and rule-sensitive.
+
+Kept as judgement calls: three workers with similar execute/verify shapes are not yet a shared base; `max_artifacts: 512` and `workers: 1` copy the other sources and are re-sized from the timed run (parked ticket 170).
