@@ -68,9 +68,9 @@ _Avoid_: Duplicate legal entity, permanent role inferred from a filing name
 The governed investment-adviser registration of a Company or a Person. It shares that holder's identity.
 _Avoid_: A separate adviser identity, IS_ENTITY_OF, IS_PERSON_OF, the Fund Series it manages, the Fund Company
 
-**Audit Firm Profile**:
-The governed audit-firm registration of a Company. It shares that Company's identity.
-_Avoid_: A separate auditor identity, a permanent auditor field on the audited Company
+**Audit Firm**:
+A Company that audits other Companies' statements, through its governed audit-firm registration. It shares that Company's identity.
+_Avoid_: Audit Firm Profile, A separate auditor identity, a permanent auditor field on the audited Company
 
 **Fund Profile**:
 The governed fund registration of a Company or a Fund Structure. It shares that holder's identity.

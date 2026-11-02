@@ -176,6 +176,10 @@ glossary or a term in it only for a domain with a rules file or a mastered
 kind; never create one to hold planned or invented terms. A type or subtype of
 one domain (a role only that domain's identity can hold) goes in that
 domain's glossary, never in `shared`.
+A kind of one domain's identity, such as a registration that shares that
+identity, is named by the kind itself and not "<kind> Profile" (operator,
+2026-11-01: a kind of an identity is not a shared term), and it goes
+in that domain's glossary.
 
 `shared` names a Glossary only. It is not a Domain, a domain tag, or a domain
 assignment. Never create or assign a domain named `Shared`.
