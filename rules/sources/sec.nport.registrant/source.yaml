@@ -20,7 +20,7 @@ source: sec.nport.registrant
 catalog:
   pipelines:
     mastering:
-      display_name: N-PORT registrants → Company
+      display_name: N-PORT registrants to Company
 bronze:
   family: sec.nport-datasets
 # The quarter's registrants through the Merge Stage (ticket 118): the filing
