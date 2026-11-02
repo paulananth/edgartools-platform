@@ -2,7 +2,7 @@
 
 Priority: 172. Map: [Rebuild priorities](../map.md). Opened 2026-11-02 12:15 ET (operator, 2026-11-02: "List all pipeline with no bookkeeping", then "first Bookkeeping ticket for sec.thirteenf.securities?").
 
-Type: task. Status: open. Blocked by: [173](173-the-thirteenf-source-is-named-for-what-it-masters.md) (the rename). Pattern: [169](169-company-financials-run-through-bookkeeping-and-the-change-journal.md) (company facts) and the `openfigi` and `sec.nport.security` mastering targets.
+Type: task. Status: in progress (branch `claude/t172-thirteenf-securities-bookkeeping`). Blocked by: none ([173](173-the-thirteenf-source-is-named-for-what-it-masters.md), the rename, merged). Pattern: [169](169-company-financials-run-through-bookkeeping-and-the-change-journal.md) (company facts) and the `openfigi` and `sec.nport.security` mastering targets.
 
 ## Question
 
@@ -21,12 +21,12 @@ Type: task. Status: open. Blocked by: [173](173-the-thirteenf-source-is-named-fo
 
 ## Parts
 
-- [ ] GoF consult before any code
-- [ ] Find how the Securities are mastered today (the older prepare commands and the tests that use the reading), and what a data set's size does to the units (an output over 32 MiB is written in pieces, ticket 83)
-- [ ] A `mastering` target in `source.yaml`, shaped like `openfigi` and `sec.nport.security`: `read` (slices of the files), `reduce` (`source.combine` over every read unit, ticket 82), `combine` (`source.combine`), `records` (`mdm.prepare`, table `security`, dataset `sec.thirteenf.securities.v1`), `merge` (`mdm.merge`), `processed` (`journal.record`)
-- [ ] `source-sequence.yaml` gives it the target; the sequence and engine-bundle tests that pin the order and status are updated
-- [ ] A limited proof only: a few invented information-table files; a second pass changes nothing; an unchanged file is skipped; a changed reduce or combine rule names every file again; a CUSIP failing its check digit is a data quality exception, not a stop (ticket 79 ruling)
-- [ ] The Mapping Document is regenerated if the rules change it; the mapping test passes
+- [x] GoF consult before any code: the change is rules files and a test, no production code; the target copies the `openfigi` shape, so the verdict is leave it (2026-11-02 16:03 ET)
+- [x] Find how the Securities are mastered today (the older prepare commands and the tests that use the reading), and what a data set's size does to the units (an output over 32 MiB is written in pieces, ticket 83): found that `reduce.yaml` named eight fixed units (`units_1..8`); a Bookkeeping slot is one name over every unit, so it is now `units` (2026-11-02 16:03 ET)
+- [x] A `mastering` target in `source.yaml` (`read`, `reduce`, `combine`, `record`, `prepare`, `merge`, `processed`; `record.yaml` is the combined row itself); proved by `tests/mdm/test_thirteenf_securities_target.py` and the 13F chain tests run through `record.yaml` (2026-11-02 16:03 ET), shaped like `openfigi` and `sec.nport.security`: `read` (slices of the files), `reduce` (`source.combine` over every read unit, ticket 82), `combine` (`source.combine`), `records` (`mdm.prepare`, table `security`, dataset `sec.thirteenf.securities.v1`), `merge` (`mdm.merge`), `processed` (`journal.record`)
+- [x] `source-sequence.yaml` gives it the target (it now sits after `openfigi`, before `sec.nport.security`); the sequence and engine-bundle tests that pin the order and status are updated; unit and engine-bundle tests run before the push (2026-11-02 16:03 ET)
+- [x] A limited proof only: a few invented information-table files; a second pass changes nothing; an unchanged file is skipped; a changed reduce or combine rule names every file again; a CUSIP failing its check digit is a data quality exception, not a stop (ticket 79 ruling): proved at plan level (steps, second pass, changed rule) and by the 13F chain tests run through `record.yaml`; the check-digit set-aside is covered by the existing identifier-format tests (2026-11-02 16:03 ET)
+- [x] The Mapping Document is regenerated if the rules change it; the mapping test passes (2026-11-02 16:03 ET)
 - [ ] One real run is timed and its deadline and `workers` sized from the measure (say the time before starting it; provider access is not needed: the files are already captured)
-- [ ] Stores and containers a test run leaves are removed
-- [ ] Learning → skill: `bookkeeping`, `change-journal` and the securities skill name the target and its steps
+- [x] Stores and containers a test run leaves are removed (none left: 2026-11-02 16:03 ET)
+- [x] Learning → skill: the `security-master` skill names the three mastering targets and the 13F steps; `bookkeeping` and `change-journal` need no line (the target uses their existing operations) (2026-11-02 16:03 ET)

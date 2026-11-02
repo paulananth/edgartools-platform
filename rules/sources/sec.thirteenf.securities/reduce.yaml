@@ -23,7 +23,7 @@ reduce:
   max_output_bytes: 1073741824
   groups:
     securities:
-      source: [units_1, units_2, units_3, units_4, units_5, units_6, units_7, units_8]
+      source: [units]
       table: sec_thirteenf_holding
       keys: [cusip]
       mode: count
@@ -31,7 +31,7 @@ reduce:
       sample: null
       sample_limit: 0
     names:
-      source: [units_1, units_2, units_3, units_4, units_5, units_6, units_7, units_8]
+      source: [units]
       table: sec_thirteenf_name
       keys: [cusip]
       mode: members
@@ -40,7 +40,7 @@ reduce:
       sample: name_sample
       sample_limit: 1
     titles:
-      source: [units_1, units_2, units_3, units_4, units_5, units_6, units_7, units_8]
+      source: [units]
       table: sec_thirteenf_title
       keys: [cusip]
       mode: members
@@ -50,7 +50,7 @@ reduce:
       sample_limit: 1
     # Every share class the titles name (ticket 130), all kept: at most 26.
     classes:
-      source: [units_1, units_2, units_3, units_4, units_5, units_6, units_7, units_8]
+      source: [units]
       table: sec_thirteenf_class
       keys: [cusip]
       mode: members
@@ -59,7 +59,7 @@ reduce:
       sample: class_sample
       sample_limit: 26
     figis:
-      source: [units_1, units_2, units_3, units_4, units_5, units_6, units_7, units_8]
+      source: [units]
       table: sec_thirteenf_figi
       keys: [cusip, figi]
       mode: count

@@ -142,6 +142,8 @@ CUSIP). Each source keeps its own record on it; MDM merges them.
 The ranking that fills a field: OpenFIGI, then 13F, then N-PORT (operator,
 2026-10-25: "this should be second source", then "Load and priority"; it
 replaces "make openfigi priority 1 and 13f last", 2026-10-18).
+Each of the three runs as a `mastering` target of Bookkeeping, and records its files in the
+Change Journal (13F: ticket 172): read, reduce, combine, record, prepare, merge, processed.
 `rules/merge/kinds/security.yaml`, `defaults.sources`.
 
 ## Keys and identifiers
