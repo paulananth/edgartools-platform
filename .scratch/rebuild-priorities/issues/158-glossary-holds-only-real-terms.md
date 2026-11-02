@@ -25,6 +25,9 @@ Two of them (`HAS_MARKET_OPERATOR`, `IS_SEGMENT_OF_EXCHANGE`) name relationship 
 - [x] `skills/openmetadata/SKILL.md`, "Glossary and classification": publish a term only when real data backs it; a planned type is not published; no domain or glossary for planned terms; a type of one domain goes in that domain's glossary, not `shared` (2026-11-01 18:41 ET)
 - [x] Four more terms removed from `shared` and `IS_SUBFUND_OF` kept; 47 terms at the start, 41 now (2026-11-01 19:04 ET)
 - [x] `CONTEXT.md` "Audit Firm Profile" renamed "Audit Firm"; the skill says a kind of an identity is named by the kind and goes in its domain's glossary (2026-11-01 19:04 ET)
+- [x] More terms removed ("yes, remove it" / by the same ruling): `AUDITED_BY` (no rule, no link), `INVESTMENT_ADVISER_TO` (adviser can be a person or a company: 6 of 2,409 filings in the October 2025 Form ADV capture are sole proprietorships; but no rule creates the link). `CUSTODIAN` kept (rules read it). 39 terms in `shared` (2026-11-01 19:16 ET)
+- [x] The 8 planned types stay as `mdm.relationships` assets, each description ending "(planned: no rule reads this type yet and no link is loaded)": written by hand in the local catalog; asset versions 1.4 to 1.5, certification unchanged (2026-11-01 19:16 ET)
+- [ ] Make the planned marker permanent: `catalog.py` writes it for any type no file under `rules/sources/` reads, with a test (a hand-written marker is overwritten by the next publish)
 - [ ] `Audit Firm`, `CUSTODIAN`, `AUDITED_BY` (if kept) placed in the `company` glossary, and the sibling profile terms (Adviser, Fund, Governed Role) decided
 - [ ] `CUSTODIAN` moved from `shared` to the `company` glossary
 - [ ] The other 44 terms walked one by one with the operator, each kept, moved or removed
