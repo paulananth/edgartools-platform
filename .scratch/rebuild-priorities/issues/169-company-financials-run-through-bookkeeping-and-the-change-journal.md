@@ -29,8 +29,8 @@ The company financials (facts, line items, measures) are built by hand: `rules/s
 - [x] (slice 1) A limited proof only: one Company's facts file, both orders, a second pass that changes nothing, an unchanged file skipped, a changed rule reprocessed. No full cohort rerun. Slice 1 done: a retry changes nothing and the verifier refuses when silver holds fewer keys
 - [ ] One real run is timed and its deadline sized from the measure (say the time before starting it)
 - [ ] The landing step writes `QUALITY_RESULTS_FILE`; the three silver tables get their first quality checks (operator decides the checks)
-- [ ] Stores and containers a test run leaves are removed
-- [ ] Learning → skill: `bookkeeping`, `change-journal` and `company-financials` skills name the target, the steps and the identity
+- [x] Stores and containers a test run leaves are removed (none left: docker lists only the catalog and shared stores, 2026-11-02 17:38 ET)
+- [x] Learning → skill (2026-11-02 17:38 ET): `bookkeeping` names `silver.land` and `silver.derive`; `company-financials` names the target, steps and identity and the whole-rebuild limit; `data-platform/COMBINING.md` now says a per-unit numbered source name cannot run as a target (found in ticket 172); `change-journal` stays independent of workloads, so no line
 
 ## What I found (2026-11-02 09:12 ET)
 
