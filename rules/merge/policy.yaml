@@ -389,7 +389,7 @@ automatic_rules:
 # linked through a GLEIF other name, a conflict in place of incorporation, or a
 # name another candidate holds (159, none a different entity; the operator
 # labelled 3 the same after Claude flagged a renamed predecessor). The evidence
-# is on the operator's machine, ~/.local/share/edgartools/clean-mdm/proving/t09-cascade/.
+# is on the operator's machine, ~/.local/share/edgartools/mdm/proving/t09-cascade/.
 - kind: company
   family: name_binding
   rule_id: sec-gleif-cascade-p5

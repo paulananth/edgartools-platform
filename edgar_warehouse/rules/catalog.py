@@ -54,7 +54,7 @@ from .mapdoc import critical_elements, mapped, paths, relationship_rows, winners
 
 SERVICE = "edgartools-rules"
 PIPELINES_SERVICE = SERVICE + "-pipelines"
-SOURCES, MDM, CLEAN = "sources", "mdm", "clean"
+SOURCES, MDM, MASTER_RECORDS = "sources", "mdm", "master_records"
 SILVER, RDM, CODE_SETS = "silver", "rdm", "code_sets"
 TEXT = "STRING"  # the catalog shows what a value means, not a database type
 # One relationship endpoint the rules name differently from its catalog domain.
@@ -184,10 +184,10 @@ def _dataset(source: str, code: str, contract: dict, kinds: list[str], fills: di
     lineage = []
     for kind in kinds:
         columns = [{"fromColumns": [f"{at}.{quote(p)}" for p in sorted(set(read))],
-                    "toColumn": fqn(SERVICE, MDM, CLEAN, kind, field)}
+                    "toColumn": fqn(SERVICE, MDM, MASTER_RECORDS, kind, field)}
                    for field, read in sorted(to_field.items()) if field in fills.get(kind, set())]
         if columns:
-            lineage.append({"from": at, "to": fqn(SERVICE, MDM, CLEAN, kind), "columns": columns,
+            lineage.append({"from": at, "to": fqn(SERVICE, MDM, MASTER_RECORDS, kind), "columns": columns,
                             "description": f"`{code}` fills these {kind} fields."})
     return table, lineage
 
@@ -521,7 +521,7 @@ def _data_classes(root: Path, tables: list[dict], kinds) -> dict:
              "description": _sentence(words.get(heading) or fallback, 300)}
             for name, heading, fallback in DATA_CLASSES]
     registered = _registered_names(root)
-    kind_names = {fqn(SERVICE, MDM, CLEAN, kind) for kind in kinds}
+    kind_names = {fqn(SERVICE, MDM, MASTER_RECORDS, kind) for kind in kinds}
     marks = []
     for table in tables:
         name = _table_name(table)
@@ -557,7 +557,7 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict], 
         for code in (props.get("from") or []) + (props.get("to") or []):
             ends.add(ENDPOINT_CATALOG_NAME.get(code, code))
     names = sorted(kinds | ends)
-    kind_tables = {fqn(SERVICE, MDM, CLEAN, kind): kind for kind in kinds}
+    kind_tables = {fqn(SERVICE, MDM, MASTER_RECORDS, kind): kind for kind in kinds}
     words = {heading: _sentence(description.split("Avoid:")[0], 240)
              for heading, description in _context_terms(root)}
     domains = []
@@ -678,7 +678,7 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict], 
             domain = ENDPOINT_CATALOG_NAME.get(code, code)
             add_relation(identity_of.get(domain), type_term, relation_type, display, description)
     def subject_assets(domain: str) -> list[str]:
-        prefix = fqn(SERVICE, MDM, CLEAN, domain)
+        prefix = fqn(SERVICE, MDM, MASTER_RECORDS, domain)
         return sorted(name for name, domains_ in membership.items()
                       if domain in domains_ and (name == prefix or f".{SOURCES}." in name) and name in present)
     facts = sorted(name for name in membership if name.endswith(("company_fact", "company_line_item", "company_measure")) and "company" in membership[name])
@@ -760,7 +760,7 @@ def _identifier_cases(kinds: dict, by_name: dict) -> list[dict]:
     """A kind's identifier limits, as the kind file states them, are its master checks."""
     cases = []
     for kind, rules in sorted(kinds.items()):
-        table = fqn(SERVICE, MDM, CLEAN, kind)
+        table = fqn(SERVICE, MDM, MASTER_RECORDS, kind)
         if table not in by_name:
             continue
         columns = {column["name"] for column in by_name[table]["columns"]}
@@ -883,7 +883,7 @@ def plan(root: Path | None = None) -> dict:
                             f"Filled by {filled}: the first with a value wins. "
                             f"Rule: {which} (rules/{at})."})
         tables.append({"name": kind, "displayName": _display(kind),
-                       "databaseSchema": fqn(SERVICE, MDM, CLEAN), "columns": columns,
+                       "databaseSchema": fqn(SERVICE, MDM, MASTER_RECORDS), "columns": columns,
                        "description": f"One {_display(kind)} in the master data. "
                                       "The first dataset with a value fills each field."
                                       + _kind_profile_text(kind, profiles)})
@@ -898,7 +898,7 @@ def plan(root: Path | None = None) -> dict:
                 "description": "Silver: every registered or profiled table and its fields, with their data quality rules."},
                {"name": RDM, "service": SERVICE, "description": "RDM: the code sets the profiled data needs."}]
               if silver_schemas else [])],
-        "schemas": schemas + [{"name": CLEAN, "database": fqn(SERVICE, MDM),
+        "schemas": schemas + [{"name": MASTER_RECORDS, "database": fqn(SERVICE, MDM),
                                "description": "The kinds MDM masters."}]
                    + ([{"name": "relationships", "database": fqn(SERVICE, MDM),
                         "description": "Pinned relationship types. One asset per type. The ends stay on the type."}]

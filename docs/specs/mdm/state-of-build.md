@@ -175,7 +175,7 @@ were previously installed there; keep their checksums unchanged.
 The prepared candidate is at:
 
 ```text
-~/.local/share/edgartools/clean-mdm/inputs/local-fewco-20260917-company-v2/
+~/.local/share/edgartools/mdm/inputs/local-fewco-20260917-company-v2/
 ```
 
 It contains Apple (CIK 320193), Microsoft (789019), and Amazon (1018724), sourced

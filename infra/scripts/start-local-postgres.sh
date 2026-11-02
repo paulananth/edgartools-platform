@@ -29,8 +29,8 @@
 set -euo pipefail
 
 ACTION=start
-CONTAINER="edgartools-clean-mdm-pg16"
-VOLUME="edgartools-clean-mdm-pg16-data"
+CONTAINER="edgartools-mdm-pg16"
+VOLUME="edgartools-mdm-pg16-data"
 IMAGE="postgres:16-alpine"
 USER_NAME="postgres"
 PASSWORD="test"
