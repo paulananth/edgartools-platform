@@ -1004,7 +1004,6 @@ def _publish_vocabulary(plan: dict, call: Call) -> None:
         _upsert(call, "/glossaries", glossary)
     for term in plan.get("glossary_terms") or []:
         body = {key: term[key] for key in ("name", "displayName", "description", "glossary")}
-        body["entityStatus"] = "Draft"
         expected = f"{body['glossary']}.{quote(body['name'])}"
         answer = call("PUT", "/glossaryTerms", body) or {}
         if answer.get("fullyQualifiedName") != expected:
@@ -1016,6 +1015,23 @@ def _publish_vocabulary(plan: dict, call: Call) -> None:
         _allow_several_domains(call)
     _publish_glossary_relation_types(plan, call)
     _publish_glossary_relations(plan, call)
+
+
+def _draft_terms(plan: dict, call: Call) -> None:
+    """A term is Draft, never Approved. The create body has no status field (2.0.2 swagger),
+    and later writes (the put, relations, tags on assets) put Approved back. A patch to one term
+    also resets its related terms, so patch, read each status back and patch what is not Draft
+    until none is. This is the last write of a publish; a repeat patch changes nothing."""
+    ids = [term["id"] for term in plan.get("glossary_terms") or [] if term.get("id")]
+    pending = list(ids)
+    for _ in range(len(ids) + 1):  # each pass can reset at most the other terms, so this many passes settle it
+        for term_id in pending:
+            call("PATCH", f"/glossaryTerms/{term_id}", [{"op": "add", "path": "/entityStatus", "value": "Draft"}])
+        pending = [term_id for term_id in ids
+                   if (call("GET", f"/glossaryTerms/{term_id}") or {}).get("entityStatus") != "Draft"]
+        if not pending:
+            return
+    raise CatalogError(f"The server keeps {len(pending)} glossary terms out of Draft")
 
 
 def _term_id(call: Call, fqn_name: str, known: dict[str, str]) -> str | None:
@@ -1194,7 +1210,7 @@ def publish(plan: dict, call: Call) -> dict:
     removed = {"tables": 0, "schemas": 0, "databases": 0, "lineage": 0}
     for table in _listed(call, "/tables", {"service": service}, service):
         if table["fullyQualifiedName"] not in ids:
-            call("DELETE", f"/tables/{table['id']}", params={"hardDelete": "true"})
+            call("DELETE", f"/tables/{table['id']}", params={"hardDelete": "true", "recursive": "true"})
             removed["tables"] += 1
     planned_schemas = {f"{s['database']}.{quote(s['name'])}" for s in plan["schemas"]}
     planned_databases = {fqn(service, d["name"]) for d in plan["databases"]}
@@ -1229,6 +1245,7 @@ def publish(plan: dict, call: Call) -> dict:
             if pipeline["fullyQualifiedName"] not in pipeline_ids:
                 call("DELETE", f"/pipelines/{pipeline['id']}", params={"hardDelete": "true"})
                 removed["pipelines"] = removed.get("pipelines", 0) + 1
+    _draft_terms(plan, call)
     return {"service": service, "tables": len(plan["tables"]), "lineage": len(plan["lineage"]),
             "pipelines": len(pipeline_ids), "removed": removed}
 

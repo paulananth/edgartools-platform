@@ -2,7 +2,7 @@
 
 Priority: 159. Map: [Rebuild priorities](../map.md). Opened 2026-11-01 19:35 ET, from ticket 158 (operator, 2026-11-01).
 
-Type: task. Status: in progress. Blocked by: none.
+Type: task. Status: resolved. Blocked by: none.
 
 ## Question
 
@@ -19,4 +19,6 @@ catalog publish would undo the placement the operator ruled in ticket 158. Can t
 - [x] A test states that no glossary is made for a `CONTEXT.md` section and that a platform word is not published (test_only_entity_terms_are_published_as_draft_terms, 2026-11-01 20:11 ET)
 - [x] A test states that an entry describing silver data (`Discretion`, `Holdings`) and a name ending in "Profile" are not published as terms (test_only_entity_terms_are_published_as_draft_terms, 2026-11-01 20:11 ET)
 - [x] `catalog.py` writes them (29 catalog tests pass, plan = the 22 live terms, 2026-11-01 20:11 ET); the three review axes; PR
-- [ ] Learning → skill: none expected (ticket 158 holds the rules)
+- [x] Publish to the local OpenMetadata and read back (2026-11-01 20:37 ET): `rules catalog publish` then `check` matched (62 assets, 22 terms, 29 quality cases, 13 pipelines). It removed the 3 old `sec.submissions.company` pipelines and the old gleif pipeline, 1 schema, 2 tables.
+- [x] Found while publishing: the term create body has no status field; a delete of a renamed source's table needs `recursive=true`; the server's glossary approval workflow re-approves terms (suspended on the local server). Fixed in the publisher with tests (`test_a_term_is_written_as_draft_never_approved`, `test_a_patch_that_puts_a_related_term_back_to_approved_is_patched_again`) (2026-11-01 20:37 ET)
+- [x] Learning → skill: `skills/openmetadata/SKILL.md` ("Readback and reconciliation traps" and "Local server") now name the three traps and where quality cases and mappings show (2026-11-01 20:37 ET)
