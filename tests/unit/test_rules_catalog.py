@@ -251,10 +251,17 @@ def test_only_entity_terms_are_published_as_draft_terms():
     assert {glossary["name"] for glossary in plan["glossaries"]} == domains
 
 
-def test_a_term_is_written_as_draft_never_approved():
+def test_a_publish_leaves_the_term_status_to_the_server_unless_asked():
     plan = catalog.plan()
     server = _Server(plan)
     catalog.publish(plan, server)
+    assert not [path for path, _ in server.patches if path.startswith("/glossaryTerms/")]
+
+
+def test_a_term_is_written_as_draft_never_approved_when_asked():
+    plan = catalog.plan()
+    server = _Server(plan)
+    catalog.publish(plan, server, draft_terms=True)
     assert server.term_bodies and not any("entityStatus" in body for body in server.term_bodies)  # the create body has no such field
     patched = [body for path, body in server.patches if path.startswith("/glossaryTerms/")]
     assert len(patched) == len(server.term_bodies)
@@ -278,7 +285,7 @@ def test_a_patch_that_puts_a_related_term_back_to_approved_is_patched_again():
             return answer
 
     server = Resetting(plan)
-    catalog.publish(plan, server)
+    catalog.publish(plan, server, draft_terms=True)
     again = [path for path, _ in server.patches if path == "/glossaryTerms/Company Identity"]
     assert len(again) == 2
     assert server.draft >= {term["name"] for term in plan["glossary_terms"]}
@@ -372,7 +379,7 @@ def test_catalog_publish_missing_configuration_preserves_usage_exit_code(capsys,
     monkeypatch.delenv("OPENMETADATA_TOKEN", raising=False)
     monkeypatch.setattr(catalog, "connect", lambda *args: pytest.fail("missing config must stop before connect"))
 
-    assert rules_cli._catalog(Namespace(action="publish", root="rules")) == 2
+    assert rules_cli._catalog(Namespace(action="publish", root="rules", draft_terms=False)) == 2
 
     output = capsys.readouterr()
     report = json.loads(output.out)
@@ -387,7 +394,7 @@ def test_catalog_publish_requires_matching_readback_and_returns_structured_resul
     monkeypatch.setenv("OPENMETADATA_TOKEN", "header-secret")
     monkeypatch.setattr(catalog, "plan", lambda root: plan)
     monkeypatch.setattr(catalog, "connect", lambda url, token: calls.append((url, token)) or (lambda *args, **kwargs: {}))
-    monkeypatch.setattr(catalog, "publish", lambda selected, call: calls.append("publish") or {
+    monkeypatch.setattr(catalog, "publish", lambda selected, call, **kw: calls.append("publish") or {
         "service": "edgartools-rules", "tables": 3, "pipelines": 2, "lineage": 2,
         "removed": {"tables": 0, "schemas": 0, "databases": 0, "lineage": 0},
     })
@@ -395,7 +402,7 @@ def test_catalog_publish_requires_matching_readback_and_returns_structured_resul
         "ok": True, "tables": 3, "pipelines": 2, "differences": [],
     })
 
-    assert rules_cli._catalog(Namespace(action="publish", root="rules")) == 0
+    assert rules_cli._catalog(Namespace(action="publish", root="rules", draft_terms=False)) == 0
 
     output = capsys.readouterr()
     report = json.loads(output.out)
@@ -416,13 +423,13 @@ def test_catalog_publish_failure_names_stage_and_redacts_error_details(capsys, m
     monkeypatch.setattr(catalog, "plan", lambda root: _outcome_plan())
     monkeypatch.setattr(catalog, "connect", lambda url, token: lambda *args, **kwargs: {})
 
-    def fail_publish(plan, call):
+    def fail_publish(plan, call, **kw):
         raise catalog.CatalogError("PUT /tables: HTTP 401 body contains do-not-print")
 
     monkeypatch.setattr(catalog, "publish", fail_publish)
     monkeypatch.setattr(catalog, "verify", lambda *args: pytest.fail("failed publish cannot be confirmed"))
 
-    assert rules_cli._catalog(Namespace(action="publish", root="rules")) == 1
+    assert rules_cli._catalog(Namespace(action="publish", root="rules", draft_terms=False)) == 1
 
     output = capsys.readouterr()
     report = json.loads(output.out)
@@ -438,14 +445,14 @@ def test_catalog_partial_publish_failure_requires_readback_before_retry(capsys, 
     monkeypatch.setattr(catalog, "plan", lambda root: _outcome_plan())
     monkeypatch.setattr(catalog, "connect", lambda url, token: lambda *args, **kwargs: {"ok": True})
 
-    def fail_after_write(plan, call):
+    def fail_after_write(plan, call, **kw):
         call("PUT", "/tables", {})
         raise catalog.CatalogError("PUT /tables: HTTP 503")
 
     monkeypatch.setattr(catalog, "publish", fail_after_write)
     monkeypatch.setattr(catalog, "verify", lambda *args: pytest.fail("readback is deferred after failure"))
 
-    assert rules_cli._catalog(Namespace(action="publish", root="rules")) == 1
+    assert rules_cli._catalog(Namespace(action="publish", root="rules", draft_terms=False)) == 1
 
     output = capsys.readouterr()
     report = json.loads(output.out)
@@ -459,14 +466,14 @@ def test_catalog_publish_with_remote_drift_is_partial(capsys, monkeypatch):
     monkeypatch.setenv("OPENMETADATA_TOKEN", "local-token")
     monkeypatch.setattr(catalog, "plan", lambda root: _outcome_plan())
     monkeypatch.setattr(catalog, "connect", lambda url, token: lambda *args, **kwargs: {})
-    monkeypatch.setattr(catalog, "publish", lambda plan, call: {
+    monkeypatch.setattr(catalog, "publish", lambda plan, call, **kw: {
         "service": "edgartools-rules", "removed": {"tables": 0},
     })
-    monkeypatch.setattr(catalog, "verify", lambda plan, call: {
+    monkeypatch.setattr(catalog, "verify", lambda plan, call, **kw: {
         "ok": False, "tables": 3, "pipelines": 2, "differences": ["tables: different membership"],
     })
 
-    assert rules_cli._catalog(Namespace(action="publish", root="rules")) == 1
+    assert rules_cli._catalog(Namespace(action="publish", root="rules", draft_terms=False)) == 1
 
     output = capsys.readouterr()
     report = json.loads(output.out)
@@ -482,7 +489,7 @@ def test_catalog_check_is_read_only_and_reports_confirmed_readback(capsys, monke
     monkeypatch.setattr(catalog, "plan", lambda root: _outcome_plan())
     monkeypatch.setattr(catalog, "connect", lambda url, token: lambda *args, **kwargs: {})
     monkeypatch.setattr(catalog, "publish", lambda *args: pytest.fail("check must not publish"))
-    monkeypatch.setattr(catalog, "verify", lambda plan, call: {
+    monkeypatch.setattr(catalog, "verify", lambda plan, call, **kw: {
         "ok": True, "tables": 3, "pipelines": 2, "differences": [],
     })
 

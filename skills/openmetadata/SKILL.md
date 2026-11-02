@@ -264,7 +264,8 @@ or any other pair the plan does not name with
 The separate RDF glossary graph stays unused unless that service is enabled.
 
 `rules catalog publish` applies the built-in certification and the `data_class`
-tags below, and writes every term as Draft. It writes the terms, tags and
+tags below. It leaves each term's status to the server unless `--draft-terms` is given
+(operator, 2026-11-02: "stop forcing Draft on the local catalog"). It writes the terms, tags and
 descriptions this section names; edit none of them in the live catalog by hand.
 A second write of mention edges or endpoint domain links is how overstatement
 comes back. A relationship type that no file under `rules/sources/` names gets
@@ -339,12 +340,12 @@ reference list.
   removes the old ones in the same run; do not delete them by hand.
 - A glossary term has no status in its create body (`CreateGlossaryTerm`, 2.0.2).
   A put, a relation write and a tag on an asset all leave it `Approved`, and a
-  patch of one term resets its related terms. The publisher patches
-  `/entityStatus` to `Draft` as its last write, reads each status back and
-  patches again until none is left.
+  patch of one term resets its related terms. With `--draft-terms` the publisher
+  patches `/entityStatus` to `Draft` as its last write, reads each status back and
+  patches again until none is left. Without it, a publish leaves the server's status.
 - The server's `GlossaryTermApprovalWorkflow` approves any created or updated
   term that has no reviewer, a few seconds after the write. It keeps terms
-  `Approved` whatever the publisher does. On the local server it is suspended:
+  `Approved` whatever `--draft-terms` does. To see Draft on a server, suspend it:
   `PUT /api/v1/governance/workflowDefinitions/name/GlossaryTermApprovalWorkflow/suspend`
   (undo with `/resume`). Check `suspended` is true before a publish.
 - What the catalog holds for quality and mapping: a quality case sits on the table

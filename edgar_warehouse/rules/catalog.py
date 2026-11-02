@@ -1204,7 +1204,7 @@ def _publish_marks(plan: dict, call: Call, ids: dict[str, str]) -> None:
                       "labelType": "Manual", "state": "Suggested"}}])
 
 
-def publish(plan: dict, call: Call) -> dict:
+def publish(plan: dict, call: Call, draft_terms: bool = False) -> dict:
     """Make the catalog equal to `plan`: create or update everything it names,
     then delete, inside its own service only, the tables, schemas and lineage
     it no longer names. Publishing the same plan again changes nothing."""
@@ -1318,7 +1318,8 @@ def publish(plan: dict, call: Call) -> dict:
             if pipeline["fullyQualifiedName"] not in pipeline_ids:
                 call("DELETE", f"/pipelines/{pipeline['id']}", params={"hardDelete": "true"})
                 removed["pipelines"] = removed.get("pipelines", 0) + 1
-    _draft_terms(plan, call)
+    if draft_terms:
+        _draft_terms(plan, call)
     return {"service": service, "tables": len(plan["tables"]), "lineage": len(plan["lineage"]),
             "pipelines": len(pipeline_ids), "removed": removed}
 

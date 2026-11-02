@@ -312,7 +312,7 @@ def _catalog(args):
         return _catalog_output(report)
 
     try:
-        sent = catalog.publish(plan, call)
+        sent = catalog.publish(plan, call, draft_terms=args.draft_terms)
     except catalog.CatalogError as error:
         cause = _catalog_cause(error, catalog)
         rejected = re.search(r"HTTP 4\d\d\b", cause) is not None and completed_writes == 0
@@ -408,6 +408,9 @@ def register(subparsers):
     catalog.add_argument("action", choices=("plan", "publish", "check"),
                          help="plan: preview; publish: reconcile OpenMetadata; check: read back metadata and lineage")
     catalog.add_argument("--root", default=str(files.ROOT))
+    catalog.add_argument("--draft-terms", action="store_true",
+                         help="publish: set every glossary term to Draft (a steward approves it); "
+                              "by default the server's own status is left alone")
     catalog.set_defaults(handler=_catalog)
     test = commands.add_parser(
         "test", help="A source version's test run on local stores, from a capture already made (two passes)")
