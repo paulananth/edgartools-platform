@@ -270,8 +270,10 @@ A second write of mention edges or endpoint domain links is how overstatement
 comes back. A relationship type that no file under `rules/sources/` names gets
 "(planned: no rule reads this type yet and no link is loaded)" in its asset
 description and no term. Each data product carries the identity term of its
-domain, `Suggested`. The `processing_layer` tag is named for a later publisher
-change and is not written yet.
+domain, `Suggested`. The publisher writes the `processing_layer` classification
+(tags `mdm`, `rdm`, `silver`) on every table of those three stores. A source
+dataset is captured input and carries no layer tag. `check` reports a table
+whose class or layer tag is missing.
 
 - `data_class`. One tag for each class the data-modeling skill names and this
   catalog can hold: master data on a kind table, reference data on a code-set
@@ -281,10 +283,10 @@ change and is not written yet.
   in the prepared store has no data class. A source dataset has no data class:
   data-modeling does not name a source class. The metadata class stays unused
   until that store is in the catalog.
-- `processing_layer`. One tag per database the rules catalog plan already
-  emits. The tag name is that database name. It is a category. It is not a
-  subject domain, and it does not follow from a folder name the plan does not
-  use.
+- `processing_layer`. One tag per processing store: `mdm`, `rdm`, `silver`
+  (operator, 2026-11-02: "mdm, rdm, silver"). The tag name is that database
+  name. It is a category. It is not a subject domain, and it does not follow
+  from a folder name the plan does not use. A source dataset carries none.
 - Built-in `Certification`, which is mutually exclusive. It is the asset field
   `certification`, read with `fields=certification`. The screen reads
   `certification.tagLabel`. It is not a member of `tags`. A patch that adds

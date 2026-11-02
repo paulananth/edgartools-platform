@@ -105,7 +105,7 @@ class _Server:
         self.plan, self.calls, self.ids = plan, [], {}
         self.term_bodies, self.product_bodies, self.patches, self.draft = [], [], [], set()
         self.table_delete_params = []
-        self.profiles = {}
+        self.profiles, self.tags = {}, {}
 
     def __call__(self, method, path, body=None, params=None):
         self.calls.append((method, path))
@@ -113,8 +113,14 @@ class _Server:
             self.table_delete_params.append(params)
         if method == "PATCH":
             self.patches.append((path, body))
+            for op in body if isinstance(body, list) else []:
+                if path.startswith("/tables/") and op.get("path") == "/tags/-":
+                    self.tags.setdefault(path.removeprefix("/tables/"), []).append({"tagFQN": op["value"]["tagFQN"]})
             if path.startswith("/glossaryTerms/"):
                 self.draft.add(path.removeprefix("/glossaryTerms/"))
+        if method == "GET" and path.startswith("/tables/name/") and (params or {}).get("fields") == "tags":
+            from urllib.parse import unquote
+            return {"tags": self.tags.get(self.ids.get(unquote(path.removeprefix("/tables/name/"))), [])}
         if method == "GET" and path.endswith("/tableProfile/latest"):
             found = self.profiles.get(path.removeprefix("/tables/").removesuffix("/tableProfile/latest"))
             return {"profile": found} if found else {}
@@ -683,3 +689,25 @@ def test_each_identifier_limit_of_a_kind_is_a_check_on_its_master_table():
     assert "at most 1 `cik` value" in forward["description"] and "merge/kinds/company.yaml" in reverse["description"]
     assert "security.cusip-per-master" in cases and not any(n.startswith("security.") and n.endswith("masters-per-value")
                                                             for n in cases)
+
+
+def test_master_reference_and_silver_tables_carry_their_processing_layer():
+    plan = catalog.plan(files.ROOT)
+    layers = {c["name"]: c for c in plan["classifications"]}["processing_layer"]
+    assert [t["name"] for t in layers["tags"]] == ["mdm", "rdm", "silver"]
+    marks = {item["table"]: item["tag"] for item in plan["layer_marks"]}
+    assert marks[f"{catalog.SERVICE}.mdm.clean.company"] == "processing_layer.mdm"
+    assert {tag.split(".")[1] for tag in marks.values()} == {"mdm", "rdm", "silver"}
+    assert not any(".sources." in name for name in marks)
+    assert len(marks) == sum(1 for t in plan["tables"] if not t["databaseSchema"].split(".")[1] == "sources")
+
+
+def test_publish_tags_each_table_with_its_layer_and_check_says_when_a_tag_is_missing():
+    plan = catalog.plan()
+    server = _Server(plan)
+    catalog.publish(plan, server)
+    assert not [d for d in catalog.verify(plan, server)["differences"] if "missing tag" in d]
+    company = "edgartools-rules.mdm.clean.company"
+    server.tags[server.ids[company]] = [t for t in server.tags[server.ids[company]]
+                                        if t["tagFQN"] != "processing_layer.mdm"]
+    assert f"{company}: missing tag processing_layer.mdm" in catalog.verify(plan, server)["differences"]
