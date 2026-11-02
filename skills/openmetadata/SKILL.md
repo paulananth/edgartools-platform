@@ -351,6 +351,8 @@ reference list.
   `claim.reverse` of each identifier in `merge/kinds/<kind>.yaml`, none where the
   limit is null), and a mapping is a column in the lineage of the
   kind table (the Lineage tab, columns shown), not a column of the table page.
+  A code list's edge maps its `code` to each column that holds those codes. A
+  captured file feed's edge to its dataset stays table to table: a file has no columns.
   A page with an empty Quality tab is a table with no configured check.
 
 - A profile has one native place, the table profile. `PUT /api/v1/tables/{id}/tableProfile`

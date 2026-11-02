@@ -727,3 +727,13 @@ def test_check_says_when_a_table_is_not_certified_as_planned():
     assert not [d for d in catalog.verify(plan, server)["differences"] if "not certified" in d]
     server.certified = {}
     assert any("not certified Certification.Gold" in d for d in catalog.verify(plan, server)["differences"])
+
+
+def test_a_code_list_edge_maps_the_code_to_the_column_that_holds_it():
+    plan = catalog.plan(files.ROOT)
+    edges = [e for e in plan["lineage"] if ".rdm." in e["from"]]
+    assert edges and all(e["columns"] for e in edges)
+    edge = next(e for e in edges if e["from"].endswith('"requests.idType"'))
+    assert edge["columns"][0]["fromColumns"][0].endswith('"requests.idType".code')
+    assert edge["columns"][0]["toColumn"].startswith(edge["to"] + ".")
+    assert not any(e["columns"] for e in plan["lineage"] if ".sources." in e["from"] and ".sources." in e["to"])

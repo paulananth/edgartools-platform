@@ -2,7 +2,7 @@
 
 Priority: 164. Map: [Rebuild priorities](../map.md). Opened 2026-11-02 06:45 ET (same request as 163).
 
-Type: task. Status: open. Blocked by: none.
+Type: task. Status: resolved. Blocked by: none.
 
 ## Question
 
@@ -12,7 +12,7 @@ Answer: the 13 code-list edges can (the list's `code` column to the silver colum
 
 ## Parts
 
-- [ ] GoF consult before the code
-- [ ] The 13 code-list edges carry `code` to the using column (test: one edge in a copy of the rules)
-- [ ] `check` matches after a publish; the live edges read back with columns
-- [ ] Learning → skill: `skills/openmetadata/SKILL.md` says which edges carry columns and why the file edges do not
+- [x] GoF consult before the code: leave it; `uses` keeps the column beside the table, no new class (2026-11-02 07:29 ET)
+- [x] The 13 code-list edges carry `code` to the using column (`test_a_code_list_edge_maps_the_code_to_the_column_that_holds_it`, 2026-11-02 07:29 ET)
+- [x] `check` matched after a publish; 13 of 13 code-list edges read back with columns (2026-11-02 07:31 ET)
+- [x] Learning → skill: `skills/openmetadata/SKILL.md` says which edges carry columns and why the file edges do not (2026-11-02 07:31 ET)
