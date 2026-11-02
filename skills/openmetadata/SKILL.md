@@ -87,6 +87,11 @@ do not invent a type.
   `mdm.relationships`. Its description is the code's definition, and it states
   the `from` ends, the `to` ends, and the capacities. The rules catalog plan
   already writes that description. Keep it.
+- A type that no file under `rules/sources/` reads, and no loaded link uses,
+  stays an asset, because the pinned list is the source, and its description
+  ends "(planned: no rule reads this type yet and no link is loaded)". It has
+  no glossary term and no Relations Graph edge until a rule reads it (operator,
+  2026-11-01).
 - A child code is a capacity of its parent type. It is not another asset, not
   another domain, and not another relationship.
 - The type is one asset. Do not place that asset on every endpoint domain.
