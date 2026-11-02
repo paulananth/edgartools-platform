@@ -331,6 +331,28 @@ reference list.
   explicit ownership receipt. Domains, glossaries, terms and quality resources
   are global and are not assumed removed when a service is reset.
 
+- A renamed source leaves its old tables behind. Such a table still holds its
+  test cases, so `DELETE /tables/{id}?hardDelete=true` answers 400 "table is not
+  empty"; the publisher deletes with `recursive=true` (2026-11-01, a
+  source ID rename). A publish that names a
+  renamed source creates its new pipelines, schema, tables and test cases and
+  removes the old ones in the same run; do not delete them by hand.
+- A glossary term has no status in its create body (`CreateGlossaryTerm`, 2.0.2).
+  A put, a relation write and a tag on an asset all leave it `Approved`, and a
+  patch of one term resets its related terms. The publisher patches
+  `/entityStatus` to `Draft` as its last write, reads each status back and
+  patches again until none is left.
+- The server's `GlossaryTermApprovalWorkflow` approves any created or updated
+  term that has no reviewer, a few seconds after the write. It keeps terms
+  `Approved` whatever the publisher does. On the local server it is suspended:
+  `PUT /api/v1/governance/workflowDefinitions/name/GlossaryTermApprovalWorkflow/suspend`
+  (undo with `/resume`). Check `suspended` is true before a publish.
+- What the catalog holds for quality and mapping: a quality case sits on the table
+  it checks (29 cases on 10 tables: source datasets and two silver tables, none
+  on a master kind table), and a mapping is a column in the lineage of the
+  kind table (the Lineage tab, columns shown), not a column of the table page.
+  A page with an empty Quality tab is a table with no configured check.
+
 ## Operator outcome report
 
 Keep configuration, send and confirmation as three separate facts:
@@ -436,6 +458,8 @@ Check Docker first. If it is unreachable, report that blocker. Preserve other
 users' containers and volumes. A cold start may take 10–20 minutes. The compose
 file accepts `CATALOG_SERVER_HEAP_OPTS` and `CATALOG_SEARCH_HEAP_OPTS`.
 
+A login token of the local account expires within the hour; a publish that
+answers 401 needs a new one (`POST /api/v1/users/login`, password base64).
 Supply `OPENMETADATA_URL` and `OPENMETADATA_TOKEN` from the private environment.
 Never print them. The URL passed to `catalog.connect` is the server root. That
 function adds `/api/v1`.

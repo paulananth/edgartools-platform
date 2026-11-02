@@ -103,10 +103,20 @@ class _Server:
 
     def __init__(self, plan: dict):
         self.plan, self.calls, self.ids = plan, [], {}
-        self.term_bodies, self.product_bodies = [], []
+        self.term_bodies, self.product_bodies, self.patches, self.draft = [], [], [], set()
+        self.table_delete_params = []
 
     def __call__(self, method, path, body=None, params=None):
         self.calls.append((method, path))
+        if method == "DELETE" and path.startswith("/tables/"):
+            self.table_delete_params.append(params)
+        if method == "PATCH":
+            self.patches.append((path, body))
+            if path.startswith("/glossaryTerms/"):
+                self.draft.add(path.removeprefix("/glossaryTerms/"))
+        if method == "GET" and path.startswith("/glossaryTerms/"):
+            term_id = path.removeprefix("/glossaryTerms/")
+            return {"id": term_id, "entityStatus": "Draft" if term_id in self.draft else "Approved"}
         if method == "PUT" and path == "/dataQuality/testCases":
             link = body.get("entityLink") or ""
             table = link.removeprefix("<#E::table::").split("::columns::")[0].removesuffix(">")
@@ -240,7 +250,33 @@ def test_a_term_is_written_as_draft_never_approved():
     plan = catalog.plan()
     server = _Server(plan)
     catalog.publish(plan, server)
-    assert server.term_bodies and all(body.get("entityStatus") == "Draft" for body in server.term_bodies)
+    assert server.term_bodies and not any("entityStatus" in body for body in server.term_bodies)  # the create body has no such field
+    patched = [body for path, body in server.patches if path.startswith("/glossaryTerms/")]
+    assert len(patched) == len(server.term_bodies)
+    assert all(ops == [{"op": "add", "path": "/entityStatus", "value": "Draft"}] for ops in patched)
+
+
+def test_a_patch_that_puts_a_related_term_back_to_approved_is_patched_again():
+    plan = catalog.plan()
+
+    last = plan["glossary_terms"][-1]["name"]
+
+    class Resetting(_Server):
+        """The 2.0.2 server resets a related term when another term is patched (seen 2026-11-01)."""
+        resets = 0
+
+        def __call__(self, method, path, body=None, params=None):
+            answer = super().__call__(method, path, body, params)
+            if method == "PATCH" and path == "/glossaryTerms/" + last and not self.resets:
+                self.resets += 1
+                self.draft.discard("Company Identity")  # the fake's term id is its name
+            return answer
+
+    server = Resetting(plan)
+    catalog.publish(plan, server)
+    again = [path for path, _ in server.patches if path == "/glossaryTerms/Company Identity"]
+    assert len(again) == 2
+    assert server.draft >= {term["name"] for term in plan["glossary_terms"]}
 
 
 def test_each_table_carries_its_data_class():
@@ -462,6 +498,8 @@ def test_publish_deletes_only_what_the_rules_no_longer_name():
     company = server.ids["edgartools-rules.mdm.clean.company"]
     feed = server.ids['edgartools-rules.sources.gleif."gleif.relationships.v1"']
     assert deletes == ["/tables/id-old", "/databaseSchemas/id-gone", f"/lineage/table/{feed}/table/{company}"]
+    # a renamed source's old table still holds test cases: the server refuses a delete that is not recursive
+    assert server.table_delete_params == [{"hardDelete": "true", "recursive": "true"}]
     assert result["removed"] == {"tables": 1, "schemas": 1, "databases": 0, "lineage": 1}
     assert sum(1 for method, path in server.calls if (method, path) == ("PUT", "/lineage")) == len(plan["lineage"])
     posts = [path for method, path in server.calls if method == "POST" and path.endswith("/relations")]
