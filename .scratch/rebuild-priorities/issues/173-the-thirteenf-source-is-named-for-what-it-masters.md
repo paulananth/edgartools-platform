@@ -28,3 +28,7 @@ Rules approval, under the standing words of 2026-10-15 ("Approved the rules alwa
 
 The stamps on this ticket's parts were written together when it closed, not as each part finished.
 
+## CI (2026-11-02 13:10 ET)
+
+The first CI run failed two tests. `test_the_mastering_target_prepares_what_the_in_process_preparation_did` pins the merge-policy digest in `tests/integration/fixtures/company-mastering-records.json`; the Security rules changed, so the digest legitimately changed (`e3fed913...` to `634a5120...`, the value `control_contract.digest` gives for the policy) and the fixture is updated. I had not run that Postgres test locally, only the four that use the source: the rule is to name every test that pins what the change alters, and a pinned digest is one. `test_concurrent_claim_and_cross_run_takeover_preserve_fencing` (MySQL, row lock "NOWAIT") passes twice locally with this change and does not touch rules; treated as a timing flake and re-run in CI.
+
