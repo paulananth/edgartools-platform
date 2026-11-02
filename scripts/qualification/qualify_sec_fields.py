@@ -27,7 +27,7 @@ def qualify(capture,limit):
     refs.sort(key=lambda ref:hashlib.sha256(ref['key'].encode()).hexdigest());refs=refs[:limit]
     if len(refs)!=limit or len({ref['key'] for ref in refs})!=limit:raise ValueError('distinct capture count')
     sources=('sec.company','sec.submissions.person')
-    contracts={source:next(iter(files.source(source)['mdm'].values()))['contract'] for source in sources}
+    contracts={source:next(iter(files.source(source)['dataset_contracts'].values()))['contract'] for source in sources}
     retained=copy.deepcopy(contracts)
     for body in retained.values():body['adapter'].pop('reading')
     policy=files.policy()
@@ -58,7 +58,7 @@ def qualify(capture,limit):
                 except adapters.UnsupportedRecord as error:return {'reason':error.reason,'detail':error.detail,'kind':error.probable_kind}
             if digest(fields(contracts[source]))!=digest(fields(retained[source])):raise ValueError('mapped/quality mismatch')
             publication={'publication_key':'field-qualification','revision':1,'artifact_sha256':ref['sha256'],'member':ref['key']}
-            code=next(iter(files.source(source)['mdm']))
+            code=next(iter(files.source(source)['dataset_contracts']))
             def normalized(body):
                 try:return {'assertion':adapters.normalize(row,source_code=code,contract=body,publication=publication,policy=policy)}
                 except adapters.UnsupportedRecord as error:return {'reason':error.reason,'detail':error.detail,'kind':error.probable_kind}

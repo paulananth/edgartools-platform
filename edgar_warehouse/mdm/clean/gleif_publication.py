@@ -55,7 +55,7 @@ def dataset_contract(member: str, *, level1_source: str | None = None) -> dict:
     names, at both ends; `level1_source` replaces it for a caller that
     registers Level 1 under another code.
     """
-    for entry in files.source("gleif")["mdm"].values():
+    for entry in files.source("gleif")["dataset_contracts"].values():
         contract = entry["contract"]
         if contract["adapter"]["native_member"] == member:
             if level1_source is not None:

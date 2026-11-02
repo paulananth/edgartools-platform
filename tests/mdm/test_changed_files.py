@@ -74,7 +74,7 @@ def test_forcing_names_every_file_and_says_so(tmp_path):
 
 
 def test_other_rules_or_another_shared_input_is_another_identity():
-    reading = {"read": {"format": "json"}, "mdm": {}}
+    reading = {"read": {"format": "json"}, "dataset_contracts": {}}
     base = changed_files.identity(reading, "p1", [{"name": "census", "sha256": "a" * 64}])
     assert base == changed_files.identity(reading, "p1", [{"name": "census", "sha256": "a" * 64}])
     assert base != changed_files.identity({**reading, "read": {"format": "xml"}}, "p1",

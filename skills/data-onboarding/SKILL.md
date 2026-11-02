@@ -72,7 +72,7 @@ them in PRs. [REFERENCE.md](REFERENCE.md) is the contract language.
 
 | File | What it holds |
 |---|---|
-| `rules/sources/<source>/source.yaml` | The feed: `source`, `bronze` and `mdm` (one Dataset Contract per source code). Its `bookkeeping` section, which runs the feed into silver and MDM, belongs to the Bookkeeping skill. |
+| `rules/sources/<source>/source.yaml` | The feed: `source`, `bronze` and `dataset_contracts` (one Dataset Contract per source code). Its `bookkeeping` section, which runs the feed into silver and MDM, belongs to the Bookkeeping skill. |
 | `rules/source-sequence.yaml` | One line per source folder, naming its Bookkeeping target (or `null` when no target is registered yet) and preferred `after` order. Every folder needs both a `source.yaml` (even one that only names the source and reads nothing) and a sequence entry. Every source must declare its intended `bookkeeping.targets` in `source.yaml`; a missing target or `target: null` is an explicit unregistered/not-runnable gap to resolve before claiming a complete pipeline. `after` is not a runtime dependency. Suite tests walk both files (ticket 45). |
 | `rules/sources/<source>/quality.yaml` | The feed's data quality checks and fixes |
 | `rules/sources/<source>/silver-<table>.yaml` | A silver table spec, one file per table (silver target): reviewed in the PR, registered from this file |
@@ -98,7 +98,7 @@ not evidence that its workers exist; check every profile before submitting.
 Every step says what differs for each target.
 
 - **MDM target.** The feed's records become MDM records through its
-  Dataset Contract (`mdm` section) and its kind's merge rules. Everything in
+  Dataset Contract (`dataset_contracts` section) and its kind's merge rules. Everything in
   this skill builds it.
 - **Silver target.** A transaction or published reference part lands in a
   silver table made from its approved silver table spec (the part's `silver`
@@ -568,7 +568,7 @@ starting from its "Defaults".
   YAML would guess), that each Bookkeeping target and the acquisition hold,
   and that the merge rules pass.
   Run it with no `--source` after a change to the merge rules.
-- Write `source`, `bronze`, `execution`, `read` and `mdm` for a configured
+- Write `source`, `bronze`, `execution`, `read` and `dataset_contracts` for a configured
   captured-file path. The source worker requires
   `execution: {profile: source.read, workers: 1, max_artifacts: 1}`; workers
   may be 1 or 2 and max_artifacts 1 to 512 (one reading reads many documents:

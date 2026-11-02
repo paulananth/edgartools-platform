@@ -102,6 +102,9 @@ DROP TRIGGER IF EXISTS rules_insert
 -- statement boundary
 CREATE TRIGGER rules_insert BEFORE INSERT ON rule_version FOR EACH ROW
 BEGIN
+  IF NEW.kind='source' AND JSON_CONTAINS_PATH(NEW.body,'one','$.mdm') THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Dataset Contracts are in dataset_contracts, not mdm (ticket 171); save the source again';
+  END IF;
   IF NEW.status<>'draft' OR NEW.proof IS NOT NULL OR NEW.batch_hash IS NOT NULL
     OR NEW.approved_by IS NOT NULL OR NEW.approved_at IS NOT NULL OR NEW.proved_at IS NOT NULL
     OR NEW.approved_words IS NOT NULL OR NEW.approval_overrule IS NOT NULL
@@ -122,6 +125,9 @@ DROP TRIGGER IF EXISTS rules_update
 CREATE TRIGGER rules_update BEFORE UPDATE ON rule_version FOR EACH ROW
 BEGIN
   DECLARE old_rank BIGINT; DECLARE new_rank BIGINT;
+  IF NEW.kind='source' AND JSON_CONTAINS_PATH(NEW.body,'one','$.mdm') AND NEW.status IN ('proven','active') THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Dataset Contracts are in dataset_contracts, not mdm (ticket 171); save the source again';
+  END IF;
   IF NOT (NEW.kind<=>OLD.kind) OR NOT (NEW.name<=>OLD.name) OR NOT (NEW.version<=>OLD.version)
     OR NOT (NEW.body<=>OLD.body) OR NOT (NEW.digest<=>OLD.digest)
     OR NOT (NEW.created_by<=>OLD.created_by) OR NOT (NEW.created_at<=>OLD.created_at) THEN
@@ -171,11 +177,11 @@ BEGIN
     END IF;
   END IF;
   IF NEW.status='active' THEN
-    IF NEW.proof IS NULL OR ((NEW.kind='merge' OR JSON_CONTAINS_PATH(NEW.body,'one','$.mdm','$.bookkeeping.targets.mdm'))
+    IF NEW.proof IS NULL OR ((NEW.kind='merge' OR JSON_CONTAINS_PATH(NEW.body,'one','$.dataset_contracts','$.bookkeeping.targets.mdm'))
                              AND NEW.approved_by IS NULL) THEN
       SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Activation requires proof and MDM approval';
     END IF;
-    IF (NEW.kind='merge' OR (NEW.kind='source' AND JSON_CONTAINS_PATH(NEW.body,'one','$.mdm')))
+    IF (NEW.kind='merge' OR (NEW.kind='source' AND JSON_CONTAINS_PATH(NEW.body,'one','$.dataset_contracts')))
       AND NOT (JSON_UNQUOTE(JSON_EXTRACT(NEW.clean_mdm,'$.rules_digest'))<=>NEW.digest) THEN
       SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Activation requires an MDM handoff receipt for this rule';
     END IF;

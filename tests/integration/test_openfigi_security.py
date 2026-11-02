@@ -180,7 +180,7 @@ def prepared_records(root: Path, words: tuple[str, ...] = ("cusip", "isin"),
         "table": "security", "record_column": "record", "dataset": CODE, "policy": "0" * 64,
         "consumer": "check", "batch_id": "check-openfigi", "as_of": "2026-10-17T00:00:00+00:00"})
     refused: dict[str, str] = {}
-    out = chain.records(store, root / "mdm", prepared, CODE, files.source("openfigi")["mdm"][CODE]["contract"],
+    out = chain.records(store, root / "mdm", prepared, CODE, files.source("openfigi")["dataset_contracts"][CODE]["contract"],
                         refused=refused, key="id")
     return out, refused
 

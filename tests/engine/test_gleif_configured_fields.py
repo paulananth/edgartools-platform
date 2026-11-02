@@ -18,7 +18,7 @@ RETIRED=json.loads(Path(__file__).with_name('retired_mapper_outcomes.json').read
 
 
 def contract(member):
-    return copy.deepcopy(files.source('gleif')['mdm'][f'gleif.{member}.v1']['contract'])
+    return copy.deepcopy(files.source('gleif')['dataset_contracts'][f'gleif.{member}.v1']['contract'])
 
 
 def retired_contract(member):
@@ -106,7 +106,7 @@ def test_reserved_text_alias_is_not_a_literal_dictionary_field(value):
 
 @pytest.mark.parametrize('member',['level1','relationships','reporting_exceptions'])
 def test_frozen_inline_reading_matches_bundled_recipe(member):
-    configured=files.source('gleif')['mdm'][f'gleif.{member}.v1']['contract']['adapter']['reading']
+    configured=files.source('gleif')['dataset_contracts'][f'gleif.{member}.v1']['contract']['adapter']['reading']
     recipe=files.load(files.ROOT/'sources/gleif'/f'{member.replace("_","-")}-fields.yaml')
     assert digest(configured)==digest(recipe)
 
@@ -129,7 +129,7 @@ def test_configured_normalization_preserves_assertion_ids_and_deferrals(case):
 
 
 def test_invalid_reading_configuration_stops_instead_of_deferring_record():
-    configured=copy.deepcopy(files.source('gleif')['mdm']['gleif.level1.v1']['contract'])
+    configured=copy.deepcopy(files.source('gleif')['dataset_contracts']['gleif.level1.v1']['contract'])
     configured['adapter']['reading']['read']['tables']['mapped']['columns']['fields']={'unknown_primitive':{}}
     with pytest.raises(source_engine.SourceRejected): adapters.mapped_values(raw(),configured)
 
@@ -138,7 +138,7 @@ def test_relationship_refusal_precedes_later_matching_shape_failure():
     row=raw()
     row['relationship']={'kind':'UNSUPPORTED'}
     row['Entity']['HeadquartersAddress']['AdditionalAddressLine']=['invalid']
-    configured=copy.deepcopy(files.source('gleif')['mdm']['gleif.level1.v1']['contract'])
+    configured=copy.deepcopy(files.source('gleif')['dataset_contracts']['gleif.level1.v1']['contract'])
     configured['adapter']['relationships']=[{'type_field':'relationship.kind','type_values':{'KNOWN':'owns'}}]
     publication={'artifact_sha256':'a'*64,'member':'level1','publication_key':'fixture','revision':1}
     with pytest.raises(adapters.UnsupportedRecord) as failure:
@@ -147,7 +147,7 @@ def test_relationship_refusal_precedes_later_matching_shape_failure():
 
 
 def test_unused_mapping_expressions_are_validated_before_fields_projection():
-    configured=copy.deepcopy(files.source('gleif')['mdm']['gleif.level1.v1']['contract']['adapter'])
+    configured=copy.deepcopy(files.source('gleif')['dataset_contracts']['gleif.level1.v1']['contract']['adapter'])
     configured['reading']['read']['tables']['mapped']['columns']['matching']={'unknown_primitive':{}}
     with pytest.raises(source_engine.SourceRejected) as failure:
         adapters._fields(raw(),configured)

@@ -26,7 +26,7 @@ def resolve_feed(root: Path, source: str, feed: str) -> dict:
             for name, body in documents
             if any(
                 entry["contract"].get("provider", "").casefold() == source.casefold()
-                for entry in body.get("mdm", {}).values()
+                for entry in body.get("dataset_contracts", {}).values()
             )
         ]
     if len(matches) > 1:
@@ -53,7 +53,7 @@ def resolve_feed(root: Path, source: str, feed: str) -> dict:
     declared_feed = declared.get(feed)
     bronze_family = body.get("bronze", {}).get("family")
     datasets = []
-    for code, entry in sorted(body.get("mdm", {}).items()):
+    for code, entry in sorted(body.get("dataset_contracts", {}).items()):
         contract = entry["contract"]
         member = contract.get("adapter", {}).get("native_member")
         labels = {code, member, bronze_family, contract.get("family")}

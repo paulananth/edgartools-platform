@@ -47,7 +47,7 @@ def needs_mdm_approval(export: dict) -> bool:
     """MDM work needs the approved digest: a merge document, or a document with an `mdm`
     section. A target's name decides nothing, and a rules test's disposable version has no
     `mdm` section, so its `mastering` target runs without approval (ticket 160)."""
-    return bool(export["kind"] == "merge" or export["body"].get("mdm"))
+    return bool(export["kind"] == "merge" or export["body"].get("dataset_contracts"))
 
 
 @dataclass(frozen=True)

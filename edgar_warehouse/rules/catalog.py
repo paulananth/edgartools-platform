@@ -782,7 +782,7 @@ def _quality(root: Path, tables: list[dict], kinds: dict) -> dict:
     for path in sorted((root / "sources").glob("*/source.yaml")):
         body = files.load_source(path)
         source = body.get("source") or path.parent.name
-        for code, entry in sorted((body.get("mdm") or {}).items()):
+        for code, entry in sorted((body.get("dataset_contracts") or {}).items()):
             quality = ((entry.get("contract") or {}).get("quality") or {})
             table_name = fqn(SERVICE, SOURCES, source, code)
             table = by_name.get(table_name)
@@ -840,7 +840,7 @@ def plan(root: Path | None = None) -> dict:
                 captured.setdefault(spec["family"], []).append((body.get("source") or path.parent.name, feed))
     for path, body in bodies:
         source = body.get("source") or path.parent.name
-        mdm = body.get("mdm") or {}
+        mdm = body.get("dataset_contracts") or {}
         schemas.append({"name": source, "database": fqn(SERVICE, SOURCES),
                         "description": f"The source `{source}`: rules/sources/{path.parent.name}/."
                                        + _profile_text(profiles.get(source))})

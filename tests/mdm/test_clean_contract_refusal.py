@@ -18,7 +18,7 @@ PUBLICATION = {"artifact_sha256": "a" * 64, "member": "level1", "publication_key
 
 
 def contract(*checks):
-    body = copy.deepcopy(files.source("gleif")["mdm"]["gleif.level1.v1"]["contract"])
+    body = copy.deepcopy(files.source("gleif")["dataset_contracts"]["gleif.level1.v1"]["contract"])
     body["adapter"]["reading"]["read"]["tables"]["mapped"]["checks"] = list(checks)
     return body
 
@@ -36,7 +36,7 @@ def test_a_check_names_its_reason_and_a_passing_record_has_none():
 
 
 def test_a_reading_without_checks_refuses_nothing():
-    reading = copy.deepcopy(files.source("gleif")["mdm"]["gleif.level1.v1"]["contract"]["adapter"]["reading"])
+    reading = copy.deepcopy(files.source("gleif")["dataset_contracts"]["gleif.level1.v1"]["contract"]["adapter"]["reading"])
     reading["read"]["tables"]["mapped"].pop("checks")
     assert record_refusal(record(Extension={"gleif:Deletion": {"$": "x"}}), reading) is None
 
@@ -77,5 +77,5 @@ def test_a_reading_of_several_tables_is_a_contract_error():
 ], ids=["null", "empty object", "null flag", "flag", "text", "number", "list"])
 def test_an_extension_that_is_not_an_object_is_read_as_the_flag(member, row, extension, flagged):
     # As the older reader did: an object holds the flag, anything else is it (operator, 2026-10-10).
-    reading = files.source("gleif")["mdm"][f"gleif.{member}.v1"]["contract"]["adapter"]["reading"]
+    reading = files.source("gleif")["dataset_contracts"][f"gleif.{member}.v1"]["contract"]["adapter"]["reading"]
     assert (record_refusal(row(extension), reading) == "gleif_deletion_flag") is flagged

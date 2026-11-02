@@ -170,7 +170,7 @@ def winners(policy: dict, root: Path) -> dict[str, dict[str, tuple[list[str], li
     it, its source order included; every other field takes the default."""
     filled: dict[str, set] = defaultdict(set)
     for path in sorted((root / "sources").glob("*/source.yaml")):
-        for code, entry in (files.load_source(path).get("mdm") or {}).items():
+        for code, entry in (files.load_source(path).get("dataset_contracts") or {}).items():
             for field in mapped((entry.get("contract") or {}).get("adapter") or {}, "fields"):
                 filled[field].add(code)
     found: dict[str, dict] = {}
@@ -238,7 +238,7 @@ def _source_sheets(name: str, body: dict, policy: dict, root: Path) -> dict[str,
                 for n in binding_namespaces(rule)}
 
     by_kind = winners(policy, root)
-    for code, entry in (body.get("mdm") or {}).items():
+    for code, entry in (body.get("dataset_contracts") or {}).items():
         contract = entry.get("contract") or {}
         adapter = contract.get("adapter") or {}
         at = f"mdm.{code}.contract"

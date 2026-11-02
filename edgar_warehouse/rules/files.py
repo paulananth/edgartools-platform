@@ -173,6 +173,8 @@ def load_source(path: Path) -> dict:
     Contract it names as `quality`, so one approval and one digest cover the
     mapping and the checks that run with it, as `policy()` does for kinds."""
     body = load(path)
+    if isinstance(body, dict) and "mdm" in body:  # the section was named `mdm` until ticket 171
+        raise RulesFileError(f"{path}: the `mdm` section is now `dataset_contracts` (ticket 171); rename it")
     quality_path = path.parent / "quality.yaml"
     if not quality_path.exists():
         return body
@@ -182,7 +184,7 @@ def load_source(path: Path) -> dict:
     for code, block in quality["quality"].items():
         if not isinstance(block, dict):
             raise RulesFileError(f"{quality_path}: {code} holds fixes and checks")
-        contract = ((body.get("mdm") or {}).get(code) or {}).get("contract")
+        contract = ((body.get("dataset_contracts") or {}).get(code) or {}).get("contract")
         if not isinstance(contract, dict):
             raise RulesFileError(f"{quality_path}: {code} is not a Dataset Contract in source.yaml")
         if "quality" in contract:
@@ -197,7 +199,7 @@ def write_source(body: dict, folder: Path) -> None:
 
     body = copy.deepcopy(body)
     blocks, versions = {}, set()
-    for code, entry in (body.get("mdm") or {}).items():
+    for code, entry in (body.get("dataset_contracts") or {}).items():
         block = (entry.get("contract") or {}).pop("quality", None)
         if block is not None:
             versions.add(block.pop("version", None))
@@ -237,7 +239,7 @@ def pipeline(name: str, root: Path | None = None) -> dict:
 
 def mdm_contract(source_name: str, source_code: str, root: Path | None = None) -> dict:
     """The Dataset Contract one source registers under `source_code`."""
-    return source(source_name, root)["mdm"][source_code]["contract"]
+    return source(source_name, root)["dataset_contracts"][source_code]["contract"]
 
 
 # The policy's sections kept in one file each under `merge/`, loaded when the

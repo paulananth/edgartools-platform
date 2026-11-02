@@ -115,7 +115,7 @@ bookkeeping:
       checks: [manifest.hash, work.accounting, journal.delivered]
 bronze:
   family: submissions
-mdm:
+dataset_contracts:
   sec.company.v1:
     contract:
       provider: SEC

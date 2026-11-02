@@ -50,7 +50,7 @@ def sandbox_authority(source: str, code: str, contract: dict, capture_sha256: st
             "completeness": {"format": "json", "required": [], "allow_empty": True, "max_bytes": 1024},
             "required_producers": ["rules-test"], "url_prefixes": ["https://rules-test.invalid/"]}
     document = {"source": name, "acquisition": {"version": 1, "feeds": {"capture": feed}},
-                "mdm": {code: {"contract": contract}}}
+                "dataset_contracts": {code: {"contract": contract}}}
     content = digest(document)
     proof = {"passed": True, "digest": content, "acquisition": {"capture": {
         "manifest": {"uri": "file:///rules-test/capture-receipts.json", "sha256": capture_sha256},
@@ -161,7 +161,7 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
         raise TestRunError(str(error)) from error
     prepare = next((step for step in declared["steps"] if step["operation"] == "mdm.prepare"), None)
     code = ((prepare or {}).get("input") or {}).get("keys", {}).get("dataset")
-    if code not in (document.get("mdm") or {}):
+    if code not in (document.get("dataset_contracts") or {}):
         raise TestRunError(f"Target {target} prepares none of {source}'s Dataset Contracts")
     recorder = recording(source, version, document, env["governance"]["RULES_DATABASE_URL"]) if version else None
     mdm = create_engine(env["governance"]["RULES_MDM_ACTIVATION_DATABASE_URL"])
@@ -181,7 +181,7 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
         policy = files.policy()
         with mdm.begin() as conn:  # the sandbox registration: never an approval
             policy_digest = register_policy(conn, policy)
-            for code, entry in (document.get("mdm") or {}).items():
+            for code, entry in (document.get("dataset_contracts") or {}).items():
                 register_dataset(conn, code, entry["contract"],
                                  rules_authority=sandbox_authority(source, code, entry["contract"], capture_sha))
         rules = Rules(rules_engine)
@@ -229,7 +229,7 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
             "rules_digest": digest(document),
             "batch_hash": passes[0]["manifest_sha256"],
             "policy_digest": policy_digest,
-            "contract_digests": {code: digest(entry["contract"]) for code, entry in (document.get("mdm") or {}).items()},
+            "contract_digests": {code: digest(entry["contract"]) for code, entry in (document.get("dataset_contracts") or {}).items()},
             # The run's own inputs: each fact, and each file by its sha256.
             "run_inputs": {"facts": dict(facts or {}), "files": {
                 name: hashlib.sha256(Path(path).read_bytes()).hexdigest() for name, path in (run_files or {}).items()}},

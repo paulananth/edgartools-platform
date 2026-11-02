@@ -114,7 +114,7 @@ def test_the_declared_chain_gives_the_hand_built_chains_records(databases, tmp_p
     refused: dict[str, str] = {}
     found = chain.records(book.artifacts, tmp_path / "bundle" / "prepare",
                           {"uri": prepared.as_uri(), "sha256": hashlib.sha256(prepared.read_bytes()).hexdigest()},
-                          figi.CODE, body["mdm"][figi.CODE]["contract"], refused=refused, key="id")
+                          figi.CODE, body["dataset_contracts"][figi.CODE]["contract"], refused=refused, key="id")
     assert {r["provenance"]["record_key"]: comparable(r) for r in found} == {
         r["provenance"]["record_key"]: comparable(r) for r in by_hand}
     assert refused == refused_by_hand

@@ -149,7 +149,7 @@ read:
     max_partitions: 1000
     max_spool_bytes: 1073741824
     max_output_rows: 1000000
-mdm:
+dataset_contracts:
   sec.nport.registrant.v1:
     contract:
       provider: SEC

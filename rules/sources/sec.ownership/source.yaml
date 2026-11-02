@@ -18,7 +18,7 @@ bronze:
   # Bronze: filing_artifact/sec/cik=<issuer>/<accession>/<accession>.txt (the SGML
   # submission file); the cohort's bare primary documents sit under filings/.
   family: filing_artifact
-mdm:
+dataset_contracts:
   sec.ownership.reporting_owner.v1:
     contract:
       provider: SEC

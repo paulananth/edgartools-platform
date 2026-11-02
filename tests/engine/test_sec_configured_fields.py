@@ -18,7 +18,7 @@ RETIRED=json.loads(Path(__file__).with_name('retired_mapper_outcomes.json').read
 
 
 def contracts(source):
-    contract=next(iter(files.source(source)['mdm'].values()))['contract']
+    contract=next(iter(files.source(source)['dataset_contracts'].values()))['contract']
     if source.endswith('person'):
         # Rebuild ticket 10 made Person's quality v2 (one more check, which these
         # cases pass); a record names its quality version, so the retired
@@ -63,7 +63,7 @@ def row(source):
 
 @pytest.mark.parametrize('source',SOURCES)
 def test_inline_native_reading_matches_bundled_recipe(source):
-    configured=next(iter(files.source(source)['mdm'].values()))['contract']
+    configured=next(iter(files.source(source)['dataset_contracts'].values()))['contract']
     recipe=files.load(files.ROOT/'sources'/source/'fields.yaml')
     assert digest(configured['adapter']['reading'])==digest(recipe)
 
@@ -98,7 +98,7 @@ def test_normalization_preserves_assertion_ids_classification_quality_and_deferr
     elif case=='bad_name':record['name' if source.endswith('person') else 'entity_name']=False
     elif case=='unknown_fields':record['unknown']={'integer':18446744073709551615,'boolean':False,'null':None}
     publication={'publication_key':'fixture','revision':1,'artifact_sha256':'a'*64,'member':'fixture'}
-    code=next(iter(files.source(source)['mdm']))
+    code=next(iter(files.source(source)['dataset_contracts']))
     try:
         assertion=adapters.normalize(record,source_code=code,contract=contracts(source),
                                      publication=publication,policy=files.policy())

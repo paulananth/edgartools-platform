@@ -44,7 +44,7 @@ def test_unseen_mdm_source_is_not_an_acquisition_feed(tmp_path):
         path = tmp_path / "sources" / name / "source.yaml"
         path.parent.mkdir(parents=True)
         path.write_text(dumps({"source": name, "bronze": {"family": "new-family"},
-                              "mdm": {f"{name}.v1": {"contract": {"provider": "NewProvider",
+                              "dataset_contracts": {f"{name}.v1": {"contract": {"provider": "NewProvider",
                               "family": "new-family", "adapter": {"native_member": "new-member"}}}}}))
     with pytest.raises(ValueError):
         resolve_feed(tmp_path, "new-feed", "new-member")

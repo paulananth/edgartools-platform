@@ -74,7 +74,7 @@ def prepare(store, root: Path, reading: dict, table: str, code: str, **keys) -> 
     prepared = chain.prepare(store, root, reading, {
         "table": table, "dataset": code, "policy": "0" * 64, "consumer": "check", "batch_id": f"check-{code}",
         "as_of": "2026-10-16T00:00:00+00:00", **dated, **keys})
-    return chain.records(store, root, prepared, code, files.source(NAME)["mdm"][code]["contract"])
+    return chain.records(store, root, prepared, code, files.source(NAME)["dataset_contracts"][code]["contract"])
 
 
 def month(root: Path, published: str) -> tuple[list[dict], list[dict]]:

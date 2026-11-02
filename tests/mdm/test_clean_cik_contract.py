@@ -39,7 +39,7 @@ def test_each_feed_maps_only_the_identifiers_it_issues():
     issuers = _issuers()
     mapped = {}
     for folder in sorted((files.ROOT / "sources").iterdir()):
-        for code, body in (files.source(folder.name).get("mdm") or {}).items():
+        for code, body in (files.source(folder.name).get("dataset_contracts") or {}).items():
             for namespace in ((body.get("contract") or {}).get("adapter") or {}).get("identifiers") or {}:
                 mapped[(code, namespace)] = code in issuers.get(namespace, set())
     assert {("sec.company.v1", "cik"), ("gleif.level1.v1", "lei")} <= set(mapped)

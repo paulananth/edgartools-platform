@@ -141,7 +141,7 @@ read:
           text: {path: cusip.$, default: "", transforms: [{case: upper}]}
         figi:
           text: {path: figi.$, default: "", transforms: [{case: upper}]}
-mdm:
+dataset_contracts:
   sec.thirteenf.information_table.security.v1:
     contract:
       provider: SEC
