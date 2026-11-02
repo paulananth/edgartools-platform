@@ -167,27 +167,37 @@ definition paragraph plus the Avoid line. Review state on an asset is
 Give each published subject domain its own glossary. Its native name is the
 domain name, and its display name is the domain's display name. A term whose
 heading is that display name, or that display name plus " Identity", goes in
-that glossary. Every other term from the two sections goes in one shared
-glossary named `shared`. A shared spelling with a different definition stays a
-different term.
+that glossary. There is no `shared` glossary (operator, 2026-11-01: "i dont
+want any shared"), no domain named `Shared`, and no `Shared` tag. Place every
+other term from the two sections by its kind:
+
+- A kind of one domain's identity, such as a registration that shares that
+  identity, goes in that domain's glossary. Name it by the kind itself. Never
+  add "Profile" to a term's name (an audit firm is an audit firm, not an audit
+  firm profile).
+- A relationship type goes in the glossary of the domain its `from` list names
+  first in the pinned list. A type whose `from` list names several domains
+  still has that one home.
+- Any other term goes in a glossary named after its `CONTEXT.md` section: the
+  section name in snake case is the native name, and the section name is the
+  display name.
+- A silver field or a silver row set is not a glossary term. Its definition
+  goes on the silver column or table. A `CONTEXT.md` entry that describes
+  silver data is not published.
+- An umbrella word with no real instance of its own is not a term. Remove it
+  from `CONTEXT.md` instead of publishing it.
 
 Publish a term only when real data backs it (operator, 2026-11-01: "the skill
-must be intelligent, can not create fake domains"). A relationship type is a
-glossary term only when a file under `rules/sources/` uses its code. A type
-that `CONTEXT.md` or a ticket plans, with no rules file and no loaded feed, is
-not published (`HAS_MARKET_OPERATOR` and `IS_SEGMENT_OF_EXCHANGE`, removed
-2026-11-01: no market-code feed is loaded). Create a subject domain, its
-glossary or a term in it only for a domain with a rules file or a mastered
-kind; never create one to hold planned or invented terms. A type or subtype of
-one domain (a role only that domain's identity can hold) goes in that
-domain's glossary, never in `shared`.
-A kind of one domain's identity, such as a registration that shares that
-identity, is named by the kind itself and not "<kind> Profile" (operator,
-2026-11-01: a kind of an identity is not a shared term), and it goes
-in that domain's glossary.
-
-`shared` names a Glossary only. It is not a Domain, a domain tag, or a domain
-assignment. Never create or assign a domain named `Shared`.
+must be intelligent, can not create fake domains"). A domain is real when a
+rule reads it, an RDM code set holds it, or a mastered kind exists. A
+relationship type is a glossary term only when a file under `rules/sources/`
+uses its code. A type that `CONTEXT.md` or a ticket plans, with no rule that
+creates it, is not published (`HAS_MARKET_OPERATOR` and
+`IS_SEGMENT_OF_EXCHANGE`, removed 2026-11-01: no rule creates either link).
+Test a domain by its own data before ruling it out: the market/venue domain
+looked empty through those two links, but its MIC code set and the listing rules
+make it real. Create a subject domain, its glossary or a term in
+it only for a real domain; never create one to hold planned or invented terms.
 
 Associate a glossary term with a table only when the term is one relationship
 type and the table is that type. Do not tag the kind table with every term
