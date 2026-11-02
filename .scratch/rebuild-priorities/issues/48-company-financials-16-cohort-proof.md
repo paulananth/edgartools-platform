@@ -74,12 +74,12 @@ tables, traced to its fact and filing; an agent reads one company's measures.
   incorporation; its latest submissions file has none. Silver reads the master, as the rule says, so it finds
   the statutory rate (6 values; 2 then "missing year"); the oracle, fed the file, says "no country of
   incorporation". Silver follows the rule; the difference is in the oracle's input
-- [ ] Follow-up, not this ticket's: 2 Company masters hold a place of incorporation other than their own latest
+- [ ] ~~Follow-up, not this ticket's: 2 Company masters hold a place of incorporation other than their own latest
   file's (one filled where the file is empty, one empty where the file has one). Each place is copied from the
   file as filed, so survivorship across a merged master's records is the likely source; for the Company master's
-  owner (MDM), not financials
-- [ ] Open: the test server dropped a connection during the Company merge in 3 of 13 sample runs
-  (`server closed the connection unexpectedly`); its log is now kept on every run; neither full run had one
+  owner (MDM), not financials~~ deferred (2026-11-02 09:10 ET, operator: "Agreed"): the Company master's owner (MDM) decides; financials reads the master as the rule says
+- [ ] ~~Open: the test server dropped a connection during the Company merge in 3 of 13 sample runs
+  (`server closed the connection unexpectedly`); its log is now kept on every run; neither full run had one~~ deferred to [169](169-company-financials-run-through-bookkeeping-and-the-change-journal.md) (2026-11-02 09:10 ET): it happens in the Company merge, not the financials steps; 169's timed real run watches for it and repeats the timing if it recurs
 - [x] GoF consult, three-axis review (2026-10-30 12:31 ET): GoF, leave the bundle's hand-kept file list (14 additions
   one at a time, but the new test now fails on any miss); Standards, no hard violation; Spec, five gaps in the
   proof's checks, all fixed and passed on the sample, then at full size (13:21 ET)
