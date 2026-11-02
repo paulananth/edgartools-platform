@@ -132,4 +132,31 @@ why: >-
   The filing's fy and fp are kept but never key a year (ticket 35). The figure
   is exact (tickets 128 and 134): of the 5,134,979 captured, the longest has 20
   whole digits and 6 after the point, within DECIMAL(38,10).
-checks: []
+# First quality checks (ticket 169; chosen from DataKitchen TestGen's test types,
+# docs/research/datakitchen-testgen-test-types-2026-11-02.md): the facts of one
+# filing agree on what the filing is.
+checks:
+- id: one_form_per_filing
+  check: one_value
+  column: form
+  per: accession
+  on_fail: flag
+  why: A filing has one form type; every fact of that filing states the same one (TestGen custom consistency test).
+- id: one_filed_per_filing
+  check: one_value
+  column: filed
+  per: accession
+  on_fail: flag
+  why: A filing has one filing date; every fact of that filing states the same one (TestGen custom consistency test).
+- id: one_fiscal_year_filed_per_filing
+  check: one_value
+  column: fiscal_year_filed
+  per: accession
+  on_fail: flag
+  why: A filing has one fiscal year; every fact of that filing states the same one (TestGen custom consistency test).
+- id: one_fiscal_period_filed_per_filing
+  check: one_value
+  column: fiscal_period_filed
+  per: accession
+  on_fail: flag
+  why: A filing has one fiscal period; every fact of that filing states the same one (TestGen custom consistency test).

@@ -13,7 +13,9 @@ source-extract receipts. A name may list 1..256 receipts instead of one: they
 are read in that order as one source extract (ticket 112), so a step fed by
 many units (a Bookkeeping list slot) names one source in the rules, not one per
 unit; the output names every listed receipt and a receipt listed twice is
-refused. A reduction's `last` over a listed name is refused, as over several
+refused. A contract that numbers its sources per unit (`units_1` to `units_8`) cannot run as a
+Bookkeeping target: name one source (`units`) and let the step list every unit under it;
+find such a contract by listing a reduction's `source:` names before writing the target. A reduction's `last` over a listed name is refused, as over several
 sources; a combination group's `last` takes the last listed reading's row.
 Each receipt holds a version-1 inline or version-2 partitioned
 configured source extract. Partition receipts are authenticated within the same
