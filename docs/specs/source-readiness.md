@@ -119,7 +119,7 @@ document on disk is not proof of runtime readiness.
 | `gleif` | Merge only | Complete member read/combine/prepare/processed path; publication validation remains outside it. |
 | `iapd.adv` | None | Monthly context, grouping/joins and complete run wiring. |
 | `sec.ownership` | None | Reading selection, owner preparation, relationship dependencies and processed accounting. |
-| `sec.thirteenf.information_table` | None; separate reading-only pipeline | Source-owned reduce/combine/prepare/merge/processed path. |
+| `sec.thirteenf.securities` | None; separate reading-only pipeline | Source-owned reduce/combine/prepare/merge/processed path. |
 | `sec.nport.registrant` | None | Authenticated filed-registrant lookup producer and complete run. |
 | `sec.nport.fund` | None | Filed/registrant lookup producers and complete run. Existing deferred relationship semantics must not be invented. |
 | `sec.nport.security` | None | Lookup agreement pairs, quarter context, publication identity/revision/time, issuer preparation and processed accounting. |

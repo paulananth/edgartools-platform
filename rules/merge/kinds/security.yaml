@@ -1,13 +1,13 @@
 # Security merge rules (a new kind, ticket 79). Source: the SEC Form 13F
 # information tables, one record per CUSIP over a data set
-# (rules/sources/sec.thirteenf.information_table). Rulings it rests on
+# (rules/sources/sec.thirteenf.securities). Rulings it rests on
 # (operator, 2026-10-14): "CUSIP and ISIN join" (one CUSIP is one Security;
 # FIGI, ticker and SEDOL are lookup only); "Securities only, options aside";
 # "A" (the Security carries the issuer name and class title as filed).
 # Switched on (operator, 2026-10-15 06:27 ET, in their words: "merge 985 when green agreed for the rest"):
 # the matching rule activates on its Identifier Contract, verified on the
 # Proving Run's cohort (rules/merge/policy.yaml, automatic_rules).
-version: security-2026-10-27.filed-figi-on
+version: security-2026-11-02.thirteenf-source-is-securities
 defaults:
   # The first listed wins each field. Operator, 2026-10-18 (ticket 84): "make
   # openfigi priority 1 and 13f last", then "Name only (Recommended)". OpenFIGI
@@ -20,7 +20,7 @@ defaults:
   # openfigi priority 1 and 13f last" (2026-10-18).
   sources:
   - openfigi.security.v3
-  - sec.thirteenf.information_table.security.v1
+  - sec.thirteenf.securities.v1
   - sec.nport.security.v2
   allow_unknown_effective: true
 rules:
@@ -32,7 +32,7 @@ rules:
 - rule_id: security-cusip
   version: 2026-10-27.1
   family: binding
-  source: sec.thirteenf.information_table.security.v1
+  source: sec.thirteenf.securities.v1
   applies_to_verdict: security
   emits:
   - bind
@@ -54,7 +54,7 @@ rules:
 - rule_id: thirteenf-security-figi
   version: 2026-10-26.1
   family: binding
-  source: sec.thirteenf.information_table.security.v1
+  source: sec.thirteenf.securities.v1
   applies_to_verdict: security
   emits:
   - bind
@@ -172,7 +172,7 @@ identifiers:
   cusip:
     authority: CUSIP Global Services (ANSI X9.6)
     sources:
-    - sec.thirteenf.information_table.security.v1
+    - sec.thirteenf.securities.v1
     - sec.nport.security.v2
     - openfigi.security.v3
     # rules/identifiers/cusip.yaml (ticket 81): 9 characters, the check digit

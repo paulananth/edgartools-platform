@@ -49,7 +49,7 @@ One provider or captured delivery can therefore support several contracts.
 | [GLEIF](rules/sources/gleif/source.yaml) | Legal-entity evidence, accounting-parent relationships and reporting exceptions. |
 | [IAPD Form ADV](rules/sources/iapd.adv/source.yaml) | Adviser filings and custodians mapped to Company identities; custody amounts remain separate facts. |
 | [SEC ownership, Forms 3/4/5](rules/sources/sec.ownership/source.yaml) | Reporting-owner identities and dated links to issuers. Transaction-table and pipeline work have separate qualification requirements. |
-| [SEC 13F information tables](rules/sources/sec.thirteenf.information_table/source.yaml) | Security evidence keyed by CUSIP, keeping the filed issuer name and security title. |
+| [SEC 13F information tables](rules/sources/sec.thirteenf.securities/source.yaml) | Security evidence keyed by CUSIP, keeping the filed issuer name and security title. |
 | [SEC N-PORT registrants](rules/sources/sec.nport.registrant/source.yaml) | Filing registrants mapped to Company by CIK, retaining the latest filing's name and address together. |
 | [SEC N-PORT securities](rules/sources/sec.nport.security/source.yaml) | Security evidence through separate CUSIP and ISIN-only Dataset Contracts. |
 | [SEC N-PORT fund series](rules/sources/sec.nport.fund/source.yaml) | Fund Structure evidence by SEC series ID and eligible LEI, keeping the registrant CIK as a lookup reference. |

@@ -18,7 +18,7 @@
 # every unit's rows by CUSIP; combine.yaml joins name, title and FIGI into one
 # row per CUSIP; mdm.prepare (table `security`) gives the Dataset Contract one
 # record each.
-source: sec.thirteenf.information_table
+source: sec.thirteenf.securities
 bronze:
   # The capture family the prototype reading names.
   family: sec.thirteenf_infotable
@@ -142,7 +142,7 @@ read:
         figi:
           text: {path: figi.$, default: "", transforms: [{case: upper}]}
 dataset_contracts:
-  sec.thirteenf.information_table.security.v1:
+  sec.thirteenf.securities.v1:
     contract:
       provider: SEC
       family: sec.thirteenf_infotable
@@ -160,7 +160,7 @@ dataset_contracts:
       - missing_record_identity
       adapter:
         reading:
-          source: sec.thirteenf.information_table
+          source: sec.thirteenf.securities
           read:
             format: json
             limits: {max_bytes: 33554432, max_records: 1}

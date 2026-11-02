@@ -25,7 +25,7 @@ sources:
     target: null
     requires: []
     after: [sec.submissions.person]
-  sec.thirteenf.information_table:
+  sec.thirteenf.securities:
     target: null
     requires: []
     after: [gleif, openfigi]
@@ -54,7 +54,7 @@ sources:
   sec.nport.security:
     target: mastering
     requires: []
-    after: [sec.thirteenf.information_table]
+    after: [sec.thirteenf.securities]
   # Company facts (ticket 45): silver rows linked to the Company by CIK, so they
   # run after it. Its `silver` target (ticket 169) reads the files, lands
   # company_fact and records each file in the Change Journal.

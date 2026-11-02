@@ -1,7 +1,7 @@
 # 13F information table. Emits cusip, the filed title, and the filed issuer
 # name. Security identity, Security Title, and ISSUED_BY are decided later,
 # per docs/specs/clean-mdm/security-identity.md. This file does not create them.
-source: sec.thirteenf.information_table
+source: sec.thirteenf.securities
 version: "prototype-2"
 bronze: { family: sec.thirteenf_infotable }
 execution: { profile: source.read, workers: 2, max_artifacts: 2 }

@@ -46,7 +46,7 @@ from tests.support.rules_authority import register_dataset
 
 FOLDER = files.ROOT / "sources" / "openfigi"
 CODE = "openfigi.security.v3"
-THIRTEENF = "sec.thirteenf.information_table.security.v1"
+THIRTEENF = "sec.thirteenf.securities.v1"
 NPORT_ISIN = "sec.nport.security.v2"  # its ISIN-only Securities (ticket 120: one Dataset Contract)
 # Invented CUSIPs and ISINs, check digits valid.
 EQUITY, BOND, MISSING, UNHELD, SOLE, DOUBLE = "ZZ0000013", "ZZ0000021", "ZZ0000039", "ZZ0000047", "ZZ0000120", "ZZ0000138"
