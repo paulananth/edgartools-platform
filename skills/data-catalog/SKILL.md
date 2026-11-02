@@ -29,8 +29,8 @@ Three different facts, kept as different tags:
 - A subject domain says what the data is about.
 - A processing layer says which plan database holds it.
 - A certification says how finished that store is. Gold certifies the master
-  store. Silver certifies the prepared store. The reference store and a
-  captured source dataset stay uncertified. Gold is not a layer and not a
+  and reference stores. Silver certifies the prepared store. A captured source
+  dataset stays uncertified. Gold is not a layer and not a
   subject. How a destination stores that certification is in the
   [openmetadata](../openmetadata/SKILL.md) skill.
 

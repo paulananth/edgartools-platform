@@ -105,7 +105,7 @@ class _Server:
         self.plan, self.calls, self.ids = plan, [], {}
         self.term_bodies, self.product_bodies, self.patches, self.draft = [], [], [], set()
         self.table_delete_params = []
-        self.profiles, self.tags = {}, {}
+        self.profiles, self.tags, self.certified = {}, {}, None
 
     def __call__(self, method, path, body=None, params=None):
         self.calls.append((method, path))
@@ -114,10 +114,21 @@ class _Server:
         if method == "PATCH":
             self.patches.append((path, body))
             for op in body if isinstance(body, list) else []:
+                if path.startswith("/tables/") and op.get("path") == "/certification":
+                    self.certified_by_id = getattr(self, "certified_by_id", {})
+                    self.certified_by_id[path.removeprefix("/tables/")] = op["value"]
                 if path.startswith("/tables/") and op.get("path") == "/tags/-":
                     self.tags.setdefault(path.removeprefix("/tables/"), []).append({"tagFQN": op["value"]["tagFQN"]})
             if path.startswith("/glossaryTerms/"):
                 self.draft.add(path.removeprefix("/glossaryTerms/"))
+        if method == "GET" and path == "/system/settings":
+            return {"data": [{"config_type": "assetCertificationSettings", "config_value": {"validityPeriod": "P30D"}}]}
+        if method == "GET" and path.startswith("/tables/name/") and (params or {}).get("fields") == "certification":
+            from urllib.parse import unquote
+            if self.certified == {}:
+                return {}
+            return {"certification": getattr(self, "certified_by_id", {}).get(
+                self.ids.get(unquote(path.removeprefix("/tables/name/"))))}
         if method == "GET" and path.startswith("/tables/name/") and (params or {}).get("fields") == "tags":
             from urllib.parse import unquote
             return {"tags": self.tags.get(self.ids.get(unquote(path.removeprefix("/tables/name/"))), [])}
@@ -204,7 +215,7 @@ def test_the_plan_names_domains_glossaries_and_store_certification():
     assert certified["edgartools-rules.mdm.clean.company"] == "Certification.Gold"
     assert any(name.startswith("edgartools-rules.silver.") and tag == "Certification.Silver"
                for name, tag in certified.items())
-    assert not any(name.startswith(("edgartools-rules.sources.", "edgartools-rules.rdm.")) for name in certified)
+    assert not any(name.startswith("edgartools-rules.sources.") for name in certified)  # a source dataset stays uncertified
     assert catalog.glossary_relation_type_name("ISSUED_BY") == "issuedBy"
     assert catalog.glossary_relation_type_name("IS_FUND-MANAGED_BY") == "isFundManagedBy"
     assert "relatedTo" not in {edge["relationType"] for edge in plan["glossary_relations"]}
@@ -691,23 +702,21 @@ def test_each_identifier_limit_of_a_kind_is_a_check_on_its_master_table():
                                                             for n in cases)
 
 
-def test_master_reference_and_silver_tables_carry_their_processing_layer():
-    plan = catalog.plan(files.ROOT)
-    layers = {c["name"]: c for c in plan["classifications"]}["processing_layer"]
-    assert [t["name"] for t in layers["tags"]] == ["mdm", "rdm", "silver"]
-    marks = {item["table"]: item["tag"] for item in plan["layer_marks"]}
-    assert marks[f"{catalog.SERVICE}.mdm.clean.company"] == "processing_layer.mdm"
-    assert {tag.split(".")[1] for tag in marks.values()} == {"mdm", "rdm", "silver"}
-    assert not any(".sources." in name for name in marks)
-    assert len(marks) == sum(1 for t in plan["tables"] if not t["databaseSchema"].split(".")[1] == "sources")
+def test_master_and_reference_tables_are_gold_and_silver_tables_are_silver():
+    plan = catalog.plan()
+    certified = {item["table"]: item["tag"] for item in plan["certifications"]}
+    assert certified[f"{catalog.SERVICE}.mdm.clean.company"] == "Certification.Gold"
+    assert any(name.startswith(f"{catalog.SERVICE}.rdm.code_sets.") and tag == "Certification.Gold"
+               for name, tag in certified.items())
+    assert {tag for name, tag in certified.items() if ".silver." in name} == {"Certification.Silver"}
+    assert not any(".sources." in name for name in certified)
+    assert "processing_layer" not in {c["name"] for c in plan["classifications"]}
 
 
-def test_publish_tags_each_table_with_its_layer_and_check_says_when_a_tag_is_missing():
+def test_check_says_when_a_table_is_not_certified_as_planned():
     plan = catalog.plan()
     server = _Server(plan)
     catalog.publish(plan, server)
-    assert not [d for d in catalog.verify(plan, server)["differences"] if "missing tag" in d]
-    company = "edgartools-rules.mdm.clean.company"
-    server.tags[server.ids[company]] = [t for t in server.tags[server.ids[company]]
-                                        if t["tagFQN"] != "processing_layer.mdm"]
-    assert f"{company}: missing tag processing_layer.mdm" in catalog.verify(plan, server)["differences"]
+    assert not [d for d in catalog.verify(plan, server)["differences"] if "not certified" in d]
+    server.certified = {}
+    assert any("not certified Certification.Gold" in d for d in catalog.verify(plan, server)["differences"])

@@ -508,26 +508,9 @@ def _context_terms(root: Path) -> list[tuple[str, str]]:
     return found
 
 
-LAYERS = ((MDM, "Master data: one record per entity, merged from its sources."),
-          (RDM, "Reference data: the code sets the profiled data needs."),
-          (SILVER, "Prepared tables: source records landed, with their checks."))
-
-
-def _processing_layers(tables: list[dict]) -> dict:
-    """The `processing_layer` tags, one per store, and the tables each holds. A source dataset
-    is captured input, not a processing layer."""
-    stores = {name for name, _ in LAYERS}
-    marks = [{"table": _table_name(table), "tag": f"processing_layer.{_store(_table_name(table))}"}
-             for table in tables if _store(_table_name(table)) in stores]
-    return {"classification": {"name": "processing_layer", "description": "The store whose processing a table belongs to.",
-                               "tags": [{"name": name, "displayName": name.upper(), "description": text}
-                                        for name, text in LAYERS]},
-            "layer_marks": sorted(marks, key=lambda item: item["table"])}
-
-
 def _data_classes(root: Path, tables: list[dict], kinds) -> dict:
-    """The `data_class` and `processing_layer` tags and the tables that carry them. A source
-    dataset and a proposed silver table carry no class (data-modeling names no such class)."""
+    """The `data_class` tags and the tables that carry one. A source dataset and
+    a proposed silver table carry none (data-modeling names no such class)."""
     words = dict(_context_terms(root))
     tags = [{"name": name, "displayName": _display(name),
              "description": _sentence(words.get(heading) or fallback, 300)}
@@ -549,11 +532,9 @@ def _data_classes(root: Path, tables: list[dict], kinds) -> dict:
         else:
             continue
         marks.append({"table": name, "tag": f"data_class.{tag}"})
-    layers = _processing_layers(tables)
     return {"classifications": [{"name": "data_class", "description": "The class of data a table holds.",
-                                 "tags": tags}, layers["classification"]],
-            "data_class_marks": sorted(marks, key=lambda item: item["table"]),
-            "layer_marks": layers["layer_marks"]}
+                                 "tags": tags}],
+            "data_class_marks": sorted(marks, key=lambda item: item["table"])}
 
 
 def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict], read: set[str]) -> dict:
@@ -630,7 +611,7 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict], 
     for table in tables:
         name = _table_name(table)
         store = _store(name)
-        if store == MDM:
+        if store in (MDM, RDM):
             certifications.append({"table": name, "tag": GOLD})
         elif store == SILVER:
             certifications.append({"table": name, "tag": SILVER_MARK})
@@ -1207,7 +1188,7 @@ def _publish_marks(plan: dict, call: Call, ids: dict[str, str]) -> None:
             "value": {"tagLabel": {"tagFQN": item["tag"], "source": "Classification",
                                    "labelType": "Manual", "state": "Confirmed"},
                       "appliedDate": now, "expiryDate": now + days * 24 * 60 * 60 * 1000}}])
-    for item in (plan.get("data_class_marks") or []) + (plan.get("layer_marks") or []):
+    for item in plan.get("data_class_marks") or []:
         if item["table"] in ids:
             call("PATCH", f"/tables/{ids[item['table']]}", [{
                 "op": "add", "path": "/tags/-",
@@ -1414,9 +1395,13 @@ def verify(plan: dict, call: Call) -> dict:
         if (latest.get("timestamp"), latest.get("rowCount"), latest.get("columnCount")) != (
                 mark["timestamp"], mark["rowCount"], mark["columnCount"]):
             differences.append(mark["table"] + ": profile changed, publish again")
-    for mark in (plan.get("data_class_marks") or []) + (plan.get("layer_marks") or []):
+    for mark in plan.get("data_class_marks") or []:
         held = call("GET", f"/tables/name/{escape(mark['table'], safe='')}", params={"fields": "tags"}) or {}
         if mark["tag"] not in {tag.get("tagFQN") for tag in held.get("tags") or []}:
             differences.append(mark["table"] + ": missing tag " + mark["tag"])
+    for mark in plan.get("certifications") or []:
+        held = call("GET", f"/tables/name/{escape(mark['table'], safe='')}", params={"fields": "certification"}) or {}
+        if ((held.get("certification") or {}).get("tagLabel") or {}).get("tagFQN") != mark["tag"]:
+            differences.append(mark["table"] + ": not certified " + mark["tag"])
     return {"ok": not differences, "tables": len(plan["tables"]),
             "pipelines": len(plan.get("pipelines") or []), "differences": differences}
