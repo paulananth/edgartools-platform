@@ -313,7 +313,12 @@ uv run --with duckdb --with pyyaml python profile_data.py approve \
 
 6. **Write the catalog summary** (`catalog`, above) into
    `rules/sources/<source>/profile.yaml`, so the Data Catalog shows every
-   silver field, its quality rules and the code sets.
+   silver field, its quality rules and the code sets. Then publish it:
+   `edgar-warehouse rules catalog publish --root rules`, and
+   `rules catalog check --root rules` must match. A re-profiled or re-approved
+   source changes `profile.yaml`; until the next publish, `check` reports each
+   changed table as "profile changed, publish again". A source with no
+   `profile.yaml` shows "Not profiled yet" on its source schema.
 7. **Hand over.** data-onboarding reads the approved `findings.yaml`, plans one
    onboarding per part in dependency order (master kinds with their "together"
    relationships first, then reference data as RDM code sets, then

@@ -34,6 +34,7 @@ The catalog is one OpenMetadata database service, `edgartools-rules`:
 
 from __future__ import annotations
 
+import datetime
 import hashlib
 import html
 import json
@@ -301,6 +302,47 @@ def _profiles(root: Path) -> tuple[list[dict], list[dict], list[dict]]:
         lineage += [{"from": fqn(SERVICE, RDM, CODE_SETS, name), "to": at, "columns": [],
                      "description": f"Values of `{at}` are codes of `{name}`."} for at in sorted(used_by[name])]
     return silver_schemas, tables, lineage
+
+
+NOT_PROFILED = " Not profiled yet."
+
+
+def _profiles_of(root: Path) -> dict[str, dict]:
+    """Each source's approved profile summary (`profile.yaml`), by source; none for a source without one."""
+    return {path.parent.name: files.load(path) for path in sorted((root / "sources").glob("*/profile.yaml"))}
+
+
+def _profile_text(profile: dict | None) -> str:
+    """What a source schema says of its profile: names, counts and dates only."""
+    if not profile:
+        return NOT_PROFILED
+    return (f" Profile: {profile.get('dataset', 'unnamed')}; {len(profile.get('parts') or [])} parts, profiled "
+            f"{str(profile.get('profiled_at') or 'undated')[:10]}, approved {str(profile.get('approved_at') or 'undated')[:10]}.")
+
+
+def _kind_profile_text(kind: str, profiles: dict[str, dict]) -> str:
+    """What a kind table says of the profiles that feed it."""
+    fed = [(source, sum(1 for part in profile.get("parts") or [] if part.get("kind") == kind))
+           for source, profile in sorted(profiles.items())]
+    fed = [(source, count) for source, count in fed if count]
+    if not fed:
+        return NOT_PROFILED
+    return " " + " ".join(f"Profiled from {source}: {count} part{'s' if count != 1 else ''}." for source, count in fed)
+
+
+def _profile_marks(profiles: dict[str, dict]) -> list[dict]:
+    """The native table profile of each profiled silver table: its rows and columns when profiled."""
+    marks = []
+    for source, profile in sorted(profiles.items()):
+        if not profile.get("profiled_at"):
+            continue  # no date, no native profile: it needs a time
+        when = datetime.datetime.fromisoformat(str(profile["profiled_at"]))
+        stamp = int(when.replace(tzinfo=when.tzinfo or datetime.timezone.utc).timestamp() * 1000)  # no zone means UTC
+        for part in profile.get("parts") or []:
+            silver = part["silver"]
+            marks.append({"table": fqn(SERVICE, SILVER, source, silver["table"]), "timestamp": stamp,
+                          "rowCount": part["rows"], "columnCount": len(silver["fields"])})
+    return marks
 
 
 def _registered_names(root: Path) -> set[str]:
@@ -752,6 +794,7 @@ def plan(root: Path | None = None) -> dict:
     kinds = policy.get("kinds") or {}
     by_kind = winners(policy, root)
     schemas, tables, lineage = [], [], []
+    profiles = _profiles_of(root)
     silver_schemas, profiled, profiled_lineage = _profiles(root)
     tables += profiled
     lineage += profiled_lineage
@@ -772,7 +815,8 @@ def plan(root: Path | None = None) -> dict:
         source = body.get("source") or path.parent.name
         mdm = body.get("mdm") or {}
         schemas.append({"name": source, "database": fqn(SERVICE, SOURCES),
-                        "description": f"The source `{source}`: rules/sources/{path.parent.name}/."})
+                        "description": f"The source `{source}`: rules/sources/{path.parent.name}/."
+                                       + _profile_text(profiles.get(source))})
         for feed, spec in _feeds(body):
             required = (spec.get("completeness") or {}).get("required") or []
             columns = [{"name": key, "dataType": TEXT, "description": "Names one captured file."}
@@ -814,7 +858,8 @@ def plan(root: Path | None = None) -> dict:
         tables.append({"name": kind, "displayName": _display(kind),
                        "databaseSchema": fqn(SERVICE, MDM, CLEAN), "columns": columns,
                        "description": f"One {_display(kind)} in the master data. "
-                                      "The first dataset with a value fills each field."})
+                                      "The first dataset with a value fills each field."
+                                      + _kind_profile_text(kind, profiles)})
     return {
         "service": {"name": SERVICE, "serviceType": "CustomDatabase",
                     "description": "The Data Catalog, published one way from the rules; change the rules, "
@@ -840,6 +885,8 @@ def plan(root: Path | None = None) -> dict:
                                             "This catalog does not enable schedules or run workloads."},
         "pipelines": _pipelines(root),
         "service_lineage": _service_lineage(_pipelines(root), tables),
+        "profiles": [mark for mark in _profile_marks(profiles)
+                     if mark["table"] in {_table_name(table) for table in tables}],
         **_meaning(root, policy, tables, lineage, read),
         **_quality(root, tables),
     }
@@ -1160,6 +1207,10 @@ def publish(plan: dict, call: Call) -> dict:
         if answer["fullyQualifiedName"] != name:  # lineage names columns by this name
             raise CatalogError(f"The server named table {name} {answer['fullyQualifiedName']}")
         ids[name] = answer["id"]
+    for mark in plan.get("profiles") or []:
+        if mark["table"] in ids:
+            call("PUT", f"/tables/{ids[mark['table']]}/tableProfile", {"tableProfile": {
+                "timestamp": mark["timestamp"], "rowCount": mark["rowCount"], "columnCount": mark["columnCount"]}})
     for definition in plan.get("quality_definitions") or []:
         _upsert(call, "/dataQuality/testDefinitions", definition)
     for case in plan.get("quality_cases") or []:
@@ -1317,5 +1368,10 @@ def verify(plan: dict, call: Call) -> dict:
             details = actual[source].get("lineageDetails") or {}
             compare(wanted["description"], details.get("description"), name + ".lineage.description")
             compare(wanted["columns"], details.get("columnsLineage") or [], name + ".lineage.columns")
+    for mark in plan.get("profiles") or []:
+        latest = (call("GET", f"/tables/{escape(mark['table'], safe='')}/tableProfile/latest") or {}).get("profile") or {}
+        if (latest.get("timestamp"), latest.get("rowCount"), latest.get("columnCount")) != (
+                mark["timestamp"], mark["rowCount"], mark["columnCount"]):
+            differences.append(mark["table"] + ": profile changed, publish again")
     return {"ok": not differences, "tables": len(plan["tables"]),
             "pipelines": len(plan.get("pipelines") or []), "differences": differences}

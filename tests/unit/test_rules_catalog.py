@@ -105,6 +105,7 @@ class _Server:
         self.plan, self.calls, self.ids = plan, [], {}
         self.term_bodies, self.product_bodies, self.patches, self.draft = [], [], [], set()
         self.table_delete_params = []
+        self.profiles = {}
 
     def __call__(self, method, path, body=None, params=None):
         self.calls.append((method, path))
@@ -114,6 +115,9 @@ class _Server:
             self.patches.append((path, body))
             if path.startswith("/glossaryTerms/"):
                 self.draft.add(path.removeprefix("/glossaryTerms/"))
+        if method == "GET" and path.endswith("/tableProfile/latest"):
+            found = self.profiles.get(path.removeprefix("/tables/").removesuffix("/tableProfile/latest"))
+            return {"profile": found} if found else {}
         if method == "GET" and path.startswith("/glossaryTerms/"):
             term_id = path.removeprefix("/glossaryTerms/")
             return {"id": term_id, "entityStatus": "Draft" if term_id in self.draft else "Approved"}
@@ -608,3 +612,63 @@ def test_a_registered_silver_table_shows_as_it_lands(tmp_path):
             {"name": "other", "type": "VARCHAR", "nullable": True, "sensitivity": "none"}]}}]}), encoding="utf-8")
     again = [t for t in catalog.plan(root)["tables"] if t["name"] == "visit"]
     assert [[c["name"] for c in t["columns"]] for t in again] == [["visit_id", "seen", "company_mdm_id", "quality", "loaded_at"]]
+
+
+def _invented_profile(tmp_path: Path):
+    """A copy of the rules whose openfigi profile is an invented one: 2 parts, 40 rows, 3 fields."""
+    root = tmp_path / "rules"
+    shutil.copytree(files.ROOT, root)
+    path = root / "sources" / "openfigi" / "profile.yaml"
+    profile = files.load(path)
+    profile.update(dataset="Invented set", profiled_at="2026-01-02T03:04:05+00:00", approved_at="2026-01-03T00:00:00+00:00")
+    profile["parts"] = profile["parts"][:2]
+    profile["parts"][0]["rows"] = 40
+    profile["parts"][0]["silver"]["fields"] = profile["parts"][0]["silver"]["fields"][:3]
+    path.write_text(files.dumps(profile), encoding="utf-8")
+    return root, profile
+
+
+def test_a_profiled_source_says_so_and_an_unprofiled_one_says_not_yet(tmp_path: Path):
+    root, _ = _invented_profile(tmp_path)
+    plan = catalog.plan(root)
+    schemas = {schema["name"]: schema["description"] for schema in plan["schemas"] if schema["database"].endswith(".sources")}
+    assert schemas["openfigi"].endswith("Profile: Invented set; 2 parts, profiled 2026-01-02, approved 2026-01-03.")
+    assert schemas["sec.company"].endswith("Not profiled yet.")
+
+
+def test_a_kind_table_says_which_profile_feeds_it_or_not_yet(tmp_path: Path):
+    root, profile = _invented_profile(tmp_path)
+    profile["parts"][1]["kind"] = "security"
+    (root / "sources" / "openfigi" / "profile.yaml").write_text(files.dumps(profile), encoding="utf-8")
+    tables = _tables(catalog.plan(root))
+    assert tables["edgartools-rules.mdm.clean.security"]["description"].endswith("Profiled from openfigi: 1 part.")
+    assert tables["edgartools-rules.mdm.clean.company"]["description"].endswith("Not profiled yet.")
+
+
+def test_a_profiled_silver_table_carries_its_row_and_column_count(tmp_path: Path):
+    root, profile = _invented_profile(tmp_path)
+    plan = catalog.plan(root)
+    table = profile["parts"][0]["silver"]["table"]
+    assert [item for item in plan["profiles"] if item["table"].endswith("." + table)] == [{
+        "table": f"edgartools-rules.silver.openfigi.{table}", "timestamp": 1767323045000, "rowCount": 40, "columnCount": 3}]
+    assert len(plan["profiles"]) == 2
+
+
+def test_a_profile_date_without_a_zone_is_utc(tmp_path: Path):
+    root, profile = _invented_profile(tmp_path)
+    profile["profiled_at"] = "2026-01-02T03:04:05"
+    (root / "sources" / "openfigi" / "profile.yaml").write_text(files.dumps(profile), encoding="utf-8")
+    assert {item["timestamp"] for item in catalog.plan(root)["profiles"]} == {1767323045000}
+
+
+def test_publish_writes_the_profile_and_check_says_when_it_is_stale():
+    plan = catalog.plan()
+    server = _Server(plan)
+    catalog.publish(plan, server)
+    assert [path for method, path in server.calls if method == "PUT" and path.endswith("/tableProfile")]
+    mark = plan["profiles"][0]
+    server.profiles = {mark["table"]: {**mark, "rowCount": mark["rowCount"] + 1}}
+    report = catalog.verify(plan, server)
+    assert f"{mark['table']}: profile changed, publish again" in report["differences"]
+    server.profiles = {item["table"]: item for item in plan["profiles"]}
+    assert not [d for d in catalog.verify(plan, server)["differences"] if "profile changed" in d]
