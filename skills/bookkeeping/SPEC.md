@@ -351,8 +351,8 @@ edgar-warehouse rules pending
 edgar-warehouse rules approve --source <source> --version <new-version> --evidence <evidence_hash from pending> \
   --by "<name>" --words "<their exact words>"
 edgar-warehouse rules activate --source <source> --version <new-version>
-edgar-warehouse rules run --source <source> --target mdm --input-manifest <URI> --input-sha256 <SHA256> --limit 100
-edgar-warehouse rules run --source <source> --target mdm --resume-run-id <UUID> --limit 100
+edgar-warehouse rules run --source <source> --target <merge target> --input-manifest <URI> --input-sha256 <SHA256> --limit 100
+edgar-warehouse rules run --source <source> --target <merge target> --resume-run-id <UUID> --limit 100
 edgar-warehouse bookkeeping status <UUID>
 edgar-warehouse bookkeeping runs --state waiting --limit 100
 edgar-warehouse bookkeeping checks <UUID>

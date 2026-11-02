@@ -5,8 +5,8 @@
 source: gleif
 catalog:
   pipelines:
-    lei:
-      display_name: GLEIF LEI
+    subfund-pairs:
+      display_name: GLEIF sub-fund pairs
 # Where the Golden Copy comes from. Declaring it sends no request: the pipes
 # switch on over files already captured, apart from live acquisition (operator,
 # 2026-10-19; ticket 114).
@@ -42,7 +42,7 @@ bookkeeping:
     # read from the publication's relationship file (ticket 120): nothing is
     # mastered; the Securities chain reads this step's verified units as its
     # `umbrella` pair set (ticket 23), so it runs first.
-    lei:
+    subfund-pairs:
       steps:
         - name: pairs
           operation: source.read

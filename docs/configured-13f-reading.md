@@ -39,7 +39,7 @@ malformed XML outside the root fails. A conflicting existing output fails.
 
 Install the platform with its `engine` extra, or use the existing dependency
 images, which include a prebuilt engine wheel. Save, prove and approve the
-`rules/pipelines/sec-13f-reading/pipeline.yaml` version through the normal Rules
+`rules/pipelines/sec.thirteenf.extract/pipeline.yaml` version through the normal Rules
 lifecycle before submission. Neither this document nor installing the worker
 approves or activates a Rules version.
 
@@ -48,7 +48,7 @@ existing Bookkeeping profile-grant command. Keep their logins separate, and use
 AWS S3 output/report roots for AWS runs. Submit a frozen worklist:
 
 ```bash
-uv run --extra engine edgar-warehouse rules run --pipeline sec-13f-reading --target read \
+uv run --extra engine edgar-warehouse rules run --pipeline sec.thirteenf.extract --target extract \
   --input-manifest s3://YOUR-BUCKET/manifests/WORKLIST.json --input-sha256 ACTUAL_SHA256
 uv run --extra engine python -m edgar_warehouse.workers work source.read RUN_ID --limit 1
 # Set BOOKKEEPING_DATABASE_URL to the verifier's separate login.

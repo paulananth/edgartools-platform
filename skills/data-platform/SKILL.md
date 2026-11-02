@@ -355,8 +355,8 @@ The steps below are what it runs, for a run you drive by hand.
 
 1. For a combined run already submitted in Parse, retain its `run_id` and
    continue its declared steps. Otherwise submit:
-   `edgar-warehouse rules run --source <name> --target mdm --input-manifest <uri> --input-sha256 <sha256>`.
-   An MDM target needs the operator's approval of that rules version first (Mode 4).
+   `edgar-warehouse rules run --source <name> --target <merge target> --input-manifest <uri> --input-sha256 <sha256>`.
+   A source with an `mdm` section needs the operator's approval of that rules version first (Mode 4).
 2. Work and verify **each declared profile in dependency order**: `source.read`,
    `mdm.prepare`, `mdm.merge`, then each declared `mdm.publish` step. For example:
    `edgar-warehouse workers work mdm.prepare <run_id> --limit 100`, then

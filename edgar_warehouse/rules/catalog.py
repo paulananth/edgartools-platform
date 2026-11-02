@@ -385,7 +385,7 @@ def _service_lineage(pipelines: list[dict], tables: list[dict]) -> list[dict]:
 def _codes_read(root: Path, codes: list[str]) -> set[str]:
     """The relationship type codes some file under `sources/` names: a type no
     rule reads is planned, not real."""
-    text = "\n".join(path.read_text() for path in sorted((root / "sources").rglob("*.yaml")))
+    text = "\n".join(path.read_text(encoding="utf-8") for path in sorted((root / "sources").rglob("*.yaml")))
     return {code for code in codes if re.search(rf"(?<![A-Za-z0-9_-]){re.escape(code)}(?![A-Za-z0-9_-])", text)}
 
 

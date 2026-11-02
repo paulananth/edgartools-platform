@@ -1,14 +1,14 @@
-pipeline: sec-13f-reading
+pipeline: sec.thirteenf.extract
 bookkeeping:
   version: 1
   targets:
-    read:
+    extract:
       lease_seconds: 120
       heartbeat_seconds: 30
       retry: { attempts: 5, base_ms: 100, cap_ms: 5000 }
       allow_zero_work: false
       steps:
-        - name: read-information-tables
+        - name: extract-information-tables
           operation: source.read
           requires: []
           key: "{batch_id}"

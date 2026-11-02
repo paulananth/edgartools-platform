@@ -104,7 +104,7 @@ bookkeeping:
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, journal.recorded]
       checks: [manifest.hash, work.accounting, journal.delivered]
-    mdm:
+    merge-batch:
       steps:
         - name: merge
           operation: mdm.merge
