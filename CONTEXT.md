@@ -60,11 +60,7 @@ _Avoid_: A job title, a source form name, evidence of who the person is
 One dated period during which a relationship held, carrying whether its dates were stated by a filing or only observed from one, with several intervals per relationship where it stopped and resumed.
 _Avoid_: A single span from first to last sighting, an end inferred from silence
 
-**Governed Role Profile**:
-An evidence-backed, dated registration or capacity attached to an identity without creating another identity for its holder.
-_Avoid_: Duplicate legal entity, permanent role inferred from a filing name
-
-**Adviser Profile**:
+**Adviser**:
 The governed investment-adviser registration of a Company or a Person. It shares that holder's identity.
 _Avoid_: A separate adviser identity, IS_ENTITY_OF, IS_PERSON_OF, the Fund Series it manages, the Fund Company
 
@@ -72,7 +68,7 @@ _Avoid_: A separate adviser identity, IS_ENTITY_OF, IS_PERSON_OF, the Fund Serie
 A Company that audits other Companies' statements, through its governed audit-firm registration. It shares that Company's identity.
 _Avoid_: Audit Firm Profile, A separate auditor identity, a permanent auditor field on the audited Company
 
-**Fund Profile**:
+**Fund**:
 The governed fund registration of a Company or a Fund Structure. It shares that holder's identity.
 _Avoid_: A Security, an ETF share, a name ending in "fund" as proof of the profile
 
@@ -121,8 +117,8 @@ A government body represented in its own right, distinct from a legally incorpor
 _Avoid_: Government ownership as an identity kind, International Organization
 
 **Market/Venue**:
-A trading market or venue distinct from the organization operating it: HAS_MARKET_OPERATOR links it to its market operator, and IS_SEGMENT_OF_EXCHANGE a market segment to its exchange.
-_Avoid_: Operator Company, corporate ownership hierarchy
+A trading market or venue distinct from the organization operating it, identified by its ISO 10383 MIC from RDM's `iso-10383-mic` code set. That set carries each segment under its operating MIC. A Security's listing names its venue by MIC.
+_Avoid_: Operator Company, corporate ownership hierarchy, a data vendor's exchange code as the venue's identity
 
 **International Organization**:
 An organization accepted as that kind from its source category, distinct from a Company and from a Government Entity. It keeps the source classification it was accepted under.

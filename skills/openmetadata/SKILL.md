@@ -67,6 +67,10 @@ must be a domain of every asset it contains. Assets are added after the
 product exists. Input ports are a second assignment, not the asset list.
 Add them with `PUT /api/v1/dataProducts/{name}/inputPorts/add` and the same
 bulk asset body. Read them with `GET /api/v1/dataProducts/name/{fqn}/inputPorts`.
+A product carries its domain and the glossary term "<Domain> Identity" of that
+domain, as a `Glossary` tag in the `Suggested` state (operator, 2026-11-01: "update
+data products with domains and glossary"). The tag is on the product, not on its
+assets, and a product's domain still equals every asset's domain.
 A mastered package takes the source datasets that fill it as input ports.
 The fundamental-measures package takes the filed-figure table and the line-item
 table as input ports. The measure table is an asset, not an input port.
@@ -158,36 +162,75 @@ subject, not one of these native objects.
 
 Project. Do not author a second glossary, and do not mark a term approved.
 
-Read `CONTEXT.md`. Take the bold terms in **MDM identities and mastering** and
-in **Data classes, reference data and agent context**. Leave the other sections
-there until the skill that owns them asks for a term. The description is the
-definition paragraph plus the Avoid line. Review state on an asset is
-`Suggested`. Create no owners.
+Read `CONTEXT.md`. A glossary holds only entity terms: the domain identity
+terms, the kinds of one domain's identity, and the relationship types. The
+description is the definition paragraph plus the Avoid line. Review state on
+an asset is `Suggested`. Create no owners.
 
 Give each published subject domain its own glossary. Its native name is the
 domain name, and its display name is the domain's display name. A term whose
 heading is that display name, or that display name plus " Identity", goes in
-that glossary. Every other term from the two sections goes in one shared
-glossary named `shared`. A shared spelling with a different definition stays a
-different term.
+that glossary. There is no `shared` glossary (operator, 2026-11-01: "i dont
+want any shared"), no domain named `Shared`, and no `Shared` tag. Place every
+other entity term by its kind:
+
+- A kind of one domain's identity, such as a registration that shares that
+  identity, goes in that domain's glossary. Name it by the kind itself. Never
+  add "Profile" to a term's name (an audit firm is an audit firm, not an audit
+  firm profile).
+- A relationship type goes in the glossary of the domain its `from` list names
+  first in the pinned list. A type whose `from` list names several domains
+  still has that one home.
+- A platform word is not a glossary term, and `CONTEXT.md` is its one home
+  (operator, 2026-11-01: "they are steps in the system and documentation, it
+  can be part of lineage, not in glossary"). That covers a pipeline step or
+  stage, a rules file and its parts, a store or a file. The catalog shows the
+  steps as pipeline tasks on lineage, so a term would repeat them. Do not
+  create a glossary named after a `CONTEXT.md` section, and do not copy these
+  definitions into Articles.
+- A data class is a `data_class` tag, a code-set grouping is text in the
+  code-set descriptions, and a fact about a relationship (its capacity or its
+  dated interval) is text in the relationship-type descriptions. The publisher
+  writes these; do not edit the live catalog by hand.
+- A silver field or a silver row set is not a glossary term. Its definition
+  goes on the silver column or table. A `CONTEXT.md` entry that describes
+  silver data is not published.
+- An umbrella word with no real instance of its own is not a term. Remove it
+  from `CONTEXT.md` instead of publishing it.
 
 Publish a term only when real data backs it (operator, 2026-11-01: "the skill
-must be intelligent, can not create fake domains"). A relationship type is a
-glossary term only when a file under `rules/sources/` uses its code. A type
-that `CONTEXT.md` or a ticket plans, with no rules file and no loaded feed, is
-not published (`HAS_MARKET_OPERATOR` and `IS_SEGMENT_OF_EXCHANGE`, removed
-2026-11-01: no market-code feed is loaded). Create a subject domain, its
-glossary or a term in it only for a domain with a rules file or a mastered
-kind; never create one to hold planned or invented terms. A type or subtype of
-one domain (a role only that domain's identity can hold) goes in that
-domain's glossary, never in `shared`.
-A kind of one domain's identity, such as a registration that shares that
-identity, is named by the kind itself and not "<kind> Profile" (operator,
-2026-11-01: a kind of an identity is not a shared term), and it goes
-in that domain's glossary.
+must be intelligent, can not create fake domains"). A domain is real when a
+rule reads it, an RDM code set holds it, or a mastered kind exists. A
+relationship type is a glossary term only when a file under `rules/sources/`
+uses its code. A type that `CONTEXT.md` or a ticket plans, with no rule that
+creates it, is not published (`HAS_MARKET_OPERATOR` and
+`IS_SEGMENT_OF_EXCHANGE`, removed 2026-11-01: no rule creates either link).
+Test a domain by its own data before ruling it out: the market/venue domain
+looked empty through those two links, but its MIC code set and the listing rules
+make it real. Create a subject domain, its glossary or a term in
+it only for a real domain; never create one to hold planned or invented terms.
 
-`shared` names a Glossary only. It is not a Domain, a domain tag, or a domain
-assignment. Never create or assign a domain named `Shared`.
+## Context Center
+
+OpenMetadata 2.0 replaced the Knowledge Center with the Context Center. A
+glossary holds entity terms and a `data_class` tag holds a data class; a
+platform word stays in `CONTEXT.md`. A process record that nothing else holds,
+or a how-to, is an Article.
+Articles are pages (found in the server's `/swagger.json`, tested 2026-11-01 on
+version 2.0.2):
+
+- Create with `POST /api/v1/contextCenter/pages`: `name`, `pageType`
+  `"Article"` and `page` `{}` are required; the text goes in `description`,
+  which the server stores HTML-escaped. Set `entityStatus` to `Draft`; do not
+  mark an Article approved. The `page` object holds only `publicationDate` and
+  `relatedArticles`.
+- Read `GET .../pages/{id}`, list `GET .../pages`, and change the text with a
+  JSON patch on `/description`. A short fact is a Memory
+  (`/api/v1/contextCenter/memories`); an uploaded file is in
+  `/api/v1/contextCenter/drive`.
+- Not tested: how an Article looks in the screen, and whether an AI agent finds
+  it. The documentation says the agent search reads only the facts extracted
+  from uploaded files, not Articles or hand-written Memories.
 
 Associate a glossary term with a table only when the term is one relationship
 type and the table is that type. Do not tag the kind table with every term
