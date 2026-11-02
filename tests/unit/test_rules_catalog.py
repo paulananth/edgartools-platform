@@ -103,6 +103,7 @@ class _Server:
 
     def __init__(self, plan: dict):
         self.plan, self.calls, self.ids = plan, [], {}
+        self.term_bodies, self.product_bodies = [], []
 
     def __call__(self, method, path, body=None, params=None):
         self.calls.append((method, path))
@@ -111,7 +112,10 @@ class _Server:
             table = link.removeprefix("<#E::table::").split("::columns::")[0].removesuffix(">")
             column = link.split("::columns::", 1)[1].removesuffix(">") + "." if "::columns::" in link else ""
             return {**body, "id": body["name"], "fullyQualifiedName": f"{table}.{column}{catalog.quote(body['name'])}"}
+        if method == "PUT" and path == "/dataProducts":
+            self.product_bodies.append(body)
         if method == "PUT" and path == "/glossaryTerms":
+            self.term_bodies.append(body)
             return {**body, "id": body["name"],
                     "fullyQualifiedName": body["glossary"] + "." + catalog.quote(body["name"])}
         if method == "PUT" and path == "/pipelines":
@@ -181,30 +185,95 @@ def test_the_plan_names_domains_glossaries_and_store_certification():
     assert any(name.startswith("edgartools-rules.silver.") and tag == "Certification.Silver"
                for name, tag in certified.items())
     assert not any(name.startswith(("edgartools-rules.sources.", "edgartools-rules.rdm.")) for name in certified)
-    term = next(term for term in plan["glossary_terms"] if term["name"] == "AUDITED_BY")
-    assert term["glossary"] == "shared" and term["table"].endswith("relationships.AUDITED_BY")
-    assert "relatedTo" not in term
     assert catalog.glossary_relation_type_name("ISSUED_BY") == "issuedBy"
     assert catalog.glossary_relation_type_name("IS_FUND-MANAGED_BY") == "isFundManagedBy"
+    assert "relatedTo" not in {edge["relationType"] for edge in plan["glossary_relations"]}
+
+
+def _terms(plan):
+    return {f"{term['glossary']}.{term['name']}": term for term in plan["glossary_terms"]}
+
+
+def test_a_relationship_type_is_a_term_of_the_domain_its_from_list_names_first():
+    plan = catalog.plan()
+    fqns = set(_terms(plan))
+    assert "shared" not in {glossary["name"] for glossary in plan["glossaries"]}
+    assert not [name for name in fqns if name.startswith("shared.")]
+    assert {"company.CUSTODIAN", "company.IS_SUBFUND_OF", "company.SUCCESSOR_ENTITY", "person.EMPLOYED_BY",
+            "security.ISSUED_BY", "company.BENEFICIAL_OWNER_OF"} <= fqns
+    term = _terms(plan)["person.EMPLOYED_BY"]
+    assert term["table"].endswith("relationships.EMPLOYED_BY")
     company_graph = {edge["to"]: edge["relationType"] for edge in plan["glossary_relations"]
                      if edge["from"] == "company.Company Identity"}
-    assert company_graph["shared.AUDITED_BY"] == "auditedBy"
-    assert company_graph["shared.IS_SUBSIDIARY_OF"] == "isSubsidiaryOf"
-    assert "shared.ISSUED_BY" not in company_graph
-    assert "shared.IS_SEGMENT_OF_EXCHANGE" not in company_graph
-    assert "shared.EMPLOYED_BY" not in company_graph
-    assert "relatedTo" not in {edge["relationType"] for edge in plan["glossary_relations"]}
-    assert len(company_graph) == 11
+    assert company_graph["company.CUSTODIAN"] == "custodian"
+    assert "company.ISSUED_BY" not in company_graph
     security_graph = {edge["to"]: edge["relationType"] for edge in plan["glossary_relations"]
                       if edge["from"] == "security.Security Identity"}
-    assert security_graph == {"shared.ISSUED_BY": "issuedBy", "shared.Holdings": "heldBy"}
-    person_graph = {edge["to"]: edge["relationType"] for edge in plan["glossary_relations"]
-                    if edge["from"] == "person.Person Identity"}
-    assert person_graph["shared.EMPLOYED_BY"] == "employedBy"
-    by_type = {item["name"]: item["displayName"] for item in plan["glossary_relation_types"]}
-    assert by_type["issuedBy"] == "Issued by"
-    assert by_type["heldBy"] == "Held by"
-    assert by_type["employedBy"] == "Employed by"
+    assert security_graph == {"security.ISSUED_BY": "issuedBy"}
+
+
+def test_a_type_no_rule_reads_stays_an_asset_marked_planned():
+    plan = catalog.plan()
+    names = {term["name"] for term in plan["glossary_terms"]}
+    marker = "(planned: no rule reads this type yet and no link is loaded)"
+    tables = _tables(plan)
+    for code in ("AUDITED_BY", "HAS_MARKET_OPERATOR", "IS_SUBSIDIARY_OF"):
+        assert code not in names
+        assert marker in tables[f"edgartools-rules.mdm.relationships.{code}"]["description"]
+    assert marker not in tables["edgartools-rules.mdm.relationships.CUSTODIAN"]["description"]
+
+
+def test_only_entity_terms_are_published_as_draft_terms():
+    plan = catalog.plan()
+    names = {term["name"] for term in plan["glossary_terms"]}
+    assert {"Company Identity", "Adviser", "Audit Firm", "Fund", "Fund Series", "Market/Venue"} <= names
+    for platform in ("Merge Stage", "Source Extract", "Relationship Capacity", "Master Data", "Holdings", "Discretion"):
+        assert platform not in names
+    assert not [name for name in names if name.endswith("Profile")]
+    placed = {f"{term['glossary']}.{term['name']}" for term in plan["glossary_terms"]}
+    assert {"company.Adviser", "company.Fund", "fund_structure.Fund Series", "market_venue.Market/Venue"} <= placed
+    domains = {domain["name"] for domain in plan["domains"]}
+    assert {glossary["name"] for glossary in plan["glossaries"]} == domains
+
+
+def test_a_term_is_written_as_draft_never_approved():
+    plan = catalog.plan()
+    server = _Server(plan)
+    catalog.publish(plan, server)
+    assert server.term_bodies and all(body.get("entityStatus") == "Draft" for body in server.term_bodies)
+
+
+def test_each_table_carries_its_data_class():
+    plan = catalog.plan()
+    marks = {item["table"]: item["tag"] for item in plan["data_class_marks"]}
+    assert marks["edgartools-rules.mdm.clean.company"] == "data_class.master_data"
+    assert marks["edgartools-rules.mdm.relationships.CUSTODIAN"] == "data_class.relationship"
+    assert any(name.startswith("edgartools-rules.rdm.code_sets.") and tag == "data_class.reference_data"
+               for name, tag in marks.items())
+    assert any(name.startswith("edgartools-rules.silver.") and tag == "data_class.transaction_data"
+               for name, tag in marks.items())
+    assert not any(".sources." in name for name in marks)
+    classes = {tag["name"] for tag in plan["classifications"][0]["tags"]}
+    assert plan["classifications"][0]["name"] == "data_class"
+    assert classes == {"master_data", "reference_data", "relationship", "transaction_data"}
+    tables = _tables(plan)
+    assert "Reference Hierarchy" in next(
+        table["description"] for name, table in tables.items() if name.startswith("edgartools-rules.rdm.code_sets."))
+    assert "interval" in tables["edgartools-rules.mdm.relationships.CUSTODIAN"]["description"].lower()
+    assert "capacity" in tables["edgartools-rules.mdm.relationships.CUSTODIAN"]["description"].lower()
+
+
+def test_each_data_product_carries_its_identity_term_in_the_suggested_state():
+    plan = catalog.plan()
+    products = {product["name"]: product for product in plan["products"]}
+    assert products["company_master"]["tags"] == ["company.Company Identity"]
+    assert products["company_fundamentals"]["tags"] == ["company.Company Identity"]
+    assert products["security_master"]["tags"] == ["security.Security Identity"]
+    server = _Server(plan)
+    catalog.publish(plan, server)
+    sent = {body["name"]: body for body in server.product_bodies}
+    assert sent["company_master"]["tags"] == [{
+        "tagFQN": "company.Company Identity", "source": "Glossary", "labelType": "Manual", "state": "Suggested"}]
 
 
 def _outcome_plan():

@@ -263,12 +263,15 @@ or any other pair the plan does not name with
 `DELETE /glossaryTerms/{id}/relations/{toTermId}?relationType=<that type>`.
 The separate RDF glossary graph stays unused unless that service is enabled.
 
-`rules catalog publish` applies the built-in certification and no other
-classification. Do not add `data_class` or `processing_layer` tags in a second
-write. A second write of mention edges or endpoint domain links is how
-overstatement comes back.
-The class and the layer are named here so a later publisher change has one
-meaning. They are not a reason to edit the live catalog by hand.
+`rules catalog publish` applies the built-in certification and the `data_class`
+tags below, and writes every term as Draft. It writes the terms, tags and
+descriptions this section names; edit none of them in the live catalog by hand.
+A second write of mention edges or endpoint domain links is how overstatement
+comes back. A relationship type that no file under `rules/sources/` names gets
+"(planned: no rule reads this type yet and no link is loaded)" in its asset
+description and no term. Each data product carries the identity term of its
+domain, `Suggested`. The `processing_layer` tag is named for a later publisher
+change and is not written yet.
 
 - `data_class`. One tag for each class the data-modeling skill names and this
   catalog can hold: master data on a kind table, reference data on a code-set
