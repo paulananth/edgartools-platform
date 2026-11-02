@@ -229,8 +229,13 @@ Take its design, not its tool:
   or a table name in engine code is a defect. A rule no kind carries is a new
   kind (one generic function plus its tests), then declared in the rules.
 - **Read the column's type first.** A kind has a column type it accepts
-  (`in_set` reads text columns only; the catalog refuses a number). A numeric
-  closed list needs a kind that accepts numbers, not a text copy of the column.
+  (`in_set` reads a text column with text values, or a `BIGINT` column with
+  whole-number values, as every integer is `BIGINT`; the catalog refuses anything
+  else). A numeric closed list on a decimal column needs its own kind, not a text copy of the column.
+- **The table's key already checks the key.** A silver table's `PRIMARY KEY`
+  refuses a repeated or empty key column, so TestGen's unique-key and required
+  types need no check kind for the key; add a kind only for a rule the table
+  cannot state.
 - **Values come from rules, not from a sample.** TestGen's baseline types fill
   their lists from a profile of the data; here a closed list comes from the
   rules file or its code list in the reference store, and a count measured on

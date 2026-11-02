@@ -8,6 +8,13 @@ def spec(name):
     return files.load(files.ROOT / "sources" / "sec.company-facts" / f"silver-company-{name}.yaml")
 
 
+def test_a_measure_over_an_unknown_window_is_flagged():
+    rows = [{"window_years": w} for w in (1, 3, 5, 10, 7)]
+    _, report = checks.run(spec("measure"), rows)
+    assert report["checks"]["window_years_known"]["rows_failed"] == 1
+    assert report["rows_checked"] == 5
+
+
 def test_facts_of_one_filing_must_agree_on_what_the_filing_is():
     same = {"accession": "A-1", "form": "10-K", "filed": "2026-02-01", "fiscal_year_filed": 2025, "fiscal_period_filed": "FY"}
     rows = [dict(same), dict(same), dict(same), {**same, "form": "10-Q"}, {**same, "accession": "A-2"}]

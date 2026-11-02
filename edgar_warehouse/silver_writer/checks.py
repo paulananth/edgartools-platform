@@ -17,8 +17,9 @@ The checks:
   flagged when its value is not the group's most common one; when two values
   are equally common, every row of the group is. It holds only within one
   delivery: split a part into several deliveries and each is checked alone.
-`in_set` reads a text column (`VARCHAR`), compared as delivered; no check
-reads a nested column. An empty value passes every check: whether a column may be empty
+`in_set` reads a text column (`VARCHAR`, listed values are text) or a `BIGINT`
+column (listed values are whole numbers; every integer is `BIGINT`), compared as delivered; no check reads a
+nested column. An empty value passes every check: whether a column may be empty
 is its `nullable`. A snapshot table takes no `exception` check: a row kept
 out of its delivery would be deleted from the table.
 
@@ -37,7 +38,7 @@ QUALITY = "quality"  # the column a flagged row's check ids are written to
 ON_FAIL = ("flag", "exception")
 # Each check and the keys it takes beside id, check, why and on_fail.
 ARGUMENTS = {"identifier": {"column", "type"}, "in_set": {"column", "values"}, "one_value": {"column", "per"}}
-TEXT = "VARCHAR"  # the type `in_set` reads
+TEXT, WHOLE = "VARCHAR", "BIGINT"  # the types `in_set` reads: text, or a whole number (every integer is BIGINT)
 
 
 def check(spec: dict, names: list[str]) -> None:
@@ -65,8 +66,8 @@ def check(spec: dict, names: list[str]) -> None:
         for role in ("column", "per"):
             if role in item and item[role] not in names:
                 raise Blocked(f"Check {item['id']}: {role} names a column of the spec: {item[role]!r}")
-            if role in item and kind == "in_set" and types[item[role]] != TEXT:
-                raise Blocked(f"Check {item['id']}: in_set reads a {TEXT} column, not {item[role]} "
+            if role in item and kind == "in_set" and types[item[role]] not in (TEXT, WHOLE):
+                raise Blocked(f"Check {item['id']}: in_set reads a {TEXT} or a {WHOLE} column, not {item[role]} "
                               f"({types[item[role]]})")
             if role in item and postgres_type(types[item[role]]) == "jsonb":
                 raise Blocked(f"Check {item['id']}: {item[role]} holds nested values, which no check reads")
@@ -75,9 +76,13 @@ def check(spec: dict, names: list[str]) -> None:
 
             if item["type"] not in TYPES:
                 raise Blocked(f"Check {item['id']}: no identifier type {item['type']!r} in rules/identifiers")
-        if kind == "in_set" and (not isinstance(item["values"], list) or not item["values"]
-                                 or not all(isinstance(v, str) for v in item["values"])):
-            raise Blocked(f"Check {item['id']}: values lists the allowed values, as text")
+        if kind == "in_set":
+            whole = types.get(item["column"]) == WHOLE
+            kept = int if whole else str
+            if (not isinstance(item["values"], list) or not item["values"]
+                    or not all(type(v) is kept for v in item["values"])):
+                raise Blocked(f"Check {item['id']}: values lists the allowed values, "
+                              f"as {'whole numbers' if whole else 'text'} to match the column")
 
 
 def run(spec: dict, rows: list[dict]) -> tuple[list[dict], dict]:
