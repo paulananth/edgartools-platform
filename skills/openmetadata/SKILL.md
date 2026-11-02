@@ -67,6 +67,10 @@ must be a domain of every asset it contains. Assets are added after the
 product exists. Input ports are a second assignment, not the asset list.
 Add them with `PUT /api/v1/dataProducts/{name}/inputPorts/add` and the same
 bulk asset body. Read them with `GET /api/v1/dataProducts/name/{fqn}/inputPorts`.
+A product carries its domain and the glossary term "<Domain> Identity" of that
+domain, as a `Glossary` tag in the `Suggested` state (operator, 2026-11-01: "update
+data products with domains and glossary"). The tag is on the product, not on its
+assets, and a product's domain still equals every asset's domain.
 A mastered package takes the source datasets that fill it as input ports.
 The fundamental-measures package takes the filed-figure table and the line-item
 table as input ports. The measure table is an asset, not an input port.
