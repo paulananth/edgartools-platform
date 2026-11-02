@@ -69,7 +69,7 @@ def _receipt(count: int, seen: set) -> bytes:
                       sort_keys=True, separators=(",", ":")).encode()
 
 
-def _engines():
+def engines():
     from edgar_warehouse.database_connections import engine_from_env
 
     silver = engine_from_env("SILVER_DATABASE_URL")
@@ -84,7 +84,7 @@ def execute(envelope: dict, artifacts) -> dict:
     if set(envelope["checks"]) != {CHECK}:
         raise ValueError(f"silver.land verifies {CHECK} only")
     keys = _keys(envelope)
-    silver, mdm = _engines()
+    silver, mdm = engines()
     try:
         sink, ids = DatabaseSink(silver), MdmIds(mdm) if mdm is not None else None
         spec = sink.spec(keys["silver"])
@@ -124,7 +124,7 @@ def verify(envelope: dict, artifacts) -> tuple[dict, list]:
     if envelope["candidate"]["uri"] != envelope["output"]:
         raise ValueError("Candidate URI differs from the intended output")
     keys = _keys(envelope)
-    silver, _ = _engines()
+    silver, _ = engines()
     try:
         spec = DatabaseSink(silver).spec(keys["silver"])
         count, seen = 0, set()

@@ -267,8 +267,12 @@ Evidence and sources: ticket 39, research 02 section 3; the build, ticket 47.
 
 `sec.company-facts` has one Bookkeeping target, `silver`: `facts` (`source.read`,
 filers' files in slices of at most 8 MiB), `land` (`silver.land`: the reading's
-`company_fact` table into silver, once per filer file) and `processed`
+`company_fact` table into silver, once per filer file), `line_items` and
+`measures` (`silver.derive`: each derived table rebuilt whole), and `processed`
 (`journal.record`). The Change Journal skips a file recorded under the same
 rules and content, and a changed facts, line-item or measure rule is a new
-processing identity. Line items and measures are not steps yet: `silver
-line-items` and `silver measures` stay manual until the derive step exists.
+processing identity. A run with no changed file does not start. A run that has
+one rebuilds both derived tables for every company: both are snapshots, and the
+writer removes any row a delivery lacks, so a delivery of some companies would
+remove the rest. Rebuilding only the changed companies needs a writer that
+replaces by partition (`company_key`); that is not built.

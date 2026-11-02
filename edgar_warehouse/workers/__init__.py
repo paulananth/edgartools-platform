@@ -16,7 +16,7 @@ from importlib import import_module
 
 PROFILES = {"artifact.copy": "copy", "jsonl.count": "count", "source.read": "source_read", "source.combine": "source_combine",
             "mdm.prepare": "mdm_prepare", "mdm.merge": "mdm_merge", "mdm.publish": "mdm_publish", "provider.capture": "provider_capture",
-            "journal.record": "journal_record", "silver.land": "silver_land"}
+            "journal.record": "journal_record", "silver.land": "silver_land", "silver.derive": "silver_derive"}
 
 
 class Redo(Exception):
