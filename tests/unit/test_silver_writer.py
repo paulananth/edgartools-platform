@@ -200,7 +200,7 @@ def test_a_check_flags_its_rows_an_exception_refuses_them_and_an_empty_value_pas
 
 @pytest.mark.parametrize("change, refused", [
     ({"check": "pattern"}, "is one of"),
-    ({"check": "in_set", "column": "amount", "values": ["1"], "type": None}, "reads a VARCHAR column"),
+    ({"check": "in_set", "column": "amount", "values": ["1"], "type": None}, "reads a VARCHAR or a BIGINT column"),
     ({"check": "one_value", "column": "tags", "per": "member_id", "type": None}, "nested values"),
     ({"type": "nope"}, "no identifier type"),
     ({"column": "nope"}, "names a column"),
@@ -252,3 +252,19 @@ def test_a_load_given_a_results_file_keeps_each_check_s_report(tmp_path, monkeyp
     monkeypatch.setenv(results.ENVIRONMENT, str(other))
     writer.land(sink, "visit", delivered, lambda *a: {})
     assert set(results.load(other)) == set(kept)
+
+
+def test_in_set_reads_a_bigint_column_with_whole_number_values():
+    from edgar_warehouse.silver_writer import checks
+
+    item = {"id": "window_known", "check": "in_set", "column": "visit_id", "values": [1, 3, 5],
+            "on_fail": "flag", "why": "A visit number is one of the listed ones."}
+    spec = a_spec(checks=[item])
+    specs.check(spec)
+    _, report = checks.run(spec, [{"visit_id": n} for n in (1, 3, 5, 7, None)])
+    assert report["checks"]["window_known"]["rows_failed"] == 1  # the 7; an empty value passes
+    for values in (["1"], [True], [1.5], []):  # text, a flag, a fraction or nothing is refused
+        with pytest.raises(Blocked, match="whole numbers"):
+            specs.check(a_spec(checks=[{**item, "values": values}]))
+    with pytest.raises(Blocked, match="as text"):  # a text column still takes text only
+        specs.check(a_spec(checks=[{**item, "column": "member_id", "values": [1]}]))

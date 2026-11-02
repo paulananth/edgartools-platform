@@ -87,4 +87,17 @@ why: >-
   Each row names its inputs and definition version, so a value traces to its
   facts and filings. The statement format and country are read from the
   Company master, never copied here.
-checks: []
+# First quality check (ticket 175; from DataKitchen TestGen's LOV_Match,
+# docs/research/datakitchen-testgen-test-types-2026-11-02.md): the windows are
+# the four measures.yaml defines.
+checks:
+- id: window_years_known
+  check: in_set
+  column: window_years
+  values:
+  - 1
+  - 3
+  - 5
+  - 10
+  on_fail: flag
+  why: A measure is computed over the 1, 3, 5 or 10 year window measures.yaml defines (validity).
