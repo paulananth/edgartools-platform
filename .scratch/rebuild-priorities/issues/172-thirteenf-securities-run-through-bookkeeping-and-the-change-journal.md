@@ -2,7 +2,7 @@
 
 Priority: 172. Map: [Rebuild priorities](../map.md). Opened 2026-11-02 12:15 ET (operator, 2026-11-02: "List all pipeline with no bookkeeping", then "first Bookkeeping ticket for sec.thirteenf.securities?").
 
-Type: task. Status: in progress (branch `claude/t172-thirteenf-securities-bookkeeping`). Blocked by: none ([173](173-the-thirteenf-source-is-named-for-what-it-masters.md), the rename, merged). Pattern: [169](169-company-financials-run-through-bookkeeping-and-the-change-journal.md) (company facts) and the `openfigi` and `sec.nport.security` mastering targets.
+Type: task. Status: closed incomplete (the timed real run is deferred). Blocked by: none ([173](173-the-thirteenf-source-is-named-for-what-it-masters.md), the rename, merged). Pattern: [169](169-company-financials-run-through-bookkeeping-and-the-change-journal.md) (company facts) and the `openfigi` and `sec.nport.security` mastering targets.
 
 ## Question
 
@@ -30,6 +30,7 @@ Type: task. Status: in progress (branch `claude/t172-thirteenf-securities-bookke
 - [x] Before the real run: the target runs through the real workers on Postgres (`tests/integration/test_thirteenf_securities_target_postgres.py`): three invented files, one read unit each, reduce over all three units (a CUSIP in two files counts both holdings), combine, record, prepare; a second pass redoes nothing (2026-11-02 16:51 ET)
 - [x] Before the real run: the Dataset Contract code. Earlier note ("no Rules Database here") was wrong: the shared store's `worker.env` holds `RULES_DATABASE_URL`. Saved the source as `sec.thirteenf.securities-2026-11-02.bookkeeping` in the shared Rules Database, ran `rules test` on 2 invented files in a disposable store (passed: all steps incl. merge and journal verified, 2 Securities mastered, 1 CUSIP with a bad check digit set aside, second pass changed nothing), then approved it under "Approved the rules always" (2026-10-15) with that run as evidence. Switching it on in MDM still waits for the operator's words (2026-11-02 17:13 ET)
 - [x] The rule is documented where it was missed: CLAUDE.md "Shared local data" and the `data-onboarding` skill's "test" mode (2026-11-02 17:13 ET)
-- [ ] One real run is timed and its deadline and `workers` sized from the measure (say the time before starting it; provider access is not needed: the files are already captured)
+- [x] Switched on in MDM (operator, 2026-11-02 17:23 ET: "A and B", to the offer to switch on `sec.thirteenf.securities` and defer the timed run): `rules activate` registered the approved version `sec.thirteenf.securities-2026-11-02.bookkeeping`; `rules status` shows it active (2026-11-02 17:23 ET)
+- [ ] ~~One real run is timed and its deadline and `workers` sized from the measure (say the time before starting it; provider access is not needed: the files are already captured)~~ deferred (operator, 2026-11-02 17:23 ET: "A and B"): the 13F files are not on this machine and capturing them is a provider request needing separate permission; the lease and workers stay at the defaults until the run. Move to a new ticket when the files are available
 - [x] Stores and containers a test run leaves are removed (none left: 2026-11-02 16:03 ET)
 - [x] Learning → skill: the `security-master` skill names the three mastering targets and the 13F steps; `bookkeeping` and `change-journal` need no line (the target uses their existing operations) (2026-11-02 16:03 ET)
