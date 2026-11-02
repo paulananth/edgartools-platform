@@ -61,8 +61,8 @@ ENDPOINT_CATALOG_NAME = {"venue": "market_venue"}
 GOLD, SILVER_MARK = "Certification.Gold", "Certification.Silver"
 # The kinds of an identity: the domain whose glossary holds the term, for a heading
 # that does not start with a domain's display name (ticket 158, ticket 159).
-KIND_HOME = {"Adviser": "company", "Audit Firm": "company", "Fund": "company", "Fund Company": "company",
-             "Fund Series": "fund_structure", "Market/Venue": "market_venue"}
+KIND_HOME = {"Adviser": "company", "Audit Firm": "company", "Fund Company": "company",
+             "Fund": "fund_structure", "Fund Series": "fund_structure", "Market/Venue": "market_venue"}
 PLANNED = "(planned: no rule reads this type yet and no link is loaded)"
 RELATIONSHIP_FACTS = (" Each link has a capacity, and holds over one or more dated intervals, "
                       "stated by a filing or observed from one.")
