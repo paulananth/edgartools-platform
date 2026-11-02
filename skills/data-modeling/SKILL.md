@@ -99,8 +99,8 @@ master file is reference data plus a master attribute that holds its codes.
 
 ### 2. A master part: its kind
 
-- The kind is one of `KINDS`. A role a thing plays (an adviser, an auditor, a
-  fund) is a profile on a kind (`PROFILE_KINDS`), never a kind.
+- The kind is one of `KINDS`. A role a thing plays (an adviser, an auditor) is
+  a profile on a kind (`PROFILE_KINDS`), never a kind. A fund is a collection of securities, never a profile.
 - No kind fits: say why the part is master data, propose a name and a
   definition, and ask the operator. Stop.
 - **One kind, however many identifiers.** Two identifier schemes for one

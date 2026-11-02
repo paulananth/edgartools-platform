@@ -241,7 +241,8 @@ def test_only_entity_terms_are_published_as_draft_terms():
         assert platform not in names
     assert not [name for name in names if name.endswith("Profile")]
     placed = {f"{term['glossary']}.{term['name']}" for term in plan["glossary_terms"]}
-    assert {"company.Adviser", "company.Fund", "fund_structure.Fund Series", "market_venue.Market/Venue"} <= placed
+    assert {"company.Adviser", "fund_structure.Fund", "fund_structure.Fund Series", "market_venue.Market/Venue"} <= placed
+    assert "company.Fund" not in placed  # a fund is a collection of securities, not a company
     domains = {domain["name"] for domain in plan["domains"]}
     assert {glossary["name"] for glossary in plan["glossaries"]} == domains
 

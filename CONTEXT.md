@@ -33,7 +33,7 @@ There is one MDM. It is not called "Clean MDM" (operator, 2026-10-13); the old M
 The master data domains are Company, Person, Security, Fund Structure, Branch, Government Entity, International Organization, and Market/Venue. A profile hangs on one of those domains and is not itself a domain.
 
 **Company Identity**:
-The identity of one accepted legal company, shared by its governed Adviser, Audit Firm, and legally applicable Fund profiles. A subsidiary, a filing trust, and its adviser are separate Companies when they have separate identifiers. A rename of one identifier stays one Company, and the old name is an alias.
+The identity of one accepted legal company, shared by its governed Adviser and Audit Firm registrations and, for a business development company, its fund registration. A subsidiary, a filing trust, and its adviser are separate Companies when they have separate identifiers. A rename of one identifier stays one Company, and the old name is an alias.
 _Avoid_: A second identity per role, Person, a Fund name as proof of company legal form, merging two Companies because their names are similar
 
 **Person Identity**:
@@ -68,10 +68,6 @@ _Avoid_: A separate adviser identity, IS_ENTITY_OF, IS_PERSON_OF, the Fund Serie
 A Company that audits other Companies' statements, through its governed audit-firm registration. It shares that Company's identity.
 _Avoid_: Audit Firm Profile, A separate auditor identity, a permanent auditor field on the audited Company
 
-**Fund**:
-The governed fund registration of a Company or a Fund Structure. It shares that holder's identity.
-_Avoid_: A Security, an ETF share, a name ending in "fund" as proof of the profile
-
 **Merge Stage**:
 The common mastering stage that resolves identity before selecting identity and profile values, preserving source attribution, disagreement and the decisions that explain the resulting master state.
 _Avoid_: Field overwrite only, source-specific direct master writes, identity consolidation by field priority
@@ -88,9 +84,13 @@ _Avoid_: Confusing it with the Merge Stage, which is the step that reads it; a h
 The kind that a rule step gives to a record it holds in the Stage. It sorts the Stage and never creates an identity; the rule of that kind decides.
 _Avoid_: hint, candidate kind, a decided kind
 
+**Fund**:
+A collection of Securities that pools investors' money. It is not a Company: a fund that is no company is a Fund Structure, and a business development company stays a Company that also holds a fund registration.
+_Avoid_: A Security, an ETF share, a name ending in "fund" as proof of the registration, treating a fund as a Company
+
 **Fund Structure**:
-A non-company fund arrangement with an evidence-backed structural level and a governed Fund profile, whether or not it is a legal person: a registered fund, a privately offered fund or REIT, an exchange-traded commodity or crypto trust, or an insurance company's separate account that pools investors' money. It is distinct from the securities representing interests in it and from separately identified umbrella or subfund arrangements.
-_Avoid_: "Fund kind"; treating every fund as a Company; a business development company, which is a Company with a Fund profile; treating a fund share as the fund itself
+A non-company fund arrangement with an evidence-backed structural level and a governed fund registration, whether or not it is a legal person: a registered fund, a privately offered fund or REIT, an exchange-traded commodity or crypto trust, or an insurance company's separate account that pools investors' money. It is distinct from the securities representing interests in it and from separately identified umbrella or subfund arrangements.
+_Avoid_: "Fund kind"; treating every fund as a Company; a business development company, which is a Company with a fund registration; treating a fund share as the fund itself
 
 **Fund Company**:
 The SEC registrant that files for a fund family, keyed by its CIK. iShares Trust, Vanguard Index Funds, and SPDR S&P 500 ETF Trust are Fund Companies. The adviser that manages them is not.
