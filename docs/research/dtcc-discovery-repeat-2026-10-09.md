@@ -104,7 +104,7 @@ and [draft findings](../../.scratch/onboarding/dtcc-directories/profile/findings
 remain the review artifacts; repeat output hashes identify the new local files
 without duplicating unchanged findings and fingerprints in Git. Fresh captures,
 repeat profile and terms HTML are also retained under
-`~/.local/share/edgartools/clean-mdm/research/dtcc-repeat-20261009/`.
+`~/.local/share/edgartools/mdm/research/dtcc-repeat-20261009/`.
 
 The profile's 22 questions cover nine unknown classes, nine designed keys and
 four proposed master kinds. Before asking the operator to accept surrogates or

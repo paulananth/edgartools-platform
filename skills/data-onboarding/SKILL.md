@@ -824,8 +824,8 @@ capture is enough for a source whose rules are already proved on real files
      records should finish in under 5 minutes; several thousand take tens
      of minutes. Say the estimate before a long run.
    - **If it hangs or is killed,** its container stays up. List it with
-     `docker ps --filter name=clean-mdm-test-` and remove it with
-     `docker rm -f <name>`. Never touch any other container.
+     `docker ps --filter name=edgartools-local-` and remove it with
+     `docker rm -f <name>`, or `local-test-stores.py stop <name>` for a stores folder. Remove only the container your run created; the shared store's container stays.
    A full run registers the datasets and policy, applies the bundles, and
    runs a second pass that must change nothing (Examples names one).
 3. **The inputs and the proof.**

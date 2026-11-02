@@ -18,7 +18,7 @@ path. Its `body.publication_contract` pins:
 | Field | Version 1 meaning |
 | --- | --- |
 | `version` | Integer `1` |
-| `format` | `clean-mdm-publication-v1`, the normalized adapter manifest format |
+| `format` | `mdm-publication-v2`, the normalized adapter manifest format (the same format as the earlier version 1, which carried "clean" in its name; no stored manifest names either) |
 | `continuity` | `sequence-predecessor-sha256-v1` |
 | `publication_family` | One of the dataset's declared publication families |
 | `required_members` | Exact, nonempty set of unique member names; up to 128 |

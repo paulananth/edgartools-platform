@@ -20,7 +20,7 @@ The scripts use the existing local captures below and write evidence under
    population is now counted from the raw capture by `mdm name-census`
    (`rules/sources/sec.company/census-raw.yaml`).* It was
    `sec_source_population.py`, which exhausted the 69 landed SEC captures in the
-   existing `~/.local/share/edgartools/clean-mdm/proving/cm27` fixture. It executes
+   existing `~/.local/share/edgartools/mdm/proving/cm27` fixture. It executes
    and verifies Source Extracts before deriving wanted keys. Company and former
    name bytes must match historical Name Frequency pins; address and manifest
    bytes receive authenticated immutable receipts for this qualification.

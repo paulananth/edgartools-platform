@@ -33,7 +33,7 @@ def test_every_source_feed_dataset_and_mdm_field_is_in_the_catalog():
     assert 'edgartools-rules.sources."sec.adv".adv_bulk' not in tables
     sec = tables['edgartools-rules.sources."sec.company"."sec.company.v1"']
     assert {"cik", "entity_name", "business_address.postal_code", "name_census"} <= {c["name"] for c in sec["columns"]}
-    company = tables["edgartools-rules.mdm.clean.company"]
+    company = tables["edgartools-rules.mdm.master_records.company"]
     assert {"name", "address", "jurisdiction", "state_of_incorporation"} <= {c["name"] for c in company["columns"]}
     name = next(c for c in company["columns"] if c["name"] == "name")
     assert ("sec.company.v1, then gleif.level1.v1, then iapd.adv.filings.v1, then "
@@ -93,7 +93,7 @@ def test_the_same_rules_give_the_same_catalog_and_a_change_shows(tmp_path: Path)
     files.write_source(body, path.parent)
     changed = catalog.plan(root)
     assert changed["service"]["description"] != catalog.plan()["service"]["description"]  # a new digest
-    company = _tables(changed)["edgartools-rules.mdm.clean.company"]
+    company = _tables(changed)["edgartools-rules.mdm.master_records.company"]
     assert "description" not in {c["name"] for c in company["columns"]}
 
 
@@ -170,8 +170,8 @@ class _Server:
                              for d in self.plan["databases"]]}
         if method == "GET" and path == "/databaseSchemas" and params["database"].endswith(".sources"):
             return {"data": [{"fullyQualifiedName": "edgartools-rules.sources.gone", "id": "id-gone"}]}
-        if method == "GET" and path.startswith("/lineage/table/name/edgartools-rules.mdm.clean.company"):
-            company = self.ids["edgartools-rules.mdm.clean.company"]
+        if method == "GET" and path.startswith("/lineage/table/name/edgartools-rules.mdm.master_records.company"):
+            company = self.ids["edgartools-rules.mdm.master_records.company"]
             ours = self.ids['edgartools-rules.sources.gleif."gleif.relationships.v1"']
             return {"upstreamEdges": [{"fromEntity": ours, "toEntity": company},
                                       {"fromEntity": "id-other", "toEntity": company}]}
@@ -212,10 +212,10 @@ def test_the_plan_names_domains_glossaries_and_store_certification():
     assert cases["sec.company.v1.dc_state_is_empty"]["description"].startswith("Correction")
     assert cases["openfigi_listing.figi_valid"]["testDefinition"] == "edgartools-configured-column-check"
     assert all("testCaseResult" not in case for case in plan["quality_cases"])
-    assert any(name.endswith("mdm.clean.security") for name in products["security_master"]["tables"])
+    assert any(name.endswith("mdm.master_records.security") for name in products["security_master"]["tables"])
     assert sum(1 for table in plan["tables"] if table["databaseSchema"].endswith(".relationships")) == 16
     certified = {item["table"]: item["tag"] for item in plan["certifications"]}
-    assert certified["edgartools-rules.mdm.clean.company"] == "Certification.Gold"
+    assert certified["edgartools-rules.mdm.master_records.company"] == "Certification.Gold"
     assert any(name.startswith("edgartools-rules.silver.") and tag == "Certification.Silver"
                for name, tag in certified.items())
     assert not any(name.startswith("edgartools-rules.sources.") for name in certified)  # a source dataset stays uncertified
@@ -314,7 +314,7 @@ def test_a_patch_that_puts_a_related_term_back_to_approved_is_patched_again():
 def test_each_table_carries_its_data_class():
     plan = catalog.plan()
     marks = {item["table"]: item["tag"] for item in plan["data_class_marks"]}
-    assert marks["edgartools-rules.mdm.clean.company"] == "data_class.master_data"
+    assert marks["edgartools-rules.mdm.master_records.company"] == "data_class.master_data"
     assert marks["edgartools-rules.mdm.relationships.CUSTODIAN"] == "data_class.relationship"
     assert any(name.startswith("edgartools-rules.rdm.code_sets.") and tag == "data_class.reference_data"
                for name, tag in marks.items())
@@ -527,7 +527,7 @@ def test_publish_deletes_only_what_the_rules_no_longer_name():
     server = _Server(plan)
     result = catalog.publish(plan, server)
     deletes = [path for method, path in server.calls if method == "DELETE"]
-    company = server.ids["edgartools-rules.mdm.clean.company"]
+    company = server.ids["edgartools-rules.mdm.master_records.company"]
     feed = server.ids['edgartools-rules.sources.gleif."gleif.relationships.v1"']
     assert deletes == ["/tables/id-old", "/databaseSchemas/id-gone", f"/lineage/table/{feed}/table/{company}"]
     # a renamed source's old table still holds test cases: the server refuses a delete that is not recursive
@@ -668,8 +668,8 @@ def test_a_kind_table_says_which_profile_feeds_it_or_not_yet(tmp_path: Path):
     profile["parts"][1]["kind"] = "security"
     (root / "sources" / "openfigi" / "profile.yaml").write_text(files.dumps(profile), encoding="utf-8")
     tables = _tables(catalog.plan(root))
-    assert tables["edgartools-rules.mdm.clean.security"]["description"].endswith("Profiled from openfigi: 1 part.")
-    assert tables["edgartools-rules.mdm.clean.company"]["description"].endswith("Not profiled yet.")
+    assert tables["edgartools-rules.mdm.master_records.security"]["description"].endswith("Profiled from openfigi: 1 part.")
+    assert tables["edgartools-rules.mdm.master_records.company"]["description"].endswith("Not profiled yet.")
 
 
 def test_a_profiled_silver_table_carries_its_row_and_column_count(tmp_path: Path):
@@ -705,7 +705,7 @@ def test_each_identifier_limit_of_a_kind_is_a_check_on_its_master_table():
     plan = catalog.plan(files.ROOT)
     cases = {case["name"]: case for case in plan["quality_cases"]}
     forward, reverse = cases["company.cik-per-master"], cases["company.cik-masters-per-value"]
-    assert forward["entityLink"].endswith("mdm.clean.company>")
+    assert forward["entityLink"].endswith("mdm.master_records.company>")
     assert forward["testDefinition"] == "edgartools-configured-table-check"
     assert "at most 1 `cik` value" in forward["description"] and "merge/kinds/company.yaml" in reverse["description"]
     assert "security.cusip-per-master" in cases and not any(n.startswith("security.") and n.endswith("masters-per-value")
@@ -715,7 +715,7 @@ def test_each_identifier_limit_of_a_kind_is_a_check_on_its_master_table():
 def test_master_and_reference_tables_are_gold_and_silver_tables_are_silver():
     plan = catalog.plan()
     certified = {item["table"]: item["tag"] for item in plan["certifications"]}
-    assert certified[f"{catalog.SERVICE}.mdm.clean.company"] == "Certification.Gold"
+    assert certified[f"{catalog.SERVICE}.mdm.master_records.company"] == "Certification.Gold"
     assert any(name.startswith(f"{catalog.SERVICE}.rdm.code_sets.") and tag == "Certification.Gold"
                for name, tag in certified.items())
     assert {tag for name, tag in certified.items() if ".silver." in name} == {"Certification.Silver"}

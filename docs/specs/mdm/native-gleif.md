@@ -40,7 +40,7 @@ Record datasets must match its source family and native member/schema version.
 OpenCorporates remains a different corroboration publication; it cannot replace
 any Golden Copy member or connect a Golden Copy recovery chain.
 
-The captured publication manifest extends `clean-mdm-publication-v1`:
+The captured publication manifest extends `mdm-publication-v2`:
 
 - `publication_time`: publisher release timestamp with timezone;
 - `sequence`: exact UTC microseconds since 1970 (`release_sequence`);
