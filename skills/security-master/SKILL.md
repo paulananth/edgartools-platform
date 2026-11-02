@@ -136,7 +136,7 @@ CUSIP). Each source keeps its own record on it; MDM merges them.
 | Source | Dataset | Creates a Security? | Gives |
 |---|---|---|---|
 | SEC N-PORT | `sec.nport.security.v2` | Yes (decided) | CUSIP, every ISIN filed with it (ticket 138), issuer name as filed, title of class, issuer LEI, "issued by" link |
-| SEC 13F | `sec.thirteenf.information_table.security.v1` | Yes (live) | CUSIP, name and title as filed, a filed FIGI |
+| SEC 13F | `sec.thirteenf.securities.v1` | Yes (live) | CUSIP, name and title as filed, a filed FIGI |
 | OpenFIGI | `openfigi.security.v3` (both kinds asked, ticket 138) | Yes, and first (on since 2026-10-26 12:24 ET) | All ten OpenFIGI fields and every listing; the CUSIP or ISIN asked and every listing's FIGI as identifiers |
 
 The ranking that fills a field: OpenFIGI, then 13F, then N-PORT (operator,
@@ -225,7 +225,7 @@ it; the priority decides only where several give it. For each field
 2. **Otherwise the highest-priority source wins**, in the order of
    `defaults.sources`:
    1. `openfigi.security.v3`
-   2. `sec.thirteenf.information_table.security.v1`
+   2. `sec.thirteenf.securities.v1`
    3. `sec.nport.security.v2`
 
    (operator, 2026-10-18, ticket 84: "make openfigi priority 1 and 13f

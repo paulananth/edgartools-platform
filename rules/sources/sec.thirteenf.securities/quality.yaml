@@ -4,7 +4,7 @@
 # (rules/identifiers/): a failing one is set aside where the record is read.
 version: sec-thirteenf-security-quality-v1
 quality:
-  sec.thirteenf.information_table.security.v1:
+  sec.thirteenf.securities.v1:
     checks:
     # Filers that name two share classes for one Security give it none
     # (combine.yaml); the Security is listed for a steward, never held back.

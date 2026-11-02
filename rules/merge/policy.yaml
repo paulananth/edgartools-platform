@@ -251,7 +251,7 @@ automatic_rules:
 # operator, 2026-10-27 (recorded 13:56 ET), in their words: On, set aside put/call
 # (Recommended). A 13F CUSIP no Security holds joins the Security holding its
 # filed FIGI; a held CUSIP stays on its own Security; a FIGI filed only on put
-# or call rows is not read (sec.thirteenf.information_table/source.yaml). The
+# or call rows is not read (sec.thirteenf.securities/source.yaml). The
 # FIGI rule activates on the verified FIGI Identifier Contract; the limited
 # test is .scratch/rebuild-priorities/research/138_13f_figi_limited_test.json.
 - kind: security
