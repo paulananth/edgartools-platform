@@ -348,8 +348,10 @@ reference list.
   `PUT /api/v1/governance/workflowDefinitions/name/GlossaryTermApprovalWorkflow/suspend`
   (undo with `/resume`). Check `suspended` is true before a publish.
 - What the catalog holds for quality and mapping: a quality case sits on the table
-  it checks (29 cases on 10 tables: source datasets and two silver tables, none
-  on a master kind table), and a mapping is a column in the lineage of the
+  it checks (source datasets and silver tables from their quality rules; a master
+  kind table from its identifier limits: one case per `claim.forward` and
+  `claim.reverse` of each identifier in `merge/kinds/<kind>.yaml`, none where the
+  limit is null), and a mapping is a column in the lineage of the
   kind table (the Lineage tab, columns shown), not a column of the table page.
   A page with an empty Quality tab is a table with no configured check.
 

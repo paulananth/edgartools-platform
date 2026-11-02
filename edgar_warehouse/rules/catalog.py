@@ -747,11 +747,33 @@ def _quality_case(table: str, columns: set[str], code: str, kind: str, rule: dic
             "testDefinition": definition, "entityLink": link, "kind": kind}
 
 
-def _quality(root: Path, tables: list[dict]) -> dict:
+IDENTIFIER_LIMITS = (("forward", "per-master", "A master holds at most {limit} `{identifier}` value(s)."),
+                     ("reverse", "masters-per-value", "One `{identifier}` value names at most {limit} master(s)."))
+
+
+def _identifier_cases(kinds: dict, by_name: dict) -> list[dict]:
+    """A kind's identifier limits, as the kind file states them, are its master checks."""
+    cases = []
+    for kind, rules in sorted(kinds.items()):
+        table = fqn(SERVICE, MDM, CLEAN, kind)
+        if table not in by_name:
+            continue
+        columns = {column["name"] for column in by_name[table]["columns"]}
+        for identifier, spec in sorted((rules.get("identifiers") or {}).items()):
+            claim = spec.get("claim") or {}
+            for key, slug, text in IDENTIFIER_LIMITS:
+                if claim.get(key) is not None:
+                    rule = {"id": f"{identifier}-{slug}", "why": text.format(limit=claim[key], identifier=identifier)}
+                    cases.append(_quality_case(table, columns, kind, "check", rule, rules.get("version") or "",
+                                               f"merge/kinds/{kind}.yaml"))
+    return cases
+
+
+def _quality(root: Path, tables: list[dict], kinds: dict) -> dict:
     """Configured checks and fixes. A profile proposal is not a case, and a
     case has no pass or fail result."""
     by_name = {_table_name(table): table for table in tables}
-    cases = []
+    cases = _identifier_cases(kinds, by_name)
     for path in sorted((root / "sources").glob("*/source.yaml")):
         body = files.load_source(path)
         source = body.get("source") or path.parent.name
@@ -888,7 +910,7 @@ def plan(root: Path | None = None) -> dict:
         "profiles": [mark for mark in _profile_marks(profiles)
                      if mark["table"] in {_table_name(table) for table in tables}],
         **_meaning(root, policy, tables, lineage, read),
-        **_quality(root, tables),
+        **_quality(root, tables, kinds),
     }
 
 
