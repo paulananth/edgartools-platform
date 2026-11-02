@@ -1062,6 +1062,37 @@ def _validity_days(call: Call) -> int | None:
     return None
 
 
+def _case_fqn(case: dict) -> str:
+    table = case["entityLink"].removeprefix("<#E::table::").split("::columns::")[0].removesuffix(">")
+    column = case["entityLink"].split("::columns::", 1)[1].removesuffix(">") + "." if "::columns::" in case["entityLink"] else ""
+    return f"{table}.{column}{quote(case['name'])}"
+
+
+def _result_body(result: dict) -> dict:
+    """A silver load's report of one check, as the server's test case result."""
+    checked, failed = result["rows_checked"], result["rows_failed"]
+    if not 0 <= failed <= checked:
+        raise CatalogError(f"The result of {result.get('table')}.{result.get('check')} fails {failed} of {checked} rows")
+    return {"timestamp": _millis(result["at"]), "testCaseStatus": "Failed" if failed else "Success",
+            "result": f"{failed} of {checked} rows failed ({result['on_fail']}).",
+            "passedRows": checked - failed, "failedRows": failed,
+            "testResultValue": [{"name": "rowsChecked", "value": str(checked)},
+                                {"name": "rowsFailed", "value": str(failed)}]}
+
+
+def _millis(instant: str) -> int:
+    parsed = datetime.datetime.fromisoformat(instant)
+    return int((parsed if parsed.tzinfo else parsed.replace(tzinfo=datetime.timezone.utc)).timestamp() * 1000)
+
+
+def _publish_results(plan: dict, call: Call, results: dict) -> None:
+    for case in plan.get("quality_cases") or []:
+        result = results.get(case["name"])
+        if result:
+            call("POST", "/dataQuality/testCases/testCaseResults/" + escape(_case_fqn(case), safe=""),
+                 _result_body(result))
+
+
 def _publish_classifications(plan: dict, call: Call) -> None:
     for classification in plan.get("classifications") or []:
         call("PUT", "/classifications", {"name": classification["name"],
@@ -1209,7 +1240,7 @@ def _publish_marks(plan: dict, call: Call, ids: dict[str, str]) -> None:
                       "labelType": "Manual", "state": "Suggested"}}])
 
 
-def publish(plan: dict, call: Call, draft_terms: bool = False) -> dict:
+def publish(plan: dict, call: Call, draft_terms: bool = False, results: dict | None = None) -> dict:
     """Make the catalog equal to `plan`: create or update everything it names,
     then delete, inside its own service only, the tables, schemas and lineage
     it no longer names. Publishing the same plan again changes nothing."""
@@ -1243,13 +1274,10 @@ def publish(plan: dict, call: Call, draft_terms: bool = False) -> dict:
     for case in plan.get("quality_cases") or []:
         body = {key: case[key] for key in ("name", "displayName", "description", "testDefinition", "entityLink")}
         answer = call("PUT", "/dataQuality/testCases", body) or {}
-        table = case["entityLink"].removeprefix("<#E::table::").split("::columns::")[0].removesuffix(">")
-        column = ""
-        if "::columns::" in case["entityLink"]:
-            column = case["entityLink"].split("::columns::", 1)[1].removesuffix(">") + "."
-        expected = f"{table}.{column}{quote(case['name'])}"
+        expected = _case_fqn(case)
         if answer.get("fullyQualifiedName") != expected:
             raise CatalogError(f"The server named quality case {expected} {answer.get('fullyQualifiedName')}")
+    _publish_results(plan, call, results or {})
     _publish_marks(plan, call, ids)
     _drop_invented_domain_edges(plan, call)
     for product in plan.get("products") or []:
@@ -1329,7 +1357,7 @@ def publish(plan: dict, call: Call, draft_terms: bool = False) -> dict:
             "pipelines": len(pipeline_ids), "removed": removed}
 
 
-def verify(plan: dict, call: Call) -> dict:
+def verify(plan: dict, call: Call, results: dict | None = None) -> dict:
     """Read back the owned metadata and lineage; never repair while checking."""
     differences = []
 
@@ -1409,5 +1437,17 @@ def verify(plan: dict, call: Call) -> dict:
         held = call("GET", f"/tables/name/{escape(mark['table'], safe='')}", params={"fields": "certification"}) or {}
         if ((held.get("certification") or {}).get("tagLabel") or {}).get("tagFQN") != mark["tag"]:
             differences.append(mark["table"] + ": not certified " + mark["tag"])
+    cases = {case["name"]: case for case in plan.get("quality_cases") or []}
+    for name, result in sorted((results or {}).items()):
+        case = cases.get(name)
+        if not case:
+            continue
+        where = _case_fqn(case)
+        held = ((call("GET", "/dataQuality/testCases/name/" + escape(where, safe=""),
+                      params={"fields": "testCaseResult"}) or {}).get("testCaseResult")) or {}
+        wanted = _result_body(result)
+        keys = ("timestamp", "testCaseStatus", "passedRows", "failedRows")
+        if tuple(held.get(key) for key in keys) != tuple(wanted[key] for key in keys):
+            differences.append(where + ": result changed, publish again")
     return {"ok": not differences, "tables": len(plan["tables"]),
             "pipelines": len(plan.get("pipelines") or []), "differences": differences}

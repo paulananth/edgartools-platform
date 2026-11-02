@@ -6,6 +6,7 @@ from io import BytesIO
 import json
 import shutil
 from argparse import Namespace
+from urllib.parse import unquote
 from pathlib import Path
 from urllib.error import HTTPError
 
@@ -105,7 +106,7 @@ class _Server:
         self.plan, self.calls, self.ids = plan, [], {}
         self.term_bodies, self.product_bodies, self.patches, self.draft = [], [], [], set()
         self.table_delete_params = []
-        self.profiles, self.tags, self.certified = {}, {}, None
+        self.profiles, self.tags, self.certified, self.results = {}, {}, None, {}
 
     def __call__(self, method, path, body=None, params=None):
         self.calls.append((method, path))
@@ -121,16 +122,18 @@ class _Server:
                     self.tags.setdefault(path.removeprefix("/tables/"), []).append({"tagFQN": op["value"]["tagFQN"]})
             if path.startswith("/glossaryTerms/"):
                 self.draft.add(path.removeprefix("/glossaryTerms/"))
+        if method == "POST" and path.startswith("/dataQuality/testCases/testCaseResults/"):
+            self.results[unquote(path.removeprefix("/dataQuality/testCases/testCaseResults/"))] = body
+        if method == "GET" and path.startswith("/dataQuality/testCases/name/"):
+            return {"testCaseResult": self.results.get(unquote(path.removeprefix("/dataQuality/testCases/name/")))}
         if method == "GET" and path == "/system/settings":
             return {"data": [{"config_type": "assetCertificationSettings", "config_value": {"validityPeriod": "P30D"}}]}
         if method == "GET" and path.startswith("/tables/name/") and (params or {}).get("fields") == "certification":
-            from urllib.parse import unquote
             if self.certified == {}:
                 return {}
             return {"certification": getattr(self, "certified_by_id", {}).get(
                 self.ids.get(unquote(path.removeprefix("/tables/name/"))))}
         if method == "GET" and path.startswith("/tables/name/") and (params or {}).get("fields") == "tags":
-            from urllib.parse import unquote
             return {"tags": self.tags.get(self.ids.get(unquote(path.removeprefix("/tables/name/"))), [])}
         if method == "GET" and path.endswith("/tableProfile/latest"):
             found = self.profiles.get(path.removeprefix("/tables/").removesuffix("/tableProfile/latest"))
@@ -415,7 +418,7 @@ def test_catalog_publish_requires_matching_readback_and_returns_structured_resul
         "service": "edgartools-rules", "tables": 3, "pipelines": 2, "lineage": 2,
         "removed": {"tables": 0, "schemas": 0, "databases": 0, "lineage": 0},
     })
-    monkeypatch.setattr(catalog, "verify", lambda selected, call: calls.append("readback") or {
+    monkeypatch.setattr(catalog, "verify", lambda selected, call, **kw: calls.append("readback") or {
         "ok": True, "tables": 3, "pipelines": 2, "differences": [],
     })
 
@@ -737,3 +740,56 @@ def test_a_code_list_edge_maps_the_code_to_the_column_that_holds_it():
     assert edge["columns"][0]["fromColumns"][0].endswith('"requests.idType".code')
     assert edge["columns"][0]["toColumn"].startswith(edge["to"] + ".")
     assert not any(e["columns"] for e in plan["lineage"] if ".sources." in e["from"] and ".sources." in e["to"])
+
+
+def _results_file():
+    return {"openfigi_listing.figi_valid": {"table": "openfigi_listing", "check": "figi_valid", "on_fail": "flag",
+                                           "at": "2026-11-02T12:00:00+00:00", "rows_checked": 40, "rows_failed": 3}}
+
+
+def test_publish_sends_each_recorded_result_to_its_case_and_check_reads_it_back():
+    plan = catalog.plan()
+    server = _Server(plan)
+    results = _results_file()
+    catalog.publish(plan, server, results=results)
+    (fqn_, sent), = server.results.items()
+    assert fqn_ == 'edgartools-rules.silver.openfigi.openfigi_listing.figi."openfigi_listing.figi_valid"'
+    assert sent["testCaseStatus"] == "Failed" and sent["failedRows"] == 3 and sent["passedRows"] == 37
+    assert sent["timestamp"] == 1793620800000
+    assert not [d for d in catalog.verify(plan, server, results=results)["differences"] if "result" in d]
+    server.results[fqn_] = {**sent, "testCaseStatus": "Success"}
+    assert any("result changed, publish again" in d for d in catalog.verify(plan, server, results=results)["differences"])
+
+
+def test_a_publish_without_results_sends_none():
+    plan = catalog.plan()
+    server = _Server(plan)
+    catalog.publish(plan, server)
+    assert server.results == {}
+
+
+def test_a_result_that_fails_more_rows_than_it_checked_is_refused():
+    plan = catalog.plan()
+    bad = {"openfigi_listing.figi_valid": {**_results_file()["openfigi_listing.figi_valid"], "rows_failed": 41}}
+    with pytest.raises(catalog.CatalogError, match="fails 41 of 40 rows"):
+        catalog.publish(plan, _Server(plan), results=bad)
+
+
+def test_check_says_when_the_row_counts_of_a_result_differ():
+    plan = catalog.plan()
+    server = _Server(plan)
+    results = _results_file()
+    catalog.publish(plan, server, results=results)
+    key, sent = next(iter(server.results.items()))
+    server.results[key] = {**sent, "failedRows": 0, "passedRows": 40}
+    assert any("result changed" in d for d in catalog.verify(plan, server, results=results)["differences"])
+
+
+def test_the_catalog_command_reads_the_results_file_it_is_given(tmp_path):
+    from edgar_warehouse.silver_writer import results as silver_results
+
+    path = tmp_path / "results.json"
+    silver_results.record(path, "openfigi_listing", {"checks": {"figi_valid": {"on_fail": "flag", "rows_failed": 3}},
+                                                     "rows_checked": 40})
+    assert rules_cli._results(Namespace(results=path))["openfigi_listing.figi_valid"]["rows_failed"] == 3
+    assert rules_cli._results(Namespace(results=None)) == {}

@@ -101,7 +101,7 @@ def run(spec: dict, rows: list[dict]) -> tuple[list[dict], dict]:
             continue
         kept.append({**row, QUALITY: sorted(ids) or None})
     report = {"checks": {c["id"]: {"on_fail": c["on_fail"], "rows_failed": counts[c["id"]]} for c in checks},
-              "rows_flagged": sum(1 for row in kept if row[QUALITY]), "rows_refused": refused}
+              "rows_checked": len(rows), "rows_flagged": sum(1 for row in kept if row[QUALITY]), "rows_refused": refused}
     return kept, report
 
 

@@ -193,7 +193,7 @@ def test_a_check_flags_its_rows_an_exception_refuses_them_and_an_empty_value_pas
     assert result["quality"] == {"checks": {"member_shape": {"on_fail": "flag", "rows_failed": 1},
                                             "one_member_per_day": {"on_fail": "flag", "rows_failed": 3},
                                             "known_member": {"on_fail": "exception", "rows_failed": 1}},
-                                 "rows_flagged": 4, "rows_refused": 1}
+                                 "rows_checked": 7, "rows_flagged": 4, "rows_refused": 1}
     with pytest.raises(Blocked, match="does not name"):  # a delivery cannot write its own flags
         writer.land(sink, "visit", [{"visit_id": 1, "quality": None}], lambda *a: {})
 
@@ -234,3 +234,21 @@ def test_exact_json_numbers_keep_existing_integral_master_key_spelling():
     assert _key(Decimal("1.0")) == _key(1.0) == "1"
     assert _key(Decimal("1e60")) == str(10**60)
     assert _key(Decimal("1.25")) == "1.25"
+
+
+def test_a_load_given_a_results_file_keeps_each_check_s_report(tmp_path, monkeypatch):
+    from edgar_warehouse.silver_writer import results
+
+    sink = FakeSink(a_spec(checks=CHECKS))
+    delivered = [{"visit_id": 1, "member_id": "ZZ0000013", "amount": "1", "visited_on": "2026-10-01"},
+                 {"visit_id": 4, "member_id": "ZZ0000014", "amount": None, "visited_on": None}]
+    path = tmp_path / "results.json"
+    monkeypatch.delenv(results.ENVIRONMENT, raising=False)
+    writer.land(sink, "visit", delivered, lambda *a: {}, results=path)
+    kept = results.load(path)
+    assert set(kept) == {"visit." + check["id"] for check in CHECKS}
+    assert {entry["rows_checked"] for entry in kept.values()} == {2}
+    other = tmp_path / "from-environment.json"
+    monkeypatch.setenv(results.ENVIRONMENT, str(other))
+    writer.land(sink, "visit", delivered, lambda *a: {})
+    assert set(results.load(other)) == set(kept)
