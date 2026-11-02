@@ -674,6 +674,17 @@ does not run or activate a pipeline.
 
 ### test: run it on real captured files and record the result
 
+**Recording a run: two Postgres servers.** `rules test --stores <folder>` runs the
+chain in disposable stores (start them: `uv run --extra mdm python
+infra/scripts/local-test-stores.py up <name>`, then `stop <name>` and remove the
+container after), and `--version` records the result in the Rules Database that
+`RULES_DATABASE_URL` names. Source the shared store's `worker.env` for that URL
+(the shared store is the Rules Database); never use it as `--stores`
+(the command refuses: the stores' Rules Database is the test's sandbox). Then
+`rules pending` and `rules approve` under the standing words. A small invented
+capture is enough for a source whose rules are already proved on real files
+(two files, every step verified, second pass changed nothing: about 30 s).
+
 1. **Captured-file qualification.** Use 5–10 receipt-verified records first,
    with source hashes and publication facts taken from the capture. Execute
    the candidate `read:` contract with the configured engine and select
