@@ -2,7 +2,7 @@
 
 Priority: 44, tier 3, product value. Map: [Rebuild priorities](../map.md). Moved from `.scratch/company-financials/issues/12-answer-key-for-measures.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
-Type: task. Status: in progress (Claude, 2026-10-22; operator: "Resume financials (44)"). Blocked by: 39 (resolved). Map: [map](../../company-financials/map.md).
+Type: task. Status: resolved (2026-11-02 08:16 ET; operator: "start ticket 44"), after the PR merged as #1144 on 2026-10-22. Blocked by: 39 (resolved). Map: [map](../../company-financials/map.md).
 
 ## Question
 
@@ -39,7 +39,7 @@ counts and the key file's sha256, so ticket 48 scores against that exact key.
   - at a year-end change, the year is the one an annual report covers as its own fiscal year (operator, 2026-10-22: "The reported year (Recommended)"); the one collision in the three companies keeps the period it kept, the other 12-month period set aside as a comparative (`comparative_end`), no value moves; skill updated;
   - the two checks above tightened.
   Key now: 867 measures with a value; no concept filed 232, missing year 337, not meaningful 85, not meaningful for financial services 60, waiting for the statutory rate 8, mixed currencies 6, denominator zero or less 5; "fiscal year changed" 0, since none of the three companies has a fiscal year without an annual period. Local key sha256 `8c9c0d1e6319711a95ff94769cb6e83ff71e53de040209c262fe99c359590f87`
-- [ ] ~~"fiscal year changed" shown on a real company~~ deferred to [47](47-company-financials-15-build-measures.md): its tests carry an invented filer whose change leaves a fiscal year without an annual period
+- [x] "fiscal year changed" shown on real companies (2026-11-02 08:16 ET): the cohort proof, run on the real captured facts, reports 47 measures with that reason ([48](48-company-financials-16-cohort-proof.md), full run 2026-10-30). The three-company answer key has none, as recorded; the code path was proved on an invented filer in ticket 47 and is now seen on real data
 - [x] PR, CI green, merged as #1144 (2026-10-22 21:42 ET)
 - [x] Total debt's forms corrected toward research 01 and 04 (ticket 46's Spec review, 2026-10-28 16:55 ET): the second us-gaap form adds short-term borrowings ("+ short-term borrowings"), and IFRS long-term borrowings add short-term, else current borrowings (the third form could never fire); the liabilities fallback refuses two units. Key regenerated: no value and no measure moved (only total debt's tried concepts, 153 entries); local key sha256 `815155a64ff21951c6941b9036bffb73f990392d40cbd3de3c10715b4e6e17a8`
 - [x] Learning → skill: `skills/company-financials/SKILL.md`, the time model: at a year-end change the year is the reported one, a comparative is not a year, and a missing figure in a year that has one is "missing year"; the hard-stop row names both exact-text engine options (2026-10-22 21:32 ET)
