@@ -205,7 +205,7 @@ partition: []
 load_mode: append
 why: 'A line is transaction data: a position or an event restated every filing with its amount,
   so it lands in silver with its issuer''s MDM id and its as-of date, never as an MDM relationship
-  (operator, 2026-10-22). Its owners are the filing''s, in insider_ownership, joined by accession number,
+  (operator, 2026-10-22). Its owners are the filing''s, in insider_reporting_owner, joined by accession number,
   as SEC''s own data sets keep them.'
 # Data quality, as for N-PORT's holdings (operator, 2026-10-17: "Flag, land the
 # row"): a line whose ownership is neither D nor I lands flagged, never refused;

@@ -1,7 +1,7 @@
 """Forms 3, 4 and 5 in silver: lines and owners, as SEC keeps them (ticket 25).
 
 The SGML ownership reading on an invented joint filing, landed into
-`insider_position` and `insider_ownership` (`rules/sources/sec.ownership/silver-*.yaml`)
+`insider_position` and `insider_reporting_owner` (`rules/sources/sec.ownership/silver-*.yaml`)
 on a disposable PostgreSQL 16. A line lands once, with its issuer's MDM id and
 its as-of and filing dates; each owner lands once, found as the Person the
 ownership feed masters (its record key) or as a Company by its CIK (operator,
@@ -81,7 +81,7 @@ def test_a_joint_filings_lines_land_once_and_each_owner_finds_its_master(databas
             assert (again["inserted"], again["changed"]) == (0, 0)
         with runtime.connect() as conn:
             landed = list(conn.execute(text("SELECT * FROM silver.insider_position ORDER BY line_table")).mappings())
-            found = {r["rpt_owner_cik"]: r for r in conn.execute(text("SELECT * FROM silver.insider_ownership")).mappings()}
+            found = {r["rpt_owner_cik"]: r for r in conn.execute(text("SELECT * FROM silver.insider_reporting_owner")).mappings()}
         entity = core.bindings(database)
 
     # Each line once, with its issuer, the date it holds at and the filing's date.

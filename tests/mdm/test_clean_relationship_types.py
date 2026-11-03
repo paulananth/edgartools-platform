@@ -29,7 +29,8 @@ LEGAL = ["company", "fund_structure", "government", "international_organization"
 BEFORE = {
     "AUDITED_BY": {"from": ["company"], "to": ["company"], "to_profile": "audit_firm"},
     "ISSUED_BY": {"from": ["security"], "to": LEGAL},
-    "EMPLOYED_BY": {"from": ["person"], "to": ["company"], "capacities": ["director", "employee", "officer"]},
+    # EMPLOYED_BY gained the capacity `other` (ticket 182: the Form 3/4/5 "Other (specify below)" box).
+    "EMPLOYED_BY": {"from": ["person"], "to": ["company"], "capacities": ["director", "employee", "officer", "other"]},
     "CONTROLS": {"from": ["person"], "to": ["company"], "capacities": ["control_person", "owner", "ten_percent_owner"]},
     "HOLDS": {"from": ["company", "fund_structure", "person"], "to": ["security"]},
     "MANAGES_FUND": {"from": ["company", "person"], "to": ["company", "fund_structure"],
