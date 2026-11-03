@@ -757,7 +757,7 @@ bookkeeping:
             lookups:
               isin: {from: identifiers, table: isin, column: holding, value_column: isin,
                      max_input_bytes: 268435456, max_input_rows: 10000000}
-              filed: {from: submissions, table: filed, column: accession, value_column: filed,
+              filed: {from: submissions, table: filed, column: accession_number, value_column: filed,
                      max_input_bytes: 67108864, max_input_rows: 1000000}
               umbrella: {run: {source: gleif, target: subfund-pairs, step: pairs}, table: subfund, column: fund,
                          value_column: umbrella, max_input_bytes: 67108864, max_input_rows: 1000000}
@@ -806,7 +806,7 @@ bookkeeping:
           input:
             contract: sec.nport.registrant/source.yaml
             lookups:
-              filed: {from: submissions, table: filed, column: accession, value_column: filed,
+              filed: {from: submissions, table: filed, column: accession_number, value_column: filed,
                       max_input_bytes: 17179869184, max_input_rows: 100000000}
         - name: series
           operation: source.read
@@ -829,13 +829,13 @@ bookkeeping:
             lookups:
               isin: {from: identifiers, table: isin, column: holding, value_column: isin,
                      max_input_bytes: 17179869184, max_input_rows: 100000000}
-              series: {from: series, table: series, column: accession, value_column: series_id,
+              series: {from: series, table: series, column: accession_number, value_column: series_id,
                        max_input_bytes: 17179869184, max_input_rows: 100000000}
-              registrant: {from: registrants, table: filing, column: accession, value_column: cik,
+              registrant: {from: registrants, table: filing, column: accession_number, value_column: cik,
                            max_input_bytes: 17179869184, max_input_rows: 100000000}
-              filed: {from: submissions, table: filed, column: accession, value_column: filed,
+              filed: {from: submissions, table: filed, column: accession_number, value_column: filed,
                       max_input_bytes: 17179869184, max_input_rows: 100000000}
-              as_of: {from: submissions, table: reported, column: accession, value_column: as_of,
+              as_of: {from: submissions, table: reported, column: accession_number, value_column: as_of,
                       max_input_bytes: 17179869184, max_input_rows: 100000000}
         - name: holding_combine
           operation: source.combine

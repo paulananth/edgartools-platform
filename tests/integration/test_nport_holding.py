@@ -41,12 +41,12 @@ REPORTED = {"A-1": "31-MAR-2026", "A-2": ""}
 
 
 def reported_pairs(store, root, raw) -> list[list[str]]:
-    """Each filing's accession and as-of date (filings.yaml's `reported`)."""
+    """Each filing's accession number and as-of date (filings.yaml's `reported`)."""
     reading = cusip.read(store, root / "reported", "filings.yaml", raw, None)
     rows = [row for artifact in store.json(reading)["artifacts"] for part in artifact.get("partitions", [])
             for row in store.json(part["receipt"])["tables"]["reported"]]
     rows += [row for artifact in store.json(reading)["artifacts"] for row in artifact.get("tables", {}).get("reported", [])]
-    return [[row["accession"], row["as_of"]] for row in rows if row["as_of"]]
+    return [[row["accession_number"], row["as_of"]] for row in rows if row["as_of"]]
 def holding_rows(root: Path) -> list[dict]:
     store = Artifacts()
     root.mkdir(parents=True, exist_ok=True)
@@ -60,7 +60,7 @@ def holding_rows(root: Path) -> list[dict]:
                    + "".join(f"{a}\t{s}\n" for a, s in INFO.items()))
     raw = store.put_bytes((root / "capture.zip").as_uri(), body.getvalue())
     series = cusip.read(store, root / "series", "holding-series.yaml", raw, None)
-    pairs = [[r["accession"], r["series_id"]] for a in store.json(series)["artifacts"]
+    pairs = [[r["accession_number"], r["series_id"]] for a in store.json(series)["artifacts"]
              for part in a.get("partitions", []) for r in store.json(part["receipt"])["tables"]["series"]]
     assert pairs == [["A-1", "S000000001"]]  # "N/A" gives no pair: a lookup never holds an empty value
     holdings = cusip.read(store, root / "holding", "holding.yaml", raw, cusip.Q2, lookups={
@@ -96,7 +96,7 @@ def test_each_holding_names_the_security_record_its_holdings_make(tmp_path):
 
 def test_the_holder_is_the_series_else_the_registrant(tmp_path):
     rows = holding_rows(tmp_path / "rows")
-    by_filing = {(r["accession"], r["series_id"], r["registrant_cik"], r["filed"], r["period"]) for r in rows}
+    by_filing = {(r["accession_number"], r["series_id"], r["registrant_cik"], r["filed"], r["period"]) for r in rows}
     assert by_filing == {("A-1", "S000000001", "0000000001", "2026-06-05", cusip.Q2),
                          ("A-2", None, "0000000002", "2026-05-28", cusip.Q2)}
 
@@ -106,7 +106,7 @@ def test_each_holding_carries_the_date_its_filing_reports_at(tmp_path):
     a holding is true at its filing's REPORT_DATE, beside the filing date; a
     filing stating none gives none."""
     rows = holding_rows(tmp_path / "rows")
-    assert {(r["accession"], r["as_of"], r["filed"]) for r in rows} == {
+    assert {(r["accession_number"], r["as_of"], r["filed"]) for r in rows} == {
         ("A-1", "2026-03-31", "2026-06-05"), ("A-2", None, "2026-05-28")}
 
 
@@ -159,13 +159,13 @@ def test_each_row_lands_with_its_holder_and_security_found_by_lookup(database, t
     # 4 and 5 (by ONE) and 9 (by the CUSIP) are one Security, found by each key; A-1's are the fund's.
     assert bound(database, SECURITY, isin.ONE) == security
     assert {h: str(landed[h]["security_mdm_id"]) for h in ("4", "5", "9")} == {"4": security, "5": security, "9": security}
-    assert {str(r["fund_mdm_id"]) for h, r in landed.items() if r["accession"] == "A-1"} == {fund}
-    assert {str(r["registrant_mdm_id"]) for r in landed.values() if r["accession"] == "A-1"} == {registrant}
+    assert {str(r["fund_mdm_id"]) for h, r in landed.items() if r["accession_number"] == "A-1"} == {fund}
+    assert {str(r["registrant_mdm_id"]) for r in landed.values() if r["accession_number"] == "A-1"} == {registrant}
     # A-2 names no series and its registrant is not mastered: empty ids, the row still lands.
-    a2 = [r for r in landed.values() if r["accession"] == "A-2"]
+    a2 = [r for r in landed.values() if r["accession_number"] == "A-2"]
     assert a2 and all(r["fund_mdm_id"] is None and r["registrant_mdm_id"] is None for r in a2)
     # The as-of date lands as a date: A-1 reports at 31 March, A-2 states none.
-    assert {str(r["as_of"]) for r in landed.values() if r["accession"] == "A-1"} == {"2026-03-31"}
+    assert {str(r["as_of"]) for r in landed.values() if r["accession_number"] == "A-1"} == {"2026-03-31"}
     assert all(r["as_of"] is None for r in a2)
     # TWO and NONE have no Security mastered here: empty, never another Security's id.
     assert landed["6"]["security_mdm_id"] is None and landed["8"]["security_mdm_id"] is None

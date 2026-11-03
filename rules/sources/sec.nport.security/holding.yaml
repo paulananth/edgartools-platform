@@ -4,7 +4,7 @@
 # record: the silver writer fills the Fund's, the registrant Company's and the
 # Security's MDM ids by their keys (silver-holding.yaml). Its own reading, so the
 # Security's mastering reading (source.yaml) and its digests stay as they are.
-# Lookups, each keyed by the filing's accession unless named: `isin` (the
+# Lookups, each keyed by the filing's accession number unless named: `isin` (the
 # holding's one ISIN, by HOLDING_ID, as source.yaml reads it), `series` (the
 # filing's fund series id, holding-series.yaml; a filing with none is the
 # registrant's own), `registrant` (the filing's CIK), `filed` (its
@@ -32,7 +32,7 @@ read:
       each: .
       select: {test: {path: HOLDING_ID, kind: present}}
       columns:
-        accession: {text: {path: ACCESSION_NUMBER}}
+        accession_number: {text: {path: ACCESSION_NUMBER}}
         holding_id: {text: {path: HOLDING_ID}}
         period:
           context: {name: period}

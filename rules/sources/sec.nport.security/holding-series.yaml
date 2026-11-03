@@ -38,7 +38,7 @@ read:
               path: ACCESSION_NUMBER
               kind: present
       columns:
-        accession: {text: {path: ACCESSION_NUMBER}}
+        accession_number: {text: {path: ACCESSION_NUMBER}}
         series_id:
           text:
             path: SERIES_ID

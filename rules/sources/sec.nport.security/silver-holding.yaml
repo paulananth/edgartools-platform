@@ -26,9 +26,9 @@
 # changes; an amended report is a new filing.
 table: nport_holding
 definition: "One holding of one N-PORT filing, as filed, linked to the fund series, the registrant and the Security."
-grain: "one row per filing (accession) and holding id"
+grain: "one row per filing (accession number) and holding id"
 columns:
-- name: accession
+- name: accession_number
   type: VARCHAR
   nullable: false
   definition: "The filing's accession number."
@@ -50,25 +50,25 @@ columns:
   type: DATE
   nullable: true
   definition: "The filing's date."
-  source: "SUBMISSION.FILING_DATE by accession"
+  source: "SUBMISSION.FILING_DATE by accession number"
   sensitivity: none
 - name: as_of
   type: DATE
   nullable: true
   definition: "The date the holding is reported at: the filing's date as of which information is reported (ticket 79)."
-  source: "SUBMISSION.REPORT_DATE by accession"
+  source: "SUBMISSION.REPORT_DATE by accession number"
   sensitivity: none
 - name: series_id
   type: VARCHAR
   nullable: true
   definition: "The fund series that filed it; empty for a filing that names none."
-  source: "FUND_REPORTED_INFO.SERIES_ID by accession"
+  source: "FUND_REPORTED_INFO.SERIES_ID by accession number"
   sensitivity: none
 - name: registrant_cik
   type: VARCHAR
   nullable: false
   definition: "The registrant's CIK."
-  source: "REGISTRANT.CIK by accession"
+  source: "REGISTRANT.CIK by accession number"
   sensitivity: none
 - name: security_key
   type: VARCHAR
@@ -125,7 +125,7 @@ columns:
   source: "FAIR_VALUE_LEVEL"
   sensitivity: none
 key:
-- accession
+- accession_number
 - holding_id
 # The holder: the Fund when the filing names a series, else the registrant
 # Company (both filled when both exist). The Security by its record key. A row

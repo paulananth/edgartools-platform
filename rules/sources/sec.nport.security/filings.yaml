@@ -13,7 +13,7 @@ read:
     filed:
       each: .
       columns:
-        accession: {text: {path: ACCESSION_NUMBER}}
+        accession_number: {text: {path: ACCESSION_NUMBER}}
         filed:
           concat:
           # The year: the four digits after the last hyphen; anything else is no date.
@@ -64,7 +64,7 @@ read:
     reported:
       each: .
       columns:
-        accession: {text: {path: ACCESSION_NUMBER}}
+        accession_number: {text: {path: ACCESSION_NUMBER}}
         as_of:
           concat:
           # The year: the four digits after the last hyphen; anything else is no date.

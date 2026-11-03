@@ -14,7 +14,7 @@ read:
     holding:
       each: tables.holding
       columns:
-        accession: {text: {path: accession}}
+        accession_number: {text: {path: accession_number}}
         holding_id: {text: {path: holding_id}}
         period: {value: {path: period}}
         filed: {value: {path: filed}}
