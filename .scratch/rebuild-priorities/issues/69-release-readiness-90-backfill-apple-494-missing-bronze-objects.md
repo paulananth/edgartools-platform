@@ -3,9 +3,7 @@
 Priority: 69, tier 5, needs SEC requests or AWS. Map: [Rebuild priorities](../map.md). Moved from `.scratch/release-readiness/issues/90-backfill-apple-494-missing-bronze-objects.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
 Type: task
-Status: in_progress (operator decision made 2026-09-12: option (b), full CIK
-targeted-resync; execution is armed and waiting on `daily_incremental`'s
-`sec_fetch_active` lease to free -- see "Decision and current status" below)
+Status: resolved (2026-11-03 18:56 ET), obsolete: see Closing
 
 ## Question
 
@@ -57,3 +55,12 @@ targeted-resync has not yet fired. Once it completes, verify Ticket 90's
 paths against a fresh S3 listing of
 `s3://edgartools-prod-bronze-690839588395/warehouse/bronze/filings/sec/` for
 CIK 320193, expect 0 missing) before marking this ticket resolved.
+
+## Closing
+
+Closed 2026-11-03 18:56 ET as obsolete. It repairs rows of the old warehouse (`sec_raw_object`) that point at keys missing from its S3 bronze bucket. The rebuild replaced that pipeline (operator, 2026-09-26: no more production or legacy; 2026-11-03: no production Snowflake now), `targeted-resync` is no longer a command in `edgar_warehouse`, and the rebuilt platform captures SEC files as additive, immutable bronze with a receipt each, so no row can point at a key never written.
+
+## Checklist
+
+- [ ] ~~Backfill the missing bronze objects~~ not needed: the old pipeline is retired and the command is gone
+- [x] Learning → skill: none (2026-11-03 18:56 ET); the cause (repair scripts that updated rows without writing objects) is covered by receipts on every captured file
