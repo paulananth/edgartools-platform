@@ -210,7 +210,7 @@ def test_the_plan_names_domains_glossaries_and_store_certification():
     cases = {case["name"]: case for case in plan["quality_cases"]}
     assert "sec.company.v1.name_present" in cases
     assert cases["sec.company.v1.dc_state_is_empty"]["description"].startswith("Correction")
-    assert cases["openfigi_listing.figi_valid"]["testDefinition"] == "edgartools-configured-column-check"
+    assert cases["company_fact.one_form_per_filing"]["testDefinition"] == "edgartools-configured-column-check"
     assert all("testCaseResult" not in case for case in plan["quality_cases"])
     assert any(name.endswith("mdm.master_records.security") for name in products["security_master"]["tables"])
     assert sum(1 for table in plan["tables"] if table["databaseSchema"].endswith(".relationships")) == 16
@@ -743,7 +743,7 @@ def test_a_code_list_edge_maps_the_code_to_the_column_that_holds_it():
 
 
 def _results_file():
-    return {"openfigi_listing.figi_valid": {"table": "openfigi_listing", "check": "figi_valid", "on_fail": "flag",
+    return {"company_fact.one_form_per_filing": {"table": "company_fact", "check": "one_form_per_filing", "on_fail": "flag",
                                            "at": "2026-11-02T12:00:00+00:00", "rows_checked": 40, "rows_failed": 3}}
 
 
@@ -753,7 +753,7 @@ def test_publish_sends_each_recorded_result_to_its_case_and_check_reads_it_back(
     results = _results_file()
     catalog.publish(plan, server, results=results)
     (fqn_, sent), = server.results.items()
-    assert fqn_ == 'edgartools-rules.silver.openfigi.openfigi_listing.figi."openfigi_listing.figi_valid"'
+    assert fqn_.endswith('.company_fact.form."company_fact.one_form_per_filing"')
     assert sent["testCaseStatus"] == "Failed" and sent["failedRows"] == 3 and sent["passedRows"] == 37
     assert sent["timestamp"] == 1793620800000
     assert not [d for d in catalog.verify(plan, server, results=results)["differences"] if "result" in d]
@@ -770,7 +770,7 @@ def test_a_publish_without_results_sends_none():
 
 def test_a_result_that_fails_more_rows_than_it_checked_is_refused():
     plan = catalog.plan()
-    bad = {"openfigi_listing.figi_valid": {**_results_file()["openfigi_listing.figi_valid"], "rows_failed": 41}}
+    bad = {"company_fact.one_form_per_filing": {**_results_file()["company_fact.one_form_per_filing"], "rows_failed": 41}}
     with pytest.raises(catalog.CatalogError, match="fails 41 of 40 rows"):
         catalog.publish(plan, _Server(plan), results=bad)
 
@@ -789,7 +789,7 @@ def test_the_catalog_command_reads_the_results_file_it_is_given(tmp_path):
     from edgar_warehouse.silver_writer import results as silver_results
 
     path = tmp_path / "results.json"
-    silver_results.record(path, "openfigi_listing", {"checks": {"figi_valid": {"on_fail": "flag", "rows_failed": 3}},
+    silver_results.record(path, "company_fact", {"checks": {"one_form_per_filing": {"on_fail": "flag", "rows_failed": 3}},
                                                      "rows_checked": 40})
-    assert rules_cli._results(Namespace(results=path))["openfigi_listing.figi_valid"]["rows_failed"] == 3
+    assert rules_cli._results(Namespace(results=path))["company_fact.one_form_per_filing"]["rows_failed"] == 3
     assert rules_cli._results(Namespace(results=None)) == {}

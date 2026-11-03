@@ -3,7 +3,7 @@
 Priority: 158. Map: [Rebuild priorities](../map.md). Opened 2026-11-01 18:41 ET, from reading the `shared` glossary term by term
 (operator, 2026-11-01: "list one by one, get feedback and adjust the skill").
 
-Type: task. Status: in progress (Claude, branch `claude/t158-glossary-real-terms`). Blocked by: none.
+Type: task. Status: resolved (Claude, branch `claude/t158-glossary-real-terms`). Blocked by: none.
 
 ## Question
 
@@ -30,7 +30,7 @@ Two of them (`HAS_MARKET_OPERATOR`, `IS_SEGMENT_OF_EXCHANGE`) name relationship 
 - [x] `CONTEXT.md` "Audit Firm Profile" renamed "Audit Firm"; the skill says a kind of an identity is named by the kind and goes in its domain's glossary (2026-11-01 19:04 ET)
 - [x] More terms removed ("yes, remove it" / by the same ruling): `AUDITED_BY` (no rule, no link), `INVESTMENT_ADVISER_TO` (adviser can be a person or a company: 6 of 2,409 filings in the October 2025 Form ADV capture are sole proprietorships; but no rule creates the link). `CUSTODIAN` kept (rules read it). 39 terms in `shared` (2026-11-01 19:16 ET)
 - [x] The 8 planned types stay as `mdm.relationships` assets, each description ending "(planned: no rule reads this type yet and no link is loaded)": written by hand in the local catalog; asset versions 1.4 to 1.5, certification unchanged (2026-11-01 19:16 ET)
-- [ ] ~~Make the planned marker permanent in `catalog.py`~~ deferred to ticket 159: the publisher still writes `shared`, so one code change covers both
+- [x] Make the planned marker permanent in `catalog.py` (2026-11-03 13:55 ET): ticket 159 (resolved) made the publisher write the glossary placement, `PLANNED` is a constant in `edgar_warehouse/rules/catalog.py` and the publisher writes no `shared` tag
 - [x] `Governed Role Profile` deleted from the glossary, from `CONTEXT.md` and from the spec; `Adviser Profile` and `Fund Profile` renamed `Adviser` and `Fund` in `CONTEXT.md` (2026-11-01 19:35 ET)
 - [x] `CUSTODIAN` moved to the `company` glossary, with `Audit Firm`, `Adviser`, `Fund` and `Fund Company`; `Fund Series` to `fund_structure` (2026-11-01 19:35 ET)
 - [x] The terms walked one by one with the operator, each kept, moved or removed: the local glossary now has 11 terms in `company`, 3 in `security`, 2 each in `person` and `fund_structure`, 1 each in `branch`, `government` and `international_organization`, 1 in `market_venue`; `shared` deleted (2026-11-01 19:35 ET)
@@ -40,5 +40,5 @@ Two of them (`HAS_MARKET_OPERATOR`, `IS_SEGMENT_OF_EXCHANGE`) name relationship 
 - [x] The "Data classes, reference data and agent context" glossary (3 terms) deleted: `Profiling Findings` is an Article, `Transaction Data` becomes a `data_class` tag, `Reference Hierarchy` code-set text (the last two by the publisher, ticket 159) (operator, 2026-11-01: "yes, delete both glossaries and update the skill"; 2026-11-01 19:48 ET)
 - [x] The "MDM identities and mastering" glossary (19 platform words) deleted: the steps show as pipeline tasks on lineage and `CONTEXT.md` holds the definitions (operator, 2026-11-01: "they are steps in the system and documentation, it can be part of lineage, not in glossary"); the skill says so (2026-11-01 19:48 ET)
 - [x] The three data products carry their domain and the identity glossary term of that domain as a `Suggested` tag: `company_master` and `company_fundamentals` have `company.Company Identity`, `security_master` has `security.Security Identity`; each product's domain was already set (operator, 2026-11-01: "update data products with domains and glossary"; 2026-11-01 19:53 ET). `company_master`'s tag was `Confirmed` and is now `Suggested`; the skill has the rule
-- [ ] Silver definitions: `discretion_type` and the holdings rows get their definition on the silver column or table (no silver table for the 13F holdings is in the catalog yet)
+- [ ] ~~Silver definitions: `discretion_type` and the holdings rows get their definition on the silver column or table~~ deferred to ticket 183: no silver table for the 13F holdings exists, and cannot until a source reads the manager filings (the information tables name no manager)
 - [x] Learning → skill: `skills/openmetadata/SKILL.md`, "Glossary and classification": no `shared`; placement by kind; silver data and umbrella words are not terms; a domain is tested by its own data (2026-11-01 19:35 ET)

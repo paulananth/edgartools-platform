@@ -84,20 +84,7 @@ read:
         # as MDM writes a two-part key), so a silver row finds the owner's Person (ticket 25).
         owner_record_key: {concat: [{const: {value: '["'}}, {context: {name: accession_number}}, {const: {value: '","'}}, {text: {path: reportingOwnerId.rptOwnerCik.$}}, {const: {value: '"]'}}]}
         filed: {context: {name: filed}}
-        rpt_owner_name: {text: {path: reportingOwnerId.rptOwnerName.$}}
-        rpt_owner_street1: {text: {path: reportingOwnerAddress.rptOwnerStreet1.$}}
-        rpt_owner_street2: {text: {path: reportingOwnerAddress.rptOwnerStreet2.$}}
-        rpt_owner_city: {text: {path: reportingOwnerAddress.rptOwnerCity.$}}
-        rpt_owner_state: {text: {path: reportingOwnerAddress.rptOwnerState.$}}
-        rpt_owner_zip_code: {text: {path: reportingOwnerAddress.rptOwnerZipCode.$}}
-        rpt_owner_state_description: {text: {path: reportingOwnerAddress.rptOwnerStateDescription.$}}
-        rpt_owner_non_us_address_flag: {choose: {condition: {test: {path: reportingOwnerAddress.rptOwnerNonUSAddressFlag.$, kind: text}}, then: {lookup: {reference: booleans, column: value, key: {text: {path: reportingOwnerAddress.rptOwnerNonUSAddressFlag.$}}, on_missing: error}}, else: {const: {value: null}}}}
-        rpt_owner_country: {text: {path: reportingOwnerAddress.rptOwnerCountry.$}}
-        is_director: {choose: {condition: {test: {path: reportingOwnerRelationship.isDirector.$, kind: text}}, then: {lookup: {reference: booleans, column: value, key: {text: {path: reportingOwnerRelationship.isDirector.$}}, on_missing: error}}, else: {const: {value: null}}}}
-        is_officer: {choose: {condition: {test: {path: reportingOwnerRelationship.isOfficer.$, kind: text}}, then: {lookup: {reference: booleans, column: value, key: {text: {path: reportingOwnerRelationship.isOfficer.$}}, on_missing: error}}, else: {const: {value: null}}}}
-        is_ten_percent_owner: {choose: {condition: {test: {path: reportingOwnerRelationship.isTenPercentOwner.$, kind: text}}, then: {lookup: {reference: booleans, column: value, key: {text: {path: reportingOwnerRelationship.isTenPercentOwner.$}}, on_missing: error}}, else: {const: {value: null}}}}
         is_other: {choose: {condition: {test: {path: reportingOwnerRelationship.isOther.$, kind: text}}, then: {lookup: {reference: booleans, column: value, key: {text: {path: reportingOwnerRelationship.isOther.$}}, on_missing: error}}, else: {const: {value: null}}}}
-        officer_title: {text: {path: reportingOwnerRelationship.officerTitle.$}}
         other_text: {text: {path: reportingOwnerRelationship.otherText.$}}
         # The filing's issuer and event date on each owner row (from the document), so the
         # owner's Dataset Contract can state its link to the issuer, dated by the filing.
