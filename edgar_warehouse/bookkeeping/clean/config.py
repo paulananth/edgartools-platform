@@ -39,6 +39,10 @@ BIND_TOKEN = r"[A-Za-z0-9_.:-]{1,128}"
 # from outside the capture (`--file name=path`); a step names them as `{fact: <name>}` in its
 # context, `{file: <name>}` for a lookup set or a contract reference.
 RUN_KEYS = frozenset({"facts", "files"})
+# A run file counts toward a file's processing identity by its content; `projections` names, per file, the
+# top-level parts of that content that count (ticket 177, slice 3), so the rest of the file moves nothing.
+RUN_DECLARED = RUN_KEYS | {"projections"}
+PROJECTION_PARTS = 16
 NAME = r"[a-z][a-z0-9_]*"
 LOOKUP_KEYS = frozenset({"from", "table", "column", "value_column", "max_input_bytes", "max_input_rows"})
 # A per-document template names the document's folder, its name before the first dot, and its file name.
@@ -77,14 +81,23 @@ def _named(value, kind: str) -> bool:
 
 
 def run_inputs(selected: dict) -> dict:
-    """A target's declared run inputs: `{facts: [names], files: [names]}`."""
+    """A target's declared run inputs: `{facts: [names], files: [names], projections: {file: [parts]}}`."""
     declared = selected.get("run", {})
-    if (not isinstance(declared, dict) or set(declared) - RUN_KEYS
+    if (not isinstance(declared, dict) or set(declared) - RUN_DECLARED
             or any(not isinstance(declared.get(k, []), list) or len(set(declared.get(k, []))) != len(declared.get(k, []))
                    or any(not isinstance(n, str) or not re.fullmatch(NAME, n) for n in declared.get(k, []))
                    for k in RUN_KEYS)):
         raise Blocked("A target's run names its facts and files: {facts: [names], files: [names]}")
-    return {k: list(declared.get(k, [])) for k in sorted(RUN_KEYS)}
+    found = {k: list(declared.get(k, [])) for k in sorted(RUN_KEYS)}
+    projections = declared.get("projections", {})
+    if not isinstance(projections, dict) or any(name not in found["files"] for name in projections):
+        raise Blocked("A run file's projection names a file the run declares")
+    for name, parts in projections.items():
+        if (not isinstance(parts, list) or not 1 <= len(parts) <= PROJECTION_PARTS or len(set(parts)) != len(parts)
+                or any(not isinstance(part, str) or not part for part in parts)):
+            raise Blocked(f"The projection of run file {name} names 1 to {PROJECTION_PARTS} distinct parts of it")
+    found["projections"] = {name: list(parts) for name, parts in sorted(projections.items())}
+    return found
 
 
 
