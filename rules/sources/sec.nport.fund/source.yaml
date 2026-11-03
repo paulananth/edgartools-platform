@@ -14,7 +14,7 @@
 # FUND_REPORTED_INFO.tsv once, one row per filing; reduce.yaml lists each
 # series (a filing naming no series, 729 in 2026q2, is not read: its
 # registrant is the fund); combine.yaml keeps each series' latest filing whole
-# (by date, then accession) and its LEI when one to one (lei-pairs.yaml, its own
+# (by date, then accession number) and its LEI when one to one (lei-pairs.yaml, its own
 # step before the combine);
 # record.yaml makes each `fund` row one record; mdm.prepare,
 # the merge and the processed record follow (the `mastering` target below).
@@ -49,7 +49,7 @@ bookkeeping:
           input:
             contract: sec.nport.registrant/source.yaml
             lookups:
-              filed: {from: submissions, table: filed, column: accession, value_column: filed,
+              filed: {from: submissions, table: filed, column: accession_number, value_column: filed,
                       max_input_bytes: 67108864, max_input_rows: 1000000}
         - name: filings
           operation: source.read
@@ -60,9 +60,9 @@ bookkeeping:
           units: {each: file}
           input:
             lookups:
-              filed: {from: submissions, table: filed, column: accession, value_column: filed,
+              filed: {from: submissions, table: filed, column: accession_number, value_column: filed,
                       max_input_bytes: 67108864, max_input_rows: 1000000}
-              registrant: {from: registrants, table: filing, column: accession, value_column: cik,
+              registrant: {from: registrants, table: filing, column: accession_number, value_column: cik,
                            max_input_bytes: 268435456, max_input_rows: 1000000}
         - name: series
           operation: source.combine
@@ -142,7 +142,7 @@ read:
       select: {test: {path: SERIES_ID, kind: truthy}}
       columns:
         series_id: {text: {path: SERIES_ID, default: "", transforms: [{case: upper}], null_if: ["", "N/A"]}}
-        accession: {text: {path: ACCESSION_NUMBER}}
+        accession_number: {text: {path: ACCESSION_NUMBER}}
         filed:
           member_value: {lookup: filed, key: {text: {path: ACCESSION_NUMBER}}, on_many: error}
         cik:

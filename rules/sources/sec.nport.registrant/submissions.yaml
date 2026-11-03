@@ -13,7 +13,7 @@ read:
     filed:
       each: .
       columns:
-        accession: {text: {path: ACCESSION_NUMBER}}
+        accession_number: {text: {path: ACCESSION_NUMBER}}
         # Year, month number and day, each cut from the filed text, joined.
         filed:
           concat:
