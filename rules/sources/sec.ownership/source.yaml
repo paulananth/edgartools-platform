@@ -14,10 +14,85 @@
 # family is named with its capture: today's local copies sit in two (the cohort's
 # primary documents and the filing_artifact submission files).
 source: sec.ownership
+execution: {profile: source.read, workers: 1, max_artifacts: 512}
 bronze:
   # Bronze: filing_artifact/sec/cik=<issuer>/<accession>/<accession>.txt (the SGML
   # submission file); the cohort's bare primary documents sit under filings/.
   family: filing_artifact
+# Bookkeeping (ticket 176): read the SEC submission files, master each reporting owner (a Person, or a
+# Company by its CIK), then land the owners and the lines in silver once the merge has made the masters
+# their rows link to, and record each file in the Change Journal. Landing waits for the merge, not for
+# the owners' rows alone, so a new owner's Person id is there when its silver row lands.
+bookkeeping:
+  version: 2
+  targets:
+    mastering:
+      steps:
+        - name: read
+          operation: source.read
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {slices: {bytes: 8388608}}
+          input: {contract: ownership-sgml.yaml, files: "*.txt"}
+        - name: prepare
+          operation: mdm.prepare
+          requires: [read]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, mdm.prepared]
+          input:
+            keys: {table: owner_record, record_column: record, dataset: sec.ownership.reporting_owner.v1}
+            readings: {read: {all: read}}
+        - name: merge
+          operation: mdm.merge
+          requires: [prepare]
+          key: "{batch_id}"
+          leases: ["mdm:consumer:{consumer}"]
+          checks: [input.hash, output.receipt, mdm.committed]
+        - name: land_owner
+          operation: silver.land
+          requires: [read, merge]
+          key: "{unit}"
+          leases: ["silver:{silver}"]
+          checks: [input.hash, output.receipt, silver.landed]
+          input: {keys: {table: reporting_owner, silver: insider_ownership}}
+        - name: land_nd_transaction
+          operation: silver.land
+          requires: [read, merge]
+          key: "{unit}"
+          leases: ["silver:{silver}"]
+          checks: [input.hash, output.receipt, silver.landed]
+          input: {keys: {table: non_derivative_transaction, silver: insider_position}}
+        - name: land_nd_holding
+          operation: silver.land
+          requires: [read, merge]
+          key: "{unit}"
+          leases: ["silver:{silver}"]
+          checks: [input.hash, output.receipt, silver.landed]
+          input: {keys: {table: non_derivative_holding, silver: insider_position}}
+        - name: land_d_transaction
+          operation: silver.land
+          requires: [read, merge]
+          key: "{unit}"
+          leases: ["silver:{silver}"]
+          checks: [input.hash, output.receipt, silver.landed]
+          input: {keys: {table: derivative_transaction, silver: insider_position}}
+        - name: land_d_holding
+          operation: silver.land
+          requires: [read, merge]
+          key: "{unit}"
+          leases: ["silver:{silver}"]
+          checks: [input.hash, output.receipt, silver.landed]
+          input: {keys: {table: derivative_holding, silver: insider_position}}
+        - name: processed
+          operation: journal.record
+          requires: [land_owner, land_nd_transaction, land_nd_holding, land_d_transaction, land_d_holding]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, journal.recorded]
+      checks: [manifest.hash, work.accounting, journal.delivered]
 dataset_contracts:
   sec.ownership.reporting_owner.v1:
     contract:
