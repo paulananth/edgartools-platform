@@ -77,12 +77,12 @@ def recorded(store, root, combined):
 
 
 def filed_pairs(store, root, raw) -> list[list[str]]:
-    """Each filing's accession and date (filings.yaml), the issuer reading's `filed` set."""
+    """Each filing's accession number and date (filings.yaml), the issuer reading's `filed` set."""
     reading = read(store, root / "filings", "filings.yaml", raw, None)
     rows = [row for artifact in store.json(reading)["artifacts"] for part in artifact.get("partitions", [])
             for row in store.json(part["receipt"])["tables"]["filed"]]
     rows += [row for artifact in store.json(reading)["artifacts"] for row in artifact.get("tables", {}).get("filed", [])]
-    return [[row["accession"], row["filed"]] for row in rows if row["filed"]]
+    return [[row["accession_number"], row["filed"]] for row in rows if row["filed"]]
 
 
 def issuers(store, root, raw, isin, period, umbrella=()):
