@@ -101,3 +101,9 @@ checks:
   - 10
   on_fail: flag
   why: A measure is computed over the 1, 3, 5 or 10 year window measures.yaml defines (validity).
+- id: empty_value_has_reason
+  check: reason_if_empty
+  column: value
+  reason: null_reason
+  on_fail: flag
+  why: A value is empty only with a stated reason, and a stated reason means an empty value (completeness).
