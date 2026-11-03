@@ -62,6 +62,16 @@ For an isolated test that explicitly needs silver, add `--include-silver` to
 database stays intact. Older six-store environments remain six-store backup
 sets, even when reinitialized without silver; new environments default to five.
 
+Silver is part of the platform. To deploy it into an environment, add it with
+`up <name> --include-silver`, then register every committed silver table spec:
+
+```bash
+bash infra/scripts/deploy-silver-local.sh <name>
+```
+
+The script migrates silver and registers each `rules/sources/*/silver-*.yaml`.
+Repeating it changes nothing.
+
 The container listens only on loopback at an automatically assigned port.
 Its named volume survives stops and restarts. Resource labels and the private
 ownership file bind it to the creating worktree. Other worktrees may use the
