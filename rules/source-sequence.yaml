@@ -62,6 +62,13 @@ sources:
     target: silver
     requires: []
     after: [sec.company]
+  # The 13F reports each manager filed (ticket 184): read from the managers' submissions lists, landed in
+  # silver and linked to the manager Company by CIK, so they run after the Company source; the holdings
+  # (sec.thirteenf.securities) find their filing by accession number.
+  sec.thirteenf.filings:
+    target: silver
+    requires: []
+    after: [sec.company, sec.thirteenf.securities]
   # Registration statements (ticket 149): captured first; the reading, and the
   # links to the Company by CIK, come with onboarding.
   sec.registration:

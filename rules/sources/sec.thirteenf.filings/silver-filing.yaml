@@ -1,0 +1,80 @@
+# The silver table of Form 13F filings (ticket 184): one row per 13F report, linked to the manager
+# Company by CIK. `edgar-warehouse silver register` reads this spec. Rows are the `filing` table of
+# source.yaml. The manager's name and the filer facts are the Company's, in MDM (ticket 143), read
+# through `manager_mdm_id`; the CIK stays as the link key. A holding of the report is a row of
+# `thirteenf_holding` with the same accession number: join them on `accession_number`
+# (`thirteenf_holding.accession_number = thirteenf_filing.accession_number`). Append only: a
+# filing's facts never change; an amendment is a filing of its own.
+table: thirteenf_filing
+definition: One Form 13F report (or notice, or amendment) a manager filed, linked to the manager Company by CIK.
+grain: one row per accession number
+columns:
+- name: accession_number
+  type: VARCHAR
+  nullable: false
+  definition: The filing's accession number.
+  source: filings.recent.accessionNumber
+  sensitivity: none
+- name: cik
+  type: BIGINT
+  nullable: false
+  definition: The manager's CIK, the filer whose submissions list holds the filing; the key to its Company.
+  source: the capture's folder, cik=<number>
+  sensitivity: none
+- name: form
+  type: VARCHAR
+  nullable: false
+  definition: The form type as filed (13F-HR holdings report, 13F-HR/A its amendment, 13F-NT notice, 13F-E exemption).
+  source: filings.recent.form
+  sensitivity: none
+- name: filing_date
+  type: DATE
+  nullable: true
+  definition: The day SEC accepted the filing.
+  source: filings.recent.filingDate
+  sensitivity: none
+- name: report_date
+  type: DATE
+  nullable: true
+  definition: The last day of the quarter the report covers.
+  source: filings.recent.reportDate
+  sensitivity: none
+- name: acceptance_datetime
+  type: VARCHAR
+  nullable: true
+  definition: The moment SEC accepted the filing, as it states it.
+  source: filings.recent.acceptanceDateTime
+  sensitivity: none
+- name: primary_document
+  type: VARCHAR
+  nullable: true
+  definition: The file name of the filing's primary document (its cover page).
+  source: filings.recent.primaryDocument
+  sensitivity: none
+key:
+- accession_number
+links:
+- columns:
+  - cik
+  kind: company
+  source_code: sec.company.v1
+  to_part: manager
+  source_key: cik
+  mdm_id_column: manager_mdm_id
+time:
+  as_of: report_date
+  as_at: filing_date
+  event_time: null
+partition: []
+load_mode: append
+why: >-
+  A filing is transaction data: one row per 13F report, keyed by its accession number. It links to the
+  manager's Company by lookup, so no record of its own goes through the Merge Stage. Append, since a filed
+  report never changes.
+checks:
+- id: report_date_not_after_filing_date
+  check: not_after
+  column: report_date
+  later: filing_date
+  on_fail: flag
+  why: A report covers a quarter that ended on or before the day it was filed (validity).

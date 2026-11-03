@@ -1,0 +1,99 @@
+# SEC Form 13F filings, from each filer's submissions list (ticket 184, from 183): the accession
+# number of every 13F report the manager filed, with its form, filing date and report period.
+# The 13F information tables name no manager, report period or filing date; the manager's own
+# submissions list does, since the manager is the filer whose list holds the accession number.
+# So the manager filings are read from the same main submissions documents the Company source
+# masters (`/main/`), the recent list only (SEC's older pages are not in the capture). Rows are
+# transactions for silver (`thirteenf_filing`), linked to the manager's Company by CIK; nothing
+# goes to MDM. A holding finds its filing by accession number (`thirteenf_holding.accession_number`).
+source: sec.thirteenf.filings
+bronze:
+  family: submissions
+execution: {profile: source.read, workers: 1, max_artifacts: 512}
+read:
+  format: json
+  limits: {max_bytes: 33554432, max_records: 100000}
+  context:
+    cik: {type: integer}
+  assertions:
+  - test: {test: {path: ., kind: object}}
+    reason: A submissions document must be a JSON object
+  tables:
+    filing:
+      # Only the 13F reports and their notices and amendments (13F-HR, 13F-HR/A, 13F-NT, 13F-E, 13FCONP ...).
+      select:
+        choose:
+          condition:
+            equal:
+              left:
+                text:
+                  path: form
+                  default: ""
+                  trim: false
+                  transforms:
+                  - {regex_replace: {pattern: "^13F.*$", with: "#"}}
+              right: {const: {value: "#"}}
+          then: {test: {path: form, kind: truthy}}
+          else: {test: {path: NO_SUCH_COLUMN, kind: present}}
+      each:
+        parallel:
+          path: filings.recent
+          anchor: accessionNumber
+          fields:
+            accession_number: accessionNumber
+            form: form
+            filing_date: filingDate
+            report_date: reportDate
+            acceptance_datetime: acceptanceDateTime
+            primary_document: primaryDocument
+          lengths: anchor
+          on_invalid_object: empty
+          strings: characters
+          on_empty_anchor: ignore_fields
+          objects: indexed
+          validation: selected
+      columns:
+        accession_number:
+          text: {path: accession_number, trim: false, null_if: [""], coerce: python}
+        cik:
+          context: {name: cik}
+        form:
+          text: {path: form, trim: false, null_if: [""], coerce: python}
+        filing_date:
+          date: {path: filing_date, kind: calendar, basic_suffix: ignore, prefix_length: 10, on_invalid: null, coerce: python}
+        report_date:
+          date: {path: report_date, kind: calendar, basic_suffix: ignore, prefix_length: 10, on_invalid: null, coerce: python}
+        acceptance_datetime:
+          text: {path: acceptance_datetime, trim: false, null_if: [""], coerce: python}
+        primary_document:
+          text: {path: primary_document, trim: false, null_if: [""], coerce: python}
+bookkeeping:
+  version: 2
+  targets:
+    silver:
+      steps:
+        - name: filings
+          operation: source.read
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {slices: {bytes: 8388608}}
+          input:
+            files: "*/submissions/sec/cik=*/main/*"
+            context: {cik: {segment: cik, as: integer}}
+        # The managers' Companies are mastered by sec.company, which runs first.
+        - name: land
+          operation: silver.land
+          requires: [filings]
+          key: "{unit}"
+          leases: ["silver:{silver}"]
+          checks: [input.hash, output.receipt, silver.landed]
+          input: {keys: {table: filing, silver: thirteenf_filing}}
+        - name: processed
+          operation: journal.record
+          requires: [land]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, journal.recorded]
+      checks: [manifest.hash, work.accounting, journal.delivered]
