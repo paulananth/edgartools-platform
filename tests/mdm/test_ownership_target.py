@@ -13,7 +13,7 @@ from edgar_warehouse.workers import journal_record
 from tests.support.memory_journal import MemoryJournal
 
 SOURCE = "sec.ownership"
-LANDS = {"land_owner": ("reporting_owner", "insider_ownership"),
+LANDS = {"land_owner": ("reporting_owner", "insider_reporting_owner"),
          "land_nd_transaction": ("non_derivative_transaction", "insider_position"),
          "land_nd_holding": ("non_derivative_holding", "insider_position"),
          "land_d_transaction": ("derivative_transaction", "insider_position"),

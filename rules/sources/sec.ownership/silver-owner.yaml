@@ -8,11 +8,11 @@
 # record key), else as a Company by its CIK.
 # Silver keeps no master field (ticket 143; operator, 2026-10-28: "silver must not have duplicate
 # fields"): the owner's name, the director, officer and ten-percent capacities and the officer
-# title are the Person's and its dated relationships in MDM, so only the links and the
+# title (and the "other" capacity with its text, ticket 182) are the Person's and its dated relationships in MDM, so only the links and the
 # filing's own facts stay. The owner's address is not kept anywhere in the platform's data stores
-# (the Person consumer spec never captures it); the filing in bronze keeps it. `is_other` and
-# `other_text` stay until a real relationship type exists for that capacity (ticket 182).
-table: insider_ownership
+# (the Person consumer spec never captures it); the filing in bronze keeps it. The table is new
+# (ticket 182) because a registered silver table is never changed by dropping its columns.
+table: insider_reporting_owner
 definition: One reporting owner of one Form 3, 4 or 5, linked to its Person or Company and
   to the issuer; a joint filing names several.
 grain: one row per filing (accession number) and reporting owner (CIK)
@@ -41,18 +41,6 @@ columns:
   definition: The owner's record key in sec.ownership.reporting_owner.v1 (its accession number and
     CIK), by which its Person is found.
   source: accession number and reportingOwnerId.rptOwnerCik
-  sensitivity: none
-- name: is_other
-  type: BOOLEAN
-  nullable: true
-  definition: Another relationship, named in other_text.
-  source: reportingOwnerRelationship.isOther
-  sensitivity: none
-- name: other_text
-  type: VARCHAR
-  nullable: true
-  definition: The other relationship as filed.
-  source: reportingOwnerRelationship.otherText
   sensitivity: none
 - name: issuer_cik
   type: VARCHAR

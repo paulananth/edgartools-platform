@@ -375,9 +375,21 @@ def without_place_codes(policy: dict) -> dict:
     return {k: v for k, v in _copy(policy).items() if k != "reference"}
 
 
+def without_other_capacity(policy: dict) -> dict:
+    """Ticket 182 (operator, 2026-11-03: "Capacity `other` on EMPLOYED_BY (Recommended)"): the relationship
+    types pinned at version 2, which adds the capacity `other` to EMPLOYED_BY. Peeled, the pin is version 1."""
+    body = _copy(policy)
+    pin = body["reference_pins"][body["relationships"]["pin"]]
+    pin["version"] = "1"
+    pin["sha256"] = "9a0a3525e9427ab88405240a81b85be9d89a54c540b0c53770bdd269df7c4d33"
+    return body
+
+
 # Newest first: each layer, and Company's policy digest with it and every
 # layer after it still on.
 LAYERS = [
+    # The capacity `other` on EMPLOYED_BY: "Capacity `other` on EMPLOYED_BY (Recommended)" (2026-11-03, ticket 182).
+    (without_other_capacity, "a24c4ac2bd970feba807d28fc4ae9b5539adc49e7826c9aadff45424629244e7"),
     # P5 compares the city or the postcode; P1 and P4 deleted: "do not use p1 or p4, p5 can match on
     # postel code" and "Link them (Recommended)" (2026-10-30, ticket 09).
     (without_p5_postcode, "939847064fb977b01787a7d473f7cc8dca1f29dafa888e3e977063a17e68179c"),

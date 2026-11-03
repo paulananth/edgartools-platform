@@ -54,6 +54,11 @@ the pinned rows and holds the one check, called at registration and before
 every calculation. Python only carries rows to it and its error back. No code
 copy, no default for a missing entry: a policy pinning none has no entries,
 so what would use one goes to review.
+A new capacity or type is a new published version (`rules/reference/published/<set>/<n>/`, the file's
+sha256 in its `pin.json`) and a new pin in `rules/merge/reference-pins.yaml`; the committed workbooks
+(`rules mapdoc write`) and the test fixture follow it (ticket 182). When a source field is not one of the
+vocabulary's words, count how many rows state it first: 7 of 3,570 owners did, each refining a capacity
+already held, so the form's own word became a capacity with the stated text as its title.
 
 Storage adapters own connections, types, SQL compilation, indexed retrieval,
 schema migrations, grants and transaction/concurrency primitives. Use

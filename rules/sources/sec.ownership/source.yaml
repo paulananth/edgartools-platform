@@ -57,7 +57,7 @@ bookkeeping:
           key: "{unit}"
           leases: ["silver:{silver}"]
           checks: [input.hash, output.receipt, silver.landed]
-          input: {keys: {table: reporting_owner, silver: insider_ownership}}
+          input: {keys: {table: reporting_owner, silver: insider_reporting_owner}}
         - name: land_nd_transaction
           operation: silver.land
           requires: [read, merge]
@@ -183,6 +183,17 @@ dataset_contracts:
           on: period_of_report
           held: is_officer
           title: officer_title
+          time_format: date
+          ends: {reason: relationship_end_missing}
+          interval: {reason: invalid_relationship_interval}
+          scope: SEC ownership
+        - type: EMPLOYED_BY
+          capacity: other
+          target_key: [issuer_cik]
+          target_source: sec.company.v1
+          on: period_of_report
+          held: is_other
+          title: other_text
           time_format: date
           ends: {reason: relationship_end_missing}
           interval: {reason: invalid_relationship_interval}

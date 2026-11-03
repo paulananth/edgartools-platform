@@ -116,7 +116,7 @@ def test_no_landing_is_claimable_before_the_merge_and_each_then_lands_its_rows(d
         monkeypatch.setattr(mdm.application, "dispose", lambda: None)
         state = drive(book, rid, databases.ledger, workers=workers)
         with runtime.connect() as conn:
-            owners = conn.execute(text("SELECT count(*) FROM silver.insider_ownership")).scalar()
+            owners = conn.execute(text("SELECT count(*) FROM silver.insider_reporting_owner")).scalar()
             lines = conn.execute(text("SELECT line_table, count(*) FROM silver.insider_position GROUP BY 1")).all()
 
     assert state["run"]["state"] == "complete"
