@@ -338,3 +338,19 @@ def test_a_run_that_cannot_be_finished_is_left_named_and_its_documents_load_agai
     assert list(result["left_as_they_are"]) == ["stuck-1"]
     assert "could not be finished" in result["left_as_they_are"]["stuck-1"] and "status 1" in result["left_as_they_are"]["stuck-1"]
     assert [b["run_id"] for b in result["bundles"]] == ["new-1"]  # its documents were loaded again in a new run
+
+
+def test_a_target_that_lands_silver_stops_at_once_when_an_env_file_has_no_silver_login(tmp_path, monkeypatch):
+    """MDM and silver complete together: a load never starts on stores that leave silver out."""
+    silver = {"bookkeeping": {"targets": {"by_letter": {"steps": [
+        {"name": "read", "operation": "source.read", "input": {}}, {"name": "land", "operation": "silver.land"}]}}}}
+    monkeypatch.setattr(loading.files, "source", lambda name: silver)
+    for duty in driving.DUTIES:
+        (tmp_path / f"{duty}.env").write_text("export BOOKKEEPING_MANIFEST_ROOT=file://%s/m\nunset SILVER_DATABASE_URL\n" % tmp_path)
+
+    with pytest.raises(loading.RunStopped, match="lands silver .*land.* no silver login"):
+        loading.Loader(source="example", target="by_letter", stores=tmp_path, workers=1, minutes=1, say=lambda line: None)
+
+    for duty in ("worker", "verifier"):
+        (tmp_path / f"{duty}.env").write_text("export BOOKKEEPING_MANIFEST_ROOT=file://%s/m\nexport SILVER_DATABASE_URL=x\n" % tmp_path)
+    assert loading.Loader(source="example", target="by_letter", stores=tmp_path, workers=1, minutes=1, say=lambda line: None)

@@ -6,7 +6,7 @@
 #   bash infra/scripts/deploy-silver-local.sh <environment-name>
 #
 # The environment must hold silver (create it with
-# `local-test-stores.py up <name> --include-silver`). Prints table names only,
+# `local-test-stores.py up <name>`). Prints table names only,
 # never a connection value.
 set -euo pipefail
 
@@ -17,7 +17,7 @@ env_file="${EDGARTOOLS_LOCAL_TESTS:-$HOME/.local/share/edgartools/local-tests}/e
 
 set -a; . "$env_file"; set +a
 [ -n "${SILVER_MIGRATION_DATABASE_URL:-}" ] || {
-  echo "Environment $name holds no silver; run: local-test-stores.py up $name --include-silver" >&2; exit 2; }
+  echo "Environment $name holds no silver; run: local-test-stores.py up $name" >&2; exit 2; }
 
 cd "$root"
 run() { uv run --no-sync edgar-warehouse "$@"; }

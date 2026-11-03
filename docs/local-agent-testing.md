@@ -5,8 +5,9 @@ Separate Git worktrees isolate code. A separate data copy is for disruptive
 tests or recovery, rather than routine lookups.
 
 Use PostgreSQL 16 on the Docker runtime already configured on the machine.
-The script uses the existing migrations for five databases by default:
-MDM, RDM, Rules, Bookkeeping and Change Journal. Silver is excluded. It needs the checkout's
+The script uses the existing migrations for six databases by default:
+MDM, RDM, Rules, Bookkeeping, Change Journal and Silver, so a run completes
+MDM and silver together (operator, 2026-11-03). It needs the checkout's
 Python dependencies, including the `mdm` extra, and the `postgres:16-alpine`
 image. It makes no source-provider request and deploys nothing to Snowflake.
 
@@ -53,17 +54,14 @@ Four private files are written in the environment folder:
 | `governance.env` | Rules governance and MDM registration connections |
 
 Source `worker.env` before work and `verifier.env` before verification. These
-files clear owner/activation settings left by another duty and omit silver.
+files clear owner/activation settings left by another duty and carry the silver login.
 `BOOKKEEPING_MANIFEST_ROOT` points to private local files. Connections and
 passwords are never printed by initialization.
 
-For an isolated test that explicitly needs silver, add `--include-silver` to
-`up`. A default rerun never initializes or migrates silver. An existing silver
-database stays intact. Older six-store environments remain six-store backup
-sets, even when reinitialized without silver; new environments default to five.
+For a core-only isolated test, add `--no-silver` to `up`. A rerun keeps an existing
+silver database intact and keeps its login in the env files; `--no-silver` alone leaves it out.
 
-Silver is part of the platform. To deploy it into an environment, add it with
-`up <name> --include-silver`, then register every committed silver table spec:
+Silver is part of the platform and comes with `up <name>`. Register every committed silver table spec:
 
 ```bash
 bash infra/scripts/deploy-silver-local.sh <name>
