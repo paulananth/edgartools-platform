@@ -47,6 +47,23 @@ def name_count(args) -> int:
     return 0
 
 
+def steward_split(args) -> int:
+    """Split a consolidation a rule made (ticket 142): previews unless `--confirm`."""
+    from datetime import UTC, datetime
+
+    from .steward import split
+    from .store import Store
+
+    mdm = engine_from_env("MDM_DATABASE_URL")
+    try:
+        report = split(Store(mdm), merge_id=args.merge, actor=args.by, reason=args.reason,
+                       at=datetime.now(UTC).isoformat(), confirm=args.confirm)
+    finally:
+        mdm.dispose()
+    print(json.dumps(report, sort_keys=True))
+    return 0
+
+
 def _print_mdm_report(read) -> int:
     """Run one read on the MDM database as the application role and print it."""
     mdm = engine_from_env("MDM_DATABASE_URL")
