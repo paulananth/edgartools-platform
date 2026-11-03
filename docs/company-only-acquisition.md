@@ -17,7 +17,7 @@ checked by a separate verifier. Nothing makes a request to SEC here.
      --output <bundle folder> --as-of <instant> --revision 0
    ```
 
-   It checks the inputs, binds the approved run IDs and the census digest
+   It checks the inputs, binds the approved run IDs and the Name Count digest
    into the contracts and freezes every unit's input; the documents stay in
    the capture, named by their receipts. Its report names the manifest
    (`manifest.uri`, `manifest.sha256`) and the publication.
@@ -33,12 +33,12 @@ checked by a separate verifier. Nothing makes a request to SEC here.
    Its steps, in `rules/sources/sec.company/source.yaml`:
    `main` and `keys` read each document (`census-main.yaml`,
    `census-keys.yaml`, two a unit); `catalog` reads the ticker catalog
-   (`catalog.yaml`); `census` reads the Name Frequency file narrowed to the
+   (`catalog.yaml`); `census` reads the Name Count file narrowed to the
    bundle's names and CIKs (`census.yaml`, lookup sets derived from the key
-   readings); `combine` joins each main unit with the census and the catalog
+   readings); `combine` joins each main unit with the Name Count and the catalog
    (`combine-census-captured.yaml`); `records` prepares the bundle's rows as
    one publication (`mdm.prepare`); `merge` runs it through the Merge Stage
-   (`mdm.merge`). The census, combine and records inputs are composed from the
+   (`mdm.merge`). The Name Count, combine and records inputs are composed from the
    steps' verified readings. The returned Bookkeeping run ID is the recovery
    handle: `bookkeeping resume <run-id>` for its work and `change-journal
    recover bookkeeping <run-id>` for committed, undelivered Journal intent.

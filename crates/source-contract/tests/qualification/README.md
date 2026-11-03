@@ -1,4 +1,4 @@
-# Offline whole-source Name Frequency qualification
+# Offline whole-source Name Count qualification
 
 These scripts qualify the configured projection against retained independent
 functions. They are test tooling; they do not introduce a production loader,
@@ -22,14 +22,14 @@ The scripts use the existing local captures below and write evidence under
    `sec_source_population.py`, which exhausted the 69 landed SEC captures in the
    existing `~/.local/share/edgartools/mdm/proving/cm27` fixture. It executes
    and verifies Source Extracts before deriving wanted keys. Company and former
-   name bytes must match historical Name Frequency pins; address and manifest
+   name bytes must match historical Name Count pins; address and manifest
    bytes receive authenticated immutable receipts for this qualification.
-   **Historical address pins are not claimed:** the older Name Frequency
+   **Historical address pins are not claimed:** the older Name Count
    document did not contain them.
-4. *Deleted with the retired census builder it compared against (ticket 88).*
+4. *Deleted with the retired Name Count builder it compared against (ticket 88).*
    `whole_source_frequency.py` compared the whole pinned GLEIF JSON archive's
-   Name Frequency and its seven cascade passes with that builder; the tests now
-   hold the census each case makes (`tests/engine/fixtures/configured-census-cases.json`).
+   Name Count and its seven cascade passes with that builder; the tests now
+   hold the Name Count each case makes (`tests/engine/fixtures/configured-census-cases.json`).
 
 Use `uv run python crates/source-contract/tests/qualification/<script>.py`.
 For measured samples, set `CENSUS_BOUNDED=1` on the SEC script and
@@ -45,7 +45,7 @@ files while it runs. The raw oracle table exists only in memory inside this test
 it is never published or persisted as a Source Extract. Original provider EOF
 is required; neither a repackaged prefix nor the bounded sample qualifies.
 
-The output contains the complete Name Frequency receipt and global-address
+The output contains the complete Name Count receipt and global-address
 frequency digest, plus counts, timing, policy, runtime pins and explicit flags.
 `global-address-frequency.jsonl` is created exclusively: an existing file must
 not be overwritten. Preserve a completed evidence directory and choose a fresh

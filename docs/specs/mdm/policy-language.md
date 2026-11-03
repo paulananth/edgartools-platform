@@ -182,7 +182,7 @@ Evidence: [research 03](../../../.scratch/mastering-policy-language/research/03-
 | binding | `identifier_cardinality` | `namespace` (contract in §7.2) | veto or pass |
 | binding | `compound_key_equal` | `components[] {field, normalizer, comparison ∈ exact|consistent}` | bool |
 | binding | `name_similarity` | `left`, `right`, `normalizer`, `method@version`, `min_score` | bool |
-| name_binding | `name_census_match` | `sec_normalizer`, `gleif_normalizer` | bool: the SEC record's Name Census entry names exactly its own CIK and this LEI at the GLEIF record's last update, and both keys (legal form kept) agree |
+| name_binding | `name_census_match` | `sec_normalizer`, `gleif_normalizer` | bool: the SEC record's Name Count entry names exactly its own CIK and this LEI at the GLEIF record's last update, and both keys (legal form kept) agree |
 | name_binding | `gleif_entity_eligible` | `categories`, `entity_statuses`, `refused_registration_statuses` | bool |
 | name_binding | `holds_no_other_lei` | — | veto: the Company already holds another LEI |
 | name_binding | `jurisdiction_agrees` | `sec_field`, `sec_codes`, `gleif_field` | bool |

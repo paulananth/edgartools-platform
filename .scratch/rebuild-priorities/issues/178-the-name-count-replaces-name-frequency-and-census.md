@@ -1,0 +1,36 @@
+# 178: The Name Count replaces "Name Frequency" and "census"
+
+Priority: 178. Map: [Rebuild priorities](../map.md). Opened 2026-11-02 20:23 ET (operator, 2026-11-02: "remove censes and Name Frequency chang it to \"Name Count\"").
+
+Type: task. Status: open (in progress). Blocks: [177](177-sec-company-loads-through-the-load-command.md) slices 3 to 5 (they write new Name Count settings, so the names change first). Related: [177](177-sec-company-loads-through-the-load-command.md).
+
+## Question
+
+`CONTEXT.md` called the pinned count of how many SEC filers and GLEIF legal entities carry each name "Name Frequency" and said to avoid "Census" and "Name Census". The code, the rules files and the stored file all say "census". The operator asked for one word: **Name Count**, and no "census".
+
+## What counted (read 2026-11-02 20:23 ET, outside `.scratch/` and `.planning/`, which are history and stay as written)
+
+- 93 files and 749 lines say "census"; 29 files say "Name Frequency".
+- Two Python modules (`name_census.py`, `name_frequency.py`), the CLI `mdm name-census` and its `--name-census` flag.
+- Eighteen rules files: `rules/sources/sec.company/census*.yaml` and `combine-census*.yaml`, `rules/sources/gleif/census-*.yaml`.
+- The merge policy function `name_census_match` (the policy language), in `rules/merge`.
+- The stored Name Count file (its keys, its `version`) and the contract tokens that carry its digest.
+- Python, engine and Rust tests and fixtures (`tests/engine`, `tests/mdm`, `crates/source-contract/tests`).
+- Mapping Document workbooks and the Data Catalog, which print the names.
+
+## Rules for the rename
+
+- A rules file that moves changes its source's digest, so a source version saved under the old names is a new version; no old file is edited in place.
+- The stored Name Count file is a versioned contract: the new names come with a new version of the file, and a file built under the old version is rebuilt (the load needs a rebuilt one anyway).
+- `.scratch/` and `.planning/` stay as written.
+
+## Parts
+
+- [x] The glossary and the prose: `CONTEXT.md` defines **Name Count** (avoid "Name Frequency", "Name Census", "Census"); the skills and the living docs say Name Count wherever they name the concept; file names, commands and code identifiers stay until the slices below (2026-11-02 20:23 ET; lints pass)
+- [ ] Slice 2: the Python modules, the CLI (`mdm name-count`, `--name-count`), their functions and tests
+- [ ] Slice 3: the rules files of `sec.company` and `gleif`, the source references and contract tokens; new versions of the sources; the Mapping Documents
+- [ ] Slice 4: the merge policy function (`name_census_match`), the policy language, the pinned digests and the merge rules' new version with its carried-forward proof
+- [ ] Slice 5: the stored Name Count file's keys and version, and the tests that read it
+- [ ] Slice 6: the Rust crate's tests and fixtures
+- [ ] Final check: `git grep -i census` outside `.scratch/` and `.planning/` finds only words that mean something else (the N-CEN form, a filename tally)
+- [ ] Learning → skill: `skills/data-platform` and `skills/refining-rules` use Name Count (done in the first part), or "none"
