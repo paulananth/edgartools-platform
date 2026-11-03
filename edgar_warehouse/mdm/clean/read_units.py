@@ -246,7 +246,8 @@ def form(step: dict, run, units: dict) -> list[dict]:
                 artifact["lookups"] = {"slot": slot}
                 slots[slot] = {"compose": {
                     "document": {"version": 2, "input": source, "sets": {
-                        set_name: {"readings": {"slot": set_name} if "run" in value else [{"slot": set_name}],
+                        set_name: {"readings": {"slot": set_name} if "run" in value or value.get("over") == "all"
+                                   else [{"slot": set_name}],
                                    **{k: v for k, v in value.items() if k not in ("from", "run", "over")}}
                         for set_name, value in lookups.items()}},
                     "slots": {set_name: run_units(run, value["run"]) if "run" in value

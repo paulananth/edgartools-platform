@@ -301,6 +301,9 @@ def test_a_lookup_over_all_reads_every_unit_of_its_prerequisite_in_one_reading(t
     compose = unit["input"]["compose"]
     named = compose["slots"][compose["document"]["artifacts"][0]["lookups"]["slot"]]["compose"]["slots"]["asked"]
     assert named == [{"step": "requests", "key": f"id_cusip/{n:05d}"} for n in range(8)]
+    # the lookup document names that slot whole, as a derived set reads a list of readings
+    document = compose["slots"][compose["document"]["artifacts"][0]["lookups"]["slot"]]["compose"]["document"]
+    assert document["sets"]["asked"]["readings"] == {"slot": "asked"}
 
 
 def test_a_lookup_over_all_is_one_of_all_or_each(tmp_path, monkeypatch):
@@ -309,4 +312,36 @@ def test_a_lookup_over_all_is_one_of_all_or_each(tmp_path, monkeypatch):
         next(step for step in steps if step["name"] == "answers")["input"]["lookups"]["asked"]["over"] = "some"
 
     with pytest.raises(Exception, match="over"):
+        write(tmp_path, monkeypatch, bad)
+
+
+def each_answers(steps):
+    reduce = next(step for step in steps if step["name"] == "reduce")
+    reduce["units"] = {"each": "answers"}
+    reduce["input"]["readings"] = {"answers": {"step": "answers"}}
+    later = next(step for step in steps if step["name"] == "combine")  # reads the reduce units, now several
+    later["input"]["readings"] = {slot: {"all": "reduce"} if named == {"step": "reduce"} else named
+                                  for slot, named in later["input"]["readings"].items()}
+
+
+def test_a_combine_may_make_one_unit_for_each_unit_of_a_step(tmp_path, monkeypatch):
+    """Ticket 177, slice 5: the Company combination runs once per main unit (its 100,000-row bound)."""
+    steps = Artifacts().json(write(tmp_path, monkeypatch, each_answers)["manifest"])["steps"]
+
+    assert [u["keys"]["unit"] for u in steps["reduce"]] == [f"reduce-{n}" for n in range(3)]
+    slots = [u["input"]["compose"]["slots"]["answers"] for u in steps["reduce"]]
+    assert slots == [{"step": "answers", "key": a["keys"]["unit"]} for a in steps["answers"]]
+
+
+@pytest.mark.parametrize("units, message", [
+    ({"each": "file"}, "only a read declares"),             # a combine over each file
+    ({"each": "nothing"}, "a read step it requires"),            # a step it does not require
+    ({"groups": 2}, "only a read declares"),
+])
+def test_a_combines_units_are_each_unit_of_a_step_it_requires(tmp_path, monkeypatch, units, message):
+    def bad(steps):
+        each_answers(steps)
+        next(step for step in steps if step["name"] == "reduce")["units"] = units
+
+    with pytest.raises(Exception, match=message):
         write(tmp_path, monkeypatch, bad)

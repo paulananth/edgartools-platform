@@ -6,16 +6,20 @@ combine them and prepare one publication. What reaches MDM (the records files
 and their publication) equals the bundle the in-process preparation wrote before
 the target replaced it (`fixtures/company-mastering-records.json`, written once).
 The merge step needs a registered MDM; the installed proof covers it.
+
+The target is planned by the generic `write_manifest` (ticket 177, slice 5): the same rules, run facts and
+Name Count file the dedicated writer took, with no Company-specific code.
 """
 import hashlib
 import json
+import pytest
 from copy import deepcopy
 from pathlib import Path
 from uuid import uuid4
 
 from edgar_warehouse.bookkeeping.clean.database import grant_profile
 from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
-from edgar_warehouse.mdm.clean.company_prepare import write_company_manifest
+from edgar_warehouse.mdm.clean.target_manifest import write_manifest
 from edgar_warehouse.rules import files
 from edgar_warehouse.workers import mdm_prepare, source_combine, source_read
 from tests.integration.test_configured_bookkeeping_postgres import databases  # noqa: F401
@@ -25,6 +29,30 @@ from tests.mdm.test_clean_company_preparation import ACME, APPLE, CATALOG_ROWS, 
 from tests.support.memory_journal import MemoryJournal
 from tests.support.bookkeeping_protocol import drive
 from tests.support.sec_capture import CATALOG, document, key
+
+def plan(tmp_path, folder, name_count, output="bundle", slice_bytes=None):
+    """The Company target's input manifest, planned by the generic writer over the capture's documents and catalog."""
+    listed = tmp_path / f"documents-{output}.json"
+    listed.write_text(json.dumps([key(c) for c in CIKS] + [CATALOG]))
+    real = files.source
+
+    def source(name, *args, **kwargs):
+        reading = deepcopy(real(name, *args, **kwargs))
+        if name == "sec.company" and slice_bytes is not None:
+            main = next(s for s in reading["bookkeeping"]["targets"]["mastering"]["steps"] if s["name"] == "main")
+            main["units"] = {"slices": {"bytes": slice_bytes}}
+        return reading
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(files, "source", source)
+        report = write_manifest(
+            source="sec.company", target="mastering", capture=str(folder), documents=str(listed),
+            capture_run=PINS["capture_run"], output=str(tmp_path / output), as_of=PINS["as_of"],
+            revision=PINS["revision"], journal=MemoryJournal(),
+            facts={"capture_run": PINS["capture_run"], "catalog_run": PINS["catalog_run"],
+                   "observed_at": PINS["observed_at"], "load_mode": "default"},
+            run_files={"name_count": str(name_count)})
+    return report
+
 
 WORKERS = {"source.read": source_read, "source.combine": source_combine, "mdm.prepare": mdm_prepare}
 CIKS = (320193, 789019, 42)
@@ -38,7 +66,7 @@ def run_without_merge(databases, tmp_path, book, report):
     target = deepcopy(files.source("sec.company")["bookkeeping"]["targets"]["mastering"])
     assert [step["name"] for step in target["steps"][-2:]] == ["merge", "processed"]
     target["steps"] = target["steps"][:-2]
-    body = {"source": f"company-{uuid4().hex}", "bookkeeping": {"version": 1, "targets": {"mastering": target}}}
+    body = {"source": f"company-{uuid4().hex}", "bookkeeping": {"version": 2, "targets": {"mastering": target}}}
     steps = book.artifacts.json(report["manifest"])["steps"]
     del steps["merge"], steps["processed"]
     manifest = book.artifacts.put(tmp_path.as_uri() + "/submitted", {"version": 2, "steps": steps})
@@ -53,11 +81,7 @@ def run_without_merge(databases, tmp_path, book, report):
 def test_the_mastering_target_prepares_what_the_in_process_preparation_did(databases, tmp_path):
     capture = name_count_capture(tmp_path, documents(), CATALOG_ROWS)
     folder, population, name_count = capture
-    listed = tmp_path / "documents.json"
-    listed.write_text(json.dumps([key(c) for c in CIKS]))
-    args = {"capture": str(folder), "documents": str(listed), "population": str(population), "catalog": CATALOG,
-            "name_count": str(name_count), **PINS}
-    report = write_company_manifest(journal=MemoryJournal(), output=str(tmp_path / "bundle"), **args)
+    report = plan(tmp_path, folder, name_count)
     book = Bookkeeping(databases.runtime)
     book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)
     rid = run_without_merge(databases, tmp_path, book, report)
@@ -76,14 +100,20 @@ def test_the_mastering_target_prepares_what_the_in_process_preparation_did(datab
              "publication": {k: v for k, v in b["input"]["publication"].items() if k != "publication_key"},
              "source_code": b["input"]["source_code"], "expected_checkpoint": b["expected_checkpoint"],
              "checkpoint": b["checkpoint"]} for b in prepared["batches"]]
-    assert got == expected["batches"]
+    # A bundle is its documents in key order, so the records come in key order, not the order they were listed.
+    def by_cik(batch):
+        lines = sorted(batch["records_jsonl"].splitlines(), key=lambda line: json.loads(line)["cik"])
+        return {**batch, "records_jsonl": "\n".join(lines) + "\n"}
+    assert [by_cik(b) for b in got] == [by_cik(b) for b in expected["batches"]]
     assert (prepared["as_of"], prepared["policy_digest"]) == (EXPECTED["as_of"], EXPECTED["policy_digest"])
     # Ticket 22: the publication is its documents (key and receipt), as for any source, not
     # the list file's bytes the old preparation hashed; the rest of the key is the same.
-    ours, theirs = report["publication"]["publication_key"].split(":"), expected["publication_key"].split(":")
-    assert ours[:2] + ours[3:] == theirs[:2] + theirs[3:] and ours[2] != theirs[2]
-    assert {k: v for k, v in report["scope"].items() if k in EXPECTED["scope"]} == EXPECTED["scope"]
-    assert (report["scope"]["listed"], report["scope"]["forced"]) == (len(CIKS), False)
+    # The generic planner names a publication by its run, source and documents (the catalog is one of them); the
+    # approved runs and the Name Count's digest are in the consumer and batch ids, as for any source.
+    assert report["publication"]["publication_key"].startswith("capture-1:sec.company:")
+    # The bundle lists the main documents and the catalog; the scope names the run, not a Company sample.
+    assert (report["scope"]["listed"], report["scope"]["forced"], report["scope"]["capture_run_id"]) == (
+        len(CIKS) + 1, False, "capture-1")
     assert [b["consumer"] for b in prepared["batches"]] == [report["publication"]["consumer"]]
 
     book.resume(rid)  # nothing is redone: every receipt and composed input is reverified
@@ -92,28 +122,23 @@ def test_the_mastering_target_prepares_what_the_in_process_preparation_did(datab
 
 def test_the_manifest_freezes_documents_by_receipt_and_composes_name_count_and_combine(tmp_path):
     folder, population, name_count = name_count_capture(tmp_path, documents(), CATALOG_ROWS)
-    listed = tmp_path / "documents.json"
-    listed.write_text(json.dumps([key(c) for c in CIKS]))
-    report = write_company_manifest(journal=MemoryJournal(), capture=str(folder), documents=str(listed), population=str(population),
-                                    catalog=CATALOG, name_count=str(name_count), output=str(tmp_path / "b"), **PINS)
+    report = plan(tmp_path, folder, name_count, output="b")
     steps = json.loads(Path(report["manifest"]["uri"].removeprefix("file://")).read_bytes())["steps"]
     assert {name: len(units) for name, units in steps.items()} == {
         "main": 1, "keys": 1, "catalog": 1, "name_count": 1, "combine": 1, "records": 1, "merge": 1, "processed": 1}
-    name_count_input = steps["name_count"][0]["input"]["compose"]
-    assert name_count_input["slots"]["lookups"]["compose"]["slots"]["keys"] == [{"step": "keys", "key": "keys"}]
-    assert set(steps["combine"][0]["input"]["compose"]["slots"]) == {"main", "name_count", "catalog"}
+    lookups = steps["name_count"][0]["input"]["compose"]
+    (slot,) = lookups["slots"]  # the one artifact's lookups, composed of the bundle's key reading
+    assert lookups["slots"][slot]["compose"]["slots"]["names"] == [{"step": "keys", "key": "keys"}]
+    assert set(steps["combine"][0]["input"]["compose"]["slots"]) == {"main", "name_count", "catalog_exchange"}
     assert steps["merge"][0]["input"] == {"from": {"step": "records", "key": "records"}}
     assert steps["records"][0]["keys"]["revision"] == str(PINS["revision"])
     assert not list((tmp_path / "b").rglob("*.jsonl"))  # documents stay in the capture, by receipt
 
 
-def mastered(databases, tmp_path, found=None):
+def mastered(databases, tmp_path, found=None, slice_bytes=None):
     """The records the target prepares for a capture of `found` documents, by CIK, and the manifest."""
     folder, population, name_count = name_count_capture(tmp_path, found or documents(), CATALOG_ROWS)
-    listed = tmp_path / "documents.json"
-    listed.write_text(json.dumps([key(c) for c in CIKS]))
-    report = write_company_manifest(journal=MemoryJournal(), capture=str(folder), documents=str(listed), population=str(population),
-                                    catalog=CATALOG, name_count=str(name_count), output=str(tmp_path / "bundle"), **PINS)
+    report = plan(tmp_path, folder, name_count, slice_bytes=slice_bytes)
     book = Bookkeeping(databases.runtime)
     book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)
     assert drive(book, run_without_merge(databases, tmp_path, book, report), databases.ledger,
@@ -141,10 +166,8 @@ def test_forms_tickers_address_origin_and_name_count_entry_come_from_configured_
     assert "_name_key" not in found[APPLE]
 
 
-def test_main_units_are_cut_by_document_bytes_and_still_prepare_the_same_records(databases, tmp_path, monkeypatch):
-    from edgar_warehouse.mdm.clean import company_prepare
-    monkeypatch.setattr(company_prepare, "MAIN_READING_BYTES", 1)  # every document its own main unit
-    found, _, folder = mastered(databases, tmp_path)
+def test_main_units_are_cut_by_document_bytes_and_still_prepare_the_same_records(databases, tmp_path):
+    found, _, folder = mastered(databases, tmp_path, slice_bytes=1)  # every document its own main unit
     (manifest,) = [p for p in (tmp_path / "bundle").glob("*.json") if len(p.stem) == 64]  # the input manifest
     steps = json.loads(manifest.read_bytes())["steps"]
     assert (len(steps["main"]), len(steps["combine"]), len(steps["keys"])) == (3, 3, 1)

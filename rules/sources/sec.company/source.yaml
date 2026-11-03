@@ -37,7 +37,7 @@ acquisition:
       url_prefixes:
       - https://data.sec.gov/submissions/
 bookkeeping:
-  version: 1
+  version: 2
   targets:
     capture:
       steps:
@@ -48,10 +48,16 @@ bookkeeping:
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt]
       checks: [manifest.hash, work.accounting, journal.delivered]
-    # Company preparation and mastering of one bundle (Issue 20 slice 20c): the
-    # input manifest is written by `mdm prepare-clean-company`; name count and
-    # combine inputs are composed from the steps' verified readings.
+    # Company preparation and mastering of one bundle, planned by the generic `load` command
+    # (ticket 177): the bundle's documents are the main submissions documents and the exchange
+    # ticker catalog; the Name Count is a run file read once per bundle, narrowed to the bundle's
+    # names and CIKs. The run takes the approved capture runs and the observation time as facts.
     mastering:
+      run:
+        facts: [capture_run, catalog_run, observed_at, load_mode]
+        files: [name_count]
+        # The Name Count counts by its entries, normalizers and version, not by the capture it was built from.
+        projections: {name_count: [entries, normalizers, version]}
       steps:
         - name: main
           operation: source.read
@@ -59,36 +65,74 @@ bookkeeping:
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.output]
+          units: {slices: {bytes: 8388608}}
+          input:
+            contract: name-count-main.yaml
+            files: "*/submissions/sec/cik=*/main/*"
+            context:
+              cik: {segment: cik, as: integer}
+              sync_run_id: {fact: capture_run}
+              raw_object_id: {receipt: sha256}
+              load_mode: {fact: load_mode}
+              recent_limit: null
+              last_synced_at: {fact: observed_at}
+              bronze_object: "{dir}/{name}"
         - name: keys
           operation: source.read
           requires: []
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.output]
+          input: {contract: name-count-keys.yaml, files: "*/submissions/sec/cik=*/main/*"}
         - name: catalog
           operation: source.read
           requires: []
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.output]
+          input:
+            contract: catalog.yaml
+            files: "*/company_tickers_exchange/*"
+            context:
+              sync_run_id: {fact: catalog_run}
+              last_synced_at: {fact: observed_at}
+              source_name: catalog_exchange
         - name: name_count
           operation: source.read
           requires: [keys]
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.output]
+          input:
+            contract: name-count.yaml
+            runfile: name_count
+            bind: {"0000000000000000000000000000000000000000000000000000000000000000": {digest: name_count}}
+            lookups:
+              names: {from: keys, over: all, table: keys, column: _name_key, max_input_bytes: 16777216, max_input_rows: 512}
+              ciks: {from: keys, over: all, table: keys, column: _cik_key, max_input_bytes: 16777216, max_input_rows: 512}
         - name: combine
           operation: source.combine
           requires: [main, catalog, name_count]
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.combined]
+          units: {each: main}
+          input:
+            contract: combine-name-count-captured.yaml
+            readings: {main: {step: main}, name_count: {all: name_count}, catalog_exchange: {all: catalog}}
+            bind:
+              APPROVED_COMPANY_CAPTURE_RUN: {fact: capture_run}
+              APPROVED_CATALOG_CAPTURE_RUN: {fact: catalog_run}
+              "0000000000000000000000000000000000000000000000000000000000000000": {digest: name_count}
         - name: records
           operation: mdm.prepare
           requires: [combine]
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, mdm.prepared]
+          input:
+            keys: {table: company, dataset: sec.company.v1}
+            readings: {combined: {all: combine}}
         - name: merge
           operation: mdm.merge
           requires: [records]
@@ -291,11 +335,12 @@ dataset_contracts:
           ticker_run_id: _origin.tickers.run_id
           address_landing_sha256: _origin.business_address.sha256
 
-# Generic reading of a receipt-bound main document; no source activation.
+# Generic reading of a receipt-bound main document; no source activation. A bundle names at most
+# 511 main documents and the catalog (ticket 177: the bundle size of the generic load; the engine allows 512).
 execution:
   profile: source.read
   workers: 1
-  max_artifacts: 2
+  max_artifacts: 512
 read:
   format: json
   context:

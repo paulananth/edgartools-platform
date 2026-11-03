@@ -62,8 +62,8 @@ def _units(units) -> None:
         raise Blocked(f"A step's units are one, slices of at most N bytes, groups of 1..{COMPOSE_SLOTS} files, "
                       "or each file")
     if "each" in units:
-        if units["each"] != "file":
-            raise Blocked("A step's units are each file: {each: file}")
+        if units["each"] != "file" and not (isinstance(units["each"], str) and re.fullmatch(NAME, units["each"])):
+            raise Blocked("A step's units are each file {each: file}, or (a combine's) each unit of a step {each: <step>}")
         return
     if "slices" in units:
         slices = units["slices"]
@@ -159,7 +159,8 @@ def _plan(step: dict) -> None:
             or any(not _named(v, "file") and (
                        not isinstance(v, dict)
                        or v.get("over", "file") not in LOOKUP_OVER
-                       or not (set(v) - {"over"} == LOOKUP_KEYS and v["from"] in step["requires"]
+                       or not (set(v) - {"over"} in (LOOKUP_KEYS, LOOKUP_KEYS - {"value_column"})
+                               and v["from"] in step["requires"]
                                or set(v) == LOOKUP_KEYS - {"from"} | {"run"} and _other_run(v["run"]))
                        or any(type(v[k]) is not int or v[k] < 1 for k in ("max_input_bytes", "max_input_rows")))
                    for v in lookups.values())):

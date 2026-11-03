@@ -39,8 +39,8 @@ from .store import digest
 DOCUMENTS_BYTES = 1024**2
 # The keys of a preparation (workers/mdm_prepare.py lists them all): these three, and the optional ones a ruled
 # need has asked for so far. The worker's other optional keys wait for theirs.
-PREPARE_KEYS = {"table", "record_column", "dataset"}
-PREPARE_OPTIONAL = {"distinct_on"}
+PREPARE_KEYS = {"table", "dataset"}
+PREPARE_OPTIONAL = {"distinct_on", "record_column"}  # no record column: each row is the record
 RUN_FILE_BYTES = 256 * 1024**2  # a run file is JSON: a scope, a lookup set
 
 
@@ -99,8 +99,12 @@ def _prepared_shape(by_name: dict, prepare: dict, keys_of: dict, contracts: dict
     reads declares: one column holding the record."""
     readings = prepare.get("input", {}).get("readings", {})
     producer = by_name.get(next(iter(readings.values()), {}).get("all", ""), {})
-    if producer.get("operation") != "source.read":
-        raise ValueError("The preparation reads the units of one source.read step")
+    if producer.get("operation") not in ("source.read", "source.combine"):
+        raise ValueError("The preparation reads the units of one source.read or source.combine step")
+    if "record_column" not in keys_of:
+        return
+    if producer["operation"] != "source.read":
+        raise ValueError("A preparation's record column is one a source.read step declares")
     contract = contracts[_contract(producer)]
     columns = (((contract.get("read") or {}).get("tables") or {}).get(keys_of["table"]) or {}).get("columns") or {}
     if keys_of["record_column"] not in columns:
@@ -114,24 +118,34 @@ def _read(step: dict, run: _Run, units: dict) -> list[dict]:
 
 
 def _combine(step: dict, run: _Run, units: dict) -> list[dict]:
-    """One unit: the step's contract over the readings it names, each a list of units or one unit."""
+    """The step's contract over the readings it names, each a list of units or one unit: one unit, or
+    (`units: {each: <step>}`) one for each unit of that step, which its `{step: <step>}` reading pairs with."""
     name, shape = step["name"], step.get("input", {})
-    readings, slots = shape.get("readings", {}), {}
+    readings = shape.get("readings", {})
     if not readings:
         raise ValueError(f"Step {name}: a combine names its readings")
-    for slot, named in readings.items():
-        if "all" in named:
-            slots[slot] = [{"step": named["all"], "key": u["keys"]["unit"]} for u in units[named["all"]]]
-        elif "run" in named:
-            slots[slot] = read_units.run_units(run, named["run"])
-        elif len(units[named["step"]]) != 1:
-            raise ValueError(f"Step {name}: {{step: {named['step']}}} names a step of one unit; use {{all: ...}}")
-        else:
-            slots[slot] = {"step": named["step"], "key": units[named["step"]][0]["keys"]["unit"]}
+    each = step.get("units", "one")
+    paired = units[each["each"]] if each != "one" else [None]
     contract = run.store.put(run.inputs, read_units.bound(name, shape, run.contracts[_contract(step)], run))
-    return [read_units.unit(f"{run.root}/{name}/combined.json", {"unit": name}, {"compose": {
-        "document": {"version": 1, "contract": contract, "readings": {slot: {"slot": slot} for slot in slots}},
-        "slots": slots}})]
+    found = []
+    for n, mine in enumerate(paired):
+        slots = {}
+        for slot, named in readings.items():
+            if "all" in named:
+                slots[slot] = [{"step": named["all"], "key": u["keys"]["unit"]} for u in units[named["all"]]]
+            elif "run" in named:
+                slots[slot] = read_units.run_units(run, named["run"])
+            elif mine is not None and named["step"] == each["each"]:
+                slots[slot] = {"step": named["step"], "key": mine["keys"]["unit"]}
+            elif len(units[named["step"]]) != 1:
+                raise ValueError(f"Step {name}: {{step: {named['step']}}} names a step of one unit; use {{all: ...}}")
+            else:
+                slots[slot] = {"step": named["step"], "key": units[named["step"]][0]["keys"]["unit"]}
+        label = name if mine is None else f"{name}-{n}"
+        found.append(read_units.unit(f"{run.root}/{name}/{'combined' if mine is None else n}.json", {"unit": label}, {"compose": {
+            "document": {"version": 1, "contract": contract, "readings": {slot: {"slot": slot} for slot in slots}},
+            "slots": slots}}))
+    return found
 
 
 def _prepare(step: dict, run: _Run, units: dict) -> list[dict]:
@@ -343,7 +357,13 @@ def write_manifest(
         raise ValueError("The mdm.prepare step's keys name its table, record column and one of the source's datasets "
                          "(and may name distinct_on)")
     for step in steps:
-        if step["operation"] != "source.read" and "units" in step:
+        units_of = step.get("units")
+        if (step["operation"] == "source.combine" and isinstance(units_of, dict) and set(units_of) == {"each"}
+                and units_of["each"] != "file"):
+            if (units_of["each"] not in step["requires"]
+                    or by_name_of(steps)[units_of["each"]]["operation"] != "source.read"):
+                raise ValueError(f"Step {step['name']}: a combine's units are each unit of a read step it requires")
+        elif step["operation"] != "source.read" and "units" in step:
             raise ValueError(f"Step {step['name']}: only a read declares its units")
     dataset = keys_of.get("dataset")
     by_name = by_name_of(steps)
