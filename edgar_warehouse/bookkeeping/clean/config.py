@@ -80,6 +80,14 @@ def run_inputs(selected: dict) -> dict:
     return {k: list(declared.get(k, [])) for k in sorted(RUN_KEYS)}
 
 
+
+def _key_value(name: str, value) -> bool:
+    """A step key is nonempty text; `distinct_on` (mdm.prepare) names 1 to 8 distinct columns."""
+    if name == "distinct_on":
+        return (isinstance(value, list) and 1 <= len(value) <= 8 and len(set(value)) == len(value)
+                and all(isinstance(c, str) and c for c in value))
+    return isinstance(value, str) and bool(value)
+
 def _plan(step: dict) -> None:
     _units(step.get("units", "one"))
     shape = step.get("input", {})
@@ -90,8 +98,8 @@ def _plan(step: dict) -> None:
                                 or not re.fullmatch(r"(?:[a-z0-9][a-z0-9_.-]*/)?[a-z0-9][a-z0-9_.-]*\.yaml", shape["contract"])):
         raise Blocked("A step's contract is a rules file in the source's folder, or <source>/<file> in another's")
     if "keys" in shape and (not isinstance(shape["keys"], dict)
-                            or any(not isinstance(v, str) or not v for v in shape["keys"].values())):
-        raise Blocked("A step's keys are nonempty text")
+                            or any(not _key_value(k, v) for k, v in shape["keys"].items())):
+        raise Blocked("A step's keys are nonempty text (distinct_on: 1 to 8 distinct column names)")
     readings = shape.get("readings", {})
     if not isinstance(readings, dict) or any(not re.fullmatch(r"[a-z][a-z0-9_]*", name) for name in readings):
         raise Blocked("A step's readings are named by identifiers")

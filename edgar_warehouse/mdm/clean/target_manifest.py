@@ -37,6 +37,10 @@ from .raw_capture import read_bounded
 from .store import digest
 
 DOCUMENTS_BYTES = 1024**2
+# The keys of a preparation (workers/mdm_prepare.py lists them all): these three, and the optional ones a ruled
+# need has asked for so far. The worker's other optional keys wait for theirs.
+PREPARE_KEYS = {"table", "record_column", "dataset"}
+PREPARE_OPTIONAL = {"distinct_on"}
 RUN_FILE_BYTES = 256 * 1024**2  # a run file is JSON: a scope, a lookup set
 
 
@@ -322,9 +326,10 @@ def write_manifest(
     if len(prepare) > 1:
         raise ValueError("A target prepares one publication: at most one mdm.prepare step")
     keys_of = prepare[0].get("input", {}).get("keys", {}) if prepare else {}
-    if prepare and (set(keys_of) != {"table", "record_column", "dataset"}
+    if prepare and (not PREPARE_KEYS <= set(keys_of) <= PREPARE_KEYS | PREPARE_OPTIONAL
                     or keys_of["dataset"] not in (reading.get("dataset_contracts") or {})):
-        raise ValueError("The mdm.prepare step's keys name its table, record column and one of the source's datasets")
+        raise ValueError("The mdm.prepare step's keys name its table, record column and one of the source's datasets "
+                         "(and may name distinct_on)")
     for step in steps:
         if step["operation"] != "source.read" and "units" in step:
             raise ValueError(f"Step {step['name']}: only a read declares its units")
