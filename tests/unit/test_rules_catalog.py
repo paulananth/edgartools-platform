@@ -32,7 +32,7 @@ def test_every_source_feed_dataset_and_mdm_field_is_in_the_catalog():
     tables = _tables(plan)
     assert 'edgartools-rules.sources."sec.adv".adv_bulk' not in tables
     sec = tables['edgartools-rules.sources."sec.company"."sec.company.v1"']
-    assert {"cik", "entity_name", "business_address.postal_code", "name_census"} <= {c["name"] for c in sec["columns"]}
+    assert {"cik", "entity_name", "business_address.postal_code", "name_count"} <= {c["name"] for c in sec["columns"]}
     company = tables["edgartools-rules.mdm.master_records.company"]
     assert {"name", "address", "jurisdiction", "state_of_incorporation"} <= {c["name"] for c in company["columns"]}
     name = next(c for c in company["columns"] if c["name"] == "name")
@@ -49,7 +49,7 @@ def test_lineage_runs_column_by_column_and_leaves_matching_out():
     edge = next(e for e in plan["lineage"] if e["from"].endswith('"sec.company.v1"'))
     by_field = {c["toColumn"].rsplit(".", 1)[1]: c["fromColumns"] for c in edge["columns"]}
     assert len(by_field["address"]) == 6  # an address's parts fill one MDM field
-    assert "name_census" not in {c.rsplit(".", 1)[1].strip('"') for cols in by_field.values() for c in cols}
+    assert "name_count" not in {c.rsplit(".", 1)[1].strip('"') for cols in by_field.values() for c in cols}
     feed = next(e for e in plan["lineage"] if e["to"].endswith('"sec.company.v1"'))
     assert feed["from"].endswith(".submissions") and feed["columns"] == []
 

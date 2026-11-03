@@ -131,11 +131,7 @@ def _with_company_fields_back(contract: dict, code: str) -> dict:
     return before_ticket_129(contract, code)
 
 
-# Ticket 178 renamed the matching profile fields (the function id name_census_match@1 stays: a registered rule version keeps its steps); the historic digests use the old words.
-RENAMED_BY_TICKET_178 = {
-    **{f"name_count_{part}": f"census_{part}" for part in (
-        "field", "entries_field", "holder_keys_field", "holder_count_field", "identifier_count_field",
-        "other_holders_field")}}
+from tests.support.name_count_words import RENAMED_BY_TICKET_178
 
 
 def _restore_company_identity(value):

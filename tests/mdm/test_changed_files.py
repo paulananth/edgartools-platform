@@ -75,12 +75,12 @@ def test_forcing_names_every_file_and_says_so(tmp_path):
 
 def test_other_rules_or_another_shared_input_is_another_identity():
     reading = {"read": {"format": "json"}, "dataset_contracts": {}}
-    base = changed_files.identity(reading, "p1", [{"name": "census", "sha256": "a" * 64}])
-    assert base == changed_files.identity(reading, "p1", [{"name": "census", "sha256": "a" * 64}])
+    base = changed_files.identity(reading, "p1", [{"name": "name_count", "sha256": "a" * 64}])
+    assert base == changed_files.identity(reading, "p1", [{"name": "name_count", "sha256": "a" * 64}])
     assert base != changed_files.identity({**reading, "read": {"format": "xml"}}, "p1",
-                                          [{"name": "census", "sha256": "a" * 64}])
-    assert base != changed_files.identity(reading, "p2", [{"name": "census", "sha256": "a" * 64}])
-    assert base != changed_files.identity(reading, "p1", [{"name": "census", "sha256": "b" * 64}])
+                                          [{"name": "name_count", "sha256": "a" * 64}])
+    assert base != changed_files.identity(reading, "p2", [{"name": "name_count", "sha256": "a" * 64}])
+    assert base != changed_files.identity(reading, "p1", [{"name": "name_count", "sha256": "b" * 64}])
 
 
 def test_a_company_repeat_names_no_file_and_forcing_names_them_all(tmp_path, company_capture):  # noqa: F811

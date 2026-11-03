@@ -121,7 +121,7 @@ def test_populated_candidate_index_upgrade_preserves_history_and_pins(database):
     from edgar_warehouse.mdm.clean.record_reads import for_connection
     db = database
     item = core.source("invented-existing", provenance={"matching":{
-        "name_census":{"leis":[["invented-target",1]]}}})
+        "name_count":{"leis":[["invented-target",1]]}}})
     identity, binding = core.identity_and_binding(item)
     core.apply(db, 1, assertions=[item], identities=[identity], decisions=[binding])
     def snapshot():
@@ -139,7 +139,7 @@ def test_populated_candidate_index_upgrade_preserves_history_and_pins(database):
 
 def test_candidate_containment_checks_exact_array_position_and_duplicates(database):
     items = [core.source("invented-"+str(n), provenance={"matching":{
-        "name_census":{"leis":entries}}}) for n,entries in enumerate([
+        "name_count":{"leis":entries}}}) for n,entries in enumerate([
             [["first",1],["second",2]], [["second",1]], [["missing",1],["first",2]],
             ["first"], {"0":["first"]}, [[False,1]], [["",1]],
         ])]
@@ -156,7 +156,7 @@ def test_each_candidate_value_probes_its_real_index(database, route):
     from edgar_warehouse.mdm.clean.record_reads import for_connection
     # Unrelated entries ensure the two probes return only their exact groups.
     items = [core.source("invented-"+str(n), identifiers={"lei":"target-"+str(n)},
-        provenance={"matching":{"name_census":{"leis":[["target-"+str(n),1]],
+        provenance={"matching":{"name_count":{"leis":[["target-"+str(n),1]],
             "cascade":{"lei":"target-"+str(n)}}}}) for n in range(80)]
     core.apply(database, 1, assertions=items)
     statements = []

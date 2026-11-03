@@ -28,7 +28,7 @@ def no_custom_steps(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def recorded_answers(request):
-    """This case's censuses, in the order its `compare` calls ask for them; every
+    """This case's Name Counts, in the order its `compare` calls ask for them; every
     answer recorded for the case must be used."""
     global ANSWERS
     ANSWERS = list(CASES.get(request.node.name, []))

@@ -338,7 +338,7 @@ pass.
 Bind the approved Name Count file's canonical SHA into the source's combine
 contract for it and use its matching source-extract contract; replace capture and
 catalog run placeholders with the approved runs. Supply the full source extracts the
-source's `combine.yaml` uses, plus a source-extract named `census`. Name Count groups use
+source's `combine.yaml` uses, plus a source-extract named `name_count`. Name Count groups use
 `one` and pin each row's Name Count digest. Name evidence joins by the configured
 name key; optional cascade evidence joins by the record key. Missing name
 evidence yields null, while a cascade answer can create a cascade-only object.
@@ -414,16 +414,16 @@ Bind the approved Name Count file's canonical SHA into `combine-name-count.yaml`
 its matching source-extract contract `name-count.yaml`; replace capture/catalog run
 placeholders with the approved runs. Supply the full main/page/catalog
 source extracts used by `combine.yaml`, with main captures read through
-`name-count-main.yaml`, plus a source-extract named `census`. Both Name Count groups use
+`name-count-main.yaml`, plus a source-extract named `name_count`. Both Name Count groups use
 `one` and pin each row's Name Count digest. Name evidence joins by the configured
 SEC name key; optional cascade evidence joins by integer CIK under
-`name_census.cascade`. Missing name evidence yields null, while a cascade
+`name_count.cascade`. Missing name evidence yields null, while a cascade
 answer can create a cascade-only object. The helper name key is dropped
 before MDM preparation.
 
 Prepared rows were compared with the older Python Name Count builder and
 Company reader, including missing/empty evidence and cascade-only cases, before
-both were retired (#901, #905). The cascade itself stays in `name_census.py`.
+both were retired (#901, #905). The cascade itself stays in `name_count.py`.
 
 ## Whole-source Name Count qualification
 

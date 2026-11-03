@@ -137,7 +137,7 @@ class TestWhatARecordCarries:
     def test_its_entry_names_the_name_count(self):
         doc = counted_names([APPLE], [gleif("HWUPKR0MPOU8FGXBT394", "Apple Inc.")])
         found = entry(doc, "APPLE INC /CA/", name_count_digest=digest(doc))
-        assert found["census"] == digest(doc)
+        assert found["name_count"] == digest(doc)
         assert found["key"] == "APPLE INC"
         assert found["leis"] == [["HWUPKR0MPOU8FGXBT394", "2026-09-01T00:00:00Z"]]
 
@@ -193,5 +193,5 @@ def test_a_record_carries_its_ciks_cascade_answer_inside_its_name_count_entry():
     found["cascade"] = {"version": "sec-gleif-cascade-v1", "assignments": {"0000320193": {"lei": "L", "pass": "P1"}}}
     carried = name_count_evidence(found, row, "d")
     assert carried["key"] == "APPLE INC"
-    assert carried["cascade"] == {"census": "d", "version": "sec-gleif-cascade-v1", "lei": "L", "pass": "P1"}
+    assert carried["cascade"] == {"name_count": "d", "version": "sec-gleif-cascade-v1", "lei": "L", "pass": "P1"}
     assert "cascade" not in name_count_evidence(found, {"cik": 1, "entity_name": "APPLE INC"}, "d")

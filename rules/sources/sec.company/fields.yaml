@@ -106,15 +106,15 @@ read:
                 value:
                   path: business_address.country
                   path_mode: literal
-              name_census:
+              name_count:
                 value:
-                  path: name_census
+                  path: name_count
                   path_mode: literal
 input_fields:
 - business_address
 - description
 - entity_name
 - fiscal_year_end
-- name_census
+- name_count
 - sic
 - state_of_incorporation

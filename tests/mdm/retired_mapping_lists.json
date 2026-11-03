@@ -76,7 +76,7 @@
   "matching": {
    "business_country": "business_address.country",
    "business_postal_code": "business_address.postal_code",
-   "name_census": "name_census"
+   "name_count": "name_count"
   }
  },
  "sec.submissions.person.v1": {

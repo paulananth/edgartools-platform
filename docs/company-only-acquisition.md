@@ -11,7 +11,7 @@ checked by a separate verifier. Nothing makes a request to SEC here.
    ```bash
    uv run --extra mdm --extra s3 edgar-warehouse mdm prepare-clean-company \
      --capture <capture folder> --documents <documents.json> \
-     --population <population.json> --name-census <name-census.json> \
+     --population <population.json> --name-count <name-count.json> \
      --catalog <ticker catalog receipt key> \
      --capture-run <run id> --catalog-run <run id> --observed-at <instant> \
      --output <bundle folder> --as-of <instant> --revision 0
@@ -33,7 +33,7 @@ checked by a separate verifier. Nothing makes a request to SEC here.
    Its steps, in `rules/sources/sec.company/source.yaml`:
    `main` and `keys` read each document (`name-count-main.yaml`,
    `name-count-keys.yaml`, two a unit); `catalog` reads the ticker catalog
-   (`catalog.yaml`); `census` reads the Name Count file narrowed to the
+   (`catalog.yaml`); `name_count` reads the Name Count file narrowed to the
    bundle's names and CIKs (`name-count.yaml`, lookup sets derived from the key
    readings); `combine` joins each main unit with the Name Count and the catalog
    (`combine-name-count-captured.yaml`); `records` prepares the bundle's rows as

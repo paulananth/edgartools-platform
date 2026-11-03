@@ -219,7 +219,7 @@ def test_the_record_carries_its_matching_evidence_in_provenance():
     row = source_row(320193, entity_name="APPLE INC")
     row["last_synced_at"] = row["last_synced_at"].isoformat()
     row["business_address"] = {"postal_code": "95014", "country": "US"}
-    row["name_census"] = {"census": "c" * 64, "key": "APPLE INC"}
+    row["name_count"] = {"name_count": "c" * 64, "key": "APPLE INC"}
     body = normalize(
         row,
         source_code=SOURCE_CODE,
@@ -235,7 +235,7 @@ def test_the_record_carries_its_matching_evidence_in_provenance():
     assert body["provenance"]["matching"] == {
         "business_postal_code": "95014",
         "business_country": "US",
-        "name_census": {"census": "c" * 64, "key": "APPLE INC"},
+        "name_count": {"name_count": "c" * 64, "key": "APPLE INC"},
         # The quality rule's standard address, a matching copy (ticket 22).
         "address": {"postcode": "95014", "country": "US"},
     }

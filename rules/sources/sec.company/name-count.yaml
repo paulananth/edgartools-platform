@@ -130,7 +130,7 @@ read:
               value:
                 path: entry
             fields:
-              census:
+              name_count:
                 const:
                   value: "0000000000000000000000000000000000000000000000000000000000000000"
               version:
@@ -187,7 +187,7 @@ read:
               value:
                 path: entry
             fields:
-              census:
+              name_count:
                 const:
                   value: "0000000000000000000000000000000000000000000000000000000000000000"
               version:

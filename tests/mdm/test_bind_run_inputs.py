@@ -13,20 +13,20 @@ from tests.mdm import test_ownership_target as ownership
 from tests.mdm import test_thirteenf_securities_target as thirteenf
 
 NAME_COUNT = {"entries": [1, 2, 3], "version": 1}
-TOKENS = {"APPROVED_RUN": {"fact": "approved_run"}, "NAME_COUNT_DIGEST": {"digest": "census"}}
+TOKENS = {"APPROVED_RUN": {"fact": "approved_run"}, "NAME_COUNT_DIGEST": {"digest": "name_count"}}
 
 
 def plan(monkeypatch, tmp_path, module, step_name, *, bind=TOKENS, facts=None, run=None, carries=("APPROVED_RUN", "NAME_COUNT_DIGEST")):
     """Plan a module's target with `bind` on one step; its contract carries the tokens."""
     real, real_load = files.source, files.load
-    name_count = tmp_path / "census.json"
+    name_count = tmp_path / "name_count.json"
     name_count.write_text(json.dumps(NAME_COUNT))
 
     def source(name, *args, **kwargs):
         reading = deepcopy(real(name, *args, **kwargs))
         if name == module.SOURCE:
             target = reading["bookkeeping"]["targets"]["mastering"]
-            target["run"] = run if run is not None else {"facts": ["approved_run"], "files": ["census"]}
+            target["run"] = run if run is not None else {"facts": ["approved_run"], "files": ["name_count"]}
             step = next(s for s in target["steps"] if s["name"] == step_name)
             step.setdefault("input", {})["bind"] = bind
         return reading
@@ -40,7 +40,7 @@ def plan(monkeypatch, tmp_path, module, step_name, *, bind=TOKENS, facts=None, r
     monkeypatch.setattr(target_manifest.rules_files, "load", load)
     options = module.capture(tmp_path, [1])
     return target_manifest.write_manifest(
-        **options, facts={"approved_run": "run-7"} if facts is None else facts, run_files={"census": str(name_count)})
+        **options, facts={"approved_run": "run-7"} if facts is None else facts, run_files={"name_count": str(name_count)})
 
 
 def contract_name(module, step_name):
@@ -68,7 +68,7 @@ def test_a_combine_contract_carries_them_too(monkeypatch, tmp_path):
 @pytest.mark.parametrize("kwargs, message", [
     ({"carries": ("APPROVED_RUN",)}, "carries no"),                      # a stale token
     ({"facts": {"approved_run": 7}}, "takes text"),                         # a fact that is not text
-    ({"run": {"facts": [], "files": ["census"]}, "facts": {}}, "not in the target's run"),   # an undeclared fact
+    ({"run": {"facts": [], "files": ["name_count"]}, "facts": {}}, "not in the target's run"),   # an undeclared fact
     ({"run": {"facts": ["approved_run"], "files": []}}, "not in the target's run|run takes"),  # an undeclared file
     ({"bind": {"APPROVED_RUN": {"fact": 3}}}, "bind maps a token"),         # a malformed reference
 ])

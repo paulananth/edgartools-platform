@@ -50,7 +50,7 @@ def name_count_capture(tmp_path, found, rows):
     (tmp_path / "g").mkdir()
     archive, metadata, _ = gleif_archive(tmp_path / "g", GLEIF)
     filers = [(f"{cik:010d}", d["name"], [n["name"] for n in d["formerNames"]]) for cik, d in found.items()]
-    name_count = tmp_path / "name-census.json"
+    name_count = tmp_path / "name-count.json"
     write_name_count(capture=str(folder), population=str(population), gleif_metadata=str(metadata),
                          gleif_reading=gleif_reading(tmp_path / "r", archive, _sec_population(filers)[1], len(GLEIF)),
                          output=str(name_count), catalog=CATALOG)
