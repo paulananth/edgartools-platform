@@ -1,0 +1,12 @@
+# Each custody row as one record for the Dataset Contract iapd.adv.custodians.v1 (ticket 176).
+# custodian_id is a column of its own: the preparation keeps the first row of each custodian.
+execution: {profile: source.read, workers: 1, max_artifacts: 512}
+read:
+  format: json
+  limits: {max_bytes: 33554432, max_records: 1000000}
+  tables:
+    custody:
+      each: tables.custody
+      columns:
+        record: {value: {path: .}}
+        custodian_id: {value: {path: custodian_id, path_mode: literal, type: text, null_if_blank: true}}

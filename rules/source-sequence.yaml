@@ -18,7 +18,7 @@ sources:
     requires: []
     after: [gleif]
   iapd.adv:
-    target: null
+    target: mastering
     requires: []
     after: [sec.submissions.person]
   sec.ownership:

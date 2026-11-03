@@ -13,6 +13,7 @@
 # BD number (it identifies the custodian then); `lei` keeps every reported LEI
 # for lookup. MDM takes one record per file and custodian_id (mdm.prepare
 # `distinct_on`); every row is a silver fact.
+execution: {profile: source.read, workers: 1, max_artifacts: 512}
 read:
   format: csv
   container: zip

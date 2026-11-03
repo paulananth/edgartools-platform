@@ -3,6 +3,7 @@
 # UTF-8 (ticket 07). DateSubmitted has two formats (6/24/2025 7:44 to
 # August 2025, 06/24/2026 10:37:17 AM after); kept as text, since the file's
 # month end (context `published`) dates the records.
+execution: {profile: source.read, workers: 1, max_artifacts: 512}
 read:
   format: csv
   container: zip

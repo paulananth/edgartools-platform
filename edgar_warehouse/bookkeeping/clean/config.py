@@ -343,7 +343,7 @@ def worklist(manifest: dict, config: dict) -> list[dict]:
             # durable destination receipt, not guessed during submission.
             if not isinstance(unit["output"], str) or not unit["output"]:
                 raise Blocked("Output reference missing")
-            if not isinstance(unit["keys"], dict) or any(not isinstance(v, str) or not v for v in unit["keys"].values()):
+            if not isinstance(unit["keys"], dict) or any(not _key_value(k, v) for k, v in unit["keys"].items()):
                 raise Blocked("Unit keys must be nonempty text")
             try:
                 key = step["key"].format_map(unit["keys"])

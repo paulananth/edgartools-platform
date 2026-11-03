@@ -1,0 +1,11 @@
+# Each adviser filing, with its custodians joined in, as one record for the Dataset Contract
+# iapd.adv.filings.v1 (ticket 176).
+execution: {profile: source.read, workers: 1, max_artifacts: 512}
+read:
+  format: json
+  limits: {max_bytes: 33554432, max_records: 1000000}
+  tables:
+    filings:
+      each: tables.filings
+      columns:
+        record: {value: {path: .}}
