@@ -109,6 +109,8 @@ def companions(steps: list[dict], rows: dict, key: str) -> list[tuple[str, str]]
 def _document(step: dict, run, key: str) -> dict:
     """What one document is read as: itself, or its companion."""
     beside = step.get("input", {}).get("beside")
+    if "runfile" in step.get("input", {}):  # a run file's canonical bytes, stored once (ticket 177, slice 5)
+        return run.store.put_bytes(f"{run.inputs}/{key}.json", canonical(run.run_files[key]).encode())
     if beside is None:
         return raw_capture.document(run.folder, run.receipts, key)
     companion = fill(beside["path"], key)
@@ -198,7 +200,8 @@ def form(step: dict, run, units: dict) -> list[dict]:
         return [unit(f"{run.root}/{name}/reading.json", {"unit": name}, {"compose": {
             "document": {"version": 4, "contract": contract, "pieces": {"slot": "pieces"}},
             "slots": {"pieces": {"step": shape["pieces"]["step"], "key": before["keys"]["unit"]}}}})]
-    keys = [key for key in run.keys if fnmatch.fnmatchcase(key, shape.get("files", "*"))]
+    keys = [shape["runfile"]] if "runfile" in shape else [
+        key for key in run.keys if fnmatch.fnmatchcase(key, shape.get("files", "*"))]
     if not keys:
         raise ValueError(f"Step {name}: no document of the bundle matches {shape.get('files', '*')!r}")
     lookups = shape.get("lookups", {})

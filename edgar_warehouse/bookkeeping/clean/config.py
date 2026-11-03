@@ -31,7 +31,7 @@ def _integer(value, low, high, name):
 # reads. They are checked here and stripped, so the engine sees version-1 steps.
 PLAN_KEYS = frozenset({"units", "input"})
 INPUT_KEYS = frozenset({"contract", "keys", "readings", "files", "beside", "context", "lookups", "pieces",
-                        "references", "bind"})
+                        "references", "bind", "runfile"})
 # A token a step's contract carries, replaced before the contract is frozen: `{fact: <name>}` (text)
 # or `{digest: <file>}` (the sha256 of a run file's canonical content).
 BIND_TOKEN = r"[A-Za-z0-9_.:-]{1,128}"
@@ -116,7 +116,7 @@ def _plan(step: dict) -> None:
     shape = step.get("input", {})
     if not isinstance(shape, dict) or set(shape) - INPUT_KEYS:
         raise Blocked("A step's input names its contract, keys, readings, files, beside, context, lookups, "
-                      "pieces, references and bind only")
+                      "pieces, references, runfile and bind only")
     if "contract" in shape and (not isinstance(shape["contract"], str)
                                 or not re.fullmatch(r"(?:[a-z0-9][a-z0-9_.-]*/)?[a-z0-9][a-z0-9_.-]*\.yaml", shape["contract"])):
         raise Blocked("A step's contract is a rules file in the source's folder, or <source>/<file> in another's")
@@ -160,6 +160,10 @@ def _plan(step: dict) -> None:
                       "step instead of `from` ({run: {source, target, step}}), or a run file {file: <name>}")
     if any(_named(v, "file") for v in lookups.values()) and not all(_named(v, "file") for v in lookups.values()):
         raise Blocked("A step's lookups are all run files, or all read from a prerequisite")
+    if "runfile" in shape and (not isinstance(shape["runfile"], str) or not re.fullmatch(NAME, shape["runfile"])
+                               or {"files", "beside", "pieces"} & set(shape) or step.get("units", "one") != "one"):
+        raise Blocked("A step's runfile names a run file, read as the step's one document (one unit, with no "
+                      "files, beside or pieces)")
     bind = shape.get("bind", {})
     if (not isinstance(bind, dict) or any(not isinstance(t, str) or not re.fullmatch(BIND_TOKEN, t) for t in bind)
             or any(not (_named(v, "fact") or _named(v, "digest")) for v in bind.values())):
@@ -213,6 +217,7 @@ def validate(document: dict, target: str) -> dict:
                 files_named = [v["file"] for v in [*shape.get("lookups", {}).values(), *shape.get("references", {}).values()]
                                if _named(v, "file")]
                 files_named += [v["digest"] for v in shape.get("bind", {}).values() if _named(v, "digest")]
+                files_named += [shape["runfile"]] if "runfile" in shape else []
                 if any(v["fact"] not in declared["facts"] for v in named) or any(f not in declared["files"] for f in files_named):
                     raise Blocked(f"Step {step['name']}: a fact or file it names is not in the target's run")
             steps = [{k: v for k, v in step.items() if k not in PLAN_KEYS} for step in steps]

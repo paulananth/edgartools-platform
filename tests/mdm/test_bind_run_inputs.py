@@ -1,5 +1,6 @@
 """A step's `bind` fills a run fact or a run file's digest into its contract before the contract is
 frozen (ticket 177, slice 2): for a read and for a combine. Every name here is invented."""
+import hashlib
 import json
 from copy import deepcopy
 
@@ -7,7 +8,7 @@ import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.mdm.clean import target_manifest
-from edgar_warehouse.mdm.clean.store import digest
+from edgar_warehouse.mdm.clean.store import canonical, digest
 from edgar_warehouse.rules import files
 from tests.mdm import test_ownership_target as ownership
 from tests.mdm import test_thirteenf_securities_target as thirteenf
@@ -75,3 +76,44 @@ def test_a_combine_contract_carries_them_too(monkeypatch, tmp_path):
 def test_a_bad_bind_is_refused(monkeypatch, tmp_path, kwargs, message):
     with pytest.raises(Exception, match=message):
         plan(monkeypatch, tmp_path, ownership, "read", **kwargs)
+
+
+def runfile_plan(monkeypatch, tmp_path, *, run=None, runfile="name_count", extra=None):
+    """The ownership read step reads a run file as its one document (ticket 177, slice 5)."""
+    real = files.source
+
+    def source(name, *args, **kwargs):
+        reading = deepcopy(real(name, *args, **kwargs))
+        if name == ownership.SOURCE:
+            target = reading["bookkeeping"]["targets"]["mastering"]
+            target["run"] = run if run is not None else {"facts": [], "files": ["name_count"]}
+            step = next(s for s in target["steps"] if s["name"] == "read")
+            step["units"] = "one"
+            step["input"] = {k: v for k, v in step.get("input", {}).items() if k in ("contract", "bind")}
+            step["input"]["runfile"] = runfile
+            step["input"].update(extra or {})
+        return reading
+    monkeypatch.setattr(target_manifest.rules_files, "source", source)
+    path = tmp_path / "name_count.json"
+    path.write_text(json.dumps(NAME_COUNT))
+    options = ownership.capture(tmp_path, [1])
+    return target_manifest.write_manifest(**options, facts={}, run_files={"name_count": str(path)})
+
+
+def test_a_read_may_take_a_run_file_as_its_one_document(monkeypatch, tmp_path):
+    report = runfile_plan(monkeypatch, tmp_path)
+    store = Artifacts()
+    (unit,) = store.json(report["manifest"])["steps"]["read"]
+    (artifact,) = store.json(unit["input"])["artifacts"]
+    document = artifact.get("input", artifact)
+    assert document["sha256"] == hashlib.sha256(canonical(NAME_COUNT).encode()).hexdigest()
+
+
+@pytest.mark.parametrize("kwargs, message", [
+    ({"run": {"facts": [], "files": []}}, "run takes|not in the target's run"),   # an undeclared file
+    ({"runfile": 3}, "runfile names"),                                            # not a name
+    ({"extra": {"files": "*.xml"}}, "runfile"),                                   # with a document glob
+])
+def test_a_bad_runfile_is_refused(monkeypatch, tmp_path, kwargs, message):
+    with pytest.raises(Exception, match=message):
+        runfile_plan(monkeypatch, tmp_path, **kwargs)
