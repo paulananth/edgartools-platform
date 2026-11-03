@@ -2,7 +2,7 @@
 
 Priority: 138. Map: [Rebuild priorities](../map.md). Opened 2026-10-25 15:31 ET.
 
-Type: task. Status: in progress (Claude, branch `claude/t138-mdm-build`; parts after A1 on fresh branches).
+Type: task. Status: resolved (2026-11-02 21:09 ET; operator: "close ticket 138"). Every engineering part is ticked and merged; the four unticked parts are struck through with their reasons (deferred or dropped), and the stale-lease cause is its own follow-up.
 Blocked by: none. Replaces the two-target design of [120](120-switch-on-securities.md)'s
 "OpenFIGI first" part; the rest of 120's load waits for this.
 
