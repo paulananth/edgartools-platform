@@ -212,6 +212,11 @@ edgar-warehouse load \
   those files.
 - Add `--fact name=value` and `--file name=path` for each input the target's
   `run` declares.
+- **A source's Bookkeeping section must be version 2.** `load` cannot plan a
+  version 1 section: every bundle stops at `mdm prepare-capture` with "must be
+  version 2" before any run is submitted. Check
+  `grep -A2 '^bookkeeping' rules/sources/<source>/source.yaml`. A source still
+  on version 1 has its own route (see that source's doc) until it is converted.
 - **Plan first.** Add `--plan` (no `--capture-run` needed) before claiming or
   starting a load. It changes nothing and prints which open runs `load` would
   finish, which it would leave and why (a run pinned to old worker code is
