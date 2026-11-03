@@ -31,9 +31,9 @@ Format seen in the project (read 2026-11-03 06:32 ET): the SGML header and the R
 
 ## Parts
 
-- [ ] Operator's choice of the one name (`accession_number` recommended, or `filing_id`)
-- [ ] Check the stored form: dashes or none in each Silver table and the Snowflake DDL; one form, written in the entry
-- [ ] Add the **Accession Number** entry to `CONTEXT.md` (with the line above), and change the four daily-run terms that use "accession" for the filing to "filing"
+- [x] Operator's choice of the one name: `accession_number` (2026-11-03 06:49 ET; operator: "accession_number")
+- [x] Check the stored form (2026-11-03 06:49 ET): the five newer Silver tables' tests, the SGML header, company facts' `accn` and the Rust tests all hold the number with dashes (`0000000001-26-000001`); one dashboard helper strips them only to build a folder address; the entry says "stored with dashes". Not checked: the live legacy Silver rows (no data read)
+- [x] Add the **Accession Number** entry to `CONTEXT.md` (with the line above), and change the four daily-run terms that use "accession" for the filing to "filing" (2026-11-03 06:49 ET; `git grep -i accession CONTEXT.md` now finds only the entry and Derived Filing Text's "Accession Number"; the genericity lint passes)
 - [ ] If `accession_number`: rename the `accession` column of the five newer Silver tables and the references in their four sources' rules (`sec.company-facts`, `sec.nport.security`, `sec.ownership`, and the readings that feed them), as slices: tests first, one source per slice, new rule versions with carried-forward proofs, a Silver migration, Mapping Documents regenerated
 - [ ] Final check: `git grep -w accession` outside SEC's own spellings, history and the glossary finds only prose that means something else
 - [ ] Learning → skill: name the skill line this changes (the glossary rule in `skills/data-platform` or `skills/data-onboarding`: a column named for a source's number keeps the source's word), or "none"
