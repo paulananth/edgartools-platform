@@ -14,6 +14,10 @@ Nine sources have a Bookkeeping target in `rules/source-sequence.yaml`. Three ha
 - `iapd.adv` has its read rules (two CSV files and a combine contract) and its quality file. It needs a mastering target.
 - `sec.registration` has a capture-only target (version 1) and no read rules. What its second step reads is the operator's decision (ticket 149 kept the document unread first), so it is last.
 
+## Change Journal (operator, 2026-11-02: "also needs change journal")
+
+Every target ends with the `journal.record` step (the 13F target's `processed`), so the Change Journal skips a file already processed with the same source, key, content hash and processing identity, and names every file again when a rule changes. Each source below is done only when a test shows both: a second pass changes nothing, and a changed rule names every file again. `sec.registration`'s capture target has no `journal.record` step today; it gets one.
+
 ## Order (recommended)
 
 1. `sec.ownership`: its rules and silver are complete.
@@ -24,12 +28,12 @@ Nine sources have a Bookkeeping target in `rules/source-sequence.yaml`. Three ha
 
 - [ ] `sec.ownership`: the mastering target (read, record, prepare, merge, processed), written like the 13F target
 - [ ] `sec.ownership`: the `silver.land` steps for `insider_ownership` and `insider_position`, after the merge
-- [ ] `sec.ownership`: tests at plan level and through the real workers on Postgres (a second pass changes nothing; a changed rule names every file again)
+- [ ] `sec.ownership`: the Change Journal step ends the target; tests at plan level and through the real workers on Postgres (a second pass changes nothing; a changed rule names every file again)
 - [ ] `sec.ownership`: `target: mastering` (or the silver kind the engine names) in `rules/source-sequence.yaml`, with the pinned-order tests
 - [ ] `iapd.adv`: the mastering target (read, combine, record, prepare, merge, processed)
-- [ ] `iapd.adv`: tests at plan level and through the real workers; `rules/source-sequence.yaml`
+- [ ] `iapd.adv`: the Change Journal step ends the target; tests at plan level and through the real workers; `rules/source-sequence.yaml`
 - [ ] `sec.registration`: the operator decides what the second step reads (the document unread, or facts)
-- [ ] `sec.registration`: its target beyond capture, tests and `rules/source-sequence.yaml`
+- [ ] `sec.registration`: its target beyond capture, with the Change Journal step added after capture, tests and `rules/source-sequence.yaml`
 - [ ] Learning → skill: name the skill line this ticket changed (`data-onboarding` target writing), or "none"
 
 ## Not in this ticket
