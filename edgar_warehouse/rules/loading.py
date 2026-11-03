@@ -3,7 +3,9 @@
 One command for every source and target, with nothing named after either:
 
 1. Finish first: a run of this source and target that is still running or waiting
-   is driven to the end before anything new is submitted.
+   is driven to the end before anything new is submitted. A run that cannot be finished
+   (its retry fails) is named and left as it is: a replacement needs a new run, and the
+   Change Journal, which holds only what was verified, loads its documents again.
 2. The documents are the capture's receipts the target reads: those matching its
    first step's `files` pattern (all of them when it names none).
 3. They are cut into bundles of the source's `execution.max_artifacts`. Each bundle
@@ -211,8 +213,21 @@ class Loader:
             self.say(f"Run {run_id} is left as it is: {why}")
         for run_id in unfinished:
             self.say(f"Finishing run {run_id}, left open before")
-        self.at_once([(f"run {run_id}", lambda run_id=run_id: self.drive(run_id)) for run_id in unfinished])
-        result["finished_open_runs"] = unfinished
+        result["finished_open_runs"] = []
+
+        def finish(run_id: str) -> None:
+            """A run that cannot be finished (a conflicting output, say) cannot be resumed, and a replacement
+            needs a new run (bookkeeping RECOVERY.md): name it and go on. The Change Journal holds only what was
+            verified, so its documents load again below. It stays in Bookkeeping as evidence."""
+            try:
+                self.drive(run_id)
+            except RunStopped as stopped:
+                result["left_as_they_are"][run_id] = f"could not be finished: {stopped}"
+                self.say(f"Run {run_id} could not be finished and is left as it is: {stopped}")
+            else:
+                result["finished_open_runs"].append(run_id)
+        self.at_once([(f"run {run_id}", lambda run_id=run_id: finish(run_id)) for run_id in unfinished])
+        result["finished_open_runs"] = [run_id for run_id in unfinished if run_id in result["finished_open_runs"]]
         cut = self.cut(capture)
         self.say(f"{self.source} {self.target}: {sum(len(b) for b in cut)} documents in {len(cut)} bundles, "
                  f"{self.at_a_time} at once")
