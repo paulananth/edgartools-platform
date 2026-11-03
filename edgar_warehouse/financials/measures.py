@@ -146,13 +146,13 @@ def statements(measures: Measures, formats: dict, lines: str = "silver.company_l
 def _part(alias: str) -> str:
     """One figure's trace: its value, concept and filing."""
     return (f"jsonb_strip_nulls(jsonb_build_object('value', {alias}.value::text, 'concept', {alias}.concept, "
-            f"'accession', {alias}.accession))")
+            f"'accession_number', {alias}.accession_number))")
 
 
 def _input(alias: str) -> str:
     """One input's trace: its fiscal year and its figure, or the parts it was computed from."""
     return (f"jsonb_strip_nulls(jsonb_build_object('fiscal_year', {alias}.fiscal_year, 'value', {alias}.value::text, "
-            f"'concept', {alias}.concept, 'accession', {alias}.accession)) || COALESCE({alias}.detail, '{{}}'::jsonb)")
+            f"'concept', {alias}.concept, 'accession_number', {alias}.accession_number)) || COALESCE({alias}.detail, '{{}}'::jsonb)")
 
 
 def _item(alias: str, name: str, year: str = "y") -> str:
@@ -197,7 +197,7 @@ def _steps(measures: Measures, formats: dict, lines: str, facts: str) -> tuple[l
                                   "NULL::text, NULL::text, 0::bigint")),
         # A value with a reason is an input that could not be computed (mixed currencies, no tax rate).
         ("item", f"""
-  SELECT company_key, fiscal_year, line_item, value, currency, concept, accession, NULL::text AS reason,
+  SELECT company_key, fiscal_year, line_item, value, currency, concept, accession_number, NULL::text AS reason,
          NULL::jsonb AS detail
   FROM {lines}"""),
         # Each fiscal year once, at its end.
@@ -206,7 +206,7 @@ def _steps(measures: Measures, formats: dict, lines: str, facts: str) -> tuple[l
         ("fcf", f"""
   SELECT y.company_key, y.fiscal_year, 'fcf' AS line_item,
          CASE WHEN o.currency IS NOT DISTINCT FROM c.currency THEN o.value - c.value END AS value,
-         o.currency, 'computed' AS concept, NULL::text AS accession,
+         o.currency, 'computed' AS concept, NULL::text AS accession_number,
          CASE WHEN o.value IS NOT NULL AND c.value IS NOT NULL
                    AND o.currency IS DISTINCT FROM c.currency THEN {lit(MIXED)} END AS reason,
          jsonb_build_object('ocf', {_part("o")}, 'capex', {_part("c")}) AS detail
@@ -223,11 +223,11 @@ def _steps(measures: Measures, formats: dict, lines: str, facts: str) -> tuple[l
   {_item("oi", "operating_income")} {_item("pre", "pretax_income")} {_item("tax", "income_tax")}"""),
         ("operating_income_after_tax", f"""
   SELECT company_key, fiscal_year, line_item, CASE WHEN reason IS NULL THEN value END AS value, currency,
-         concept, accession, reason, detail
+         concept, accession_number, reason, detail
   FROM (
     SELECT t.company_key, t.fiscal_year, 'operating_income_after_tax' AS line_item,
            t.oi * (1 - COALESCE(t.own_rate, r.rate)) AS value, t.currency, 'computed' AS concept,
-           NULL::text AS accession,
+           NULL::text AS accession_number,
            CASE WHEN t.missing THEN {lit(NO_CONCEPT)}
                 WHEN t.own_rate IS NULL AND t.country IS NULL THEN 'no country of incorporation'
                 WHEN t.own_rate IS NULL AND r.rate IS NULL THEN 'no statutory rate for the country and year'
@@ -243,7 +243,7 @@ def _steps(measures: Measures, formats: dict, lines: str, facts: str) -> tuple[l
   SELECT y.company_key, y.fiscal_year, 'invested_capital' AS line_item,
          CASE WHEN d.currency IS NOT DISTINCT FROM e.currency AND e.currency IS NOT DISTINCT FROM c.currency
               THEN d.value + e.value - c.value END AS value,
-         e.currency, 'computed' AS concept, NULL::text AS accession,
+         e.currency, 'computed' AS concept, NULL::text AS accession_number,
          CASE WHEN d.value IS NOT NULL AND e.value IS NOT NULL AND c.value IS NOT NULL
                    AND (d.currency IS DISTINCT FROM e.currency OR e.currency IS DISTINCT FROM c.currency)
               THEN {lit(MIXED)} END AS reason,

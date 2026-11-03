@@ -32,7 +32,7 @@ def line(company, year, item, value, currency="USD", end=None):
     return {"company_key": company, "line_item": item, "fiscal_year": year, "period_start": None,
             "period_end": end or f"{year}-12-31", "value": str(value), "unit": currency or "shares",
             "currency": currency, "taxonomy": "us-gaap", "concept": "Invented", "inputs": None,
-            "accession": f"{company}-{year % 100:02d}-000001", "filed": f"{year + 1}-02-01", "flags": [],
+            "accession_number": f"{company}-{year % 100:02d}-000001", "filed": f"{year + 1}-02-01", "flags": [],
             "null_reason": None, "rule_version": "invented"}
 
 
@@ -126,7 +126,7 @@ def test_a_ratio_and_its_reasons(built):
     assert rows[(GROWING, "gross_margin", 2025, 1)]["currency"] is None
     margin = rows[(GROWING, "gross_margin", 2025, 1)]["inputs"]
     assert margin["revenue"] == {"fiscal_year": 2025, "value": "146.4100000000", "concept": "Invented",
-                                 "accession": f"{GROWING}-25-000001"}
+                                 "accession_number": f"{GROWING}-25-000001"}
 
 
 def test_the_statement_format_decides_what_is_meaningful(built):
@@ -187,4 +187,4 @@ def test_a_computed_input_in_two_currencies_says_so(built):
     assert got(rows, MIXED_PARTS, "roic_beginning", 2025) == (None, "mixed currencies")  # this year's capital
     fcf = rows[(MIXED_PARTS, "fcf_margin", 2025, 1)]["inputs"]["fcf"]
     assert (fcf["concept"], fcf["capex"]) == ("computed", {"value": "10.0000000000", "concept": "Invented",
-                                                           "accession": f"{MIXED_PARTS}-25-000001"})
+                                                           "accession_number": f"{MIXED_PARTS}-25-000001"})

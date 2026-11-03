@@ -71,14 +71,14 @@ columns:
 - name: inputs
   type: JSON
   nullable: true
-  definition: "For a computed figure, each term's concept (or line item), accession and value."
+  definition: "For a computed figure, each term's concept (or line item), accession number and value."
   source: "company_fact"
   sensitivity: none
-- name: accession
+- name: accession_number
   type: VARCHAR
   nullable: true
   definition: "The filing the figure was taken from (a computed figure's first fact term)."
-  source: "company_fact.accession"
+  source: "company_fact.accession_number"
   sensitivity: none
 - name: filed
   type: DATE

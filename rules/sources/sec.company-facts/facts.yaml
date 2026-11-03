@@ -219,7 +219,7 @@ read:
         period_start: {date: {path: start, kind: calendar}}
         period_end: {date: {path: end, kind: calendar}}
         value: {value: {path: val, nullable: false, big_numbers: text, decimals: text}}
-        accession: {text: {path: accn, trim: false}}
+        accession_number: {text: {path: accn, trim: false}}
         filed: {date: {path: filed, kind: calendar}}
         form: {text: {path: form, trim: false}}
         fiscal_year_filed: {integer: {path: fy}}

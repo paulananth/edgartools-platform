@@ -51,7 +51,7 @@ columns:
 - name: inputs
   type: JSON
   nullable: false
-  definition: "Each line item the measure read: its fiscal year, value, concept and accession, and what a computed input was computed from (ROIC's tax rate and its source)."
+  definition: "Each line item the measure read: its fiscal year, value, concept and accession number, and what a computed input was computed from (ROIC's tax rate and its source)."
   source: "company_line_item"
   sensitivity: none
 - name: definition_version

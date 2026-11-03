@@ -39,7 +39,7 @@ proof is live only once its own change is proved
 
 - **Every filed copy is kept; the latest is the default** (operator: "Keep all,
   latest by default (Recommended)"). Silver keeps each filed figure, as of its
-  period (start, end) and as at its filing (filed date, accession). Measures use
+  period (start, end) and as at its filing (filed date, accession number). Measures use
   the latest-filed copy, which keeps per-share series consistent across a stock
   split; the first-reported figure can be read back from the kept copies.
 - **A year is keyed on the period's end date** (operator: "Period end, 364–371
@@ -74,7 +74,7 @@ Evidence and sources: ticket 35, research 02 section 1.
   `CostOfServices`, `CostOfGoodsSold`.
 - **First present wins:** for each company and annual period, the first concept
   with a fact for that exact period, using the latest-filed copy. The chosen
-  concept and accession are recorded beside the value.
+  concept and accession number are recorded beside the value.
 - **Computed fallbacks** (the standard's impute rules: net income = `ProfitLoss`
   − NCI net income; parent equity = equity including NCI − `MinorityInterest`;
   gross profit = revenue − cost of revenue; liabilities from liabilities and
