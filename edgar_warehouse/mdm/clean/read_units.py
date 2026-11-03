@@ -22,6 +22,7 @@ from __future__ import annotations
 import fnmatch
 import posixpath
 
+from edgar_warehouse.bookkeeping.clean.config import RECEIPT_CONTEXT
 from edgar_warehouse.workers.source_readings import RECEIPT_BYTES
 
 from . import raw_capture
@@ -34,6 +35,13 @@ CONTEXT_TYPES = {"integer": int, "text": str, "boolean": bool}
 def unit(output: str, keys: dict, source: dict) -> dict:
     """A manifest unit: its keys (with its output as `destination`), its input and its output."""
     return {"keys": {**keys, "destination": output}, "input": source, "output": output, "cursor": {}}
+
+
+def context_value(template, key: str, run):
+    """A context value for one document: a run fact, the document's receipt hash, or a filled template."""
+    if template == RECEIPT_CONTEXT:
+        return run.receipts[key]
+    return fill(template, key, run.facts)
 
 
 def fill(template, key: str, facts: dict | None = None):
@@ -114,7 +122,10 @@ def _check_run_inputs(name: str, shape: dict, body: dict, run) -> None:
         if read.get("references", {}).get(ref) != {}:
             raise ValueError(f"Step {name}: reference {ref} is not one the contract declares empty")
     for value_name, template in shape.get("context", {}).items():
-        if isinstance(template, dict):
+        if template == RECEIPT_CONTEXT:
+            if (read.get("context") or {}).get(value_name, {}).get("type") != "text":
+                raise ValueError(f"Step {name}: the receipt hash is text, but the contract's {value_name} is not")
+        elif isinstance(template, dict):
             kind = CONTEXT_TYPES.get((read.get("context") or {}).get(value_name, {}).get("type"))
             fact = run.facts[template["fact"]]
             if kind is None or not isinstance(fact, kind) or kind is int and isinstance(fact, bool):
@@ -172,7 +183,7 @@ def form(step: dict, run, units: dict) -> list[dict]:
             artifact = {"input": source}
             if "context" in shape or lookups:  # a lookup needs a context receipt, empty values when none is declared
                 artifact["context"] = run.store.put(run.inputs, {"version": 1, "input": source, "values": {
-                    value_name: fill(template, key, run.facts) for value_name, template in shape.get("context", {}).items()}})
+                    value_name: context_value(template, key, run) for value_name, template in shape.get("context", {}).items()}})
             if from_files:  # each set given whole by a run file
                 artifact["lookups"] = run.store.put(run.inputs, {"version": 1, "input": source, "sets": {
                     set_name: run.run_files[value["file"]] for set_name, value in lookups.items()}})
