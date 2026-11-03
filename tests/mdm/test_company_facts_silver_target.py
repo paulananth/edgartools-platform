@@ -116,3 +116,30 @@ def test_a_derivation_that_names_no_build_is_refused():
 
     with pytest.raises(ValueError, match="build, silver"):
         tm.FORMS["silver.derive"]({"name": "line_items", "requires": ["land"], "input": {"keys": {"build": "x"}}}, None, {"land": []})
+
+
+def _landing(requires):
+    """`_land` over an invented target: a read step, a preparation, a merge and the landing."""
+    from types import SimpleNamespace
+
+    from edgar_warehouse.mdm.clean import target_manifest
+
+    by_name = {"read": {"operation": "source.read"}, "prepare": {"operation": "mdm.prepare"},
+               "merge": {"operation": "mdm.merge"}, "land": {"operation": "silver.land"}}
+    run = SimpleNamespace(by_name=by_name, root="run")
+    step = {"name": "land", "requires": requires, "input": {"keys": {"table": "t", "silver": "s"}}}
+    units = {"read": [{"keys": {"unit": "u1"}}, {"keys": {"unit": "u2"}}], "merge": [{"keys": {"batch_id": "b"}}]}
+    return lambda: target_manifest._land(step, run, units)
+
+
+def test_a_landing_may_wait_for_a_merge_and_still_takes_its_rows_from_the_read_step():
+    made = _landing(["read", "merge"])()
+    assert [u["input"] for u in made] == [{"from": {"step": "read", "key": "u1"}},
+                                         {"from": {"step": "read", "key": "u2"}}]
+    assert made == _landing(["read"])()  # the wait changes the order, not the units
+
+
+@pytest.mark.parametrize("requires", [[], ["merge"], ["read", "read"], ["read", "prepare"]])
+def test_a_landing_that_reads_no_step_or_two_or_waits_for_another_kind_is_refused(requires):
+    with pytest.raises(ValueError, match="a landing follows one read step"):
+        _landing(requires)()
