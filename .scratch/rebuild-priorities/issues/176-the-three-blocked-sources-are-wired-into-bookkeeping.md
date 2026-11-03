@@ -2,7 +2,7 @@
 
 Priority: 176. Map: [Rebuild priorities](../map.md). Opened 2026-11-02 19:13 ET (operator, 2026-11-02: "wire bookkeeping then only we can turn on").
 
-Type: task. Status: open, not started. Related: [172](172-the-thirteenf-securities-run-through-bookkeeping-and-the-change-journal.md) (the 13F target is the pattern), [174](174-sec-prospectus-final-prospectuses-looked-up-on-mdm-then-landed-in-silver.md) (`sec.prospectus`).
+Type: task. Status: open (incomplete: the target for sec.registration is deferred to 149). Related: [172](172-the-thirteenf-securities-run-through-bookkeeping-and-the-change-journal.md) (the 13F target is the pattern), [174](174-sec-prospectus-final-prospectuses-looked-up-on-mdm-then-landed-in-silver.md) (`sec.prospectus`).
 
 ## Question
 
@@ -16,13 +16,13 @@ Nine sources have a Bookkeeping target in `rules/source-sequence.yaml`. Three ha
 
 ## Change Journal (operator, 2026-11-02: "also needs change journal")
 
-Every target ends with the `journal.record` step (the 13F target's `processed`), so the Change Journal skips a file already processed with the same source, key, content hash and processing identity, and names every file again when a rule changes. Each source below is done only when a test shows both: a second pass changes nothing, and a changed rule names every file again. `sec.registration`'s capture target has no `journal.record` step today; it gets one.
+Every target that processes files ends with the `journal.record` step (the 13F target's `processed`), so the Change Journal skips a file already processed with the same source, key, content hash and processing identity, and names every file again when a rule changes. Each source below is done only when a test shows both: a second pass changes nothing, and a changed rule names every file again. A capture target ends at capture and has no such step (`sec.company`'s, GLEIF's and OpenFIGI's have none), so `sec.registration` gets one with the target that reads its documents.
 
 ## Order (recommended)
 
 1. `sec.ownership`: its rules and silver are complete.
 2. `iapd.adv`: its rules are complete; no silver.
-3. `sec.registration`: waits for the operator's decision on what is read.
+3. `sec.registration`: nothing to wire before its documents are read (ticket 149).
 
 ## Parts
 
@@ -35,9 +35,9 @@ Every target ends with the `journal.record` step (the 13F target's `processed`),
 - [x] `iapd.adv`: the Change Journal step ends both targets; plan tests (`tests/mdm/test_iapd_adv_targets.py`: a second pass changes nothing; a changed rule names every file again; recording the filings does not skip the custodians of the same file) (2026-11-02 19:49 ET)
 - [x] `iapd.adv`: the preparation may name `distinct_on` (validators for step keys and unit keys, and the planner; `tests/mdm/test_prepare_distinct_on.py` failed before on `A step's keys are nonempty text`) (2026-11-02 19:50 ET)
 - [x] `iapd.adv`: real workers on Postgres (`tests/integration/test_iapd_adv_targets_postgres.py`: the filing carries its 3 custodians; 4 custody rows make 3 custodian records, 4 without `distinct_on`); `rules/source-sequence.yaml` and the pinned-order tests (2026-11-02 19:50 ET)
-- [ ] `sec.registration`: the operator decides what the second step reads (the document unread, or facts)
-- [ ] `sec.registration`: its target beyond capture, with the Change Journal step added after capture, tests and `rules/source-sequence.yaml`
-- [ ] Learning → skill: name the skill line this ticket changed (`data-onboarding` target writing), or "none"
+- [x] `sec.registration`: the operator decides what the second step reads: "Capture and Change Journal only (Recommended)" (operator, 2026-11-02 19:56 ET); its documents are not captured (the run was left at 2 of 9,538 verified, about 32 hours) and nothing reads them yet (the HTML reader and the profile are open in 149), so no target beyond capture is wired
+- [ ] ~~`sec.registration`: its target beyond capture, with the Change Journal step, tests and `rules/source-sequence.yaml`~~ deferred to 149: the target that reads the documents (IPO pipeline, offering terms) needs the captured documents, the HTML reader and the profile; its last step is the Change Journal step, and the source joins the order then. Its capture target already follows the pattern (it ends at capture, as `sec.company`'s does)
+- [x] Learning → skill: `skills/change-journal/SPEC.md`: a capture target ends at capture and has no `journal.record` step; the step ends the target that processes the files (2026-11-02 19:56 ET)
 
 ## Findings while building `sec.ownership`
 
