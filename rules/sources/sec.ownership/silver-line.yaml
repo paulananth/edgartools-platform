@@ -9,7 +9,7 @@
 # transactions, 428 derivative holdings), every one with an as-of date and a
 # 10-digit issuer CIK, every amount a number, no key repeated. The Security
 # link waits for ticket 24 (a Form 4 names its class in words, never a CUSIP).
-table: ownership_line
+table: insider_position
 definition: 'One line of a Form 3, 4 or 5, as filed: a transaction or a holding, non-derivative
   or derivative, with the position after it, linked to its issuer.'
 grain: one row per filing (accession), table and line
