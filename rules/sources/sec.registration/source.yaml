@@ -9,7 +9,7 @@
 # - "Extend the configured capture (Recommended)": each document through
 #   `provider.capture`, with its receipt, journal event and verifier.
 # A document's address is the filing's folder plus its primary document name,
-# both from the submissions index; one unit per accession (a filing listed
+# both from the submissions index; one unit per accession number (a filing listed
 # under two co-registrants is asked once). The bound is the transport's 128 MiB
 # ceiling: the index gives the whole filing's size, not the main document's.
 # No dataset yet: the reading and its Dataset Contract come with onboarding.
@@ -24,7 +24,7 @@ acquisition:
       datasets: []
       scope:
       - cik
-      - accession
+      - accession_number
       capabilities:
         capture: provider.capture
         fetch: sec.conditional
@@ -47,7 +47,7 @@ bookkeeping:
         - name: capture
           operation: provider.capture
           requires: []
-          key: "{accession}"
+          key: "{accession_number}"
           leases: ["provider:sec", "output:{destination}"]
           checks: [input.hash, output.receipt, capture.verified]
       checks: [manifest.hash, work.accounting, journal.delivered]

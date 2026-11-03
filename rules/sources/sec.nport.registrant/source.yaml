@@ -11,7 +11,7 @@
 # The run, in order: submissions.yaml gives the pair set `filed` (filing to
 # its date); this reading streams REGISTRANT.tsv once, one row per filing,
 # with its date; reduce.yaml lists each CIK; combine.yaml keeps each CIK's
-# latest filing whole (by date, then accession), so a name and an address
+# latest filing whole (by date, then accession number), so a name and an address
 # never mix two filings; record.yaml makes each `registrant` row one record; mdm.prepare,
 # the merge and the processed record follow (the `mastering` target below).
 # Left out: the phone number (personal, profiling). An LEI of all zeros is a
@@ -48,7 +48,7 @@ bookkeeping:
           units: {each: file}
           input:
             lookups:
-              filed: {from: submissions, table: filed, column: accession, value_column: filed,
+              filed: {from: submissions, table: filed, column: accession_number, value_column: filed,
                       max_input_bytes: 67108864, max_input_rows: 1000000}
         - name: ciks
           operation: source.combine
@@ -113,7 +113,7 @@ read:
       each: .
       columns:
         cik: {text: {path: CIK}}
-        accession: {text: {path: ACCESSION_NUMBER}}
+        accession_number: {text: {path: ACCESSION_NUMBER}}
         filed:
           member_value: {lookup: filed, key: {text: {path: ACCESSION_NUMBER}}, on_many: error}
         name: {text: {path: REGISTRANT_NAME, default: "", null_if: [""]}}
