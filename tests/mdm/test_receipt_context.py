@@ -24,16 +24,16 @@ def plan(monkeypatch, tmp_path, context):
 
 
 def test_the_context_holds_the_documents_receipt_hash(monkeypatch, tmp_path):
-    report = plan(monkeypatch, tmp_path, {"accession": {"receipt": "sha256"}})
+    report = plan(monkeypatch, tmp_path, {"accession_number": {"receipt": "sha256"}})
     store = Artifacts()
     (read,) = store.json(report["manifest"])["steps"]["read"]
     (artifact,) = store.json(read["input"])["artifacts"]
     raw = b"an invented submission 1"
-    assert store.json(artifact["context"])["values"] == {"accession": hashlib.sha256(raw).hexdigest()}
+    assert store.json(artifact["context"])["values"] == {"accession_number": hashlib.sha256(raw).hexdigest()}
 
 
-@pytest.mark.parametrize("context", [{"accession": {"receipt": "key"}}, {"accession": {"receipt": "sha256", "x": 1}},
-                                     {"accession": {"receipt": 1}}])
+@pytest.mark.parametrize("context", [{"accession_number": {"receipt": "key"}}, {"accession_number": {"receipt": "sha256", "x": 1}},
+                                     {"accession_number": {"receipt": 1}}])
 def test_another_receipt_field_is_refused(monkeypatch, tmp_path, context):
     with pytest.raises(Exception, match="context names values"):
         plan(monkeypatch, tmp_path, context)

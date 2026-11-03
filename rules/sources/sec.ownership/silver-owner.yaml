@@ -9,9 +9,9 @@
 table: insider_ownership
 definition: One reporting owner of one Form 3, 4 or 5, linked to its Person or Company and
   to the issuer; a joint filing names several.
-grain: one row per filing (accession) and reporting owner (CIK)
+grain: one row per filing (accession number) and reporting owner (CIK)
 columns:
-- name: accession
+- name: accession_number
   type: VARCHAR
   nullable: false
   definition: The filing's accession number.
@@ -32,9 +32,9 @@ columns:
 - name: owner_record_key
   type: VARCHAR
   nullable: false
-  definition: The owner's record key in sec.ownership.reporting_owner.v1 (its accession and
+  definition: The owner's record key in sec.ownership.reporting_owner.v1 (its accession number and
     CIK), by which its Person is found.
-  source: accession and reportingOwnerId.rptOwnerCik
+  source: accession number and reportingOwnerId.rptOwnerCik
   sensitivity: none
 - name: rpt_owner_name
   type: VARCHAR
@@ -145,7 +145,7 @@ columns:
   source: the SGML header's FILED AS OF DATE, or the caller
   sensitivity: none
 key:
-- accession
+- accession_number
 - rpt_owner_cik
 links:
 - columns:

@@ -1,5 +1,5 @@
 # A Form 3, 4 or 5 ownership document inside the SEC's SGML submission file: the
-# one <DOCUMENT> whose text is <XML>, the accession from the header's ACCESSION
+# one <DOCUMENT> whose text is <XML>, the accession number from the header's ACCESSION
 # NUMBER line. The same tables and columns as ownership-xml.yaml (a test holds the
 # two equal): profiling ticket 07.
 source: sec.ownership
@@ -9,7 +9,7 @@ read:
   container: sgml
   root: ownershipDocument
   context:
-    accession: {type: text, sgml_header: ACCESSION NUMBER}
+    accession_number: {type: text, sgml_header: ACCESSION NUMBER}
     # The filing date, YYYYMMDD as the header writes it (ticket 25).
     filed: {type: text, nullable: true, sgml_header: FILED AS OF DATE}
   # max_member_bytes bounds the XML inside an SGML file; the bare reading declares it too, so the
@@ -60,7 +60,7 @@ read:
     ownership_document:
       each: .
       columns:
-        accession: {context: {name: accession}}
+        accession_number: {context: {name: accession_number}}
         schema_version: {text: {path: schemaVersion.$}}
         document_type: {text: {path: documentType.$}}
         period_of_report: {date: {path: periodOfReport.$, kind: calendar, prefix_length: 10}}
@@ -77,12 +77,12 @@ read:
     reporting_owner:
       each: reportingOwner
       columns:
-        accession: {context: {name: accession}}
+        accession_number: {context: {name: accession_number}}
         position: {ordinal: {}}
         rpt_owner_cik: {text: {path: reportingOwnerId.rptOwnerCik.$}}
-        # The owner's record key in sec.ownership.reporting_owner.v1 (its accession and CIK,
+        # The owner's record key in sec.ownership.reporting_owner.v1 (its accession number and CIK,
         # as MDM writes a two-part key), so a silver row finds the owner's Person (ticket 25).
-        owner_record_key: {concat: [{const: {value: '["'}}, {context: {name: accession}}, {const: {value: '","'}}, {text: {path: reportingOwnerId.rptOwnerCik.$}}, {const: {value: '"]'}}]}
+        owner_record_key: {concat: [{const: {value: '["'}}, {context: {name: accession_number}}, {const: {value: '","'}}, {text: {path: reportingOwnerId.rptOwnerCik.$}}, {const: {value: '"]'}}]}
         filed: {context: {name: filed}}
         rpt_owner_name: {text: {path: reportingOwnerId.rptOwnerName.$}}
         rpt_owner_street1: {text: {path: reportingOwnerAddress.rptOwnerStreet1.$}}
@@ -111,7 +111,7 @@ read:
         record:
           object:
             fields:
-              accession: {context: {name: accession}}
+              accession_number: {context: {name: accession_number}}
               rpt_owner_cik: {text: {path: reportingOwnerId.rptOwnerCik.$}}
               rpt_owner_name: {text: {path: reportingOwnerId.rptOwnerName.$}}
               issuer_cik: {text: {path: issuer.issuerCik.$, from: document}}
@@ -123,7 +123,7 @@ read:
     non_derivative_transaction:
       each: nonDerivativeTable.nonDerivativeTransaction
       columns:
-        accession: {context: {name: accession}}
+        accession_number: {context: {name: accession_number}}
         position: {ordinal: {}}
         line_table: {const: {value: non_derivative_transaction}}
         issuer_cik: {text: {path: issuer.issuerCik.$, from: document}}
@@ -148,7 +148,7 @@ read:
     non_derivative_holding:
       each: nonDerivativeTable.nonDerivativeHolding
       columns:
-        accession: {context: {name: accession}}
+        accession_number: {context: {name: accession_number}}
         position: {ordinal: {}}
         line_table: {const: {value: non_derivative_holding}}
         issuer_cik: {text: {path: issuer.issuerCik.$, from: document}}
@@ -163,7 +163,7 @@ read:
     derivative_transaction:
       each: derivativeTable.derivativeTransaction
       columns:
-        accession: {context: {name: accession}}
+        accession_number: {context: {name: accession_number}}
         position: {ordinal: {}}
         line_table: {const: {value: derivative_transaction}}
         issuer_cik: {text: {path: issuer.issuerCik.$, from: document}}
@@ -194,7 +194,7 @@ read:
     derivative_holding:
       each: derivativeTable.derivativeHolding
       columns:
-        accession: {context: {name: accession}}
+        accession_number: {context: {name: accession_number}}
         position: {ordinal: {}}
         line_table: {const: {value: derivative_holding}}
         issuer_cik: {text: {path: issuer.issuerCik.$, from: document}}
@@ -215,13 +215,13 @@ read:
     footnote:
       each: footnotes.footnote
       columns:
-        accession: {context: {name: accession}}
+        accession_number: {context: {name: accession_number}}
         footnote_id: {text: {path: '@id'}}
         text: {text: {path: $}}
     owner_signature:
       each: ownerSignature
       columns:
-        accession: {context: {name: accession}}
+        accession_number: {context: {name: accession_number}}
         position: {ordinal: {}}
         signature_name: {text: {path: signatureName.$}}
         signature_date: {date: {path: signatureDate.$, kind: calendar, prefix_length: 10}}
