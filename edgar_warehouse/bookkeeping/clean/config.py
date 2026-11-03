@@ -78,6 +78,13 @@ def _units(units) -> None:
 RECEIPT_CONTEXT = {"receipt": "sha256"}
 
 
+def _segment(value) -> bool:
+    """`{segment: <name>}` (optionally `as: text|integer`): the value of the key's `<name>=<value>` folder."""
+    return (isinstance(value, dict) and set(value) in ({"segment"}, {"segment", "as"})
+            and isinstance(value["segment"], str) and bool(re.fullmatch(NAME, value["segment"]))
+            and value.get("as", "text") in ("text", "integer"))
+
+
 def _named(value, kind: str) -> bool:
     """`{fact: <name>}` or `{file: <name>}`: a run input by name."""
     return isinstance(value, dict) and set(value) == {kind} and isinstance(value[kind], str) and bool(re.fullmatch(NAME, value[kind]))
@@ -141,10 +148,11 @@ def _plan(step: dict) -> None:
     context = shape.get("context", {})
     if (not isinstance(context, dict) or any(not re.fullmatch(r"[a-z][a-z0-9_]*", name) for name in context)
             or any(isinstance(v, str) and not re.fullmatch(TEMPLATE, v) for v in context.values())
-            or any(not isinstance(v, (str, int, bool)) and not _named(v, "fact") and v != RECEIPT_CONTEXT
-                   for v in context.values())):
+            or any(not isinstance(v, (str, int, bool, type(None))) and not _named(v, "fact") and v != RECEIPT_CONTEXT
+                   and not _segment(v) for v in context.values())):
         raise Blocked("A step's context names values: text templates over {dir}, {base} and {name}, "
-                      "literals, a run fact {fact: <name>}, or the document's receipt hash {receipt: sha256}")
+                      "literals (or null), a run fact {fact: <name>}, a folder segment of the key "
+                      "{segment: <name>, as: text|integer}, or the document's receipt hash {receipt: sha256}")
     lookups = shape.get("lookups", {})
     if (not isinstance(lookups, dict) or len(lookups) > COMPOSE_SLOTS - 1
             or any(not re.fullmatch(r"[a-z][a-z0-9_]*", name) for name in lookups)
