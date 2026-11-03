@@ -82,6 +82,7 @@ MIGRATIONS: tuple[str, ...] = (
     "025_kind_descriptions.sql",
     "026_company_fields_out.sql",
     "027_candidate_routes.sql",
+    "030_name_count_index.sql",
 )
 
 

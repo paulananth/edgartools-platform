@@ -6,7 +6,7 @@ their own dates and scope; this documentation refresh adds no runtime or deploym
 qualification. Complete-set
 reduction is merged (#911); accepted merge replay and field ranking are merged
 and CI-qualified (#920). Materialized collections/joins are merged and
-CI-qualified (#921), with exact cached Company/whole-census parity. The local
+CI-qualified (#921), with exact cached Company/whole-source Name Count parity. The local
 and installed qualifications are recorded separately. Deployment and activation are separate gates.
 Contract2 publication preparation is merged (#925) and uses native object
 construction and UTF-8 bytes through Python callers; its PostgreSQL qualification is recorded separately

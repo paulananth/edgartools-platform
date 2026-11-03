@@ -295,6 +295,15 @@ masters needs its rebuild before readers accept it.
 
 - A schema change is a new migration file, added at the end of the
   registered list. Never edit an applied one.
+  `store.MIGRATIONS` is that list: a file left out of it is never applied
+  (ticket 178's migration 030 was), and
+  `tests/unit/test_every_mdm_migration_is_applied.py` fails for it.
+- A registered name is an identity. A rule version keeps its steps, so a matching
+  function's id cannot be renamed under it; a Dataset Contract keeps its
+  `publication_key` words and `record_key`. Before renaming a word that is
+  stored or registered, try the activation in the shared store (it refuses
+  with "Rule version already registered" or "Dataset identity is immutable"),
+  and keep the old word as the permanent name (ticket 178).
 - Test every migration against a **populated** table. An empty-table test
   proves nothing about what a migration exists to do.
 - PostgreSQL cannot defer a **partial** unique index, and SQL Server checks a
