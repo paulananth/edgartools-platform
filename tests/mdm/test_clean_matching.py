@@ -167,7 +167,7 @@ def test_a_matching_path_is_read_from_the_rule():
     [
         ("jurisdiction_agrees@1", {"sec_codes": "edgar-iso-v2"}, "unknown code table"),
         (
-            "name_census_match@1",
+            "name_count_match@1",
             {"sec_normalizer": "normalize_text@x"},
             "unknown normalizer",
         ),

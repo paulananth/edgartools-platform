@@ -18,7 +18,7 @@ struct Command {
     pairs: Option<Vec<[Object; 2]>>,
     code_tables: IndexMap<String, IndexMap<String, String>>,
     normalizers: IndexMap<String, bool>,
-    census_version: String,
+    name_count_version: String,
     cascade_version: String,
     pair_comparison: PairComparison,
 }
@@ -27,12 +27,12 @@ struct Command {
 struct PairComparison {
     name_field: String,
     identifier_namespace: String,
-    census_field: String,
-    census_entries_field: String,
-    census_holder_keys_field: String,
-    census_holder_count_field: String,
-    census_identifier_count_field: String,
-    census_other_holders_field: String,
+    name_count_field: String,
+    name_count_entries_field: String,
+    name_count_holder_keys_field: String,
+    name_count_holder_count_field: String,
+    name_count_identifier_count_field: String,
+    name_count_other_holders_field: String,
     cascade_field: String,
     cascade_identifier_field: String,
     eligibility_kind: String,
@@ -51,14 +51,14 @@ fn read_field_value(record: &Object, name: &str) -> Result<Document, String> {
         values::write_value(&())
     }
 }
-/// The census saw the GLEIF record GLEIF last updated at `census`; the stored
+/// The Name Count saw the GLEIF record GLEIF last updated at `name_count`; the stored
 /// record is the same version when its effective time is that instant (or both
 /// are unknown). GLEIF's own spelling and the stored UTC form compare as instants.
-fn same_update(census: &str, record: &Object) -> bool {
+fn same_update(name_count: &str, record: &Object) -> bool {
     let stated = values::read_text(record, "effective_at").ok();
-    match (census.is_empty(), stated) {
+    match (name_count.is_empty(), stated) {
         (true, None) => true,
-        (false, Some(stated)) => match (values::read_time(census), values::read_time(&stated)) {
+        (false, Some(stated)) => match (values::read_time(name_count), values::read_time(&stated)) {
             (Ok(left), Ok(right)) => left == right,
             _ => false,
         },
@@ -246,14 +246,14 @@ fn test_record_pair(
     let shape = &command.pair_comparison;
     match name {
         "holds_no_other_lei@1" => Ok(true),
-        "name_census_match@1" => {
-            let entry = values::read_object(&read_matching_values(left)?, &shape.census_field)?;
+        "name_count_match@1" => {
+            let entry = values::read_object(&read_matching_values(left)?, &shape.name_count_field)?;
             let identifier = values::read_optional_value(
                 &values::read_object(right, "identifiers")?,
                 &shape.identifier_namespace,
             )?;
             let key = read_name(args, left, "sec_normalizer", command)?;
-            let leis = values::read_array(&entry, &shape.census_entries_field)?;
+            let leis = values::read_array(&entry, &shape.name_count_entries_field)?;
             let held = match leis.as_slice() {
                 [only] => values::read_value::<(Option<String>, String)>(only).ok(),
                 _ => None,
@@ -261,15 +261,15 @@ fn test_record_pair(
             Ok(held.is_some_and(|(lei, updated)| {
                 values::read_value::<Option<String>>(&identifier).ok() == Some(lei)
                     && same_update(&updated, right)
-            }) && value_matches_rule(&entry, "version", &command.census_version)?
-                && value_matches_rule(&entry, &shape.census_holder_count_field, &1)?
+            }) && value_matches_rule(&entry, "version", &command.name_count_version)?
+                && value_matches_rule(&entry, &shape.name_count_holder_count_field, &1)?
                 && value_matches_rule(
                     &entry,
-                    &shape.census_holder_keys_field,
+                    &shape.name_count_holder_keys_field,
                     &vec![values::read_optional_value(left, "record_key")?],
                 )?
-                && value_matches_rule(&entry, &shape.census_identifier_count_field, &1)?
-                && value_matches_rule(&entry, &shape.census_other_holders_field, &0)?
+                && value_matches_rule(&entry, &shape.name_count_identifier_count_field, &1)?
+                && value_matches_rule(&entry, &shape.name_count_other_holders_field, &0)?
                 && !key.is_empty()
                 && value_matches_rule(&entry, "key", &key)?
                 && key == read_name(args, right, "gleif_normalizer", command)?)
@@ -341,7 +341,7 @@ fn test_record_pair(
         )),
         "cascade_pass@1" => {
             let answer = values::read_object(
-                &values::read_object(&read_matching_values(left)?, &shape.census_field)?,
+                &values::read_object(&read_matching_values(left)?, &shape.name_count_field)?,
                 &shape.cascade_field,
             )?;
             let key = read_name(args, left, "sec_normalizer", command)?;

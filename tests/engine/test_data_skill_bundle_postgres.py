@@ -213,8 +213,8 @@ profile = copy.deepcopy(body["pair_comparisons"][body["legacy_pair_comparison"]]
 profile.update(eligibility_kind="bundle-invented-kind", eligibility_categories=["INVENTED"],
                name_field="invented_name", status_field="invented_status",
                registration_status_field="invented_registration",
-               identifier_namespace="invented_namespace", census_field="invented_name_count",
-               census_entries_field="invented_entries", cascade_field="invented_cascade",
+               identifier_namespace="invented_namespace", name_count_field="invented_name_count",
+               name_count_entries_field="invented_entries", cascade_field="invented_cascade",
                cascade_identifier_field="invented_target")
 body["pair_comparisons"]["bundle-invented"] = profile
 (folder / catalog.RELATIVE).write_text(files.dumps(body))
@@ -230,7 +230,7 @@ right = {"kind": "bundle-invented-kind", "fields": {
 assert compare_candidate_records(rule, [({}, right)]) == [[True, False]]
 paths = candidate_paths(rule)
 assert paths["identifier"] == ("identifiers", "invented_namespace")
-assert paths["census"] == ("provenance", "matching", "invented_name_count", "invented_entries", 0, 0)
+assert paths["name_count"] == ("provenance", "matching", "invented_name_count", "invented_entries", 0, 0)
 assert paths["cascade"] == ("provenance", "matching", "invented_name_count", "invented_cascade", "invented_target")
 assert candidate_value({"identifiers":{"invented_namespace":"invented-value"}}, paths["identifier"]) == "invented-value"
 from edgar_warehouse.mdm.clean.matching import candidate_routes

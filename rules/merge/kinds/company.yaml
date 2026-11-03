@@ -272,7 +272,7 @@ rules:
   - bind
   on_no_match: wait
   when:
-  - primitive: name_census_match@1
+  - primitive: name_count_match@1
     args:
       sec_normalizer: normalize_text@sec-legal-form-kept-v1
       gleif_normalizer: normalize_text@legal-form-kept-v1
@@ -302,7 +302,7 @@ rules:
   - bind
   on_no_match: wait
   when:
-  - primitive: name_census_match@1
+  - primitive: name_count_match@1
     args:
       sec_normalizer: normalize_text@sec-legal-form-kept-v1
       gleif_normalizer: normalize_text@legal-form-kept-v1
@@ -331,7 +331,7 @@ rules:
       gleif_country: matching.headquarters_country
 # The cascade (company mastering ticket 21; operator, 2026-09-27: "name and
 # address first ... then reduce the fields gradually"). One rule per pass, in
-# order; the Name Census runs the passes once over both whole sources, one to
+# order; the Name Count runs the passes once over both whole sources, one to
 # one over what earlier passes left, on the addresses the quality rule leaves
 # fit (headquarters first; one more than 25 entities share is compared by
 # country only: ticket 22, "25, yes"). No jurisdiction test: a conflict in

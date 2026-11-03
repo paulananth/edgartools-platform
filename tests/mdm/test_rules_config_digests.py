@@ -131,6 +131,14 @@ def _with_company_fields_back(contract: dict, code: str) -> dict:
     return before_ticket_129(contract, code)
 
 
+# Ticket 178 renamed the matching function and its profile fields; the historic digests use the old words.
+RENAMED_BY_TICKET_178 = {
+    "name_count_match@1": "name_census_match@1",
+    **{f"name_count_{part}": f"census_{part}" for part in (
+        "field", "entries_field", "holder_keys_field", "holder_count_field", "identifier_count_field",
+        "other_holders_field")}}
+
+
 def _restore_company_identity(value):
     """Restore the identity used by historical approval and mapping digests."""
     if isinstance(value, dict):
@@ -142,7 +150,8 @@ def _restore_company_identity(value):
         return {"sec.company.v1": HISTORIC_SEC_CODE,
                 "sec.company": "sec.submissions.company",
                 "company-2026-10-31.sec-company-source-identity":
-                    "company-2026-10-25.one-value-per-identifier"}.get(value, value)
+                    "company-2026-10-25.one-value-per-identifier",
+                **RENAMED_BY_TICKET_178}.get(value, value)
     return value
 
 
