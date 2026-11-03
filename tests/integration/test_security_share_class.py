@@ -79,7 +79,7 @@ def thirteenf_records(root: Path, rows: str | None = None) -> list[dict]:
 
     def unit(n: int, table: str) -> dict:
         raw = store.put_bytes((root / f"table-{n}.xml").as_uri(), f"<informationTable>{table}</informationTable>".encode())
-        context = store.put(root.as_uri(), {"version": 1, "input": raw, "values": {}})
+        context = store.put(root.as_uri(), {"version": 1, "input": raw, "values": {"accession_number": "0000000042-26-000001"}})
         return chain.read(store, root / f"read-{n}", body, [{"input": raw, "context": context}], 2)
 
     # The run's eight reading units; one holds the table, the others none.
