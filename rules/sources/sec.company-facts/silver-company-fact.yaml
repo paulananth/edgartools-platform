@@ -160,3 +160,9 @@ checks:
   per: accession_number
   on_fail: flag
   why: A filing has one fiscal period; every fact of that filing states the same one (TestGen custom consistency test).
+- id: period_start_not_after_end
+  check: not_after
+  column: period_start
+  later: period_end
+  on_fail: flag
+  why: A reported period starts on or before the day it ends (validity).

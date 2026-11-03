@@ -16,7 +16,12 @@ The checks:
   (a level of a hierarchy has one parent). Within the delivery, a row is
   flagged when its value is not the group's most common one; when two values
   are equally common, every row of the group is. It holds only within one
-  delivery: split a part into several deliveries and each is checked alone.
+  delivery: split a part into several deliveries and each is checked alone;
+- `not_after`: `column` is not after `later` (a start is not after its end); both
+  columns are `DATE`, `TIMESTAMP` or `BIGINT` of one type; an empty value passes;
+- `reason_if_empty`: `column` is empty exactly when `reason` (a `VARCHAR` column)
+  is filled: an empty value with no reason, and a value beside a reason, both fail
+  (ticket 175; a blank reason is none). It is the one check that reads an empty value.
 `in_set` reads a text column (`VARCHAR`, listed values are text) or a `BIGINT`
 column (listed values are whole numbers; every integer is `BIGINT`), compared as delivered; no check reads a
 nested column. An empty value passes every check: whether a column may be empty
@@ -37,7 +42,9 @@ from edgar_warehouse.control_contract import Blocked
 QUALITY = "quality"  # the column a flagged row's check ids are written to
 ON_FAIL = ("flag", "exception")
 # Each check and the keys it takes beside id, check, why and on_fail.
-ARGUMENTS = {"identifier": {"column", "type"}, "in_set": {"column", "values"}, "one_value": {"column", "per"}}
+ARGUMENTS = {"identifier": {"column", "type"}, "in_set": {"column", "values"}, "one_value": {"column", "per"},
+             "not_after": {"column", "later"}, "reason_if_empty": {"column", "reason"}}
+ORDERED = ("DATE", "TIMESTAMP", "BIGINT")  # the types `not_after` compares
 TEXT, WHOLE = "VARCHAR", "BIGINT"  # the types `in_set` reads: text, or a whole number (every integer is BIGINT)
 
 
@@ -63,7 +70,7 @@ def check(spec: dict, names: list[str]) -> None:
                           "a row kept out of a delivery would be deleted")
         if not isinstance(item["why"], str) or not item["why"].strip():
             raise Blocked(f"Check {item['id']}: why is plain words")
-        for role in ("column", "per"):
+        for role in ("column", "per", "later", "reason"):
             if role in item and item[role] not in names:
                 raise Blocked(f"Check {item['id']}: {role} names a column of the spec: {item[role]!r}")
             if role in item and kind == "in_set" and types[item[role]] not in (TEXT, WHOLE):
@@ -71,6 +78,13 @@ def check(spec: dict, names: list[str]) -> None:
                               f"({types[item[role]]})")
             if role in item and postgres_type(types[item[role]]) == "jsonb":
                 raise Blocked(f"Check {item['id']}: {item[role]} holds nested values, which no check reads")
+        if kind == "not_after":
+            first, second = types[item["column"]], types[item["later"]]
+            if first != second or first not in ORDERED:
+                raise Blocked(f"Check {item['id']}: not_after reads two columns of the same type, a date, timestamp or "
+                              f"whole-number type, not {item['column']} ({first}) and {item['later']} ({second})")
+        if kind == "reason_if_empty" and types[item["reason"]] != TEXT:
+            raise Blocked(f"Check {item['id']}: the reason column {item['reason']} is {TEXT}, not {types[item['reason']]}")
         if kind == "identifier":
             from edgar_warehouse.mdm.clean.identifier_types import TYPES
 
@@ -138,9 +152,27 @@ def _one_value(item: dict, rows: list[dict]) -> list[int]:
     return sorted(out)
 
 
+def _not_after(item: dict, rows: list[dict]) -> list[int]:
+    out = []
+    for n, row in enumerate(rows):
+        first, second = row.get(item["column"]), row.get(item["later"])
+        if _empty(first) or _empty(second):
+            continue
+        if type(first) is not type(second):  # a date delivered as text beside a date: compare their ISO forms
+            first, second = str(first), str(second)
+        if first > second:
+            out.append(n)
+    return out
+
+
+def _reason_if_empty(item: dict, rows: list[dict]) -> list[int]:
+    return [n for n, row in enumerate(rows) if _empty(row.get(item["column"])) == _empty(row.get(item["reason"]))]
+
+
 def _empty(value) -> bool:
     return value is None or (isinstance(value, str) and not value.strip())
 
 
 _FAILS: dict[str, Callable[[dict, list[dict]], list[int]]] = {
-    "identifier": _identifier, "in_set": _in_set, "one_value": _one_value}
+    "identifier": _identifier, "in_set": _in_set, "one_value": _one_value, "not_after": _not_after,
+    "reason_if_empty": _reason_if_empty}

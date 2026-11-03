@@ -27,8 +27,9 @@ read as a calendar date, the spellings of one flag looked up to a boolean,
 codes read against their full list from its authority, not one sample's) and
 type it in its silver spec. Every other rule goes in the spec's `checks`
 (`docs/specs/profiling/findings.md`, section 6): `identifier` (a declared
-identifier type), `in_set` and `one_value` (one value per group, which carries
-a reference hierarchy's rule). A row failing a `flag` check lands with the
+identifier type), `in_set`, `one_value` (one value per group, which carries
+a reference hierarchy's rule), `not_after` (a start is not after its end) and
+`reason_if_empty` (a value is empty exactly when its reason column is filled). A row failing a `flag` check lands with the
 check's id in its `quality` column (operator, 2026-10-17: "Flag, land the
 row"); `exception` keeps it out. Measure each check on the delivery first,
 with the writer's own code (`edgar_warehouse.silver_writer.checks.run`), and
@@ -241,11 +242,10 @@ Take its design, not its tool:
   rules file or its code list in the reference store, and a count measured on
   the delivery goes in the comment (see above), never into the list.
 - **Order by what a defect costs.** After the kinds this engine has
-  (`identifier`, `in_set`, `one_value`), the kinds that find most are: a unique
+  (`identifier`, `in_set`, `one_value`, `not_after`, `reason_if_empty`), the kinds that find most are: a unique
   key (an append-only table shows a replay as a repeated key; a snapshot shows
   a rebuild that did not replace), a required column (a null key defeats the
-  uniqueness check), a bound or date order (start after end, a date in the
-  future), a row condition over columns, a pattern, a second-table match, and
+  uniqueness check), a bound (a date in the future; a date order is `not_after`), a row condition over columns, a pattern, a second-table match, and
   volume or freshness per delivery. Statistical drift types need a baseline run
   this platform does not keep; leave them out of a first set.
 - **`one_value` has no TestGen twin.** "Within a group one value, flag the

@@ -131,4 +131,16 @@ why: >-
   much"); the restated and first-reported copies are company_fact's (ticket 35).
   A missing figure is a row with its reason, so it is counted (ticket 38). The
   statement format is read from the Company master's SIC, never copied here.
-checks: []
+checks:
+- id: period_start_not_after_end
+  check: not_after
+  column: period_start
+  later: period_end
+  on_fail: flag
+  why: A reported period starts on or before the day it ends (validity).
+- id: empty_value_has_reason
+  check: reason_if_empty
+  column: value
+  reason: null_reason
+  on_fail: flag
+  why: A value is empty only with a stated reason, and a stated reason means an empty value (completeness).

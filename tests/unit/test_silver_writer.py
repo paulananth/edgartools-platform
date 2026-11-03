@@ -268,3 +268,65 @@ def test_in_set_reads_a_bigint_column_with_whole_number_values():
             specs.check(a_spec(checks=[{**item, "values": values}]))
     with pytest.raises(Blocked, match="as text"):  # a text column still takes text only
         specs.check(a_spec(checks=[{**item, "column": "member_id", "values": [1]}]))
+
+
+def a_dated_spec(**more):
+    """The visit table with a second DATE column and a value with its reason (ticket 175)."""
+    spec = a_spec(**more)
+    spec["columns"] = [*spec["columns"], *(
+        {"name": name, "type": kind, "nullable": True, "definition": None, "source": f"visit.{name}",
+         "sensitivity": "none"} for name, kind in (("left_on", "DATE"), ("reason", "VARCHAR")))]
+    spec["time"] = {"as_of": None, "as_at": "loaded_at", "event_time": "visited_on"}
+    return spec
+
+
+NOT_AFTER = {"id": "dates_in_order", "check": "not_after", "column": "visited_on", "later": "left_on",
+             "on_fail": "flag", "why": "A visit starts before it ends (validity)."}
+REASON = {"id": "empty_has_reason", "check": "reason_if_empty", "column": "member_id", "reason": "reason",
+          "on_fail": "flag", "why": "A member is missing only with a stated reason (completeness)."}
+
+
+def test_not_after_flags_a_row_whose_start_is_after_its_end_and_passes_an_empty_date():
+    from edgar_warehouse.silver_writer import checks
+
+    spec = a_dated_spec(checks=[NOT_AFTER])
+    specs.check(spec)
+    rows = [{"visit_id": n, "visited_on": a, "left_on": b} for n, (a, b) in enumerate([
+        ("2026-01-01", "2026-01-02"), ("2026-01-02", "2026-01-02"),   # in order, and the same day
+        ("2026-01-03", "2026-01-02"),                                   # after: flagged
+        (None, "2026-01-02"), ("2026-01-03", None)])]                  # an empty date passes
+    _, report = checks.run(spec, rows)
+    assert report["checks"]["dates_in_order"]["rows_failed"] == 1
+
+
+def test_reason_if_empty_flags_an_empty_value_with_no_reason_and_a_value_with_one():
+    from edgar_warehouse.silver_writer import checks
+
+    spec = a_dated_spec(checks=[REASON])
+    specs.check(spec)
+    rows = [{"visit_id": n, "member_id": m, "reason": r} for n, (m, r) in enumerate([
+        ("m1", None), (None, "not given"),   # a value alone, or an empty value with its reason: well
+        (None, None), ("m1", "not given"),   # an empty value with none, or a value with a reason: flagged
+        ("m1", " "), (None, " ")])]           # a blank reason is no reason
+    flagged = checks.run(spec, rows)[0]
+    assert [r["visit_id"] for r in flagged if r["quality"]] == [2, 3, 5]
+
+
+@pytest.mark.parametrize("change, refused", [
+    ({"later": "member_id"}, "the same type"),                 # a DATE and a text column
+    ({"column": "member_id", "later": "reason"}, "date, timestamp or whole-number"),
+    ({"later": "nope"}, "names a column"),
+    ({"later": "tags"}, "nested values"),
+])
+def test_not_after_that_could_not_run_is_refused(change, refused):
+    with pytest.raises(Blocked, match=refused):
+        specs.check(a_dated_spec(checks=[{**NOT_AFTER, **change}]))
+
+
+@pytest.mark.parametrize("change, refused", [
+    ({"reason": "visited_on"}, "VARCHAR"),                     # the reason is text
+    ({"reason": "nope"}, "names a column"),
+])
+def test_reason_if_empty_that_could_not_run_is_refused(change, refused):
+    with pytest.raises(Blocked, match=refused):
+        specs.check(a_dated_spec(checks=[{**REASON, **change}]))
