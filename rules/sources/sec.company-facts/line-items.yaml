@@ -18,7 +18,7 @@
 #   cover-page figure), in place of a copy dated on the period;
 # - {computed: sum | difference, terms, flag}: the terms' values added, or
 #   the first less the rest, all in one unit, flagged "computed" (and with its
-#   own flag, when it names one), naming the accession of its first term read
+#   own flag, when it names one), naming the accession number of its first term read
 #   from the facts. A term is a
 #   concept, {first_of: [concepts]} (the first present), {line_item: code}
 #   (that line item's value for the same period) or {optional: term} (counted

@@ -26,12 +26,12 @@ def no_masters(source_code, kind, keys):
     return {}
 
 
-def fact(company, concept, value, end, start=None, *, taxonomy="us-gaap", unit="USD", accession="0000000001-26-000001",
+def fact(company, concept, value, end, start=None, *, taxonomy="us-gaap", unit="USD", accession_number="0000000001-26-000001",
          filed="2026-02-01", form="10-K"):
     return {"company_key": company, "taxonomy": taxonomy, "concept": concept, "unit": unit,
             "currency": unit.split("/")[0] if unit[:3].isupper() and unit[:3] != "pur" else None,
             "period": f"{start}/{end}" if start else end, "period_start": start, "period_end": end,
-            "value": str(value), "accession": accession, "filed": filed, "form": form,
+            "value": str(value), "accession_number": accession_number, "filed": filed, "form": form,
             "fiscal_year_filed": None, "fiscal_period_filed": None, "frame": None}
 
 
@@ -50,7 +50,7 @@ FACTS = [
     fact(US, "Revenues", 130, "2025-12-31", "2025-10-01"),  # a quarter is never the year's
     # Net income: the latest-filed copy wins.
     year_2025(US, "NetIncomeLoss", 10),
-    year_2025(US, "NetIncomeLoss", 12, accession="0000000001-27-000001", filed="2027-02-01"),
+    year_2025(US, "NetIncomeLoss", 12, accession_number="0000000001-27-000001", filed="2027-02-01"),
     # Book value: computed, equity including NCI less NCI.
     balance_2025(US, "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest", 100),
     balance_2025(US, "MinorityInterest", 10),
@@ -60,7 +60,7 @@ FACTS = [
     balance_2025(US, "LongTermDebt", "50.5"),
     balance_2025(US, "CommercialPaper", 5),
     # Liabilities: the computed terms are in two units, so nothing.
-    balance_2025(US, "LiabilitiesAndStockholdersEquity", 1000, unit="EUR", accession="0000000001-26-000009",
+    balance_2025(US, "LiabilitiesAndStockholdersEquity", 1000, unit="EUR", accession_number="0000000001-26-000009",
                  filed="2026-01-01"),
     # Cash: one copy filed in two units keeps the unit its filing uses most.
     balance_2025(US, "CashAndCashEquivalentsAtCarryingValue", 70),
@@ -69,35 +69,35 @@ FACTS = [
     # never one filed in another form.
     fact(US, "EntityCommonStockSharesOutstanding", 7, "2026-01-20", taxonomy="dei", unit="shares"),
     fact(US, "EntityCommonStockSharesOutstanding", 8, "2026-04-20", taxonomy="dei", unit="shares",
-         accession="0000000001-26-000005", filed="2026-04-30", form="10-Q"),
+         accession_number="0000000001-26-000005", filed="2026-04-30", form="10-Q"),
     # A year ending in March is the previous year's (Compustat FYEAR); the annual
     # report's own year wins over a later period seen only in another form.
-    fact(MARCH, "Revenues", 40, "2025-03-31", "2024-04-01", accession="0000000002-25-000001", filed="2025-05-01"),
-    fact(MARCH, "Assets", 90, "2025-03-31", accession="0000000002-25-000001", filed="2025-05-01"),
-    fact(MARCH, "Revenues", 41, "2025-05-31", "2024-06-01", accession="0000000002-25-000002", filed="2025-07-01",
+    fact(MARCH, "Revenues", 40, "2025-03-31", "2024-04-01", accession_number="0000000002-25-000001", filed="2025-05-01"),
+    fact(MARCH, "Assets", 90, "2025-03-31", accession_number="0000000002-25-000001", filed="2025-05-01"),
+    fact(MARCH, "Revenues", 41, "2025-05-31", "2024-06-01", accession_number="0000000002-25-000002", filed="2025-07-01",
          form="8-K"),
     # An IFRS filer, with a stray us-gaap fact in the same filing.
-    year_2025(EU, "Revenue", 200, taxonomy="ifrs-full", unit="EUR", accession="0000000003-26-000001"),
-    year_2025(EU, "ProfitLoss", 20, taxonomy="ifrs-full", unit="EUR", accession="0000000003-26-000001"),
-    year_2025(EU, "Revenues", 999, unit="EUR", accession="0000000003-26-000001"),
+    year_2025(EU, "Revenue", 200, taxonomy="ifrs-full", unit="EUR", accession_number="0000000003-26-000001"),
+    year_2025(EU, "ProfitLoss", 20, taxonomy="ifrs-full", unit="EUR", accession_number="0000000003-26-000001"),
+    year_2025(EU, "Revenues", 999, unit="EUR", accession_number="0000000003-26-000001"),
     # Cover-page counts: the amendment of a year's annual report wins (filed later); a count filed in the
     # next year's report, even dated on this year's end, is never this year's; of two in one report, the later.
-    year_2025(NEXT, "Revenues", 100, accession="0000000004-26-000001"),
-    year_2025(NEXT, "CostOfRevenue", 60, accession="0000000004-26-000001"),
+    year_2025(NEXT, "Revenues", 100, accession_number="0000000004-26-000001"),
+    year_2025(NEXT, "CostOfRevenue", 60, accession_number="0000000004-26-000001"),
     fact(NEXT, "EntityCommonStockSharesOutstanding", 7, "2026-01-20", taxonomy="dei", unit="shares",
-         accession="0000000004-26-000001"),
-    year_2025(NEXT, "Revenues", 100, accession="0000000004-26-000002", filed="2026-03-01", form="10-K/A"),
+         accession_number="0000000004-26-000001"),
+    year_2025(NEXT, "Revenues", 100, accession_number="0000000004-26-000002", filed="2026-03-01", form="10-K/A"),
     fact(NEXT, "EntityCommonStockSharesOutstanding", 9, "2026-02-20", taxonomy="dei", unit="shares",
-         accession="0000000004-26-000002", filed="2026-03-01", form="10-K/A"),
-    fact(NEXT, "Revenues", 120, "2026-12-31", "2026-01-01", accession="0000000004-27-000001", filed="2027-02-01"),
-    fact(NEXT, "CostOfRevenue", 70, "2026-12-31", "2026-01-01", accession="0000000004-27-000001", filed="2027-02-01"),
-    year_2025(NEXT, "Revenues", 100, accession="0000000004-27-000001", filed="2027-02-01"),
+         accession_number="0000000004-26-000002", filed="2026-03-01", form="10-K/A"),
+    fact(NEXT, "Revenues", 120, "2026-12-31", "2026-01-01", accession_number="0000000004-27-000001", filed="2027-02-01"),
+    fact(NEXT, "CostOfRevenue", 70, "2026-12-31", "2026-01-01", accession_number="0000000004-27-000001", filed="2027-02-01"),
+    year_2025(NEXT, "Revenues", 100, accession_number="0000000004-27-000001", filed="2027-02-01"),
     balance_2025(NEXT, "EntityCommonStockSharesOutstanding", 99, taxonomy="dei", unit="shares",
-                 accession="0000000004-27-000001", filed="2027-02-01"),
+                 accession_number="0000000004-27-000001", filed="2027-02-01"),
     fact(NEXT, "EntityCommonStockSharesOutstanding", 50, "2027-01-10", taxonomy="dei", unit="shares",
-         accession="0000000004-27-000001", filed="2027-02-01"),
+         accession_number="0000000004-27-000001", filed="2027-02-01"),
     fact(NEXT, "EntityCommonStockSharesOutstanding", 51, "2027-01-15", taxonomy="dei", unit="shares",
-         accession="0000000004-27-000001", filed="2027-02-01"),
+         accession_number="0000000004-27-000001", filed="2027-02-01"),
 ]
 
 
@@ -131,7 +131,7 @@ def test_the_first_present_concept_s_latest_copy_wins(built):
     assert (revenue["value"], revenue["concept"], revenue["flags"]) == (
         Decimal(500), "RevenueFromContractWithCustomerExcludingAssessedTax", ["revenue quality check"])
     assert revenue["period_start"].isoformat() == "2025-01-01"
-    assert (income["value"], income["accession"], income["filed"].isoformat()) == (
+    assert (income["value"], income["accession_number"], income["filed"].isoformat()) == (
         Decimal(12), "0000000001-27-000001", "2027-02-01")
     cash, shares = rows[(US, 2025, "cash")], rows[(US, 2025, "shares_outstanding")]
     assert (cash["value"], cash["unit"], cash["currency"], cash["period_start"]) == (Decimal(70), "USD", "USD", None)
@@ -147,7 +147,7 @@ def test_computed_values_are_exact_and_name_their_inputs(built):
     assert [i["concept"] for i in book["inputs"]] == [
         "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest", "MinorityInterest"]
     assert (gross["value"], gross["inputs"][0]) == (Decimal(200), {"line_item": "revenue", "value": "500.0000000000"})
-    assert gross["accession"] == "0000000001-26-000001" and gross["period_start"].isoformat() == "2025-01-01"
+    assert gross["accession_number"] == "0000000001-26-000001" and gross["period_start"].isoformat() == "2025-01-01"
     assert (debt["value"], [i["concept"] for i in debt["inputs"]]) == (Decimal("55.5"), ["LongTermDebt", "CommercialPaper"])
     liabilities = rows[(US, 2025, "liabilities")]
     assert (liabilities["value"], liabilities["null_reason"]) == (None, "no concept filed")  # two units
@@ -166,8 +166,8 @@ def test_the_fiscal_year_and_its_taxonomy(built):
 def test_a_cover_page_count_is_its_own_annual_report_s(built):
     _, rows = built
     amended, next_year = rows[(NEXT, 2025, "shares_outstanding")], rows[(NEXT, 2026, "shares_outstanding")]
-    assert (amended["value"], amended["accession"], amended["inputs"][0]["date"]) == (
+    assert (amended["value"], amended["accession_number"], amended["inputs"][0]["date"]) == (
         Decimal(9), "0000000004-26-000002", "2026-02-20")
     assert (next_year["value"], next_year["inputs"][0]) == (Decimal(51), {
-        "concept": "dei:EntityCommonStockSharesOutstanding", "accession": "0000000004-27-000001",
+        "concept": "dei:EntityCommonStockSharesOutstanding", "accession_number": "0000000004-27-000001",
         "value": "51.0000000000", "date": "2027-01-15"})

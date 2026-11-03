@@ -65,7 +65,7 @@ columns:
   definition: "The figure as filed, never rounded."
   source: "val, its exact filed digits"
   sensitivity: none
-- name: accession
+- name: accession_number
   type: VARCHAR
   nullable: false
   definition: "The filing that reported the fact."
@@ -107,7 +107,7 @@ key:
 - concept
 - unit
 - period
-- accession
+- accession_number
 - filed
 links:
 - columns:
@@ -139,24 +139,24 @@ checks:
 - id: one_form_per_filing
   check: one_value
   column: form
-  per: accession
+  per: accession_number
   on_fail: flag
   why: A filing has one form type; every fact of that filing states the same one (TestGen custom consistency test).
 - id: one_filed_per_filing
   check: one_value
   column: filed
-  per: accession
+  per: accession_number
   on_fail: flag
   why: A filing has one filing date; every fact of that filing states the same one (TestGen custom consistency test).
 - id: one_fiscal_year_filed_per_filing
   check: one_value
   column: fiscal_year_filed
-  per: accession
+  per: accession_number
   on_fail: flag
   why: A filing has one fiscal year; every fact of that filing states the same one (TestGen custom consistency test).
 - id: one_fiscal_period_filed_per_filing
   check: one_value
   column: fiscal_period_filed
-  per: accession
+  per: accession_number
   on_fail: flag
   why: A filing has one fiscal period; every fact of that filing states the same one (TestGen custom consistency test).
