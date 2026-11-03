@@ -56,7 +56,7 @@ def test_the_mastering_target_prepares_what_the_in_process_preparation_did(datab
     listed = tmp_path / "documents.json"
     listed.write_text(json.dumps([key(c) for c in CIKS]))
     args = {"capture": str(folder), "documents": str(listed), "population": str(population), "catalog": CATALOG,
-            "name_census": str(name_count), **PINS}
+            "name_count": str(name_count), **PINS}
     report = write_company_manifest(journal=MemoryJournal(), output=str(tmp_path / "bundle"), **args)
     book = Bookkeeping(databases.runtime)
     book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)

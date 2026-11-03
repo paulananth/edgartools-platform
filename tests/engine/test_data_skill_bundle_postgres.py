@@ -1366,17 +1366,17 @@ traversal.scan(io.BytesIO(packed),lookups={"wanted":sorted(wanted)},
     context={"publication_count":name_count_arguments["gleif_metadata"]["record_count"]},
     on_reading=lambda reading,_:tables.append(reading.tables))
 meta=name_count_arguments["gleif_metadata"]
-name_count=name_count.from_readings(sec_population=name_count_arguments["sec_population"],
+counted=name_count.from_readings(sec_population=name_count_arguments["sec_population"],
     gleif={"archive_sha256":name_count_arguments["gleif_sha256"],"content_date":meta["content_date"],
            "file_content":meta["file_content"],"record_count":meta["record_count"]},
     held=held,wanted=wanted,readings=tables)
 expected=body["checkout_name_count"]
-assert name_count==expected
+assert counted==expected
 name_count_assertions=[]
 for record in body["sec_records"]:
     if record["source"]!="sec.company":continue
     row=copy.deepcopy(record["row"])
-    row["name_census"]=name_count.entry(name_count,row["entity_name"],name_count_digest=digest(name_count))
+    row["name_census"]=name_count.entry(counted,row["entity_name"],name_count_digest=digest(counted))
     old_row=copy.deepcopy(row)
     old_row["name_census"]=body["checkout_entries"][str(row["cik"])]
     kwargs={"source_code":"sec.company.v1","contract":files.mdm_contract("sec.company","sec.company.v1"),
@@ -1393,7 +1393,7 @@ with engine.connect() as conn:
         reader=for_connection(conn)
         stored=reader._readings(reader.current([assertion["subject"]]))[assertion["subject"]]
         assert digest(stored)==digest(assertion)
-        assert stored["provenance"]["matching"]["name_census"]["census"]==digest(name_count)
+        assert stored["provenance"]["matching"]["name_census"]["census"]==digest(counted)
 class LostAcknowledgement:
     def __init__(self,sink): self.sink=sink
     def publish(self,*args): self.sink.publish(*args); raise OSError("simulated lost acknowledgement")
@@ -1426,7 +1426,7 @@ pins={str(path):hashlib.sha256(Path(path).read_bytes()).hexdigest()
                    files.ROOT/"sources/gleif/census-complete-stream.yaml",
                    files.ROOT/"sources/sec.company/census-filer.yaml"]}
 print(json.dumps({"pins":pins,"generation":name_count_result["generation"],"counts":counts,
-                  "installed_gleif_mapping":True,"installed_sec_mapping":True,"installed_name_count_caller":True,"name_count_digest":digest(name_count),"publication_recovery":True,"full_population":False}))
+                  "installed_gleif_mapping":True,"installed_sec_mapping":True,"installed_name_count_caller":True,"name_count_digest":digest(counted),"publication_recovery":True,"full_population":False}))
 engine.dispose()
 ''', cwd=root, document={"dsn": app.url.render_as_string(hide_password=False),
                          "policy": policy_digest, "readings": readings, "rows": rows, "sec_records": sec_records,
