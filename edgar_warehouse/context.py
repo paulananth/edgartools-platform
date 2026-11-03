@@ -159,13 +159,30 @@ def definitions() -> dict:
     return files.load(files.ROOT / "context" / "definitions.yaml")
 
 
-def relationship_definitions() -> dict:
-    """Each relationship type's plain words: its code's definition in the RDM
-    code set the policy pins (ticket 132)."""
+def relationship_definitions(policy: dict | None = None) -> dict:
+    """Each relationship type's plain words: its code's definition in the RDM code set that `policy` pins
+    (ticket 132): the policy the answer's generation ran under (ticket 140). With no policy (a command with
+    no database), the policy file's pin."""
     from edgar_warehouse.rules import files
 
-    return {row["code"]: row["definition"] for row in files.pinned_reference("mdm-relationship-types")
-            if row["parent_code"] is None}
+    if policy is None:
+        rows = files.pinned_reference("mdm-relationship-types")
+    else:
+        section = policy.get("relationships")
+        pin = (policy.get("reference_pins") or {}).get(section["pin"]) if isinstance(section, dict) else None
+        if not isinstance(pin, dict):  # a policy pinning no relationship types masters no link
+            return {}
+        rows = files.published_reference(pin)
+    return {row["code"]: row["definition"] for row in rows if row["parent_code"] is None}
+
+
+def policy_of(adapter, conn, policy_digest: str | None) -> dict | None:
+    """The registered Mastering Policy whose digest a generation recorded, or none."""
+    from edgar_warehouse.mdm.clean.store import digest
+
+    if not policy_digest:
+        return None
+    return next((body for body in adapter.registered_policies(conn) if digest(body) == policy_digest), None)
 
 
 def parse_time(value: str, flag: str, command: str) -> datetime:
@@ -638,7 +655,10 @@ class Context:
             full = args.detail == "full"
             if full:
                 _attach_sources(conn, links)
-        types = relationship_definitions()
+            from edgar_warehouse.mdm.clean.store import storage_adapter
+
+            policy = policy_of(storage_adapter(), conn, trust.get("policy_digest"))
+        types = relationship_definitions(policy)
         related = [_full_link(link) if full else _brief_link(link) for link in links]
         answer = {
             "name": names[entity_id]["name"],
