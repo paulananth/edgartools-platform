@@ -2,7 +2,7 @@
 
 Priority: 171. Map: [Rebuild priorities](../map.md). Opened 2026-11-02 09:38 ET (operator, 2026-11-02: "Reading rules can not be named reading[\"mdm\"]"; chosen name: `dataset_contracts`, "dataset_contracts (Recommended)").
 
-Type: task. Status: in progress (Claude, 2026-11-02 10:24 ET). Blocked by: none (169 slice 1 merged).
+Type: task. Status: resolved. Blocked by: none (169 slice 1 merged).
 
 ## Question
 
@@ -18,7 +18,7 @@ Answer: `dataset_contracts` (the CONTEXT.md term). Measured: 10 rules files, 23 
 - [x] Mapping Documents: none change (`test_rules_mapdoc.py` passes on the committed workbooks, 2026-11-02 10:24 ET); the rules digests change because the key name is part of the digested body
 - [x] Tests (2026-11-02 10:24 ET): `tests/unit` and `tests/mdm` (all pass), the Postgres integration tests that build a rules document (configured bookkeeping, approval, proving, declared chain) and the MySQL rules runtime adapter test pass; `test_a_rules_file_with_the_old_mdm_key_is_refused` added (rules, target manifest, change journal, mapdoc, catalog, sequence); one test that a file with the old key is refused
 - [x] The bookkeeping, data-catalog, data-platform and data-onboarding skills say `dataset_contracts` (2026-11-02 10:24 ET), data-onboarding and refining-rules skills and the docs say `dataset_contracts`
-- [ ] Learning → skill: the section name in the skills that teach the rules file
+- [x] Learning → skill (2026-11-03 12:39 ET): done with the rename (the bookkeeping, data-catalog, data-platform and data-onboarding skills say `dataset_contracts`); a search of skills, docs, CONTEXT.md, AGENTS.md and CLAUDE.md for `reading["mdm"]`, `.get("mdm")` and a top-level `mdm:` finds none left
 
 ## Review (2026-11-02 10:31 ET)
 
