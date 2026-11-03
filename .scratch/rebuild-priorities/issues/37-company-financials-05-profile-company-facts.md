@@ -2,7 +2,7 @@
 
 Priority: 37, tier 3, product value. Map: [Rebuild priorities](../map.md). Moved from `.scratch/company-financials/issues/05-profile-company-facts.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
-Type: task. Status: approved. Blocked by: 36. Map: [map](../../company-financials/map.md).
+Type: task. Status: resolved (2026-11-03 18:38 ET). Blocked by: 36. Map: [map](../../company-financials/map.md).
 
 ## Question
 

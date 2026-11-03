@@ -2,7 +2,7 @@
 
 Priority: 19, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md). Moved from `.scratch/profiling/issues/05b-relationship-as-at.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
-Status: done locally; the hosted `mdm migrate` waits for hosting (ticket 68).
+Status: resolved (2026-11-03 18:38 ET); done locally; the hosted `mdm migrate` waits for hosting (ticket 68).
 Type: task. Phase: A. Blocked by: 18. Map: [map](../../profiling/map.md). Plan: [plan](../../profiling/plan.md).
 
 Ticket 05 deferred `edgar-warehouse context relationship <entity> --as-at <time>`:
