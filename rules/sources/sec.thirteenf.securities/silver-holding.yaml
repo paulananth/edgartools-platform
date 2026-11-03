@@ -7,9 +7,9 @@
 # `security_mdm_id`; the CUSIP stays as the link key. The numbers are read as floating point
 # (exact to 15 digits) and land as exact decimals. Append only: a filed holding never changes;
 # an amended filing is a new accession number.
-# Not here yet: the manager, the report period and the filing date. The information table
-# names none; the manager filings (cover pages) hold them, and no source reads those yet
-# (ticket 184). A holding finds them by its accession number.
+# The manager, the report period and the filing date are not here: the information table names
+# none. They are in `thirteenf_filing` (source sec.thirteenf.filings, ticket 184); join on
+# `thirteenf_holding.accession_number = thirteenf_filing.accession_number`.
 table: thirteenf_holding
 definition: One holding of one Form 13F information table, as filed, linked to its Security by CUSIP.
 grain: one row per filing (accession number) and holding (its place in the information table)
