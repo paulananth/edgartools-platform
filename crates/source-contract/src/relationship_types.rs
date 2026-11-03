@@ -3,29 +3,95 @@
 //! child codes, `TYPE:capacity`. This module is the one place the rules are
 //! read and checked: at policy registration and before every calculation.
 
+use indexmap::IndexMap;
 use serde::Deserialize;
 use serde_json::{Map, Value};
 use std::collections::BTreeSet;
 
-const ULTIMATE_PARENT_ALGORITHMS: &[&str] = &["accounting-chain-v1", "accounting-chain-v2"];
 const CYCLES: &[&str] = &["invalid", "review"];
 
+/// The ultimate-parent algorithms, named once: the check and the calculation both read this list.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UltimateParent {
+    /// The current parent chain of each entity.
+    ChainV1,
+    /// The parent chain's whole history.
+    ChainV2,
+}
+
+impl UltimateParent {
+    const NAMES: [(UltimateParent, &'static str); 2] =
+        [(UltimateParent::ChainV1, "accounting-chain-v1"), (UltimateParent::ChainV2, "accounting-chain-v2")];
+
+    pub fn name(self) -> &'static str {
+        Self::NAMES.iter().find(|(algorithm, _)| *algorithm == self).map_or("", |(_, name)| name)
+    }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::NAMES.iter().find(|(_, known)| *known == name).map(|(algorithm, _)| *algorithm)
+    }
+}
+
 /// One type's rules, as written. An unknown property refuses the type.
-#[derive(Deserialize)]
+#[derive(Clone, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct TypeRules {
-    from: Vec<String>,
-    to: Vec<String>,
-    from_profile: Option<String>,
-    to_profile: Option<String>,
-    capacities: Option<Vec<String>>,
+pub struct TypeRules {
+    pub from: Vec<String>,
+    pub to: Vec<String>,
+    pub from_profile: Option<String>,
+    pub to_profile: Option<String>,
+    pub capacities: Option<Vec<String>>,
     hierarchy: Option<bool>,
     cycles: Option<String>,
     one_parent: Option<bool>,
     ultimate_parent: Option<String>,
-    ultimate_type: Option<String>,
+    pub ultimate_type: Option<String>,
     ends_parent_links: Option<bool>,
     keeps_start: Option<bool>,
+}
+
+impl TypeRules {
+    /// Links of this type form a hierarchy.
+    pub fn is_hierarchy(&self) -> bool {
+        self.hierarchy == Some(true)
+    }
+
+    /// An entity has one parent at a time.
+    pub fn is_one_parent(&self) -> bool {
+        self.one_parent == Some(true)
+    }
+
+    /// A cycle sets its links aside (`invalid`) rather than only asking for review.
+    pub fn cycles_are_invalid(&self) -> bool {
+        self.cycles.as_deref() == Some("invalid")
+    }
+
+    /// A link of this type ends the entity's parent links when it starts.
+    pub fn ends_parent_links(&self) -> bool {
+        self.ends_parent_links == Some(true)
+    }
+
+    /// The earliest start seen is kept.
+    pub fn keeps_start(&self) -> bool {
+        self.keeps_start == Some(true)
+    }
+
+    /// The type's ultimate-parent algorithm; the check refuses a name it does not know.
+    pub fn ultimate(&self) -> Option<UltimateParent> {
+        self.ultimate_parent.as_deref().and_then(UltimateParent::from_name)
+    }
+}
+
+/// The types as typed rules, parsed once. Call after `check`, which gives the refusals their words.
+pub fn parse(types: &Map<String, Value>) -> Result<IndexMap<String, TypeRules>, String> {
+    types
+        .iter()
+        .map(|(name, spec)| {
+            serde_json::from_value(spec.clone())
+                .map(|rules| (name.clone(), rules))
+                .map_err(|error| format!("Relationship type {name} has rules it cannot run: {error}"))
+        })
+        .collect()
 }
 
 /// Refuse types that could not run exactly as written. `kinds`, when given,
@@ -65,7 +131,7 @@ pub fn check(types: &Map<String, Value>, kinds: Option<&BTreeSet<String>>) -> Re
             return Err(format!("Relationship type {name}: cycles, one_parent and ultimate_parent go only on a hierarchy"));
         }
         if let Some(algorithm) = &rules.ultimate_parent {
-            if !ULTIMATE_PARENT_ALGORITHMS.contains(&algorithm.as_str()) {
+            if UltimateParent::from_name(algorithm).is_none() {
                 return Err(format!("Relationship type {name}: unknown ultimate-parent algorithm {algorithm}"));
             }
         }
@@ -205,5 +271,40 @@ mod tests {
         let orphan = rows(json!([{"code": "X:director", "parent_code": "X", "status": "valid"}]));
         assert!(from_codes(&orphan, &kinds()).unwrap_err().contains("no relationship type"));
         assert!(from_codes(&[], &kinds()).unwrap_err().contains("at least one type"));
+    }
+
+    #[test]
+    fn the_rules_are_typed_and_the_algorithms_named_once() {
+        let types = from_codes(&rows(json!([
+            {"code": "PARENT", "parent_code": null, "status": "valid", "properties": {
+                "from": ["company"], "to": ["company"], "hierarchy": true, "cycles": "invalid", "one_parent": true,
+                "ultimate_parent": "accounting-chain-v1", "ultimate_type": "ULTIMATE"}},
+            {"code": "ULTIMATE", "parent_code": null, "status": "valid", "properties": {
+                "from": ["company"], "to": ["company"], "hierarchy": true, "cycles": "review"}},
+            {"code": "SUCCEEDS", "parent_code": null, "status": "valid", "properties": {
+                "from": ["company"], "to": ["company"], "ends_parent_links": true, "keeps_start": true}}
+        ])), &kinds())
+        .unwrap();
+        let rules = parse(&types).unwrap();
+        let parent = &rules["PARENT"];
+        assert!(parent.is_hierarchy() && parent.is_one_parent() && parent.cycles_are_invalid());
+        assert_eq!(parent.ultimate(), Some(UltimateParent::ChainV1));
+        assert!(!rules["ULTIMATE"].cycles_are_invalid() && rules["ULTIMATE"].ultimate().is_none());
+        assert!(rules["SUCCEEDS"].ends_parent_links() && rules["SUCCEEDS"].keeps_start() && !rules["SUCCEEDS"].is_hierarchy());
+        for algorithm in [UltimateParent::ChainV1, UltimateParent::ChainV2] {
+            assert_eq!(UltimateParent::from_name(algorithm.name()), Some(algorithm));
+        }
+        assert_eq!(UltimateParent::from_name("accounting-chain-v3"), None);
+    }
+
+    /// The calculation reads typed fields: no rule is read by its name from an untyped object, where a
+    /// misspelt key reads as absent and passes the check (ticket 140).
+    #[test]
+    fn the_calculation_reads_no_rule_by_its_name() {
+        let calculation = include_str!("relationships.rs");
+        for name in ["keeps_start", "ends_parent_links", "one_parent", "ultimate_parent", "from_profile", "to_profile"] {
+            assert!(!calculation.contains(&format!("\"{name}\"")), "relationships.rs reads {name} by its name");
+        }
+        assert!(!calculation.contains("\"accounting-chain-"), "an algorithm is named once, in relationship_types.rs");
     }
 }

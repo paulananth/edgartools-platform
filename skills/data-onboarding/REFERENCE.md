@@ -217,6 +217,10 @@ unknown kind or property, a hierarchy that does not say what its cycles do, an
 unknown ultimate-parent algorithm, and an ultimate parent without its
 `ultimate_type`. A policy that pins no types masters no link: each reported
 link goes to review as unsupported.
+A new type rule is one typed field of `TypeRules` in that file, its check beside it, and the calculation in
+`relationships.rs` reads the field (`rules.keeps_start()`), never a rule's name from an untyped object; a Rust test
+refuses a rule's name written in the calculation. An ultimate-parent algorithm is one `UltimateParent` variant. The
+agent context words a link with the code set the policy that mastered it pins (`context.relationship_definitions`).
 Agents read every mastered link through `mdm.relationship_context`, and a
 parent chain through `mdm.relationship_chain(entity, type, max_hops)`.
 

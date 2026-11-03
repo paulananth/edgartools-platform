@@ -3,6 +3,7 @@
 
 use crate::record_values::{self as values, Document, Object};
 use indexmap::IndexMap;
+use crate::relationship_types::{self, TypeRules, UltimateParent};
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -35,6 +36,9 @@ struct Command {
     canonical: BTreeMap<String, String>,
     records: BTreeMap<String, Object>,
     types: IndexMap<String, Object>,
+    /// The types as typed rules, parsed once after the check (never in the command).
+    #[serde(skip)]
+    rules: IndexMap<String, TypeRules>,
     stored: BTreeMap<String, Object>,
     as_of: String,
     clock: String,
@@ -300,7 +304,7 @@ pub fn prepare_relationship_periods(raw: &str) -> Result<String, String> {
 
 fn finish_at_succession(
     edges: &mut IndexMap<String, Relationship>,
-    types: &IndexMap<String, Object>,
+    types: &IndexMap<String, TypeRules>,
     reviews: &mut Vec<Object>,
 ) -> Result<(), String> {
     let mut ceased: BTreeMap<String, (Object, String, i64)> = BTreeMap::new();
@@ -311,7 +315,7 @@ fn finish_at_succession(
         let kind = values::read_text(&edge.body, "type")?;
         if !types
             .get(&kind)
-            .is_some_and(|spec| values::has_value(spec, "ends_parent_links"))
+            .is_some_and(TypeRules::ends_parent_links)
         {
             continue;
         }
@@ -332,7 +336,7 @@ fn finish_at_succession(
         if ceased.is_empty()
             || !types
                 .get(&kind)
-                .is_some_and(|spec| values::has_value(spec, "hierarchy"))
+                .is_some_and(TypeRules::is_hierarchy)
         {
             continue;
         }
@@ -393,7 +397,7 @@ fn finish_at_succession(
 
 /// Prepare direct links and derived history from a complete affected read set.
 pub fn prepare_relationships(raw: &str) -> Result<String, String> {
-    let command: Command = serde_json::from_str(raw).map_err(|_| "Invalid relationship command")?;
+    let mut command: Command = serde_json::from_str(raw).map_err(|_| "Invalid relationship command")?;
     // The types run only as their one check allows (ticket 132). A policy
     // pinning none masters no link: each reported one goes to review.
     if !command.types.is_empty() {
@@ -401,6 +405,9 @@ pub fn prepare_relationships(raw: &str) -> Result<String, String> {
         crate::relationship_types::check(
             types.as_object().ok_or("Invalid relationship command")?,
             Some(&command.kinds),
+        )?;
+        command.rules = relationship_types::parse(
+            types.as_object().ok_or("Invalid relationship command")?,
         )?;
     }
     let mut edges: IndexMap<String, Relationship> = IndexMap::new();
@@ -423,17 +430,13 @@ pub fn prepare_relationships(raw: &str) -> Result<String, String> {
                 ("relationship".into(), values::write_value(&reported)?),
                 ("subject".into(), values::write_value(subject)?),
             ]);
-            let Some((kind, spec)) =
-                kind.and_then(|kind| command.types.get(&kind).map(|spec| (kind, spec)))
+            let Some((kind, rules)) =
+                kind.and_then(|kind| command.rules.get(&kind).map(|rules| (kind, rules)))
             else {
                 add_review(&mut reviews, "unsupported_relationship", context)?;
                 continue;
             };
-            let capacities: Vec<String> = spec
-                .get("capacities")
-                .map(|raw| values::read_value(raw))
-                .transpose()?
-                .unwrap_or_default();
+            let capacities: &[String] = rules.capacities.as_deref().unwrap_or_default();
             if !capacities.is_empty()
                 && !values::read_text(&reported, "capacity")
                     .is_ok_and(|capacity| capacities.contains(&capacity))
@@ -494,16 +497,8 @@ pub fn prepare_relationships(raw: &str) -> Result<String, String> {
                 .records
                 .get(target_id)
                 .ok_or("Missing relationship target")?;
-            let from: Vec<String> = values::read_value(
-                spec.get("from")
-                    .ok_or("Relationship type needs source kinds")?,
-            )?;
-            let to: Vec<String> = values::read_value(
-                spec.get("to")
-                    .ok_or("Relationship type needs target kinds")?,
-            )?;
-            if !from.contains(&values::read_text(source, "kind")?)
-                || !to.contains(&values::read_text(destination, "kind")?)
+            if !rules.from.contains(&values::read_text(source, "kind")?)
+                || !rules.to.contains(&values::read_text(destination, "kind")?)
             {
                 add_review(&mut reviews, "incompatible_endpoint", context)?;
                 continue;
@@ -570,16 +565,13 @@ pub fn prepare_relationships(raw: &str) -> Result<String, String> {
                 }
             }
             let mut eligible = true;
-            for (endpoint, field) in [(source, "from_profile"), (destination, "to_profile")] {
-                if !values::has_value(spec, field) {
-                    continue;
-                }
-                let role = values::read_text(spec, field)?;
+            for (endpoint, role) in [(source, &rules.from_profile), (destination, &rules.to_profile)] {
+                let Some(role) = role else { continue };
                 let bounds = interval(&period)?;
                 let mut found = false;
                 for raw in values::read_array(endpoint, "profiles")? {
                     let profile: Object = values::read_value(&raw)?;
-                    if values::read_text(&profile, "role")? == role {
+                    if values::read_text(&profile, "role")? == *role {
                         let (lo, hi) = interval(&profile)?;
                         if lo <= bounds.0 && hi >= bounds.1 {
                             found = true;
@@ -661,12 +653,12 @@ pub fn prepare_relationships(raw: &str) -> Result<String, String> {
                 .ok()
                 .as_deref()
                 == Some("observed")
-                || values::has_value(spec, "keeps_start")
+                || rules.keeps_start()
             {
                 if !keep_earlier_start(
                     &mut edge.periods,
                     &period,
-                    values::has_value(spec, "keeps_start"),
+                    rules.keeps_start(),
                 )? {
                     edge.periods.push(period);
                 }
@@ -727,14 +719,14 @@ pub fn prepare_relationships(raw: &str) -> Result<String, String> {
     for key in empty {
         edges.shift_remove(&key);
     }
-    finish_at_succession(&mut edges, &command.types, &mut reviews)?;
+    finish_at_succession(&mut edges, &command.rules, &mut reviews)?;
     finish_relationships(edges, &command, reviews)
 }
 
 fn derive_current_parents(
     group: &[LinkPeriod],
     invalid: &BTreeSet<String>,
-    spec: &Object,
+    rules: &TypeRules,
     scope: &Document,
     command: &Command,
 ) -> Result<Vec<Object>, String> {
@@ -765,9 +757,12 @@ fn derive_current_parents(
         let mut body = Object::from([
             (
                 "type".into(),
-                spec.get("ultimate_type")
-                    .cloned()
-                    .ok_or("An ultimate parent names its ultimate_type")?,
+                values::write_value(
+                    rules
+                        .ultimate_type
+                        .as_ref()
+                        .ok_or("An ultimate parent names its ultimate_type")?,
+                )?,
             ),
             ("source_id".into(), values::write_value(source)?),
             ("target_id".into(), values::write_value(&node)?),
@@ -775,7 +770,7 @@ fn derive_current_parents(
             ("derived".into(), values::write_value(&true)?),
             (
                 "algorithm".into(),
-                values::write_value(&"accounting-chain-v1")?,
+                values::write_value(&UltimateParent::ChainV1.name())?,
             ),
             ("as_of".into(), values::write_value(&command.as_of)?),
             ("path".into(), values::write_value(&path)?),
@@ -790,7 +785,7 @@ fn derive_current_parents(
 fn derive_parent_history(
     group: &[LinkPeriod],
     invalid: &BTreeSet<String>,
-    spec: &Object,
+    rules: &TypeRules,
     scope: &Document,
 ) -> Result<Vec<Object>, String> {
     let links: Vec<_> = group
@@ -852,9 +847,12 @@ fn derive_parent_history(
         let mut body = Object::from([
             (
                 "type".into(),
-                spec.get("ultimate_type")
-                    .cloned()
-                    .ok_or("An ultimate parent names its ultimate_type")?,
+                values::write_value(
+                    rules
+                        .ultimate_type
+                        .as_ref()
+                        .ok_or("An ultimate parent names its ultimate_type")?,
+                )?,
             ),
             ("source_id".into(), values::write_value(&source)?),
             ("target_id".into(), values::write_value(&target)?),
@@ -862,7 +860,7 @@ fn derive_parent_history(
             ("derived".into(), values::write_value(&true)?),
             (
                 "algorithm".into(),
-                values::write_value(&"accounting-chain-v2")?,
+                values::write_value(&UltimateParent::ChainV2.name())?,
             ),
         ]);
         let id = values::calculate_content_hash(&values::write_value(&body)?)?;
@@ -928,8 +926,8 @@ fn finish_relationships(
     }
     let mut invalid = BTreeSet::new();
     for ((kind, _), group) in &grouped {
-        let spec = command.types.get(kind).cloned().unwrap_or_default();
-        if values::has_value(&spec, "one_parent") {
+        let rules = command.rules.get(kind).cloned().unwrap_or_default();
+        if rules.is_one_parent() {
             for (index, link) in group.iter().enumerate() {
                 for other in &group[index + 1..] {
                     if link.source == other.source
@@ -956,7 +954,7 @@ fn finish_relationships(
                 }
             }
         }
-        if !values::has_value(&spec, "hierarchy") {
+        if !rules.is_hierarchy() {
             continue;
         }
         let mut adjacency: IndexMap<String, Vec<usize>> = IndexMap::new();
@@ -1007,7 +1005,7 @@ fn finish_relationships(
                             ("entities".into(), values::write_value(&ends)?),
                         ]),
                     )?;
-                    if values::read_text(&spec, "cycles").ok().as_deref() == Some("invalid") {
+                    if rules.cycles_are_invalid() {
                         invalid.extend(cycle);
                     }
                 } else if !seen.contains(&link.target) {
@@ -1041,19 +1039,19 @@ fn finish_relationships(
         result.push(body);
     }
     for ((kind, _), group) in &grouped {
-        let spec = command.types.get(kind).cloned().unwrap_or_default();
+        let rules = command.rules.get(kind).cloned().unwrap_or_default();
         let scope = &edges
             .get(&group[0].key)
             .ok_or("Missing hierarchy scope")?
             .body["scope"];
-        match values::read_text(&spec, "ultimate_parent").ok().as_deref() {
-            Some("accounting-chain-v1") => result.extend(derive_current_parents(
-                group, &invalid, &spec, scope, command,
+        match rules.ultimate() {
+            Some(UltimateParent::ChainV1) => result.extend(derive_current_parents(
+                group, &invalid, &rules, scope, command,
             )?),
-            Some("accounting-chain-v2") => result.extend(derive_parent_history(
-                group, &invalid, &spec, scope,
+            Some(UltimateParent::ChainV2) => result.extend(derive_parent_history(
+                group, &invalid, &rules, scope,
             )?),
-            _ => {}
+            None => {}
         }
     }
     for edge in &mut result {
@@ -1063,9 +1061,9 @@ fn finish_relationships(
         let key = values::read_text(edge, "relationship_id")?;
         let kind = values::read_text(edge, "type")?;
         let keeps_start = command
-            .types
+            .rules
             .get(&kind)
-            .is_some_and(|spec| values::has_value(spec, "keeps_start"));
+            .is_some_and(TypeRules::keeps_start);
         if let Some(stored) = command.stored.get(&key) {
             let mut periods: Vec<Object> = values::read_value(&edge["periods"])?;
             for raw in values::read_array(stored, "periods")? {
