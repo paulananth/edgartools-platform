@@ -2,11 +2,11 @@
 # 25), kept apart from the lines as SEC's Insider Transactions Data Sets keep them
 # (operator, 2026-10-22: "Lines + owners, as SEC (Recommended)"): a joint filing
 # (41 of the cohort's 3,367 filings, 145 of its 11,451 lines) names each owner
-# once here and its lines once in ownership_line. Rows are the reporting_owner
+# once here and its lines once in insider_position. Rows are the reporting_owner
 # table of ownership-xml.yaml / ownership-sgml.yaml: 3,570 owners, no key
 # repeated. The owner is found as the Person the ownership feed masters (its
 # record key), else as a Company by its CIK.
-table: ownership_owner
+table: insider_ownership
 definition: One reporting owner of one Form 3, 4 or 5, linked to its Person or Company and
   to the issuer; a joint filing names several.
 grain: one row per filing (accession) and reporting owner (CIK)

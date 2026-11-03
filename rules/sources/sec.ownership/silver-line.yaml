@@ -9,7 +9,7 @@
 # transactions, 428 derivative holdings), every one with an as-of date and a
 # 10-digit issuer CIK, every amount a number, no key repeated. The Security
 # link waits for ticket 24 (a Form 4 names its class in words, never a CUSIP).
-table: ownership_line
+table: insider_position
 definition: 'One line of a Form 3, 4 or 5, as filed: a transaction or a holding, non-derivative
   or derivative, with the position after it, linked to its issuer.'
 grain: one row per filing (accession), table and line
@@ -205,7 +205,7 @@ partition: []
 load_mode: append
 why: 'A line is transaction data: a position or an event restated every filing with its amount,
   so it lands in silver with its issuer''s MDM id and its as-of date, never as an MDM relationship
-  (operator, 2026-10-22). Its owners are the filing''s, in ownership_owner, joined by accession,
+  (operator, 2026-10-22). Its owners are the filing''s, in insider_ownership, joined by accession,
   as SEC''s own data sets keep them.'
 # Data quality, as for N-PORT's holdings (operator, 2026-10-17: "Flag, land the
 # row"): a line whose ownership is neither D nor I lands flagged, never refused;
