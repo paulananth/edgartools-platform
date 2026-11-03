@@ -142,8 +142,7 @@ def _restore_company_identity(value):
         return {"sec.company.v1": HISTORIC_SEC_CODE,
                 "sec.company": "sec.submissions.company",
                 "company-2026-10-31.sec-company-source-identity":
-                    "company-2026-10-25.one-value-per-identifier"}.get(value, value).replace(
-                        "plus the Name Count", "plus the Name Census")  # ticket 178 renamed the word, not the contract
+                    "company-2026-10-25.one-value-per-identifier"}.get(value, value)
     return value
 
 

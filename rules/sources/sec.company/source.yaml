@@ -123,7 +123,7 @@ dataset_contracts:
       schema_version: silver-company-v1
       record_key: zero-padded 10-digit CIK
       publication_key: capture run plus exact company landing member digest, plus the exact
-        filing-list, business-address and ticker catalog member digests, plus the Name Count
+        filing-list, business-address and ticker catalog member digests, plus the Name Census
         digest
       effective_time: unknown; last_synced_at is observation time only
       semantics: patch
