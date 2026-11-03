@@ -1,7 +1,7 @@
 """The Company `mastering` target on real PG16 (Issue 20 slice 20c).
 
 Bookkeeping runs Company preparation as steps: the registered workers read the
-main documents, their census keys, the catalog and the narrowed census,
+main documents, their name count keys, the catalog and the narrowed name count,
 combine them and prepare one publication. What reaches MDM (the records files
 and their publication) equals the bundle the in-process preparation wrote before
 the target replaced it (`fixtures/company-mastering-records.json`, written once).
@@ -21,7 +21,7 @@ from edgar_warehouse.workers import mdm_prepare, source_combine, source_read
 from tests.integration.test_configured_bookkeeping_postgres import databases  # noqa: F401
 from edgar_warehouse.mdm.clean import limits
 from edgar_warehouse.mdm.clean.store import canonical
-from tests.mdm.test_clean_company_preparation import ACME, APPLE, CATALOG_ROWS, MSFT, PINS, census_capture, documents
+from tests.mdm.test_clean_company_preparation import ACME, APPLE, CATALOG_ROWS, MSFT, PINS, name_count_capture, documents
 from tests.support.memory_journal import MemoryJournal
 from tests.support.bookkeeping_protocol import drive
 from tests.support.sec_capture import CATALOG, document, key
@@ -51,27 +51,27 @@ def run_without_merge(databases, tmp_path, book, report):
 
 
 def test_the_mastering_target_prepares_what_the_in_process_preparation_did(databases, tmp_path):
-    capture = census_capture(tmp_path, documents(), CATALOG_ROWS)
-    folder, population, census = capture
+    capture = name_count_capture(tmp_path, documents(), CATALOG_ROWS)
+    folder, population, name_count = capture
     listed = tmp_path / "documents.json"
     listed.write_text(json.dumps([key(c) for c in CIKS]))
     args = {"capture": str(folder), "documents": str(listed), "population": str(population), "catalog": CATALOG,
-            "name_census": str(census), **PINS}
+            "name_count": str(name_count), **PINS}
     report = write_company_manifest(journal=MemoryJournal(), output=str(tmp_path / "bundle"), **args)
     book = Bookkeeping(databases.runtime)
     book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)
     rid = run_without_merge(databases, tmp_path, book, report)
     state = drive(book, rid, databases.ledger, workers=WORKERS)
-    # One main unit (3 small documents, under the byte budget), one key reading, catalog, census, combine, records.
+    # One main unit (3 small documents, under the byte budget), one key reading, catalog, name count, combine, records.
     assert state["run"]["state"] == "complete" and state["counts"] == {"verified": 6}
 
     prepared = json.loads((tmp_path / "bundle/records/manifest.json").read_bytes())
     root = tmp_path / "bundle/records"
     # What MDM reads: each batch's records bytes, count and publication (ids aside).
-    # The census's digest (`CENSUS` in the answers) is the canonical census's; its GLEIF zip
+    # The name count's digest (`NAME_COUNT` in the answers) is the canonical name count's; its GLEIF zip
     # carries today's time, so the digest is computed here.
-    census_hash = hashlib.sha256(canonical(json.loads(census.read_bytes())).encode()).hexdigest()
-    expected = json.loads(json.dumps(EXPECTED).replace("CENSUS", census_hash))
+    name_count_hash = hashlib.sha256(canonical(json.loads(name_count.read_bytes())).encode()).hexdigest()
+    expected = json.loads(json.dumps(EXPECTED).replace("CENSUS", name_count_hash))
     got = [{"records_jsonl": (root / b["input"]["path"]).read_text(), "record_count": b["input"]["record_count"],
              "publication": {k: v for k, v in b["input"]["publication"].items() if k != "publication_key"},
              "source_code": b["input"]["source_code"], "expected_checkpoint": b["expected_checkpoint"],
@@ -90,17 +90,17 @@ def test_the_mastering_target_prepares_what_the_in_process_preparation_did(datab
     assert drive(book, rid, databases.ledger, workers=WORKERS)["counts"] == {"verified": 6}
 
 
-def test_the_manifest_freezes_documents_by_receipt_and_composes_census_and_combine(tmp_path):
-    folder, population, census = census_capture(tmp_path, documents(), CATALOG_ROWS)
+def test_the_manifest_freezes_documents_by_receipt_and_composes_name_count_and_combine(tmp_path):
+    folder, population, name_count = name_count_capture(tmp_path, documents(), CATALOG_ROWS)
     listed = tmp_path / "documents.json"
     listed.write_text(json.dumps([key(c) for c in CIKS]))
     report = write_company_manifest(journal=MemoryJournal(), capture=str(folder), documents=str(listed), population=str(population),
-                                    catalog=CATALOG, name_census=str(census), output=str(tmp_path / "b"), **PINS)
+                                    catalog=CATALOG, name_count=str(name_count), output=str(tmp_path / "b"), **PINS)
     steps = json.loads(Path(report["manifest"]["uri"].removeprefix("file://")).read_bytes())["steps"]
     assert {name: len(units) for name, units in steps.items()} == {
         "main": 1, "keys": 1, "catalog": 1, "census": 1, "combine": 1, "records": 1, "merge": 1, "processed": 1}
-    census_input = steps["census"][0]["input"]["compose"]
-    assert census_input["slots"]["lookups"]["compose"]["slots"]["keys"] == [{"step": "keys", "key": "keys"}]
+    name_count_input = steps["census"][0]["input"]["compose"]
+    assert name_count_input["slots"]["lookups"]["compose"]["slots"]["keys"] == [{"step": "keys", "key": "keys"}]
     assert set(steps["combine"][0]["input"]["compose"]["slots"]) == {"main", "census", "catalog"}
     assert steps["merge"][0]["input"] == {"from": {"step": "records", "key": "records"}}
     assert steps["records"][0]["keys"]["revision"] == str(PINS["revision"])
@@ -109,11 +109,11 @@ def test_the_manifest_freezes_documents_by_receipt_and_composes_census_and_combi
 
 def mastered(databases, tmp_path, found=None):
     """The records the target prepares for a capture of `found` documents, by CIK, and the manifest."""
-    folder, population, census = census_capture(tmp_path, found or documents(), CATALOG_ROWS)
+    folder, population, name_count = name_count_capture(tmp_path, found or documents(), CATALOG_ROWS)
     listed = tmp_path / "documents.json"
     listed.write_text(json.dumps([key(c) for c in CIKS]))
     report = write_company_manifest(journal=MemoryJournal(), capture=str(folder), documents=str(listed), population=str(population),
-                                    catalog=CATALOG, name_census=str(census), output=str(tmp_path / "bundle"), **PINS)
+                                    catalog=CATALOG, name_count=str(name_count), output=str(tmp_path / "bundle"), **PINS)
     book = Bookkeeping(databases.runtime)
     book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)
     assert drive(book, run_without_merge(databases, tmp_path, book, report), databases.ledger,
@@ -125,7 +125,7 @@ def mastered(databases, tmp_path, found=None):
     return found, manifest, folder
 
 
-def test_forms_tickers_address_origin_and_census_entry_come_from_configured_readings(databases, tmp_path):
+def test_forms_tickers_address_origin_and_name_count_entry_come_from_configured_readings(databases, tmp_path):
     found, _, folder = mastered(databases, tmp_path)
     assert found[APPLE]["forms"] == ["10-K", "10-Q"]
     assert found[APPLE]["tickers"] == ["AAPL", "APLE"]  # catalog rank order, listed once

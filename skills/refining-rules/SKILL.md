@@ -290,7 +290,7 @@ Never invent a command.
 - Open work on the live SEC Company and GLEIF pipelines: see data-onboarding's
   Examples, "Unfinished live pipelines" (one list, kept there).
 - Name matching across two sources: SEC Company to GLEIF. The Name Count is
-  `edgar-warehouse mdm name-census` (readings in
+  `edgar-warehouse mdm name-count` (readings in
   `rules/sources/sec.company/census-*.yaml` and
   `rules/sources/gleif/census-*.yaml`; about 11 minutes over the whole
   population); the name rules `sec-gleif-name-jurisdiction` and

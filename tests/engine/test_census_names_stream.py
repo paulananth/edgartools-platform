@@ -1,4 +1,4 @@
-"""Full-stream configured names: the census rows each GLEIF record makes, written independently of the engine."""
+"""Full-stream configured names: the name count rows each GLEIF record makes, written independently of the engine."""
 from collections import defaultdict
 import io
 import json
@@ -9,7 +9,7 @@ from edgar_warehouse.rules import files
 
 from edgar_warehouse.rules.source_engine import SourceRejected
 from edgar_warehouse.workers.source_traversal import Traversal
-from tests.mdm.test_clean_name_census import gleif
+from tests.mdm.test_clean_name_count import gleif
 from edgar_warehouse.mdm.clean.primitives import NORMALIZERS
 
 RULE = Path(__file__).resolve().parents[2] / 'rules/sources/gleif/census-names-stream.yaml'
@@ -82,7 +82,7 @@ def test_typed_names_and_identity(value):
 def test_ineligible_identity_skips_other_containers_without_sentinel_paths(category, lei, bad):
     row = gleif(lei, 'Apple Inc.', category=category)
     row['Entity']['OtherEntityNames'] = bad
-    row['__no_census_rows__'] = [{'key':'APPLE INC'}]
+    row['__no_name_count_rows__'] = [{'key':'APPLE INC'}]
     assert project([row], {'APPLE INC'}) == [expected(row, {'APPLE INC'})]
 
 

@@ -95,7 +95,7 @@ def main():
     result = {'captures': len(refs), 'names': count, 'unicode_scalars': scalar_count,
               'exact_key_parity': True, 'deliberate_state_suffix_fault_detected': fault_detected,
               'sec_keys_sha256': digest.hexdigest(), 'inputs_and_code_sha256': before,
-              'full_company_mastering': False, 'census_population_qualified': False,
+              'full_company_mastering': False, 'name_count_population_qualified': False,
               'elapsed_seconds': round(time.monotonic() - started, 3), 'evidence': evidence}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + '\n')

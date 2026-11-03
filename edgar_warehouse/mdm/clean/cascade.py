@@ -9,8 +9,8 @@ one to one in that pass: the filer agrees with exactly one entity, and that
 entity with exactly one filer.
 
 It runs once over both whole sources, never over what a Stage holds, so load
-order cannot change a result: the Name Census carries its answer per CIK
-(`name_census.py`) and the Merge Stage re-checks each pair on its own rows
+order cannot change a result: the Name Count carries its answer per CIK
+(`name_count.py`) and the Merge Stage re-checks each pair on its own rows
 (`matching.py`). The proof calls this same function, so it measures what runs.
 
 Addresses are the ones the data quality rule leaves fit (ticket 22): GLEIF's
@@ -146,7 +146,7 @@ def legal_key(record: dict) -> str:
 
 
 def record(key: str, fields: dict, matching: dict, quality: dict | None, identifiers: dict | None = None) -> dict:
-    """Mapped values in the shape the Stage holds a record, so the census
+    """Mapped values in the shape the Stage holds a record, so the name count
     reads every filer and entity as the Merge Stage reads its own rows."""
     return {"record_key": key, "identifiers": identifiers or {},
             "fields": {name: {"op": "value", "value": v} for name, v in fields.items()},
@@ -183,12 +183,12 @@ def eligible(values: dict, cascade: dict) -> bool:
             and values.get("gleif_registration_status") not in cascade["refused_registration_statuses"])
 
 
-def entry(census: dict, cik: str, *, census_digest: str) -> dict | None:
-    """What one SEC record carries: the census's cascade answer for its CIK."""
-    found = ((census.get("cascade") or {}).get("assignments") or {}).get(cik)
+def entry(name_count: dict, cik: str, *, name_count_digest: str) -> dict | None:
+    """What one SEC record carries: the name count's cascade answer for its CIK."""
+    found = ((name_count.get("cascade") or {}).get("assignments") or {}).get(cik)
     if found is None:
         return None
-    return {"census": census_digest, "version": census["cascade"]["version"], **found}
+    return {"census": name_count_digest, "version": name_count["cascade"]["version"], **found}
 
 
 def count_addresses(places: Iterable[Place]) -> Counter:

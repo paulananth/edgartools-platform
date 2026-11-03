@@ -968,7 +968,7 @@ These name today's sources only as examples; nothing above depends on them.
   switched-on `sec-company-candidate` from the policy when it loads, so a
   proving run stamps it into its copy of the policy first (**test**); its
   preparation (`edgar-warehouse mdm prepare-clean-company`) reads the Name
-  Name Count file (`--name-census`, built by `edgar-warehouse mdm name-census`,
+  Name Count file (`--name-count`, built by `edgar-warehouse mdm name-count`,
   with `--catalog` while a cascade pass is on) and the exchange catalog.
 - **Source checks in code:** for Company,
   `merge.check_company_sources(files.policy(), assertions)`.

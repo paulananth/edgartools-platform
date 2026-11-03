@@ -79,7 +79,7 @@ def cascade_entity(row, cascade_spec, wanted):
 @pytest.mark.parametrize("case", ["ordinary", "agent", "placeholder", "headquarters_agent",
     "cross_line_agent", "postcode", "unicode", "noncandidate", "ineligible", "missing_name",
     "bad_field", "bad_lines", "branch"])
-def test_complete_census_general_projection_matches_active_cascade_without_install(case):
+def test_complete_name_count_general_projection_matches_active_cascade_without_install(case):
     """Bounded projection proof; no install or database population gate."""
     import copy
     from edgar_warehouse.mdm.clean import cascade, sec_company, quality
@@ -213,7 +213,7 @@ profile = copy.deepcopy(body["pair_comparisons"][body["legacy_pair_comparison"]]
 profile.update(eligibility_kind="bundle-invented-kind", eligibility_categories=["INVENTED"],
                name_field="invented_name", status_field="invented_status",
                registration_status_field="invented_registration",
-               identifier_namespace="invented_namespace", census_field="invented_census",
+               identifier_namespace="invented_namespace", census_field="invented_name_count",
                census_entries_field="invented_entries", cascade_field="invented_cascade",
                cascade_identifier_field="invented_target")
 body["pair_comparisons"]["bundle-invented"] = profile
@@ -230,8 +230,8 @@ right = {"kind": "bundle-invented-kind", "fields": {
 assert compare_candidate_records(rule, [({}, right)]) == [[True, False]]
 paths = candidate_paths(rule)
 assert paths["identifier"] == ("identifiers", "invented_namespace")
-assert paths["census"] == ("provenance", "matching", "invented_census", "invented_entries", 0, 0)
-assert paths["cascade"] == ("provenance", "matching", "invented_census", "invented_cascade", "invented_target")
+assert paths["census"] == ("provenance", "matching", "invented_name_count", "invented_entries", 0, 0)
+assert paths["cascade"] == ("provenance", "matching", "invented_name_count", "invented_cascade", "invented_target")
 assert candidate_value({"identifiers":{"invented_namespace":"invented-value"}}, paths["identifier"]) == "invented-value"
 from edgar_warehouse.mdm.clean.matching import candidate_routes
 from edgar_warehouse.mdm.clean.evidence import assertion
@@ -1130,8 +1130,8 @@ print("six installed GLEIF member contracts passed")
     assert result.stdout.strip() == 'six installed GLEIF member contracts passed'
 
 
-@pytest.mark.parametrize("with_census", [False, True])
-def test_company_combination_blueprint_runs_from_installed_bundle(installed, with_census):
+@pytest.mark.parametrize("with_name_count", [False, True])
+def test_company_combination_blueprint_runs_from_installed_bundle(installed, with_name_count):
     """Installed raw readings compose/prepare without retained Company loaders."""
     python, root = installed
     result = _run(python, '-c', '''
@@ -1141,8 +1141,8 @@ from edgar_warehouse.rules import files
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.workers import source_read, source_combine, mdm_prepare
 store = Artifacts()
-with_census = WITH_CENSUS
-folder = Path("company-composition-census" if with_census else "company-composition").resolve()
+with_name_count = WITH_NAME_COUNT
+folder = Path("company-composition-name-count" if with_name_count else "company-composition").resolve()
 folder.mkdir()
 blueprints = files.ROOT / "sources/sec.company"
 date = "2026-10-04T00:00:00Z"
@@ -1158,24 +1158,24 @@ def read(name, template, payload, context):
     receipt = source_read.execute(task,store)
     assert source_read.verify({**task,"candidate":receipt},store) == ({"source.output":True},[])
     return receipt
-main = read("main","census-main.yaml" if with_census else "source.yaml",{"name":"Example","filings":{"recent":{
+main = read("main","census-main.yaml" if with_name_count else "source.yaml",{"name":"Example","filings":{"recent":{
     "accessionNumber":["r1","r2"],"form":["8-K","10-K"]}},
     "addresses":{"business":{"street1":"Raw","stateOrCountry":"X0"}}},
-    {**context,"recent_limit":None,"last_synced_at":date,**({"bronze_object":"bronze/main.json"} if with_census else {})})
+    {**context,"recent_limit":None,"last_synced_at":date,**({"bronze_object":"bronze/main.json"} if with_name_count else {})})
 pages = read("pages","pagination.yaml",{"accessionNumber":["p1","p2"],"form":["20-F","10-K"]},context)
 catalog_context = {"sync_run_id":"catalog","last_synced_at":date,"source_name":"exchange"}
 exchange = read("catalog-exchange","catalog.yaml",{"fields":["cik","ticker"],"data":[[1,"B"],[1,"A"]]},catalog_context)
 tickers = read("catalog-tickers","catalog.yaml",{"0":{"cik_str":1,"ticker":"A"},"1":{"cik_str":1,"ticker":"C"}},
     {**catalog_context,"source_name":"tickers"})
 refs = {"main":main,"pages":pages,"catalog_exchange":exchange,"catalog_tickers":tickers}
-rules = files.load(blueprints / ("combine-census.yaml" if with_census else "combine.yaml"))
-if with_census:
-    census = {"version":"sec-gleif-name-census-v1","sec":{"filers":1},
+rules = files.load(blueprints / ("combine-census.yaml" if with_name_count else "combine.yaml"))
+if with_name_count:
+    name_count = {"version":"sec-gleif-name-count-v1","sec":{"filers":1},
         "gleif":{"file_content":"GLEIF_FULL_PUBLISHED"},
         "normalizers":{"sec":"normalize_text@sec-legal-form-kept-v1","gleif":"normalize_text@legal-form-kept-v1"},
         "entries":{"EXAMPLE":{"cik_count":1,"lei_count":1,"ciks":["0000000001"],"leis":[["L1","2026-09-11"]]}},
         "cascade":{"version":"sec-gleif-cascade-v1","assignments":{"0000000001":{"lei":"L1","pass":"P1"}}}}
-    raw = store.put(folder.as_uri(),census)
+    raw = store.put(folder.as_uri(),name_count)
     def bind(value):
         if isinstance(value,str): return raw["sha256"] if value == "0"*64 else value
         if isinstance(value,list): return [bind(item) for item in value]
@@ -1204,9 +1204,9 @@ row = artifact["tables"]["company"][0]
 assert row["forms"] == ["10-K","20-F","8-K"]
 assert row["tickers"] == ["A","B","C"]
 assert row["business_address"]["country"] == "GB" and row["business_address"]["street"] == "Raw"
-if with_census:
-    expected = {"census":raw["sha256"],"version":census["version"],"key":"EXAMPLE",**census["entries"]["EXAMPLE"],
-        "cascade":{"census":raw["sha256"],"version":census["cascade"]["version"],"lei":"L1","pass":"P1"}}
+if with_name_count:
+    expected = {"census":raw["sha256"],"version":name_count["version"],"key":"EXAMPLE",**name_count["entries"]["EXAMPLE"],
+        "cascade":{"census":raw["sha256"],"version":name_count["cascade"]["version"],"lei":"L1","pass":"P1"}}
     assert row["name_census"] == expected and "_name_key" not in row
 prepare = {"input":combined,"output":(folder / "mdm/manifest.json").as_uri(),"checks":["mdm.prepared"],
     "keys":{"table":"company","dataset":"sec.company.v1","policy":"0"*64,
@@ -1216,7 +1216,7 @@ assert mdm_prepare.verify({**prepare,"candidate":prepared},store) == ({"mdm.prep
 batch = store.json(prepared)["batches"][0]
 assert json.loads((folder / "mdm" / batch["input"]["path"]).read_bytes()) == row
 print("installed Company raw combination and preparation passed")
-'''.replace('WITH_CENSUS', repr(with_census)), cwd=root)
+'''.replace('WITH_NAME_COUNT', repr(with_name_count)), cwd=root)
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == 'installed Company raw combination and preparation passed'
 
@@ -1269,18 +1269,18 @@ def test_gleif_configured_mapping_publishes_and_recovers_from_installed_bundle(i
                 publication={"publication_key":f"offline-cohort/{row['cik']}@{digest(row)}",
                              "revision":1,"artifact_sha256":digest(row),
                              "member":"four_companies_v1.json","record_locator":str(row["cik"])}))
-        from tests.mdm.test_clean_name_census import archive, configured, metadata
-        from edgar_warehouse.mdm.clean import name_census
-        census_archive = archive(rows)
-        census_filers = [(f"{r['row']['cik']:010d}", r['row']['entity_name'], [])
+        from tests.mdm.test_clean_name_count import archive, configured, metadata
+        from edgar_warehouse.mdm.clean import name_count
+        name_count_archive = archive(rows)
+        name_count_filers = [(f"{r['row']['cik']:010d}", r['row']['entity_name'], [])
                          for r in sec_records if r['source'] == 'sec.company']
-        census_arguments = {"filers": census_filers,
-                            "sec_population": {"capture_run_id": "installed-census", "filers": len(census_filers)},
+        name_count_arguments = {"filers": name_count_filers,
+                            "sec_population": {"capture_run_id": "installed-name-count", "filers": len(name_count_filers)},
                             "gleif_metadata": metadata(len(rows)),
-                            "gleif_sha256": hashlib.sha256(census_archive).hexdigest()}
-        # The checkout's census over the same inputs; the installed bundle must write the same.
-        checkout_census = configured(census_filers, rows, population=census_arguments["sec_population"],
-                                     archive_sha256=census_arguments["gleif_sha256"])
+                            "gleif_sha256": hashlib.sha256(name_count_archive).hexdigest()}
+        # The checkout's name count over the same inputs; the installed bundle must write the same.
+        checkout_name_count = configured(name_count_filers, rows, population=name_count_arguments["sec_population"],
+                                     archive_sha256=name_count_arguments["gleif_sha256"])
         done = _run(python, "-c", r'''
 import copy, hashlib, json, sys
 from pathlib import Path
@@ -1348,52 +1348,52 @@ decisions=[decision("bind",actor="steward",reason="offline fixture binding",at=b
 second_command={**command,"batch_id":"installed-gleif-bindings","assertions":[],"decisions":decisions,
                 "expected_checkpoint":1,"checkpoint":2}
 second=stage.apply(**second_command)
-# Build a fresh census inside the installation and carry its exact evidence
+# Build a fresh name count inside the installation and carry its exact evidence
 # through actual SEC normalization, Merge Stage and publication/recovery.
 import io, base64
 import zipfile
-from edgar_warehouse.mdm.clean import name_census
+from edgar_warehouse.mdm.clean import name_count
 from edgar_warehouse.workers.source_traversal import Traversal
-assert not any(hasattr(name_census,name) for name in ("_text","_other_names","sec_keys","build","cascade_entity"))
-packed=base64.b64decode(body["census_archive"],validate=True)
-census_arguments=body["census_arguments"]
-assert hashlib.sha256(packed).hexdigest()==census_arguments["gleif_sha256"]
-# The Golden Copy through the installed configured complete reading, folded as `mdm name-census` folds it.
-held,wanted=name_census._sec_population(census_arguments["filers"])
+assert not any(hasattr(name_count,name) for name in ("_text","_other_names","sec_keys","build","cascade_entity"))
+packed=base64.b64decode(body["name_count_archive"],validate=True)
+name_count_arguments=body["name_count_arguments"]
+assert hashlib.sha256(packed).hexdigest()==name_count_arguments["gleif_sha256"]
+# The Golden Copy through the installed configured complete reading, folded as `mdm name-count` folds it.
+held,wanted=name_count._sec_population(name_count_arguments["filers"])
 traversal=Traversal(files.load(files.ROOT/"sources/gleif/census-complete-stream.yaml"),archive_policy="configured")
 tables=[]
 traversal.scan(io.BytesIO(packed),lookups={"wanted":sorted(wanted)},
-    context={"publication_count":census_arguments["gleif_metadata"]["record_count"]},
+    context={"publication_count":name_count_arguments["gleif_metadata"]["record_count"]},
     on_reading=lambda reading,_:tables.append(reading.tables))
-meta=census_arguments["gleif_metadata"]
-census=name_census.census(sec_population=census_arguments["sec_population"],
-    gleif={"archive_sha256":census_arguments["gleif_sha256"],"content_date":meta["content_date"],
+meta=name_count_arguments["gleif_metadata"]
+counted=name_count.from_readings(sec_population=name_count_arguments["sec_population"],
+    gleif={"archive_sha256":name_count_arguments["gleif_sha256"],"content_date":meta["content_date"],
            "file_content":meta["file_content"],"record_count":meta["record_count"]},
     held=held,wanted=wanted,readings=tables)
-expected=body["checkout_census"]
-assert census==expected
-census_assertions=[]
+expected=body["checkout_name_count"]
+assert counted==expected
+name_count_assertions=[]
 for record in body["sec_records"]:
     if record["source"]!="sec.company":continue
     row=copy.deepcopy(record["row"])
-    row["name_census"]=name_census.entry(census,row["entity_name"],census_digest=digest(census))
+    row["name_census"]=name_count.entry(counted,row["entity_name"],name_count_digest=digest(counted))
     old_row=copy.deepcopy(row)
     old_row["name_census"]=body["checkout_entries"][str(row["cik"])]
     kwargs={"source_code":"sec.company.v1","contract":files.mdm_contract("sec.company","sec.company.v1"),
-            "policy":files.policy(),"publication":{"publication_key":f"installed-census/{row['cik']}","revision":2,
+            "policy":files.policy(),"publication":{"publication_key":f"installed-name-count/{row['cik']}","revision":2,
             "artifact_sha256":digest(row),"member":"four_companies_v1.json","record_locator":str(row["cik"])}}
     actual=adapters.normalize(row,**kwargs)
     assert digest(actual)==digest(adapters.normalize(old_row,**kwargs))
-    census_assertions.append(actual)
-census_command={**command,"batch_id":"installed-census-reading","assertions":census_assertions,
+    name_count_assertions.append(actual)
+name_count_command={**command,"batch_id":"installed-name-count-reading","assertions":name_count_assertions,
                 "expected_checkpoint":2,"checkpoint":3}
-census_result=stage.apply(**census_command)
+name_count_result=stage.apply(**name_count_command)
 with engine.connect() as conn:
-    for assertion in census_assertions:
+    for assertion in name_count_assertions:
         reader=for_connection(conn)
         stored=reader._readings(reader.current([assertion["subject"]]))[assertion["subject"]]
         assert digest(stored)==digest(assertion)
-        assert stored["provenance"]["matching"]["name_census"]["census"]==digest(census)
+        assert stored["provenance"]["matching"]["name_census"]["census"]==digest(counted)
 class LostAcknowledgement:
     def __init__(self,sink): self.sink=sink
     def publish(self,*args): self.sink.publish(*args); raise OSError("simulated lost acknowledgement")
@@ -1408,7 +1408,7 @@ for consumer in body["consumers"]:
     assert list(sink.directory.glob("*.json"))
 assert store.run_status(run)["publication_complete"]
 assert stage.apply(**command)["duplicate"] and stage.apply(**second_command)["duplicate"]
-assert stage.apply(**census_command)["duplicate"]
+assert stage.apply(**name_count_command)["duplicate"]
 with engine.connect() as conn:
     assert conn.scalar(text("SELECT count(*) FROM public.mdm_store_batch"))==3
     assert sum(store_counts(engine)["masters"].values())==4
@@ -1422,23 +1422,23 @@ pins={str(path):hashlib.sha256(Path(path).read_bytes()).hexdigest()
                    files.ROOT/"sources/gleif/source.yaml",
                    files.ROOT/"sources/sec.company/source.yaml",
                    files.ROOT/"sources/sec.submissions.person/source.yaml",Path(sec_company.__file__),
-                   Path(name_census.__file__),
+                   Path(name_count.__file__),
                    files.ROOT/"sources/gleif/census-complete-stream.yaml",
                    files.ROOT/"sources/sec.company/census-filer.yaml"]}
-print(json.dumps({"pins":pins,"generation":census_result["generation"],"counts":counts,
-                  "installed_gleif_mapping":True,"installed_sec_mapping":True,"installed_census_caller":True,"census_digest":digest(census),"publication_recovery":True,"full_population":False}))
+print(json.dumps({"pins":pins,"generation":name_count_result["generation"],"counts":counts,
+                  "installed_gleif_mapping":True,"installed_sec_mapping":True,"installed_name_count_caller":True,"name_count_digest":digest(counted),"publication_recovery":True,"full_population":False}))
 engine.dispose()
 ''', cwd=root, document={"dsn": app.url.render_as_string(hide_password=False),
                          "policy": policy_digest, "readings": readings, "rows": rows, "sec_records": sec_records,
-                         "census_arguments": census_arguments,
-                         "checkout_census": checkout_census,
-                         "census_archive": base64.b64encode(census_archive).decode(),
-                         "checkout_entries": {str(r['row']['cik']): name_census.entry(checkout_census,r['row']['entity_name'],census_digest=digest(checkout_census))
+                         "name_count_arguments": name_count_arguments,
+                         "checkout_name_count": checkout_name_count,
+                         "name_count_archive": base64.b64encode(name_count_archive).decode(),
+                         "checkout_entries": {str(r['row']['cik']): name_count.entry(checkout_name_count,r['row']['entity_name'],name_count_digest=digest(checkout_name_count))
                                                 for r in sec_records if r['source']=='sec.company'}, "leis": [CHILD_LEI, PARENT_LEI], "as_of": "2026-01-01T00:00:00+00:00",
                          "consumers": policy["required_consumers"]})
         assert done.returncode == 0, done.stderr
         proof = json.loads(done.stdout)
-        assert proof["installed_gleif_mapping"] and proof["installed_sec_mapping"] and proof["installed_census_caller"] and proof["publication_recovery"]
+        assert proof["installed_gleif_mapping"] and proof["installed_sec_mapping"] and proof["installed_name_count_caller"] and proof["publication_recovery"]
         (root / "installed-gleif-mapping-proof.json").write_text(json.dumps(proof, indent=2)+"\n")
     finally:
         admin.dispose()
@@ -1449,18 +1449,18 @@ def test_active_company_preparation_caller_runs_from_installed_bundle(installed,
     """The installed CLI writes the Company `mastering` target's input manifest from a raw capture,
     as the checkout does, and the installed Bookkeeping control freezes it against the installed
     target; neither can use the checkout (Issue 20 slice 20c)."""
-    from tests.mdm.test_clean_company_preparation import CATALOG_ROWS, PINS, census_capture, documents, prepare
+    from tests.mdm.test_clean_company_preparation import CATALOG_ROWS, PINS, name_count_capture, documents, prepare
     from tests.support.sec_capture import CATALOG
     python, root = installed
-    capture = census_capture(tmp_path, documents(), CATALOG_ROWS)
+    capture = name_count_capture(tmp_path, documents(), CATALOG_ROWS)
     # --all: this test has no Change Journal; it names every document, as the checkout's does (ticket 22).
     original, _ = prepare(tmp_path, capture, output="checkout", force=True)
-    folder, population, census = capture
+    folder, population, name_count = capture
     listed = tmp_path / "documents-checkout.json"
     arguments = ["mdm", "prepare-clean-company", "--capture", str(folder), "--documents", str(listed),
                  "--population", str(population), "--catalog", CATALOG,
                  "--capture-run", PINS["capture_run"], "--catalog-run", PINS["catalog_run"],
-                 "--observed-at", PINS["observed_at"], "--name-census", str(census),
+                 "--observed-at", PINS["observed_at"], "--name-count", str(name_count),
                  "--output", str(tmp_path / "pinned"), "--as-of", PINS["as_of"], "--revision", str(PINS["revision"]), "--all"]
     run = _run(python, "-c", """
 import sys
@@ -1499,7 +1499,7 @@ from edgar_warehouse.control_contract import canonical
 from edgar_warehouse.workers import source_read
 from tests.engine.test_artifact_context import task, VALUES
 
-def _census_derived(tmp_path):
+def _name_count_derived(tmp_path):
     store, work = task(tmp_path)
     manifest = store.json(work["input"])
     entry = manifest["artifacts"][0]
@@ -1515,16 +1515,16 @@ def _census_derived(tmp_path):
     return store, work, manifest, context
 
 
-def _census_bind(store, root, work, manifest, context):
+def _name_count_bind(store, root, work, manifest, context):
     manifest = copy.deepcopy(manifest)
     manifest["artifacts"][0]["context"] = store.put(root.as_uri(), context)
     return {**work, "input": store.put(root.as_uri(), manifest)}
 
 
-def test_census_actual_worker_derived_context_retry_and_dependency_verification(tmp_path):
-    store, work, manifest, context = _census_derived(tmp_path)
+def test_name_count_actual_worker_derived_context_retry_and_dependency_verification(tmp_path):
+    store, work, manifest, context = _name_count_derived(tmp_path)
     original = source_read.execute(work, store)
-    work = _census_bind(store, tmp_path, {**work, "output": (tmp_path / "derived.json").as_uri()}, manifest, context)
+    work = _name_count_bind(store, tmp_path, {**work, "output": (tmp_path / "derived.json").as_uri()}, manifest, context)
     candidate = source_read.execute(work, store)
     assert source_read.execute(work, store) == candidate
     assert source_read.verify({**work, "candidate": candidate}, store) == ({"source.output": True}, [])
@@ -1544,8 +1544,8 @@ def test_census_actual_worker_derived_context_retry_and_dependency_verification(
     "empty_rows", "missing_table", "deferred", "unknown_field", "bool_bound", "bytes_bound",
     "row_bound", "empty_columns", "large_value", "float_check", "wrong_version", "column_mismatch",
     "column_missing", "column_structured"])
-def test_census_derivation_faults_refuse_before_target_open_or_output(tmp_path, fault):
-    store, work, manifest, context = _census_derived(tmp_path)
+def test_name_count_derivation_faults_refuse_before_target_open_or_output(tmp_path, fault):
+    store, work, manifest, context = _name_count_derived(tmp_path)
     producer = store.json(context["reading"])
     artifact = producer["artifacts"][0]
     row = artifact["tables"]["metadata"][0]
@@ -1574,7 +1574,7 @@ def test_census_derivation_faults_refuse_before_target_open_or_output(tmp_path, 
         if fault == "column_mismatch": row["comparison"] = False
         if fault == "column_structured": row["comparison"] = {}; row["full"] = {}
     context["reading"] = store.put(tmp_path.as_uri(), producer)
-    work = _census_bind(store, tmp_path, work, manifest, context)
+    work = _name_count_bind(store, tmp_path, work, manifest, context)
     reads, verified = [], store.verified
     def observed(ref, **bounds):
         reads.append(ref)
@@ -1586,8 +1586,8 @@ def test_census_derivation_faults_refuse_before_target_open_or_output(tmp_path, 
     assert not Path(urlparse(work["output"]).path).exists()
 
 
-def test_census_selected_metadata_prefix_needs_late_partition_authentication(tmp_path):
-    store, work, manifest, context = _census_derived(tmp_path)
+def test_name_count_selected_metadata_prefix_needs_late_partition_authentication(tmp_path):
+    store, work, manifest, context = _name_count_derived(tmp_path)
     producer = store.json(context["reading"])
     metadata = producer["artifacts"][0]["tables"]["metadata"]
     chunks = [{"version": 1, "tables": {"metadata": metadata, "unused": []}, "deferred": []},
@@ -1600,7 +1600,7 @@ def test_census_selected_metadata_prefix_needs_late_partition_authentication(tmp
     context["reading"] = store.put(tmp_path.as_uri(), {"version": 2, "contract": work["input"],
         "artifacts": [{"input": producer["artifacts"][0]["input"], "table_names": ["metadata", "unused"],
                        "record_count": 2, "expanded_bytes": 1000, "partitions": parts}]})
-    work = _census_bind(store, tmp_path, work, manifest, context)
+    work = _name_count_bind(store, tmp_path, work, manifest, context)
     candidate = source_read.execute(work, store)
     assert source_read.verify({**work, "candidate": candidate}, store) == ({"source.output": True}, [])
     Path(urlparse(parts[1]["receipt"]["uri"]).path).write_bytes(b"{}")
@@ -1612,10 +1612,10 @@ def test_census_selected_metadata_prefix_needs_late_partition_authentication(tmp
     assert not (tmp_path / "second.json").exists()
 
 
-def test_census_producer_columns_compare_exact_scalars_with_full_identity(tmp_path):
-    store, work, manifest, context = _census_derived(tmp_path)
+def test_name_count_producer_columns_compare_exact_scalars_with_full_identity(tmp_path):
+    store, work, manifest, context = _name_count_derived(tmp_path)
     context["checks"]["cik"] = {"column": "cik"}
-    work = _census_bind(store, tmp_path, work, manifest, context)
+    work = _name_count_bind(store, tmp_path, work, manifest, context)
     candidate = source_read.execute(work, store)
     assert source_read.verify({**work, "candidate": candidate}, store) == ({"source.output": True}, [])
 
@@ -1623,7 +1623,7 @@ def test_census_producer_columns_compare_exact_scalars_with_full_identity(tmp_pa
 
 
 @pytest.mark.parametrize("fault", [None, "late_corruption", "duplicate_bound", "wrong_type", "missing_column", "deferred", "missing_table", "bool_bound", "input_mismatch", "bytes_bound", "rows_bound"])
-def test_census_derived_wanted_scope_exhausts_authenticated_inputs_before_source(tmp_path, fault):
+def test_name_count_derived_wanted_scope_exhausts_authenticated_inputs_before_source(tmp_path, fault):
     from edgar_warehouse.workers import source_read
     from tests.engine.test_source_lookup_receipts import lookup_task
     store = Artifacts()
@@ -1674,7 +1674,7 @@ def test_census_derived_wanted_scope_exhausts_authenticated_inputs_before_source
         assert store.json(body["artifacts"][0]["lookups"])["sets"]["wanted"]["readings"] == [reading]
 
 
-def test_complete_census_projection_keeps_global_duplicates_and_pair_scoped_last_updates():
+def test_complete_name_count_projection_keeps_global_duplicates_and_pair_scoped_last_updates():
     import io
     from edgar_warehouse.workers.source_traversal import Traversal
     from tests.engine.test_gleif_configured_fields import raw

@@ -91,8 +91,8 @@ def test_reading_outside_the_declared_scope_is_refused():
 @pytest.mark.parametrize("value,expected", [("invented-target", {"invented-route":"invented-target"}),
     (None, {}), (False, {}), (0, {}), ("", {}), ([], {}), ({"value":"invented-target"}, {})])
 def test_candidate_route_reads_only_nonempty_scalar_keys(value, expected):
-    item = reading(provenance={"matching":{"invented_census":{"invented_entries":[[value,1]]}}})
-    route = {"invented-route":["provenance","matching","invented_census","invented_entries",0,0]}
+    item = reading(provenance={"matching":{"invented_name_count":{"invented_entries":[[value,1]]}}})
+    route = {"invented-route":["provenance","matching","invented_name_count","invented_entries",0,0]}
     current, changes = prepare([item], routes=route)
     assert current[item["subject"]]["matching_keys"] == expected
     groups = [entry for entry in changes if entry["type"].startswith("lookup/name_candidates/")]

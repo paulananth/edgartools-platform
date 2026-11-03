@@ -135,14 +135,14 @@ one verified `source.read` reading of `rules/sources/gleif/census-complete-strea
 projected exactly the names this population holds. It needs local files only:
 
 ```bash
-edgar-warehouse mdm name-census \
+edgar-warehouse mdm name-count \
   --capture "$SEC_SUBMISSIONS_CAPTURE" \
   --population "$SEC_POPULATION_JSON" \
   --gleif-reading "$GLEIF_CENSUS_READING_JSON" \
   --gleif-reading-sha256 "$GLEIF_CENSUS_READING_SHA256" \
   --gleif-metadata "$GLEIF_LEVEL1_METADATA_JSON" \
   --catalog "$SEC_EXCHANGE_CATALOG_KEY" \
-  --output "$NAME_CENSUS_JSON"
+  --output "$NAME_COUNT_JSON"
 ```
 
 `--catalog` names the capture's exchange catalog. It is required while a
@@ -166,7 +166,7 @@ edgar-warehouse mdm prepare-clean-company \
   --catalog warehouse/bronze/reference/sec/company_tickers_exchange/2026/09/02/company_tickers_exchange.json \
   --capture-run "$CAPTURE_RUN_ID" --catalog-run "$CATALOG_RUN_ID" \
   --observed-at 2026-09-30T02:20:28+00:00 \
-  --name-census "$NAME_CENSUS_JSON" \
+  --name-count "$NAME_COUNT_JSON" \
   --output "$CLEAN_MDM_INPUT_DIRECTORY" \
   --as-of 2026-09-19T00:00:00Z --revision 0
 ```

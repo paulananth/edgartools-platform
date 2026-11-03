@@ -11,7 +11,7 @@ import pytest
 from edgar_warehouse.mdm.clean import cascade as _cascade
 from edgar_warehouse.mdm.clean.sec_company import POLICY as _POLICY
 from edgar_warehouse.mdm.clean.matching import HELD_LEI_TEST, PAIR_TESTS, _passes, _refused_by_flag
-from edgar_warehouse.mdm.clean.name_census import VERSION
+from edgar_warehouse.mdm.clean.name_count import VERSION
 from edgar_warehouse.mdm.clean.primitives import REGISTRY
 from edgar_warehouse.mdm.clean.store import Conflict
 from tests.mdm.test_clean_activation import NAME_POSTCODE, NAME_STATE
@@ -45,7 +45,7 @@ def sec(state="CA", postal="95014", country="US"):
 
 def gleif(jurisdiction="US-CA", postal="95014", effective_at="2026-09-01T00:00:00+00:00"):
     # The Stage keeps GLEIF's LastUpdateDate as the record's effective time, in
-    # UTC; the census keeps GLEIF's own spelling (ticket 129, fix 2).
+    # UTC; the name count keeps GLEIF's own spelling (ticket 129, fix 2).
     return {
         "kind": "company",
         "identifiers": {"lei": "HWUPKR0MPOU8FGXBT394"},
@@ -83,12 +83,12 @@ def test_both_measured_rules_pass_a_matching_pair():
     assert _passes(NAME_POSTCODE, sec(), gleif())
 
 
-def test_the_census_names_the_gleif_version_the_stage_holds_by_its_effective_time():
+def test_the_name_count_names_the_gleif_version_the_stage_holds_by_its_effective_time():
     # GLEIF's spelling and the Stage's UTC form are one instant.
     assert _passes(NAME_STATE, sec(), gleif(effective_at="2026-09-01T02:00:00+02:00"))
-    # A later GLEIF version than the one the census saw is not the census's answer.
+    # A later GLEIF version than the one the name count saw is not the name count's answer.
     assert not _passes(NAME_STATE, sec(), gleif(effective_at="2026-09-02T00:00:00+00:00"))
-    # A record with no stated time matches only a census that saw none.
+    # A record with no stated time matches only a name count that saw none.
     assert not _passes(NAME_STATE, sec(), gleif(effective_at=None))
     record = sec()
     record["provenance"]["matching"]["name_census"]["leis"] = [["HWUPKR0MPOU8FGXBT394", ""]]
@@ -101,7 +101,7 @@ def test_the_census_names_the_gleif_version_the_stage_holds_by_its_effective_tim
     [
         ("ambiguous_candidates", (False, False)),
         ("ambiguous_holders", (False, False)),
-        ("stale_census", (False, False)),
+        ("stale_name_count", (False, False)),
         ("different_legal_form", (False, False)),
         ("inactive_candidate", (False, False)),
         ("different_places", (False, False)),
@@ -126,7 +126,7 @@ def test_pair_policy_without_storage(case, expected):
     elif case == "ambiguous_holders":
         entry["ciks"].append("9999999998")
         entry["cik_count"] = 2
-    elif case == "stale_census":
+    elif case == "stale_name_count":
         other["effective_at"] = "2026-09-20T00:00:00Z"
     elif case == "different_legal_form":
         other["fields"]["name"] = value("Invented Group LLC")
@@ -179,7 +179,7 @@ def test_an_argument_the_test_cannot_honour_is_refused(primitive, changes, reaso
         _passes(with_args(NAME_STATE, primitive, **changes), sec(), gleif())
 
 
-# Ticket 21: a cascade pass re-checks the census's answer on the Stage rows.
+# Ticket 21: a cascade pass re-checks the name count's answer on the Stage rows.
 HQ = {"street": "1 APPLE PARK WAY", "city": "CUPERTINO", "postcode": "95014", "country": "US"}
 
 
@@ -201,9 +201,9 @@ def cascaded(pass_="P5", flags=(), via="legal name", **address):
     return record, other
 
 
-def test_a_cascade_pass_binds_the_pair_the_census_named_in_that_pass():
+def test_a_cascade_pass_binds_the_pair_the_name_count_named_in_that_pass():
     assert _passes(_pass(5), *cascaded())
-    assert not _passes(_pass(6), *cascaded())  # the census named P5
+    assert not _passes(_pass(6), *cascaded())  # the name count named P5
 
 
 def test_a_cascade_pass_rechecks_the_address_on_the_stage_rows():
@@ -222,7 +222,7 @@ def test_a_cascade_pass_refuses_a_flag_its_rule_refuses():
     assert not _passes(with_args(_pass(5), "cascade_pass@1", refused_flags=[_cascade.CONFLICT]), *pair)
 
 
-def test_a_cascade_pass_needs_the_gleif_legal_name_unless_the_census_matched_another():
+def test_a_cascade_pass_needs_the_gleif_legal_name_unless_the_name_count_matched_another():
     record, other = cascaded()
     other["fields"]["name"] = value("APPLE KABUSHIKI KAISHA")
     assert not _passes(_pass(5), record, other)

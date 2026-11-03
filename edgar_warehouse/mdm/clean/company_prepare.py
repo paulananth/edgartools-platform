@@ -2,8 +2,8 @@
 
 A bundle is up to 512 SEC main submissions documents from one receipt-bound
 raw capture. This writer checks the caller's inputs (the documents are main
-documents the capture's receipts name, in the population the Name Census
-counted), binds the approved run IDs and the census digest into the
+documents the capture's receipts name, in the population the Name Count
+counted), binds the approved run IDs and the name count digest into the
 contracts, and freezes every unit's input. Bookkeeping runs the target's steps
 (`rules run --source sec.company --target mastering`) and the
 registered workers do the work:
@@ -12,14 +12,14 @@ registered workers do the work:
   8 MiB of documents; `keys`: the bundle's name and CIK keys read once
   (`census-keys.yaml`);
 - `catalog`: the exchange ticker catalog read once (`catalog.yaml`);
-- `census`: the Name Census read once, narrowed to the bundle's names and CIKs
+- `census`: the Name Count read once, narrowed to the bundle's names and CIKs
   by lookup sets derived from the key readings (`census.yaml`);
-- `combine`: each main unit with the census and the catalog
+- `combine`: each main unit with the name count and the catalog
   (`combine-census-captured.yaml`);
 - `records`: the bundle's combined rows as one publication (`mdm.prepare`);
 - `merge`: that manifest through the Merge Stage (`mdm.merge`).
 
-The census and combine inputs are composed: Bookkeeping fills them with the
+The name count and combine inputs are composed: Bookkeeping fills them with the
 verified readings they name. Python collects no domain evidence and edits no
 rules settings; it only binds the caller's approved facts.
 """
@@ -42,9 +42,9 @@ SOURCE = "sec.company"
 ROOT = rules_files.ROOT / "sources" / SOURCE
 TARGET = "mastering"
 DOCUMENTS_BYTES = 1024**2
-CENSUS_BYTES = 256 * 1024**2
+NAME_COUNT_BYTES = 256 * 1024**2
 POPULATION_BYTES = 64 * 1024**2
-KEY_READING_BYTES = 16 * 1024**2  # the bundle's one census-keys reading
+KEY_READING_BYTES = 16 * 1024**2  # the bundle's one key reading
 # One key reading names a bundle's documents (`census-keys.yaml` max_artifacts).
 BUNDLE_DOCUMENTS = 512
 # A main unit reads documents up to this many bytes: at most 7,423 filings rows a MiB, inside
@@ -54,8 +54,8 @@ BUNDLE_DOCUMENTS = 512
 MAIN_READING_BYTES = 8 * 1024**2
 # The contracts the target's readings and combination run.
 RULES = ("census-main.yaml", "census-keys.yaml", "catalog.yaml", "census.yaml", "combine-census-captured.yaml")
-# Where `census.yaml` and the combination take the census digest.
-CENSUS_DIGEST = "0" * 64
+# Where `census.yaml` and the combination take the name count digest.
+NAME_COUNT_DIGEST = "0" * 64
 
 
 def bind(value, bindings):
@@ -91,8 +91,8 @@ def _unit(output: str, keys: dict, source: dict) -> dict:
     return {"keys": {**keys, "destination": output}, "input": source, "output": output, "cursor": {}}
 
 
-def _units(store, root: str, folder: Path, receipts: dict, keys: list[str], catalog: str, census: bytes,
-           census_hash: str, pins: dict, publication: dict) -> dict:
+def _units(store, root: str, folder: Path, receipts: dict, keys: list[str], catalog: str, name_count: bytes,
+           name_count_hash: str, pins: dict, publication: dict) -> dict:
     """Every step's units, inputs frozen: contracts bound, documents by receipt, inputs composed."""
     inputs = root + "/inputs"
     put = lambda value: store.put(inputs, value)  # noqa: E731
@@ -118,23 +118,23 @@ def _units(store, root: str, folder: Path, receipts: dict, keys: list[str], cata
         "version": 2, "contract": put(rules_files.load(ROOT / "catalog.yaml")),
         "artifacts": [{"input": catalog_ref, "context": put({"version": 1, "input": catalog_ref,
                                                               "values": catalog_context(pins)})}]}))
-    # The census is read as its canonical bytes, whose sha256 is the digest bound into the contracts.
-    census_ref = store.put_bytes(f"{inputs}/name-census.json", census)
+    # The name count is read as its canonical bytes, whose sha256 is the digest bound into the contracts.
+    name_count_ref = store.put_bytes(f"{inputs}/name-census.json", name_count)
     readings = [{"step": "keys", "key": unit["keys"]["unit"]} for unit in readers]
     sets = {name: {"readings": {"slot": "keys"}, "table": "keys", "column": column,
                    "max_input_bytes": KEY_READING_BYTES, "max_input_rows": len(keys)}
             for name, column in (("names", "_name_key"), ("ciks", "_cik_key"))}
-    census_unit = _unit(f"{root}/census.reading.json", {"unit": "census"}, {"compose": {
+    name_count_unit = _unit(f"{root}/census.reading.json", {"unit": "census"}, {"compose": {
         "document": {"version": 3, "contract": put(bind(rules_files.load(ROOT / "census.yaml"),
-                                                         {CENSUS_DIGEST: census_hash})),
-                     "artifacts": [{"input": census_ref,
-                                    "context": put({"version": 1, "input": census_ref, "values": {}}),
+                                                         {NAME_COUNT_DIGEST: name_count_hash})),
+                     "artifacts": [{"input": name_count_ref,
+                                    "context": put({"version": 1, "input": name_count_ref, "values": {}}),
                                     "lookups": {"slot": "lookups"}}]},
-        "slots": {"lookups": {"compose": {"document": {"version": 2, "input": census_ref, "sets": sets},
+        "slots": {"lookups": {"compose": {"document": {"version": 2, "input": name_count_ref, "sets": sets},
                                           "slots": {"keys": readings}}}}}})
     combine_contract = put(bind(rules_files.load(ROOT / "combine-census-captured.yaml"), {
         "APPROVED_COMPANY_CAPTURE_RUN": pins["capture_run"], "APPROVED_CATALOG_CAPTURE_RUN": pins["catalog_run"],
-        CENSUS_DIGEST: census_hash}))
+        NAME_COUNT_DIGEST: name_count_hash}))
     combine = [_unit(f"{root}/combine/{n}.reading.json", {"unit": f"combine-{n}"}, {"compose": {
         "document": {"version": 1, "contract": combine_contract,
                      "readings": {"main": {"slot": "main"}, "census": {"slot": "census"},
@@ -150,7 +150,7 @@ def _units(store, root: str, folder: Path, receipts: dict, keys: list[str], cata
             "slots": {"combined": [{"step": "combine", "key": unit["keys"]["unit"]} for unit in combine]}}})
     merge = {"keys": {"batch_id": publication["batch_id"], "consumer": publication["consumer"]},
              "input": {"from": {"step": "records", "key": "records"}}, "output": f"{root}/merge.json", "cursor": {}}
-    return {"main": main, "keys": readers, "catalog": [catalog_unit], "census": [census_unit],
+    return {"main": main, "keys": readers, "catalog": [catalog_unit], "census": [name_count_unit],
             "combine": combine, "records": [records], "merge": [merge]}
 
 
@@ -163,7 +163,7 @@ def write_company_manifest(
     capture_run: str,
     catalog_run: str,
     observed_at: str,
-    name_census: str,
+    name_count: str,
     output: str,
     as_of: str,
     revision: int,
@@ -174,14 +174,14 @@ def write_company_manifest(
     """The `mastering` target's input manifest for a bounded Company sample from a raw capture.
 
     `documents` lists this bundle's main submissions documents by receipt key
-    (at most 512); `population` is the population the Name Census counted,
+    (at most 512); `population` is the population the Name Count counted,
     which must hold them. The Company rule reads the forms a filer files (its
     main document's recent filings) and its tickers (SEC's exchange catalog,
     `catalog` by receipt key); the SEC-to-GLEIF matching rules read the
-    business address and the Name Census. The approved capture and catalog run
+    business address and the Name Count. The approved capture and catalog run
     IDs and the observation time are the caller's facts, bound into every row.
     Only the documents the Change Journal does not record as processed under
-    these rules, this census and this catalog are named (ticket 22); `force`
+    these rules, this name count and this catalog are named (ticket 22); `force`
     names every one. Returns the report: the manifest's reference (none when
     every document was processed already) and the publication's scope.
     """
@@ -198,27 +198,27 @@ def write_company_manifest(
         raise ValueError(f"A bundle names 1..{BUNDLE_DOCUMENTS} distinct main documents")
     if any("/main/" not in key for key in keys):
         raise ValueError("A bundle names main submissions documents only")
-    census_raw = read_bounded(Path(name_census).resolve(), CENSUS_BYTES)
-    census = json.loads(census_raw)
+    name_count_raw = read_bounded(Path(name_count).resolve(), NAME_COUNT_BYTES)
+    name_count = json.loads(name_count_raw)
     population_raw = read_bounded(Path(population).resolve(), POPULATION_BYTES)
-    sec = census.get("sec") or {}
+    sec = name_count.get("sec") or {}
     if (sec.get("receipts_sha256") != hashlib.sha256(receipts_raw).hexdigest()
             or sec.get("population_sha256") != hashlib.sha256(population_raw).hexdigest()
             or not set(keys) <= set(json.loads(population_raw))):
-        raise Conflict("The Name Census did not count this capture's documents")
-    canonical_census = canonical(census).encode()
-    census_hash = hashlib.sha256(canonical_census).hexdigest()  # the census's digest
+        raise Conflict("The Name Count did not count this capture's documents")
+    canonical_name_count = canonical(name_count).encode()
+    name_count_hash = hashlib.sha256(canonical_name_count).hexdigest()  # the name count's digest
     rules = [rules_files.load(ROOT / name) for name in RULES]
-    # Only the documents not yet processed under these rules, this census and this catalog.
+    # Only the documents not yet processed under these rules, this name count and this catalog.
     files = [(key, raw_capture.document(folder, receipts, key)["sha256"]) for key in keys]
     catalog_sha = raw_capture.document(folder, receipts, catalog)["sha256"]
     # The rules version is every rules file of the source (its readings, combination and
-    # contract) and the load mode they run with; the census and catalog are shared inputs.
-    # Only a true content change is a change (operator, 2026-10-13): the census counts by its
+    # contract) and the load mode they run with; the name count and catalog are shared inputs.
+    # Only a true content change is a change (operator, 2026-10-13): the name count counts by its
     # name counts, normalizers and version, not by the capture and population it was built from.
-    census_content = digest({part: census.get(part) for part in ("entries", "normalizers", "version")})
+    name_count_content = digest({part: name_count.get(part) for part in ("entries", "normalizers", "version")})
     processing = changed_files.identity({"files": changed_files.source_rules(SOURCE), "load_mode": load_mode},
-                                        digest(POLICY), [{"name": "name_census", "sha256": census_content},
+                                        digest(POLICY), [{"name": "name_census", "sha256": name_count_content},
                                                          {"name": "catalog", "sha256": catalog_sha}])
     listed, keys = len(keys), changed_files.select(SOURCE, processing, files, force=force, ledger=journal)
     if not keys:  # every document is processed already: no run
@@ -230,7 +230,7 @@ def write_company_manifest(
     # bytes, as for any source (`target_manifest`): the same documents are one publication.
     documents_hash = digest([[key, receipts[key]] for key in keys])
     publication_key = (f"{capture_run}:sec_submissions:{documents_hash}:{catalog_run}:{receipts[catalog]}"
-                       f":name_census:{census_hash}")
+                       f":name_census:{name_count_hash}")
     # The consumer and batch ids name everything that shapes the rows: a rerun with another
     # observation time, load mode or rules version is a new consumer, not a reused batch key.
     bundle = digest([publication_key, revision, as_of, observed_at, load_mode, rules])
@@ -240,7 +240,7 @@ def write_company_manifest(
             "load_mode": load_mode}
     store = Artifacts()
     root = Path(output).resolve().as_uri()
-    steps = _units(store, root, folder, receipts, keys, catalog, canonical_census, census_hash, pins, publication)
+    steps = _units(store, root, folder, receipts, keys, catalog, canonical_name_count, name_count_hash, pins, publication)
     steps["processed"] = [_unit(f"{root}/processed.json", {"unit": "processed"}, store.put(
         root + "/inputs", changed_files.record_input(
             source=SOURCE, feed=rules_files.source(SOURCE)["bronze"]["family"], processing=processing,

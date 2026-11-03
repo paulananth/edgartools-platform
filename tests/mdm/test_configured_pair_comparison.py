@@ -21,7 +21,7 @@ def configured_root(tmp_path):
     body["pair_comparisons"]["invented-comparison"] = {
         "name_field": "invented_name",
         "identifier_namespace": "invented_reference",
-        "census_field": "invented_census",
+        "census_field": "invented_name_count",
         "census_entries_field": "invented_matches",
         "census_holder_keys_field": "invented_keys",
         "census_holder_count_field": "invented_key_count",
@@ -43,7 +43,7 @@ def configured_root(tmp_path):
 PROGRAM = '''
 import copy
 from edgar_warehouse.mdm.clean.matching import compare_candidate_records
-from edgar_warehouse.mdm.clean.name_census import VERSION
+from edgar_warehouse.mdm.clean.name_count import VERSION
 from edgar_warehouse.mdm.clean.cascade import VERSION as CASCADE
 from edgar_warehouse.mdm.clean.store import Conflict
 
@@ -55,7 +55,7 @@ entry = {"version": VERSION, "key": "INVENTED LAB INC", "invented_keys": ["origi
          "invented_assignment": {"version": CASCADE, "pass": "P1", "invented_target": "target-1",
              "last_update": "2026-01-01T00:00:00Z", "key": "INVENTED LAB INC", "flags": [], "via": "legal name"}}
 left = {"record_key": "origin-1", "fields": {"invented_name": field("INVENTED LAB INC")},
-        "provenance": {"matching": {"invented_census": entry, "invented_location": place}}}
+        "provenance": {"matching": {"invented_name_count": entry, "invented_location": place}}}
 right = {"kind": "invented-kind", "identifiers": {"invented_reference": "target-1"},
          "effective_at": "2026-01-01T00:00:00Z",
          "fields": {"invented_name": field("INVENTED LAB INC"), "invented_registration": field("ISSUED")},
@@ -65,7 +65,7 @@ eligibility = {"categories": ["INVENTED"], "entity_statuses": ["ACCEPTED"],
                "refused_registration_statuses": ["REFUSED"]}
 def compare(primitive, args):
     return compare_candidate_records({"when": [{"primitive": primitive, "args": args}]}, [(left, right)])
-def census(): return compare("name_census_match@1", names)
+def name_count(): return compare("name_census_match@1", names)
 def eligible(): return compare("gleif_entity_eligible@1", eligibility)
 def cascade(): return compare("cascade_pass@1", {**names, "pass": "P1", "compare": ["street", "city", "postcode"], "refused_flags": []})
 def either(**changes):  # P5's shape: the city or the postcode
@@ -75,11 +75,11 @@ def either(**changes):  # P5's shape: the city or the postcode
 
 
 SCENARIOS = {
-    "census": 'assert census() == [[True, False]]',
-    "census_wrong_namespace": 'right["identifiers"] = {"other": "target-1"}; assert census() == [[False, False]]',
-    "census_ambiguous": 'entry["invented_matches"] *= 2; assert census() == [[False, False]]',
-    "census_stale_version": 'right["effective_at"] = "2026-02-01T00:00:00Z"; assert census() == [[False, False]]',
-    "census_withheld_name": 'left["provenance"]["quality"] = {"withheld": ["fields.invented_name"]}; assert census() == [[False, False]]',
+    "census": 'assert name_count() == [[True, False]]',
+    "name_count_wrong_namespace": 'right["identifiers"] = {"other": "target-1"}; assert name_count() == [[False, False]]',
+    "name_count_ambiguous": 'entry["invented_matches"] *= 2; assert name_count() == [[False, False]]',
+    "name_count_stale_version": 'right["effective_at"] = "2026-02-01T00:00:00Z"; assert name_count() == [[False, False]]',
+    "name_count_withheld_name": 'left["provenance"]["quality"] = {"withheld": ["fields.invented_name"]}; assert name_count() == [[False, False]]',
     "eligibility": 'assert eligible() == [[True, False]]',
     "eligibility_wrong_kind": 'right["kind"] = "other-kind"; assert eligible() == [[False, False]]',
     "eligibility_refused": 'right["fields"]["invented_registration"] = field("REFUSED"); assert eligible() == [[False, False]]',
@@ -122,7 +122,7 @@ def test_rule_selects_another_profile_without_changing_the_legacy_default(config
 def compare(primitive, args):
     return compare_candidate_records({"pair_comparison": "invented-comparison",
         "when": [{"primitive": primitive, "args": args}]}, [(left, right)])
-assert census() == [[True, False]]
+assert name_count() == [[True, False]]
 assert eligible() == [[True, False]]
 assert cascade() == [[True, False]]
 from edgar_warehouse.mdm.clean.activation import check_name_binding_rule

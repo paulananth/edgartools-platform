@@ -12,7 +12,7 @@ from edgar_warehouse.mdm.clean import changed_files
 from edgar_warehouse.mdm.clean.target_manifest import write_manifest
 from edgar_warehouse.workers import journal_record
 from tests.mdm.test_clean_company_preparation import capture as company_capture  # noqa: F401
-from tests.mdm.test_clean_company_preparation import census_capture, documents as company_documents, prepare
+from tests.mdm.test_clean_company_preparation import name_count_capture, documents as company_documents, prepare
 from tests.mdm.test_clean_company_preparation import CATALOG_ROWS
 from tests.support.memory_journal import MemoryJournal
 from tests.support.sec_capture import address, document, key, write_capture
@@ -93,26 +93,26 @@ def test_a_company_repeat_names_no_file_and_forcing_names_them_all(tmp_path, com
     assert len(named(forced)) == 3 and forced["scope"]["forced"] is True
 
 
-def test_a_company_census_from_another_capture_names_every_file(tmp_path, company_capture):  # noqa: F811
-    # The census is a shared input: a new one may change any Company's match.
+def test_a_company_name_count_from_another_capture_names_every_file(tmp_path, company_capture):  # noqa: F811
+    # The name count is a shared input: a new one may change any Company's match.
     journal = MemoryJournal()
     record(prepare(tmp_path, company_capture, output="first", journal=journal)[0], journal)
-    renamed = company_documents({42: document(42, "ACME GROUP PLC")})  # one name, so the census differs
-    other = census_capture(tmp_path / "other", renamed, CATALOG_ROWS)
+    renamed = company_documents({42: document(42, "ACME GROUP PLC")})  # one name, so the name count differs
+    other = name_count_capture(tmp_path / "other", renamed, CATALOG_ROWS)
     assert Path(other[2]).read_bytes() != Path(company_capture[2]).read_bytes()
     report, _ = prepare(tmp_path, other, output="second", journal=journal)
     assert len(named(report)) == 3  # the two unchanged documents too
 
 
 def test_a_new_capture_where_one_address_changed_names_only_that_company(tmp_path, company_capture):  # noqa: F811
-    # Operator, 2026-10-13: "Only true content change is change". The new capture's census
+    # Operator, 2026-10-13: "Only true content change is change". The new capture's name count
     # names another capture, but its name counts are the same, so only the changed file is named.
     journal = MemoryJournal()
     record(prepare(tmp_path, company_capture, output="first", journal=journal)[0], journal)
     moved = company_documents({42: document(42, "ACME HOLDINGS PLC", business=address(
         street="2 KING ST", city="LONDON", state="X0", zip_code="EC2", country="UNITED KINGDOM", country_code="GB"))})
-    other = census_capture(tmp_path / "other", moved, CATALOG_ROWS)
-    old_census, new_census = (json.loads(Path(c[2]).read_text()) for c in (company_capture, other))
-    assert old_census["sec"] != new_census["sec"] and old_census["entries"] == new_census["entries"]
+    other = name_count_capture(tmp_path / "other", moved, CATALOG_ROWS)
+    old_name_count, new_name_count = (json.loads(Path(c[2]).read_text()) for c in (company_capture, other))
+    assert old_name_count["sec"] != new_name_count["sec"] and old_name_count["entries"] == new_name_count["entries"]
     report, _ = prepare(tmp_path, other, output="second", journal=journal)
     assert named(report) == [key(42)] and report["scope"]["listed"] == 3

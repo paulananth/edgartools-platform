@@ -86,11 +86,11 @@ try:
     assert len(found) == 1
     assert found[identity["entity_id"]]["identifiers"] == {"invented_reference":["target-1"]}
     # The held-value veto must use this profile's namespace too. A fresh
-    # candidate matching the corrected census cannot replace the held value.
+    # candidate matching the corrected name count cannot replace the held value.
     entry = copy.deepcopy(left["provenance"])
-    census = entry["matching"]["invented_census"]
-    census["invented_matches"][0][0] = "other-target"
-    census["invented_assignment"]["invented_target"] = "other-target"
+    name_count = entry["matching"]["invented_name_count"]
+    name_count["invented_matches"][0][0] = "other-target"
+    name_count["invented_assignment"]["invented_target"] = "other-target"
     changed = core.source("origin-1",revision=2,kind="invented-kind",
         fields={"invented_name":"INVENTED LAB INC"},provenance=entry)
     other = core.source("other-target",source_code="fixture.secondary",kind="invented-kind",

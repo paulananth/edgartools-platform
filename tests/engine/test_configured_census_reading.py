@@ -1,7 +1,7 @@
-"""Census construction from the configured complete reading.
+"""Name Count construction from the configured complete reading.
 
-Each case's census entries (and cascade answer) are in
-`fixtures/configured-census-cases.json`, written once from the retired census
+Each case's name count entries (and cascade answer) are in
+`fixtures/configured-census-cases.json`, written once from the retired name count
 builder while the two still agreed; the header fields are checked from what the
 test itself builds."""
 from copy import deepcopy
@@ -11,10 +11,10 @@ from pathlib import Path
 
 import pytest
 
-from edgar_warehouse.mdm.clean import name_census
+from edgar_warehouse.mdm.clean import name_count
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 from edgar_warehouse.rules import files
-from tests.mdm.test_clean_name_census import (
+from tests.mdm.test_clean_name_count import (
     APPLE, COMPLETE_READING, WAYFAIR, archive, configured, gleif, metadata, TestTheCascade as CascadeFixture,
 )
 
@@ -33,7 +33,7 @@ def recorded_answers(request):
     global ANSWERS
     ANSWERS = list(CASES.get(request.node.name, []))
     yield
-    assert not ANSWERS, f"{len(ANSWERS)} recorded census answer(s) unused by {request.node.name}"
+    assert not ANSWERS, f"{len(ANSWERS)} recorded name count answer(s) unused by {request.node.name}"
 
 
 def compare(filers, records, *, cascade=None, recipe=None):
@@ -45,7 +45,7 @@ def compare(filers, records, *, cascade=None, recipe=None):
     assert actual['gleif'] == {**{k: v for k, v in metadata(len(records)).items() if k in actual['gleif']},
                                'archive_sha256': hashlib.sha256(raw).hexdigest()}
     found = {'entries': actual['entries'], **({'cascade': actual['cascade']} if 'cascade' in actual else {})}
-    assert ANSWERS, "no census answer recorded for this case"
+    assert ANSWERS, "no name count answer recorded for this case"
     assert found == ANSWERS.pop(0)
     return actual
 
@@ -102,7 +102,7 @@ def test_configured_reading_preserves_actual_cascade_assignments():
     assert found['cascade']['assignments'][APPLE[0]]['lei'] == 'HWUPKR0MPOU8FGXBT394'
 
 
-def test_deliberate_recipe_fault_fails_actual_census_counts():
+def test_deliberate_recipe_fault_fails_actual_name_count_counts():
     recipe = deepcopy(files.load(COMPLETE_READING))
     recipe['read']['tables']['a_legal']['columns']['key'] = {'const':{'value':'WRONG KEY'}}
     with pytest.raises(AssertionError):
@@ -110,7 +110,7 @@ def test_deliberate_recipe_fault_fails_actual_census_counts():
 
 
 def test_retired_extractors_are_not_production_symbols_and_limits_fail_closed():
-    assert not any(hasattr(name_census, name) for name in
+    assert not any(hasattr(name_count, name) for name in
                    ('_text','_other_names','sec_keys','build','cascade_entity','_gleif_other_keys'))
     with pytest.raises(SourceRejected, match='exceeds encoded byte bound'):
         configured([APPLE], [gleif('LEI', 'Apple Inc.', other=['A' * (1024**2)])])
@@ -175,10 +175,10 @@ def test_truthy_non_object_containers_still_refuse_eligible_records(container):
         configured([APPLE], [row])
 
 
-def test_census_name_transforms_equal_the_canonical_normalizer_recipes():
+def test_name_count_name_transforms_equal_the_canonical_normalizer_recipes():
     for source, recipe in [('gleif',files.load(COMPLETE_READING)),
                            ('gleif',files.load(files.ROOT / 'sources/gleif/census-names-stream.yaml')),
-                           ('sec.company',name_census.sec_reading())]:
+                           ('sec.company',name_count.sec_reading())]:
         canonical = files.load(files.ROOT / f'sources/{source}/name-key.yaml')
         transforms = canonical['read']['tables']['names']['columns']['key']['text']['transforms']
         found = []
@@ -204,5 +204,5 @@ def test_matched_registration_refusal_precedes_other_name_shape_or_count_refusal
         configured([APPLE], [row])
 
 
-def test_every_recorded_census_answer_names_a_test_here():
+def test_every_recorded_name_count_answer_names_a_test_here():
     assert {name.split('[')[0] for name in CASES} <= {name for name in globals() if name.startswith('test_')}

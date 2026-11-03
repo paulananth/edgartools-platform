@@ -1,7 +1,7 @@
 """Exact mapped-value parity on receipt-pinned SEC main captures.
 
 Company rows are derived by its configured main reader; continuation/catalog,
-census, provenance and full population preparation are outside this proof.
+name count, provenance and full population preparation are outside this proof.
 """
 from __future__ import annotations
 import argparse
@@ -73,7 +73,7 @@ def qualify(capture,limit):
             'outcomes':counts,'digests':{key:value.hexdigest() for key,value in hashes.items()},
             'runtime_pins':before,'capture_refs':evidence,'company_full_preparation':False,
             'installed_population_qualified':False,'full_goal_complete':False,
-            'scope':'receipt-pinned raw Person and configured main-derived Company mapped values, quality, exact assertions and deferrals; no continuation/catalog/census/provenance or full mastering claim'}
+            'scope':'receipt-pinned raw Person and configured main-derived Company mapped values, quality, exact assertions and deferrals; no continuation/catalog/name count/provenance or full mastering claim'}
 
 
 def main():

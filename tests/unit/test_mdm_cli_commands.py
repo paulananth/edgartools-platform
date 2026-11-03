@@ -7,16 +7,16 @@ import pytest
 from edgar_warehouse.cli import build_parser
 from edgar_warehouse.mdm.clean import cli as clean_cli
 
-CENSUS = ["--capture", "c", "--population", "p", "--gleif-reading", "a",
+NAME_COUNT = ["--capture", "c", "--population", "p", "--gleif-reading", "a",
           "--gleif-reading-sha256", "s", "--gleif-metadata", "x", "--output", "o"]
 PREPARE = ["--capture", "c", "--documents", "d", "--population", "p", "--catalog", "k", "--capture-run", "r",
-           "--catalog-run", "t", "--observed-at", "2026-09-30T00:00:00Z", "--name-census", "c", "--output", "o", "--as-of", "2026-09-30T00:00:00Z", "--revision", "0"]
+           "--catalog-run", "t", "--observed-at", "2026-09-30T00:00:00Z", "--name-count", "c", "--output", "o", "--as-of", "2026-09-30T00:00:00Z", "--revision", "0"]
 
 
 @pytest.mark.parametrize("argv,function", [
     (["mdm", "counts"], "counts"),
     (["mdm", "check-connectivity"], "check_connectivity"),
-    (["mdm", "name-census", *CENSUS], "name_census"),
+    (["mdm", "name-count", *NAME_COUNT], "name_count"),
     (["mdm", "prepare-clean-company", *PREPARE], "prepare_clean_company"),
     (["mdm", "force-publish", "--consumer", "graph", "--output", "o"], "force_publish"),
     (["mdm", "rebuild-name-index", "--limit", "1"], "rebuild_name_index"),

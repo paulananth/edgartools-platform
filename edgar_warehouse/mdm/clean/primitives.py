@@ -106,7 +106,7 @@ REGISTRY = MappingProxyType(
         "identifier_cardinality@1": Primitive(partial(apply_record_test, "identifier_cardinality@1"), "binding"),
         "kind_equal@1": Primitive(partial(apply_record_test, "kind_equal@1"), "binding"),
         # Ticket 08: the SEC-to-GLEIF matching rules. They compare two records
-        # and a pinned census, so they too run where both are in hand
+        # and a pinned name count, so they too run where both are in hand
         # (`matching.propose`).
         **{
             name: Primitive(partial(apply_record_test, name), "name_binding")
@@ -117,7 +117,7 @@ REGISTRY = MappingProxyType(
                 "jurisdiction_agrees@1",
                 "jurisdictions_do_not_conflict@1",
                 "postal_agrees@1",
-                # Ticket 21: one pass of the cascade the census ran.
+                # Ticket 21: one pass of the cascade the name count ran.
                 "cascade_pass@1",
             )
         },

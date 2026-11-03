@@ -1,11 +1,11 @@
-"""GLEIF inputs for a Name Census in tests: a Golden Copy archive and its configured reading."""
+"""GLEIF inputs for a Name Count in tests: a Golden Copy archive and its configured reading."""
 
 import hashlib
 import json
 
 
 def gleif_archive(tmp_path, records=()):
-    """A full GLEIF Golden Copy archive and its verified metadata, for the census."""
+    """A full GLEIF Golden Copy archive and its verified metadata, for the name count."""
     import io
     import zipfile
 
@@ -33,7 +33,7 @@ def gleif_archive(tmp_path, records=()):
 def gleif_reading(folder, archive, wanted, count):
     """The Golden Copy through its configured complete reading, as the `source.read` worker writes it."""
     from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-    from edgar_warehouse.mdm.clean.name_frequency import GLEIF_READING
+    from edgar_warehouse.mdm.clean.name_count_file import GLEIF_READING
     from edgar_warehouse.rules import files
     from edgar_warehouse.workers import source_read
 

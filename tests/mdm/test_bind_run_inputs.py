@@ -12,15 +12,15 @@ from edgar_warehouse.rules import files
 from tests.mdm import test_ownership_target as ownership
 from tests.mdm import test_thirteenf_securities_target as thirteenf
 
-CENSUS = {"entries": [1, 2, 3], "version": 1}
-TOKENS = {"APPROVED_RUN": {"fact": "approved_run"}, "CENSUS_DIGEST": {"digest": "census"}}
+NAME_COUNT = {"entries": [1, 2, 3], "version": 1}
+TOKENS = {"APPROVED_RUN": {"fact": "approved_run"}, "NAME_COUNT_DIGEST": {"digest": "census"}}
 
 
-def plan(monkeypatch, tmp_path, module, step_name, *, bind=TOKENS, facts=None, run=None, carries=("APPROVED_RUN", "CENSUS_DIGEST")):
+def plan(monkeypatch, tmp_path, module, step_name, *, bind=TOKENS, facts=None, run=None, carries=("APPROVED_RUN", "NAME_COUNT_DIGEST")):
     """Plan a module's target with `bind` on one step; its contract carries the tokens."""
     real, real_load = files.source, files.load
-    census = tmp_path / "census.json"
-    census.write_text(json.dumps(CENSUS))
+    name_count = tmp_path / "census.json"
+    name_count.write_text(json.dumps(NAME_COUNT))
 
     def source(name, *args, **kwargs):
         reading = deepcopy(real(name, *args, **kwargs))
@@ -40,7 +40,7 @@ def plan(monkeypatch, tmp_path, module, step_name, *, bind=TOKENS, facts=None, r
     monkeypatch.setattr(target_manifest.rules_files, "load", load)
     options = module.capture(tmp_path, [1])
     return target_manifest.write_manifest(
-        **options, facts={"approved_run": "run-7"} if facts is None else facts, run_files={"census": str(census)})
+        **options, facts={"approved_run": "run-7"} if facts is None else facts, run_files={"census": str(name_count)})
 
 
 def contract_name(module, step_name):
@@ -57,12 +57,12 @@ def stored_contract(report, step_name, read):
 
 def test_a_read_contract_carries_the_fact_and_the_run_files_digest(monkeypatch, tmp_path):
     report = plan(monkeypatch, tmp_path, ownership, "read")
-    assert stored_contract(report, "read", True)["tokens"] == ["run-7", digest(CENSUS)]
+    assert stored_contract(report, "read", True)["tokens"] == ["run-7", digest(NAME_COUNT)]
 
 
 def test_a_combine_contract_carries_them_too(monkeypatch, tmp_path):
     report = plan(monkeypatch, tmp_path, thirteenf, "reduce")
-    assert stored_contract(report, "reduce", False)["tokens"] == ["run-7", digest(CENSUS)]
+    assert stored_contract(report, "reduce", False)["tokens"] == ["run-7", digest(NAME_COUNT)]
 
 
 @pytest.mark.parametrize("kwargs, message", [

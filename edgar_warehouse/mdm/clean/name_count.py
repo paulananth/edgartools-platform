@@ -1,13 +1,13 @@
-"""The Name Census: who else carries a name, across both whole sources.
+"""The Name Count: who else carries a name, across both whole sources.
 
 Company mastering ticket 08. The SEC-to-GLEIF matching rules bind a GLEIF
 record to an SEC Company only when their names, legal form kept, are equal
 and **no other** SEC filer or GLEIF legal entity carries that name. A Stage
-holds a bounded scope, so it cannot count "no other". The census counts it
+holds a bounded scope, so it cannot count "no other". The name count counts it
 once, over the whole SEC capture and the whole GLEIF Golden Copy, and the SEC
 bundle pins it as evidence, as ticket 12 pinned the ticker catalog.
 
-The census only **proposes** a pair; it decides nothing. The Merge Stage
+The name count only **proposes** a pair; it decides nothing. The Merge Stage
 re-derives both name keys from the Stage rows and checks the jurisdiction or
 postcode itself (`matching.py`).
 
@@ -18,10 +18,10 @@ What it counts, per the measured rules (`.scratch/company-mastering/research/
   carries its head office's name and is not a legal entity);
 - a match is the SEC current name against a GLEIF **legal** name.
 
-Both sources arrive as configured readings (`name_frequency.py`, the
-`mdm name-census` command) and are counted by configured reductions;
-`counted_document` writes the census from the counts. The set-based fold here
-(`_sec_population`, `fold_reading`, `census`, `document`) is the oracle the
+Both sources arrive as configured readings (`name_count_file.py`, the
+`mdm name-count` command) and are counted by configured reductions;
+`counted_document` writes the name count from the counts. The set-based fold here
+(`_sec_population`, `fold_reading`, `from_readings`, `document`) is the oracle the
 tests compare with, and the matching cascade's candidates, until ticket 148
 retires it. A delta publication is refused there:
 uniqueness counted over a delta counts only what changed, and would let a
@@ -39,8 +39,8 @@ from .primitives import NORMALIZERS
 from edgar_warehouse.rules import files as rules_files
 from edgar_warehouse.workers.source_mapping import read_record
 
-VERSION = "sec-gleif-name-census-v1"
-# The normalizers the census counts with, by the versions it records; a rule
+VERSION = "sec-gleif-name-count-v1"
+# The normalizers the name count counts with, by the versions it records; a rule
 # re-derives both keys through the same registered names (`matching.py`).
 SEC_NORMALIZER = "normalize_text@sec-legal-form-kept-v1"
 GLEIF_NORMALIZER = "normalize_text@legal-form-kept-v1"
@@ -52,7 +52,7 @@ CAP = 5
 
 @cache
 def sec_reading():
-    """The SEC filer reading, loaded when the census first counts, so a merge of any other source needs no such file."""
+    """The SEC filer reading, loaded when the name count first counts, so a merge of any other source needs no such file."""
     return rules_files.load(rules_files.ROOT / "sources/sec.company/census-filer.yaml")
 
 
@@ -70,13 +70,13 @@ def _sec_population(filers):
     return held, wanted
 
 
-def census(*, sec_population: dict, gleif: dict, held: dict, wanted: set, readings, cascade: dict | None = None) -> dict:
-    """The census from the SEC population counted (`held`, `wanted`) and the
+def from_readings(*, sec_population: dict, gleif: dict, held: dict, wanted: set, readings, cascade: dict | None = None) -> dict:
+    """The name count from the SEC population counted (`held`, `wanted`) and the
     configured Golden Copy reading's tables (`readings`, in source order).
 
     With `cascade` ({"spec", "filers"}: the Company rules' passes and every SEC
     filer as the cascade reads it) and at least one declared pass, it also runs
-    the cascade over both whole sources; otherwise the census holds names only.
+    the cascade over both whole sources; otherwise the name count holds names only.
     """
     on = bool(cascade and cascade["spec"]["passes"])
     counts = cascaded.count_addresses(f.place for f in cascade["filers"]) if on else Counter()
@@ -139,7 +139,7 @@ def document(
     entities,
     address_counts,
 ) -> dict:
-    """The census document from what was counted, however it was read.
+    """The name count document from what was counted, however it was read.
 
     `held` is each SEC name key's CIKs and `wanted` the current-name keys;
     `legal` each wanted key's GLEIF legal holders with their last update,
@@ -156,7 +156,7 @@ def document(
 
 def counted_document(*, sec_population: dict, gleif: dict, wanted: set, held: dict, legal: dict, other: dict,
                      cascade: dict | None = None, entities=(), address_counts=None) -> dict:
-    """The census document from counts: `held` each SEC name key's CIK count and its
+    """The name count document from counts: `held` each SEC name key's CIK count and its
     five smallest CIKs, `legal` each key's legal-holder count and its five smallest
     `[lei, last update]` pairs, `other` each key's other-name holders who are not
     its legal holders. The configured reductions give exactly these (ticket 148)."""
@@ -195,14 +195,14 @@ def counted_document(*, sec_population: dict, gleif: dict, wanted: set, held: di
     return result
 
 
-def entry(census: dict, name: str | None, *, census_digest: str) -> dict | None:
-    """What one SEC record carries: its census entry, bound to the census.
+def entry(name_count: dict, name: str | None, *, name_count_digest: str) -> dict | None:
+    """What one SEC record carries: its name count entry, bound to the name count.
 
-    None when the census has no entry for the name, so the rule defers. The
-    digest is computed once by the caller; the census is large.
+    None when the name count has no entry for the name, so the rule defers. The
+    digest is computed once by the caller; the name count is large.
     """
     key = sec_legal_form_key(name)
-    found = census["entries"].get(key)
+    found = name_count["entries"].get(key)
     if not key or found is None:
         return None
-    return {"census": census_digest, "version": census["version"], "key": key, **found}
+    return {"census": name_count_digest, "version": name_count["version"], "key": key, **found}
