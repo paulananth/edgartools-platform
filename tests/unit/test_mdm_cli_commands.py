@@ -18,12 +18,25 @@ NAME_COUNT = ["--capture", "c", "--population", "p", "--gleif-reading", "a",
     (["mdm", "rebuild-name-index", "--limit", "1"], "rebuild_name_index"),
     (["mdm", "rebuild-detail-lookup", "--limit", "1"], "rebuild_detail_lookup"),
     (["mdm", "convert-native", "--limit", "1"], "convert_native"),
+    (["mdm", "steward", "split", "--merge", "m", "--by", "Sam", "--reason", "wrong"], "steward_split"),
 ])
 def test_each_command_runs_its_function(monkeypatch, argv, function):
     called = []
     monkeypatch.setattr(clean_cli, function, lambda args: called.append(args.mdm_command) or 0)
     args = build_parser().parse_args(argv)
     assert args.handler(args) == 0 and called == [argv[1]]
+
+
+def test_a_split_previews_unless_confirmed_and_needs_who_and_why():
+    parser = build_parser()
+    split = ["mdm", "steward", "split", "--merge", "m", "--by", "Sam", "--reason", "two different companies"]
+    assert parser.parse_args(split).confirm is False and parser.parse_args([*split, "--confirm"]).confirm is True
+    for missing in ("--by", "--reason", "--merge"):
+        argv = split[:]
+        at = argv.index(missing)
+        del argv[at:at + 2]
+        with pytest.raises(SystemExit):
+            parser.parse_args(argv)
 
 
 def test_retired_commands_stay_unavailable():

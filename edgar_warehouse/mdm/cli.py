@@ -88,6 +88,16 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     convert.add_argument("--limit", type=int, help="Stop after this many batches; a rerun resumes")
     convert.set_defaults(handler=_logged_handler("convert-native", _clean("convert_native")))
 
+    steward = mdm_sub.add_parser("steward", help="Steward decisions on master data")
+    steward_sub = steward.add_subparsers(dest="steward_command", required=True)
+    split = steward_sub.add_parser("split", help="Split a consolidation a matching rule made: both masters return and "
+                                   "the pair becomes a Match Exclusion. Shows what it would do; writes only with --confirm")
+    split.add_argument("--merge", required=True, help="The merge decision's id, as `edgar-warehouse context` shows it")
+    split.add_argument("--by", required=True, help="Who splits it, recorded on the decision")
+    split.add_argument("--reason", required=True, help="Why, in words, recorded on the decision")
+    split.add_argument("--confirm", action="store_true", help="Write the split (without it, only show it)")
+    split.set_defaults(handler=_logged_handler("steward-split", _clean("steward_split")))
+
     counts = mdm_sub.add_parser("counts", help="Print MDM entity and record counts")
     counts.set_defaults(handler=_logged_handler("counts", _clean("counts")))
 

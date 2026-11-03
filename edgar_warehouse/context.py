@@ -414,7 +414,11 @@ class Context:
         from edgar_warehouse.mdm.clean.record_reads import RecordReader
 
         adapter = installed(conn)
-        readings = RecordReader(adapter, connection=conn).readings(subjects)
+        reader = RecordReader(adapter, connection=conn)
+        readings = reader.readings(subjects)
+        from edgar_warehouse.mdm.clean.steward import splits_of
+
+        splits = splits_of(reader, canonical)
         records = sorted((reading["source_code"], reading["record_key"],
                           reading.get("cross_references", {})) for reading in readings.values())
         recorded_at = datetime.fromisoformat(read["projection"]["recorded_at"])
@@ -457,6 +461,8 @@ class Context:
                                        "and related links (held at that time) are as MDM holds them now.")
         if canonical != entity_id:
             answer["merged_from"] = entity_id
+        if splits:  # a steward split a consolidation of this master; the pair is a Match Exclusion (ticket 142)
+            answer["splits"] = splits
         answer["related"] = [_brief_link(link) for link in related]
         answer["related_count"] = f"{related_count}+" if cut else related_count
         answer["truncated"] = False
