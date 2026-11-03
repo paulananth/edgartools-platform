@@ -2,7 +2,7 @@
 
 Priority: 31, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md). Moved from `.scratch/profiling/issues/07c-unstructured-extraction.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
-Type: task. Phase: B. Blocked by: 07; the cross-checks also wait for Codex's Rust join port. Map: [map](../../profiling/map.md). Plan: [plan](../../profiling/plan.md).
+Type: task. Status: resolved (2026-11-03 18:43 ET, closed with every part moved or deferred). Phase: B. Blocked by: 07; the cross-checks also wait for Codex's Rust join port. Map: [map](../../profiling/map.md). Plan: [plan](../../profiling/plan.md).
 
 ## Where each part runs (Rust or Python)
 
@@ -31,9 +31,9 @@ cross-check gate.
 ## Checklist
 
 - [x] The operator rules on where each part runs (the table above): approved, "approve the 07c table" 2026-10-11 17:52 ET
-- [ ] HTML and iXBRL deterministic + cross-checked
-  - [ ] iXBRL first: a reading contract on one captured filing's inline XBRL; record whether the engine reads it unchanged, and any primitive it lacks (a GoF consult and an operator ruling before any engine change)
-  - [ ] HTML tables and labelled sections: a Python custom step, or an engine primitive once a second source needs it
-- [ ] PDF (Python custom step)
-- [ ] Free text (Python custom step)
-- [ ] Unconfirmed candidates keep their location, never merge (cross-checks as configuration; waits for Codex's Rust join port)
+- [ ] ~~HTML and iXBRL deterministic + cross-checked~~ deferred: the HTML part is built under ticket 149 (`read.format: html`, S-1 and F-1); iXBRL waits for a source whose captured filings carry inline XBRL tags
+  - [ ] ~~iXBRL first~~ deferred: no source needs it yet (2026-11-03 18:43 ET); open a ticket for the source that does
+  - [ ] ~~HTML tables and labelled sections~~ moved to ticket 149 (its second source justifies the engine primitive)
+- [ ] ~~PDF (Python custom step)~~ deferred: no source needs it yet; SEC main documents are HTML or text
+- [ ] ~~Free text (Python custom step)~~ moved to ticket 149 for S-1 and F-1 offering terms; other free text deferred until a source needs it
+- [ ] ~~Unconfirmed candidates keep their location, never merge~~ deferred: nothing extracts unconfirmed values yet; it waits for Codex's Rust join port
