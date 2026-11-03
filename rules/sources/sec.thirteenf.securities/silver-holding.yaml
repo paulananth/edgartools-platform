@@ -1,0 +1,108 @@
+# The silver table of Form 13F holdings (ticket 183, from 158): `edgar-warehouse silver
+# register` reads this spec (docs/specs/profiling/findings.md, section 6).
+# One row per holding of one information table: the manager's position in a Security, as filed.
+# Rows are the `sec_thirteenf_holding` table of source.yaml, with the filing's accession number
+# from the capture's folder (`accession=`). Silver keeps no master field (ticket 143): the
+# issuer name, the class title and the FIGI are the Security's, in MDM, read through
+# `security_mdm_id`; the CUSIP stays as the link key. The numbers are read as floating point
+# (exact to 15 digits) and land as exact decimals. Append only: a filed holding never changes;
+# an amended filing is a new accession number.
+# Not here yet: the manager, the report period and the filing date. The information table
+# names none; the manager filings (cover pages) hold them, and no source reads those yet
+# (ticket 184). A holding finds them by its accession number.
+table: thirteenf_holding
+definition: One holding of one Form 13F information table, as filed, linked to its Security by CUSIP.
+grain: one row per filing (accession number) and holding (its place in the information table)
+columns:
+- name: accession_number
+  type: VARCHAR
+  nullable: false
+  definition: The filing's accession number.
+  source: the capture's folder, accession=<number>
+  sensitivity: none
+- name: holding_index
+  type: BIGINT
+  nullable: false
+  definition: The holding's place in the information table, from 1.
+  source: the holding's order in infoTable
+  sensitivity: none
+- name: cusip
+  type: VARCHAR
+  nullable: true
+  definition: The CUSIP the holding names, upper-cased; the key to its Security.
+  source: infoTable.cusip
+  sensitivity: none
+- name: shares_held
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: The number of shares or the principal amount held, as the share type says.
+  source: infoTable.shrsOrPrnAmt.sshPrnamt
+  sensitivity: none
+- name: share_type
+  type: VARCHAR
+  nullable: true
+  definition: What the held amount counts, the unit of shares_held (SH for shares, PRN for principal amount).
+  source: infoTable.shrsOrPrnAmt.sshPrnamtType
+  sensitivity: none
+- name: market_value
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: The holding's market value as the manager reports it, in US dollars.
+  source: infoTable.value
+  sensitivity: none
+- name: put_call
+  type: VARCHAR
+  nullable: true
+  definition: Put or Call when the holding is an option on the security; empty for the security itself.
+  source: infoTable.putCall
+  sensitivity: none
+- name: discretion_type
+  type: VARCHAR
+  nullable: true
+  definition: Who decides the purchase and sale of the holding, as the manager states it - sole, shared (defined) or other (none of the manager's own).
+  source: infoTable.investmentDiscretion
+  sensitivity: none
+- name: voting_auth_sole
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: The shares the manager alone may vote.
+  source: infoTable.votingAuthority.Sole
+  sensitivity: none
+- name: voting_auth_shared
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: The shares the manager shares the vote of with others.
+  source: infoTable.votingAuthority.Shared
+  sensitivity: none
+- name: voting_auth_none
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: The shares the manager holds with no voting authority.
+  source: infoTable.votingAuthority.None
+  sensitivity: none
+key:
+- accession_number
+- holding_index
+# The Security by its record key, the CUSIP. A row whose Security is not mastered yet keeps an
+# empty MDM id; `silver refresh-ids` fills it later.
+links:
+- columns:
+  - cusip
+  kind: security
+  source_code: sec.thirteenf.securities.v1
+  to_part: security
+  source_key: cusip
+  mdm_id_column: security_mdm_id
+time:
+  as_of: null
+  as_at: loaded_at
+  event_time: null
+partition: []
+load_mode: append
+why: >-
+  A holding is transaction data: one row per filed holding, keyed by the filing and its place
+  in the information table. It links to its Security by lookup, so no record of its own goes
+  through the Merge Stage. Append, since a filed holding never changes.
+# No checks yet: the CUSIP is the Security's, checked by its Dataset Contract (ticket 143); a
+# holding's own numbers wait for the manager filings to say what a sensible value is.
+checks: []

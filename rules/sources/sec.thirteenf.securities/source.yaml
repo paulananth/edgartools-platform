@@ -28,21 +28,21 @@ read:
   root: informationTable
   on_parse_error: retry_without_control_chars
   limits: {max_bytes: 33554432, max_records: 100000}
+  # The filing, from the capture's folder (`accession=<number>`): the information table names none.
+  context:
+    accession_number: {type: text}
   tables:
     sec_thirteenf_holding:
       each: infoTable
       columns:
+        accession_number: {context: {name: accession_number}}
         holding_index: {ordinal: {}}
         # A reduction groups exact text, so the CUSIP is upper-cased here and a
         # missing one is blank text (the Dataset Contract refuses it).
         cusip:
           text: {path: cusip.$, default: "", transforms: [{case: upper}]}
-        issuer_name:
-          text: {path: nameOfIssuer.$, default: "", null_if: [""]}
-        security_title:
-          text: {path: titleOfClass.$, default: "", null_if: [""]}
-        figi:
-          text: {path: figi.$, default: "", null_if: [""]}
+        # No issuer name, class title or FIGI: they are the Security's, kept by the tables below and
+        # reduce.yaml (silver keeps no master field, ticket 143).
         shares_held: {number: {path: shrsOrPrnAmt.sshPrnamt.$, default: null}}
         share_type:
           text: {path: shrsOrPrnAmt.sshPrnamtType.$, default: "", null_if: ["", "none", "nan"], ignore_case: true}
@@ -157,6 +157,7 @@ bookkeeping:
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.output]
           units: {slices: {bytes: 8388608}}
+          input: {context: {accession_number: {segment: accession}}}
         - name: reduce
           operation: source.combine
           requires: [read]
@@ -193,9 +194,17 @@ bookkeeping:
           key: "{batch_id}"
           leases: ["mdm:consumer:{consumer}"]
           checks: [input.hash, output.receipt, mdm.committed]
+        # The holdings land in silver once the Securities they link to are merged (ticket 183).
+        - name: land_holding
+          operation: silver.land
+          requires: [read, merge]
+          key: "{unit}"
+          leases: ["silver:{silver}"]
+          checks: [input.hash, output.receipt, silver.landed]
+          input: {keys: {table: sec_thirteenf_holding, silver: thirteenf_holding}}
         - name: processed
           operation: journal.record
-          requires: [merge]
+          requires: [land_holding]
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, journal.recorded]

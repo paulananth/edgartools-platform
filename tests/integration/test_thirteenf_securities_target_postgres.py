@@ -62,13 +62,13 @@ def run(databases, tmp_path, monkeypatch, tables):
     for profile in WORKERS:
         grant_profile(databases.admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")
     target = deepcopy(small_slices(SOURCE)["bookkeeping"]["targets"]["mastering"])
-    assert [step["name"] for step in target["steps"][-2:]] == ["merge", "processed"]
-    target["steps"] = target["steps"][:-2]
+    assert [step["name"] for step in target["steps"][-3:]] == ["merge", "land_holding", "processed"]
+    target["steps"] = target["steps"][:-3]  # the merge, the silver landing (its own test) and the journal
     body = {"source": f"thirteenf-{uuid4().hex}", "bookkeeping": {"version": 2, "targets": {"mastering": target}}}
     book = Bookkeeping(databases.runtime)
     book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)
     steps = book.artifacts.json(report["manifest"])["steps"]
-    del steps["merge"], steps["processed"]
+    del steps["merge"], steps["land_holding"], steps["processed"]
     manifest = book.artifacts.put(tmp_path.as_uri() + "/submitted", {"version": 2, "steps": steps})
     saved = databases.rules.save("source", body["source"], "1", body)
     databases.rules.prove("source", body["source"], "1",
