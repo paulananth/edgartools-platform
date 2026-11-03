@@ -287,3 +287,30 @@ def test_after_the_deadline_no_bundle_starts_and_they_are_named_once(tmp_path, m
 def test_at_least_one_bundle_at_a_time(tmp_path, monkeypatch):
     with pytest.raises(driving.RunStopped, match="At least one bundle"):
         loader(tmp_path, monkeypatch, Recorded(), at_a_time=0)
+
+
+ALWAYS = {
+    "execution": {"max_artifacts": 3},
+    "bookkeeping": {"targets": {"with_shared": {"steps": [
+        {"name": "read", "operation": "source.read", "input": {"files": "letters/*"}},
+        {"name": "shared", "operation": "source.read", "input": {"files": "reference/*", "always": True}},
+    ]}}},
+}
+
+
+def test_documents_every_bundle_reads_are_added_to_each_bundle_and_counted_in_its_size(tmp_path):
+    """Ticket 177: an exchange catalog is read by every bundle, so it is in each one, beside at most size - 1 others."""
+    folder = capture(tmp_path / "c", "letters/a.json", "letters/b.json", "letters/c.json", "letters/d.json",
+                     "letters/e.json", "reference/table.json")
+
+    assert loading.shared_documents(ALWAYS, "with_shared", folder) == ["reference/table.json"]
+    cut = loading.cut_bundles(ALWAYS, "with_shared", folder)
+    assert cut == [["letters/a.json", "letters/b.json", "reference/table.json"],
+                   ["letters/c.json", "letters/d.json", "reference/table.json"],
+                   ["letters/e.json", "reference/table.json"]]
+
+
+def test_a_bundle_too_small_for_its_shared_documents_is_refused(tmp_path):
+    folder = capture(tmp_path / "c", "letters/a.json", "reference/one.json", "reference/two.json", "reference/three.json")
+    with pytest.raises(driving.RunStopped, match="shared documents"):
+        loading.cut_bundles(ALWAYS, "with_shared", folder)

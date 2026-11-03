@@ -10,27 +10,6 @@ from sqlalchemy import text
 from .connections import engine_from_env
 
 
-def prepare_clean_company(args) -> int:
-    from .company_prepare import write_company_manifest
-
-    report = write_company_manifest(
-        capture=args.capture,
-        documents=args.documents,
-        population=args.population,
-        catalog=args.catalog,
-        capture_run=args.capture_run,
-        catalog_run=args.catalog_run,
-        observed_at=args.observed_at,
-        name_count=args.name_count,
-        output=args.output,
-        as_of=args.as_of,
-        revision=args.revision,
-        force=args.all,
-    )
-    print(json.dumps(report, sort_keys=True))
-    return 0
-
-
 def prepare_capture(args) -> int:
     from .target_manifest import run_arguments, write_manifest
 

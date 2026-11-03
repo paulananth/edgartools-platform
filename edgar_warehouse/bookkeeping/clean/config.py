@@ -31,7 +31,7 @@ def _integer(value, low, high, name):
 # reads. They are checked here and stripped, so the engine sees version-1 steps.
 PLAN_KEYS = frozenset({"units", "input"})
 INPUT_KEYS = frozenset({"contract", "keys", "readings", "files", "beside", "context", "lookups", "pieces",
-                        "references", "bind", "runfile"})
+                        "references", "bind", "runfile", "always"})
 # A token a step's contract carries, replaced before the contract is frozen: `{fact: <name>}` (text)
 # or `{digest: <file>}` (the sha256 of a run file's canonical content).
 BIND_TOKEN = r"[A-Za-z0-9_.:-]{1,128}"
@@ -41,7 +41,11 @@ BIND_TOKEN = r"[A-Za-z0-9_.:-]{1,128}"
 RUN_KEYS = frozenset({"facts", "files"})
 # A run file counts toward a file's processing identity by its content; `projections` names, per file, the
 # top-level parts of that content that count (ticket 177, slice 3), so the rest of the file moves nothing.
-RUN_DECLARED = RUN_KEYS | {"projections"}
+# `matches` ties a run file to the capture it is run over: its part at a dotted `path` must equal the named
+# property of the capture (`receipts_sha256`: the sha256 of its receipts file), so a Name Count built from
+# another capture is refused before any unit is written (ticket 177, slice 5d).
+RUN_DECLARED = RUN_KEYS | {"projections", "matches"}
+MATCH_PROPERTIES = frozenset({"receipts_sha256"})
 PROJECTION_PARTS = 16
 NAME = r"[a-z][a-z0-9_]*"
 LOOKUP_KEYS = frozenset({"from", "table", "column", "value_column", "max_input_bytes", "max_input_rows"})
@@ -107,6 +111,14 @@ def run_inputs(selected: dict) -> dict:
                 or any(not isinstance(part, str) or not part for part in parts)):
             raise Blocked(f"The projection of run file {name} names 1 to {PROJECTION_PARTS} distinct parts of it")
     found["projections"] = {name: list(parts) for name, parts in sorted(projections.items())}
+    matches = declared.get("matches", [])
+    if (not isinstance(matches, list) or any(
+            not isinstance(m, dict) or set(m) != {"file", "path", "to"} or m["file"] not in found["files"]
+            or not isinstance(m["path"], str) or not re.fullmatch(r"[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*", m["path"])
+            or m["to"] not in MATCH_PROPERTIES for m in matches)):
+        raise Blocked("A run file's matches each name a declared file, a dotted path in it and a property of the "
+                      f"capture ({sorted(MATCH_PROPERTIES)}): {{file, path, to}}")
+    found["matches"] = [dict(m) for m in matches]
     return found
 
 
@@ -123,7 +135,7 @@ def _plan(step: dict) -> None:
     shape = step.get("input", {})
     if not isinstance(shape, dict) or set(shape) - INPUT_KEYS:
         raise Blocked("A step's input names its contract, keys, readings, files, beside, context, lookups, "
-                      "pieces, references, runfile and bind only")
+                      "pieces, references, runfile, always and bind only")
     if "contract" in shape and (not isinstance(shape["contract"], str)
                                 or not re.fullmatch(r"(?:[a-z0-9][a-z0-9_.-]*/)?[a-z0-9][a-z0-9_.-]*\.yaml", shape["contract"])):
         raise Blocked("A step's contract is a rules file in the source's folder, or <source>/<file> in another's")
@@ -173,6 +185,8 @@ def _plan(step: dict) -> None:
                                or {"files", "beside", "pieces"} & set(shape) or step.get("units", "one") != "one"):
         raise Blocked("A step's runfile names a run file, read as the step's one document (one unit, with no "
                       "files, beside or pieces)")
+    if "always" in shape and (shape["always"] is not True or "files" not in shape or step.get("units", "one") != "one"):
+        raise Blocked("A step's always is true, names its files, and is one unit: documents every bundle reads")
     bind = shape.get("bind", {})
     if (not isinstance(bind, dict) or any(not isinstance(t, str) or not re.fullmatch(BIND_TOKEN, t) for t in bind)
             or any(not (_named(v, "fact") or _named(v, "digest")) for v in bind.values())):

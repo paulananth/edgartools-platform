@@ -42,6 +42,26 @@ def documents(reading: dict, target: str, capture: Path) -> list[str]:
     return sorted(key for key in receipts if fnmatch.fnmatchcase(key, pattern))
 
 
+def shared_documents(reading: dict, target: str, capture: Path) -> list[str]:
+    """The capture's receipt keys that steps with `input.always` read in every bundle (an exchange catalog)."""
+    patterns = [(step.get("input") or {})["files"] for step in reading["bookkeeping"]["targets"][target]["steps"]
+                if (step.get("input") or {}).get("always")]
+    _, receipts = raw_capture.receipts(capture)
+    return sorted(key for key in receipts if any(fnmatch.fnmatchcase(key, p) for p in patterns))
+
+
+def cut_bundles(reading: dict, target: str, capture: Path) -> list[list[str]]:
+    """The target's documents in bundles of the source's limit; each bundle also holds the shared documents,
+    which count in its size."""
+    shared = shared_documents(reading, target, capture)
+    size = reading["execution"]["max_artifacts"] - len(shared)
+    if shared and size < 1:
+        raise RunStopped(f"A bundle of {reading['execution']['max_artifacts']} cannot hold the {len(shared)} shared "
+                         "documents every bundle reads and one more")
+    mine = [key for key in documents(reading, target, capture) if key not in shared]
+    return [sorted([*part, *shared]) for part in bundles(mine, size)]
+
+
 def bundles(keys: list[str], size: int) -> list[list[str]]:
     """The documents in bundles of at most `size`, in key order."""
     if size < 1:
@@ -167,7 +187,7 @@ class Loader:
 
     def cut(self, capture: Path) -> list[list[str]]:
         """The capture's documents this target reads, in bundles of the source's limit."""
-        return bundles(documents(self.reading, self.target, capture), self.reading["execution"]["max_artifacts"])
+        return cut_bundles(self.reading, self.target, capture)
 
     def plan(self, *, capture: Path) -> dict:
         """What `load` would do, read-only: no bundle is prepared, no run submitted or driven. The runs it
@@ -180,7 +200,7 @@ class Loader:
             # The blocked run stopped the listing: the other runs are unknown (None), not none.
             plan["blocked"], plan["finishable_runs"], plan["left_as_they_are"] = str(stopped), None, None
         cut = self.cut(capture)
-        plan.update(documents=sum(len(b) for b in cut), bundle_size=self.reading["execution"]["max_artifacts"],
+        plan.update(documents=len({k for b in cut for k in b}), bundle_size=self.reading["execution"]["max_artifacts"],
                     bundles=len(cut))
         return plan
 

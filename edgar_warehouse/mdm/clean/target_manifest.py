@@ -23,6 +23,7 @@ Nothing here names a source or a kind.
 
 from __future__ import annotations
 
+import fnmatch
 import hashlib
 import json
 from dataclasses import dataclass
@@ -34,7 +35,7 @@ from edgar_warehouse.rules import files as rules_files
 from . import changed_files, raw_capture, read_units
 from .evidence import instant
 from .raw_capture import read_bounded
-from .store import digest
+from .store import Conflict, digest
 
 DOCUMENTS_BYTES = 1024**2
 # The keys of a preparation (workers/mdm_prepare.py lists them all): these three, and the optional ones a ruled
@@ -55,6 +56,7 @@ class _Run:
     rows: dict
     companions: dict
     keys: list
+    always: frozenset
     sized: list
     limit: int
     keys_of: dict
@@ -179,7 +181,8 @@ def _record(step: dict, run: _Run, units: dict) -> list[dict]:
         run.inputs, changed_files.record_input(
             source=run.source, feed=run.reading["bronze"]["family"], processing=run.processing, forced=run.force,
             as_of=run.publication["as_of"], files=[
-                *({"key": key, **raw_capture.document(run.folder, run.receipts, key)} for key in run.keys),
+                *({"key": key, **raw_capture.document(run.folder, run.receipts, key)}
+                  for key in run.keys if key not in run.always),
                 *({"key": other, **raw_capture.verified(run.folder, other, sha256)[0]}
                   for key in run.keys for other, sha256 in run.companions[key])])))]
 
@@ -335,6 +338,16 @@ def write_manifest(
             loaded[name] = json.loads(read_bounded(Path(path).resolve(), RUN_FILE_BYTES))
         except (OSError, ValueError) as error:  # missing, a folder, too large, or not JSON
             raise ValueError(f"Run file {name} ({path}) is not a readable JSON file: {error}") from None
+    capture_properties = {"receipts_sha256": None}
+    for match in declared["matches"]:
+        receipts_raw, _ = raw_capture.receipts(Path(capture).resolve())
+        capture_properties["receipts_sha256"] = hashlib.sha256(receipts_raw).hexdigest()
+        found = loaded[match["file"]]
+        for part in match["path"].split("."):
+            found = found.get(part) if isinstance(found, dict) else None
+        if found != capture_properties[match["to"]]:
+            raise Conflict(f"The run file {match['file']} did not count this capture's documents "
+                           f"({match['path']} differs from the capture's {match['to']})")
     others = _other_runs(steps, bookkeeping)
     # Another source's reading a step runs with is part of what a file is processed under, and so is
     # every other run's output a combine reads.
@@ -380,12 +393,20 @@ def write_manifest(
     keys = sorted(keys)  # a bundle is its documents, in key order, however they are listed
     # A document and the companions read beside it are selected as one: kept when any of them is not processed.
     paired = {key: read_units.companions(steps, rows, key) for key in keys}
-    files = [(key, raw_capture.document(folder, receipts, key)["sha256"]) for key in keys]
+    # A step with `input.always` reads documents every bundle needs (an exchange catalog): they are read each
+    # time, and their content joins the processing identity, so a changed one makes every document fresh again.
+    always = {key for key in keys for step in steps if step.get("input", {}).get("always")
+              and fnmatch.fnmatchcase(key, step["input"].get("files", "*"))}
+    files = [(key, raw_capture.document(folder, receipts, key)["sha256"]) for key in keys if key not in always]
     files += [pair for key in keys for pair in paired[key]]
     policy = digest(rules_files.policy())
+    shared = [*shared, *({"name": f"always:{key}", "sha256": raw_capture.document(folder, receipts, key)["sha256"]}
+                         for key in sorted(always))]
     processing = changed_files.identity(changed_files.source_rules(source), policy, shared)
     fresh = set(changed_files.select(source, processing, files, force=force, ledger=journal))
-    listed, keys = len(keys), [key for key in keys if key in fresh or any(o in fresh for o, _ in paired[key])]
+    listed = len(keys)
+    keys = [key for key in keys if key in fresh or any(o in fresh for o, _ in paired[key])]
+    keys = [key for key in sorted({*keys, *(always if keys else ())})]
     scope = {"documents": len(keys), "listed": listed, "receipts_sha256": hashlib.sha256(receipts_raw).hexdigest(),
              "capture_run_id": capture_run, "processing_identity": processing, "forced": force}
     if not keys:  # every document is processed already: no run
@@ -406,7 +427,7 @@ def write_manifest(
     publication = {"publication_key": publication_key, "revision": revision, "as_of": as_of,
                    "consumer": f"{dataset or source}/{bundle}", "batch_id": f"{source}:{bundle}"}
     root = Path(output).resolve().as_uri()
-    run = _Run(source=source, reading=reading, folder=folder, receipts=receipts, rows=rows, companions=paired, keys=keys, sized=sized, limit=limit,
+    run = _Run(source=source, reading=reading, folder=folder, receipts=receipts, rows=rows, companions=paired, keys=keys, always=frozenset(always), sized=sized, limit=limit,
                keys_of=keys_of, policy=policy, processing=processing, force=force, publication=publication, contracts=contracts, by_name=by_name, store=Artifacts(), root=root,
                inputs=root + "/inputs", facts=facts, run_files=loaded, others=others)
     units: dict[str, list[dict]] = {}

@@ -1446,7 +1446,7 @@ engine.dispose()
 
 
 def test_active_company_preparation_caller_runs_from_installed_bundle(installed, tmp_path):
-    """The installed CLI writes the Company `mastering` target's input manifest from a raw capture,
+    """The installed CLI (`mdm prepare-capture`) writes the Company `mastering` target's input manifest from a raw capture,
     as the checkout does, and the installed Bookkeeping control freezes it against the installed
     target; neither can use the checkout (Issue 20 slice 20c)."""
     from tests.mdm.test_clean_company_preparation import CATALOG_ROWS, PINS, name_count_capture, documents, prepare
@@ -1457,11 +1457,12 @@ def test_active_company_preparation_caller_runs_from_installed_bundle(installed,
     original, _ = prepare(tmp_path, capture, output="checkout", force=True)
     folder, population, name_count = capture
     listed = tmp_path / "documents-checkout.json"
-    arguments = ["mdm", "prepare-clean-company", "--capture", str(folder), "--documents", str(listed),
-                 "--population", str(population), "--catalog", CATALOG,
-                 "--capture-run", PINS["capture_run"], "--catalog-run", PINS["catalog_run"],
-                 "--observed-at", PINS["observed_at"], "--name-count", str(name_count),
-                 "--output", str(tmp_path / "pinned"), "--as-of", PINS["as_of"], "--revision", str(PINS["revision"]), "--all"]
+    arguments = ["mdm", "prepare-capture", "--source", "sec.company", "--capture", str(folder),
+                 "--documents", str(listed), "--capture-run", PINS["capture_run"],
+                 "--output", str(tmp_path / "pinned"), "--as-of", PINS["as_of"], "--revision", str(PINS["revision"]),
+                 "--fact", f"capture_run={PINS['capture_run']}", "--fact", f"catalog_run={PINS['catalog_run']}",
+                 "--fact", f"observed_at={PINS['observed_at']}", "--fact", "load_mode=default",
+                 "--file", f"name_count={name_count}", "--all"]
     run = _run(python, "-c", """
 import sys
 from edgar_warehouse.rules import source_engine

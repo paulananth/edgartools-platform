@@ -299,6 +299,9 @@ Work it out from counts before starting:
    Expect each bundle to run slower when the cores are shared. A target that
    reads another target's runs waits for that target. If the total does not
    fit the window, say so and do not start. Never drop files to make it fit.
+   Measured 2026-11-03 (ticket 177): one source's bundle of 511 filers and the shared reference file ran 1.1 to 1.2
+   minutes with `--workers 4` (a 600 s window finished 5 of 150 bundles, the driver's peak memory 0.57 GB, about
+   0.85 cores busy), so 150 bundles one at a time take about 3 hours; time the first bundle of every source the same way.
 5. **Memory and shared masters, not only cores.** Bundles of one target
    that merge into the same masters collide: measured 2026-10-29, one source's
    load with 4 bundles at once on an 8 GB machine (Docker's VM 4 GB), 10 of 16

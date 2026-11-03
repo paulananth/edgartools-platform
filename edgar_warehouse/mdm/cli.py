@@ -1,6 +1,6 @@
 """CLI subcommand: `edgar-warehouse mdm ...`, MDM only.
 
-Commands: migrate, check-connectivity, counts, prepare-clean-company,
+Commands: migrate, check-connectivity, counts,
 prepare-capture, name-count, force-publish, rebuild-name-index, rebuild-detail-lookup and convert-native. The legacy MDM commands and their tables are
 deleted (platform validation slice 2a).
 """
@@ -24,22 +24,6 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     migrate.add_argument("--prepared-store", action="store_true", default=True,
                          help="Install governed prepared storage on a fresh PostgreSQL or MySQL target")
     migrate.set_defaults(handler=_logged_handler("migrate", _handle_migrate))
-
-    prepare = mdm_sub.add_parser("prepare-clean-company", help="Write the Company mastering target's input manifest for a bounded local sample from a raw SEC capture")
-    prepare.add_argument("--capture", required=True, help="An SEC submissions capture folder: receipts.jsonl and bronze/")
-    prepare.add_argument("--documents", required=True, help="JSON file: this bundle's main submissions documents by receipt key (at most 512)")
-    prepare.add_argument("--population", required=True, help="The population file the Name Count counted")
-    prepare.add_argument("--catalog", required=True, help="Receipt key of the SEC exchange ticker catalog")
-    prepare.add_argument("--capture-run", required=True, help="Approved capture run ID, bound into every row")
-    prepare.add_argument("--catalog-run", required=True, help="Approved ticker catalog run ID")
-    prepare.add_argument("--observed-at", required=True, help="When the capture was observed (ISO 8601 instant)")
-    prepare.add_argument("--name-count", required=True, help="Name Count file that counted this population (mdm name-count)")
-    prepare.add_argument("--output", required=True)
-    prepare.add_argument("--as-of", required=True)
-    prepare.add_argument("--revision", type=int, required=True)
-    prepare.add_argument("--all", action="store_true", help="Name every document, processed or not (a forced run); "
-                     "by default only documents the Change Journal does not record as processed under these rules")
-    prepare.set_defaults(handler=_logged_handler("prepare-clean-company", _clean("prepare_clean_company")))
 
     capture = mdm_sub.add_parser("prepare-capture", help="Write a declared target's input manifest for one bundle of "
                                  "captured documents, from the source's Bookkeeping section (version 2)")
