@@ -66,7 +66,7 @@ def test_the_engine_sees_version_one_steps():
     ({"units": {"groups": 17}}, "groups hold 1..16"),
     ({"units": {"every": 2}}, "units are one"),
     ({"input": {"other": 1}}, "pieces, references, runfile and bind only"),
-    ({"units": {"each": "folder"}}, "each file"),
+    ({"units": {"each": "Folder"}}, "each file"),
     ({"input": {"files": "../x"}}, "pattern over the bundle"),
     ({"input": {"beside": {"path": "{stem}.json", "sha256": "request_sha256"}}}, "template path"),
     ({"input": {"context": {"batch": "{stem}"}}}, "templates over"),
@@ -126,8 +126,8 @@ def test_the_declared_slices_cut_the_read_units(tmp_path, monkeypatch):
 
 
 def test_a_source_whose_section_states_no_plan_is_refused(tmp_path):
-    with pytest.raises(ValueError, match="must be version 2"):  # SEC Company keeps its own writer for now
-        write_manifest(target="mastering", **options(tmp_path, source="sec.company"))
+    with pytest.raises(ValueError, match="must be version 2"):  # SEC registration states no plan yet
+        write_manifest(target="capture", **options(tmp_path, source="sec.registration"))
 
 
 def test_an_edit_to_a_declared_contract_is_a_new_consumer(tmp_path, monkeypatch):
