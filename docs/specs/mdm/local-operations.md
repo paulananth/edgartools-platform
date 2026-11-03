@@ -138,8 +138,8 @@ projected exactly the names this population holds. It needs local files only:
 edgar-warehouse mdm name-count \
   --capture "$SEC_SUBMISSIONS_CAPTURE" \
   --population "$SEC_POPULATION_JSON" \
-  --gleif-reading "$GLEIF_CENSUS_READING_JSON" \
-  --gleif-reading-sha256 "$GLEIF_CENSUS_READING_SHA256" \
+  --gleif-reading "$GLEIF_NAME_COUNT_READING_JSON" \
+  --gleif-reading-sha256 "$GLEIF_NAME_COUNT_READING_SHA256" \
   --gleif-metadata "$GLEIF_LEVEL1_METADATA_JSON" \
   --catalog "$SEC_EXCHANGE_CATALOG_KEY" \
   --output "$NAME_COUNT_JSON"

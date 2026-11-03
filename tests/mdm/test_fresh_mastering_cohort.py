@@ -22,12 +22,14 @@ def test_removing_person_fixture_conversion_preserves_all_assertion_ids_and_prov
     from edgar_warehouse.rules import files
     from edgar_warehouse.mdm.clean.store import digest
     from tests.mdm.test_rules_config_digests import WITHOUT_TICKET_129_FIELDS, _with_company_fields_back
+    from tests.support.name_count_words import old_words
     from tests.support import person_quality
 
     def historical_cohort():
         records = cohort()[2]
-        for record in records:
+        for n, record in enumerate(records):
             if record["source_code"] == "sec.company.v1":
+                records[n] = record = old_words(record)
                 record["source_code"] = "sec.submissions.company.v1"
                 record["subject"] = digest([record["source_code"], record["record_key"]])
                 record["assertion_id"] = digest({k: v for k, v in record.items() if k != "assertion_id"})

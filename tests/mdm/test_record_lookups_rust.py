@@ -99,15 +99,15 @@ def test_candidate_route_reads_only_nonempty_scalar_keys(value, expected):
     assert len(groups) == len(expected)
 
 
-def test_profile_routes_include_identifier_census_and_cascade_without_fixed_fields():
+def test_profile_routes_include_identifier_name_count_and_cascade_without_fixed_fields():
     item = reading(provenance={"matching":{"invented/field'Ω":{"entries":[["target-one",1]],
         "assignment":{"target":"target-two"}}}})
     routes = {"reference":["identifiers","number"],
-        "census":["provenance","matching","invented/field'Ω","entries",0,0],
+        "name_count":["provenance","matching","invented/field'Ω","entries",0,0],
         "assignment":["provenance","matching","invented/field'Ω","assignment","target"]}
     current, _ = prepare([item], routes=routes)
     assert current[item["subject"]]["matching_keys"] == {
-        "reference":"17-1", "census":"target-one", "assignment":"target-two"}
+        "reference":"17-1", "name_count":"target-one", "assignment":"target-two"}
     assert len(current[item["subject"]]["matching_routes_sha256"]) == 64
 
 

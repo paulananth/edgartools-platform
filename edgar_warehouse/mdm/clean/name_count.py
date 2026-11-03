@@ -205,4 +205,4 @@ def entry(name_count: dict, name: str | None, *, name_count_digest: str) -> dict
     found = name_count["entries"].get(key)
     if not key or found is None:
         return None
-    return {"census": name_count_digest, "version": name_count["version"], "key": key, **found}
+    return {"name_count": name_count_digest, "version": name_count["version"], "key": key, **found}

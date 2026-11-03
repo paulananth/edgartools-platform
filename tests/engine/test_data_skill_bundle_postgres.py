@@ -1186,7 +1186,7 @@ if with_name_count:
     entry = {"input":raw,"context":store.put(folder.as_uri(),{"version":1,"input":raw,"values":{}}),
              "lookups":store.put(folder.as_uri(),{"version":1,"input":raw,"sets":{"names":["EXAMPLE"],"ciks":["1"]}})}
     scope = store.put(folder.as_uri(),{"version":3,"contract":store.put(folder.as_uri(),config),"artifacts":[entry]})
-    task = {"input":scope,"output":(folder / "census-reading.json").as_uri(),"checks":["source.output"]}
+    task = {"input":scope,"output":(folder / "name_count-reading.json").as_uri(),"checks":["source.output"]}
     refs["name_count"] = source_read.execute(task,store)
     assert source_read.verify({**task,"candidate":refs["name_count"]},store) == ({"source.output":True},[])
     rules = bind(rules)
@@ -1205,9 +1205,9 @@ assert row["forms"] == ["10-K","20-F","8-K"]
 assert row["tickers"] == ["A","B","C"]
 assert row["business_address"]["country"] == "GB" and row["business_address"]["street"] == "Raw"
 if with_name_count:
-    expected = {"census":raw["sha256"],"version":name_count["version"],"key":"EXAMPLE",**name_count["entries"]["EXAMPLE"],
-        "cascade":{"census":raw["sha256"],"version":name_count["cascade"]["version"],"lei":"L1","pass":"P1"}}
-    assert row["name_census"] == expected and "_name_key" not in row
+    expected = {"name_count":raw["sha256"],"version":name_count["version"],"key":"EXAMPLE",**name_count["entries"]["EXAMPLE"],
+        "cascade":{"name_count":raw["sha256"],"version":name_count["cascade"]["version"],"lei":"L1","pass":"P1"}}
+    assert row["name_count"] == expected and "_name_key" not in row
 prepare = {"input":combined,"output":(folder / "mdm/manifest.json").as_uri(),"checks":["mdm.prepared"],
     "keys":{"table":"company","dataset":"sec.company.v1","policy":"0"*64,
         "consumer":"trial","batch_id":"composition","as_of":date}}
@@ -1376,9 +1376,9 @@ name_count_assertions=[]
 for record in body["sec_records"]:
     if record["source"]!="sec.company":continue
     row=copy.deepcopy(record["row"])
-    row["name_census"]=name_count.entry(counted,row["entity_name"],name_count_digest=digest(counted))
+    row["name_count"]=name_count.entry(counted,row["entity_name"],name_count_digest=digest(counted))
     old_row=copy.deepcopy(row)
-    old_row["name_census"]=body["checkout_entries"][str(row["cik"])]
+    old_row["name_count"]=body["checkout_entries"][str(row["cik"])]
     kwargs={"source_code":"sec.company.v1","contract":files.mdm_contract("sec.company","sec.company.v1"),
             "policy":files.policy(),"publication":{"publication_key":f"installed-name-count/{row['cik']}","revision":2,
             "artifact_sha256":digest(row),"member":"four_companies_v1.json","record_locator":str(row["cik"])}}
@@ -1393,7 +1393,7 @@ with engine.connect() as conn:
         reader=for_connection(conn)
         stored=reader._readings(reader.current([assertion["subject"]]))[assertion["subject"]]
         assert digest(stored)==digest(assertion)
-        assert stored["provenance"]["matching"]["name_census"]["census"]==digest(counted)
+        assert stored["provenance"]["matching"]["name_count"]["name_count"]==digest(counted)
 class LostAcknowledgement:
     def __init__(self,sink): self.sink=sink
     def publish(self,*args): self.sink.publish(*args); raise OSError("simulated lost acknowledgement")

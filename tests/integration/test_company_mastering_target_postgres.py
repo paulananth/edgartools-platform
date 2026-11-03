@@ -71,7 +71,7 @@ def test_the_mastering_target_prepares_what_the_in_process_preparation_did(datab
     # The name count's digest (`NAME_COUNT` in the answers) is the canonical name count's; its GLEIF zip
     # carries today's time, so the digest is computed here.
     name_count_hash = hashlib.sha256(canonical(json.loads(name_count.read_bytes())).encode()).hexdigest()
-    expected = json.loads(json.dumps(EXPECTED).replace("CENSUS", name_count_hash))
+    expected = json.loads(json.dumps(EXPECTED).replace("NAME_COUNT", name_count_hash))
     got = [{"records_jsonl": (root / b["input"]["path"]).read_text(), "record_count": b["input"]["record_count"],
              "publication": {k: v for k, v in b["input"]["publication"].items() if k != "publication_key"},
              "source_code": b["input"]["source_code"], "expected_checkpoint": b["expected_checkpoint"],
@@ -137,7 +137,7 @@ def test_forms_tickers_address_origin_and_name_count_entry_come_from_configured_
     for cik, record in found.items():
         assert record["_origin"]["bronze"] == {"object": key(cik), "sha256": receipts[key(cik)], "locator": "$"}
         assert record["raw_object_id"] == receipts[key(cik)]
-    assert found[APPLE]["name_census"]["leis"][0][0] == "HWUPKR0MPOU8FGXBT394"
+    assert found[APPLE]["name_count"]["leis"][0][0] == "HWUPKR0MPOU8FGXBT394"
     assert "_name_key" not in found[APPLE]
 
 

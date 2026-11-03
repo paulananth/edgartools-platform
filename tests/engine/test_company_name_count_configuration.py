@@ -60,7 +60,7 @@ def name_count_read(store,root,body,*,config=None,sets=None):
     entry={'input':raw,'context':store.put(root.as_uri(),{'version':1,'input':raw,'values':{}}),
            'lookups':store.put(root.as_uri(),{'version':1,'input':raw,'sets':sets})}
     manifest=store.put(root.as_uri(),{'version':3,'contract':contract,'artifacts':[entry]})
-    task={'input':manifest,'output':(root/'census-reading.json').as_uri(),'checks':['source.output']}
+    task={'input':manifest,'output':(root/'name_count-reading.json').as_uri(),'checks':['source.output']}
     receipt=source_read.execute(task,store)
     assert source_read.verify({**task,'candidate':receipt},store)==({'source.output':True},[])
     return receipt,raw
@@ -85,7 +85,7 @@ def test_name_count_and_optional_cascade_match_retained_helper_through_preparati
     refs['main'],_=read(store,tmp_path,'name_count-main',files.load(ROOT/'name-count-main.yaml'),payload,{**context,'bronze_object':ORIGIN})
     name_count=fixture_name_count(case)
     refs['name_count'],raw=name_count_read(store,tmp_path,name_count)
-    expected['name_census']=name_count_evidence(name_count,expected,raw['sha256'])
+    expected['name_count']=name_count_evidence(name_count,expected,raw['sha256'])
     expected['_origin']={'bronze':{'object':ORIGIN,'sha256':expected['raw_object_id'],'locator':'$'}}
     task=envelope(store,tmp_path/'composed',combination(raw['sha256']),refs)
     result=source_combine.execute(task,store)
@@ -111,10 +111,10 @@ def test_malformed_name_count_refuses_before_output(tmp_path,fault):
     elif fault=='cascade_version': body['cascade']['version']='other'
     elif fault=='scalar_cascade': body['cascade']['assignments']=False
     elif fault=='array_cascade': body['cascade']['assignments']=[]
-    else: body['entries']['EXAMPLE']['census']='untrusted'
+    else: body['entries']['EXAMPLE']['name_count']='untrusted'
     with pytest.raises(Exception) as failed: name_count_read(store,tmp_path,body)
     assert getattr(failed.value,'code',None) in ('assertion_failed','object_field_conflict')
-    assert not (tmp_path/'census-reading.json').exists()
+    assert not (tmp_path/'name_count-reading.json').exists()
 
 
 @pytest.mark.parametrize("case", ["both", "neither"])
@@ -122,7 +122,7 @@ def test_unbound_name_count_blueprint_and_substituted_digest_refuse(tmp_path, ca
     store=Artifacts()
     with pytest.raises(ValueError,match='approved artifact hash'):
         name_count_read(store,tmp_path,fixture_name_count(case),config=files.load(ROOT/'name-count.yaml'))
-    assert not (tmp_path/'census-reading.json').exists()
+    assert not (tmp_path/'name_count-reading.json').exists()
 
 
 @pytest.mark.parametrize('fault',['name_count_pin','name_key','cascade_target'])
@@ -136,12 +136,12 @@ def test_deliberate_configuration_faults_are_observable(tmp_path,fault):
         rules['combine']['groups']['name_count_names']['checks']['name_count_digest']='1'*64
         with pytest.raises(ValueError,match='row check failed'): source_combine.execute(envelope(store,tmp_path/'fault',rules,refs),store)
     else:
-        if fault=='name_key': rules['combine']['tables']['company']['joins']['name_census']['key']='entity_name'
+        if fault=='name_key': rules['combine']['tables']['company']['joins']['name_count']['key']='entity_name'
         else: rules['combine']['tables']['company']['joins']['cascade_evidence']['path']=['wrong_cascade']
         result=source_combine.execute(envelope(store,tmp_path/'fault',rules,refs),store)
         actual=store.json(result)['artifacts'][0]['tables']['company'][0]
         expected=name_count_evidence(fixture_name_count(),actual,raw['sha256'])
-        assert actual['name_census'] != expected
+        assert actual['name_count'] != expected
 
 
 def test_name_count_main_inherits_company_reading_and_canonical_name_recipe():

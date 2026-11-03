@@ -98,7 +98,7 @@ combine:
           key: cik
           on_missing: empty
           replace: false
-        name_census:
+        name_count:
           group: name_count_names
           key: _name_key
           on_missing: empty
@@ -109,7 +109,7 @@ combine:
           on_missing: skip
           replace: false
           path:
-          - name_census
+          - name_count
           - cascade
       drop:
       - _name_key

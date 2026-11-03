@@ -188,7 +188,7 @@ def entry(name_count: dict, cik: str, *, name_count_digest: str) -> dict | None:
     found = ((name_count.get("cascade") or {}).get("assignments") or {}).get(cik)
     if found is None:
         return None
-    return {"census": name_count_digest, "version": name_count["cascade"]["version"], **found}
+    return {"name_count": name_count_digest, "version": name_count["cascade"]["version"], **found}
 
 
 def count_addresses(places: Iterable[Place]) -> Counter:

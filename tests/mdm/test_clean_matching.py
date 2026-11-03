@@ -29,7 +29,7 @@ def sec(state="CA", postal="95014", country="US"):
             "matching": {
                 "business_postal_code": postal,
                 "business_country": country,
-                "name_census": {
+                "name_count": {
                     "version": VERSION,
                     "key": "APPLE INC",
                     "ciks": ["0000320193"],
@@ -91,7 +91,7 @@ def test_the_name_count_names_the_gleif_version_the_stage_holds_by_its_effective
     # A record with no stated time matches only a name count that saw none.
     assert not _passes(NAME_STATE, sec(), gleif(effective_at=None))
     record = sec()
-    record["provenance"]["matching"]["name_census"]["leis"] = [["HWUPKR0MPOU8FGXBT394", ""]]
+    record["provenance"]["matching"]["name_count"]["leis"] = [["HWUPKR0MPOU8FGXBT394", ""]]
     assert _passes(NAME_STATE, record, gleif(effective_at=None))
     assert not _passes(NAME_STATE, record, gleif())
 
@@ -116,7 +116,7 @@ def test_pair_policy_without_storage(case, expected):
     record["fields"]["name"] = value("INVENTED GROUP INC")
     other["fields"]["name"] = value("Invented Group Inc.")
     other["identifiers"] = {"lei": "9999000000EXAMPLE113"}
-    entry = record["provenance"]["matching"]["name_census"]
+    entry = record["provenance"]["matching"]["name_count"]
     entry.update(key="INVENTED GROUP INC", ciks=[record["record_key"]],
                  leis=[[other["identifiers"]["lei"], "2026-09-01T00:00:00Z"]])
     assert all(_passes(rule, record, other) for rule in (NAME_STATE, NAME_POSTCODE))
@@ -193,7 +193,7 @@ ELSEWHERE = {"street": "9 ELSEWHERE RD", "city": "SAN JOSE", "postcode": "95110"
 def cascaded(pass_="P5", flags=(), via="legal name", **address):
     record = sec()
     record["provenance"]["matching"]["address"] = {**HQ, **address}
-    record["provenance"]["matching"]["name_census"]["cascade"] = {
+    record["provenance"]["matching"]["name_count"]["cascade"] = {
         "version": _cascade.VERSION, "lei": "HWUPKR0MPOU8FGXBT394", "last_update": "2026-09-01T00:00:00Z",
         "pass": pass_, "flags": list(flags), "key": "APPLE INC", "via": via}
     other = gleif()

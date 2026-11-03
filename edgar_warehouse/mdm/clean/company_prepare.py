@@ -12,7 +12,7 @@ registered workers do the work:
   8 MiB of documents; `keys`: the bundle's name and CIK keys read once
   (`name-count-keys.yaml`);
 - `catalog`: the exchange ticker catalog read once (`catalog.yaml`);
-- `census`: the Name Count read once, narrowed to the bundle's names and CIKs
+- `name_count`: the Name Count read once, narrowed to the bundle's names and CIKs
   by lookup sets derived from the key readings (`name-count.yaml`);
 - `combine`: each main unit with the name count and the catalog
   (`combine-name-count-captured.yaml`);
@@ -119,7 +119,7 @@ def _units(store, root: str, folder: Path, receipts: dict, keys: list[str], cata
         "artifacts": [{"input": catalog_ref, "context": put({"version": 1, "input": catalog_ref,
                                                               "values": catalog_context(pins)})}]}))
     # The name count is read as its canonical bytes, whose sha256 is the digest bound into the contracts.
-    name_count_ref = store.put_bytes(f"{inputs}/name-census.json", name_count)
+    name_count_ref = store.put_bytes(f"{inputs}/name-count.json", name_count)
     readings = [{"step": "keys", "key": unit["keys"]["unit"]} for unit in readers]
     sets = {name: {"readings": {"slot": "keys"}, "table": "keys", "column": column,
                    "max_input_bytes": KEY_READING_BYTES, "max_input_rows": len(keys)}
@@ -218,7 +218,7 @@ def write_company_manifest(
     # name counts, normalizers and version, not by the capture and population it was built from.
     name_count_content = digest({part: name_count.get(part) for part in ("entries", "normalizers", "version")})
     processing = changed_files.identity({"files": changed_files.source_rules(SOURCE), "load_mode": load_mode},
-                                        digest(POLICY), [{"name": "name_census", "sha256": name_count_content},
+                                        digest(POLICY), [{"name": "name_count", "sha256": name_count_content},
                                                          {"name": "catalog", "sha256": catalog_sha}])
     listed, keys = len(keys), changed_files.select(SOURCE, processing, files, force=force, ledger=journal)
     if not keys:  # every document is processed already: no run
@@ -230,7 +230,7 @@ def write_company_manifest(
     # bytes, as for any source (`target_manifest`): the same documents are one publication.
     documents_hash = digest([[key, receipts[key]] for key in keys])
     publication_key = (f"{capture_run}:sec_submissions:{documents_hash}:{catalog_run}:{receipts[catalog]}"
-                       f":name_census:{name_count_hash}")
+                       f":name_count:{name_count_hash}")
     # The consumer and batch ids name everything that shapes the rows: a rerun with another
     # observation time, load mode or rules version is a new consumer, not a reused batch key.
     bundle = digest([publication_key, revision, as_of, observed_at, load_mode, rules])
