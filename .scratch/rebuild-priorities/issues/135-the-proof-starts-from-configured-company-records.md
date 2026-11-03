@@ -4,7 +4,7 @@ Priority: 135, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md
 Opened 2026-10-22 from the map review ("review all existing ticket and provide a
 way to complete the project").
 
-Type: task. Status: in progress (Claude, 2026-10-29; operator, 2026-10-29 07:33 ET: "Take over 135").
+Type: task. Status: resolved (2026-11-02 21:10 ET; operator: "close if it is already done"). Every part is ticked; the two census parts moved to ticket 148.
 Blocked by: nothing on this map (#1121 and #1142 merged).
 
 ## Question
