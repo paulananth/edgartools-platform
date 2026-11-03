@@ -334,8 +334,12 @@ _Avoid_: Using `silverstage/` as an S3 lifecycle prefix, treating the Python rel
 Permanent removal of billed bytes on a versioned bucket by deleting specific `Key` + `VersionId` pairs. Key-only delete and `aws s3 rm` leave payloads billed behind delete markers.
 _Avoid_: Recursive `s3 rm`, Terraform one-shot deletes, unversioned DELETE
 
+**Accession Number**:
+The number EDGAR gives one submission (one 10-K, one Form 4, one N-PORT report); an amendment gets its own. It has 18 digits in three parts, stored with dashes, as `0001234567-23-000123`: the submitter's ID (10 digits), the year (2) and a running count (6). The first part is the CIK of whoever sent the submission, often a filing agent, so it does not name the company the filing is about. The column is `accession_number`, SEC's own word; prose says "filing" where the number is not the point.
+_Avoid_: filing ID (IAPD's `filing_id` is a different number), bare `accession` as a column name
+
 **Derived Filing Text**:
-A rebuildable normalized-text projection identified by filing accession and interpretation version and produced from retained Bronze filing evidence; it is not source evidence.
+A rebuildable normalized-text projection identified by Accession Number and interpretation version and produced from retained Bronze filing evidence; it is not source evidence.
 _Avoid_: Bronze Artifact, raw filing, canonical source evidence
 
 **Retirable Derived Filing Text**:
@@ -763,11 +767,11 @@ The smallest set of source keys, business keys, and derived dependents that must
 _Avoid_: Literal changed rows only, full-universe recomputation, best-effort dependency selection
 
 **Daily-Artifact Run Manifest**:
-The immutable, ordered accession selection for one daily-artifact run, bound to its daily-index input identity, warehouse image, and parser/configuration versions; it is the only candidate set a resume may use.
+The immutable, ordered filing selection for one daily-artifact run, bound to its daily-index input identity, warehouse image, and parser/configuration versions; it is the only candidate set a resume may use.
 _Avoid_: Re-selecting candidates on retry, mixing image or index inputs, adding repaired work through a later run's selection
 
 **Daily-Artifact Outcome Ledger**:
-The append-only, run-and-accession-scoped record of candidate attempts and dispositions. Successful work is final; only pending, retryable, or explicitly repair-authorized work may be resumed.
+The append-only, run-and-filing-scoped record of candidate attempts and dispositions. Successful work is final; only pending, retryable, or explicitly repair-authorized work may be resumed.
 _Avoid_: Process-local telemetry as recovery state, overwriting failures, full-task rework after a partial success
 
 **Daily-Artifact Repair Attestation**:
@@ -1110,11 +1114,11 @@ The declared lower and upper source boundaries within which relationship history
 _Avoid_: All history, unspecified lookback, whatever is already loaded
 
 **Required Relationship Source Candidate**:
-An accession or metadata record that may establish, change, supersede, or disprove a Required Relationship Type inside the Relationship Source Coverage Window.
+A filing or metadata record that may establish, change, supersede, or disprove a Required Relationship Type inside the Relationship Source Coverage Window.
 _Avoid_: Every entity, every 8-K, parsed row only
 
 **Bulk-Load Completion Ledger**:
-The generation-bound, accession-level accounting that binds every Required Relationship Source Candidate to verified artifacts, parser outcome, applicability, MDM relationship versions, and one allowed terminal status.
+The generation-bound, filing-level accounting that binds every Required Relationship Source Candidate to verified artifacts, parser outcome, applicability, MDM relationship versions, and one allowed terminal status.
 _Avoid_: Aggregate skipped count, workflow success, nonempty source table
 
 **Reported Executive Employment**:
