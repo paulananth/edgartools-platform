@@ -17,7 +17,7 @@ The old pipeline's ECS task definitions and Step Functions were retired with its
 
 ## Moved here (2026-10-14)
 
-- [ ] Source activation of SEC Company and GLEIF (from ticket 02; operator, 2026-10-14: "Move to ticket 71 (Recommended)"): an acquisition proof from a real acquisition run (manifest, producer counts, checks); GLEIF's `source.yaml` declares an `acquisition` first
+- [ ] Source activation of SEC Company and GLEIF for live acquisition (the local switch-on over captured files is done: SEC Company by ticket 114; from ticket 02; operator, 2026-10-14: "Move to ticket 71 (Recommended)"): an acquisition proof from a real acquisition run (manifest, producer counts, checks); GLEIF's `source.yaml` declares an `acquisition` first
 - [ ] Source activation of `sec.submissions.person` (from ticket 11): the same acquisition proof
 - [ ] `rules run --target mdm` end to end (from ticket 02)
 - [ ] The live SEC Company qualification (from ticket 03, L8; parked by the operator until AWS: `.planning/workstreams/sec-company-live-qualification-20261013/TICKET.md`)
