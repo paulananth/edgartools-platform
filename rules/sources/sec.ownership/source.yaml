@@ -3,9 +3,9 @@
 # readers/ownership/cohort/findings.yaml`; profiling ticket 07). This file names the
 # source; it reads nothing itself. Each filing is read by one of two readings, by
 # the shape it was captured in, both with the same tables and columns:
-#   ownership-xml.yaml: the filing's primary document, bare XML (the accession
+#   ownership-xml.yaml: the filing's primary document, bare XML (the accession number
 #     from the capture's path, given by the caller);
-#   ownership-sgml.yaml: the SGML submission file (the accession from its header).
+#   ownership-sgml.yaml: the SGML submission file (the accession number from its header).
 # The issuer is the existing Company (by CIK); the owner is master data, a Person
 # or Company (by CIK), and the owner on a filing is a relationship onboarded
 # with both masters (operator, 2026-10-12, "approved"). The owner's Dataset
@@ -16,7 +16,7 @@
 source: sec.ownership
 execution: {profile: source.read, workers: 1, max_artifacts: 512}
 bronze:
-  # Bronze: filing_artifact/sec/cik=<issuer>/<accession>/<accession>.txt (the SGML
+  # Bronze: filing_artifact/sec/cik=<issuer>/<accession_number>/<accession_number>.txt (the SGML
   # submission file); the cohort's bare primary documents sit under filings/.
   family: filing_artifact
 # Bookkeeping (ticket 176): read the SEC submission files, master each reporting owner (a Person, or a
@@ -99,7 +99,7 @@ dataset_contracts:
       provider: SEC
       family: filing_artifact
       schema_version: sec-ownership-reporting-owner-v1
-      record_key: one reporting owner on one filing (accession, the owner's CIK); each
+      record_key: one reporting owner on one filing (accession number, the owner's CIK); each
         filing is its own record (mastering-to-done 02, D3), so its capacities are a dated
         sighting
       publication_key: the filing's accession number
@@ -152,7 +152,7 @@ dataset_contracts:
         retain_deferred: true
         source_record_provenance: true
         record_key:
-        - accession
+        - accession_number
         - rpt_owner_cik
         classification:
           kind: person

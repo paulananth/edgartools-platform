@@ -1,7 +1,7 @@
 """The ownership readings (`rules/sources/sec.ownership/`, profiling ticket 07).
 
 A Form 3, 4 or 5 document is read the same way captured as bare XML (the
-accession from the caller) and inside the SGML submission file (the accession
+accession number from the caller) and inside the SGML submission file (the accession number
 from its header). Dates are calendar dates; flags are XML Schema booleans and
 any other spelling refuses the filing (operator, 2026-10-13); a transaction
 code outside the SEC's list refuses it too. Every name and number here is
@@ -61,7 +61,7 @@ FILED = "20260107"  # the header's FILED AS OF DATE, invented
 
 
 def bare(body: bytes, filed: str | None = FILED) -> dict:
-    return SourceEngine(XML).read(body, context={"accession": ACCESSION, "filed": filed}).tables
+    return SourceEngine(XML).read(body, context={"accession_number": ACCESSION, "filed": filed}).tables
 
 
 def wrapped(body: bytes) -> dict:
@@ -73,8 +73,8 @@ def wrapped(body: bytes) -> dict:
 def test_both_shapes_declare_the_same_tables_and_references():
     for part in ("tables", "references", "reference_pins", "root", "limits"):
         assert XML["read"][part] == SGML["read"][part], part
-    assert XML["read"]["context"]["accession"] == {"type": "text"}
-    assert SGML["read"]["context"]["accession"] == {"type": "text", "sgml_header": "ACCESSION NUMBER"}
+    assert XML["read"]["context"]["accession_number"] == {"type": "text"}
+    assert SGML["read"]["context"]["accession_number"] == {"type": "text", "sgml_header": "ACCESSION NUMBER"}
     assert XML["read"]["context"]["filed"] == {"type": "text", "nullable": True}
     assert SGML["read"]["context"]["filed"] == {"type": "text", "nullable": True, "sgml_header": "FILED AS OF DATE"}
 
@@ -83,11 +83,11 @@ def test_both_shapes_read_the_same_rows():
     tables = bare(filing())
     assert tables == wrapped(filing())
     (row,) = tables["non_derivative_transaction"]
-    assert (row["accession"], row["position"], row["transaction_date"], row["transaction_code"], row["equity_swap_involved"],
+    assert (row["accession_number"], row["position"], row["transaction_date"], row["transaction_code"], row["equity_swap_involved"],
             row["transaction_shares"]) == (ACCESSION, 1, "2026-01-05", "P", False, "100")
     assert tables["reporting_owner"][0]["is_director"] is True
-    assert tables["ownership_document"][0]["accession"] == ACCESSION
-    assert tables["footnote"] == [{"accession": ACCESSION, "footnote_id": "F1", "text": "An invented footnote."}]
+    assert tables["ownership_document"][0]["accession_number"] == ACCESSION
+    assert tables["footnote"] == [{"accession_number": ACCESSION, "footnote_id": "F1", "text": "An invented footnote."}]
 
 
 def test_a_date_with_an_offset_reads_as_its_calendar_date():
