@@ -166,12 +166,23 @@ def _record(step: dict, run: _Run, units: dict) -> list[dict]:
                   for key in run.keys for other, sha256 in run.companions[key])])))]
 
 
+def _read_step_of(step: dict, run: _Run) -> str:
+    """The one read step a landing takes its rows from; a merge it also requires only orders it after the merge,
+    so the masters its rows link to exist when they land."""
+    reads = [name for name in step["requires"] if run.by_name[name]["operation"] == "source.read"]
+    waits = [name for name in step["requires"] if run.by_name[name]["operation"] == "mdm.merge"]
+    if len(reads) != 1 or len(reads) + len(waits) != len(step["requires"]):
+        raise ValueError(f"Step {step['name']}: a landing follows one read step (and may also wait for a merge) "
+                         "and names its keys: table and silver")
+    return reads[0]
+
+
 def _land(step: dict, run: _Run, units: dict) -> list[dict]:
     """One unit for each unit of the read step it follows: that reading's table into a silver table."""
     shape = step.get("input", {}).get("keys", {})
-    if len(step["requires"]) != 1 or set(shape) != {"table", "silver"}:
-        raise ValueError(f"Step {step['name']}: a landing follows one read step and names its keys: table and silver")
-    (before,) = step["requires"]
+    if set(shape) != {"table", "silver"}:
+        raise ValueError(f"Step {step['name']}: a landing names its keys: table and silver")
+    before = _read_step_of(step, run)
     return [read_units.unit(f"{run.root}/{step['name']}/{u['keys']['unit']}.json",
                             {"unit": u["keys"]["unit"], "table": shape["table"], "silver": shape["silver"]},
                             {"from": {"step": before, "key": u["keys"]["unit"]}})
