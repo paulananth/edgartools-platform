@@ -1,4 +1,4 @@
-"""Name Frequency from configured readings writes the Name Census, counting the SEC
+"""Name Count from configured readings writes the Name Count, counting the SEC
 population from the receipt-bound raw capture."""
 
 import hashlib
@@ -6,11 +6,11 @@ import json
 
 import pytest
 
-from edgar_warehouse.mdm.clean.name_census import _sec_population
-from edgar_warehouse.mdm.clean.name_frequency import write_name_frequency
+from edgar_warehouse.mdm.clean.name_count import _sec_population
+from edgar_warehouse.mdm.clean.name_count_file import write_name_count
 from edgar_warehouse.mdm.clean.store import Conflict, canonical
-from tests.support.name_census_inputs import gleif_archive, gleif_reading
-from tests.mdm.test_clean_name_census import gleif
+from tests.support.name_count_inputs import gleif_archive, gleif_reading
+from tests.mdm.test_clean_name_count import gleif
 from tests.support.sec_capture import CATALOG, catalog, key, write_capture
 
 
@@ -33,27 +33,27 @@ def capture(tmp_path):
     return folder, population, archive, metadata, _sec_population(FILERS)[1]
 
 
-def census_of(tmp_path, capture, **changes):
+def name_count_of(tmp_path, capture, **changes):
     folder, population, archive, metadata, wanted = capture
     if "gleif_reading" not in changes:
         changes["gleif_reading"] = gleif_reading(tmp_path / "r", archive, wanted, len(RECORDS))
-    # A switched-on pass (P5, ticket 09) runs the cascade on every census, which reads the capture's catalog.
-    return write_name_frequency(capture=str(folder), population=str(population), gleif_metadata=str(metadata),
+    # A switched-on pass (P5, ticket 09) runs the cascade on every name count, which reads the capture's catalog.
+    return write_name_count(capture=str(folder), population=str(population), gleif_metadata=str(metadata),
                                 **{"output": str(tmp_path / "x.json"), "catalog": CATALOG, **changes})
 
 
-def test_it_writes_the_census(tmp_path, capture):
+def test_it_writes_the_name_count(tmp_path, capture):
     folder, population, archive, metadata, wanted = capture
     configured = tmp_path / "configured.json"
-    report = census_of(tmp_path, capture, output=str(configured))
-    census = json.loads(configured.read_text())
+    report = name_count_of(tmp_path, capture, output=str(configured))
+    name_count = json.loads(configured.read_text())
     sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()  # noqa: E731
     sec = {"receipts_sha256": sha(folder / "receipts.jsonl"), "population_sha256": sha(population), "filers": 3}
     # Each name, legal form kept: the SEC filers whose current or former name
     # it is, the GLEIF legal entities (branches left out) whose legal name it
     # is, at their latest update, and how many carry it as another name.
     expected = {
-        "version": "sec-gleif-name-census-v1",
+        "version": "sec-gleif-name-count-v1",
         "normalizers": {"sec": "normalize_text@sec-legal-form-kept-v1", "gleif": "normalize_text@legal-form-kept-v1"},
         "sec": sec,
         "gleif": {"archive_sha256": sha(archive), "content_date": "2026-09-11T16:00:00+00:00",
@@ -64,27 +64,27 @@ def test_it_writes_the_census(tmp_path, capture):
                           "other_name_holders": 1},
             "OLD NAME INC": {"ciks": ["0000000001", "0000320193"], "cik_count": 2, "leis": [], "lei_count": 0,
                              "other_name_holders": 1}}}
-    # A pass is switched on (P5, ticket 09), so the census also holds the cascade's answers (tested below).
-    assert census.pop("cascade")["version"] == "sec-gleif-cascade-v1"
-    assert canonical(census) == canonical(expected)
-    assert census["entries"]["APPLE INC"]["cik_count"] == 2  # two filers hold the name
-    assert census["entries"]["APPLE INC"]["leis"] == [["HWUPKR0MPOU8FGXBT394", "2026-09-02T00:00:00Z"]]
-    assert census["entries"]["APPLE INC"]["other_name_holders"] == 1
-    assert report["entries"] == len(census["entries"])
+    # A pass is switched on (P5, ticket 09), so the name count also holds the cascade's answers (tested below).
+    assert name_count.pop("cascade")["version"] == "sec-gleif-cascade-v1"
+    assert canonical(name_count) == canonical(expected)
+    assert name_count["entries"]["APPLE INC"]["cik_count"] == 2  # two filers hold the name
+    assert name_count["entries"]["APPLE INC"]["leis"] == [["HWUPKR0MPOU8FGXBT394", "2026-09-02T00:00:00Z"]]
+    assert name_count["entries"]["APPLE INC"]["other_name_holders"] == 1
+    assert report["entries"] == len(name_count["entries"])
 
 
 def test_a_document_the_receipts_do_not_name_is_refused(tmp_path, capture):
     folder, population, *_ = capture
     population.write_text(json.dumps([key(320193), key(42)]))
     with pytest.raises(Conflict, match="receipts do not"):
-        census_of(tmp_path, capture)
+        name_count_of(tmp_path, capture)
 
 
 def test_a_document_that_differs_from_its_receipt_is_refused(tmp_path, capture):
     folder, *_ = capture
     (folder / "bronze" / key(1).removeprefix("warehouse/bronze/")).write_text(json.dumps({"name": "CHANGED"}))
     with pytest.raises(Exception, match="(?i)hash|sha256|differ"):
-        census_of(tmp_path, capture)
+        name_count_of(tmp_path, capture)
 
 
 def test_a_filer_counted_twice_is_refused(tmp_path, capture):
@@ -97,7 +97,7 @@ def test_a_filer_counted_twice_is_refused(tmp_path, capture):
         stream.write(json.dumps({"bytes": len(raw), "key": second, "sha256": hashlib.sha256(raw).hexdigest()}) + "\n")
     population.write_text(json.dumps([key(320193), key(1), key(789019), second]))
     with pytest.raises(Conflict, match="population twice"):
-        census_of(tmp_path, capture)
+        name_count_of(tmp_path, capture)
 
 
 def test_former_names_that_are_not_a_list_are_refused(tmp_path):
@@ -105,14 +105,14 @@ def test_former_names_that_are_not_a_list_are_refused(tmp_path):
     (tmp_path / "g").mkdir()
     archive, metadata, _ = gleif_archive(tmp_path / "g", RECORDS)
     with pytest.raises(Exception, match="formerNames"):
-        census_of(tmp_path, (folder, population, archive, metadata, _sec_population([("0000000007", "X", [])])[1]))
+        name_count_of(tmp_path, (folder, population, archive, metadata, _sec_population([("0000000007", "X", [])])[1]))
 
 
 def test_a_reading_of_another_populations_names_is_refused(tmp_path, capture):
     folder, population, archive, metadata, wanted = capture
     reading = gleif_reading(tmp_path / "r", archive, wanted - {"APPLE INC"}, len(RECORDS))
     with pytest.raises(Conflict, match="another SEC population"):
-        census_of(tmp_path, capture, gleif_reading=reading)
+        name_count_of(tmp_path, capture, gleif_reading=reading)
 
 
 def test_a_delta_or_a_short_publication_is_refused(tmp_path, capture):
@@ -123,22 +123,22 @@ def test_a_delta_or_a_short_publication_is_refused(tmp_path, capture):
                             ({"record_count": len(RECORDS) + 1}, "record count")]:
         metadata.write_text(json.dumps({**published, **change}))
         with pytest.raises(Conflict, match=message):
-            census_of(tmp_path, capture, gleif_reading=reading)
+            name_count_of(tmp_path, capture, gleif_reading=reading)
 
 
 def test_a_reading_made_by_another_recipe_is_refused(tmp_path, capture, monkeypatch):
-    from edgar_warehouse.mdm.clean import name_frequency
+    from edgar_warehouse.mdm.clean import name_count_file
     from edgar_warehouse.rules import files
 
     folder, population, archive, metadata, wanted = capture
-    altered = files.load(name_frequency.GLEIF_READING)
+    altered = files.load(name_count_file.GLEIF_READING)
     altered["read"]["limits"]["max_records"] = 99_999
     original = files.load
-    monkeypatch.setattr(files, "load", lambda path: altered if path == name_frequency.GLEIF_READING else original(path))
+    monkeypatch.setattr(files, "load", lambda path: altered if path == name_count_file.GLEIF_READING else original(path))
     reading = gleif_reading(tmp_path / "r", archive, wanted, len(RECORDS))
     monkeypatch.setattr(files, "load", original)
     with pytest.raises(Conflict, match="not made by census-complete-stream.yaml"):
-        census_of(tmp_path, capture, gleif_reading=reading)
+        name_count_of(tmp_path, capture, gleif_reading=reading)
 
 
 def test_metadata_the_publisher_would_not_have_written_is_refused(tmp_path, capture):
@@ -148,21 +148,21 @@ def test_metadata_the_publisher_would_not_have_written_is_refused(tmp_path, capt
     for change in ({"content_date": "yesterday"}, {"format": "csv.zip"}, {"cdf_version": "LEI_2.1"}):
         metadata.write_text(json.dumps({**published, **change}))
         with pytest.raises(Conflict):
-            census_of(tmp_path, capture, gleif_reading=reading)
+            name_count_of(tmp_path, capture, gleif_reading=reading)
 
 
-def test_a_switched_on_cascade_runs_and_the_census_holds_its_answers(tmp_path, capture):
-    # P5 is switched on (ticket 09): every census runs the cascade, asked for or not, and refuses to
+def test_a_switched_on_cascade_runs_and_the_name_count_holds_its_answers(tmp_path, capture):
+    # P5 is switched on (ticket 09): every name count runs the cascade, asked for or not, and refuses to
     # run without the capture's catalog, which the cascade reads each filer's tickers from.
     folder, population, archive, metadata, wanted = capture
     reading = gleif_reading(tmp_path / "r", archive, wanted, len(RECORDS))
-    census_of(tmp_path, capture, gleif_reading=reading)
+    name_count_of(tmp_path, capture, gleif_reading=reading)
     found = json.loads((tmp_path / "x.json").read_text())
     assert found["cascade"]["version"] == "sec-gleif-cascade-v1" and isinstance(found["cascade"]["assignments"], dict)
-    census_of(tmp_path, capture, gleif_reading=reading, output=str(tmp_path / "asked.json"), cascade=True)
+    name_count_of(tmp_path, capture, gleif_reading=reading, output=str(tmp_path / "asked.json"), cascade=True)
     assert json.loads((tmp_path / "asked.json").read_text()) == found
     with pytest.raises(Conflict, match="exchange catalog"):
-        census_of(tmp_path, capture, gleif_reading=reading, output=str(tmp_path / "none.json"), catalog=None)
+        name_count_of(tmp_path, capture, gleif_reading=reading, output=str(tmp_path / "none.json"), catalog=None)
 
 
 def _cascade_filers(tmp_path, found, rows):
@@ -170,22 +170,22 @@ def _cascade_filers(tmp_path, found, rows):
     from tempfile import TemporaryDirectory
 
     from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-    from edgar_warehouse.mdm.clean import name_frequency, raw_capture
+    from edgar_warehouse.mdm.clean import name_count_file, raw_capture
     from tests.support.sec_capture import CATALOG
 
     folder, population = write_capture(tmp_path / "capture", found, rows)
     _, receipts = raw_capture.receipts(folder)
     with TemporaryDirectory() as scratch:
-        return name_frequency._cascade_filers(folder, receipts, json.loads(population.read_text()), CATALOG,
+        return name_count_file._cascade_filers(folder, receipts, json.loads(population.read_text()), CATALOG,
                                               Artifacts(), Path(scratch))
 
 
 def test_each_filer_reaches_the_cascade_as_the_full_company_chain_prepares_it(tmp_path):
-    """The census reads a filer through the Company chain's own readings, combination and Dataset
+    """The name count reads a filer through the Company chain's own readings, combination and Dataset
     Contract; the full chain's prepared records (the target test's answer file) give the same filer."""
     from pathlib import Path
 
-    from edgar_warehouse.mdm.clean import adapters, cascade, name_frequency
+    from edgar_warehouse.mdm.clean import adapters, cascade, name_count_file
     from edgar_warehouse.rules import files
     from tests.mdm.test_clean_company_preparation import CATALOG_ROWS, documents
 
@@ -194,7 +194,7 @@ def test_each_filer_reaches_the_cascade_as_the_full_company_chain_prepares_it(tm
     contract = files.source("sec.company")["dataset_contracts"]["sec.company.v1"]["contract"]
     expected = [cascade.filer_of(adapters.normalize(json.loads(line), source_code=b["source_code"], contract=contract,
                                                     policy=files.policy(), publication={
-                                                        **name_frequency.CASCADE_PUBLICATION, "record_locator": "x"}))
+                                                        **name_count_file.CASCADE_PUBLICATION, "record_locator": "x"}))
                 for b in answers["batches"] for line in b["records_jsonl"].splitlines()]
     assert len(filers) == 3 and {f.cik: f for f in filers} == {f.cik: f for f in expected}
     assert {f.cik: f.business_country for f in filers} == {"0000320193": "US", "0000789019": "US", "0000000042": "GB"}
@@ -215,7 +215,7 @@ def test_forms_and_tickers_classify_a_filer_as_the_merge_stage_does(tmp_path):
 
 @pytest.mark.parametrize('existing', [False, True])
 @pytest.mark.parametrize('failure', ['corruption', 'cancel'])
-def test_late_partition_failure_publishes_no_census_and_preserves_existing_file(tmp_path, capture,
+def test_late_partition_failure_publishes_no_name_count_and_preserves_existing_file(tmp_path, capture,
                                                                                monkeypatch, existing, failure):
     from pathlib import Path
     from urllib.parse import urlparse
@@ -253,7 +253,7 @@ def test_late_partition_failure_publishes_no_census_and_preserves_existing_file(
     if failure == 'corruption':
         Path(urlparse(final['uri']).path).write_bytes(b'{}')
     with pytest.raises(KeyboardInterrupt if failure == 'cancel' else ValueError):
-        census_of(tmp_path, capture, gleif_reading=ref, output=str(target))
+        name_count_of(tmp_path, capture, gleif_reading=ref, output=str(target))
     assert seen == ['last']
     assert target.read_bytes() == prior if existing else not target.exists()
 
@@ -266,7 +266,7 @@ def _crowded(tmp_path, records):
     archive, metadata, _ = gleif_archive(tmp_path / "g", records)
     wanted = {"CROWD CO"}
     out = tmp_path / "x.json"
-    write_name_frequency(capture=str(folder), population=str(population), gleif_metadata=str(metadata),
+    write_name_count(capture=str(folder), population=str(population), gleif_metadata=str(metadata),
                          gleif_reading=gleif_reading(tmp_path / "r", archive, wanted, len(records)), output=str(out),
                          catalog=CATALOG)
     return json.loads(out.read_text())["entries"]["CROWD CO"]

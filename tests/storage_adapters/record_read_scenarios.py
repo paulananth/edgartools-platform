@@ -418,7 +418,7 @@ try:
         if case == "name_held_value":
             save([other], journal=proposed["decisions"])
             changed = copy.deepcopy(left["provenance"])
-            entry = changed["matching"]["invented_census"]
+            entry = changed["matching"]["invented_name_count"]
             entry["invented_matches"][0][0] = "other-target"
             entry["invented_assignment"]["invented_target"] = "other-target"
             updated = record(

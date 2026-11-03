@@ -14,7 +14,7 @@ from edgar_warehouse.mdm.clean.sec_company import (
 )
 
 from tests.mdm.test_clean_activation import proof
-from tests.support.name_census_inputs import gleif_archive, gleif_reading  # noqa: F401
+from tests.support.name_count_inputs import gleif_archive, gleif_reading  # noqa: F401
 
 # Field and identity tests need an active rule; this synthetic proof belongs
 # only to the fixture. The standard POLICY deliberately stays inactive.

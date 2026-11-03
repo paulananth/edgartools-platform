@@ -1402,7 +1402,7 @@ exchange catalog through `catalog.yaml`; joined by
 `combine-census-captured.yaml` (`combine-census.yaml` with the sources a
 capture holds today); then `mdm.prepare` makes the bundle's rows one
 publication and `mdm.merge` merges it. The Name Count, combine and records inputs
-are composed by Bookkeeping from the verified readings. `mdm name-census`
+are composed by Bookkeeping from the verified readings. `mdm name-count`
 builds the Name Count file from configured readings of the same capture
 (#901, #905). The installed proofs #905 and #907 mastered the full population
 from the in-process bundles this target replaced; the target's own installed

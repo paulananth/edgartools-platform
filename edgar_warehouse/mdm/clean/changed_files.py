@@ -25,7 +25,7 @@ EVENT_TYPE = "file.processed"
 def identity(rules, policy: str, shared: list[dict] | None = None) -> str:
     """The processing identity: the rules a run reads files under (the
     source's readings and Dataset Contracts, as their documents), the policy
-    digest, and every shared input by name and sha256 (a census, a catalog)."""
+    digest, and every shared input by name and sha256 (a name count, a catalog)."""
     return digest({"rules": rules, "policy": policy,
                    "shared": sorted((s["name"], s["sha256"]) for s in shared or [])})
 

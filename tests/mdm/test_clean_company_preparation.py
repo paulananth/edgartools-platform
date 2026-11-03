@@ -9,11 +9,11 @@ from pathlib import Path
 import pytest
 
 from edgar_warehouse.mdm.clean.company_prepare import write_company_manifest
-from edgar_warehouse.mdm.clean.name_census import _sec_population
-from edgar_warehouse.mdm.clean.name_frequency import write_name_frequency
+from edgar_warehouse.mdm.clean.name_count import _sec_population
+from edgar_warehouse.mdm.clean.name_count_file import write_name_count
 from edgar_warehouse.mdm.clean.store import Conflict
-from tests.mdm.test_clean_name_census import gleif
-from tests.support.name_census_inputs import gleif_archive, gleif_reading
+from tests.mdm.test_clean_name_count import gleif
+from tests.support.name_count_inputs import gleif_archive, gleif_reading
 from tests.support.memory_journal import MemoryJournal
 from tests.support.sec_capture import CATALOG, address, catalog, document, key, write_capture
 
@@ -42,27 +42,27 @@ CATALOG_ROWS = catalog((APPLE, "Apple Inc.", "AAPL", "Nasdaq"), (MSFT, "MICROSOF
 
 @pytest.fixture
 def capture(tmp_path):
-    return census_capture(tmp_path, documents(), CATALOG_ROWS)
+    return name_count_capture(tmp_path, documents(), CATALOG_ROWS)
 
 
-def census_capture(tmp_path, found, rows):
+def name_count_capture(tmp_path, found, rows):
     folder, population = write_capture(tmp_path / "capture", found, rows)
     (tmp_path / "g").mkdir()
     archive, metadata, _ = gleif_archive(tmp_path / "g", GLEIF)
     filers = [(f"{cik:010d}", d["name"], [n["name"] for n in d["formerNames"]]) for cik, d in found.items()]
-    census = tmp_path / "name-census.json"
-    write_name_frequency(capture=str(folder), population=str(population), gleif_metadata=str(metadata),
+    name_count = tmp_path / "name-census.json"
+    write_name_count(capture=str(folder), population=str(population), gleif_metadata=str(metadata),
                          gleif_reading=gleif_reading(tmp_path / "r", archive, _sec_population(filers)[1], len(GLEIF)),
-                         output=str(census), catalog=CATALOG)
-    return folder, population, census
+                         output=str(name_count), catalog=CATALOG)
+    return folder, population, name_count
 
 
 def prepare(tmp_path, capture, ciks=(APPLE, MSFT, ACME), output="bundle", **changes):
-    folder, population, census = capture
+    folder, population, name_count = capture
     listed = tmp_path / f"documents-{output}.json"
     listed.write_text(json.dumps([key(c) for c in ciks]))
     args = {"capture": str(folder), "documents": str(listed), "population": str(population), "catalog": CATALOG,
-            "name_census": str(census), "output": str(tmp_path / output), "journal": MemoryJournal(), **PINS, **changes}
+            "name_count": str(name_count), "output": str(tmp_path / output), "journal": MemoryJournal(), **PINS, **changes}
     return write_company_manifest(**args), Path(args["output"])
 
 
@@ -76,20 +76,20 @@ def test_the_manifest_is_content_addressed_and_written_once(tmp_path, capture):
 
 def test_a_different_catalog_is_a_different_publication(tmp_path, capture):
     first = prepare(tmp_path, capture)[0]
-    other = census_capture(tmp_path / "other", documents(), catalog((APPLE, "Apple Inc.", "AAPL", "Nasdaq")))
+    other = name_count_capture(tmp_path / "other", documents(), catalog((APPLE, "Apple Inc.", "AAPL", "Nasdaq")))
     second = prepare(tmp_path / "other", other)[0]
     assert first["scope"]["receipts_sha256"] != second["scope"]["receipts_sha256"]
     assert first["publication"]["publication_key"] != second["publication"]["publication_key"]
 
 
-def test_a_census_that_did_not_count_this_capture_is_refused(tmp_path, capture):
-    _, _, census = census_capture(tmp_path / "other", documents(), catalog())
+def test_a_name_count_that_did_not_count_this_capture_is_refused(tmp_path, capture):
+    _, _, name_count = name_count_capture(tmp_path / "other", documents(), catalog())
     with pytest.raises(Conflict, match="did not count"):
-        prepare(tmp_path, capture, name_census=str(census))
+        prepare(tmp_path, capture, name_count=str(name_count))
 
 
 def test_a_document_outside_the_population_is_refused(tmp_path, capture):
-    folder, population, census = capture
+    folder, population, name_count = capture
     population.write_text(json.dumps([key(APPLE), key(MSFT)]))
     with pytest.raises(Conflict, match="did not count"):
         prepare(tmp_path, capture)
@@ -103,7 +103,7 @@ def test_a_document_that_differs_from_its_receipt_is_refused(tmp_path, capture):
 
 
 def test_a_bundle_names_main_documents_only_and_at_most_512(tmp_path, capture):
-    folder, population, census = capture
+    folder, population, name_count = capture
     listed = tmp_path / "documents.json"
     too_many = [f"bronze/main/{n}.json" for n in range(513)]
     for keys, message in [([CATALOG], "main submissions documents only"), ([], "1..512 distinct"),
@@ -111,7 +111,7 @@ def test_a_bundle_names_main_documents_only_and_at_most_512(tmp_path, capture):
         listed.write_text(json.dumps(keys))
         with pytest.raises(ValueError, match=message):
             write_company_manifest(capture=str(folder), documents=str(listed), population=str(population),
-                                   catalog=CATALOG, name_census=str(census), output=str(tmp_path / "x"), **PINS)
+                                   catalog=CATALOG, name_count=str(name_count), output=str(tmp_path / "x"), **PINS)
 
 
 def test_another_observation_time_or_load_mode_is_another_consumer(tmp_path, capture):

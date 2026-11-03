@@ -1,6 +1,6 @@
-"""Name Frequency from configured readings, never from a Python re-read.
+"""Name Count from configured readings, never from a Python re-read.
 
-The census (`name_census.py`) counts who else carries a name across the whole
+The name count (`name_count.py`) counts who else carries a name across the whole
 SEC capture population and the whole GLEIF Golden Copy. Each SEC main
 submissions document the population names is read from the receipt-bound raw
 capture through `census-sec-names.yaml` by the `source.read` worker and its
@@ -8,7 +8,7 @@ verifier (each filer's name keys beside its CIK, up to 256 documents a unit),
 and the Golden Copy arrives as one verified configured reading
 (`census-complete-stream.yaml`). Each half is counted by a configured reduction
 (`census-sec-reduction.yaml`, `census-name-reduction.yaml`; ticket 148), and
-`name_census.counted_document` writes the census from the counts.
+`name_count.counted_document` writes the name count from the counts.
 
 The GLEIF reading projected only the names the SEC population holds, so its
 `wanted` lookup must equal the name keys counted here; its archive and record
@@ -17,7 +17,7 @@ count must equal the full publication's metadata.
 With the matching cascade (`cascade=True`, or any pass switched on), the same
 documents also run through the Company chain's own readings and combination
 (`census-main.yaml`, `catalog.yaml`, `combine-census-captured.yaml` less its
-census groups) and the Company Dataset Contract, so each filer reaches the
+name count groups) and the Company Dataset Contract, so each filer reaches the
 cascade as the Merge Stage holds it: its forms and tickers decide its
 classification as there (rebuild priorities ticket 09). A record the contract
 sets aside never stages, so it is no filer.
@@ -38,7 +38,7 @@ from edgar_warehouse.workers import source_combine, source_readings
 
 from . import adapters, company_prepare, raw_capture
 from . import cascade as cascaded
-from . import name_census
+from . import name_count
 from .gleif_publication import validate_metadata
 from .matching import active_rules
 from .store import Conflict, canonical, digest
@@ -48,7 +48,7 @@ SEC_REDUCTION = rules_files.ROOT / "sources/sec.company/census-sec-reduction.yam
 GLEIF_READING = rules_files.ROOT / "sources/gleif/census-complete-stream.yaml"
 GLEIF_REDUCTION = rules_files.ROOT / "sources/gleif/census-name-reduction.yaml"
 # The saved Golden Copy reading: 13.25 GB expanded projects to about 211 MB
-# and 3.3 million rows (whole-source census ticket, 2026-10-09).
+# and 3.3 million rows (whole-source name count ticket, 2026-10-09).
 # The bounds are the recipe's own spool and output limits (`max_spool_bytes`,
 # `max_output_rows`), so any reading it can write can be counted.
 GLEIF_BYTES = 1024**3
@@ -60,26 +60,26 @@ COMPANY, COMPANY_CODE = "sec.company", "sec.company.v1"
 COMPANY_ROOT = rules_files.ROOT / "sources" / COMPANY
 # The run ids and times bound into the cascade's readings and combination: its rows are read
 # for the cascade only, never staged.
-CASCADE_RUN = "name-frequency"
+CASCADE_RUN = "name-count"
 CASCADE_PINS = {"capture_run": CASCADE_RUN, "catalog_run": CASCADE_RUN, "load_mode": "census", "observed_at": ""}
 # A filer's record is read for the cascade only: its publication is never staged.
-CASCADE_PUBLICATION = {"publication_key": "name-frequency", "revision": 0, "effective_at": None,
-                       "semantics": "patch", "artifact_sha256": "0" * 64, "member": "name-frequency"}
+CASCADE_PUBLICATION = {"publication_key": "name-count", "revision": 0, "effective_at": None,
+                       "semantics": "patch", "artifact_sha256": "0" * 64, "member": "name-count"}
 COMBINE_BYTES = 256 * 1024**2
 COMBINE_ROWS = 1_000_000
 
 
 def _cascade_combination() -> dict:
     """The Company chain's own combination (`combine-census-captured.yaml`) without its
-    census groups: the census is what is being written, and the cascade reads no census."""
+    name count groups: the name count is what is being written, and the cascade reads no name count."""
     body = company_prepare.bind(rules_files.load(COMPANY_ROOT / "combine-census-captured.yaml"), {
         "APPROVED_COMPANY_CAPTURE_RUN": CASCADE_RUN, "APPROVED_CATALOG_CAPTURE_RUN": CASCADE_RUN})
     groups = body["combine"]["groups"]
-    census = {name for name, group in groups.items() if group["source"] == "census"}
-    for name in census:
+    count_groups = {name for name, group in groups.items() if group["source"] == "census"}
+    for name in count_groups:
         del groups[name]
     joins = body["combine"]["tables"]["company"]["joins"]
-    for name in [n for n, join in joins.items() if join["group"] in census]:
+    for name in [n for n, join in joins.items() if join["group"] in count_groups]:
         del joins[name]
     return body
 
@@ -179,7 +179,7 @@ def _reduced(store: Artifacts, folder: Path, name: str, recipe: Path, readings: 
 def _sec_counts(store: Artifacts, folder: Path, readings: list) -> tuple[dict, set]:
     """Who holds each SEC name key (its CIK count and five smallest CIKs) and the
     current-name keys, from `census-sec-reduction.yaml`. An empty key is no name."""
-    tables = _reduced(store, folder, "sec-census", SEC_REDUCTION, {"names": readings})
+    tables = _reduced(store, folder, "sec-name count", SEC_REDUCTION, {"names": readings})
     held = {row["key"]: (row["cik_count"], [item["cik"] for item in row["ciks"]]) for row in tables["held"]}
     return held, {row["key"] for row in tables["wanted"]} - {""}
 
@@ -188,7 +188,7 @@ def _gleif_counts(store: Artifacts, folder: Path, reading: dict) -> tuple[dict, 
     """Each name key's GLEIF legal holders (count and five smallest with their last
     update) and its other-name holders who are not legal holders, from
     `census-name-reduction.yaml`."""
-    tables = _reduced(store, folder, "gleif-census", GLEIF_REDUCTION, {"names": reading})
+    tables = _reduced(store, folder, "gleif-name count", GLEIF_REDUCTION, {"names": reading})
     legal = {row["key"]: (row["count"], [[item["lei"], item["updated"]] for item in row["holders"]])
              for row in tables["legal"]}
     return legal, {row["key"]: row["count"] for row in tables["other"]}
@@ -196,10 +196,10 @@ def _gleif_counts(store: Artifacts, folder: Path, reading: dict) -> tuple[dict, 
 
 def _gleif(reading: dict, store: Artifacts, metadata: dict, wanted: set) -> tuple[dict, object]:
     """The verified Golden Copy reading, bound to its recipe, the full publication
-    and this population: its census header and its tables in source order."""
+    and this population: its name count header and its tables in source order."""
     validate_metadata("level1", metadata)
     if metadata["file_content"] != "GLEIF_FULL_PUBLISHED":
-        raise Conflict("The Name Census counts a full Golden Copy, never a delta")
+        raise Conflict("The Name Count counts a full Golden Copy, never a delta")
     opened = source_readings.OpenedExtract(reading, store, max_bytes=GLEIF_BYTES, max_rows=GLEIF_ROWS,
                                           max_contract_bytes=CONTRACT_BYTES, allow_lookup_receipts=True)
     recipe = rules_files.load(GLEIF_READING)
@@ -216,15 +216,15 @@ def _gleif(reading: dict, store: Artifacts, metadata: dict, wanted: set) -> tupl
     return gleif, (chunk["tables"] for _, _, chunk, _ in opened.chunks())
 
 
-def write_name_frequency(*, capture: str, population: str, gleif_reading: dict, gleif_metadata: str,
+def write_name_count(*, capture: str, population: str, gleif_reading: dict, gleif_metadata: str,
                          output: str, cascade: bool = False, catalog: str | None = None) -> dict:
-    """Count the SEC population and the configured Golden Copy reading into a census file.
+    """Count the SEC population and the configured Golden Copy reading into a name count file.
 
     A name is unique only if it is unique among all SEC filers (ticket 08), so
     the population names every main submissions document counted, each by its
     receipt in the capture. The matching cascade runs when asked (`cascade`)
     and always once a pass is switched on, and reads each filer's tickers from
-    the capture's exchange `catalog` (its receipt key); the census then holds
+    the capture's exchange `catalog` (its receipt key); the name count then holds
     its answers.
     An existing file is never overwritten with different content.
     """
@@ -238,7 +238,7 @@ def write_name_frequency(*, capture: str, population: str, gleif_reading: dict, 
         raise Conflict("The matching cascade reads each filer's tickers: name the capture's exchange catalog")
     store = Artifacts()
     metadata = json.loads(raw_capture.read_bounded(Path(gleif_metadata).resolve(), METADATA_BYTES))
-    with tempfile.TemporaryDirectory(prefix=".name-frequency-") as scratch:
+    with tempfile.TemporaryDirectory(prefix=".name-count-") as scratch:
         folder = Path(capture).resolve()
         readings, sec, keys, receipts = _population(folder, Path(population).resolve(), store, Path(scratch))
         cascade_filers = _cascade_filers(folder, receipts, keys, catalog, store, Path(scratch)) if runs else []
@@ -249,21 +249,21 @@ def write_name_frequency(*, capture: str, population: str, gleif_reading: dict, 
         cascade, entities, counts = None, (), None
         if runs:
             counts = cascaded.count_addresses(f.place for f in cascade_filers)
-            _, _, entities = name_census.fold_reading(
+            _, _, entities = name_count.fold_reading(
                 chunks, cascade_wanted={f.key for f in cascade_filers} - {""}, address_counts=counts)
             cascade = {"spec": spec, "filers": cascade_filers}
-    census = name_census.counted_document(sec_population=sec, gleif=gleif, wanted=wanted, held=held, legal=legal,
+    counted = name_count.counted_document(sec_population=sec, gleif=gleif, wanted=wanted, held=held, legal=legal,
                                           other=other, cascade=cascade, entities=entities, address_counts=counts)
-    data = (canonical(census) + "\n").encode()
+    data = (canonical(counted) + "\n").encode()
     target = Path(output).resolve()
     if target.exists():
         if raw_capture.read_bounded(target, len(data)) != data:
-            raise Conflict("Existing Name Census has different content")
+            raise Conflict("Existing Name Count has different content")
     else:
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open("xb") as stream:
             stream.write(data)
             stream.flush()
             os.fsync(stream.fileno())
-    return {"version": census["version"], "sha256": digest(census), "sec": census["sec"],
-            "gleif": census["gleif"], "entries": len(census["entries"])}
+    return {"version": counted["version"], "sha256": digest(counted), "sec": counted["sec"],
+            "gleif": counted["gleif"], "entries": len(counted["entries"])}

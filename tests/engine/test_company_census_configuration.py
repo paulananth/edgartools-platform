@@ -1,4 +1,4 @@
-"""Configured census reuse/composition; retained helper is an oracle only."""
+"""Configured name count reuse/composition; retained helper is an oracle only."""
 from copy import deepcopy
 import json
 import pytest
@@ -6,7 +6,7 @@ import pytest
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.control_contract import digest
 from edgar_warehouse.mdm.clean import cascade
-from edgar_warehouse.mdm.clean.name_census import entry as census_entry
+from edgar_warehouse.mdm.clean.name_count import entry as name_count_entry
 from edgar_warehouse.rules import files
 from edgar_warehouse.workers import source_read, source_combine, mdm_prepare
 from tests.engine.test_company_combination_contract import captures,read,blueprint
@@ -17,13 +17,13 @@ ZERO='0'*64
 ORIGIN='bronze/sec/cik=1/main/document.json'  # the main document's bronze object
 
 
-def census_evidence(census, row, census_hash):
-    """What the census says of one SEC record: its name's entry and, when the
-    census ran the cascade (ticket 21), the answer for its CIK, as one value."""
-    found = census_entry(census, row['entity_name'], census_digest=census_hash)
-    if 'cascade' not in census:
+def name_count_evidence(name_count, row, name_count_hash):
+    """What the name count says of one SEC record: its name's entry and, when the
+    name count ran the cascade (ticket 21), the answer for its CIK, as one value."""
+    found = name_count_entry(name_count, row['entity_name'], name_count_digest=name_count_hash)
+    if 'cascade' not in name_count:
         return found
-    answer = cascade.entry(census, f"{int(row['cik']):010d}", census_digest=census_hash)
+    answer = cascade.entry(name_count, f"{int(row['cik']):010d}", name_count_digest=name_count_hash)
     return found if answer is None else {**(found or {}), 'cascade': answer}
 
 
@@ -34,8 +34,8 @@ def bind(value,sha):
     return value
 
 
-def fixture_census(case='both'):
-    body={'version':'sec-gleif-name-census-v1',
+def fixture_name_count(case='both'):
+    body={'version':'sec-gleif-name-count-v1',
         'normalizers':{'sec':'normalize_text@sec-legal-form-kept-v1','gleif':'normalize_text@legal-form-kept-v1'},
         'sec':{'filers':3},'gleif':{'file_content':'GLEIF_FULL_PUBLISHED','archive_sha256':'f'*64,'record_count':3},
         'entries':{'EXAMPLE':{'ciks':['0000000001'],'cik_count':1,'leis':[['LEI','2026-09-11']],'lei_count':1,'other_name_holders':0,'extra':{'flag':False}}},
@@ -48,8 +48,8 @@ def fixture_census(case='both'):
     return body
 
 
-def census_read(store,root,body,*,config=None,sets=None):
-    """Read the census narrowed to `sets` (every name and CIK in the body when omitted)."""
+def name_count_read(store,root,body,*,config=None,sets=None):
+    """Read the name count narrowed to `sets` (every name and CIK in the body when omitted)."""
     raw=store.put(root.as_uri(),body)
     rules=bind(files.load(ROOT/'census.yaml'),raw['sha256']) if config is None else config
     contract=store.put(root.as_uri(),rules)
@@ -74,7 +74,7 @@ def combination(sha):
 
 
 @pytest.mark.parametrize('case',['both','name_only','cascade_only','neither','no_cascade','null_entry','empty_name'])
-def test_census_and_optional_cascade_match_retained_helper_through_preparation(tmp_path,case):
+def test_name_count_and_optional_cascade_match_retained_helper_through_preparation(tmp_path,case):
     store=Artifacts()
     refs,payload,_,_,context=captures(store,tmp_path)
     if case=='empty_name': payload['name']=''
@@ -82,10 +82,10 @@ def test_census_and_optional_cascade_match_retained_helper_through_preparation(t
     if case=='empty_name': baseline_refs['main'],_=read(store,tmp_path,'baseline-empty',files.source('sec.company'),payload,context)
     baseline=source_combine.execute(envelope(store,tmp_path/'baseline',blueprint(),baseline_refs),store)
     expected=store.json(baseline)['artifacts'][0]['tables']['company'][0]
-    refs['main'],_=read(store,tmp_path,'census-main',files.load(ROOT/'census-main.yaml'),payload,{**context,'bronze_object':ORIGIN})
-    census=fixture_census(case)
-    refs['census'],raw=census_read(store,tmp_path,census)
-    expected['name_census']=census_evidence(census,expected,raw['sha256'])
+    refs['main'],_=read(store,tmp_path,'name_count-main',files.load(ROOT/'census-main.yaml'),payload,{**context,'bronze_object':ORIGIN})
+    name_count=fixture_name_count(case)
+    refs['census'],raw=name_count_read(store,tmp_path,name_count)
+    expected['name_census']=name_count_evidence(name_count,expected,raw['sha256'])
     expected['_origin']={'bronze':{'object':ORIGIN,'sha256':expected['raw_object_id'],'locator':'$'}}
     task=envelope(store,tmp_path/'composed',combination(raw['sha256']),refs)
     result=source_combine.execute(task,store)
@@ -102,9 +102,9 @@ def test_census_and_optional_cascade_match_retained_helper_through_preparation(t
 
 
 @pytest.mark.parametrize('fault',['version','normalizer','delta','cascade_version','reserved_metadata','scalar_cascade','array_cascade'])
-def test_malformed_census_refuses_before_output(tmp_path,fault):
+def test_malformed_name_count_refuses_before_output(tmp_path,fault):
     store=Artifacts()
-    body=fixture_census()
+    body=fixture_name_count()
     if fault=='version': body['version']='other'
     elif fault=='normalizer': body['normalizers']['sec']='other'
     elif fault=='delta': body['gleif']['file_content']='GLEIF_DELTA_PUBLISHED'
@@ -112,27 +112,27 @@ def test_malformed_census_refuses_before_output(tmp_path,fault):
     elif fault=='scalar_cascade': body['cascade']['assignments']=False
     elif fault=='array_cascade': body['cascade']['assignments']=[]
     else: body['entries']['EXAMPLE']['census']='untrusted'
-    with pytest.raises(Exception) as failed: census_read(store,tmp_path,body)
+    with pytest.raises(Exception) as failed: name_count_read(store,tmp_path,body)
     assert getattr(failed.value,'code',None) in ('assertion_failed','object_field_conflict')
     assert not (tmp_path/'census-reading.json').exists()
 
 
 @pytest.mark.parametrize("case", ["both", "neither"])
-def test_unbound_census_blueprint_and_substituted_digest_refuse(tmp_path, case):
+def test_unbound_name_count_blueprint_and_substituted_digest_refuse(tmp_path, case):
     store=Artifacts()
     with pytest.raises(ValueError,match='approved artifact hash'):
-        census_read(store,tmp_path,fixture_census(case),config=files.load(ROOT/'census.yaml'))
+        name_count_read(store,tmp_path,fixture_name_count(case),config=files.load(ROOT/'census.yaml'))
     assert not (tmp_path/'census-reading.json').exists()
 
 
-@pytest.mark.parametrize('fault',['census_pin','name_key','cascade_target'])
+@pytest.mark.parametrize('fault',['name_count_pin','name_key','cascade_target'])
 def test_deliberate_configuration_faults_are_observable(tmp_path,fault):
     store=Artifacts()
     refs,payload,_,_,context=captures(store,tmp_path)
-    refs['main'],_=read(store,tmp_path,'census-main',files.load(ROOT/'census-main.yaml'),payload,{**context,'bronze_object':ORIGIN})
-    refs['census'],raw=census_read(store,tmp_path,fixture_census())
+    refs['main'],_=read(store,tmp_path,'name_count-main',files.load(ROOT/'census-main.yaml'),payload,{**context,'bronze_object':ORIGIN})
+    refs['census'],raw=name_count_read(store,tmp_path,fixture_name_count())
     rules=combination(raw['sha256'])
-    if fault=='census_pin':
+    if fault=='name_count_pin':
         rules['combine']['groups']['census_names']['checks']['census_digest']='1'*64
         with pytest.raises(ValueError,match='row check failed'): source_combine.execute(envelope(store,tmp_path/'fault',rules,refs),store)
     else:
@@ -140,46 +140,46 @@ def test_deliberate_configuration_faults_are_observable(tmp_path,fault):
         else: rules['combine']['tables']['company']['joins']['cascade_evidence']['path']=['wrong_cascade']
         result=source_combine.execute(envelope(store,tmp_path/'fault',rules,refs),store)
         actual=store.json(result)['artifacts'][0]['tables']['company'][0]
-        expected=census_evidence(fixture_census(),actual,raw['sha256'])
+        expected=name_count_evidence(fixture_name_count(),actual,raw['sha256'])
         assert actual['name_census'] != expected
 
 
-def test_census_main_inherits_company_reading_and_canonical_name_recipe():
+def test_name_count_main_inherits_company_reading_and_canonical_name_recipe():
     """Fail when either upstream blueprint changes without updating this copy; filings are a
     narrowed copy (only the columns combine's `forms` group uses), so a dropped column may change."""
     source = files.source('sec.company')
-    census = deepcopy(files.load(ROOT/'census-main.yaml'))
-    recipe = census['read']['tables']['company']['columns'].pop('_name_key')
-    census['read']['tables']['company']['columns'].pop('_origin')  # each row's bronze origin (20c)
-    census['read']['context'].pop('bronze_object')
+    name_count = deepcopy(files.load(ROOT/'census-main.yaml'))
+    recipe = name_count['read']['tables']['company']['columns'].pop('_name_key')
+    name_count['read']['tables']['company']['columns'].pop('_origin')  # each row's bronze origin (20c)
+    name_count['read']['context'].pop('bronze_object')
     # A main unit reads a bundle's documents up to a byte budget, not two at a time (20c part 4).
-    assert census['execution'].pop('max_artifacts') == 512
+    assert name_count['execution'].pop('max_artifacts') == 512
     expected = deepcopy({key: source[key] for key in ('source', 'execution', 'read')})
     expected['execution'].pop('max_artifacts')
     # Filings keep only what combine's `forms` group uses (mastering-to-done 28): the same columns, fewer.
-    filings, full = census['read']['tables'].pop('filings'), expected['read']['tables'].pop('filings')
+    filings, full = name_count['read']['tables'].pop('filings'), expected['read']['tables'].pop('filings')
     assert set(filings['columns']) == {'form', 'cik', 'sync_run_id'}
     assert filings['columns'] == {name: full['columns'][name] for name in filings['columns']}
     fields = filings['each']['parallel'].pop('fields')
     assert fields == {name: full['each']['parallel']['fields'][name] for name in ('form',)}
     full['each']['parallel'].pop('fields')
     assert (filings['take'], filings['each']) == (full['take'], full['each'])
-    assert census == expected
+    assert name_count == expected
     assert recipe == files.load(ROOT/'name-key.yaml')['read']['tables']['names']['columns']['key']
 
 
-def test_the_census_is_narrowed_to_the_bundles_names_and_ciks(tmp_path):
+def test_the_name_count_is_narrowed_to_the_bundles_names_and_ciks(tmp_path):
     store=Artifacts()
-    body=fixture_census()
+    body=fixture_name_count()
     body['entries']['OTHER']=deepcopy(body['entries']['EXAMPLE'])
     body['cascade']['assignments']['0000000002']=deepcopy(body['cascade']['assignments']['0000000001'])
-    receipt,_=census_read(store,tmp_path,body,sets={'names':['OTHER'],'ciks':['1']})
+    receipt,_=name_count_read(store,tmp_path,body,sets={'names':['OTHER'],'ciks':['1']})
     tables=store.json(receipt)['artifacts'][0]['tables']
     assert [row['name_key'] for row in tables['names']]==['OTHER']
     assert [row['cik'] for row in tables['cascade']]==[1]
 
 
-def test_census_keys_carry_the_canonical_name_recipe_and_an_unpadded_cik():
+def test_name_count_keys_carry_the_canonical_name_recipe_and_an_unpadded_cik():
     """Fail when the name-key recipe changes without updating this copy."""
     columns=files.load(ROOT/'census-keys.yaml')['read']['tables']['keys']['columns']
     assert columns['_name_key']==files.load(ROOT/'name-key.yaml')['read']['tables']['names']['columns']['key']
@@ -198,9 +198,9 @@ def test_the_captured_combination_differs_only_in_the_sources_a_capture_holds():
     assert captured==full
 
 
-def test_the_census_reads_every_sec_name_key_by_one_chain():
+def test_the_name_count_reads_every_sec_name_key_by_one_chain():
     """`census-sec-names.yaml` builds each current and former name key by `census-filer.yaml`'s
-    chain, transform for transform: a drift in one copy would change the census digest."""
+    chain, transform for transform: a drift in one copy would change the name count digest."""
     chains = [files.load(ROOT / name)["read"]["tables"][table]["columns"]["key"]["text"]["transforms"]
               for name in ("census-filer.yaml", "census-sec-names.yaml") for table in ("current", "former")]
     assert len(chains[0]) == 26 and all(chain == chains[0] for chain in chains)

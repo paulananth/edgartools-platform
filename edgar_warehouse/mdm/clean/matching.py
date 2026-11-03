@@ -1,7 +1,7 @@
 """Propose measured name bindings using the rule's pinned record selectors.
 
 Either source can arrive first. Candidate retrieval proposes pairs from the
-current readings; the shared native comparison checks the declared census,
+current readings; the shared native comparison checks the declared name count,
 names, eligibility and places. The Merge Stage assesses every proposal before
 commit. This module never creates a master or activates a rule.
 """
@@ -16,7 +16,7 @@ from .activation import activated
 from .catalog import CATALOG, assert_current
 from .binding import bound, in_review, nothing, survivors
 from .evidence import decision
-from .name_census import VERSION as CENSUS_VERSION
+from .name_count import VERSION as NAME_COUNT_VERSION
 from .names import REFERENCE_TABLES
 from .store import Conflict
 
@@ -52,11 +52,11 @@ def comparison_profile(rule: dict) -> dict:
 
 def candidate_paths(rule: dict) -> dict[str, tuple]:
     profile = comparison_profile(rule)
-    census = ("provenance", "matching", profile["census_field"])
+    name_count = ("provenance", "matching", profile["census_field"])
     return {
         "identifier": ("identifiers", profile["identifier_namespace"]),
-        "census": (*census, profile["census_entries_field"], 0, 0),
-        "cascade": (*census, profile["cascade_field"], profile["cascade_identifier_field"]),
+        "census": (*name_count, profile["census_entries_field"], 0, 0),
+        "cascade": (*name_count, profile["cascade_field"], profile["cascade_identifier_field"]),
     }
 
 
@@ -98,7 +98,7 @@ def compare_candidate_records(rule: dict, pairs: list[tuple[dict, dict]]) -> lis
             "rule": rule, "pairs": pairs,
             "code_tables": REFERENCE_TABLES,
             "normalizers": {kind.normalizer_name: kind.upper for kind in TYPES.values()},
-            "census_version": CENSUS_VERSION, "cascade_version": cascade.VERSION,
+            "census_version": NAME_COUNT_VERSION, "cascade_version": cascade.VERSION,
             "pair_comparison": profile,
         })
     except ValueError as error:

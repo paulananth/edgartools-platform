@@ -1,4 +1,4 @@
-"""The Name Census: every SEC filer and every GLEIF legal entity carrying a name.
+"""The Name Count: every SEC filer and every GLEIF legal entity carrying a name.
 
 Company mastering ticket 08.
 """
@@ -10,8 +10,8 @@ import json
 import zipfile
 
 
-from edgar_warehouse.mdm.clean import name_census
-from edgar_warehouse.mdm.clean.name_census import VERSION, entry
+from edgar_warehouse.mdm.clean import name_count
+from edgar_warehouse.mdm.clean.name_count import VERSION, entry
 from edgar_warehouse.mdm.clean.store import digest
 from edgar_warehouse.rules import files
 from edgar_warehouse.workers.source_traversal import Traversal
@@ -54,10 +54,10 @@ def metadata(count, **changes):
 
 
 def configured(filers, records, *, cascade=None, recipe=None, population=None, archive_sha256=None):
-    """The census `mdm name-census` writes: the Golden Copy through its configured
+    """The name count `mdm name-count` writes: the Golden Copy through its configured
     complete reading (`census-complete-stream.yaml`), folded, then `document`.
     `cascade` is {"spec", "filers"}: the passes and every SEC filer as the cascade reads it."""
-    held, wanted = name_census._sec_population(filers)
+    held, wanted = name_count._sec_population(filers)
     rules = copy.deepcopy(recipe or files.load(COMPLETE_READING))
     rules["read"]["stream"]["container"] = "none"
     found = []
@@ -65,7 +65,7 @@ def configured(filers, records, *, cascade=None, recipe=None, population=None, a
         io.BytesIO(json.dumps({"records": records}).encode()),
         lookups={"wanted": sorted(wanted)}, context={"publication_count": len(records)},
         on_reading=lambda reading, _ordinal: found.append(reading.tables))
-    return name_census.census(
+    return name_count.from_readings(
         sec_population=population or {"capture_run_id": "run-1", "filers": len(filers)},
         gleif={"archive_sha256": archive_sha256 or hashlib.sha256(archive(records)).hexdigest(),
                "content_date": metadata(0)["content_date"], "file_content": "GLEIF_FULL_PUBLISHED",
@@ -73,7 +73,7 @@ def configured(filers, records, *, cascade=None, recipe=None, population=None, a
         held=held, wanted=wanted, readings=found, cascade=cascade)
 
 
-def census(filers, records):
+def counted_names(filers, records):
     return configured(filers, records)
 
 
@@ -83,7 +83,7 @@ WAYFAIR = ("0001616707", "Wayfair Inc.", [])
 
 class TestWhoCarriesAName:
     def test_one_filer_and_one_legal_entity(self):
-        doc = census([APPLE], [gleif("HWUPKR0MPOU8FGXBT394", "Apple Inc.")])
+        doc = counted_names([APPLE], [gleif("HWUPKR0MPOU8FGXBT394", "Apple Inc.")])
         assert doc["entries"]["APPLE INC"] == {
             "ciks": ["0000320193"],
             "cik_count": 1,
@@ -93,16 +93,16 @@ class TestWhoCarriesAName:
         }
 
     def test_a_different_legal_form_is_a_different_name(self):
-        doc = census([WAYFAIR], [gleif("549300WAYFAIRLLC00001", "WAYFAIR LLC")])
+        doc = counted_names([WAYFAIR], [gleif("549300WAYFAIRLLC00001", "WAYFAIR LLC")])
         assert doc["entries"]["WAYFAIR INC"]["lei_count"] == 0
 
     def test_a_former_sec_name_counts_as_a_holder(self):
         renamed = ("0000000002", "NEW NAME INC", ["APPLE INC"])
-        doc = census([APPLE, renamed], [])
+        doc = counted_names([APPLE, renamed], [])
         assert doc["entries"]["APPLE INC"]["cik_count"] == 2
 
     def test_another_gleif_entity_with_the_name_as_another_name_counts(self):
-        doc = census(
+        doc = counted_names(
             [APPLE],
             [
                 gleif("HWUPKR0MPOU8FGXBT394", "Apple Inc."),
@@ -114,7 +114,7 @@ class TestWhoCarriesAName:
         assert doc["entries"]["APPLE INC"]["other_name_holders"] == 1
 
     def test_a_branch_is_not_a_legal_entity(self):
-        doc = census(
+        doc = counted_names(
             [APPLE],
             [
                 gleif("HWUPKR0MPOU8FGXBT394", "Apple Inc."),
@@ -124,9 +124,9 @@ class TestWhoCarriesAName:
         assert doc["entries"]["APPLE INC"]["lei_count"] == 1
 
 
-class TestTheCensusIsBoundToItsInputs:
+class TestTheNameCountIsBoundToItsInputs:
     def test_it_records_both_populations(self):
-        doc = census([APPLE], [gleif("HWUPKR0MPOU8FGXBT394", "Apple Inc.")])
+        doc = counted_names([APPLE], [gleif("HWUPKR0MPOU8FGXBT394", "Apple Inc.")])
         assert doc["version"] == VERSION
         assert doc["sec"] == {"capture_run_id": "run-1", "filers": 1}
         assert doc["gleif"]["file_content"] == "GLEIF_FULL_PUBLISHED"
@@ -134,20 +134,20 @@ class TestTheCensusIsBoundToItsInputs:
 
 
 class TestWhatARecordCarries:
-    def test_its_entry_names_the_census(self):
-        doc = census([APPLE], [gleif("HWUPKR0MPOU8FGXBT394", "Apple Inc.")])
-        found = entry(doc, "APPLE INC /CA/", census_digest=digest(doc))
+    def test_its_entry_names_the_name_count(self):
+        doc = counted_names([APPLE], [gleif("HWUPKR0MPOU8FGXBT394", "Apple Inc.")])
+        found = entry(doc, "APPLE INC /CA/", name_count_digest=digest(doc))
         assert found["census"] == digest(doc)
         assert found["key"] == "APPLE INC"
         assert found["leis"] == [["HWUPKR0MPOU8FGXBT394", "2026-09-01T00:00:00Z"]]
 
-    def test_a_name_the_census_does_not_hold_has_no_entry(self):
-        doc = census([APPLE], [])
-        assert entry(doc, "SOMEONE ELSE INC", census_digest="x") is None
+    def test_a_name_the_name_count_does_not_hold_has_no_entry(self):
+        doc = counted_names([APPLE], [])
+        assert entry(doc, "SOMEONE ELSE INC", name_count_digest="x") is None
 
 
 class TestTheCascade:
-    """Ticket 21: the census runs the cascade over both whole sources."""
+    """Ticket 21: the name count runs the cascade over both whole sources."""
 
     def native(self, lei, legal, street, country="US", status="ACTIVE"):
         address = {"FirstAddressLine": {"$": street}, "City": {"$": "CUPERTINO"},
@@ -180,18 +180,18 @@ class TestTheCascade:
         found = self.run([self.native("HWUPKR0MPOU8FGXBT394", "Apple Inc.", "1 Apple Park Way", status="INACTIVE")])
         assert found["cascade"]["assignments"] == {}
 
-    def test_without_passes_the_census_is_as_before(self):
-        assert "cascade" not in census([APPLE], [gleif("HWUPKR0MPOU8FGXBT394", "Apple Inc.")])
+    def test_without_passes_the_name_count_is_as_before(self):
+        assert "cascade" not in counted_names([APPLE], [gleif("HWUPKR0MPOU8FGXBT394", "Apple Inc.")])
 
 
-def test_a_record_carries_its_ciks_cascade_answer_inside_its_census_entry():
-    from tests.engine.test_company_census_configuration import census_evidence
+def test_a_record_carries_its_ciks_cascade_answer_inside_its_name_count_entry():
+    from tests.engine.test_company_census_configuration import name_count_evidence
 
-    found = census([APPLE], [gleif("HWUPKR0MPOU8FGXBT394", "Apple Inc.")])
+    found = counted_names([APPLE], [gleif("HWUPKR0MPOU8FGXBT394", "Apple Inc.")])
     row = {"cik": 320193, "entity_name": "APPLE INC"}
-    assert "cascade" not in census_evidence(found, row, "d")  # no passes: as before
+    assert "cascade" not in name_count_evidence(found, row, "d")  # no passes: as before
     found["cascade"] = {"version": "sec-gleif-cascade-v1", "assignments": {"0000320193": {"lei": "L", "pass": "P1"}}}
-    carried = census_evidence(found, row, "d")
+    carried = name_count_evidence(found, row, "d")
     assert carried["key"] == "APPLE INC"
     assert carried["cascade"] == {"census": "d", "version": "sec-gleif-cascade-v1", "lei": "L", "pass": "P1"}
-    assert "cascade" not in census_evidence(found, {"cik": 1, "entity_name": "APPLE INC"}, "d")
+    assert "cascade" not in name_count_evidence(found, {"cik": 1, "entity_name": "APPLE INC"}, "d")

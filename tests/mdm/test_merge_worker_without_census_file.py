@@ -1,4 +1,4 @@
-"""A merge worker needs only its own source's rules: the Name Frequency file loads when the count is used."""
+"""A merge worker needs only its own source's rules: the Name Count file loads when the count is used."""
 import os
 import shutil
 import subprocess
@@ -8,14 +8,14 @@ import pytest
 
 from edgar_warehouse.rules import files
 
-CENSUS_FILE = "census-filer.yaml"
+NAME_COUNT_FILE = "census-filer.yaml"
 
 
 @pytest.fixture(scope="module")
 def rules_without_the_file(tmp_path_factory):
     folder = tmp_path_factory.mktemp("rules") / "rules"
-    shutil.copytree(files.ROOT, folder, ignore=shutil.ignore_patterns(CENSUS_FILE))
-    assert not list(folder.rglob(CENSUS_FILE))
+    shutil.copytree(files.ROOT, folder, ignore=shutil.ignore_patterns(NAME_COUNT_FILE))
+    assert not list(folder.rglob(NAME_COUNT_FILE))
     return folder
 
 
@@ -36,6 +36,6 @@ def test_what_the_merge_workers_load_imports_without_the_file(rules_without_the_
 
 def test_the_count_names_its_missing_file_when_it_is_used(rules_without_the_file):
     done = _python_with_rules(rules_without_the_file,
-                              "from edgar_warehouse.mdm.clean import name_census\n"
-                              "name_census._sec_population([('1', 'Invented Organization', [])])")
-    assert done.returncode != 0 and CENSUS_FILE in done.stderr
+                              "from edgar_warehouse.mdm.clean import name_count\n"
+                              "name_count._sec_population([('1', 'Invented Organization', [])])")
+    assert done.returncode != 0 and NAME_COUNT_FILE in done.stderr

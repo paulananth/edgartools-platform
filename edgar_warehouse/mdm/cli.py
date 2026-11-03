@@ -1,7 +1,7 @@
 """CLI subcommand: `edgar-warehouse mdm ...`, MDM only.
 
 Commands: migrate, check-connectivity, counts, prepare-clean-company,
-prepare-capture, name-census, force-publish, rebuild-name-index, rebuild-detail-lookup and convert-native. The legacy MDM commands and their tables are
+prepare-capture, name-count, force-publish, rebuild-name-index, rebuild-detail-lookup and convert-native. The legacy MDM commands and their tables are
 deleted (platform validation slice 2a).
 """
 from __future__ import annotations
@@ -28,12 +28,12 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     prepare = mdm_sub.add_parser("prepare-clean-company", help="Write the Company mastering target's input manifest for a bounded local sample from a raw SEC capture")
     prepare.add_argument("--capture", required=True, help="An SEC submissions capture folder: receipts.jsonl and bronze/")
     prepare.add_argument("--documents", required=True, help="JSON file: this bundle's main submissions documents by receipt key (at most 512)")
-    prepare.add_argument("--population", required=True, help="The population file the Name Census counted")
+    prepare.add_argument("--population", required=True, help="The population file the Name Count counted")
     prepare.add_argument("--catalog", required=True, help="Receipt key of the SEC exchange ticker catalog")
     prepare.add_argument("--capture-run", required=True, help="Approved capture run ID, bound into every row")
     prepare.add_argument("--catalog-run", required=True, help="Approved ticker catalog run ID")
     prepare.add_argument("--observed-at", required=True, help="When the capture was observed (ISO 8601 instant)")
-    prepare.add_argument("--name-census", required=True, help="Name Census file that counted this population (mdm name-census)")
+    prepare.add_argument("--name-count", required=True, help="Name Count file that counted this population (mdm name-count)")
     prepare.add_argument("--output", required=True)
     prepare.add_argument("--as-of", required=True)
     prepare.add_argument("--revision", type=int, required=True)
@@ -57,25 +57,25 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
                      "by default only documents the Change Journal does not record as processed under these rules")
     capture.set_defaults(handler=_logged_handler("prepare-capture", _clean("prepare_capture")))
 
-    census = mdm_sub.add_parser("name-census", help="Count an SEC population and one configured full GLEIF Golden Copy "
-                                "reading into a Name Census file")
-    census.add_argument("--capture", required=True,
+    name_count = mdm_sub.add_parser("name-count", help="Count an SEC population and one configured full GLEIF Golden Copy "
+                                "reading into a Name Count file")
+    name_count.add_argument("--capture", required=True,
                         help="An SEC submissions capture folder: receipts.jsonl and the bronze/ documents it names")
-    census.add_argument("--population", required=True,
+    name_count.add_argument("--population", required=True,
                         help="JSON file: the receipt keys of the main submissions documents counted, which together "
                              "must be every SEC filer")
-    census.add_argument("--gleif-reading", required=True,
+    name_count.add_argument("--gleif-reading", required=True,
                         help="The verified source.read output of rules/sources/gleif/census-complete-stream.yaml "
                              "over a full Golden Copy (its reading.json)")
-    census.add_argument("--gleif-reading-sha256", required=True)
-    census.add_argument("--gleif-metadata", required=True, help="JSON file: the archive's verified publication metadata")
-    census.add_argument("--output", required=True)
-    census.add_argument("--cascade", action="store_true",
+    name_count.add_argument("--gleif-reading-sha256", required=True)
+    name_count.add_argument("--gleif-metadata", required=True, help="JSON file: the archive's verified publication metadata")
+    name_count.add_argument("--output", required=True)
+    name_count.add_argument("--cascade", action="store_true",
                         help="Also run the Company rules' matching cascade over both sources (always, once a pass "
-                             "is switched on); the census then holds its answers")
-    census.add_argument("--catalog", help="The capture's exchange ticker catalog, by receipt key: the cascade reads "
+                             "is switched on); the name count then holds its answers")
+    name_count.add_argument("--catalog", help="The capture's exchange ticker catalog, by receipt key: the cascade reads "
                                           "each filer's tickers, as the Company chain does")
-    census.set_defaults(handler=_logged_handler("name-census", _clean("name_census")))
+    name_count.set_defaults(handler=_logged_handler("name-count", _clean("name_count")))
 
     force = mdm_sub.add_parser("force-publish", help="Publish every current record to one consumer, changed or not "
                                "(forced pages of the current snapshot; changes no master data), and write the "

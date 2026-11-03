@@ -1,6 +1,6 @@
 """Shipped Company blueprint: raw configured main/pages/catalogs to prepared rows.
 
-These cases do not claim census/provenance policy, source activation, full
+These cases do not claim name count/provenance policy, source activation, full
 population or installed mastering.
 """
 import json

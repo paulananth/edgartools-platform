@@ -42,7 +42,7 @@ read:
             from: document
         right:
           const:
-            value: sec-gleif-name-census-v1
+            value: sec-gleif-name-count-v1
     reason: approved census version differs
   - test:
       equal:

@@ -527,7 +527,7 @@ def _check_contract(namespace: str, contract: dict) -> None:
 
 
 # The tests a name-binding rule must call: never the name alone (§10 check 5,
-# as for `name_similarity`), always the pinned census and one place test.
+# as for `name_similarity`), always the pinned name count and one place test.
 NAME_BINDING_PLACE_TESTS = frozenset({"jurisdiction_agrees@1", "postal_agrees@1"})
 
 
@@ -569,13 +569,13 @@ def check_name_binding_rule(kind: str, rule: dict, kinds: dict) -> None:
         return
     if "name_census_match@1" not in tests or not NAME_BINDING_PLACE_TESTS & set(tests):
         raise Conflict(
-            f"Name binding rule {rule_id} must rest on the Name Census and a place "
+            f"Name binding rule {rule_id} must rest on the Name Count and a place "
             "test, never the name alone"
         )
 
 
 def _check_cascade_pass(rule_id: str, rule: dict, tests: list) -> None:
-    """One pass of the cascade (ticket 21). It rests on the census's answer,
+    """One pass of the cascade (ticket 21). It rests on the name count's answer,
     one to one over both whole sources, not on a Stage's scope; the pass
     states which address parts it compares, down to the name alone, as the
     operator ruled (2026-09-27), and each pass is proven on its own."""
