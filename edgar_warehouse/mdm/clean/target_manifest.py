@@ -258,6 +258,17 @@ def run_arguments(facts: list[str] | None, run_files: list[str] | None) -> tuple
     return parsed, pairs(run_files)
 
 
+def _projected(name: str, value, projections: dict):
+    """A run file's content for the processing identity: the whole file, or the parts its target declares."""
+    parts = projections.get(name)
+    if parts is None:
+        return value
+    if not isinstance(value, dict) or not set(parts) <= set(value):
+        missing = "is not an object" if not isinstance(value, dict) else f"has no part {sorted(set(parts) - set(value))[0]}"
+        raise ValueError(f"Run file {name} {missing}, which its target's projection names")
+    return {part: value[part] for part in parts}
+
+
 def write_manifest(
     *,
     source: str,
@@ -319,7 +330,8 @@ def write_manifest(
                 for label, units in sorted(others.items())),
               *({"name": f"contract:{name}", "sha256": digest(body)} for name, body in sorted(contracts.items())
                 if "/" in name),
-              *({"name": f"file:{name}", "sha256": digest(value)} for name, value in sorted(loaded.items())),
+              *({"name": f"file:{name}", "sha256": digest(_projected(name, value, declared["projections"]))}
+                for name, value in sorted(loaded.items())),
               *({"name": f"fact:{name}", "sha256": digest(value)} for name, value in sorted(facts.items()))]
     # A target prepares one publication, or none: a target that only reads, for another run to read (ticket 120).
     prepare = [step for step in steps if step["operation"] == "mdm.prepare"]

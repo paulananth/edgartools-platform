@@ -33,9 +33,9 @@ Version 2 is generic; none of these may name Company.
 
 - [ ] Decide the route with the operator: a version 2 target the generic \`load\` runs: "yes convert sec.company to version 2" (operator, 2026-11-02 20:10 ET)
 - [x] Gap analysis against the dedicated writer (2026-11-02 20:10 ET; the four gaps above)
-- [ ] Slice 1: a context value from the document's receipt (\`{receipt: sha256}\`, \`{receipt: key}\`)
-- [ ] Slice 2: run facts and a run file's digest bound into a step's contract body (a declared token map), for reads and combines
-- [ ] Slice 3: a shared run file enters the processing identity by a declared content projection (the census by entries, normalizers and version)
+- [x] Slice 1 (PR #1321, merged 2026-11-02): a context value from the document's receipt (\`{receipt: sha256}\`, \`{receipt: key}\`)
+- [x] Slice 2 (PR #1322, merged 2026-11-02; tests/mdm/test_bind_run_inputs.py): run facts and a run file's digest bound into a step's contract body (a declared token map), for reads and combines
+- [x] Slice 3 (2026-11-03 09:01 ET): a target's `run.projections` names, per run file, the top-level parts that enter the processing identity (the Name Count by entries, normalizers and version); the rest of the file moves nothing. Failing before: all 8 cases of tests/mdm/test_run_file_projection.py ("A target's run names its facts and files" refused the key). tests/mdm, tests/unit, tests/architecture pass (2419).
 - [ ] Slice 4: lookup sets from a bundle's keys (a group larger than 16, or a keys unit that spans the bundle): measure the census read per group against the dedicated route's once per bundle, then choose
 - [ ] Slice 5: the version 2 \`mastering\` target for \`sec.company\` (steps, run facts and files, lease sizes), plan tests and real workers on Postgres, the dedicated writer retired once \`load\` produces the same manifest
 - [ ] Name Frequency: rebuild it from the whole captured population under the current rules (load sequence step 4), and record its digest
