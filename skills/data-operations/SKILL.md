@@ -254,7 +254,7 @@ first and never loads a document twice.
 
 | You see | It means | Do this |
 | --- | --- | --- |
-| `workers work <operation> ... failed with status 1; its message is in <log>` | A worker or verifier could not finish a unit. | Read that log (`load-errors.log` in the stores folder), fix the cause, and run the same command again. The unit is tried again first. |
+| `workers work <operation> ... failed with status 1; its message is in <log>` | A worker or verifier could not finish a unit. | Read that log (`load-errors.log` in the stores folder), fix the cause, and run the same command again. The unit is tried again first. A transient database error (a deadlock, a closed connection) clears on that retry. A retry that fails the same way ("Artifact hash mismatch": an earlier run left a different file at the output path) cannot be resumed: `load` names that run, leaves it as it is and loads its documents again in a new run from the Change Journal. Give each load its own `--as-of` (the default is now), because the output folder is named by it and a reused one collides with an earlier run's files (ticket 185). |
 | `step <s>: unit <u> failed (<error>)` | A unit failed and is still failing. | Run `bookkeeping status <run> --step <s>` to see its error, fix the cause, and run the same command again. |
 | `Run <id> of <source> <target> is blocked` | Bookkeeping stopped that run, frozen under the active rules version, on corrupt or missing evidence. `load` will not submit its documents again. | Read `bookkeeping status <id>` and recover it ([recovery](../bookkeeping/RECOVERY.md)), then run the same command again. |
 | `did not finish before the deadline` | `--minutes` ran out. | Run the same command again, or give a longer `--minutes`. |
