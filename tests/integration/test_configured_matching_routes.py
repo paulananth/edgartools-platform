@@ -13,7 +13,7 @@ from tests.integration import test_clean_mdm_postgres as core
 from tests.mdm.test_configured_pair_comparison import PROGRAM, configured_root
 
 
-@pytest.mark.parametrize("route", ["census", "cascade"])
+@pytest.mark.parametrize("route", ["name_count", "cascade"])
 @pytest.mark.parametrize("arrival", ["holder_first", "candidate_first", "together"])
 def test_invented_route_reaches_normal_merge(database, configured_root, route, arrival):
     body = files.load(configured_root / "mastering/engine-v1.yaml")
@@ -33,13 +33,13 @@ owner = create_engine(os.environ["ROUTE_OWNER_URL"], hide_parameters=True)
 runtime = create_engine(os.environ["ROUTE_RUNTIME_URL"], hide_parameters=True)
 try:
     migrate(owner, application_role="clean_application")
-    primitive = "cascade_pass@1" if os.environ["ROUTE"] == "cascade" else "name_census_match@1"
-    args = names if primitive == "name_census_match@1" else {**names, "pass":"P1",
+    primitive = "cascade_pass@1" if os.environ["ROUTE"] == "cascade" else "name_count_match@1"
+    args = names if primitive == "name_count_match@1" else {**names, "pass":"P1",
         "compare":["street","city","postcode"], "refused_flags":[], "over_shared":10}
     tests = [{"primitive":primitive,"args":args},
         {"primitive":"gleif_entity_eligible@1","args":eligibility},
         {"primitive":"holds_no_other_lei@1","args":{}}]
-    if primitive == "name_census_match@1":
+    if primitive == "name_count_match@1":
         tests.append({"primitive":"postal_agrees@1","args":{
             "sec_code":"matching.invented_postal", "sec_country":"matching.invented_country",
             "gleif_code":"matching.invented_postal", "gleif_country":"matching.invented_country"}})
@@ -134,7 +134,7 @@ def test_populated_candidate_index_upgrade_preserves_history_and_pins(database):
     store.migrate(database.admin, application_role="clean_application")
     assert snapshot() == before
     with database.application.connect() as conn:
-        assert matching._stored(for_connection(conn), "fixture.primary", matching.candidate_paths({})["census"], ["invented-target"]) == [item]
+        assert matching._stored(for_connection(conn), "fixture.primary", matching.candidate_paths({})["name_count"], ["invented-target"]) == [item]
 
 
 def test_candidate_containment_checks_exact_array_position_and_duplicates(database):
@@ -146,12 +146,12 @@ def test_candidate_containment_checks_exact_array_position_and_duplicates(databa
     core.apply(database,1,assertions=items)
     from edgar_warehouse.mdm.clean.record_reads import for_connection
     with database.application.connect() as connection:
-        actual = matching._stored(for_connection(connection),"fixture.primary",matching.candidate_paths({})["census"],["first","second","first"])
+        actual = matching._stored(for_connection(connection),"fixture.primary",matching.candidate_paths({})["name_count"],["first","second","first"])
         assert {item["record_key"] for item in actual} == {"invented-0","invented-1"}
         assert len(actual) == 2
 
 
-@pytest.mark.parametrize("route", ["identifier", "census", "cascade"])
+@pytest.mark.parametrize("route", ["identifier", "name_count", "cascade"])
 def test_each_candidate_value_probes_its_real_index(database, route):
     from edgar_warehouse.mdm.clean.record_reads import for_connection
     # Unrelated entries ensure the two probes return only their exact groups.

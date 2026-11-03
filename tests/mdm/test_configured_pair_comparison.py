@@ -21,12 +21,12 @@ def configured_root(tmp_path):
     body["pair_comparisons"]["invented-comparison"] = {
         "name_field": "invented_name",
         "identifier_namespace": "invented_reference",
-        "census_field": "invented_name_count",
-        "census_entries_field": "invented_matches",
-        "census_holder_keys_field": "invented_keys",
-        "census_holder_count_field": "invented_key_count",
-        "census_identifier_count_field": "invented_match_count",
-        "census_other_holders_field": "invented_other_count",
+        "name_count_field": "invented_name_count",
+        "name_count_entries_field": "invented_matches",
+        "name_count_holder_keys_field": "invented_keys",
+        "name_count_holder_count_field": "invented_key_count",
+        "name_count_identifier_count_field": "invented_match_count",
+        "name_count_other_holders_field": "invented_other_count",
         "cascade_field": "invented_assignment",
         "cascade_identifier_field": "invented_target",
         "eligibility_kind": "invented-kind",
@@ -65,7 +65,7 @@ eligibility = {"categories": ["INVENTED"], "entity_statuses": ["ACCEPTED"],
                "refused_registration_statuses": ["REFUSED"]}
 def compare(primitive, args):
     return compare_candidate_records({"when": [{"primitive": primitive, "args": args}]}, [(left, right)])
-def name_count(): return compare("name_census_match@1", names)
+def name_count(): return compare("name_count_match@1", names)
 def eligible(): return compare("gleif_entity_eligible@1", eligibility)
 def cascade(): return compare("cascade_pass@1", {**names, "pass": "P1", "compare": ["street", "city", "postcode"], "refused_flags": []})
 def either(**changes):  # P5's shape: the city or the postcode
@@ -75,7 +75,7 @@ def either(**changes):  # P5's shape: the city or the postcode
 
 
 SCENARIOS = {
-    "census": 'assert name_count() == [[True, False]]',
+    "name_count": 'assert name_count() == [[True, False]]',
     "name_count_wrong_namespace": 'right["identifiers"] = {"other": "target-1"}; assert name_count() == [[False, False]]',
     "name_count_ambiguous": 'entry["invented_matches"] *= 2; assert name_count() == [[False, False]]',
     "name_count_stale_version": 'right["effective_at"] = "2026-02-01T00:00:00Z"; assert name_count() == [[False, False]]',
@@ -129,7 +129,7 @@ from edgar_warehouse.mdm.clean.activation import check_name_binding_rule
 rule = {"rule_id": "invented-rule", "pair_comparison": "invented-comparison",
     "applies_to_verdict": "invented-kind", "emits": ["bind"], "on_no_match": "wait",
     "source": "invented-right", "holder_source": "invented-left", "when": [
-        {"primitive": "name_census_match@1", "args": names},
+        {"primitive": "name_count_match@1", "args": names},
         {"primitive": "postal_agrees@1", "args": {}}]}
 check_name_binding_rule("invented-kind", rule, {})
 for changed in ({**rule, "pair_comparison": "missing"},

@@ -133,7 +133,7 @@ if case.startswith(("name_", "cascade_")):
     names = comparison_fixture["names"]
     eligibility = comparison_fixture["eligibility"]
     primitive = (
-        "cascade_pass@1" if case.startswith("cascade_") else "name_census_match@1"
+        "cascade_pass@1" if case.startswith("cascade_") else "name_count_match@1"
     )
     args = (
         {
@@ -151,7 +151,7 @@ if case.startswith(("name_", "cascade_")):
         {"primitive": "gleif_entity_eligible@1", "args": eligibility},
         {"primitive": "holds_no_other_lei@1", "args": {}},
     ]
-    if primitive == "name_census_match@1":
+    if primitive == "name_count_match@1":
         tests.append(
             {
                 "primitive": "postal_agrees@1",

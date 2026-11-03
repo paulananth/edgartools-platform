@@ -92,9 +92,9 @@ def _validate(body):
 
 
 def _validate_pair_comparison(pair, kinds):
-    text_fields = {"name_field", "identifier_namespace", "census_field", "census_entries_field",
-                   "census_holder_keys_field", "census_holder_count_field", "census_identifier_count_field",
-                   "census_other_holders_field", "cascade_field", "cascade_identifier_field",
+    text_fields = {"name_field", "identifier_namespace", "name_count_field", "name_count_entries_field",
+                   "name_count_holder_keys_field", "name_count_holder_count_field", "name_count_identifier_count_field",
+                   "name_count_other_holders_field", "cascade_field", "cascade_identifier_field",
                    "eligibility_kind", "status_field", "registration_status_field"}
     list_fields = {"eligibility_categories", "left_address_fields", "right_address_fields"}
     if (not isinstance(pair, dict) or set(pair) != text_fields | list_fields

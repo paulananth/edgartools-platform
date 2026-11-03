@@ -66,12 +66,12 @@ pair_comparisons:
   existing-name-binding:
     name_field: name
     identifier_namespace: lei
-    census_field: name_census
-    census_entries_field: leis
-    census_holder_keys_field: ciks
-    census_holder_count_field: cik_count
-    census_identifier_count_field: lei_count
-    census_other_holders_field: other_name_holders
+    name_count_field: name_census
+    name_count_entries_field: leis
+    name_count_holder_keys_field: ciks
+    name_count_holder_count_field: cik_count
+    name_count_identifier_count_field: lei_count
+    name_count_other_holders_field: other_name_holders
     cascade_field: cascade
     cascade_identifier_field: lei
     eligibility_kind: company
