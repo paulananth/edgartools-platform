@@ -18,7 +18,7 @@ The scripts use the existing local captures below and write evidence under
    separate publication authority binding already recorded in this repository.
 3. *Retired with the landed Company reader (Issue 20 L4, 2026-10-11): the SEC
    population is now counted from the raw capture by `mdm name-count`
-   (`rules/sources/sec.company/census-raw.yaml`).* It was
+   (`rules/sources/sec.company/name-count-raw.yaml`).* It was
    `sec_source_population.py`, which exhausted the 69 landed SEC captures in the
    existing `~/.local/share/edgartools/mdm/proving/cm27` fixture. It executes
    and verifies Source Extracts before deriving wanted keys. Company and former
@@ -29,7 +29,7 @@ The scripts use the existing local captures below and write evidence under
 4. *Deleted with the retired Name Count builder it compared against (ticket 88).*
    `whole_source_frequency.py` compared the whole pinned GLEIF JSON archive's
    Name Count and its seven cascade passes with that builder; the tests now
-   hold the Name Count each case makes (`tests/engine/fixtures/configured-census-cases.json`).
+   hold the Name Count each case makes (`tests/engine/fixtures/configured-name-count-cases.json`).
 
 Use `uv run python crates/source-contract/tests/qualification/<script>.py`.
 For measured samples, set `CENSUS_BOUNDED=1` on the SEC script and

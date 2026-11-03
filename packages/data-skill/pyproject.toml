@@ -23,7 +23,7 @@ dependencies = ["edgartools-control-core",
     "lxml>=5.3",
     "ijson>=3.3,<4",
     "fsspec>=2023.1.0",
-    # Generic source.read Parquet framing and the independent census boundary.
+    # Generic source.read Parquet framing and the independent Name Count boundary.
     "pyarrow>=17.0.0",
     # Bounded configured provider.capture transport; no edgartools dependency.
     "httpx>=0.28,<1",

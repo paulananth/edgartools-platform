@@ -137,7 +137,7 @@ def test_a_reading_made_by_another_recipe_is_refused(tmp_path, capture, monkeypa
     monkeypatch.setattr(files, "load", lambda path: altered if path == name_count_file.GLEIF_READING else original(path))
     reading = gleif_reading(tmp_path / "r", archive, wanted, len(RECORDS))
     monkeypatch.setattr(files, "load", original)
-    with pytest.raises(Conflict, match="not made by census-complete-stream.yaml"):
+    with pytest.raises(Conflict, match="not made by name-count-complete-stream.yaml"):
         name_count_of(tmp_path, capture, gleif_reading=reading)
 
 

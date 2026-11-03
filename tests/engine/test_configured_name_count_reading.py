@@ -1,7 +1,7 @@
 """Name Count construction from the configured complete reading.
 
 Each case's name count entries (and cascade answer) are in
-`fixtures/configured-census-cases.json`, written once from the retired name count
+`fixtures/configured-name-count-cases.json`, written once from the retired name count
 builder while the two still agreed; the header fields are checked from what the
 test itself builds."""
 from copy import deepcopy
@@ -18,7 +18,7 @@ from tests.mdm.test_clean_name_count import (
     APPLE, COMPLETE_READING, WAYFAIR, archive, configured, gleif, metadata, TestTheCascade as CascadeFixture,
 )
 
-CASES = json.loads((Path(__file__).parent / 'fixtures/configured-census-cases.json').read_text())
+CASES = json.loads((Path(__file__).parent / 'fixtures/configured-name-count-cases.json').read_text())
 
 
 @pytest.fixture(autouse=True)
@@ -157,7 +157,7 @@ def test_empty_registration_and_entity_containers_keep_historical_output(value):
 def test_cascade_skips_other_names_before_mapping_when_category_is_not_general(category):
     row = gleif('LEI', 'Apple Inc.', category=category)
     row['Entity']['OtherEntityNames'] = {'OtherEntityName':['x'] * 100001}
-    recipe = files.load(files.ROOT / 'sources/gleif/census-cascade-record.yaml')
+    recipe = files.load(files.ROOT / 'sources/gleif/name-count-cascade-record.yaml')
     mapped = SourceEngine(recipe).read(json.dumps(row).encode()).tables['mapped']
     assert [r['observation'] for r in mapped] == [None]  # no cascade entity, the other names never mapped
     if category == 'BRANCH':  # never a legal entity: its other names are not read at all
@@ -177,7 +177,7 @@ def test_truthy_non_object_containers_still_refuse_eligible_records(container):
 
 def test_name_count_name_transforms_equal_the_canonical_normalizer_recipes():
     for source, recipe in [('gleif',files.load(COMPLETE_READING)),
-                           ('gleif',files.load(files.ROOT / 'sources/gleif/census-names-stream.yaml')),
+                           ('gleif',files.load(files.ROOT / 'sources/gleif/name-count-names-stream.yaml')),
                            ('sec.company',name_count.sec_reading())]:
         canonical = files.load(files.ROOT / f'sources/{source}/name-key.yaml')
         transforms = canonical['read']['tables']['names']['columns']['key']['text']['transforms']

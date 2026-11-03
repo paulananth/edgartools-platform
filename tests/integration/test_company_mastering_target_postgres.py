@@ -98,10 +98,10 @@ def test_the_manifest_freezes_documents_by_receipt_and_composes_name_count_and_c
                                     catalog=CATALOG, name_count=str(name_count), output=str(tmp_path / "b"), **PINS)
     steps = json.loads(Path(report["manifest"]["uri"].removeprefix("file://")).read_bytes())["steps"]
     assert {name: len(units) for name, units in steps.items()} == {
-        "main": 1, "keys": 1, "catalog": 1, "census": 1, "combine": 1, "records": 1, "merge": 1, "processed": 1}
-    name_count_input = steps["census"][0]["input"]["compose"]
+        "main": 1, "keys": 1, "catalog": 1, "name_count": 1, "combine": 1, "records": 1, "merge": 1, "processed": 1}
+    name_count_input = steps["name_count"][0]["input"]["compose"]
     assert name_count_input["slots"]["lookups"]["compose"]["slots"]["keys"] == [{"step": "keys", "key": "keys"}]
-    assert set(steps["combine"][0]["input"]["compose"]["slots"]) == {"main", "census", "catalog"}
+    assert set(steps["combine"][0]["input"]["compose"]["slots"]) == {"main", "name_count", "catalog"}
     assert steps["merge"][0]["input"] == {"from": {"step": "records", "key": "records"}}
     assert steps["records"][0]["keys"]["revision"] == str(PINS["revision"])
     assert not list((tmp_path / "b").rglob("*.jsonl"))  # documents stay in the capture, by receipt

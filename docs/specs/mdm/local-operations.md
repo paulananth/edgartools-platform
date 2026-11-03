@@ -126,11 +126,11 @@ whole SEC population (each filer's current and former names) and a full GLEIF
 Level 1 Golden Copy (legal and other names, branches excluded). It refuses a
 delta. The population file lists the receipt keys of the main submissions
 documents counted; each is read from the capture folder (`receipts.jsonl` and
-`bronze/`) through `rules/sources/sec.company/census-sec-names.yaml` by the
+`bronze/`) through `rules/sources/sec.company/name-count-sec-names.yaml` by the
 `source.read` worker and its verifier, up to 256 documents a unit, and must match its
-receipt; `census-sec-reduction.yaml` counts it. With a cascade pass switched on, the Name Count also runs the cascade
+receipt; `name-count-sec-reduction.yaml` counts it. With a cascade pass switched on, the Name Count also runs the cascade
 through the Company chain's own readings (`--catalog`, below). The Golden Copy arrives as
-one verified `source.read` reading of `rules/sources/gleif/census-complete-stream.yaml`
+one verified `source.read` reading of `rules/sources/gleif/name-count-complete-stream.yaml`
 (about an hour for 3.4 million records); the command checks that the reading
 projected exactly the names this population holds. It needs local files only:
 
@@ -179,12 +179,12 @@ manifest names each main submissions document in `--documents` (at most 512
 receipt keys, all in the population the Name Count counted) by its receipt
 in `receipts.jsonl`, in place, and SEC's exchange ticker catalog
 (`--catalog`, a receipt key). The target's workers read the documents in
-units of at most 8 MiB (`census-main.yaml`) and once more for their name keys
-and CIKs only (`census-keys.yaml`, one reading of the bundle), read the Name Count
-once narrowed to the bundle's names and CIKs (`census.yaml`, bound to the
+units of at most 8 MiB (`name-count-main.yaml`) and once more for their name keys
+and CIKs only (`name-count-keys.yaml`, one reading of the bundle), read the Name Count
+once narrowed to the bundle's names and CIKs (`name-count.yaml`, bound to the
 Name Count's digest; its two lookup sets are derived from the key reading, so a
 bundle names at most 512 documents), read the catalog once (`catalog.yaml`), combine them per unit
-(`combine-census-captured.yaml`): forms from the document's recent filings,
+(`combine-name-count-captured.yaml`): forms from the document's recent filings,
 tickers from the catalog in rank order, the business address and the Name Count
 entry; prepare the bundle's rows as one publication (`mdm.prepare`) and merge
 it (`mdm.merge`). Every step is executed by a worker and checked by a

@@ -45,7 +45,7 @@ read:
         right:
           const:
             value: GoldenCopy
-    reason: Census requires a FULL Golden Copy
+    reason: Name Count requires a FULL Golden Copy
   - test:
       test:
         path: data.publish_date

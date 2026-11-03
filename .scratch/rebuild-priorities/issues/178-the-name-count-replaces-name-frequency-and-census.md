@@ -28,10 +28,10 @@ Type: task. Status: open (in progress). Blocks: [177](177-sec-company-loads-thro
 
 - [x] The glossary and the prose: `CONTEXT.md` defines **Name Count** (avoid "Name Frequency", "Name Census", "Census"); the skills and the living docs say Name Count wherever they name the concept; file names, commands and code identifiers stay until the slices below (2026-11-02 20:23 ET; lints pass)
 - [x] Slice 2: the Python modules (`name_count.py`, `name_count_file.py`), the CLI (`mdm name-count`, `--name-count`), their functions and tests; the contract strings (rules file names, the record trail key `name_census`, the policy function) stay for slices 3 to 5 (2026-11-02 21:04 ET; tests/mdm, tests/unit, tests/architecture and tests/engine pass locally; the Postgres tests run in CI)
-- [ ] Slice 3: the rules files of `sec.company` and `gleif`, the source references and contract tokens; new versions of the sources; the Mapping Documents
+- [x] Slice 3: the 16 rules files of `sec.company` and `gleif` renamed (`name-count-*.yaml`, `combine-name-count*.yaml`), their references, the step, slot and group names (`name_count`, `name_count_names`, `name_count_digest`, `name_count_cascade`) and their prose; the Mapping Documents regenerated; the historic digest test restores the one renamed word (2026-11-02 22:21 ET; tests/mdm, tests/unit, tests/architecture, tests/engine incl. the installed bundle, and the Company mastering and matching-route integration tests pass locally)
+- [ ] New versions of `sec.company` and `gleif` for the renamed rules files and the `census.yaml` label, with carried-forward proofs, approved and activated in `source-by-source`
 - [ ] Slice 4: the merge policy function (`name_census_match`), the policy language, the pinned digests and the merge rules' new version with its carried-forward proof
 - [x] The label inside the file and `census.yaml` reads `sec-gleif-name-count-v1` (operator, 2026-11-02: "change sec-gleif-name-census-v1 sec-gleif-name-count-v1"); the built file's label is patched in place, counts unchanged (2026-11-02 21:04 ET)
-- [ ] A new version of `sec.company` for the changed `census.yaml` label, with its carried-forward proof, approved and activated in `source-by-source`
 - [ ] Slice 5: the stored Name Count file's keys and version, and the tests that read it
 - [ ] Slice 6: the Rust crate's tests and fixtures
 - [ ] Final check: `git grep -i census` outside `.scratch/` and `.planning/` finds only words that mean something else (the N-CEN form, a filename tally)

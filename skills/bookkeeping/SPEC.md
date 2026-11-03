@@ -245,9 +245,9 @@ filled document's reference fills it:
 ```json
 {"compose": {
   "document": {"version": 1, "contract": {"uri": "...", "sha256": "..."},
-               "readings": {"main": {"slot": "main"}, "census": {"slot": "census"}}},
+               "readings": {"main": {"slot": "main"}, "name_count": {"slot": "name_count"}}},
   "slots": {"main": {"step": "read_main", "key": "unit-0"},
-            "census": {"step": "read_census", "key": "bundle"}}
+            "name_count": {"step": "read_name_count", "key": "bundle"}}
 }}
 ```
 

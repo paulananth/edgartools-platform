@@ -65,7 +65,7 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
                         help="JSON file: the receipt keys of the main submissions documents counted, which together "
                              "must be every SEC filer")
     name_count.add_argument("--gleif-reading", required=True,
-                        help="The verified source.read output of rules/sources/gleif/census-complete-stream.yaml "
+                        help="The verified source.read output of rules/sources/gleif/name-count-complete-stream.yaml "
                              "over a full Golden Copy (its reading.json)")
     name_count.add_argument("--gleif-reading-sha256", required=True)
     name_count.add_argument("--gleif-metadata", required=True, help="JSON file: the archive's verified publication metadata")

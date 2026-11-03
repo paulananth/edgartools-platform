@@ -49,7 +49,7 @@ bookkeeping:
           checks: [input.hash, output.receipt]
       checks: [manifest.hash, work.accounting, journal.delivered]
     # Company preparation and mastering of one bundle (Issue 20 slice 20c): the
-    # input manifest is written by `mdm prepare-clean-company`; census and
+    # input manifest is written by `mdm prepare-clean-company`; name count and
     # combine inputs are composed from the steps' verified readings.
     mastering:
       steps:
@@ -71,7 +71,7 @@ bookkeeping:
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.output]
-        - name: census
+        - name: name_count
           operation: source.read
           requires: [keys]
           key: "{unit}"
@@ -79,7 +79,7 @@ bookkeeping:
           checks: [input.hash, output.receipt, source.output]
         - name: combine
           operation: source.combine
-          requires: [main, catalog, census]
+          requires: [main, catalog, name_count]
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.combined]
@@ -123,7 +123,7 @@ dataset_contracts:
       schema_version: silver-company-v1
       record_key: zero-padded 10-digit CIK
       publication_key: capture run plus exact company landing member digest, plus the exact
-        filing-list, business-address and ticker catalog member digests, plus the Name Census
+        filing-list, business-address and ticker catalog member digests, plus the Name Count
         digest
       effective_time: unknown; last_synced_at is observation time only
       semantics: patch

@@ -106,7 +106,7 @@ def test_complete_name_count_general_projection_matches_active_cascade_without_i
     assert len(spec["passes"]) == 3
     contract = dataset_contract("level1")
     expected = cascade_entity(row, {"spec": spec, "gleif_contract": contract}, {"EXAMPLE"})
-    recipe = files.load(files.ROOT / "sources/gleif/census-cascade-record.yaml")
+    recipe = files.load(files.ROOT / "sources/gleif/name-count-cascade-record.yaml")
     projected = SourceEngine(recipe).read(json.dumps(row, ensure_ascii=False).encode()).tables["mapped"][0]["observation"]
     if expected is None:
         assert projected is None
@@ -1158,7 +1158,7 @@ def read(name, template, payload, context):
     receipt = source_read.execute(task,store)
     assert source_read.verify({**task,"candidate":receipt},store) == ({"source.output":True},[])
     return receipt
-main = read("main","census-main.yaml" if with_name_count else "source.yaml",{"name":"Example","filings":{"recent":{
+main = read("main","name-count-main.yaml" if with_name_count else "source.yaml",{"name":"Example","filings":{"recent":{
     "accessionNumber":["r1","r2"],"form":["8-K","10-K"]}},
     "addresses":{"business":{"street1":"Raw","stateOrCountry":"X0"}}},
     {**context,"recent_limit":None,"last_synced_at":date,**({"bronze_object":"bronze/main.json"} if with_name_count else {})})
@@ -1168,7 +1168,7 @@ exchange = read("catalog-exchange","catalog.yaml",{"fields":["cik","ticker"],"da
 tickers = read("catalog-tickers","catalog.yaml",{"0":{"cik_str":1,"ticker":"A"},"1":{"cik_str":1,"ticker":"C"}},
     {**catalog_context,"source_name":"tickers"})
 refs = {"main":main,"pages":pages,"catalog_exchange":exchange,"catalog_tickers":tickers}
-rules = files.load(blueprints / ("combine-census.yaml" if with_name_count else "combine.yaml"))
+rules = files.load(blueprints / ("combine-name-count.yaml" if with_name_count else "combine.yaml"))
 if with_name_count:
     name_count = {"version":"sec-gleif-name-count-v1","sec":{"filers":1},
         "gleif":{"file_content":"GLEIF_FULL_PUBLISHED"},
@@ -1181,14 +1181,14 @@ if with_name_count:
         if isinstance(value,list): return [bind(item) for item in value]
         if isinstance(value,dict): return {key:bind(item) for key,item in value.items()}
         return value
-    config = bind(files.load(blueprints / "census.yaml"))
+    config = bind(files.load(blueprints / "name-count.yaml"))
     # Narrowed to the bundle's name and CIK keys (20c): a version-3 request with its lookup sets.
     entry = {"input":raw,"context":store.put(folder.as_uri(),{"version":1,"input":raw,"values":{}}),
              "lookups":store.put(folder.as_uri(),{"version":1,"input":raw,"sets":{"names":["EXAMPLE"],"ciks":["1"]}})}
     scope = store.put(folder.as_uri(),{"version":3,"contract":store.put(folder.as_uri(),config),"artifacts":[entry]})
     task = {"input":scope,"output":(folder / "census-reading.json").as_uri(),"checks":["source.output"]}
-    refs["census"] = source_read.execute(task,store)
-    assert source_read.verify({**task,"candidate":refs["census"]},store) == ({"source.output":True},[])
+    refs["name_count"] = source_read.execute(task,store)
+    assert source_read.verify({**task,"candidate":refs["name_count"]},store) == ({"source.output":True},[])
     rules = bind(rules)
 for spec in [*rules["combine"]["groups"].values(),*rules["combine"]["tables"].values()]:
     spec["checks"] = {key:{"APPROVED_COMPANY_CAPTURE_RUN":"capture","APPROVED_CATALOG_CAPTURE_RUN":"catalog"}.get(value,value)
@@ -1360,7 +1360,7 @@ name_count_arguments=body["name_count_arguments"]
 assert hashlib.sha256(packed).hexdigest()==name_count_arguments["gleif_sha256"]
 # The Golden Copy through the installed configured complete reading, folded as `mdm name-count` folds it.
 held,wanted=name_count._sec_population(name_count_arguments["filers"])
-traversal=Traversal(files.load(files.ROOT/"sources/gleif/census-complete-stream.yaml"),archive_policy="configured")
+traversal=Traversal(files.load(files.ROOT/"sources/gleif/name-count-complete-stream.yaml"),archive_policy="configured")
 tables=[]
 traversal.scan(io.BytesIO(packed),lookups={"wanted":sorted(wanted)},
     context={"publication_count":name_count_arguments["gleif_metadata"]["record_count"]},
@@ -1423,8 +1423,8 @@ pins={str(path):hashlib.sha256(Path(path).read_bytes()).hexdigest()
                    files.ROOT/"sources/sec.company/source.yaml",
                    files.ROOT/"sources/sec.submissions.person/source.yaml",Path(sec_company.__file__),
                    Path(name_count.__file__),
-                   files.ROOT/"sources/gleif/census-complete-stream.yaml",
-                   files.ROOT/"sources/sec.company/census-filer.yaml"]}
+                   files.ROOT/"sources/gleif/name-count-complete-stream.yaml",
+                   files.ROOT/"sources/sec.company/name-count-filer.yaml"]}
 print(json.dumps({"pins":pins,"generation":name_count_result["generation"],"counts":counts,
                   "installed_gleif_mapping":True,"installed_sec_mapping":True,"installed_name_count_caller":True,"name_count_digest":digest(counted),"publication_recovery":True,"full_population":False}))
 engine.dispose()
@@ -1488,7 +1488,7 @@ items = worklist(Artifacts().json(json.load(sys.stdin)["manifest"]), config)
 print(json.dumps(sorted({i["step"] for i in items})))
 """, cwd=root, document=report)
     assert frozen.returncode == 0, frozen.stderr
-    assert json.loads(frozen.stdout) == ["catalog", "census", "combine", "keys", "main", "merge", "processed", "records"]
+    assert json.loads(frozen.stdout) == ["catalog", "combine", "keys", "main", "merge", "name_count", "processed", "records"]
     repeated = _run(python,"-m","edgar_warehouse.cli",*arguments,cwd=root)
     assert repeated.returncode == 0,repeated.stderr
     assert json.loads(repeated.stdout)==report
@@ -1687,7 +1687,7 @@ def test_complete_name_count_projection_keeps_global_duplicates_and_pair_scoped_
     records[3]["Entity"]["LegalName"] = {"$": "Another"}
     records[3]["Registration"]["LastUpdateDate"] = {"$": "another-name-update"}
     records[4]["Registration"]["LastUpdateDate"] = {"$": "latest-example-update"}
-    config = files.load(files.ROOT / "sources/gleif/census-complete-stream.yaml")
+    config = files.load(files.ROOT / "sources/gleif/name-count-complete-stream.yaml")
     config["read"]["stream"]["container"] = "none"
     found = []
     receipt = Traversal(config, archive_policy="configured").scan(

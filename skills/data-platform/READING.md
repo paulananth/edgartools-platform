@@ -1254,8 +1254,8 @@ The sources this repository reads today, and where each rule above is applied.
   an object; its place lookup converts the selected SEC code with Python text
   semantics, keeping the historical mapping of nontext codes to unknown places.
 - The Person source read block keeps the complete submissions document. Company
-  preparation reads the raw capture (`census-main.yaml`, the Name Count file
-  through `census.yaml`, `catalog.yaml`) and joins them with `combine-census.yaml`.
+  preparation reads the raw capture (`name-count-main.yaml`, the Name Count file
+  through `name-count.yaml`, `catalog.yaml`) and joins them with `combine-name-count.yaml`.
 - The installed object-records trial assembles the two raw Person fixture records
   and verifies them through preparation and the actual Person MDM contract.
 - Name Count keys: `sec.company/name-key.yaml` and
@@ -1340,14 +1340,14 @@ decision and does not replace the later MDM checks.
 
 ### Name Count contracts
 
-- Name Count reuse binds the file's SHA into `sources/sec.company/census.yaml`;
-  Company captures are read through `census-main.yaml` and combined with
-  `combine-census.yaml`.
+- Name Count reuse binds the file's SHA into `sources/sec.company/name-count.yaml`;
+  Company captures are read through `name-count-main.yaml` and combined with
+  `combine-name-count.yaml`.
 
-The bundled `gleif/census-record.yaml` and
-`sec.company/census-filer.yaml` use these primitives for Name Count
-name extraction and canonical keys. `gleif/census-identity.yaml` projects
-eligibility and legal keys selectively; `gleif/census-update.yaml` reads
+The bundled `gleif/name-count-record.yaml` and
+`sec.company/name-count-filer.yaml` use these primitives for Name Count
+name extraction and canonical keys. `gleif/name-count-identity.yaml` projects
+eligibility and legal keys selectively; `gleif/name-count-update.yaml` reads
 registration only for a wanted legal key. Preserve the caller order: Name Count
 category, LEI, legal key, wanted-key timestamp, other names; cascade LEI,
 category, mapped quality, names. Empty falsey containers yield no names;
@@ -1393,13 +1393,13 @@ An empty key list still validates document shape and assertions.
 `mdm prepare-clean-company` writes the input manifest of the Company source's
 `mastering` target (Issue 20 slice 20c), and `rules run --target mastering`
 runs it: registered workers read the receipt-bound raw capture's main
-documents through `census-main.yaml` (each row's bronze origin from the
+documents through `name-count-main.yaml` (each row's bronze origin from the
 caller's `bronze_object` context) and their name and CIK keys through
-`census-keys.yaml`; the authenticated frozen Name Count file through
-`census.yaml`, narrowed by two lookup sets derived from the key readings (a
+`name-count-keys.yaml`; the authenticated frozen Name Count file through
+`name-count.yaml`, narrowed by two lookup sets derived from the key readings (a
 version-3 request; one key reading of at most 512 documents a bundle); the
 exchange catalog through `catalog.yaml`; joined by
-`combine-census-captured.yaml` (`combine-census.yaml` with the sources a
+`combine-name-count-captured.yaml` (`combine-name-count.yaml` with the sources a
 capture holds today); then `mdm.prepare` makes the bundle's rows one
 publication and `mdm.merge` merges it. The Name Count, combine and records inputs
 are composed by Bookkeeping from the verified readings. `mdm name-count`

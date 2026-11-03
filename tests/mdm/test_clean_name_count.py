@@ -16,7 +16,7 @@ from edgar_warehouse.mdm.clean.store import digest
 from edgar_warehouse.rules import files
 from edgar_warehouse.workers.source_traversal import Traversal
 
-COMPLETE_READING = files.ROOT / "sources/gleif/census-complete-stream.yaml"
+COMPLETE_READING = files.ROOT / "sources/gleif/name-count-complete-stream.yaml"
 
 
 def gleif(lei, legal, *, other=(), category="GENERAL", updated="2026-09-01T00:00:00Z"):
@@ -55,7 +55,7 @@ def metadata(count, **changes):
 
 def configured(filers, records, *, cascade=None, recipe=None, population=None, archive_sha256=None):
     """The name count `mdm name-count` writes: the Golden Copy through its configured
-    complete reading (`census-complete-stream.yaml`), folded, then `document`.
+    complete reading (`name-count-complete-stream.yaml`), folded, then `document`.
     `cascade` is {"spec", "filers"}: the passes and every SEC filer as the cascade reads it."""
     held, wanted = name_count._sec_population(filers)
     rules = copy.deepcopy(recipe or files.load(COMPLETE_READING))
@@ -185,7 +185,7 @@ class TestTheCascade:
 
 
 def test_a_record_carries_its_ciks_cascade_answer_inside_its_name_count_entry():
-    from tests.engine.test_company_census_configuration import name_count_evidence
+    from tests.engine.test_company_name_count_configuration import name_count_evidence
 
     found = counted_names([APPLE], [gleif("HWUPKR0MPOU8FGXBT394", "Apple Inc.")])
     row = {"cik": 320193, "entity_name": "APPLE INC"}
