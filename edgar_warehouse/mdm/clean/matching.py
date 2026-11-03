@@ -112,7 +112,7 @@ def compare_pair_test(name: str, left: dict, right: dict, args: dict) -> bool:
 HELD_LEI_TEST = "holds_no_other_lei@1"
 PAIR_TESTS = {
     name: partial(compare_pair_test, name) for name in (
-        "name_count_match@1", "gleif_entity_eligible@1", "jurisdiction_agrees@1",
+        "name_census_match@1", "gleif_entity_eligible@1", "jurisdiction_agrees@1",
         "jurisdictions_do_not_conflict@1", "postal_agrees@1", cascade.TEST,
     )
 }

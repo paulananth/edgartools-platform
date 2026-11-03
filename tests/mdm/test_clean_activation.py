@@ -686,7 +686,7 @@ NAME_RULES = _name_rules()
 
 
 def _current_company_identity(value):
-    """Apply the Company source rename and the Name Count rename to frozen, pre-rename policy evidence."""
+    """Apply the Company source rename to frozen, pre-rename policy evidence."""
     if isinstance(value, dict):
         return {_current_company_identity(key): _current_company_identity(item)
                 for key, item in value.items()}
@@ -694,8 +694,7 @@ def _current_company_identity(value):
         return [_current_company_identity(item) for item in value]
     if isinstance(value, str):
         return {"sec.submissions.company.v1": "sec.company.v1",
-                "sec.submissions.company": "sec.company",
-                "name_census_match@1": "name_count_match@1"}.get(value, value)
+                "sec.submissions.company": "sec.company"}.get(value, value)
     return value
 
 
@@ -709,8 +708,7 @@ def _historic_company_identity(value):
         return {"sec.company.v1": "sec.submissions.company.v1",
                 "sec.company": "sec.submissions.company",
                 "company-2026-10-31.sec-company-source-identity":
-                    "company-2026-10-25.one-value-per-identifier",
-                "name_count_match@1": "name_census_match@1"}.get(value, value)  # ticket 178
+                    "company-2026-10-25.one-value-per-identifier"}.get(value, value)
     return value
 
 
@@ -770,7 +768,7 @@ class TestANameBindingRule:
             ({"emits": ["bind", "review"]}, "exactly bind"),
             ({"holder_source": None}, "holds the Company"),
             (
-                {"when": [{"primitive": "name_count_match@1", "args": {}}]},
+                {"when": [{"primitive": "name_census_match@1", "args": {}}]},
                 "never the name alone",
             ),
             (

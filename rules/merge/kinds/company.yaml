@@ -272,7 +272,7 @@ rules:
   - bind
   on_no_match: wait
   when:
-  - primitive: name_count_match@1
+  - primitive: name_census_match@1
     args:
       sec_normalizer: normalize_text@sec-legal-form-kept-v1
       gleif_normalizer: normalize_text@legal-form-kept-v1
@@ -302,7 +302,7 @@ rules:
   - bind
   on_no_match: wait
   when:
-  - primitive: name_count_match@1
+  - primitive: name_census_match@1
     args:
       sec_normalizer: normalize_text@sec-legal-form-kept-v1
       gleif_normalizer: normalize_text@legal-form-kept-v1

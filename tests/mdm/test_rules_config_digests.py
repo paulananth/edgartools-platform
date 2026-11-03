@@ -131,9 +131,8 @@ def _with_company_fields_back(contract: dict, code: str) -> dict:
     return before_ticket_129(contract, code)
 
 
-# Ticket 178 renamed the matching function and its profile fields; the historic digests use the old words.
+# Ticket 178 renamed the matching profile fields (the function id name_census_match@1 stays: a registered rule version keeps its steps); the historic digests use the old words.
 RENAMED_BY_TICKET_178 = {
-    "name_count_match@1": "name_census_match@1",
     **{f"name_count_{part}": f"census_{part}" for part in (
         "field", "entries_field", "holder_keys_field", "holder_count_field", "identifier_count_field",
         "other_holders_field")}}

@@ -246,7 +246,7 @@ fn test_record_pair(
     let shape = &command.pair_comparison;
     match name {
         "holds_no_other_lei@1" => Ok(true),
-        "name_count_match@1" => {
+        "name_census_match@1" => {
             let entry = values::read_object(&read_matching_values(left)?, &shape.name_count_field)?;
             let identifier = values::read_optional_value(
                 &values::read_object(right, "identifiers")?,
