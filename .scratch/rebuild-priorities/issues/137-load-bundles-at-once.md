@@ -2,7 +2,7 @@
 
 Priority: 137. Map: [Rebuild priorities](../map.md). Opened 2026-10-25 13:39 ET.
 
-Type: task. Status: in progress (Claude, branch `claude/t137-bundles-at-once`).
+Type: task. Status: resolved.
 Blocked by: none. Follows [136](136-one-command-loads-a-capture.md).
 
 ## Found (2026-10-25 13:38 ET)
@@ -44,6 +44,6 @@ stop is named at the end. Open runs are finished the same way, N at a time.
   - [x] The at-once test waits on a barrier, not on timing; a stop with bundles still queued is tested (`--bundles 1`)
   - [x] The skill names `--bundles` and the number of bundles apart
   - Tests: `test_rules_loading.py` 13 passed
-- [ ] PR, CI green, merge
-- [ ] 120's load restarted with `--bundles`, the total stated before it starts
-- [ ] Learning → skill
+- [x] PR, CI green, merge (2026-11-03 12:52 ET): #1170, merged; `load --bundles` has run every load since (ticket 177 timed it)
+- [ ] ~~120's load restarted with `--bundles`, the total stated before it starts~~ deferred to ticket 150: ticket 120 resolved on 2026-10-29 and moved the rest of its loads there
+- [x] Learning → skill (2026-11-03 12:52 ET): `skills/data-operations/SKILL.md` "Fit the load into the window" names `--bundles`, the verifier as the bound and measuring one bundle first (done with the code); ticket 177 added the measured bundle time
