@@ -284,3 +284,29 @@ def test_a_missing_source_or_the_sources_own_folder_is_refused(tmp_path, monkeyp
     monkeypatch.setattr(files, "source", lambda n, *a, **k: body if n == "sec.nport.fund" else source(n, *a, **k))
     with pytest.raises(ValueError, match="another source's existing rules file"):
         fund_bundle(tmp_path)
+
+
+def over_all(steps):
+    answers = next(step for step in steps if step["name"] == "answers")
+    answers["units"] = "one"
+    answers["input"]["lookups"]["asked"]["over"] = "all"
+
+
+def test_a_lookup_over_all_reads_every_unit_of_its_prerequisite_in_one_reading(tmp_path, monkeypatch):
+    """Ticket 177, slice 4: one read of a large shared file per bundle, not one per group of files
+    (measured: 0.56 s a read for a 6 MB Name Count whether it is narrowed to 16 keys or 512)."""
+    steps = Artifacts().json(write(tmp_path, monkeypatch, over_all)["manifest"])["steps"]
+
+    (unit,) = steps["answers"]
+    compose = unit["input"]["compose"]
+    named = compose["slots"][compose["document"]["artifacts"][0]["lookups"]["slot"]]["compose"]["slots"]["asked"]
+    assert named == [{"step": "requests", "key": f"id_cusip/{n:05d}"} for n in range(8)]
+
+
+def test_a_lookup_over_all_is_one_of_all_or_each(tmp_path, monkeypatch):
+    def bad(steps):
+        over_all(steps)
+        next(step for step in steps if step["name"] == "answers")["input"]["lookups"]["asked"]["over"] = "some"
+
+    with pytest.raises(Exception, match="over"):
+        write(tmp_path, monkeypatch, bad)
