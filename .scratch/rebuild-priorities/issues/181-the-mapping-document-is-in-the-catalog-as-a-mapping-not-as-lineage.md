@@ -10,12 +10,24 @@ Today the catalog holds a mapping only as column-level lineage on the Gold or ma
 
 "Source to final" means every row of a source's `MAPPING.xlsx`: the source field or file path, each step that changes it, and the Silver column or master field it ends in.
 
+## Operator ruling (2026-11-03 08:21 ET)
+
+The operator said: "Treat the document as the integration specification; use lineage to represent the relationships described by it." They gave the placement:
+
+| What | Where in OpenMetadata |
+|---|---|
+| The mapping covering an entire integration (the whole `MAPPING.xlsx` of one source) | A custom property on the pipeline, with links from the relevant target tables |
+| A brief explanation of each transformation | The table or column description |
+| The source → target relationships | The Lineage tab |
+
+So lineage stays, as the picture of the relationships the document describes; the document itself is the specification and sits on the pipeline. The Question's wording "not lineage" means the document is not only lineage.
+
 ## Parts
 
 - [ ] Read the Mapping Document sheets (`rules mapdoc`) and name what one row carries (source path, steps, target, quality rule), with the count of rows per source
-- [ ] Find the native OpenMetadata place for it on the running server and the pinned release: table or column custom property, column description, a Data Contract, or a Knowledge Center page. Demonstrate each on the server; record which ones exist and which are absent (a capability gap is routed, not hidden)
-- [ ] Recommend one place with the reasoning, and ask the operator one question
-- [ ] Publisher: `rules catalog plan` and `publish` write the mapping to that place for every configured source, and read it back. The plan lists it; `catalog check` compares it
-- [ ] Remove the mapping from lineage, or keep lineage as data flow only (the skill already says lineage is the data flow); change the skill lines in `skills/openmetadata/SKILL.md` and `skills/data-onboarding/CATALOG.md`
+- [x] Place chosen by the operator (2026-11-03 08:21 ET, table above); no question left
+- [ ] Demonstrate on the running server and the pinned release that a pipeline custom property can hold a whole Mapping Document (size limit, type), that a table can link to it, and that table and column descriptions can hold the transformation text; record any capability gap and route it
+- [ ] Publisher: `rules catalog plan` and `publish` write each source's Mapping Document as a custom property on its pipeline, link it from the target tables, put the brief transformation text in the table or column descriptions, and keep the source → target edges (with columns) on the Lineage tab; read all back. The plan lists them; `catalog check` compares them
+- [ ] Change the skill lines in `skills/openmetadata/SKILL.md` and `skills/data-onboarding/CATALOG.md`
 - [ ] Test: a plan for a fixture source holds one mapping per row of its Mapping Document; a mapping changed in the rules changes the plan
 - [ ] Learning → skill: name the skill line this changes (the "What the catalog holds for quality and mapping" bullet in `skills/openmetadata/SKILL.md`)
