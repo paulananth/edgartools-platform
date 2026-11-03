@@ -28,7 +28,8 @@
 # `security`). The context names each file's `batch` ("id_cusip/00000") and
 # its `id_type`, the folder ("id_cusip" or "id_isin", OpenFIGI's idType). A select that gives null excludes its row (`value: {path:
 # NO_SUCH_FIELD}`, the null idiom of the engine). The `listings` table keeps
-# OpenFIGI's field names, and lands in silver (silver-listing.yaml). Stream bounds hold for a whole reading of up to 512 files: each
+# OpenFIGI's field names; the Security's `listings` detail holds every listing in MDM, so silver
+# keeps none (ticket 143). Stream bounds hold for a whole reading of up to 512 files: each
 # file is at least one piece, and an ISIN file projects about 1.4 MB (measured
 # 2026-10-17 on 8 files), so about 700 MB a reading.
 source: openfigi
@@ -645,7 +646,7 @@ read:
     # Each listing as a Security's detail row and its security-level fields, and
     # whether it is the US composite or the ISIN country's composite (ticket
     # 120): combine.yaml gathers an identifier's rows and the primary listing's
-    # fields from here, so `listings` (silver-listing.yaml) stays as it is.
+    # fields from here.
     details:
       each: data
       columns:

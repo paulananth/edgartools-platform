@@ -94,6 +94,14 @@ of an amount the row states stays beside that amount (operator, 2026-10-28:
 "Keep it on the row (Recommended)"), even when the master also holds a
 currency.
 
+**A retired column leaves a store by a new table, never by a drop** (ticket 143). The silver writer adds
+columns and never drops them, and a changed spec is refused for a registered table. So a spec that loses a
+copy is registered under a new table name (`silver register`), the loads go to it, and the old table is dropped
+by its owner after the people reading the shared server are told. A store that holds no Silver needs nothing.
+`tests/unit/test_silver_keeps_no_master_field.py` refuses a column whose name is a field the same source's
+Dataset Contract maps (a link key, the record key and a date stay); a column kept by a ruling is named in its
+`KEPT` list with the ruling.
+
 A part that looks like two classes is usually two parts: a code list inside a
 master file is reference data plus a master attribute that holds its codes.
 

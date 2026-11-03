@@ -85,7 +85,8 @@ def test_both_shapes_read_the_same_rows():
     (row,) = tables["non_derivative_transaction"]
     assert (row["accession_number"], row["position"], row["transaction_date"], row["transaction_code"], row["equity_swap_involved"],
             row["transaction_shares"]) == (ACCESSION, 1, "2026-01-05", "P", False, "100")
-    assert tables["reporting_owner"][0]["is_director"] is True
+    assert tables["owner_record"][0]["record"]["is_director"] is True  # the capacity is MDM's, not silver's
+    assert "is_director" not in tables["reporting_owner"][0]
     assert tables["ownership_document"][0]["accession_number"] == ACCESSION
     assert tables["footnote"] == [{"accession_number": ACCESSION, "footnote_id": "F1", "text": "An invented footnote."}]
 
@@ -150,7 +151,8 @@ def test_each_owner_row_carries_the_filings_issuer_and_event_date():
     """The owner's Dataset Contract states its link to the issuer, dated by the filing."""
     for tables in (bare(filing(date="2026-01-05-05:00")), wrapped(filing(date="2026-01-05-05:00"))):
         (owner,) = tables["reporting_owner"]
-        assert (owner["issuer_cik"], owner["period_of_report"], owner["is_director"]) == ("0000000001", "2026-01-05", True)
+        assert (owner["issuer_cik"], owner["period_of_report"]) == ("0000000001", "2026-01-05")
+        assert tables["owner_record"][0]["record"]["is_director"] is True
 
 
 def test_each_line_carries_its_filing_issuer_as_of_and_filing_date():

@@ -13,8 +13,7 @@ mdm.prepare and the one Dataset Contract), then the Merge Stage:
   one: a CUSIP answer and an ISIN answer sharing a listing FIGI make one
   Security, whichever comes first; an ISIN answer whose FIGIs lead to two
   Securities waits for review until ticket 138's merge part;
-- every listing lands in silver (`silver-listing.yaml`) with the master id of
-  the Security its identifier joined, or none while it waits.
+- every listing is a detail row of its Security in MDM (silver keeps none, ticket 143).
 OpenFIGI's three rules are switched on in a copy of the repo's policy, its
 FIGI contract given a fixture verification there. Invented values only.
 """
@@ -384,52 +383,13 @@ def test_an_isin_record_joins_the_security_holding_its_isin(database, tmp_path):
     assert len(securities(database)) == 1
 
 
-def test_every_listing_lands_in_silver_with_the_security_its_identifier_joined(database, tmp_path):
+def test_every_listing_of_the_source_extract_is_a_detail_row_of_its_security_in_mdm(tmp_path):
+    """Silver keeps no master field (ticket 143): OpenFIGI's listings live only in the Security's record
+    (ticket 120: "all fields from open figi must be in the security master"), one detail row per listing."""
     rows: list[dict] = []
     records, _ = prepared_records(tmp_path, listings=rows)
-    # The Securities' own records are keyed apart from the identifier, so only
-    # OpenFIGI's Dataset Contract finds a listing's Security by its identifier.
-    load(database, [
-        ("13f", [core.source(key="13F-ROW-1", source_code=THIRTEENF, kind="security",
-                             fields={"name_of_issuer": "EXAMPLE CORP"}, identifiers={"cusip": EQUITY})]),
-        ("nport", [core.source(key="NPORT-ROW-1", source_code=NPORT_ISIN, kind="security",
-                               fields={"name_of_issuer": "EXAMPLE CORP"}, identifiers={"isin": ISIN})]),
-        # CUSIP answers first: TWICE's ISIN answer merges SOLE's and DOUBLE's Securities.
-        ("openfigi-cusip", [r for r in records if r["identifiers"].get("cusip")]),
-        ("openfigi-isin", [r for r in records if r["identifiers"].get("isin")])])
-    rows = [{k: v for k, v in row.items() if k != "figi_ticker"} for row in rows]
-    with silver_database(database.admin) as (owner, runtime):
-        silver.migrate(owner, runtime_role=RUNTIME)
-        spec = spec_file(FOLDER / "silver-listing.yaml", None)
-        assert silver.register(owner, spec, runtime_role=RUNTIME)["created"] is True
-        sink, ids = PostgresSink(runtime), MdmIds(database.application)
-        assert land(sink, spec["table"], copy.deepcopy(rows), ids)["inserted"] == 19
-        again = land(sink, spec["table"], copy.deepcopy(rows), ids)  # the same delivery changes nothing
-        assert (again["inserted"], again["changed"]) == (0, 0)
-        with runtime.connect() as conn:
-            landed = {(r["id"], r["figi"]): r for r in conn.execute(text(
-                "SELECT * FROM silver.openfigi_listing")).mappings()}
-    # The answers' 11 CUSIP and 8 ISIN listings, each once; unfound identifiers give none.
-    assert len(landed) == len(rows) == 19
-    equity, isin = bound(database, CODE, EQUITY), bound(database, CODE, ISIN)
-    assert equity == bound(database, THIRTEENF, "13F-ROW-1") is not None
-    assert isin == bound(database, NPORT_ISIN, "NPORT-ROW-1") is not None
-    # One master id a row (ticket 138: "master_id only"); SHARED's listings are EQUITY's Security.
-    assert {k[1]: r["security_mdm_id"] for k, r in landed.items() if k[0] in (EQUITY, ISIN, SHARED)} == {
-        **{f: equity for f in (*figis(EQUITY), *figis(SHARED))}, **{f: isin for f in figis(ISIN)}}
-    assert landed[(EQUITY, "BBGZ0000GR13")]["ticker"] == "EXB"
-    # Every FIGI but BROKEN's second passes its check; that one is flagged and still lands,
-    # with the master id of BROKEN's Security (its answer kept, that FIGI left out).
-    assert {k for k, r in landed.items() if r["quality"]} == {(BROKEN, "BBGZZ0000US1")}
-    assert landed[(BROKEN, "BBGZZ0000US1")]["security_mdm_id"] == bound(database, CODE, BROKEN) is not None
-    assert landed[(UNHELD, "BBGZ000BND21")]["security_mdm_id"] == bound(database, CODE, UNHELD) is not None
-    # TWICE's FIGIs are SOLE's and DOUBLE's: it merged their Securities (part A2a), so
-    # every listing of the three carries the survivor's id, never the merged-away one.
-    survivor = bound(database, CODE, TWICE)
-    assert survivor in securities(database)
-    assert {r["security_mdm_id"] for k, r in landed.items() if k[0] in (SOLE, DOUBLE, TWICE)} == {survivor}
-
-
+    held = {(r["provenance"]["record_key"], d["key"]) for r in records for d in r["details"]["listings"]}
+    assert {(row["id"], row["figi"]) for row in rows} == held and len(rows) == len(held) == 19
 def test_a_securitys_fields_are_the_agreed_or_the_primary_listings_and_every_listing_is_a_detail_row(tmp_path):
     """Ticket 120 (operator, 2026-10-20: "all fields from open figi must be in the security
     master", "Use the primary exchange listing", "US, else the ISIN's country", "Detail rows

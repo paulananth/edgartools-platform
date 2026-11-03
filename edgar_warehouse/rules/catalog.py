@@ -609,8 +609,6 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict], 
         name = _table_name(table)
         if table["name"] in {"company_fact", "company_line_item", "company_measure"}:
             membership[name].add("company")
-        elif table["name"] == "openfigi_listing":
-            membership[name].add("security")
     memberships = [{"table": name, "domains": sorted(domains_)} for name, domains_ in sorted(membership.items()) if name in present and domains_]
     certifications = []
     for table in tables:
@@ -682,9 +680,8 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict], 
         return sorted(name for name, domains_ in membership.items()
                       if domain in domains_ and (name == prefix or f".{SOURCES}." in name) and name in present)
     facts = sorted(name for name in membership if name.endswith(("company_fact", "company_line_item", "company_measure")) and "company" in membership[name])
-    listing = sorted(name for name in membership if name.endswith("openfigi_listing") and "security" in membership[name])
     company_assets = subject_assets("company")
-    security_assets = sorted(set(subject_assets("security")) | set(listing))
+    security_assets = subject_assets("security")
     products = [
         {"name": "company_master", "displayName": "Company master", "domains": ["company"],
          "dataProductType": "DATASET",
@@ -693,7 +690,7 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict], 
          "inputs": [name for name in company_assets if f".{SOURCES}." in name]},
         {"name": "security_master", "displayName": "Security master", "domains": ["security"],
          "dataProductType": "DATASET",
-         "description": "The mastered instrument, the datasets that fill it, and its registered listing.",
+         "description": "The mastered instrument, and the datasets that fill it.",
          "tables": security_assets,
          "inputs": [name for name in security_assets if f".{SOURCES}." in name]},
         {"name": "company_fundamentals", "displayName": "Company fundamentals", "domains": ["company"],
