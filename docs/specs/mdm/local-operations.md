@@ -118,17 +118,17 @@ Snapshot generation and each object's projection as-of are distinct: an object
 may have been last projected before the selected global generation. Future or
 missing generations return 404. An unconfigured v2 API has no v2 routes.
 
-## Count the Name Census
+## Build the Name Count
 
 The SEC-to-GLEIF matching rules (ticket 08) bind only a name no other SEC
-filer or GLEIF legal entity carries. The census counts that once, over the
+filer or GLEIF legal entity carries. The Name Count counts that once, over the
 whole SEC population (each filer's current and former names) and a full GLEIF
 Level 1 Golden Copy (legal and other names, branches excluded). It refuses a
 delta. The population file lists the receipt keys of the main submissions
 documents counted; each is read from the capture folder (`receipts.jsonl` and
 `bronze/`) through `rules/sources/sec.company/census-sec-names.yaml` by the
 `source.read` worker and its verifier, up to 256 documents a unit, and must match its
-receipt; `census-sec-reduction.yaml` counts it. With a cascade pass switched on, the census also runs the cascade
+receipt; `census-sec-reduction.yaml` counts it. With a cascade pass switched on, the Name Count also runs the cascade
 through the Company chain's own readings (`--catalog`, below). The Golden Copy arrives as
 one verified `source.read` reading of `rules/sources/gleif/census-complete-stream.yaml`
 (about an hour for 3.4 million records); the command checks that the reading
@@ -146,13 +146,13 @@ edgar-warehouse mdm name-census \
 ```
 
 `--catalog` names the capture's exchange catalog. It is required while a
-cascade pass is switched on (P5 since ticket 09): the census then runs the
+cascade pass is switched on (P5 since ticket 09): the Name Count then runs the
 cascade, which reads each filer's tickers, and refuses to run without it.
 
 The metadata file holds the archive's verified publication metadata
 (`format`, `cdf_version`, `content_date`, `file_content`, `record_count`); its
-record count must equal the reading's. Rebuild the census for each full Golden
-Copy: a census counted before a new GLEIF entity took a name cannot see it.
+record count must equal the reading's. Rebuild the Name Count for each full Golden
+Copy: a Name Count counted before a new GLEIF entity took a name cannot see it.
 
 ## Prepare a native Company sample
 
@@ -176,24 +176,24 @@ its report (`manifest`, `publication`, `scope`); `rules run --source
 sec.company --target mastering --input-manifest <uri>
 --input-sha256 <sha>` then runs it (`docs/company-only-acquisition.md`). The
 manifest names each main submissions document in `--documents` (at most 512
-receipt keys, all in the population the Name Census counted) by its receipt
+receipt keys, all in the population the Name Count counted) by its receipt
 in `receipts.jsonl`, in place, and SEC's exchange ticker catalog
 (`--catalog`, a receipt key). The target's workers read the documents in
 units of at most 8 MiB (`census-main.yaml`) and once more for their name keys
-and CIKs only (`census-keys.yaml`, one reading of the bundle), read the census
+and CIKs only (`census-keys.yaml`, one reading of the bundle), read the Name Count
 once narrowed to the bundle's names and CIKs (`census.yaml`, bound to the
-census's digest; its two lookup sets are derived from the key reading, so a
+Name Count's digest; its two lookup sets are derived from the key reading, so a
 bundle names at most 512 documents), read the catalog once (`catalog.yaml`), combine them per unit
 (`combine-census-captured.yaml`): forms from the document's recent filings,
-tickers from the catalog in rank order, the business address and the census
+tickers from the catalog in rank order, the business address and the Name Count
 entry; prepare the bundle's rows as one publication (`mdm.prepare`) and merge
 it (`mdm.merge`). Every step is executed by a worker and checked by a
 verifier; Bookkeeping keeps each receipt. The capture and catalog run IDs and
 the observation time are the caller's facts, bound into every row. Each
 record names its bronze document (`_origin.bronze`: `object`, the receipt key; `sha256`; `locator`),
 from the main reading. The publication key names the capture run, the
-documents' digest, the catalog run and receipt, and the census digest; a
-different catalog or census is a different publication. Every frozen input
+documents' digest, the catalog run and receipt, and the Name Count digest; a
+different catalog or Name Count is a different publication. Every frozen input
 is named by its content, so identical preparation is idempotent.
 The explicit revision is source-publication order, not ingestion order. Only
 SEC `operating` filers and qualifying `other` filers can become Companies;
