@@ -32,8 +32,8 @@ The scripts use the existing local captures below and write evidence under
    hold the Name Count each case makes (`tests/engine/fixtures/configured-name-count-cases.json`).
 
 Use `uv run python crates/source-contract/tests/qualification/<script>.py`.
-For measured samples, set `CENSUS_BOUNDED=1` on the SEC script and
-`CENSUS_LIMIT=1000` on the full comparison script. A bounded result explicitly
+For measured samples, set `NAME_COUNT_BOUNDED=1` on the SEC script and
+`NAME_COUNT_LIMIT=1000` on the full comparison script. A bounded result explicitly
 reports `original_source_eof: false`. Complete upstream proofs must exist before
 running the combined comparison. Announce the measured full-scan estimate.
 

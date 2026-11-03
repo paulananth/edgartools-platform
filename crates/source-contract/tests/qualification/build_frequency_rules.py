@@ -87,5 +87,5 @@ for table in stream['read']['tables'].values():
 stream['read']['tables']['d_addresses']={'each':{'project':{'value':observation,'on_null':'empty'}},'select':test_at('place.street'),'columns':{
     'street':transform(text_or_empty('place.street'),[{'regex_replace':{'pattern':r'\n[\s\S]*$','with':''}}]),
     'postcode':transform(text_or_empty('place.postcode'),[{'slice':{'start':0,'end':5}}]),'country':text_or_empty('place.country')}}
-emit('name-count-complete-stream.yaml', '# Complete original-source census projection; input-bound wanted/count required.\n# Global addresses include every supported GENERAL occurrence, before candidate eligibility.\n'+files.dumps(stream))
+emit('name-count-complete-stream.yaml', '# Complete original-source name count projection; input-bound wanted/count required.\n# Global addresses include every supported GENERAL occurrence, before candidate eligibility.\n'+files.dumps(stream))
 print({'passes':len(spec['passes']),'cascade_bytes':(root/'name-count-cascade-record.yaml').stat().st_size,'stream_bytes':(root/'name-count-complete-stream.yaml').stat().st_size})
