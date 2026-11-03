@@ -124,7 +124,7 @@ def _combine(step: dict, run: _Run, units: dict) -> list[dict]:
             raise ValueError(f"Step {name}: {{step: {named['step']}}} names a step of one unit; use {{all: ...}}")
         else:
             slots[slot] = {"step": named["step"], "key": units[named["step"]][0]["keys"]["unit"]}
-    contract = run.store.put(run.inputs, run.contracts[_contract(step)])
+    contract = run.store.put(run.inputs, read_units.bound(name, shape, run.contracts[_contract(step)], run))
     return [read_units.unit(f"{run.root}/{name}/combined.json", {"unit": name}, {"compose": {
         "document": {"version": 1, "contract": contract, "readings": {slot: {"slot": slot} for slot in slots}},
         "slots": slots}})]

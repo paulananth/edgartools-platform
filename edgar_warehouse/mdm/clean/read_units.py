@@ -25,7 +25,7 @@ import posixpath
 from edgar_warehouse.workers.source_readings import RECEIPT_BYTES
 
 from . import raw_capture
-from .store import canonical
+from .store import canonical, digest
 
 CONTRACT_BYTES = 1024**2  # the worker reads a contract within 1 MiB
 CONTEXT_TYPES = {"integer": int, "text": str, "boolean": bool}
@@ -134,10 +134,43 @@ def _check_run_inputs(name: str, shape: dict, body: dict, run) -> None:
                              f"({'pairs' if pairs else 'values'} of text, within its bounds)")
 
 
+def bound(name: str, shape: dict, body: dict, run) -> dict:
+    """The contract with each `bind` token replaced by its run fact (text) or run file's digest.
+    Only whole string values equal to a token are replaced; a token the contract never carries is refused."""
+    tokens = shape.get("bind")
+    if not tokens:
+        return body
+    values = {}
+    for token, ref in tokens.items():
+        if "fact" in ref:
+            if not isinstance(run.facts[ref["fact"]], str):
+                raise ValueError(f"Step {name}: fact {ref['fact']} binds {token}, which takes text")
+            values[token] = run.facts[ref["fact"]]
+        else:
+            values[token] = digest(run.run_files[ref["digest"]])
+    found = set()
+
+    def walk(value):
+        if isinstance(value, str):
+            if value in values:
+                found.add(value)
+                return values[value]
+            return value
+        if isinstance(value, list):
+            return [walk(item) for item in value]
+        if isinstance(value, dict):
+            return {key: walk(item) for key, item in value.items()}
+        return value
+    result = walk(body)
+    if missing := sorted(set(values) - found):
+        raise ValueError(f"Step {name}: its contract carries no {missing}")
+    return result
+
+
 def form(step: dict, run, units: dict) -> list[dict]:
     """The units of one `source.read` step."""
     name, shape = step["name"], step.get("input", {})
-    body = run.contracts[contract_of(step)]
+    body = bound(name, shape, run.contracts[contract_of(step)], run)
     _check_run_inputs(name, shape, body, run)
     if shape.get("references"):  # a reference the contract declares empty, filled from a run file
         body = {**body, "read": {**body["read"], "references": {
