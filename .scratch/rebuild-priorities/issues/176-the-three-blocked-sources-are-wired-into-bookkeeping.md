@@ -31,8 +31,10 @@ Every target ends with the `journal.record` step (the 13F target's `processed`),
 - [x] `sec.ownership`: the Change Journal step ends the target; tests at plan level (a second pass changes nothing; a changed rule names every file again, `tests/mdm/test_ownership_target.py`) (2026-11-02 19:37 ET) and through the real workers on Postgres (a second pass changes nothing; a changed rule names every file again)
 - [x] `sec.ownership`: `target: mastering` in `rules/source-sequence.yaml` (after `sec.nport.fund`), pinned-order tests and the Mapping Document updated (2026-11-02 19:37 ET)
 - [x] The engine lets a silver landing wait for a merge ([#1316]: plan tests; failed before on `a landing follows one read step`) (2026-11-02 19:37 ET)
-- [ ] `iapd.adv`: the mastering target (read, combine, record, prepare, merge, processed)
-- [ ] `iapd.adv`: the Change Journal step ends the target; tests at plan level and through the real workers; `rules/source-sequence.yaml`
+- [x] `iapd.adv`: two targets, one publication each (a target prepares one): `mastering` (read the filings and the custody rows, combine, record, prepare, merge, processed) and `custodians` (read, combine, record, prepare with `distinct_on`, merge, processed) (2026-11-02 19:49 ET)
+- [x] `iapd.adv`: the Change Journal step ends both targets; plan tests (`tests/mdm/test_iapd_adv_targets.py`: a second pass changes nothing; a changed rule names every file again; recording the filings does not skip the custodians of the same file) (2026-11-02 19:49 ET)
+- [x] `iapd.adv`: the preparation may name `distinct_on` (validators for step keys and unit keys, and the planner; `tests/mdm/test_prepare_distinct_on.py` failed before on `A step's keys are nonempty text`) (2026-11-02 19:50 ET)
+- [x] `iapd.adv`: real workers on Postgres (`tests/integration/test_iapd_adv_targets_postgres.py`: the filing carries its 3 custodians; 4 custody rows make 3 custodian records, 4 without `distinct_on`); `rules/source-sequence.yaml` and the pinned-order tests (2026-11-02 19:50 ET)
 - [ ] `sec.registration`: the operator decides what the second step reads (the document unread, or facts)
 - [ ] `sec.registration`: its target beyond capture, with the Change Journal step added after capture, tests and `rules/source-sequence.yaml`
 - [ ] Learning → skill: name the skill line this ticket changed (`data-onboarding` target writing), or "none"
@@ -42,6 +44,14 @@ Every target ends with the `journal.record` step (the 13F target's `processed`),
 - The read step takes the SEC submission files (`*.txt`); the source has no acquisition feed yet, so which captured files carry that name is to be confirmed with the capture of the ownership files (needs the operator's permission for the SEC requests).
 - A step after a merge cannot land a read unit's rows without the engine change above: `silver.land` took exactly one predecessor, and the merge's units carry no read unit.
 - The installed-bundle test installs the committed `HEAD`, so it must run after the commit; it takes about 7 minutes locally.
+
+## Findings while building `iapd.adv`
+
+- A target prepares one publication, so the filings and the custodians are two targets (as GLEIF's pair file is). The source sequence runs `mastering` (the filings); the `custodians` target is run by hand, first, so the CUSTODIAN links of the filings find their targets. Whether the sequence should name both is open.
+- The run fact `published` (the month end as an ISO instant) is required by both targets.
+- The ruled dating by month (`effective_at` per file, operator 2026-10-22) is not built: the planner always gives the preparation a publication key and revision, and the worker then refuses `effective_column`. `effective_at` would be a run fact. Open: its own decision.
+- The step validator, the unit validator and the planner each assumed every key is text; `distinct_on` is the first list. Both validators now share one helper.
+- The captured files are the monthly zips (`*.zip`) under `reference/iapd_adv_bulk/<month>/`; the capture of them needs the operator's permission.
 
 ## Not in this ticket
 

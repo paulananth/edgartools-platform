@@ -1,0 +1,13 @@
+# The custody rows, passed through whole to the record step (ticket 176): the custodians target
+# masters one record per custody row's custodian, so nothing is joined or grouped here.
+execution: {profile: source.combine}
+combine:
+  max_rows: 1000000
+  groups: {}
+  tables:
+    custody:
+      source: custody
+      table: custody
+      checks: {}
+      where: {}
+      joins: {}
