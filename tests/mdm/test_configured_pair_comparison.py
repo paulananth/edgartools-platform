@@ -65,7 +65,7 @@ eligibility = {"categories": ["INVENTED"], "entity_statuses": ["ACCEPTED"],
                "refused_registration_statuses": ["REFUSED"]}
 def compare(primitive, args):
     return compare_candidate_records({"when": [{"primitive": primitive, "args": args}]}, [(left, right)])
-def name_count(): return compare("name_count_match@1", names)
+def name_count(): return compare("name_census_match@1", names)
 def eligible(): return compare("gleif_entity_eligible@1", eligibility)
 def cascade(): return compare("cascade_pass@1", {**names, "pass": "P1", "compare": ["street", "city", "postcode"], "refused_flags": []})
 def either(**changes):  # P5's shape: the city or the postcode
@@ -129,7 +129,7 @@ from edgar_warehouse.mdm.clean.activation import check_name_binding_rule
 rule = {"rule_id": "invented-rule", "pair_comparison": "invented-comparison",
     "applies_to_verdict": "invented-kind", "emits": ["bind"], "on_no_match": "wait",
     "source": "invented-right", "holder_source": "invented-left", "when": [
-        {"primitive": "name_count_match@1", "args": names},
+        {"primitive": "name_census_match@1", "args": names},
         {"primitive": "postal_agrees@1", "args": {}}]}
 check_name_binding_rule("invented-kind", rule, {})
 for changed in ({**rule, "pair_comparison": "missing"},

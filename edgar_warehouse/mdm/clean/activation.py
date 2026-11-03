@@ -567,7 +567,7 @@ def check_name_binding_rule(kind: str, rule: dict, kinds: dict) -> None:
     if "cascade_pass@1" in tests:
         _check_cascade_pass(rule_id, rule, tests)
         return
-    if "name_count_match@1" not in tests or not NAME_BINDING_PLACE_TESTS & set(tests):
+    if "name_census_match@1" not in tests or not NAME_BINDING_PLACE_TESTS & set(tests):
         raise Conflict(
             f"Name binding rule {rule_id} must rest on the Name Count and a place "
             "test, never the name alone"
@@ -581,7 +581,7 @@ def _check_cascade_pass(rule_id: str, rule: dict, tests: list) -> None:
     operator ruled (2026-09-27), and each pass is proven on its own."""
     from .cascade import CONFLICT, NOT_UNIQUE, PARTS
 
-    if "name_count_match@1" in tests or tests.count("cascade_pass@1") != 1:
+    if "name_census_match@1" in tests or tests.count("cascade_pass@1") != 1:
         raise Conflict(f"Cascade rule {rule_id} is exactly one pass and no other name rule")
     if not {"gleif_entity_eligible@1", "holds_no_other_lei@1"} <= set(tests):
         raise Conflict(f"Cascade rule {rule_id} must test eligibility and the one-LEI veto")

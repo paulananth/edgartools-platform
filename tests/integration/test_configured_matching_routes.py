@@ -33,13 +33,13 @@ owner = create_engine(os.environ["ROUTE_OWNER_URL"], hide_parameters=True)
 runtime = create_engine(os.environ["ROUTE_RUNTIME_URL"], hide_parameters=True)
 try:
     migrate(owner, application_role="clean_application")
-    primitive = "cascade_pass@1" if os.environ["ROUTE"] == "cascade" else "name_count_match@1"
-    args = names if primitive == "name_count_match@1" else {**names, "pass":"P1",
+    primitive = "cascade_pass@1" if os.environ["ROUTE"] == "cascade" else "name_census_match@1"
+    args = names if primitive == "name_census_match@1" else {**names, "pass":"P1",
         "compare":["street","city","postcode"], "refused_flags":[], "over_shared":10}
     tests = [{"primitive":primitive,"args":args},
         {"primitive":"gleif_entity_eligible@1","args":eligibility},
         {"primitive":"holds_no_other_lei@1","args":{}}]
-    if primitive == "name_count_match@1":
+    if primitive == "name_census_match@1":
         tests.append({"primitive":"postal_agrees@1","args":{
             "sec_code":"matching.invented_postal", "sec_country":"matching.invented_country",
             "gleif_code":"matching.invented_postal", "gleif_country":"matching.invented_country"}})

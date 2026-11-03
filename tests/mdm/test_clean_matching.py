@@ -167,7 +167,7 @@ def test_a_matching_path_is_read_from_the_rule():
     [
         ("jurisdiction_agrees@1", {"sec_codes": "edgar-iso-v2"}, "unknown code table"),
         (
-            "name_count_match@1",
+            "name_census_match@1",
             {"sec_normalizer": "normalize_text@x"},
             "unknown normalizer",
         ),
@@ -222,7 +222,7 @@ def test_a_cascade_pass_refuses_a_flag_its_rule_refuses():
     assert not _passes(with_args(_pass(5), "cascade_pass@1", refused_flags=[_cascade.CONFLICT]), *pair)
 
 
-def test_a_cascade_pass_needs_the_gleif_legal_name_unless_the_name_count_matched_another():
+def test_a_cascade_pass_needs_the_gleif_legal_name_unless_the_name_census_matched_another():
     record, other = cascaded()
     other["fields"]["name"] = value("APPLE KABUSHIKI KAISHA")
     assert not _passes(_pass(5), record, other)
