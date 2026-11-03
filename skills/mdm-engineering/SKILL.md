@@ -360,7 +360,7 @@ Name the claim in one sentence, then take the smallest cohort that can falsify i
 
 | The change | The proof |
 |---|---|
-| Any code, a migration, a rules or data file | The affected tests, locally, and CI (`AGENTS.md`, "Tests and CI") |
+| Any code, a migration, a rules or data file | The affected tests, locally, and CI (`AGENTS.md`, "Tests and CI"). A source's rules file is also read by tests that never name the source, through a shared helper (ticket 183: two tests reached a source through another test's helper and only CI found them). Before the first push of a change to a source's rules, run the whole test folder CI runs for it once (`tests/integration` takes 12 minutes) rather than the files whose names match |
 | A rule upstream of MDM (a source extract, a combine step) | Compare the changed step's output over a capture, and the combined output on one bundle. Equal combined bytes mean everything downstream is unchanged |
 | The Merge Stage engine, a worker, Bookkeeping | A Proving Run on a pinned cohort, and the full installed proof on an empty store: every count as before, a killed worker resumes, the second pass changes nothing |
 | Matching rules, a Dataset Contract | The smallest cohort that contains each new case. One slice whose second pass changes nothing proves the path on real records. A case that slice did not contain is the one bundle that contains it, then stop. The whole delivery is the proof only when the claim is that delivery's totals, or switch-on |

@@ -121,12 +121,16 @@ needs no writer of its own:
   documents cut into units of at most N bytes, each at most the reading's
   `max_artifacts`), `{groups: N}` (groups of at most N files, N at most 16,
   the composed-slot limit), or `{each: file}` (one unit per document, keyed
-  by its pair key, below);
+  by its pair key, below); a `source.combine` step may also say `{each:
+  <step>}`: one unit for each unit of that read step it requires, which its
+  `{step: <step>}` reading pairs with (a combination bounded at 100,000
+  rows, one per read unit);
 - `input`: `contract` (a rules file in the source's folder, default
   `source.yaml`, or `<source>/<file>`: another source's rules file, whose
   digest then joins what each file is processed under as
   `contract:<source>/<file>`), `keys` (for `mdm.prepare`: `table`, `record_column`,
-  `dataset`) and `readings` (each name `{all: <step>}`, every unit of a
+  `dataset`; `record_column` is optional, and without it each row is the
+  record) and `readings` (each name `{all: <step>}`, every unit of a
   prerequisite as one list, `{step: <step>}`, its one unit, or, for a
   combine, `{run: {source, target, step}}`: another run's step, below); for a read:
   - `files`: a pattern over the bundle's document keys (default every one);
@@ -136,11 +140,29 @@ needs no writer of its own:
     selected and processed as one;
   - `context`: values per document; text is a template over `{dir}` (the
     key's folder), `{base}` (its name before the first dot) and `{name}`, or
-    `{fact: <name>}`, a run fact;
+    `{fact: <name>}`, a run fact, `{receipt: sha256}` (the document's receipt
+    hash, text), `{segment: <name>, as: text|integer}` (the value of the
+    key's `<name>=<value>` folder; the contract's declared type must match)
+    or `null` (where the contract's field is nullable);
+  - `runfile: <name>`: the step's one document is a run file's canonical
+    bytes (a Name Count is a run file, not a captured document); one unit,
+    with no `files`, `beside` or `pieces`;
+  - `always: true` (with `files`, one unit): documents every bundle reads, an
+    exchange catalog. `load` adds them to each bundle (they count in its
+    size); they are read each time, join the processing identity by content,
+    and are never what makes a bundle fresh or what the journal records;
+  - `bind: {<token>: {fact: <name>} | {digest: <file>}}`: before the contract
+    is frozen, every string equal to the token is replaced by the run fact (text)
+    or the sha256 of the run file's canonical content; a token the contract
+    never carries is refused;
   - `lookups`: `{<set>: {from, table, column, value_column, max_input_bytes,
     max_input_rows}}`, a pair set read from the unit of `from` (an `{each:
     file}` step) with the same pair key, `{dir}/{base}`; a read with lookups
-    is cut into groups or each file, one composed slot per document. A set
+    is cut into groups or each file, one composed slot per document. `over:
+    all` in place of that reads every unit of `from` (1..256) in one reading,
+    so a large shared file is read once per bundle, not once per group (a 6 MB
+    Name Count reads in 0.56 s whatever the number of keys; `value_column` may
+    then be left out for a plain set). A set
     may name `run: {source, target, step}` in place of `from`: another run's
     step, read whole. Or every set `{file: <name>}`, given whole by a run file;
   - `references: {<reference>: {file: <name>}}`: a reference the contract
@@ -174,8 +196,13 @@ names in a slot is not compacted while that run is not complete (migration
 of a compacted capture finds no units and is refused.
 
 A target may declare its run's own inputs, `run: {facts: [names], files:
-[names]}`: facts the operator gives (`--fact name=value`, a JSON value or
-text) and JSON files from outside the capture (`--file name=path`), for
+[names], projections: {<file>: [parts]}, matches: [{file, path, to}]}`:
+`projections` names the top-level parts of a file that count toward the
+processing identity (the rest, such as the capture a Name Count was built from,
+moves nothing); `matches` ties a file to the capture (`to: receipts_sha256`: the
+file's dotted `path` must equal the sha256 of the capture's receipts file, else
+the manifest is refused as not counting this capture). Facts are what the
+operator gives (`--fact name=value`, a JSON value or text) and files are JSON files from outside the capture (`--file name=path`), for
 `rules test` and `mdm prepare-capture` alike. A run that gives other ones is
 refused; each file's and each fact's digest joins the processing identity and the run's ids.
 

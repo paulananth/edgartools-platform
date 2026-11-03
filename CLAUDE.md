@@ -183,6 +183,10 @@ Learned the hard way; each is a standing operator rule.
 **Commits, PRs and secrets**
 - One branch per ticket, cut fresh off `origin/main` in its own worktree;
   never continue a ticket on a used or merged branch (PRs are squash-merged).
+  Name it new: the remote keeps a merged branch's name and refuses a push to it
+  (ticket 175's second PR). A fresh worktree's `.venv` folder exists before
+  `uv sync` has run: test for `.venv/bin/pytest`, not the folder, before
+  `uv run --no-sync`.
 - Work only in this repository. Never commit, push or open a PR in another
   repository, even for a task that spans repositories.
 - Commit and PR text from a file: `git commit -F <file>`, `gh pr create --body-file <file>`.

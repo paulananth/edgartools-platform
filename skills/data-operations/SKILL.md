@@ -302,6 +302,9 @@ Work it out from counts before starting:
    Measured 2026-11-03 (ticket 177): one source's bundle of 511 filers and the shared reference file ran 1.1 to 1.2
    minutes with `--workers 4` (a 600 s window finished 5 of 150 bundles, the driver's peak memory 0.57 GB, about
    0.85 cores busy), so 150 bundles one at a time take about 3 hours; time the first bundle of every source the same way.
+   Keep the machine for the load: the same load stopped on three bundles (a deadlock, a closed connection, a failed read) while
+   several hundred integration tests ran on the same Docker, and finished 2 h 23 min instead of about 2 h 10; a stopped
+   bundle is resumed by running the same command again (ticket 177).
 5. **Memory and shared masters, not only cores.** Bundles of one target
    that merge into the same masters collide: measured 2026-10-29, one source's
    load with 4 bundles at once on an 8 GB machine (Docker's VM 4 GB), 10 of 16

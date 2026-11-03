@@ -183,6 +183,10 @@ Learned the hard way; each is a standing operator rule.
 **Commits, PRs and secrets**
 - One branch per ticket, cut fresh off `origin/main` in its own worktree;
   never continue a ticket on a used or merged branch (PRs are squash-merged).
+  Name it new: the remote keeps a merged branch's name and refuses a push to it
+  (ticket 175's second PR). A fresh worktree's `.venv` folder exists before
+  `uv sync` has run: test for `.venv/bin/pytest`, not the folder, before
+  `uv run --no-sync`.
 - Publish committed task changes, including operational and CI records, in a
   PR before ending the handoff. Keep the PR in draft while its declared change
   or validation is unfinished, then mark it ready after the final head passes.
