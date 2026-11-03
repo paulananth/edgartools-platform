@@ -3,6 +3,7 @@
 # tables and columns as ownership-sgml.yaml, which reads the same document inside
 # the SGML submission file (a test holds the two equal): profiling ticket 07.
 source: sec.ownership
+execution: {profile: source.read, workers: 1, max_artifacts: 512}
 read:
   format: xml
   root: ownershipDocument
@@ -101,6 +102,23 @@ read:
         # owner's Dataset Contract can state its link to the issuer, dated by the filing.
         issuer_cik: {text: {path: issuer.issuerCik.$, from: document}}
         period_of_report: {date: {path: periodOfReport.$, kind: calendar, prefix_length: 10, from: document}}
+    # The owner as MDM reads it: the fields the Dataset Contract sec.ownership.reporting_owner.v1
+    # names, in one object, for a Bookkeeping preparation (ticket 176). Silver lands reporting_owner.
+    owner_record:
+      each: reportingOwner
+      columns:
+        record:
+          object:
+            fields:
+              accession: {context: {name: accession}}
+              rpt_owner_cik: {text: {path: reportingOwnerId.rptOwnerCik.$}}
+              rpt_owner_name: {text: {path: reportingOwnerId.rptOwnerName.$}}
+              issuer_cik: {text: {path: issuer.issuerCik.$, from: document}}
+              period_of_report: {date: {path: periodOfReport.$, kind: calendar, prefix_length: 10, from: document}}
+              is_director: {choose: {condition: {test: {path: reportingOwnerRelationship.isDirector.$, kind: text}}, then: {lookup: {reference: booleans, column: value, key: {text: {path: reportingOwnerRelationship.isDirector.$}}, on_missing: error}}, else: {const: {value: null}}}}
+              is_officer: {choose: {condition: {test: {path: reportingOwnerRelationship.isOfficer.$, kind: text}}, then: {lookup: {reference: booleans, column: value, key: {text: {path: reportingOwnerRelationship.isOfficer.$}}, on_missing: error}}, else: {const: {value: null}}}}
+              is_ten_percent_owner: {choose: {condition: {test: {path: reportingOwnerRelationship.isTenPercentOwner.$, kind: text}}, then: {lookup: {reference: booleans, column: value, key: {text: {path: reportingOwnerRelationship.isTenPercentOwner.$}}, on_missing: error}}, else: {const: {value: null}}}}
+              officer_title: {text: {path: reportingOwnerRelationship.officerTitle.$}}
     non_derivative_transaction:
       each: nonDerivativeTable.nonDerivativeTransaction
       columns:
