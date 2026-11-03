@@ -2,7 +2,7 @@
 
 Priority: 176. Map: [Rebuild priorities](../map.md). Opened 2026-11-02 19:13 ET (operator, 2026-11-02: "wire bookkeeping then only we can turn on").
 
-Type: task. Status: open (incomplete: the target for sec.registration is deferred to 149). Related: [172](172-the-thirteenf-securities-run-through-bookkeeping-and-the-change-journal.md) (the 13F target is the pattern), [174](174-sec-prospectus-final-prospectuses-looked-up-on-mdm-then-landed-in-silver.md) (`sec.prospectus`).
+Type: task. Status: resolved (2026-11-02 21:10 ET; operator: "close if it is already done"). Every part is ticked; the sec.registration target moved to ticket 149. Open design notes, not parts: iapd.adv dating by month, and whether the sequence names both iapd.adv targets. Related: [172](172-the-thirteenf-securities-run-through-bookkeeping-and-the-change-journal.md) (the 13F target is the pattern), [174](174-sec-prospectus-final-prospectuses-looked-up-on-mdm-then-landed-in-silver.md) (`sec.prospectus`).
 
 ## Question
 

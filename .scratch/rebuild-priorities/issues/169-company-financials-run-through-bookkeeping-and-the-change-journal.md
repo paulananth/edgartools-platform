@@ -2,7 +2,7 @@
 
 Priority: 169. Map: [Rebuild priorities](../map.md). Opened 2026-11-02 08:23 ET (operator, 2026-11-02: "Is company financial go through bookkeeping and change journal", then "What do we need to do to introduce bookkeeping and change journal in accordance with elimination of 7 wastes", then "Yes").
 
-Type: task. Status: in progress (Claude, 2026-11-02 09:12 ET; operator: "Agreed" to start). Blocked by: none.
+Type: task. Status: resolved (2026-11-02 21:10 ET; operator: "close if it is already done"). Every part is ticked; the real timed run waits for the facts files (a provider request needing permission) and the quality kinds moved to ticket 175. Blocked by: none.
 
 ## Question
 
