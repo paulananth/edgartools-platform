@@ -117,3 +117,53 @@ def test_a_read_may_take_a_run_file_as_its_one_document(monkeypatch, tmp_path):
 def test_a_bad_runfile_is_refused(monkeypatch, tmp_path, kwargs, message):
     with pytest.raises(Exception, match=message):
         runfile_plan(monkeypatch, tmp_path, **kwargs)
+
+
+def context_plan(monkeypatch, tmp_path, context):
+    """The ownership read step with the given context values (ticket 177, slice 5b)."""
+    real = files.source
+
+    def source(name, *args, **kwargs):
+        reading = deepcopy(real(name, *args, **kwargs))
+        if name == ownership.SOURCE:
+            step = next(s for s in reading["bookkeeping"]["targets"]["mastering"]["steps"] if s["name"] == "read")
+            step["input"]["context"] = context
+        return reading
+    monkeypatch.setattr(target_manifest.rules_files, "source", source)
+    report = target_manifest.write_manifest(**ownership.capture(tmp_path, [1]), facts={}, run_files={})
+    store = Artifacts()
+    (unit,) = store.json(report["manifest"])["steps"]["read"]
+    (artifact,) = store.json(unit["input"])["artifacts"]
+    return store.json(artifact["context"])["values"]
+
+
+def test_a_context_value_may_be_a_folder_segment_of_the_key(monkeypatch, tmp_path):
+    values = context_plan(monkeypatch, tmp_path, {"accession_number": {"segment": "accession"}})
+    assert values == {"accession_number": "0000000042-26-000001"}
+
+
+def test_a_folder_segment_is_filled_as_text_or_as_an_integer():
+    from edgar_warehouse.mdm.clean import read_units
+    key = "bronze/cik=320193/year=2026/doc.json"
+    assert read_units.fill({"segment": "cik"}, key) == "320193"
+    assert read_units.fill({"segment": "cik", "as": "integer"}, key) == 320193
+    with pytest.raises(ValueError, match="no segment"):
+        read_units.fill({"segment": "month"}, key)
+
+
+def test_a_segment_must_fit_the_contracts_type(monkeypatch, tmp_path):
+    with pytest.raises(Exception, match="is integer, but the contract's accession_number is text"):
+        context_plan(monkeypatch, tmp_path, {"accession_number": {"segment": "accession", "as": "integer"}})
+
+
+@pytest.mark.parametrize("value", [{"segment": 3}, {"segment": "accession", "as": "float"}, {"segment": "a", "x": 1}])
+def test_a_bad_segment_is_refused(monkeypatch, tmp_path, value):
+    with pytest.raises(Exception, match="segment"):
+        context_plan(monkeypatch, tmp_path, {"accession_number": value})
+
+
+def test_a_context_value_may_be_null_where_the_contract_allows(monkeypatch, tmp_path):
+    values = context_plan(monkeypatch, tmp_path, {"accession_number": {"segment": "accession"}, "filed": None})
+    assert values["filed"] is None
+    with pytest.raises(Exception, match="does not take null"):
+        context_plan(monkeypatch, tmp_path / "x", {"accession_number": None})

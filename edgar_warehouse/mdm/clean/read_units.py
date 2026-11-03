@@ -45,7 +45,13 @@ def context_value(template, key: str, run):
 
 
 def fill(template, key: str, facts: dict | None = None):
-    """A template filled for one document; a run fact (`{fact: <name>}`) its value; a literal as it is."""
+    """A template filled for one document; a run fact (`{fact: <name>}`) its value; a key folder's `<name>=<value>` segment (`{segment: <name>}`); a literal as it is."""
+    if isinstance(template, dict) and "segment" in template:
+        found = [part[len(template["segment"]) + 1:] for part in key.split("/")[:-1]
+                 if part.startswith(template["segment"] + "=")]
+        if len(found) != 1:
+            raise ValueError(f"Document {key} has no segment {template['segment']}= (or more than one)")
+        return int(found[0]) if template.get("as") == "integer" else found[0]
     if isinstance(template, dict):
         return (facts or {})[template["fact"]]
     if not isinstance(template, str):
@@ -127,6 +133,14 @@ def _check_run_inputs(name: str, shape: dict, body: dict, run) -> None:
         if template == RECEIPT_CONTEXT:
             if (read.get("context") or {}).get(value_name, {}).get("type") != "text":
                 raise ValueError(f"Step {name}: the receipt hash is text, but the contract's {value_name} is not")
+        elif isinstance(template, dict) and "segment" in template:
+            declared = (read.get("context") or {}).get(value_name, {}).get("type")
+            if declared != template.get("as", "text"):
+                raise ValueError(f"Step {name}: segment {template['segment']} is {template.get('as', 'text')}, "
+                                 f"but the contract's {value_name} is {declared}")
+        elif template is None:
+            if not (read.get("context") or {}).get(value_name, {}).get("nullable"):
+                raise ValueError(f"Step {name}: the contract's {value_name} does not take null")
         elif isinstance(template, dict):
             kind = CONTEXT_TYPES.get((read.get("context") or {}).get(value_name, {}).get("type"))
             fact = run.facts[template["fact"]]
