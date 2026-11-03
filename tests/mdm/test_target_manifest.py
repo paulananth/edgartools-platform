@@ -65,7 +65,9 @@ def test_the_engine_sees_version_one_steps():
     ({"units": {"slices": {"bytes": 0}}}, "slices name their bytes"),
     ({"units": {"groups": 17}}, "groups hold 1..16"),
     ({"units": {"every": 2}}, "units are one"),
-    ({"input": {"other": 1}}, "pieces, references, runfile and bind only"),
+    ({"input": {"other": 1}}, "pieces, references, runfile, always and bind only"),
+    ({"input": {"always": True}}, "always is true, names its files"),   # always without files
+    ({"input": {"always": "yes", "files": "*"}}, "always is true, names its files"),
     ({"units": {"each": "Folder"}}, "each file"),
     ({"input": {"files": "../x"}}, "pattern over the bundle"),
     ({"input": {"beside": {"path": "{stem}.json", "sha256": "request_sha256"}}}, "template path"),

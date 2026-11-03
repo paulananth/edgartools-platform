@@ -1390,8 +1390,8 @@ An empty key list still validates document shape and assertions.
 
 ## Examples: configured preparation caller
 
-`mdm prepare-clean-company` writes the input manifest of the Company source's
-`mastering` target (Issue 20 slice 20c), and `rules run --target mastering`
+`mdm prepare-capture --source sec.company` writes the input manifest of the Company source's
+`mastering` target (Issue 20 slice 20c; ticket 177: the generic planner), and `rules run --target mastering`
 runs it: registered workers read the receipt-bound raw capture's main
 documents through `name-count-main.yaml` (each row's bronze origin from the
 caller's `bronze_object` context) and their name and CIK keys through

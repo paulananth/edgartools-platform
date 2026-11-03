@@ -1,6 +1,6 @@
 # SEC Company: the MDM mapping of SEC submissions records (the Dataset Contract
 # registered as sec.company.v1). Company preparation reads the raw
-# capture through the configured workers (`mdm prepare-clean-company`); the
+# capture through the configured workers (`mdm prepare-capture`); the
 # `mdm` target merges its bundles. Capture returns as a target with the
 # configured capture worker (Issue 20 L8).
 source: sec.company
@@ -58,6 +58,8 @@ bookkeeping:
         files: [name_count]
         # The Name Count counts by its entries, normalizers and version, not by the capture it was built from.
         projections: {name_count: [entries, normalizers, version]}
+        # The Name Count must have counted the capture the run is over (its receipts file's digest).
+        matches: [{file: name_count, path: sec.receipts_sha256, to: receipts_sha256}]
       steps:
         - name: main
           operation: source.read
@@ -93,6 +95,7 @@ bookkeeping:
           input:
             contract: catalog.yaml
             files: "*/company_tickers_exchange/*"
+            always: true
             context:
               sync_run_id: {fact: catalog_run}
               last_synced_at: {fact: observed_at}

@@ -2,6 +2,7 @@
 frozen (ticket 177, slice 2): for a read and for a combine. Every name here is invented."""
 import hashlib
 import json
+from pathlib import Path
 from copy import deepcopy
 
 import pytest
@@ -167,3 +168,49 @@ def test_a_context_value_may_be_null_where_the_contract_allows(monkeypatch, tmp_
     assert values["filed"] is None
     with pytest.raises(Exception, match="does not take null"):
         context_plan(monkeypatch, tmp_path / "x", {"accession_number": None})
+
+
+def matched_plan(monkeypatch, tmp_path, body, matches=None):
+    """A target whose run file must name this capture: `run.matches` (ticket 177, slice 5d)."""
+    real = files.source
+
+    def source(name, *args, **kwargs):
+        reading = deepcopy(real(name, *args, **kwargs))
+        if name == ownership.SOURCE:
+            reading["bookkeeping"]["targets"]["mastering"]["run"] = {
+                "facts": [], "files": ["name_count"],
+                "matches": matches if matches is not None else [
+                    {"file": "name_count", "path": "sec.receipts_sha256", "to": "receipts_sha256"}]}
+        return reading
+    monkeypatch.setattr(target_manifest.rules_files, "source", source)
+    options = ownership.capture(tmp_path, [1])
+    receipts = hashlib.sha256((Path(options["capture"]) / "receipts.jsonl").read_bytes()).hexdigest()
+    path = tmp_path / "name_count.json"
+    path.write_text(json.dumps(body(receipts)))
+    return target_manifest.write_manifest(**options, facts={}, run_files={"name_count": str(path)})
+
+
+def test_a_run_file_that_names_this_capture_is_accepted(monkeypatch, tmp_path):
+    report = matched_plan(monkeypatch, tmp_path, lambda receipts: {"sec": {"receipts_sha256": receipts}})
+    assert report["manifest"]
+
+
+def test_a_run_file_built_from_another_capture_is_refused(monkeypatch, tmp_path):
+    with pytest.raises(Exception, match="name_count did not count this capture"):
+        matched_plan(monkeypatch, tmp_path, lambda receipts: {"sec": {"receipts_sha256": "0" * 64}})
+
+
+def test_a_run_file_without_the_matched_part_is_refused(monkeypatch, tmp_path):
+    with pytest.raises(Exception, match="name_count did not count this capture"):
+        matched_plan(monkeypatch, tmp_path, lambda receipts: {"other": 1})
+
+
+@pytest.mark.parametrize("matches", [
+    [{"file": "other", "path": "a", "to": "receipts_sha256"}],               # a file the run does not declare
+    [{"file": "name_count", "path": "a", "to": "something"}],                # not a known property
+    [{"file": "name_count", "path": "", "to": "receipts_sha256"}],           # no path
+    [{"file": "name_count", "path": "a"}],                                    # no property
+])
+def test_a_bad_match_is_refused(monkeypatch, tmp_path, matches):
+    with pytest.raises(Exception, match="matches"):
+        matched_plan(monkeypatch, tmp_path, lambda receipts: {"a": 1}, matches)

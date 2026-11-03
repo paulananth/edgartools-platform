@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from edgar_warehouse.mdm.clean.company_prepare import write_company_manifest
+from edgar_warehouse.mdm.clean.target_manifest import write_manifest
 from edgar_warehouse.mdm.clean.name_count import _sec_population
 from edgar_warehouse.mdm.clean.name_count_file import write_name_count
 from edgar_warehouse.mdm.clean.store import Conflict
@@ -57,20 +57,27 @@ def name_count_capture(tmp_path, found, rows):
     return folder, population, name_count
 
 
-def prepare(tmp_path, capture, ciks=(APPLE, MSFT, ACME), output="bundle", **changes):
-    folder, population, name_count = capture
+def prepare(tmp_path, capture, ciks=(APPLE, MSFT, ACME), output="bundle", name_count=None, observed_at=None,
+            load_mode="default", revision=PINS["revision"], force=False, journal=None):
+    """The Company mastering target's input manifest, planned by the generic writer (ticket 177)."""
+    folder, population, counted = capture
     listed = tmp_path / f"documents-{output}.json"
-    listed.write_text(json.dumps([key(c) for c in ciks]))
-    args = {"capture": str(folder), "documents": str(listed), "population": str(population), "catalog": CATALOG,
-            "name_count": str(name_count), "output": str(tmp_path / output), "journal": MemoryJournal(), **PINS, **changes}
-    return write_company_manifest(**args), Path(args["output"])
+    listed.write_text(json.dumps([key(c) for c in ciks] + [CATALOG]))
+    report = write_manifest(
+        source="sec.company", target="mastering", capture=str(folder), documents=str(listed),
+        capture_run=PINS["capture_run"], output=str(tmp_path / output), as_of=PINS["as_of"], revision=revision,
+        journal=journal or MemoryJournal(), force=force,
+        facts={"capture_run": PINS["capture_run"], "catalog_run": PINS["catalog_run"],
+               "observed_at": observed_at or PINS["observed_at"], "load_mode": load_mode},
+        run_files={"name_count": str(name_count or counted)})
+    return report, Path(tmp_path / output)
 
 
 def test_the_manifest_is_content_addressed_and_written_once(tmp_path, capture):
     report, _ = prepare(tmp_path, capture)
     assert prepare(tmp_path, capture)[0] == report
-    assert report["scope"]["ciks"] == [APPLE, MSFT, ACME] and report["target"] == "mastering"
-    assert report["publication"]["publication_key"].startswith("capture-1:sec_submissions:")
+    assert report["target"] == "mastering" and report["scope"]["documents"] == 4
+    assert report["publication"]["publication_key"].startswith("capture-1:sec.company:")
     assert prepare(tmp_path, capture, revision=1)[0]["manifest"] != report["manifest"]
 
 
@@ -85,14 +92,7 @@ def test_a_different_catalog_is_a_different_publication(tmp_path, capture):
 def test_a_name_count_that_did_not_count_this_capture_is_refused(tmp_path, capture):
     _, _, name_count = name_count_capture(tmp_path / "other", documents(), catalog())
     with pytest.raises(Conflict, match="did not count"):
-        prepare(tmp_path, capture, name_count=str(name_count))
-
-
-def test_a_document_outside_the_population_is_refused(tmp_path, capture):
-    folder, population, name_count = capture
-    population.write_text(json.dumps([key(APPLE), key(MSFT)]))
-    with pytest.raises(Conflict, match="did not count"):
-        prepare(tmp_path, capture)
+        prepare(tmp_path, capture, name_count=name_count)
 
 
 def test_a_document_that_differs_from_its_receipt_is_refused(tmp_path, capture):
@@ -102,16 +102,17 @@ def test_a_document_that_differs_from_its_receipt_is_refused(tmp_path, capture):
         prepare(tmp_path, capture)
 
 
-def test_a_bundle_names_main_documents_only_and_at_most_512(tmp_path, capture):
+def test_a_bundle_names_at_most_512_distinct_documents(tmp_path, capture):
     folder, population, name_count = capture
     listed = tmp_path / "documents.json"
-    too_many = [f"bronze/main/{n}.json" for n in range(513)]
-    for keys, message in [([CATALOG], "main submissions documents only"), ([], "1..512 distinct"),
-                          (too_many, "1..512 distinct")]:
+    for keys in ([], [f"bronze/main/{n}.json" for n in range(513)]):
         listed.write_text(json.dumps(keys))
-        with pytest.raises(ValueError, match=message):
-            write_company_manifest(capture=str(folder), documents=str(listed), population=str(population),
-                                   catalog=CATALOG, name_count=str(name_count), output=str(tmp_path / "x"), **PINS)
+        with pytest.raises(ValueError, match="1..512 distinct"):
+            write_manifest(source="sec.company", target="mastering", capture=str(folder), documents=str(listed),
+                           capture_run="capture-1", output=str(tmp_path / "x"), as_of=PINS["as_of"], revision=0,
+                           journal=MemoryJournal(),
+                           facts={"capture_run": "c", "catalog_run": "d", "observed_at": PINS["observed_at"],
+                                  "load_mode": "default"}, run_files={"name_count": str(name_count)})
 
 
 def test_another_observation_time_or_load_mode_is_another_consumer(tmp_path, capture):

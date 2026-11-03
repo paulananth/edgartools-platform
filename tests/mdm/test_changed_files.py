@@ -88,7 +88,7 @@ def test_a_company_repeat_names_no_file_and_forcing_names_them_all(tmp_path, com
     first, _ = prepare(tmp_path, company_capture, output="first", journal=journal)
     record(first, journal)
     again, _ = prepare(tmp_path, company_capture, output="again", journal=journal)
-    assert again["manifest"] is None and again["scope"]["listed"] == 3
+    assert again["manifest"] is None and again["scope"]["listed"] == 4  # the catalog is listed, read every time
     forced, _ = prepare(tmp_path, company_capture, output="forced", journal=journal, force=True)
     assert len(named(forced)) == 3 and forced["scope"]["forced"] is True
 
@@ -115,4 +115,4 @@ def test_a_new_capture_where_one_address_changed_names_only_that_company(tmp_pat
     old_name_count, new_name_count = (json.loads(Path(c[2]).read_text()) for c in (company_capture, other))
     assert old_name_count["sec"] != new_name_count["sec"] and old_name_count["entries"] == new_name_count["entries"]
     report, _ = prepare(tmp_path, other, output="second", journal=journal)
-    assert named(report) == [key(42)] and report["scope"]["listed"] == 3
+    assert named(report) == [key(42)] and report["scope"]["listed"] == 4
