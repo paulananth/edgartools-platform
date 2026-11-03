@@ -230,7 +230,7 @@ def write_company_manifest(
     # bytes, as for any source (`target_manifest`): the same documents are one publication.
     documents_hash = digest([[key, receipts[key]] for key in keys])
     publication_key = (f"{capture_run}:sec_submissions:{documents_hash}:{catalog_run}:{receipts[catalog]}"
-                       f":name_count:{name_count_hash}")
+                       f":name_census:{name_count_hash}")
     # The consumer and batch ids name everything that shapes the rows: a rerun with another
     # observation time, load mode or rules version is a new consumer, not a reused batch key.
     bundle = digest([publication_key, revision, as_of, observed_at, load_mode, rules])
