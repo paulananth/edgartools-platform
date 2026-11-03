@@ -53,7 +53,7 @@ CAP = 5
 @cache
 def sec_reading():
     """The SEC filer reading, loaded when the name count first counts, so a merge of any other source needs no such file."""
-    return rules_files.load(rules_files.ROOT / "sources/sec.company/census-filer.yaml")
+    return rules_files.load(rules_files.ROOT / "sources/sec.company/name-count-filer.yaml")
 
 
 def _sec_population(filers):
@@ -89,7 +89,7 @@ def from_readings(*, sec_population: dict, gleif: dict, held: dict, wanted: set,
 def fold_reading(readings, *, cascade_wanted: set, address_counts) -> tuple[dict, dict, list]:
     """What the configured complete reading of the Golden Copy counted.
 
-    `readings` yields the reading's tables (`census-complete-stream.yaml`), in
+    `readings` yields the reading's tables (`name-count-complete-stream.yaml`), in
     source order: legal holders with their last update (a later record wins),
     other-name holders, and for every supported GENERAL record its cascade
     view. A candidate is an entity holding a filer's name; the same LEI later

@@ -1,7 +1,7 @@
 # Name Frequency's SEC population, its name keys read directly (ticket 148): each
 # raw main submissions document gives its filer's current name key and each
 # former name key, beside the filer's ten-digit CIK. The keys are
-# `census-filer.yaml`'s, transform for transform; `census-sec-reduction.yaml`
+# `name-count-filer.yaml`'s, transform for transform; `name-count-sec-reduction.yaml`
 # then counts who holds each key.
 execution:
   profile: source.read

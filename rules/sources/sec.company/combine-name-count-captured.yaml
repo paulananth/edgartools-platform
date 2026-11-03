@@ -1,6 +1,8 @@
-# Bind approved Company/catalog run IDs and the canonical census digest.
-# Both census groups read a separately authenticated configured reading.
-# Cascade evidence is attached only when an assignment exists.
+# combine-name-count.yaml for what a Company capture holds today: main documents
+# and the exchange catalog (L4: continuation pages and the second catalog are
+# not captured). Equal to combine-name-count.yaml but for the forms and tickers
+# sources (a test holds them equal). Bind approved Company/catalog run IDs and
+# the canonical name count digest, as there.
 execution:
   profile: source.combine
 combine:
@@ -9,7 +11,6 @@ combine:
     forms:
       source:
       - main
-      - pages
       table: filings
       key: cik
       value: form
@@ -25,7 +26,6 @@ combine:
     tickers:
       source:
       - catalog_exchange
-      - catalog_tickers
       table: tickers
       key: cik
       value: ticker
@@ -51,8 +51,8 @@ combine:
       checks:
         last_sync_run_id: APPROVED_COMPANY_CAPTURE_RUN
       where: {}
-    census_names:
-      source: census
+    name_count_names:
+      source: name_count
       table: names
       key: name_key
       value: name_evidence
@@ -61,10 +61,10 @@ combine:
       distinct: false
       skip_null_values: true
       checks:
-        census_digest: "0000000000000000000000000000000000000000000000000000000000000000"
+        name_count_digest: '0000000000000000000000000000000000000000000000000000000000000000'
       where: {}
-    census_cascade:
-      source: census
+    name_count_cascade:
+      source: name_count
       table: cascade
       key: cik
       value: cascade_evidence
@@ -73,7 +73,7 @@ combine:
       distinct: false
       skip_null_values: true
       checks:
-        census_digest: "0000000000000000000000000000000000000000000000000000000000000000"
+        name_count_digest: '0000000000000000000000000000000000000000000000000000000000000000'
       where: {}
   tables:
     company:
@@ -99,12 +99,12 @@ combine:
           on_missing: empty
           replace: false
         name_census:
-          group: census_names
+          group: name_count_names
           key: _name_key
           on_missing: empty
           replace: false
         cascade_evidence:
-          group: census_cascade
+          group: name_count_cascade
           key: cik
           on_missing: skip
           replace: false

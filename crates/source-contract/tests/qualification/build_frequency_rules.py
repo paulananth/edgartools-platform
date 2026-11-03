@@ -27,7 +27,7 @@ project=lambda v,t:{'project':{'value':v,'then':t}}
 transform=lambda v,ops:{'transform':{'value':v,'transforms':ops}}
 text_or_empty=lambda p: choose(test_at(p),value_at(p),constant(''))
 allof=lambda cs: __import__('functools').reduce(lambda acc,c:choose(c,acc,constant(False)),reversed(cs),constant(True))
-identity=files.load(root/'census-identity.yaml')['read']['tables']['mapped']['columns']
+identity=files.load(root/'name-count-identity.yaml')['read']['tables']['mapped']['columns']
 extract=lambda name:identity[name]['object']['fields']['value']
 mapped=files.load(root/'level1-fields.yaml')['read']['tables']['mapped']['columns']
 quality=files.load(root/'quality.yaml')['quality']['gleif.level1.v1']
@@ -75,8 +75,8 @@ observation=choose(allof([equals(extract('category'),constant('GENERAL')),choose
         'legal_withheld':value_at('legal_withheld'),'headquarters_withheld':value_at('headquarters_withheld')}),constant(None))), 'fallback':constant(None)}},constant(None))
 references={'entity_statuses':{s:{'allowed':True} for s in spec['entity_statuses']},'refused_registration_statuses':{s:{'refused':True} for s in spec['refused_registration_statuses']}}
 config={'source':'gleif.level1','execution':{'profile':'source.read','workers':1,'max_artifacts':1},'read':{'format':'json','limits':{'max_bytes':1048576,'max_records':100000},'references':references,'tables':{'mapped':{'each':'.','columns':{'observation':observation}}}}}
-emit('census-cascade-record.yaml', '# GENERAL observations through approved mapped fields and quality; no activation.\n'+files.dumps(config))
-stream=files.load(root/'census-names-stream.yaml')
+emit('name-count-cascade-record.yaml', '# GENERAL observations through approved mapped fields and quality; no activation.\n'+files.dumps(config))
+stream=files.load(root/'name-count-names-stream.yaml')
 stream['read']['references']=references
 stream['read']['context']['source_index']={'type':'integer'}
 stream['read']['stream']['ordinal_context']='source_index'
@@ -87,5 +87,5 @@ for table in stream['read']['tables'].values():
 stream['read']['tables']['d_addresses']={'each':{'project':{'value':observation,'on_null':'empty'}},'select':test_at('place.street'),'columns':{
     'street':transform(text_or_empty('place.street'),[{'regex_replace':{'pattern':r'\n[\s\S]*$','with':''}}]),
     'postcode':transform(text_or_empty('place.postcode'),[{'slice':{'start':0,'end':5}}]),'country':text_or_empty('place.country')}}
-emit('census-complete-stream.yaml', '# Complete original-source census projection; input-bound wanted/count required.\n# Global addresses include every supported GENERAL occurrence, before candidate eligibility.\n'+files.dumps(stream))
-print({'passes':len(spec['passes']),'cascade_bytes':(root/'census-cascade-record.yaml').stat().st_size,'stream_bytes':(root/'census-complete-stream.yaml').stat().st_size})
+emit('name-count-complete-stream.yaml', '# Complete original-source census projection; input-bound wanted/count required.\n# Global addresses include every supported GENERAL occurrence, before candidate eligibility.\n'+files.dumps(stream))
+print({'passes':len(spec['passes']),'cascade_bytes':(root/'name-count-cascade-record.yaml').stat().st_size,'stream_bytes':(root/'name-count-complete-stream.yaml').stat().st_size})

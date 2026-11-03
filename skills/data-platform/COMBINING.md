@@ -410,11 +410,11 @@ reader is deleted.
 
 ### The SEC Company Name Count evidence
 
-Bind the approved Name Count file's canonical SHA into `combine-census.yaml` and use
-its matching source-extract contract `census.yaml`; replace capture/catalog run
+Bind the approved Name Count file's canonical SHA into `combine-name-count.yaml` and use
+its matching source-extract contract `name-count.yaml`; replace capture/catalog run
 placeholders with the approved runs. Supply the full main/page/catalog
 source extracts used by `combine.yaml`, with main captures read through
-`census-main.yaml`, plus a source-extract named `census`. Both Name Count groups use
+`name-count-main.yaml`, plus a source-extract named `census`. Both Name Count groups use
 `one` and pin each row's Name Count digest. Name evidence joins by the configured
 SEC name key; optional cascade evidence joins by integer CIK under
 `name_census.cascade`. Missing name evidence yields null, while a cascade
@@ -450,5 +450,5 @@ retirement as separately verified gates.
 
 ### Examples: bundled whole-source projections
 
-`gleif/census-complete-stream.yaml` emits the original-source projection;
-`gleif/census-cascade-record.yaml` supports bounded GENERAL comparisons.
+`gleif/name-count-complete-stream.yaml` emits the original-source projection;
+`gleif/name-count-cascade-record.yaml` supports bounded GENERAL comparisons.

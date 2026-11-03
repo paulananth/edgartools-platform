@@ -8,14 +8,14 @@ contracts, and freezes every unit's input. Bookkeeping runs the target's steps
 (`rules run --source sec.company --target mastering`) and the
 registered workers do the work:
 
-- `main`: the documents read by `census-main.yaml`, cut into units of at most
+- `main`: the documents read by `name-count-main.yaml`, cut into units of at most
   8 MiB of documents; `keys`: the bundle's name and CIK keys read once
-  (`census-keys.yaml`);
+  (`name-count-keys.yaml`);
 - `catalog`: the exchange ticker catalog read once (`catalog.yaml`);
 - `census`: the Name Count read once, narrowed to the bundle's names and CIKs
-  by lookup sets derived from the key readings (`census.yaml`);
+  by lookup sets derived from the key readings (`name-count.yaml`);
 - `combine`: each main unit with the name count and the catalog
-  (`combine-census-captured.yaml`);
+  (`combine-name-count-captured.yaml`);
 - `records`: the bundle's combined rows as one publication (`mdm.prepare`);
 - `merge`: that manifest through the Merge Stage (`mdm.merge`).
 
@@ -45,7 +45,7 @@ DOCUMENTS_BYTES = 1024**2
 NAME_COUNT_BYTES = 256 * 1024**2
 POPULATION_BYTES = 64 * 1024**2
 KEY_READING_BYTES = 16 * 1024**2  # the bundle's one key reading
-# One key reading names a bundle's documents (`census-keys.yaml` max_artifacts).
+# One key reading names a bundle's documents (`name-count-keys.yaml` max_artifacts).
 BUNDLE_DOCUMENTS = 512
 # A main unit reads documents up to this many bytes: at most 7,423 filings rows a MiB, inside
 # the combination's 100,000 rows with the catalog's 10,391 (measured 2026-10-12, cm27). The
@@ -53,8 +53,8 @@ BUNDLE_DOCUMENTS = 512
 # than the 3x of the documents measured then (24.6 MiB for 7.9 MiB, 96 documents).
 MAIN_READING_BYTES = 8 * 1024**2
 # The contracts the target's readings and combination run.
-RULES = ("census-main.yaml", "census-keys.yaml", "catalog.yaml", "census.yaml", "combine-census-captured.yaml")
-# Where `census.yaml` and the combination take the name count digest.
+RULES = ("name-count-main.yaml", "name-count-keys.yaml", "catalog.yaml", "name-count.yaml", "combine-name-count-captured.yaml")
+# Where `name-count.yaml` and the combination take the name count digest.
 NAME_COUNT_DIGEST = "0" * 64
 
 
@@ -76,7 +76,7 @@ def main_units(folder: Path, receipts: dict, keys: list[str], max_artifacts: int
 
 
 def main_context(key: str, receipts: dict, pins: dict) -> dict:
-    """A main document's context values for `census-main.yaml`."""
+    """A main document's context values for `name-count-main.yaml`."""
     return {"cik": raw_capture.cik(key), "sync_run_id": pins["capture_run"], "raw_object_id": receipts[key],
             "load_mode": pins["load_mode"], "recent_limit": None, "last_synced_at": pins["observed_at"],
             "bronze_object": key}
@@ -96,9 +96,9 @@ def _units(store, root: str, folder: Path, receipts: dict, keys: list[str], cata
     """Every step's units, inputs frozen: contracts bound, documents by receipt, inputs composed."""
     inputs = root + "/inputs"
     put = lambda value: store.put(inputs, value)  # noqa: E731
-    main_rules = rules_files.load(ROOT / "census-main.yaml")
+    main_rules = rules_files.load(ROOT / "name-count-main.yaml")
     main_contract = put(main_rules)
-    keys_contract = put(rules_files.load(ROOT / "census-keys.yaml"))
+    keys_contract = put(rules_files.load(ROOT / "name-count-keys.yaml"))
     # Each document equal to its receipt before it is frozen; its size cuts the main units.
     main, start = [], 0
     for unit in main_units(folder, receipts, keys, main_rules["execution"]["max_artifacts"]):
@@ -124,23 +124,23 @@ def _units(store, root: str, folder: Path, receipts: dict, keys: list[str], cata
     sets = {name: {"readings": {"slot": "keys"}, "table": "keys", "column": column,
                    "max_input_bytes": KEY_READING_BYTES, "max_input_rows": len(keys)}
             for name, column in (("names", "_name_key"), ("ciks", "_cik_key"))}
-    name_count_unit = _unit(f"{root}/census.reading.json", {"unit": "census"}, {"compose": {
-        "document": {"version": 3, "contract": put(bind(rules_files.load(ROOT / "census.yaml"),
+    name_count_unit = _unit(f"{root}/name_count.reading.json", {"unit": "name_count"}, {"compose": {
+        "document": {"version": 3, "contract": put(bind(rules_files.load(ROOT / "name-count.yaml"),
                                                          {NAME_COUNT_DIGEST: name_count_hash})),
                      "artifacts": [{"input": name_count_ref,
                                     "context": put({"version": 1, "input": name_count_ref, "values": {}}),
                                     "lookups": {"slot": "lookups"}}]},
         "slots": {"lookups": {"compose": {"document": {"version": 2, "input": name_count_ref, "sets": sets},
                                           "slots": {"keys": readings}}}}}})
-    combine_contract = put(bind(rules_files.load(ROOT / "combine-census-captured.yaml"), {
+    combine_contract = put(bind(rules_files.load(ROOT / "combine-name-count-captured.yaml"), {
         "APPROVED_COMPANY_CAPTURE_RUN": pins["capture_run"], "APPROVED_CATALOG_CAPTURE_RUN": pins["catalog_run"],
         NAME_COUNT_DIGEST: name_count_hash}))
     combine = [_unit(f"{root}/combine/{n}.reading.json", {"unit": f"combine-{n}"}, {"compose": {
         "document": {"version": 1, "contract": combine_contract,
-                     "readings": {"main": {"slot": "main"}, "census": {"slot": "census"},
+                     "readings": {"main": {"slot": "main"}, "name_count": {"slot": "name_count"},
                                   "catalog_exchange": {"slot": "catalog"}}},
         "slots": {"main": {"step": "main", "key": unit["keys"]["unit"]},
-                  "census": {"step": "census", "key": "census"}, "catalog": {"step": "catalog", "key": "catalog"}}}})
+                  "name_count": {"step": "name_count", "key": "name_count"}, "catalog": {"step": "catalog", "key": "catalog"}}}})
                for n, unit in enumerate(main)]
     records = _unit(f"{root}/records/manifest.json", {
         "unit": "records", "table": "company", "dataset": SOURCE_CODE, "policy": digest(POLICY),
@@ -150,7 +150,7 @@ def _units(store, root: str, folder: Path, receipts: dict, keys: list[str], cata
             "slots": {"combined": [{"step": "combine", "key": unit["keys"]["unit"]} for unit in combine]}}})
     merge = {"keys": {"batch_id": publication["batch_id"], "consumer": publication["consumer"]},
              "input": {"from": {"step": "records", "key": "records"}}, "output": f"{root}/merge.json", "cursor": {}}
-    return {"main": main, "keys": readers, "catalog": [catalog_unit], "census": [name_count_unit],
+    return {"main": main, "keys": readers, "catalog": [catalog_unit], "name_count": [name_count_unit],
             "combine": combine, "records": [records], "merge": [merge]}
 
 

@@ -1,4 +1,4 @@
-# Complete original-source census projection; input-bound wanted/count required.
+# Complete original-source name count projection; input-bound wanted/count required.
 # Global addresses include every supported GENERAL occurrence, before candidate eligibility.
 source: gleif.level1
 execution:

@@ -51,7 +51,7 @@ def fixture_name_count(case='both'):
 def name_count_read(store,root,body,*,config=None,sets=None):
     """Read the name count narrowed to `sets` (every name and CIK in the body when omitted)."""
     raw=store.put(root.as_uri(),body)
-    rules=bind(files.load(ROOT/'census.yaml'),raw['sha256']) if config is None else config
+    rules=bind(files.load(ROOT/'name-count.yaml'),raw['sha256']) if config is None else config
     contract=store.put(root.as_uri(),rules)
     if sets is None:
         entries=body.get('entries') if isinstance(body.get('entries'),dict) else {}
@@ -67,7 +67,7 @@ def name_count_read(store,root,body,*,config=None,sets=None):
 
 
 def combination(sha):
-    rules=bind(files.load(ROOT/'combine-census.yaml'),sha)
+    rules=bind(files.load(ROOT/'combine-name-count.yaml'),sha)
     for spec in [*rules['combine']['groups'].values(),*rules['combine']['tables'].values()]:
         spec['checks']={col:{'APPROVED_COMPANY_CAPTURE_RUN':'capture','APPROVED_CATALOG_CAPTURE_RUN':'catalog'}.get(pin,pin) for col,pin in spec['checks'].items()}
     return rules
@@ -82,9 +82,9 @@ def test_name_count_and_optional_cascade_match_retained_helper_through_preparati
     if case=='empty_name': baseline_refs['main'],_=read(store,tmp_path,'baseline-empty',files.source('sec.company'),payload,context)
     baseline=source_combine.execute(envelope(store,tmp_path/'baseline',blueprint(),baseline_refs),store)
     expected=store.json(baseline)['artifacts'][0]['tables']['company'][0]
-    refs['main'],_=read(store,tmp_path,'name_count-main',files.load(ROOT/'census-main.yaml'),payload,{**context,'bronze_object':ORIGIN})
+    refs['main'],_=read(store,tmp_path,'name_count-main',files.load(ROOT/'name-count-main.yaml'),payload,{**context,'bronze_object':ORIGIN})
     name_count=fixture_name_count(case)
-    refs['census'],raw=name_count_read(store,tmp_path,name_count)
+    refs['name_count'],raw=name_count_read(store,tmp_path,name_count)
     expected['name_census']=name_count_evidence(name_count,expected,raw['sha256'])
     expected['_origin']={'bronze':{'object':ORIGIN,'sha256':expected['raw_object_id'],'locator':'$'}}
     task=envelope(store,tmp_path/'composed',combination(raw['sha256']),refs)
@@ -94,7 +94,7 @@ def test_name_count_and_optional_cascade_match_retained_helper_through_preparati
     assert digest(actual)==digest([expected]) and '_name_key' not in actual[0]
     assert store.json(store.json(result)['artifacts'][0]['input'])['readings']==refs
     prepare={'input':result,'output':(tmp_path/'prepared/manifest.json').as_uri(),'checks':['mdm.prepared'],
-        'keys':{'table':'company','dataset':'sec.company.v1','policy':ZERO,'consumer':'trial','batch_id':'census','as_of':context['last_synced_at']}}
+        'keys':{'table':'company','dataset':'sec.company.v1','policy':ZERO,'consumer':'trial','batch_id':'name_count','as_of':context['last_synced_at']}}
     prepared=mdm_prepare.execute(prepare,store)
     assert mdm_prepare.verify({**prepare,'candidate':prepared},store)==({'mdm.prepared':True},[])
     batch=store.json(prepared)['batches'][0]
@@ -121,7 +121,7 @@ def test_malformed_name_count_refuses_before_output(tmp_path,fault):
 def test_unbound_name_count_blueprint_and_substituted_digest_refuse(tmp_path, case):
     store=Artifacts()
     with pytest.raises(ValueError,match='approved artifact hash'):
-        name_count_read(store,tmp_path,fixture_name_count(case),config=files.load(ROOT/'census.yaml'))
+        name_count_read(store,tmp_path,fixture_name_count(case),config=files.load(ROOT/'name-count.yaml'))
     assert not (tmp_path/'census-reading.json').exists()
 
 
@@ -129,11 +129,11 @@ def test_unbound_name_count_blueprint_and_substituted_digest_refuse(tmp_path, ca
 def test_deliberate_configuration_faults_are_observable(tmp_path,fault):
     store=Artifacts()
     refs,payload,_,_,context=captures(store,tmp_path)
-    refs['main'],_=read(store,tmp_path,'name_count-main',files.load(ROOT/'census-main.yaml'),payload,{**context,'bronze_object':ORIGIN})
-    refs['census'],raw=name_count_read(store,tmp_path,fixture_name_count())
+    refs['main'],_=read(store,tmp_path,'name_count-main',files.load(ROOT/'name-count-main.yaml'),payload,{**context,'bronze_object':ORIGIN})
+    refs['name_count'],raw=name_count_read(store,tmp_path,fixture_name_count())
     rules=combination(raw['sha256'])
     if fault=='name_count_pin':
-        rules['combine']['groups']['census_names']['checks']['census_digest']='1'*64
+        rules['combine']['groups']['name_count_names']['checks']['name_count_digest']='1'*64
         with pytest.raises(ValueError,match='row check failed'): source_combine.execute(envelope(store,tmp_path/'fault',rules,refs),store)
     else:
         if fault=='name_key': rules['combine']['tables']['company']['joins']['name_census']['key']='entity_name'
@@ -148,7 +148,7 @@ def test_name_count_main_inherits_company_reading_and_canonical_name_recipe():
     """Fail when either upstream blueprint changes without updating this copy; filings are a
     narrowed copy (only the columns combine's `forms` group uses), so a dropped column may change."""
     source = files.source('sec.company')
-    name_count = deepcopy(files.load(ROOT/'census-main.yaml'))
+    name_count = deepcopy(files.load(ROOT/'name-count-main.yaml'))
     recipe = name_count['read']['tables']['company']['columns'].pop('_name_key')
     name_count['read']['tables']['company']['columns'].pop('_origin')  # each row's bronze origin (20c)
     name_count['read']['context'].pop('bronze_object')
@@ -181,16 +181,16 @@ def test_the_name_count_is_narrowed_to_the_bundles_names_and_ciks(tmp_path):
 
 def test_name_count_keys_carry_the_canonical_name_recipe_and_an_unpadded_cik():
     """Fail when the name-key recipe changes without updating this copy."""
-    columns=files.load(ROOT/'census-keys.yaml')['read']['tables']['keys']['columns']
+    columns=files.load(ROOT/'name-count-keys.yaml')['read']['tables']['keys']['columns']
     assert columns['_name_key']==files.load(ROOT/'name-key.yaml')['read']['tables']['names']['columns']['key']
-    assert columns['_name_key']==files.load(ROOT/'census-main.yaml')['read']['tables']['company']['columns']['_name_key']
+    assert columns['_name_key']==files.load(ROOT/'name-count-main.yaml')['read']['tables']['company']['columns']['_name_key']
     assert set(columns)=={'_name_key','_cik_key'}
 
 
 def test_the_captured_combination_differs_only_in_the_sources_a_capture_holds():
-    """Fail when combine-census.yaml changes without updating its captured copy."""
-    full=files.load(ROOT/'combine-census.yaml')
-    captured=deepcopy(files.load(ROOT/'combine-census-captured.yaml'))
+    """Fail when combine-name-count.yaml changes without updating its captured copy."""
+    full=files.load(ROOT/'combine-name-count.yaml')
+    captured=deepcopy(files.load(ROOT/'combine-name-count-captured.yaml'))
     assert (captured['combine']['groups']['forms']['source'],captured['combine']['groups']['tickers']['source'])==(
         ['main'],['catalog_exchange'])
     for name in ('forms','tickers'):
@@ -199,8 +199,8 @@ def test_the_captured_combination_differs_only_in_the_sources_a_capture_holds():
 
 
 def test_the_name_count_reads_every_sec_name_key_by_one_chain():
-    """`census-sec-names.yaml` builds each current and former name key by `census-filer.yaml`'s
+    """`name-count-sec-names.yaml` builds each current and former name key by `name-count-filer.yaml`'s
     chain, transform for transform: a drift in one copy would change the name count digest."""
     chains = [files.load(ROOT / name)["read"]["tables"][table]["columns"]["key"]["text"]["transforms"]
-              for name in ("census-filer.yaml", "census-sec-names.yaml") for table in ("current", "former")]
+              for name in ("name-count-filer.yaml", "name-count-sec-names.yaml") for table in ("current", "former")]
     assert len(chains[0]) == 26 and all(chain == chains[0] for chain in chains)

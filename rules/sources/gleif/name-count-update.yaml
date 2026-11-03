@@ -1,4 +1,4 @@
-# Read only after a legal name matches the wanted census population.
+# Read only after a legal name matches the wanted name count population.
 source: gleif.level1
 execution:
   profile: source.read

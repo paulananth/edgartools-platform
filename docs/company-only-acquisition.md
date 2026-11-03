@@ -31,12 +31,12 @@ checked by a separate verifier. Nothing makes a request to SEC here.
    ```
 
    Its steps, in `rules/sources/sec.company/source.yaml`:
-   `main` and `keys` read each document (`census-main.yaml`,
-   `census-keys.yaml`, two a unit); `catalog` reads the ticker catalog
+   `main` and `keys` read each document (`name-count-main.yaml`,
+   `name-count-keys.yaml`, two a unit); `catalog` reads the ticker catalog
    (`catalog.yaml`); `census` reads the Name Count file narrowed to the
-   bundle's names and CIKs (`census.yaml`, lookup sets derived from the key
+   bundle's names and CIKs (`name-count.yaml`, lookup sets derived from the key
    readings); `combine` joins each main unit with the Name Count and the catalog
-   (`combine-census-captured.yaml`); `records` prepares the bundle's rows as
+   (`combine-name-count-captured.yaml`); `records` prepares the bundle's rows as
    one publication (`mdm.prepare`); `merge` runs it through the Merge Stage
    (`mdm.merge`). The Name Count, combine and records inputs are composed from the
    steps' verified readings. The returned Bookkeeping run ID is the recovery

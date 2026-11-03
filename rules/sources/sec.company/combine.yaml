@@ -3,7 +3,7 @@
 # The ticker catalogs share their separately authenticated catalog run.
 # If verified capture completeness proves no continuation pages, change the
 # forms source list to [main]; do not invent an empty pagination capture.
-# Local reading/composition qualification only; census/provenance mastering
+# Local reading/composition qualification only; name count/provenance mastering
 # gates remain mandatory before activating a replacement Company route.
 execution:
   profile: source.combine

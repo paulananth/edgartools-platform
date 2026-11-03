@@ -8,7 +8,7 @@ import pytest
 
 from edgar_warehouse.rules import files
 
-NAME_COUNT_FILE = "census-filer.yaml"
+NAME_COUNT_FILE = "name-count-filer.yaml"
 
 
 @pytest.fixture(scope="module")
