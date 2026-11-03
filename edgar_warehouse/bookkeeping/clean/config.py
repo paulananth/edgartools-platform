@@ -45,6 +45,9 @@ RUN_DECLARED = RUN_KEYS | {"projections"}
 PROJECTION_PARTS = 16
 NAME = r"[a-z][a-z0-9_]*"
 LOOKUP_KEYS = frozenset({"from", "table", "column", "value_column", "max_input_bytes", "max_input_rows"})
+# A lookup reads the same file's unit of its prerequisite (`over: file`, the default), or every unit of it in
+# one reading (`over: all`, ticket 177 slice 4): one read of a large shared file per bundle, not per group.
+LOOKUP_OVER = frozenset({"file", "all"})
 # A per-document template names the document's folder, its name before the first dot, and its file name.
 TEMPLATE = r"(?:[^{}]|\{(?:dir|base|name)\})*"
 
@@ -147,13 +150,14 @@ def _plan(step: dict) -> None:
             or any(not re.fullmatch(r"[a-z][a-z0-9_]*", name) for name in lookups)
             or any(not _named(v, "file") and (
                        not isinstance(v, dict)
-                       or not (set(v) == LOOKUP_KEYS and v["from"] in step["requires"]
+                       or v.get("over", "file") not in LOOKUP_OVER
+                       or not (set(v) - {"over"} == LOOKUP_KEYS and v["from"] in step["requires"]
                                or set(v) == LOOKUP_KEYS - {"from"} | {"run"} and _other_run(v["run"]))
                        or any(type(v[k]) is not int or v[k] < 1 for k in ("max_input_bytes", "max_input_rows")))
                    for v in lookups.values())):
         raise Blocked("A step's lookups each read the same file's unit of one prerequisite (from, table, "
-                      "column, value_column and their bounds), another run's step instead of `from` "
-                      "({run: {source, target, step}}), or a run file {file: <name>}")
+                      "column, value_column and their bounds; `over: all` reads every unit of it), another run's "
+                      "step instead of `from` ({run: {source, target, step}}), or a run file {file: <name>}")
     if any(_named(v, "file") for v in lookups.values()) and not all(_named(v, "file") for v in lookups.values()):
         raise Blocked("A step's lookups are all run files, or all read from a prerequisite")
     bind = shape.get("bind", {})
@@ -164,7 +168,7 @@ def _plan(step: dict) -> None:
     if (not isinstance(references, dict) or any(not re.fullmatch(NAME, name) for name in references)
             or any(not _named(v, "file") for v in references.values())):
         raise Blocked("A step's references each name a run file: {<reference>: {file: <name>}}")
-    if (lookups and not all(_named(v, "file") for v in lookups.values())
+    if (lookups and not all(_named(v, "file") or v.get("over") == "all" for v in lookups.values())
             and not (isinstance(step.get("units"), dict) and set(step["units"]) <= {"groups", "each"})):
         raise Blocked("A read with lookups is cut into groups or each file (a composed slot per file)")
     pieces = shape.get("pieces")

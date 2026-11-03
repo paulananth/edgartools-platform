@@ -22,7 +22,7 @@ from __future__ import annotations
 import fnmatch
 import posixpath
 
-from edgar_warehouse.bookkeeping.clean.config import RECEIPT_CONTEXT
+from edgar_warehouse.bookkeeping.clean.config import COMPOSE_LIST, RECEIPT_CONTEXT
 from edgar_warehouse.workers.source_readings import RECEIPT_BYTES
 
 from . import raw_capture
@@ -206,6 +206,10 @@ def form(step: dict, run, units: dict) -> list[dict]:
     for value in ([] if from_files else lookups.values()):
         if "run" in value:  # another run's step, read whole (ticket 120)
             continue
+        if value.get("over") == "all":  # every unit of the prerequisite, in one reading (ticket 177, slice 4)
+            if not 1 <= len(units[value["from"]]) <= COMPOSE_LIST:
+                raise ValueError(f"Step {name}: a lookup over all reads 1..{COMPOSE_LIST} units of {value['from']}")
+            continue
         if run.by_name[value["from"]].get("units") != {"each": "file"}:
             raise ValueError(f"Step {name}: a lookup reads the same file's unit of a step whose units are each file")
     found = []
@@ -226,10 +230,11 @@ def form(step: dict, run, units: dict) -> list[dict]:
                 slots[slot] = {"compose": {
                     "document": {"version": 2, "input": source, "sets": {
                         set_name: {"readings": {"slot": set_name} if "run" in value else [{"slot": set_name}],
-                                   **{k: v for k, v in value.items() if k not in ("from", "run")}}
+                                   **{k: v for k, v in value.items() if k not in ("from", "run", "over")}}
                         for set_name, value in lookups.items()}},
-                    "slots": {set_name: run_units(run, value["run"])
-                              if "run" in value else {"step": value["from"], "key": pair(key)}
+                    "slots": {set_name: run_units(run, value["run"]) if "run" in value
+                              else [{"step": value["from"], "key": u["keys"]["unit"]} for u in units[value["from"]]]
+                              if value.get("over") == "all" else {"step": value["from"], "key": pair(key)}
                               for set_name, value in lookups.items()}}}
             artifacts.append(artifact)
         document = raw_capture.request(contract, artifacts)
