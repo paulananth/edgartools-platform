@@ -120,6 +120,10 @@ change to any of them processes every file of the source again. The unit is a
 whole file, never a field or a record inside one (record-level change is
 `mdm.publish`'s).
 
+- A capture target ends at capture: it keeps files and processes none, so it
+  has no `journal.record` step. The step ends the target that processes the
+  files (reads, masters or lands them), and a source with no such target has
+  recorded nothing.
 - A target's last step, `journal.record` (after its merge is verified),
   appends one `file.processed` event per file the run named, producer
   `change-propagation`, its key `file.processed:<source>:<identity>:<sha256>:<file
