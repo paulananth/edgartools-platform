@@ -26,15 +26,22 @@ Every target ends with the `journal.record` step (the 13F target's `processed`),
 
 ## Parts
 
-- [ ] `sec.ownership`: the mastering target (read, record, prepare, merge, processed), written like the 13F target
-- [ ] `sec.ownership`: the `silver.land` steps for `insider_ownership` and `insider_position`, after the merge
-- [ ] `sec.ownership`: the Change Journal step ends the target; tests at plan level and through the real workers on Postgres (a second pass changes nothing; a changed rule names every file again)
-- [ ] `sec.ownership`: `target: mastering` (or the silver kind the engine names) in `rules/source-sequence.yaml`, with the pinned-order tests
+- [x] `sec.ownership`: the mastering target (read, prepare, merge, landings, processed): `bookkeeping` v2 in `rules/sources/sec.ownership/source.yaml`, with an `owner_record` table in both read contracts holding each owner as one object; plan test `tests/mdm/test_ownership_target.py` (2026-11-02 19:37 ET)
+- [x] `sec.ownership`: the `silver.land` steps for `insider_ownership` and `insider_position`, after the merge: five landings that require the read step and the merge; real workers on Postgres (`tests/integration/test_ownership_target_postgres.py`) land 2 owners and 4 lines, and fail when the landings require only the read step (2026-11-02 19:37 ET)
+- [x] `sec.ownership`: the Change Journal step ends the target; tests at plan level (a second pass changes nothing; a changed rule names every file again, `tests/mdm/test_ownership_target.py`) (2026-11-02 19:37 ET) and through the real workers on Postgres (a second pass changes nothing; a changed rule names every file again)
+- [x] `sec.ownership`: `target: mastering` in `rules/source-sequence.yaml` (after `sec.nport.fund`), pinned-order tests and the Mapping Document updated (2026-11-02 19:37 ET)
+- [x] The engine lets a silver landing wait for a merge ([#1316]: plan tests; failed before on `a landing follows one read step`) (2026-11-02 19:37 ET)
 - [ ] `iapd.adv`: the mastering target (read, combine, record, prepare, merge, processed)
 - [ ] `iapd.adv`: the Change Journal step ends the target; tests at plan level and through the real workers; `rules/source-sequence.yaml`
 - [ ] `sec.registration`: the operator decides what the second step reads (the document unread, or facts)
 - [ ] `sec.registration`: its target beyond capture, with the Change Journal step added after capture, tests and `rules/source-sequence.yaml`
 - [ ] Learning → skill: name the skill line this ticket changed (`data-onboarding` target writing), or "none"
+
+## Findings while building `sec.ownership`
+
+- The read step takes the SEC submission files (`*.txt`); the source has no acquisition feed yet, so which captured files carry that name is to be confirmed with the capture of the ownership files (needs the operator's permission for the SEC requests).
+- A step after a merge cannot land a read unit's rows without the engine change above: `silver.land` took exactly one predecessor, and the merge's units carry no read unit.
+- The installed-bundle test installs the committed `HEAD`, so it must run after the commit; it takes about 7 minutes locally.
 
 ## Not in this ticket
 
