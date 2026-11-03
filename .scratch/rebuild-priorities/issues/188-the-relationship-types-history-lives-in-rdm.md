@@ -13,4 +13,5 @@ Ticket 132 moved the relationship types into the RDM code set `mdm-relationship-
 - [ ] List every copy of the relationship types outside RDM (the fixture, `BEFORE`, the layers in `policy_layers.py` that edit `types`) and what each one proves
 - [ ] Publish each earlier table as a version of `mdm-relationship-types` in `rules/reference/published/`, so the layers read their types from RDM by version
 - [ ] Delete the fixture and `BEFORE`; the approval-history digests (`tests/mdm/test_rules_config_digests.py`) stay unchanged
-- [ ] Learning → skill
+- [x] (2026-11-03 17:47 ET) Learning → skill, written first on the operator's instruction: `skills/data-modeling/SKILL.md`, "Types and reference data live in RDM, never in files"
+- [ ] Learning → skill: add what the move itself taught, if anything
