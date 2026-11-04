@@ -496,6 +496,15 @@ and failure actions. An externally executed check is not a runnable native SQL
 test. The `Other` platform is available in the pinned definition schema; select
 the tested mapping rather than relabeling the existing execution engine.
 
+The Rules catalog currently publishes its configured checks and corrections as
+two custom test definitions on the `Other` platform. Their descriptions state
+that OpenMetadata does not execute them. The resulting cases are metadata only:
+adding a database connection or ingestion runner does not make these cases
+runnable. Before claiming native quality execution, map each supported rule to
+an executable OpenMetadata definition or connect an external executor that
+actually runs the rule, then read back real results. Do not relabel `Other` as a
+database platform to make the cases appear executable.
+
 A result is `POST /api/v1/dataQuality/testCases/testCaseResults/{caseFQN}` with
 `timestamp`, `testCaseStatus` (`Success` or `Failed`), `testResultValue`,
 `passedRows` and `failedRows`; read it as `testCaseResult` with
