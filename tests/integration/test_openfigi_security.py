@@ -207,19 +207,24 @@ def test_each_identifier_carries_only_its_single_levels(tmp_path):
     records, refused = prepared_records(tmp_path, ("cusip",))
     found = {r["provenance"]["record_key"]: r.get("cross_references", {}) for r in records}
     assert found == {
-        EQUITY: {"composite_figi": "BBGZ0000VS14", "share_class_figi": "BBGZ00000SC6", "openfigi_ticker": "EXA"},
-        BOND: {"openfigi_ticker": "EXA 5 01/01/30"},
-        UNHELD: {"openfigi_ticker": "EXC 4 01/01/31"},
-        SOLE: {"composite_figi": "BBGZ0000VS23", "share_class_figi": "BBGZ0000SC22", "openfigi_ticker": "EXD"},
+        EQUITY: {"composite_figi": "BBGZ0000VS14", "share_class_figi": "BBGZ00000SC6"},
+        BOND: {},
+        UNHELD: {},
+        SOLE: {"composite_figi": "BBGZ0000VS23", "share_class_figi": "BBGZ0000SC22"},
         DOUBLE: {},
-        BROKEN: {"composite_figi": "BBGZ0000BK13", "openfigi_ticker": "EXJ"},
+        BROKEN: {"composite_figi": "BBGZ0000BK13"},
     }
     # A listed FIGI failing its check digit is left out; the answer stays (ticket 138).
     assert refused == {cusip: "not_found_by_openfigi" for cusip in (MISSING, *OTHERS)}
-    # The CUSIP asked and every listing's FIGI (ticket 138): the FIGIs are identifiers.
+    # The CUSIP asked and every listing's FIGI (ticket 138): the FIGIs are identifiers; so is the
+    # ticker (ticket 24), separators dropped; a bond's description (ten or more letters and digits
+    # once dropped) is no ticker and leaves the field empty, the record is kept.
+    tickers = {EQUITY: "EXA", SOLE: "EXD"}
     assert {r["provenance"]["record_key"]: r["identifiers"] for r in records} == {
-        **{c: {"cusip": c, "figi": figis(c)} for c in found if c != BROKEN},
-        BROKEN: {"cusip": BROKEN, "figi": ["BBGZ0000BK13"]}}
+        **{c: {"cusip": c, "figi": figis(c), **({"ticker": tickers[c]} if c in tickers else {})}
+           for c in found if c != BROKEN},
+        BROKEN: {"cusip": BROKEN, "figi": ["BBGZ0000BK13"], "ticker": "EXJ"}}
+    assert {r["provenance"]["record_key"]: r["provenance"].get("identifiers_set_aside") for r in records}[BOND] is None
     # BROKEN's bad FIGI is set aside with its reason, counted, never dropped.
     assert {r["provenance"]["record_key"]: r["provenance"].get("identifiers_set_aside") for r in records}[BROKEN] == [
         {"namespace": "figi", "value": "BBGZZ0000US1", "reason": "invalid_figi"}]
@@ -235,13 +240,15 @@ def test_an_isin_answer_carries_its_isin_and_every_listing_figi(tmp_path):
     """No pairing in the rules (ticket 138: "why do you need to read cusip results in isin
     they are not related"): the ISIN answer's record carries its own identifiers only."""
     records, refused = prepared_records(tmp_path, ("isin",))
+    tickers = {ISIN: "EXG", HOME: "EXH", SHARED: "EXA"}
     assert {r["provenance"]["record_key"]: r["identifiers"] for r in records} == {
-        i: {"isin": i, "figi": figis(i)} for i in (ISIN, HOME, SHARED, TWICE)}
+        i: {"isin": i, "figi": figis(i), **({"ticker": tickers[i]} if i in tickers else {})}
+        for i in (ISIN, HOME, SHARED, TWICE)}
     assert refused == {isin: "not_found_by_openfigi" for isin in ISIN_OTHERS}
     assert {r["provenance"]["record_key"]: r["cross_references"] for r in records if r["provenance"]["record_key"] != TWICE} == {
-        ISIN: {"composite_figi": "BBGZ0000VS50", "share_class_figi": "BBGZ0000SC59", "openfigi_ticker": "EXG"},
-        HOME: {"share_class_figi": "BBGZ0000SC68", "composite_figi": "BBGZ0000JP69", "openfigi_ticker": "EXH"},
-        SHARED: {"share_class_figi": "BBGZ00000SC6", "composite_figi": "BBGZ0000VS14", "openfigi_ticker": "EXA"}}
+        ISIN: {"composite_figi": "BBGZ0000VS50", "share_class_figi": "BBGZ0000SC59"},
+        HOME: {"share_class_figi": "BBGZ0000SC68", "composite_figi": "BBGZ0000JP69"},
+        SHARED: {"share_class_figi": "BBGZ00000SC6", "composite_figi": "BBGZ0000VS14"}}
 
 
 def bound(database, source_code: str, key: str) -> str | None:
@@ -283,7 +290,7 @@ def test_a_record_joins_the_security_holding_its_cusip_or_creates_it(database, t
     assert (joined["fields"]["name_of_issuer"]["value"], joined["fields"]["title_of_class"]["value"]) == (
         "EXAMPLE CORP", "COM")
     # The Security holds its CUSIP and every listing FIGI (no reverse limit).
-    assert joined["status"] == "accepted" and joined["identifiers"] == {"cusip": [EQUITY], "figi": figis(EQUITY)}
+    assert joined["status"] == "accepted" and joined["identifiers"] == {"cusip": [EQUITY], "figi": figis(EQUITY), "ticker": ["EXA"]}
     from edgar_warehouse.mdm.record_reads import for_connection
     with database.application.connect() as conn:
         reader = for_connection(conn)
@@ -308,7 +315,7 @@ def test_a_filed_figi_finds_its_security_and_never_becomes_one_of_its_identifier
                  for cusip, filed in (("ZZ0000211", figis(EQUITY)[0]), ("ZZ0000229", unheld_figi))])])
     found = securities(database)[bound(database, THIRTEENF, "ZZ0000211")]
     assert bound(database, THIRTEENF, "ZZ0000211") == bound(database, CODE, EQUITY)
-    assert found["identifiers"] == {"cusip": sorted([EQUITY, "ZZ0000211"]), "figi": figis(EQUITY)}
+    assert found["identifiers"] == {"cusip": sorted([EQUITY, "ZZ0000211"]), "figi": figis(EQUITY), "ticker": ["EXA"]}
     created = securities(database)[bound(database, THIRTEENF, "ZZ0000229")]
     assert created["identifiers"] == {"cusip": ["ZZ0000229"]}
 
@@ -357,10 +364,10 @@ def test_openfigi_answers_in_either_order_make_the_same_securities(database, tmp
     assert len(securities(database)) == 7
     equity = bound(database, CODE, EQUITY)
     assert securities(database)[equity]["identifiers"] == {
-        "cusip": [EQUITY], "isin": [SHARED], "figi": sorted({*figis(EQUITY), *figis(SHARED)})}
+        "cusip": [EQUITY], "isin": [SHARED], "figi": sorted({*figis(EQUITY), *figis(SHARED)}), "ticker": ["EXA"]}
     merged = securities(database)[bound(database, CODE, TWICE)]
     assert merged["identifiers"] == {"cusip": sorted([SOLE, DOUBLE]), "isin": [TWICE],
-                                     "figi": sorted({*figis(SOLE), *figis(DOUBLE)})}
+                                     "figi": sorted({*figis(SOLE), *figis(DOUBLE)}), "ticker": ["EXD"]}
     assert not [v for v in core.documents(database, "review").values() if v.get("open")]
     if order == "cusip_first":
         # The merged-away Security points at its survivor, the one created first.

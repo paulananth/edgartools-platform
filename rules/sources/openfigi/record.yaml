@@ -128,4 +128,7 @@ read:
                       - {join: {path: us_composite.us_composite_sample, item_path: figi_ticker, separator: "", max_items: 1, null_if_empty: true}}
                       - {join: {path: home_composite.home_composite_sample, item_path: figi_ticker, separator: "", max_items: 1, null_if_empty: true}}
                       - {join: {path: listing.listing_sample, item_path: figi_ticker, separator: "", max_items: 1, null_if_empty: true}}
-                  transforms: [{regex_replace: {pattern: "^[^ ]+ ", with: ""}}]
+                  # A class ticker is written with a slash, a dash, a dot or a space (BRK/B); the
+                  # identifier keeps letters and digits only (ticket 24), as a Form 4's symbol does. A bond's
+                  # description (ten or more once dropped) is no ticker and leaves the field empty.
+                  transforms: [{regex_replace: {pattern: "^[^ ]+ ", with: ""}}, {regex_replace: {pattern: "[^A-Za-z0-9]", with: ""}}, {regex_replace: {pattern: "^.{10,}$", with: ""}}]
