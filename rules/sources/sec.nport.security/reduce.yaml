@@ -23,7 +23,7 @@ reduce:
     # which kind its key is (`key_kind`: cusip or isin).
     keys:
       source: holdings
-      table: [security_cusip, security_isin]
+      table: [security_cusip, security_no_cusip]
       keys: [key, period]
       mode: members
       member: key_kind
@@ -35,7 +35,7 @@ reduce:
     # file; a tie keeps none, and a holding filing none votes for none.
     most_asset_category:
       source: holdings
-      table: [security_cusip, security_isin]
+      table: [security_cusip, security_no_cusip]
       keys: [key]
       mode: most
       member: asset_category
@@ -44,7 +44,7 @@ reduce:
       sample_limit: 0
     most_issuer_type:
       source: holdings
-      table: [security_cusip, security_isin]
+      table: [security_cusip, security_no_cusip]
       keys: [key]
       mode: most
       member: issuer_type
@@ -53,7 +53,7 @@ reduce:
       sample_limit: 0
     most_investment_country:
       source: holdings
-      table: [security_cusip, security_isin]
+      table: [security_cusip, security_no_cusip]
       keys: [key]
       mode: most
       member: investment_country
@@ -62,7 +62,7 @@ reduce:
       sample_limit: 0
     most_currency:
       source: holdings
-      table: [security_cusip, security_isin]
+      table: [security_cusip, security_no_cusip]
       keys: [key]
       mode: most
       member: currency
@@ -71,7 +71,7 @@ reduce:
       sample_limit: 0
     most_restricted:
       source: holdings
-      table: [security_cusip, security_isin]
+      table: [security_cusip, security_no_cusip]
       keys: [key]
       mode: most
       member: restricted
@@ -80,7 +80,7 @@ reduce:
       sample_limit: 0
     most_derivative_category:
       source: holdings
-      table: [security_cusip, security_isin]
+      table: [security_cusip, security_no_cusip]
       keys: [key]
       mode: most
       member: derivative_category
@@ -157,46 +157,46 @@ reduce:
       count: holdings
       sample: null
       sample_limit: 0
-    isins:
+    no_cusip_keys:
       source: holdings
-      table: security_isin
-      keys: [isin, period]
+      table: security_no_cusip
+      keys: [no_cusip_key, period]
       mode: count
       count: holdings
       sample: null
       sample_limit: 0
-    isin_names:
+    no_cusip_names:
       source: holdings
-      table: security_isin
-      keys: [isin]
+      table: security_no_cusip
+      keys: [no_cusip_key]
       mode: members
       member: issuer_name
       count: names
       sample: name_sample
       sample_limit: 1
-    isin_titles:
+    no_cusip_titles:
       source: holdings
-      table: security_isin
-      keys: [isin]
+      table: security_no_cusip
+      keys: [no_cusip_key]
       mode: members
       member: issuer_title
       count: titles
       sample: title_sample
       sample_limit: 1
     # Every share class its equity holdings name (ticket 130), all kept.
-    isin_classes:
+    no_cusip_classes:
       source: holdings
-      table: isin_class
-      keys: [isin]
+      table: no_cusip_class
+      keys: [no_cusip_key]
       mode: members
       member: share_class
       count: classes
       sample: class_sample
       sample_limit: 26
-    isin_leis:
+    no_cusip_leis:
       source: holdings
-      table: security_isin
-      keys: [isin]
+      table: security_no_cusip
+      keys: [no_cusip_key]
       mode: members
       member: issuer_lei
       count: leis

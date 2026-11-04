@@ -70,12 +70,13 @@ def combine(store, root, contract_file, readings):
     return chain.combine(store, root, FOLDER / contract_file, readings)
 
 
-def recorded(store, root, combined):
+def recorded(store, root, combined, batch="first"):
     """record.yaml over the combine's pieces (ticket 120): each Security row as its record."""
     root.mkdir(parents=True, exist_ok=True)
     pieces = [store.put(root.as_uri(), {"tables": a["tables"]}) for a in store.json(combined)["artifacts"]]
     return chain.read(store, root, files.load(FOLDER / "record.yaml"), [
-        {"input": p, "context": store.put(root.as_uri(), {"version": 1, "input": p, "values": {}})} for p in pieces], 2)
+        {"input": p, "context": store.put(root.as_uri(), {"version": 1, "input": p, "values": {"batch": batch}})}
+        for p in pieces], 2)
 
 
 def filed_pairs(store, root, raw) -> list[list[str]]:
@@ -90,7 +91,8 @@ def filed_pairs(store, root, raw) -> list[list[str]]:
 def issuers(store, root, raw, isin, period, umbrella=()):
     """The issuer source extract, each holding with its filing's date, else the quarter's."""
     return read(store, root / "issuers", "issuers.yaml", raw, period,
-                lookups={"isin": isin, "umbrella": list(umbrella), "filed": filed_pairs(store, root, raw)})
+                lookups={"isin": isin, "sedol": [], "loanx": [], "umbrella": list(umbrella),
+                                  "filed": filed_pairs(store, root, raw)})
 
 
 def prepared_records(root: Path, period: str, revision: int | None = None,
@@ -110,14 +112,15 @@ def prepared_records(root: Path, period: str, revision: int | None = None,
                                                             "revision": str(revision)}))
 
 
-def security_records(store, root: Path, holdings, issuer_reading, *, batch_id: str, **publication) -> list[dict]:
+def security_records(store, root: Path, holdings, issuer_reading, *, batch_id: str, batch: str = "first",
+                     **publication) -> list[dict]:
     """The Security chain after the holdings and issuer source extracts: reduce.yaml,
     issuer-reduce.yaml, combine.yaml, record.yaml, mdm.prepare and the contract's records.
     One place for the steps every N-PORT Security test runs (GoF review, ticket 138)."""
     securities = combine(store, root / "reduce", "reduce.yaml", {"holdings": holdings})
     reduced = combine(store, root / "issuer-reduce", "issuer-reduce.yaml", {"issuers": issuer_reading})
     combined = combine(store, root / "combine", "combine.yaml", {"securities": securities, "issuers": reduced})
-    prepared = chain.prepare(store, root / "mdm", recorded(store, root / "record", combined), {
+    prepared = chain.prepare(store, root / "mdm", recorded(store, root / "record", combined, batch), {
         "table": "security", "record_column": "record", "dataset": CODE, "policy": "0" * 64, "consumer": "check",
         "batch_id": batch_id, "as_of": "2026-10-16T00:00:00+00:00", **publication})
     return chain.records(store, root / "mdm", prepared, CODE, files.source(NAME)["dataset_contracts"][CODE]["contract"])

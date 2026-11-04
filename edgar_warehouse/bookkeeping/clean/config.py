@@ -199,9 +199,11 @@ def _plan(step: dict) -> None:
             and not (isinstance(step.get("units"), dict) and set(step["units"]) <= {"groups", "each"})):
         raise Blocked("A read with lookups is cut into groups or each file (a composed slot per file)")
     pieces = shape.get("pieces")
-    if pieces is not None and (not isinstance(pieces, dict) or set(pieces) != {"step"}
-                               or pieces["step"] not in step["requires"]):
-        raise Blocked("A step's pieces name one prerequisite step: {step: <step>}")
+    if pieces is not None and not (isinstance(pieces, dict) and (
+            set(pieces) == {"step"} and pieces["step"] in step["requires"]
+            or set(pieces) == {"run"} and _other_run(pieces["run"]))):
+        raise Blocked("A step's pieces name one prerequisite step, {step: <step>}, "
+                      "or another run's step, {run: {source, target, step}}")
     if pieces is not None and step.get("units", "one") != "one":
         raise Blocked("A read of pieces is one unit")
 

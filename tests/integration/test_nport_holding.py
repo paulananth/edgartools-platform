@@ -64,7 +64,7 @@ def holding_rows(root: Path) -> list[dict]:
              for part in a.get("partitions", []) for r in store.json(part["receipt"])["tables"]["series"]]
     assert pairs == [["A-1", "S000000001"]]  # "N/A" gives no pair: a lookup never holds an empty value
     holdings = cusip.read(store, root / "holding", "holding.yaml", raw, cusip.Q2, lookups={
-        "isin": isin.PAIRS, "series": pairs, "registrant": REGISTRANTS,
+        "isin": isin.PAIRS, "sedol": [], "loanx": [], "series": pairs, "registrant": REGISTRANTS,
         "filed": cusip.filed_pairs(store, root, raw), "as_of": reported_pairs(store, root, raw)})
     combined = cusip.combine(store, root / "combine", "holding-combine.yaml", {"holdings": holdings})
     pieces = [store.put(root.as_uri(), {"tables": a["tables"]}) for a in store.json(combined)["artifacts"]]

@@ -27,6 +27,8 @@ read:
             values:
             - {value: {path: cusip}}
             - {value: {path: isin}}
+            - {value: {path: sedol}}
+            - {value: {path: loanx}}
         balance: {value: {path: balance}}
         unit: {value: {path: unit}}
         currency_code: {value: {path: currency_code}}

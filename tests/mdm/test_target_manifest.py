@@ -270,3 +270,58 @@ def test_two_targets_over_the_same_files_each_process_them(tmp_path, monkeypatch
 
     assert first["scope"]["processing_identity"] != second["scope"]["processing_identity"]
     assert first["publication"]["batch_id"] != second["publication"]["batch_id"]
+
+
+def test_a_read_takes_its_pieces_from_another_runs_combine(tmp_path, monkeypatch):
+    """Ticket 190: the second batch of Securities re-reads the first run's combined output, so each
+    record of it finds the Security the first run merged."""
+    body = files.source(SOURCE)
+    read = body["bookkeeping"]["targets"]["mastering"]["steps"][0]
+    read["units"] = "one"
+    read["input"] = {"contract": "source.yaml", "pieces": {"run": OTHER}}
+    monkeypatch.setattr(files, "source", lambda name, root=None: body)
+    runs = Runs([unit("11111111-1111-1111-1111-111111111111", "answers-0", "a")])
+    steps = steps_of(write_manifest(target="mastering", bookkeeping=runs, **options(tmp_path)))
+
+    assert runs.asked == [OTHER]
+    (only,) = steps["read"]
+    assert only["input"]["compose"]["slots"] == {"pieces": {k: runs.units[0][k] for k in ("run", "step", "key")}}
+
+
+@pytest.mark.parametrize("selector", [{"source": "openfigi", "target": "mastering"}, {**OTHER, "extra": "x"}])
+def test_pieces_of_another_run_name_source_target_and_step(monkeypatch, selector):
+    body = files.source(SOURCE)
+    read = body["bookkeeping"]["targets"]["mastering"]["steps"][0]
+    read["input"] = {"contract": "source.yaml", "pieces": {"run": selector}}
+    monkeypatch.setattr(files, "source", lambda name, root=None: body)
+    with pytest.raises(Blocked, match="another run's step"):
+        validate(files.source(SOURCE), "mastering")
+
+
+def test_the_pieces_read_of_another_run_is_given_its_context_values(tmp_path, monkeypatch):
+    body = files.source(SOURCE)
+    read = body["bookkeeping"]["targets"]["mastering"]["steps"][0]
+    read["units"] = "one"
+    read["input"] = {"contract": "source.yaml", "pieces": {"run": OTHER}, "context": {"batch": "other"}}
+    monkeypatch.setattr(files, "source", lambda name, root=None: body)
+    runs = Runs([unit("11111111-1111-1111-1111-111111111111", "answers-0", "a")])
+    steps = steps_of(write_manifest(target="mastering", bookkeeping=runs, **options(tmp_path)))
+    (only,) = steps["read"]
+    assert only["input"]["compose"]["document"]["context"] == {"batch": "other"}
+
+
+def test_the_second_batch_of_securities_reads_the_first_runs_combine_and_publishes_after_it(tmp_path):
+    """Ticket 190: the Securities keyed by a SEDOL or a LoanX, from the same record rules, batch `other`."""
+    combined = {"run": "11111111-1111-1111-1111-111111111111", "step": "combine", "key": "combine", "sha256": "a" * 64}
+    runs = Runs([combined])
+    one = tmp_path / "one.json"  # the quarter's one data set file
+    one.write_text(json.dumps([key(1001)]))
+    report = write_manifest(bookkeeping=runs, **options(tmp_path, source="sec.nport.security",
+                                                         target="mastering_other_keys", documents=str(one)))
+    assert runs.asked == [{"source": "sec.nport.security", "target": "mastering", "step": "combine"}]
+    steps = steps_of(report)
+    assert set(steps) == {"record", "prepare", "merge"}
+    (record,) = steps["record"]
+    assert record["input"]["compose"]["slots"] == {"pieces": {k: combined[k] for k in ("run", "step", "key")}}
+    assert record["input"]["compose"]["document"]["context"] == {"batch": "other"}
+    assert steps["prepare"][0]["keys"]["dataset"] == "sec.nport.security.v2"

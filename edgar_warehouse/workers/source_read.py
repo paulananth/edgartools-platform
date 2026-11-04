@@ -52,8 +52,9 @@ def _pieces(envelope: dict, manifest: dict, artifacts) -> tuple[dict, dict]:
     a file beside this step's output, named by its hash, which the verifier reads
     back by that hash. The worker's own version-1 input, and the inline pieces'
     bytes, written only once the whole input has passed its checks."""
-    if set(manifest) != {"version", "contract", "pieces"}:
-        raise ValueError("Version-4 source input names its contract and the reading it reads in pieces")
+    if set(manifest) - {"context"} != {"version", "contract", "pieces"} or not isinstance(manifest.get("context", {}), dict):
+        raise ValueError("Version-4 source input names its contract and the reading it reads in pieces, "
+                         "and may give context values")
     index = source_readings.index(reference(manifest["pieces"]), artifacts)
     refs, inline = [], {}
     for artifact in index["artifacts"]:
@@ -71,6 +72,15 @@ def _pieces(envelope: dict, manifest: dict, artifacts) -> tuple[dict, dict]:
         ref = {"uri": f"{envelope['output']}.pieces/{sha}.json", "sha256": sha}
         inline[ref["uri"]] = (ref, data)
         refs.append(ref)
+    if "context" in manifest:  # one context receipt per piece, bound to it as a planned input's is (ticket 190)
+        entries = []
+        for ref in refs:
+            data = _encode({"version": 1, "input": reference(ref), "values": manifest["context"]})
+            sha = hashlib.sha256(data).hexdigest()
+            bound = {"uri": f"{envelope['output']}.context/{sha}.json", "sha256": sha}
+            inline[bound["uri"]] = (bound, data)
+            entries.append({"input": ref, "context": bound})
+        return {"version": 2, "contract": manifest["contract"], "artifacts": entries}, inline
     # An empty reading has no piece: refused below, as any input naming no file is.
     return {"version": 1, "contract": manifest["contract"], "artifacts": refs}, inline
 

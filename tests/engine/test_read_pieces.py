@@ -128,3 +128,24 @@ def test_a_refused_input_writes_no_piece(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="1..2 workers"):
         by_pieces(store, tmp_path / "record", reading)
     assert not list((tmp_path / "record").glob("reading.json.pieces/*"))
+
+
+def test_a_reading_in_pieces_is_given_context_values(tmp_path):
+    """Ticket 190: one contract publishes two batches of a combine's rows; each read names its batch."""
+    store = Artifacts()
+    reading = first_reading(store, tmp_path, 2)
+    root = tmp_path / "ctx"
+    root.mkdir()
+    body = {"execution": {"profile": "source.read", "workers": 1, "max_artifacts": 512},
+            "read": {"format": "json", "limits": {"max_bytes": 1 << 20, "max_records": 1000},
+                     "context": {"batch": {"type": "text"}},
+                     "tables": {"record": {"each": "tables.rows", "columns": {
+                         "id": {"value": {"path": "id"}}, "batch": {"context": {"name": "batch"}}}}}}}
+    manifest = store.put(root.as_uri(), {"version": 4, "contract": store.put(root.as_uri(), body), "pieces": reading,
+                                         "context": {"batch": "other"}})
+    task = {"input": manifest, "output": (root / "reading.json").as_uri(), "checks": ["source.output"]}
+    out = source_read.execute(task, store)
+    assert source_read.verify({**task, "candidate": out}, store) == ({"source.output": True}, [])
+    loaded, _ = source_read.source_readings.load(out, store, max_bytes=1 << 20, max_rows=1000)
+    assert [(r["id"], r["batch"]) for a in loaded["artifacts"] for r in a["tables"]["record"]] == [
+        ("id-0", "other"), ("id-1", "other")]
