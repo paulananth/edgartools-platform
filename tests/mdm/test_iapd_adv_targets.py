@@ -15,7 +15,7 @@ from tests.support.memory_journal import MemoryJournal
 
 SOURCE = "iapd.adv"
 FACTS = {"published": "2026-09-30T00:00:00Z"}
-STEPS = {"mastering": ["read_filings", "read_custody", "combine", "record", "prepare", "merge", "processed"],
+STEPS = {"mastering": ["read_filings", "read_custody", "combine", "record", "prepare", "merge", "land_custody", "processed"],
          "custodians": ["read", "combine", "record", "prepare", "merge", "processed"]}
 
 
@@ -81,3 +81,11 @@ def test_recording_the_filings_does_not_skip_the_custodians_of_the_same_file(tmp
     recorded(options, write_manifest(**options))
     custodians = {**capture(tmp_path / "b", "custodians", [8]), "journal": options["journal"]}
     assert write_manifest(**custodians)["manifest"] is not None  # each target keeps its own record of the file
+
+
+def test_the_amount_each_custodian_holds_lands_in_silver_after_the_filings_merge(tmp_path):
+    """Ticket 01: the custody rows are read once (read_custody) and landed in `adv_custody` once the adviser's
+    filing is mastered; the journal records the file only after the landing."""
+    steps = Artifacts().json(write_manifest(**capture(tmp_path, "mastering", [8, 9]))["manifest"])["steps"]
+    assert len(steps["land_custody"]) == len(steps["read_custody"])  # each read unit lands its own rows
+    assert {(u["keys"]["table"], u["keys"]["silver"]) for u in steps["land_custody"]} == {("custody", "adv_custody")}
