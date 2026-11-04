@@ -439,6 +439,26 @@ rules:
   - primitive: identifier_cardinality@1
     args:
       namespace: bd_number
+# A custodian named only by its name (Form ADV 5.K(3), no BD number or LEI; 274 of the 494 custodian
+# records in June 2026) joins the one Company that other sources' records hold under the same name
+# id (the name folded by `name_id@1`), exact name only (operator, 2026-11-04: "Master the name
+# against company then attach", then "Agreed"). It finds and never creates: no holder leaves it
+# waiting, several holders send it to review. A bank and its holding company have different names, so
+# they stay apart.
+- rule_id: iapd-adv-custodian-name
+  version: 2026-11-04.exact-name
+  family: exact_name_binding
+  source: iapd.adv.custodians.v1
+  holder_sources:
+  - sec.company.v1
+  - gleif.level1.v1
+  - iapd.adv.filings.v1
+  applies_to_verdict: company
+  emits:
+  - bind
+  key: name_id@1
+  on_no_match: wait
+  on_several: review
 # A GLEIF record an N-PORT holding names as its issuer joins the one Company
 # that holds its LEI, and otherwise waits for the SEC-GLEIF name rules; it
 # never creates a Company (operator, 2026-10-16: "Wait, config only

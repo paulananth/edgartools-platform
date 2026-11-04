@@ -448,9 +448,22 @@ def without_name_only_passes_deleted(policy: dict) -> dict:
     return body
 
 
+def without_custodian_name_rule(policy: dict) -> dict:
+    """Ticket 01 (operator, 2026-11-04: "Complete and then run and switch on", exact name only,
+    "Agreed"): the Form ADV custodian name rule, declared and switched on after its limited test on
+    the real June 2026 names. Peeled, the policy is the one before."""
+    body = _copy(policy)
+    body["kinds"]["company"]["rules"] = [r for r in body["kinds"]["company"]["rules"]
+                                         if r["rule_id"] != "iapd-adv-custodian-name"]
+    body["automatic_rules"] = [r for r in body["automatic_rules"] if r.get("rule_id") != "iapd-adv-custodian-name"]
+    return body
+
+
 # Newest first: each layer, and Company's policy digest with it and every
 # layer after it still on.
 LAYERS = [
+    # The Form ADV custodian name rule (ticket 01, exact name only).
+    (without_custodian_name_rule, "788ffd4fd739d65cb2014f5278c49724b3f2ace4a32c4cffc85780070b991d2f"),
     # A Security has one issuer at a time (ticket 24, relationship types version 3).
     (without_one_issuer, "97905f9416668c213d74eabe9aea2c237c77d6faec1394f15927a402b2e24baf"),
     # The two name-only passes deleted: "delete p6 and p7" (2026-11-03, ticket 09).
