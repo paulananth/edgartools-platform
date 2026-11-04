@@ -16,17 +16,17 @@ rule.
 
 ## Current local evidence
 
-The local API reports OpenMetadata 2.0.2. Following the catalog-only reset and
-refresh, the Rules plan, publisher readback and independent read-only check
-matched. The unauthenticated local `/swagger.json` schema was also inspected
-against the running server: catalog `Pipeline` exposes CRUD, status read/write,
-metrics, trends and observability routes, but no run trigger. In contrast,
-`ingestionPipelines` exposes trigger, deploy and kill routes; Apps and governance
-workflow definitions also have their own trigger routes. Those routes execute
-their own workflow types and do not trigger the platform's catalog `Pipeline`
-or Bookkeeping targets.
+The local API health endpoint reports OpenMetadata 2.0.2. The workstream records
+a catalog-only reset, republish and authenticated API inventory earlier on
+2026-11-04. The unauthenticated local `/swagger.json` schema was rechecked at
+09:37 ET: catalog `Pipeline` exposes CRUD, status read/write, metrics, trends
+and observability routes, but no run trigger. In contrast, `ingestionPipelines`
+exposes trigger, deploy and kill routes; Apps and governance workflow definitions
+also have their own trigger routes. Those routes execute their own workflow
+types and do not trigger the platform's catalog `Pipeline` or Bookkeeping
+targets.
 
-| Catalog measure | Current count |
+| Catalog measure | Rules plan / prior inventory |
 |---|---:|
 | Domains | 8 |
 | Glossaries | 8 |
@@ -36,12 +36,23 @@ or Bookkeeping targets.
 | Configured quality cases | 52 |
 | Data products | 3 |
 | Catalog pipelines | 20 |
-| Table / pipeline / domain / glossary lineage | 30 / 30 / 51 / 22 |
-| Total configured lineage edges | 133 |
-| `Shared` domains / glossaries | 0 / 0 |
+| Planned table / pipeline / domain / glossary lineage | 30 / 30 / 51 / 22 |
+| Total planned lineage edges | 133 |
+| `Shared` domains / glossaries in the prior inventory | 0 / 0 |
 
-Independent API checks after refresh found zero latest results for the 52
-configured quality cases and zero Data Contracts. The database service is
+These counts are not all covered by the CLI's automated readback. `verify()`
+checks the database service, database and schema inventory, tables, pipelines
+(including tasks), table lineage, profiles, selected table tags/certifications,
+and quality results only when a results file is supplied. It does not verify
+domain or glossary content and associations, products and their assets/input
+ports, quality definitions/cases, domain lineage, pipeline-to-table lineage,
+or every table annotation. The earlier API inventory recorded entity counts and
+the absence of `Shared`; it does not establish field-by-field equality for all
+those objects. Treat the plan/readback as confirmed only for the dimensions
+actually checked.
+
+The prior authenticated API checks after refresh found zero latest results for
+the 52 configured quality cases and zero Data Contracts. The database service is
 `CustomDatabase` with no connection; the pipeline service is `CustomPipeline`
 with no connection. The deployment has zero ingestion pipelines and sets
 `PIPELINE_SERVICE_CLIENT_ENABLED=false`. Its compose file has the OpenMetadata
@@ -58,7 +69,7 @@ MDM, RDM, Silver or Bookkeeping.
 
 | Requirement | Finding | Evidence and limit |
 |---|---|---|
-| Data catalog | **Fits as a projection.** | Rules publication, table/pipeline readback and the catalog-only rebuild succeeded. The configured Rules model remains authoritative. A catalog refresh does not execute the described pipelines. |
+| Data catalog | **Fits as a projection; full object-level confirmation remains incomplete.** | Rules publication and catalog-only rebuild succeeded. The automated readback confirms tables, pipelines/tasks and table lineage, but not every domain, glossary, product, quality object or lineage family. The prior authenticated inventory recorded counts and no `Shared` domain/glossary. The configured Rules model remains authoritative; a catalog refresh does not execute described pipelines. |
 | Data engineering control | **Partial and integration-specific; does not fit this platform as deployed.** | The live 2.0.2 schema exposes catalog `Pipeline` status, metrics, trends and observability, but no run trigger. Ingestion-pipeline triggers run metadata workflows. OpenMetadata runs its own metadata and quality workflows through configured Airflow/Kubernetes runners. Current 2.0.x docs also say the dbt Cloud integration can execute models; dbt Core integration reads artifacts produced by a separate dbt run. This repository uses its Snowflake dbt project and has no dbt Cloud configuration. The local OpenMetadata instance has no ingestion runner configured. |
 | Data operations control | **Does not fit without integration or replacement.** | The platform's source sequence executes through Bookkeeping workers. A repository scan finds OpenMetadata references only in the Rules catalog adapter/CLI, with none in the Bookkeeping or worker packages. OpenMetadata has no existing handoff into those run, merge, load, journal, retry and recovery operations. This is supported by the configured execution path, the code scan and the local API/runner inventory. |
 | Data quality | **Native feature, not currently runnable here.** | OpenMetadata documents no-code tests and quality workflows, but this instance has no real database connection or ingestion runner; its 52 cases have no results. Definition presence is not execution evidence. |
@@ -97,7 +108,9 @@ review is completed.
 ## Sources
 
 - Local version and catalog/API readback: OpenMetadata API at the local 2.0.2
-  instance; evidence summarized above and in `TICKET.md`.
+  instance; earlier authenticated inventory and reset evidence are summarized
+  in `TICKET.md`. Fresh authenticated inventory is pending because this session
+  has no `OPENMETADATA_TOKEN`.
 - Local execution API schema: the running instance's `/swagger.json`; catalog
   Pipeline has status and observability routes but no run trigger, while
   ingestion, app and governance workflow types expose their own trigger routes.
