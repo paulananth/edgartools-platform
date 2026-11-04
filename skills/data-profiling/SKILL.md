@@ -36,6 +36,25 @@ Operator, 2026-10-17. This is the rule the silver spec follows.
   `silver`. The tests stay in the findings. The run still writes the silver
   fields. It does not stop to ask which class the part is.
 
+## Every date, number and identifier has one written shape
+
+Standing rule (operator, 2026-11-04, after a date written `DD-MON-YYYY` was read
+into two different shapes by two mappings: "this should be a standing rule on
+the data profiling skill").
+
+- Profile the shape of every date, number and identifier field against the
+  captured files: the shapes seen, each one's count, and the rows that fit none.
+  A field with more than one shape, or a shape the mapping does not parse, is a
+  format issue; report it with counts, never with a value from the data.
+- Fix it in the mapping: one declared shape per field, converted once, to the
+  same calendar form wherever sources share a kind (a date is `YYYY-MM-DD`). A
+  row that fits none becomes none and is counted, never guessed.
+- A profiled number is typed `BIGINT` (integer), or exact `BIGDECIMAL` in code and
+  `NUMBER(precision, scale)` in a database (decimal), never a float; the profile
+  records the digits and decimal places that set the precision and scale.
+- Two mappings that read the same input field write the same output shape; a
+  test feeds both the same record and compares what they give.
+
 **Use the other skill when:**
 - the findings are approved and you are bringing a part in: use
   **data-onboarding** (it reads `findings.yaml`);
