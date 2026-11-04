@@ -127,6 +127,18 @@ the blocker. The recurring loop below then loads that domain's entities from a
 finished delivery. This section does not download, does not invent a command,
 and does not mark a blocked domain complete.
 
+### Reload RDM from the published code sets
+
+`rules/reference/published/<set>/<version>/` keeps a version's codes and sha256, not the code set's
+own words or where its codes came from. An empty RDM database is reloaded from those files with
+`PYTHONPATH=. uv run python scripts/dev/reload_rdm.py` (the RDM login from the environment). It
+drafts each version, approves it under the operator's reload words, publishes it into a temporary
+folder and refuses unless the bytes equal the file and its pin; a version already held is left
+alone. Each set's words and source are in `WORDS` in that script, and in RDM itself (`edgar-warehouse
+rdm describe <code set>`: its authority and the evidence of its first version). Publishing a code set
+adds its entry in `WORDS` in the same change; a skill whose domain uses the set names its source (the
+skills of the domain carry a section "RDM code sets and their sources").
+
 ## Qualify Silver storage
 
 Use retained applicable evidence and the normal installed caller on each selected
