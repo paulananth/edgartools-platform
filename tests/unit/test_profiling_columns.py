@@ -47,6 +47,9 @@ def alnum(n: int) -> str:
     ("mod 11-10", lambda: with_family(identifiers.mod11_10, digits(9), string.digits)),
     ("mod 37-36", lambda: with_family(identifiers.mod37_36, alnum(9), string.digits + string.ascii_uppercase)),
     ("damm", lambda: with_family(identifiers.damm, digits(9), string.digits)),
+    # SEDOL-shaped: six characters and a check digit under the weights 1 3 1 7 3 9 1.
+    ("weighted sum 1 3 1 7 3 9 1 mod 10",
+     lambda: with_family(identifiers.weighted_sum_1_3_1_7_3_9_1, alnum(6), string.digits)),
     # FIGI-shaped: eleven letters or digits and a check digit doubled from the left (ticket 107).
     ("luhn over letter values from the left",
      lambda: with_family(identifiers.luhn_letter_values_from_left, alnum(11), string.digits)),

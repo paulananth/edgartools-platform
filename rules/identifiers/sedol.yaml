@@ -1,0 +1,18 @@
+# SEDOL (Stock Exchange Daily Official List, London Stock Exchange): the seven-character
+# code a security trades under on the London and many other exchanges. Six characters
+# (digits or consonants) and a check digit: each character times its weight 1 3 1 7 3 9 1
+# adds up to a multiple of 10. Ticket 125, from the 2026 Q2 N-PORT data set's "other
+# identifier" rows labelled SEDOL: 195,695 rows, 26,012 distinct values; 195,528 rows pass shape
+# and check digit, 67 fail the check digit and 40 fail the shape (counted, set aside).
+# A change to this file is a new version: its normalizer gets a new name.
+identifier: sedol
+version: 1
+description: "Six digits or consonants and a check digit (weights 1 3 1 7 3 9 1). Upper-cased."
+case: upper
+parts:
+  - length: 6
+    characters: [digits, B, C, D, F, G, H, J, K, L, M, N, P, Q, R, S, T, V, W, X, Y, Z]
+  - length: 1
+    characters: [digits]
+check_digit: weighted sum 1 3 1 7 3 9 1 mod 10
+refuse_one_repeated_character: true

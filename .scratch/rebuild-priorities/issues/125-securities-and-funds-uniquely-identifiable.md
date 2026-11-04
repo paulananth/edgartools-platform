@@ -4,7 +4,7 @@ Priority: 125 (operator, 2026-10-20 08:24 ET: "Securities and funds must be
 uniquely identifiable"). Map: [Rebuild priorities](../map.md). Rules in the
 `security-master` skill.
 
-Type: task. Status: open. Blocked by: ticket 120 (the one Securities target).
+Type: task. Status: in progress (2026-11-03 19:15 ET, Claude; part 1 done). Blocked by: ticket 120 (the one Securities target).
 
 ## Measured (2026 Q2 N-PORT data set, captured; 2026-10-20)
 
@@ -35,7 +35,8 @@ Type: task. Status: open. Blocked by: ticket 120 (the one Securities target).
 
 ## Checklist
 
-- [ ] Identifier types `sedol`, `cins`, `loanx` (`rules/identifiers/`), each with its shape and check digit where one exists; measured on the captured holdings
+- [x] Identifier types `sedol` and `loanx` (`rules/identifiers/`), measured on the captured 2026 Q2 holdings (2026-11-03 19:15 ET): SEDOL 195,695 rows, 26,012 distinct, 195,528 pass shape and check digit (new check-digit family `weighted sum 1 3 1 7 3 9 1 mod 10`, in the engine and in profiling; 67 fail the check, 40 the shape); LoanX 5,579 rows, 5,253 are `LX` and six digits, no check digit (326 another length); tests: `tests/mdm/test_clean_identifier_types.py`, `tests/unit/test_profiling_columns.py`; 1,272 tests in `tests/mdm` and `tests/unit` pass
+- [ ] ~~Identifier type `cins`~~ not declared (2026-11-03 19:15 ET, found on the data): of 1,327 rows labelled CINS, 1,316 start with a digit (CUSIPs under the wrong label, 244 of them pass the CUSIP check digit) and only 11 start with a letter (8 pass). A CINS is a CUSIP with a country letter, the same length and check digit, so the `cusip` type already accepts it, and a second type with the same family and length made the quality plan ambiguous (`tests/unit/test_data_quality_plan.py` failed). The chain reads a CINS-labelled value as a CUSIP; to confirm with the operator
 - [ ] The Securities chain reads them from N-PORT's "other identifier" by label, and keys a Security by one when it has no CUSIP or ISIN; Bloomberg ids and FIGIs as cross-references
 - [ ] Identifier Contracts for the three, verified on a test run (no identifier on two Securities), approved under the standing approval
 - [ ] Funds with no series id: check that each such filing is a single-fund registrant; key the Fund by the registrant's CIK, its LEI an identifier; a test run

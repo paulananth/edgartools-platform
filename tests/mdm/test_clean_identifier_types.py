@@ -142,6 +142,8 @@ PINNED = {
     ("sec_series_id", 1): "a6d53f1d27f62d67ac1d446d9322b827b8935dd37bc90a95ce4dcdc53fe46c41",
     ("figi", 1): "9a15cdc28dec97a475ea09ae9b1f3b258c58fbccc88e33c9cc28eedacee24fbe",
     ("figi", 2): "040addeb2f49daa51627620eee853785764bbbd30a2ebade302475a89ae48cc3",
+    ("sedol", 1): "8fa0cb7dddfcd15e892a5a74dbce6fb19c1c3da1bd9ab9559ce6fa1fb0ba6df3",
+    ("loanx", 1): "781d1eb3655508412be932a9b1963a9c86932d74b9f7d6998fbfa258888752d3",
 }
 
 
@@ -184,3 +186,23 @@ def test_the_sec_series_id_is_s_and_nine_digits():
     assert series.refusal(" s000012345 ") == ("S000012345", None)
     assert series.refusal("S12345")[1] == "invalid_sec_series_id"
     assert series.refusal("C000012345")[1] == "invalid_sec_series_id"
+
+
+def test_a_sedol_is_six_digits_or_consonants_and_a_weighted_check_digit():
+    # 0263494 is the SEDOL standard's own worked example (weights 1 3 1 7 3 9 1: sum 130).
+    sedol = identifier_types.load()["sedol"]
+    assert sedol.refusal(" 0263494 ") == ("0263494", None)
+    assert sedol.refusal("0263495")[1] == "invalid_sedol_checksum"
+    assert sedol.refusal("026349")[1] == "invalid_sedol"
+    assert sedol.refusal("0A63494")[1] == "invalid_sedol"  # a vowel is not a SEDOL character
+    assert sedol.refusal("0000000")[1] is not None  # a run of one character is a stand-in for none
+    assert identifier_types.weighted_sum_1_3_1_7_3_9_1("0263494") and profiled.weighted_sum_1_3_1_7_3_9_1("0263494")
+    assert not profiled.weighted_sum_1_3_1_7_3_9_1("0263495")
+
+
+def test_a_loanx_is_lx_and_six_digits():
+    loanx = identifier_types.load()["loanx"]
+    assert loanx.refusal(" lx123456 ") == ("LX123456", None)
+    assert loanx.refusal("LX12345")[1] == "invalid_loanx"
+    assert loanx.refusal("LX123456789012")[1] == "invalid_loanx"
+    assert loanx.refusal("XX123456")[1] == "invalid_loanx"
