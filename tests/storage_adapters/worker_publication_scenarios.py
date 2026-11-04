@@ -9,8 +9,8 @@ import pytest
 os.environ["READ_CASE"] = "details" if os.environ["READ_WORKER_CASE"] == "mapping_freeze" else "join"
 g = runpy.run_module("tests.storage_adapters.record_read_scenarios")
 
-from edgar_warehouse.mdm.clean.merge import MergeStage
-from edgar_warehouse.mdm.clean.store import Store, Conflict, storage_adapter
+from edgar_warehouse.mdm.merge import MergeStage
+from edgar_warehouse.mdm.store import Store, Conflict, storage_adapter
 from tests.storage_adapters.test_destination_authority import proof
 
 runtime = g["runtime"]
@@ -59,7 +59,7 @@ if os.environ["READ_WORKER_CASE"] == "publication":
     import json
     from pathlib import Path
     from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-    from edgar_warehouse.mdm.clean.publication import LocalContractSink
+    from edgar_warehouse.mdm.publication import LocalContractSink
     from edgar_warehouse.workers import mdm_publish
     os.environ["MDM_DATABASE_URL"] = os.environ["READ_RUNTIME_URL"]
     os.environ["MDM_APPLICATION_ROLE"] = os.environ["READ_RUNTIME_ROLE"]
@@ -88,8 +88,8 @@ if os.environ["READ_WORKER_CASE"] == "merge_worker":
     from pathlib import Path
     from unittest.mock import patch
     from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-    from edgar_warehouse.mdm.clean.run import RunCoordinator
-    from edgar_warehouse.mdm.clean.publication import LocalContractSink
+    from edgar_warehouse.mdm.run import RunCoordinator
+    from edgar_warehouse.mdm.publication import LocalContractSink
     from edgar_warehouse.workers import mdm_merge
     os.environ["MDM_DATABASE_URL"] = os.environ["READ_RUNTIME_URL"]
     os.environ["MDM_APPLICATION_ROLE"] = os.environ["READ_RUNTIME_ROLE"]
@@ -167,7 +167,7 @@ if os.environ["READ_WORKER_CASE"] == "journal":
     from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
     from edgar_warehouse.change_journal.database import migrate
     from edgar_warehouse.change_journal.store import ChangeJournal, get_engine
-    from edgar_warehouse.mdm.clean.journal_delivery import JournalPublisher
+    from edgar_warehouse.mdm.journal_delivery import JournalPublisher
     from edgar_warehouse.workers import mdm_publish
 
     journal_owner = get_engine(os.environ["READ_JOURNAL_OWNER_URL"])
@@ -218,7 +218,7 @@ if os.environ["READ_WORKER_CASE"] == "forced":
     from sqlalchemy import select
     from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
     from edgar_warehouse.cli import main
-    from edgar_warehouse.mdm.clean.publication import LocalContractSink
+    from edgar_warehouse.mdm.publication import LocalContractSink
     from edgar_warehouse.workers import mdm_publish
     current = proof(api,micros=120000000)
     os.environ["MDM_DATABASE_URL"] = os.environ["READ_RUNTIME_URL"]
@@ -263,7 +263,7 @@ if os.environ["READ_WORKER_CASE"] == "forced":
         candidate = mdm_publish.execute(envelope,artifacts)
         assert mdm_publish.verify({**envelope,"candidate":candidate},artifacts) == ({"mdm.published":True},[])
     assert sent == [key for key,_ in original] and frame() == before
-    from edgar_warehouse.mdm.clean.forced_publication import page
+    from edgar_warehouse.mdm.forced_publication import page
     for consumer in ("journal","invented-unconfigured"):
         with pytest.raises((ValueError,Conflict),match="Journal|does not require"):
             page(stage.store,consumer,str(uuid4()),1,{"object_type":"","object_id":""},1)
@@ -275,8 +275,8 @@ if os.environ["READ_WORKER_CASE"] == "mapping_freeze":
     from pathlib import Path
     from unittest.mock import patch
     from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-    from edgar_warehouse.mdm.clean.run import RunCoordinator
-    from edgar_warehouse.mdm.clean.record_reads import RecordReader
+    from edgar_warehouse.mdm.run import RunCoordinator
+    from edgar_warehouse.mdm.record_reads import RecordReader
     from edgar_warehouse.workers import mdm_merge
     from tests.support.reading import reading
     os.environ["MDM_DATABASE_URL"] = os.environ["READ_RUNTIME_URL"]
@@ -338,9 +338,9 @@ if os.environ["READ_WORKER_CASE"] == "review_recovery":
     import json
     from pathlib import Path
     from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-    from edgar_warehouse.mdm.clean.evidence import subject_key
-    from edgar_warehouse.mdm.clean.publication import LocalContractSink
-    from edgar_warehouse.mdm.clean.run import RunCoordinator
+    from edgar_warehouse.mdm.evidence import subject_key
+    from edgar_warehouse.mdm.publication import LocalContractSink
+    from edgar_warehouse.mdm.run import RunCoordinator
     from edgar_warehouse.workers import mdm_merge
     os.environ["MDM_DATABASE_URL"] = os.environ["READ_RUNTIME_URL"]
     os.environ["MDM_APPLICATION_ROLE"] = os.environ["READ_RUNTIME_ROLE"]
@@ -368,7 +368,7 @@ if os.environ["READ_WORKER_CASE"] == "review_recovery":
     report = coordinator.reconcile(root)
     assert report["waiting_links"] == 1 and report["unresolved_reviews"] == 0
     assert len(report["waiting_link_list"]) == 1 and not report["end_to_end_complete"]
-    from edgar_warehouse.mdm.clean.inspection import counts
+    from edgar_warehouse.mdm.inspection import counts
     inspected = counts(stage.store.engine)
     assert inspected["waiting_links"] == {"unresolved_endpoint": 1} and inspected["open_reviews"] == {}
     sink = LocalContractSink(folder/"delivered")
@@ -389,9 +389,9 @@ if os.environ["READ_WORKER_CASE"] == "held_review":
     import json
     from pathlib import Path
     from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-    from edgar_warehouse.mdm.clean.evidence import deferred_record
-    from edgar_warehouse.mdm.clean.publication import LocalContractSink
-    from edgar_warehouse.mdm.clean.run import RunCoordinator
+    from edgar_warehouse.mdm.evidence import deferred_record
+    from edgar_warehouse.mdm.publication import LocalContractSink
+    from edgar_warehouse.mdm.run import RunCoordinator
     from edgar_warehouse.workers import mdm_merge
     os.environ["MDM_DATABASE_URL"] = os.environ["READ_RUNTIME_URL"]
     os.environ["MDM_APPLICATION_ROLE"] = os.environ["READ_RUNTIME_ROLE"]

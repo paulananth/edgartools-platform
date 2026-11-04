@@ -71,7 +71,7 @@ print("control ready")
 
 
 def test_the_guard_catches_a_reintroduced_dependency():
-    result = run_guarded("import edgar_warehouse.bookkeeping.clean.engine\nimport edgar_warehouse.mdm.clean.store")
+    result = run_guarded("import edgar_warehouse.bookkeeping.clean.engine\nimport edgar_warehouse.mdm.store")
     assert result.returncode != 0
     assert "Bookkeeping control loaded a domain package: edgar_warehouse.mdm" in result.stderr
 

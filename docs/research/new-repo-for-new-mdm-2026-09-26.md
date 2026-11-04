@@ -13,7 +13,7 @@ Pull request 722 already accepted that split inside one codebase: one versioned 
 | Piece | Where it lives | What it depends on outside itself |
 | --- | --- | --- |
 | Old MDM | `edgar_warehouse/mdm/`, 67 Python modules, not under `clean/` | Silver tables, the running graph, Forms 3/4/5 and 13F relationship derivation |
-| New MDM | `edgar_warehouse/mdm/clean/`, 24 Python modules | One import of warehouse bookkeeping (`PipelineRun`, `BookkeepingStore`). It does not import the old resolvers. |
+| New MDM | `edgar_warehouse/mdm/`, 24 Python modules | One import of warehouse bookkeeping (`PipelineRun`, `BookkeepingStore`). It does not import the old resolvers. |
 | Config parser | Rust crate `crates/source-contract`, and the Python prototype under `.scratch/source-contract/prototype/` | Neither imports MDM. The Rust reader emits columns. It does not create a Security or `ISSUED_BY`. |
 
 The old and new designs already have a directory boundary. They share a package name and a deployment image. That is the coupling a new repo would cut, and it is also how the old graph keeps running while securities mastering is specified and not yet the writer.

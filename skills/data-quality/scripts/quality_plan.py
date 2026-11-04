@@ -5,7 +5,7 @@
              compared with the counts profiling found; one planted record per
              check proves the check can fire
 
-Only the engine's own checks are used (`edgar_warehouse.mdm.clean.quality`):
+Only the engine's own checks are used (`edgar_warehouse.mdm.quality`):
 a defect with no check in its catalog is listed as new code, for a ticket,
 never written. Run it where the platform is installed (`uv run python ...`
 from the platform checkout).
@@ -21,7 +21,7 @@ from pathlib import Path
 
 import yaml
 
-from edgar_warehouse.mdm.clean import identifier_types, quality
+from edgar_warehouse.mdm import identifier_types, quality
 
 # A profiling check → the engine check that carries it. `when` limits it to the
 # items whose args fit what the engine test checks exactly.
@@ -135,7 +135,7 @@ def mapped(row: dict, fields: dict[str, str]) -> dict:
 def measure(block: dict, records: list[dict]) -> dict[str, int]:
     """How many records each fix changed and each check fired on. Each check runs on its own after the
     fixes, as profiling counts it: an `exception` elsewhere does not hide a record from it."""
-    from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord
+    from edgar_warehouse.mdm.adapters import UnsupportedRecord
 
     fixes = block.get("fixes") or []
     fired = {i["id"]: 0 for i in [*fixes, *(block.get("checks") or [])]}

@@ -30,7 +30,7 @@ from uuid import uuid4
 
 from sqlalchemy import create_engine
 
-from edgar_warehouse.mdm.clean.store import digest
+from edgar_warehouse.mdm.store import digest
 
 from . import files
 from .driving import Commands, RunStopped, duties, manifest_root
@@ -67,7 +67,7 @@ def _records_md5(engine) -> str:
 
 def counts(engine) -> dict:
     """Count the governed store on one snapshot, through its indexed record pages."""
-    from edgar_warehouse.mdm.clean.inspection import counts as inspect_counts
+    from edgar_warehouse.mdm.inspection import counts as inspect_counts
 
     return inspect_counts(engine)
 
@@ -75,9 +75,9 @@ def counts(engine) -> dict:
 def quality(folder: Path, mdm) -> dict:
     """What the data quality rule did to one pass's prepared records, per fix, flag, withheld value
     and exception: the Merge Stage's own reader (`batch_input`) and its count (`quality.counts`)."""
-    from edgar_warehouse.mdm.clean.execution import batch_input
-    from edgar_warehouse.mdm.clean.quality import counts as quality_counts
-    from edgar_warehouse.mdm.clean.store import Store
+    from edgar_warehouse.mdm.execution import batch_input
+    from edgar_warehouse.mdm.quality import counts as quality_counts
+    from edgar_warehouse.mdm.store import Store
 
     manifest = json.loads((folder / "manifest.json").read_text())
     assertions, deferred = [], []
@@ -144,8 +144,8 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
     """Two runs of one of the source's targets (default `mastering`) on the capture; the report, written to `out`."""
     from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
     from edgar_warehouse.change_journal.store import ChangeJournal
-    from edgar_warehouse.mdm.clean.store import register_dataset, register_policy
-    from edgar_warehouse.mdm.clean.target_manifest import write_manifest
+    from edgar_warehouse.mdm.store import register_dataset, register_policy
+    from edgar_warehouse.mdm.target_manifest import write_manifest
     from edgar_warehouse.rules.db import Rules
 
     env = duties(stores)
@@ -153,7 +153,7 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
     declared = ((document.get("bookkeeping") or {}).get("targets") or {}).get(target)
     if declared is None:
         raise TestRunError(f"{source} declares no `{target}` target in its source.yaml")
-    from edgar_warehouse.mdm.clean.target_manifest import plan
+    from edgar_warehouse.mdm.target_manifest import plan
 
     try:
         plan(document, target)  # the declaration the writer will read, refused before any store is touched

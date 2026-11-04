@@ -40,7 +40,7 @@ qualify every original caller or approve feed cutover.
 - `acquisition/{processing,revisions,registry_ledger,evidence_conflicts,
   evidence_import,capture_parity}.py` remain legacy interfaces. Capture uses
   only the old pure decision validation helpers; it performs no legacy SQL.
-- `mdm/clean/source_publications.py`, native `PublicationVerifier`, standalone
+- `mdm/source_publications.py`, native `PublicationVerifier`, standalone
   Clean MDM CLI/RunCoordinator and legacy MDM pipelines retain source-table
   verification/control. Configured `mdm.ingest` and `mdm.publish` have a tested
   Rules/journal route; standalone legacy runs have not been redirected.

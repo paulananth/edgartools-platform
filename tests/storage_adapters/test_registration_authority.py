@@ -8,9 +8,9 @@ import pytest
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 
-from edgar_warehouse.mdm.clean import registration
-from edgar_warehouse.mdm.clean.prepared_registry import require_installed, mapping_pin, schema_pin
-from edgar_warehouse.mdm.clean.store import Conflict, migrate, register_policy, current_reading, digest
+from edgar_warehouse.mdm import registration
+from edgar_warehouse.mdm.prepared_registry import require_installed, mapping_pin, schema_pin
+from edgar_warehouse.mdm.store import Conflict, migrate, register_policy, current_reading, digest
 from tests.support.rules_authority import register_dataset
 
 CASES = ["rights", "rollback", "definition"] if os.environ.get("SKILL_ADAPTER_TEST_ENGINE") == "postgresql" else ["unsupported"]

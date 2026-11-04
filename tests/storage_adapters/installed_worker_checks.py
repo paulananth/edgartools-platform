@@ -10,7 +10,7 @@ from uuid import uuid4
 import pytest
 
 from edgar_warehouse.rules import files
-from tests.mdm.test_clean_activation import CIK_CONTRACT
+from tests.mdm.test_activation import CIK_CONTRACT
 from tests.support.rules_authority import authority
 from tests.support.reading import reading
 

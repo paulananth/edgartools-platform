@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from edgar_warehouse.mdm.clean.store import canonical
+from edgar_warehouse.mdm.store import canonical
 from edgar_warehouse.rules.files import RulesFileError, dumps, loads
 
 # Strings that plain YAML would read as something else, or that need quoting.

@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from edgar_warehouse.mdm.clean import gleif_publication, evidence as evidence_module, store as store_module
+from edgar_warehouse.mdm import gleif_publication, evidence as evidence_module, store as store_module
 from edgar_warehouse.rules import source_engine, files
 from edgar_warehouse.workers import source_attestation
 

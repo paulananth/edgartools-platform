@@ -18,15 +18,15 @@ from pathlib import Path
 from sqlalchemy import text
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.mdm.clean.merge import MergeStage
-from edgar_warehouse.mdm.clean.store import Store, register_policy
+from edgar_warehouse.mdm.merge import MergeStage
+from edgar_warehouse.mdm.store import Store, register_policy
 from edgar_warehouse.rules import files
 from edgar_warehouse.silver_writer import database as silver
 from edgar_warehouse.silver_writer import spec as silver_spec
 from edgar_warehouse.silver_writer.cli import spec_file
 from edgar_warehouse.silver_writer.sink import PostgresSink
 from edgar_warehouse.silver_writer.writer import MdmIds, land
-from tests.integration import test_clean_mdm_postgres as core
+from tests.integration import test_mdm_postgres as core
 from tests.integration import test_nport_isin_link as isin
 from tests.integration import test_nport_link_start as cusip
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database

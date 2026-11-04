@@ -7,7 +7,7 @@ import pytest
 from edgar_warehouse.rules import files
 from tests.support import place_codes
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
-from edgar_warehouse.mdm.clean.names import edgar_jurisdiction
+from edgar_warehouse.mdm.names import edgar_jurisdiction
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.workers import source_read
 

@@ -12,9 +12,9 @@ between them. That parent record is synthetic, not a GLEIF fact.
 from pathlib import Path
 import json
 
-from edgar_warehouse.mdm.clean import gleif_publication
-from edgar_warehouse.mdm.clean.adapters import normalize
-from edgar_warehouse.mdm.clean.store import digest
+from edgar_warehouse.mdm import gleif_publication
+from edgar_warehouse.mdm.adapters import normalize
+from edgar_warehouse.mdm.store import digest
 from edgar_warehouse.rules import files
 
 ROOT = Path(__file__).resolve().parents[2]

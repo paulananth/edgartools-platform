@@ -22,10 +22,10 @@ g = s["g"]
 
 from edgar_warehouse.cli import main
 from edgar_warehouse.context import Context, ContextError
-from edgar_warehouse.mdm.clean import master_index, master_search
-from edgar_warehouse.mdm.clean.evidence import decision
-from edgar_warehouse.mdm.clean.record_reads import RecordReader
-from edgar_warehouse.mdm.clean.store import Conflict
+from edgar_warehouse.mdm import master_index, master_search
+from edgar_warehouse.mdm.evidence import decision
+from edgar_warehouse.mdm.record_reads import RecordReader
+from edgar_warehouse.mdm.store import Conflict
 from edgar_warehouse.rules import files
 from tests.storage_adapters.test_prepared_effects import assert_index_lookup
 
@@ -213,7 +213,7 @@ try:
             identities.append(identity)
             decisions.append(bind)
         s["apply"](assertions=readings, identities=identities, decisions=decisions)
-        from edgar_warehouse.mdm.clean import master_search as search_module
+        from edgar_warehouse.mdm import master_search as search_module
         original = search_module.prepare
         cohort_sizes = []
 
@@ -230,7 +230,7 @@ try:
         key = master_index.state_key(master_search.index_for(master_search.configuration()))
         before, generation = durable_counts(), api.generation()
         original = api.read([key], lookup=True)[key]
-        from edgar_warehouse.mdm.clean.store import storage_adapter
+        from edgar_warehouse.mdm.store import storage_adapter
         module = storage_adapter()
         stale = module.IndexChange(*key, original["body"], expected_version=original["version"] + 1)
         for arguments, message in [
@@ -294,9 +294,9 @@ import pytest
 from sqlalchemy import func,select
 from edgar_warehouse.context import Context,ContextError
 from edgar_warehouse.database_connections import engine_from_env
-from edgar_warehouse.mdm.clean import master_index, master_search
-from edgar_warehouse.mdm.clean.merge import MergeStage
-from edgar_warehouse.mdm.clean.store import Store,migrate,storage_adapter
+from edgar_warehouse.mdm import master_index, master_search
+from edgar_warehouse.mdm.merge import MergeStage
+from edgar_warehouse.mdm.store import Store,migrate,storage_adapter
 owner,runtime=engine_from_env("READ_OWNER_URL"),engine_from_env("READ_RUNTIME_URL")
 try:
     migrate(owner,application_role=os.environ["READ_RUNTIME_ROLE"],prepared=True)

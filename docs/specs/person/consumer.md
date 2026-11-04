@@ -9,7 +9,7 @@ complete.** Every decision below is resolved and cited; the things that are
 not decided are marked *Open* and are not hidden. Nothing here authorizes
 implementation — the [release gates](#release-gates) do.
 
-**Implementation owner.** MDM (`edgar_warehouse/mdm/clean/`,
+**Implementation owner.** MDM (`edgar_warehouse/mdm/`,
 `docs/specs/mdm/`, Codex/Grok-owned and read-only from here). Their
 [Company completion gate](../mdm/company-completion.md) line 80 forbids
 starting Person integration until the local Company gate passes; this spec is
@@ -645,7 +645,7 @@ Plus the foundation's own gates, inherited.
 
 - Implementation, migrations, schedules, deployment — MDM's.
 - Any edit to `.scratch/clean-mdm/`, `docs/specs/mdm/` or
-  `edgar_warehouse/mdm/clean/`.
+  `edgar_warehouse/mdm/`.
 - Person evidence from GLEIF or any LEI source.
 - Reopening MDM's accepted Q1–Q16 merge policy, beyond the one Person
   amendment named in Dependencies.

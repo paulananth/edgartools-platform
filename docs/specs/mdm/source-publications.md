@@ -6,7 +6,7 @@
 > the record of what was built; the code last ran at commit `68cc1240`.
 
 Ticket 11 implements a **source-only offline verification API** in
-`edgar_warehouse/mdm/clean/source_publications.py`. It creates no tables, roles,
+`edgar_warehouse/mdm/source_publications.py`. It creates no tables, roles,
 master records, consumer receipts or acquisition status flags. The fixture is
 synthetic and is not native GLEIF qualification or matching calibration.
 

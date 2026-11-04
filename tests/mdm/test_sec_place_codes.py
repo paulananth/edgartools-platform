@@ -16,13 +16,13 @@ import shutil
 
 import pytest
 
-from edgar_warehouse.mdm.clean.names import (
+from edgar_warehouse.mdm.names import (
     _EDGAR_ISO,
     _US_TERRITORIES,
     edgar_jurisdiction,
     jurisdictions_agree,
 )
-from edgar_warehouse.mdm.clean.store import digest
+from edgar_warehouse.mdm.store import digest
 from edgar_warehouse.rules import files
 from tests.support import place_codes
 

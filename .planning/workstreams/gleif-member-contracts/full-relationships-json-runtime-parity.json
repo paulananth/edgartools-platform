@@ -14,7 +14,7 @@
   },
   "runtime_implementation": [
     {
-      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/edgar_warehouse/mdm/clean/gleif_source.py",
+      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/edgar_warehouse/mdm/gleif_source.py",
       "sha256": "0d11cc07dfd9a9d81f4dc26e8c143469e385ad4c6598b644dcafeb42c976c3ca"
     },
     {

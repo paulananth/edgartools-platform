@@ -178,7 +178,7 @@ def relationship_definitions(policy: dict | None = None) -> dict:
 
 def policy_of(adapter, conn, policy_digest: str | None) -> dict | None:
     """The registered Mastering Policy whose digest a generation recorded, or none."""
-    from edgar_warehouse.mdm.clean.store import digest
+    from edgar_warehouse.mdm.store import digest
 
     if not policy_digest:
         return None
@@ -265,7 +265,7 @@ class Context:
         self.engine = engine
 
     def answer(self, args: argparse.Namespace) -> dict:
-        from edgar_warehouse.mdm.clean.evidence import KINDS
+        from edgar_warehouse.mdm.evidence import KINDS
 
         if args.as_of and args.as_at:
             raise ContextError("Give --as-of or --as-at, not both.", f"{PROG} {args.subject} {args.key or ''} --as-of <time>".replace("  ", " "))
@@ -296,12 +296,12 @@ class Context:
         if ":" not in key:
             return key
         namespace, value = key.split(":", 1)
-        from edgar_warehouse.mdm.clean.prepared_registry import (
+        from edgar_warehouse.mdm.prepared_registry import (
             require_installed as installed,
         )
-        from edgar_warehouse.mdm.clean.record_reads import RecordReader
-        from edgar_warehouse.mdm.clean.primitives import prepare_matching_value
-        from edgar_warehouse.mdm.clean.store import storage_adapter
+        from edgar_warehouse.mdm.record_reads import RecordReader
+        from edgar_warehouse.mdm.primitives import prepare_matching_value
+        from edgar_warehouse.mdm.store import storage_adapter
 
         adapter = installed(conn)
         api, reader = storage_adapter(), RecordReader(adapter, connection=conn)
@@ -338,10 +338,10 @@ class Context:
 
     @staticmethod
     def _names(conn, ids: list[str]) -> dict:
-        from edgar_warehouse.mdm.clean.prepared_registry import (
+        from edgar_warehouse.mdm.prepared_registry import (
             require_installed as installed,
         )
-        from edgar_warehouse.mdm.clean.record_reads import RecordReader
+        from edgar_warehouse.mdm.record_reads import RecordReader
 
         if not ids:
             return {}
@@ -351,7 +351,7 @@ class Context:
 
     @staticmethod
     def _generation(conn, args) -> int | None:
-        from edgar_warehouse.mdm.clean.prepared_registry import (
+        from edgar_warehouse.mdm.prepared_registry import (
             require_installed as installed,
         )
 
@@ -382,7 +382,7 @@ class Context:
 
     def _entity(self, conn, args: argparse.Namespace) -> dict:
 
-        from edgar_warehouse.mdm.clean.consumer import ContractReader
+        from edgar_warehouse.mdm.consumer import ContractReader
 
         entity_id = self._resolve(conn, args.subject, args.key)
         generation = self._generation(conn, args)
@@ -408,15 +408,15 @@ class Context:
             fields.append(item)
         canonical = read["canonical_id"]
         subjects = body.get("subjects", [])
-        from edgar_warehouse.mdm.clean.prepared_registry import (
+        from edgar_warehouse.mdm.prepared_registry import (
             require_installed as installed,
         )
-        from edgar_warehouse.mdm.clean.record_reads import RecordReader
+        from edgar_warehouse.mdm.record_reads import RecordReader
 
         adapter = installed(conn)
         reader = RecordReader(adapter, connection=conn)
         readings = reader.readings(subjects)
-        from edgar_warehouse.mdm.clean.steward import splits_of
+        from edgar_warehouse.mdm.steward import splits_of
 
         splits = splits_of(reader, canonical)
         records = sorted((reading["source_code"], reading["record_key"],
@@ -485,13 +485,13 @@ class Context:
         with self.engine.connect().execution_options(
             isolation_level="REPEATABLE READ"
         ) as conn:
-            from edgar_warehouse.mdm.clean.prepared_registry import (
+            from edgar_warehouse.mdm.prepared_registry import (
                 require_installed as installed,
             )
 
             adapter = installed(conn)
-            from edgar_warehouse.mdm.clean.master_search import configuration, search
-            from edgar_warehouse.mdm.clean.store import Conflict
+            from edgar_warehouse.mdm.master_search import configuration, search
+            from edgar_warehouse.mdm.store import Conflict
 
             if configuration() is None:
                 raise ContextError("Name search is not installed for prepared MDM storage.",
@@ -525,9 +525,9 @@ class Context:
         if args.as_of or args.as_at:
             raise ContextError("A detail key reads current masters; look one up by its id with --as-of or --as-at.", again)
         with self.engine.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
-            from edgar_warehouse.mdm.clean import detail_lookups
-            from edgar_warehouse.mdm.clean.prepared_registry import require_installed
-            from edgar_warehouse.mdm.clean.store import Conflict
+            from edgar_warehouse.mdm import detail_lookups
+            from edgar_warehouse.mdm.prepared_registry import require_installed
+            from edgar_warehouse.mdm.store import Conflict
 
             adapter = require_installed(conn)
             spec = detail_lookups.configuration()
@@ -582,10 +582,10 @@ class Context:
         periods holds at `at`; so does a calculated one with periods, and one
         without (an earlier algorithm) always counts. Returns (links, count, cut).
         """
-        from edgar_warehouse.mdm.clean.prepared_registry import (
+        from edgar_warehouse.mdm.prepared_registry import (
             require_installed as installed,
         )
-        from edgar_warehouse.mdm.clean.record_reads import RecordReader
+        from edgar_warehouse.mdm.record_reads import RecordReader
 
         adapter = installed(conn)
 
@@ -639,12 +639,12 @@ class Context:
         ) as conn:
             entity_id = self._resolve(conn, None, args.key)
             generation = self._generation(conn, args) if args.as_at else None
-            from edgar_warehouse.mdm.clean.prepared_registry import (
+            from edgar_warehouse.mdm.prepared_registry import (
                 require_installed as installed,
             )
 
             if installed(conn) is not None:
-                from edgar_warehouse.mdm.clean.consumer import ContractReader
+                from edgar_warehouse.mdm.consumer import ContractReader
                 try:
                     entity_id = ContractReader(self.engine).entity(entity_id, generation=generation,
                                                                    connection=conn)["canonical_id"]
@@ -661,7 +661,7 @@ class Context:
             full = args.detail == "full"
             if full:
                 _attach_sources(conn, links)
-            from edgar_warehouse.mdm.clean.store import storage_adapter
+            from edgar_warehouse.mdm.store import storage_adapter
 
             policy = policy_of(storage_adapter(), conn, trust.get("policy_digest"))
         types = relationship_definitions(policy)
@@ -689,7 +689,7 @@ class Context:
 
 
 def _name(body: dict):
-    from edgar_warehouse.mdm.clean.master_search import configuration, configured_name
+    from edgar_warehouse.mdm.master_search import configuration, configured_name
     spec = configuration()
     if spec is not None:
         return configured_name(body, spec)
@@ -735,7 +735,7 @@ def _full_link(link: dict) -> dict:
 
 def _latest(conn, generation: int | None = None) -> dict:
     """The generation an answer reads: MDM's latest batch, or the one --as-at picked."""
-    from edgar_warehouse.mdm.clean.prepared_registry import (
+    from edgar_warehouse.mdm.prepared_registry import (
         require_installed as installed,
     )
 
@@ -756,10 +756,10 @@ def _latest(conn, generation: int | None = None) -> dict:
 
 def _attach_sources(conn, links: list[dict]) -> None:
     """Each link's stating records (source code and record key), in one query."""
-    from edgar_warehouse.mdm.clean.prepared_registry import (
+    from edgar_warehouse.mdm.prepared_registry import (
         require_installed as installed,
     )
-    from edgar_warehouse.mdm.clean.record_reads import RecordReader
+    from edgar_warehouse.mdm.record_reads import RecordReader
 
     wanted = {item.get("assertion_id") for link in links for item in link["body"].get("evidence", []) if item.get("assertion_id")}
     if not wanted:

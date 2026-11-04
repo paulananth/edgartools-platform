@@ -54,9 +54,9 @@ def cascade_entity(row, cascade_spec, wanted):
     """One Level 1 record as the cascade reads it (ticket 21): through the GLEIF
     contract and its quality rule, with its legal and other names; None when it
     is not GENERAL or the contract sets it aside."""
-    from edgar_warehouse.mdm.clean import cascade
-    from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord, mapped_values
-    from edgar_warehouse.mdm.clean.primitives import NORMALIZERS
+    from edgar_warehouse.mdm import cascade
+    from edgar_warehouse.mdm.adapters import UnsupportedRecord, mapped_values
+    from edgar_warehouse.mdm.primitives import NORMALIZERS
     entity = row.get("Entity") or {}
     lei = _text(row.get("LEI"))
     if not lei or _text(entity.get("EntityCategory")) != "GENERAL":
@@ -82,8 +82,8 @@ def cascade_entity(row, cascade_spec, wanted):
 def test_complete_name_count_general_projection_matches_active_cascade_without_install(case):
     """Bounded projection proof; no install or database population gate."""
     import copy
-    from edgar_warehouse.mdm.clean import cascade, sec_company, quality
-    from edgar_warehouse.mdm.clean.gleif_publication import dataset_contract
+    from edgar_warehouse.mdm import cascade, sec_company, quality
+    from edgar_warehouse.mdm.gleif_publication import dataset_contract
     from edgar_warehouse.rules.source_engine import SourceEngine
     from tests.engine.test_gleif_configured_fields import raw
 
@@ -117,7 +117,7 @@ def test_complete_name_count_general_projection_matches_active_cascade_without_i
     assert projected["last_update"] == expected.last_update
     assert projected["jurisdiction"] == expected.jurisdiction
     assert cascade.place(projected["place"]) == expected.place
-    from edgar_warehouse.mdm.clean.adapters import mapped_values
+    from edgar_warehouse.mdm.adapters import mapped_values
     _, _, original_quality = mapped_values(row, contract)
     record = {"provenance": {"quality": original_quality}}
     assert projected["legal_withheld"] == quality.withheld(record, "matching.address")
@@ -203,7 +203,7 @@ def test_configured_pair_profile_runs_from_installed_bundle(installed):
 import copy, os, shutil, sys, tempfile
 from pathlib import Path
 from edgar_warehouse.rules import files
-from edgar_warehouse.mdm.clean import catalog
+from edgar_warehouse.mdm import catalog
 
 folder = Path(tempfile.mkdtemp(dir=".")) / "rules"
 shutil.copytree(files.ROOT, folder)
@@ -220,7 +220,7 @@ body["pair_comparisons"]["bundle-invented"] = profile
 (folder / catalog.RELATIVE).write_text(files.dumps(body))
 env = {**os.environ, "EDGAR_RULES_ROOT": str(folder.resolve())}
 code = """
-from edgar_warehouse.mdm.clean.matching import compare_candidate_records, candidate_paths, candidate_value
+from edgar_warehouse.mdm.matching import compare_candidate_records, candidate_paths, candidate_value
 rule = {"pair_comparison": "bundle-invented", "when": [{"primitive": "gleif_entity_eligible@1",
     "args": {"categories": ["INVENTED"], "entity_statuses": ["ACCEPTED"],
              "refused_registration_statuses": ["REFUSED"]}}]}
@@ -233,8 +233,8 @@ assert paths["identifier"] == ("identifiers", "invented_namespace")
 assert paths["name_count"] == ("provenance", "matching", "invented_name_count", "invented_entries", 0, 0)
 assert paths["cascade"] == ("provenance", "matching", "invented_name_count", "invented_cascade", "invented_target")
 assert candidate_value({"identifiers":{"invented_namespace":"invented-value"}}, paths["identifier"]) == "invented-value"
-from edgar_warehouse.mdm.clean.matching import candidate_routes
-from edgar_warehouse.mdm.clean.evidence import assertion
+from edgar_warehouse.mdm.matching import candidate_routes
+from edgar_warehouse.mdm.evidence import assertion
 from edgar_warehouse.rules.source_engine import prepare_record_lookups
 item = assertion(source_code="invented.source",record_key="one",publication_key="first",revision=1,
     effective_at=None,kind="bundle-invented-kind",fields={},identifiers={"invented_namespace":"invented-value"})
@@ -290,10 +290,10 @@ print(json.dumps({{"shipped": shipped, "modules": modules, "absent": absent, "ru
     assert twice == []
     assert found["absent"] == {}  # `silver line-items` failed so: financials was not shipped (ticket 48)
     assert all(found["rules_read"])  # `silver line-items` failed so: its line-items.yaml was looked for beside a checkout (ticket 48)
-    assert {"edgar_warehouse.cli", "edgar_warehouse.workers.source_read", "edgar_warehouse.mdm.clean.merge",
+    assert {"edgar_warehouse.cli", "edgar_warehouse.workers.source_read", "edgar_warehouse.mdm.merge",
             "edgar_warehouse.rules.cli", "edgar_warehouse.database_connections", "edgar_warehouse.database_types",
             "edgar_warehouse.rdm.storage", "edgar_warehouse.rdm.mysql_migration",
-            "edgar_warehouse.mdm.clean.schema"} <= set(found["modules"])
+            "edgar_warehouse.mdm.schema"} <= set(found["modules"])
     assert any(p.endswith("bundle_data/skills/data-onboarding/SKILL.md") for p in found["shipped"])
     assert any(p.endswith("mdm/migrations/024_configured_kinds.sql") for p in found["shipped"])
     assert any(p.endswith("mdm/migrations/025_kind_descriptions.sql") for p in found["shipped"])
@@ -336,7 +336,7 @@ def test_publication_preparation_runs_from_installed_bundle_without_checkout(ins
 import hashlib
 from pathlib import Path
 from edgar_warehouse.rules import source_engine
-from edgar_warehouse.mdm.clean import payloads, store
+from edgar_warehouse.mdm import payloads, store
 from edgar_warehouse.workers import mdm_publish
 raw = source_engine.postgres_jsonb_text('{"a":1e-7,"bbb":1.2300}')
 assert raw == '{"a": 0.0000001, "bbb": 1.2300}'
@@ -346,8 +346,8 @@ row["payload_hash"] = hashlib.sha256(payloads.payload_text(row).encode()).hexdig
 assert payloads.prepare(row)["objects"] == [{"x":1.23}]
 assert set(source_engine.runtime_files()) <= set(mdm_publish.runtime_files())
 assert Path(payloads.__file__) in mdm_publish.runtime_files()
-assert (Path(store.__file__).parents[1]/"migrations/016_publication_inputs.sql").is_file()
-assert all((Path(store.__file__).parents[1]/"migrations"/name).is_file() for name in store.MIGRATIONS)
+assert (Path(store.__file__).parent/"migrations/016_publication_inputs.sql").is_file()
+assert all((Path(store.__file__).parent/"migrations"/name).is_file() for name in store.MIGRATIONS)
 print("publication preparation installed")
 ''', cwd=root)
     assert result.returncode == 0, result.stderr
@@ -701,9 +701,9 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
     MDM in one Rules run, every step by a worker and a separate verifier from
     the installed bundle."""
     from edgar_warehouse.bookkeeping.clean.destinations import migrate_guard
-    from edgar_warehouse.mdm.clean.store import migrate, register_policy
+    from edgar_warehouse.mdm.store import migrate, register_policy
     from sqlalchemy import create_engine, text
-    from tests.integration import test_clean_mdm_postgres as core
+    from tests.integration import test_mdm_postgres as core
     from tests.support.rules_approval import approve
     from tests.support.rules_authority import register_dataset
 
@@ -953,7 +953,7 @@ read:
         failed_state = json.loads(cli("bookkeeping", "status", bad_run))
         assert failed_state["counts"].get("verified", 0) == 0
         with mdm_reader.connect() as conn:
-            from edgar_warehouse.mdm.clean.inspection import counts
+            from edgar_warehouse.mdm.inspection import counts
             report = counts(mdm_reader)
             assert report["stage_records"] == report["masters"] == {}
 
@@ -972,7 +972,7 @@ read:
             assert filers["uri"] in rejected.stderr
             assert not (out / "reading.json").exists() and not (out / "reading.json.parts").exists()
             with mdm_reader.connect() as conn:
-                from edgar_warehouse.mdm.clean.inspection import counts
+                from edgar_warehouse.mdm.inspection import counts
                 assert counts(mdm_reader)["stage_records"] == {}
         finally:
             unavailable.rename(captured)
@@ -1035,8 +1035,8 @@ read:
         assert [row["character"] for row in rows] == ['é', '🦀']
     state = json.loads(cli("bookkeeping", "finalize", run_id))
     assert state["counts"] == {"verified": len(profiles)} and state["run"]["state"] == "complete"
-    from edgar_warehouse.mdm.clean.inspection import counts
-    from edgar_warehouse.mdm.clean.consumer import ContractReader
+    from edgar_warehouse.mdm.inspection import counts
+    from edgar_warehouse.mdm.consumer import ContractReader
     report = counts(mdm_reader)
     names = [item["body"].get("fields", {}).get("name")
              for item in ContractReader(mdm_reader).snapshot_page("entity")["items"]]
@@ -1060,10 +1060,10 @@ from xml.etree import ElementTree as ET
 from edgar_warehouse.rules import files
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.workers import source_read
-from edgar_warehouse.mdm.clean import gleif_publication
-from edgar_warehouse.mdm.clean.gleif_publication import attest_publication
+from edgar_warehouse.mdm import gleif_publication
+from edgar_warehouse.mdm.gleif_publication import attest_publication
 import importlib.util
-assert importlib.util.find_spec("edgar_warehouse.mdm.clean.gleif_source") is None
+assert importlib.util.find_spec("edgar_warehouse.mdm.gleif_source") is None
 assert not hasattr(gleif_publication, "inspect_archive")
 store = Artifacts()
 lei = "5493001KJTIIGC8Y1R12"
@@ -1228,7 +1228,7 @@ def test_gleif_configured_mapping_publishes_and_recovers_from_installed_bundle(i
     This does not qualify the full captured Company/GLEIF population.
     """
     from sqlalchemy import create_engine
-    from edgar_warehouse.mdm.clean.store import migrate, register_policy, digest
+    from edgar_warehouse.mdm.store import migrate, register_policy, digest
     from tests.support.fresh_mastering import cohort, FIXTURE, CHILD_LEI, PARENT_LEI
     from tests.support.rules_authority import register_dataset
 
@@ -1257,7 +1257,7 @@ def test_gleif_configured_mapping_publishes_and_recovers_from_installed_bundle(i
             {"source": "sec.submissions.person", "row": json.loads(line)}
             for line in FIXTURE.with_name("person_raw.jsonl").read_text().splitlines() if line.strip()
         ]
-        from edgar_warehouse.mdm.clean.adapters import normalize
+        from edgar_warehouse.mdm.adapters import normalize
         for record in sec_records:
             if record["source"]=="sec.company":  # a Delaware business address, as SEC writes it
                 record["row"]["business_address"]={"street":"  Source Street  ","street2":None,"city":"City",
@@ -1269,8 +1269,8 @@ def test_gleif_configured_mapping_publishes_and_recovers_from_installed_bundle(i
                 publication={"publication_key":f"offline-cohort/{row['cik']}@{digest(row)}",
                              "revision":1,"artifact_sha256":digest(row),
                              "member":"four_companies_v1.json","record_locator":str(row["cik"])}))
-        from tests.mdm.test_clean_name_count import archive, configured, metadata
-        from edgar_warehouse.mdm.clean import name_count
+        from tests.mdm.test_name_count import archive, configured, metadata
+        from edgar_warehouse.mdm import name_count
         name_count_archive = archive(rows)
         name_count_filers = [(f"{r['row']['cik']:010d}", r['row']['entity_name'], [])
                          for r in sec_records if r['source'] == 'sec.company']
@@ -1288,13 +1288,13 @@ from uuid import uuid4
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError
 from edgar_warehouse.rules import files, source_engine
-from edgar_warehouse.mdm.clean import adapters, sec_company
-from edgar_warehouse.mdm.clean.inspection import counts as store_counts
-from edgar_warehouse.mdm.clean.record_reads import for_connection
-from edgar_warehouse.mdm.clean.evidence import decision
-from edgar_warehouse.mdm.clean.merge import MergeStage
-from edgar_warehouse.mdm.clean.publication import LocalContractSink
-from edgar_warehouse.mdm.clean.store import Store, digest
+from edgar_warehouse.mdm import adapters, sec_company
+from edgar_warehouse.mdm.inspection import counts as store_counts
+from edgar_warehouse.mdm.record_reads import for_connection
+from edgar_warehouse.mdm.evidence import decision
+from edgar_warehouse.mdm.merge import MergeStage
+from edgar_warehouse.mdm.publication import LocalContractSink
+from edgar_warehouse.mdm.store import Store, digest
 from edgar_warehouse.workers import source_mapping
 body=json.load(sys.stdin)
 assert files.ROOT == files.BUNDLED
@@ -1352,7 +1352,7 @@ second=stage.apply(**second_command)
 # through actual SEC normalization, Merge Stage and publication/recovery.
 import io, base64
 import zipfile
-from edgar_warehouse.mdm.clean import name_count
+from edgar_warehouse.mdm import name_count
 from edgar_warehouse.workers.source_traversal import Traversal
 assert not any(hasattr(name_count,name) for name in ("_text","_other_names","sec_keys","build","cascade_entity"))
 packed=base64.b64decode(body["name_count_archive"],validate=True)
@@ -1449,7 +1449,7 @@ def test_active_company_preparation_caller_runs_from_installed_bundle(installed,
     """The installed CLI (`mdm prepare-capture`) writes the Company `mastering` target's input manifest from a raw capture,
     as the checkout does, and the installed Bookkeeping control freezes it against the installed
     target; neither can use the checkout (Issue 20 slice 20c)."""
-    from tests.mdm.test_clean_company_preparation import CATALOG_ROWS, PINS, name_count_capture, documents, prepare
+    from tests.mdm.test_mdm_company_preparation import CATALOG_ROWS, PINS, name_count_capture, documents, prepare
     from tests.support.sec_capture import CATALOG
     python, root = installed
     capture = name_count_capture(tmp_path, documents(), CATALOG_ROWS)

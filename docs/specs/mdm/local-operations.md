@@ -13,7 +13,7 @@ prerequisites. The API checks need the existing `mdm` extra as well as
 
 ```bash
 uv run --frozen --extra s3 --extra mdm-runtime --extra mdm pytest \
-  tests/integration/test_clean_mdm_postgres.py \
+  tests/integration/test_mdm_postgres.py \
   tests/mdm/test_api.py \
   tests/mdm/test_publication_drain_cli.py \
   tests/mdm/test_graph_publication_queue.py -q --tb=short

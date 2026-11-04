@@ -9,7 +9,7 @@ No deployment or policy activation.
 |---|---|
 | Accepted identity graph replay, default/explicit survivors, merge dependencies, exclusions, bind correction, quarantine and retirement | Rust `crates/source-contract/src/identity.rs`, through the existing Python `replay` API |
 | Configured source eligibility, clear authorization, unknown-time eligibility, priority/recency/tie ordering | Rust `crates/source-contract/src/survivorship.rs`, shared by entity and profile fields |
-| Policy authority and digests, approved matching, profile qualification, timestamps/age calculation, source-history fold, canonical value comparisons, override interpretation and output materialization | Python `mdm/clean/identity.py` and `survivorship.py`; opaque payload references preserve arbitrary integers, float/bool distinctions and Unicode |
+| Policy authority and digests, approved matching, profile qualification, timestamps/age calculation, source-history fold, canonical value comparisons, override interpretation and output materialization | Python `mdm/identity.py` and `survivorship.py`; opaque payload references preserve arbitrary integers, float/bool distinctions and Unicode |
 | CLI, integrations, retries, independent verification and database clients | Existing Python worker and MergeStage |
 | Indexed retrieval, constraints, atomic commits, shared freshness/fencing, leases, history and recovery | Existing PostgreSQL 16 schema/roles/functions; unchanged in this slice |
 

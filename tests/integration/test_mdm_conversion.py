@@ -13,11 +13,11 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import create_engine, text
 
-from edgar_warehouse.mdm.clean import conversion
-from edgar_warehouse.mdm.clean.evidence import decision, deferred_record
-from edgar_warehouse.mdm.clean.relationships import types_of
-from edgar_warehouse.mdm.clean.store import digest, storage_adapter
-from tests.integration import test_clean_mdm_postgres as core
+from edgar_warehouse.mdm import conversion
+from edgar_warehouse.mdm.evidence import decision, deferred_record
+from edgar_warehouse.mdm.relationships import types_of
+from edgar_warehouse.mdm.store import digest, storage_adapter
+from tests.integration import test_mdm_postgres as core
 
 NATIVE = """
 CREATE SCHEMA mdm;

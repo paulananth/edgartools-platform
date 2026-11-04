@@ -2,10 +2,10 @@
 import hashlib
 
 from edgar_warehouse.rules import proving
-from edgar_warehouse.mdm.clean.inspection import HASH_CONTRACT
-from edgar_warehouse.mdm.clean.prepared_registry import require_installed
-from edgar_warehouse.mdm.clean.store import canonical
-from tests.integration import test_clean_mdm_postgres as core
+from edgar_warehouse.mdm.inspection import HASH_CONTRACT
+from edgar_warehouse.mdm.prepared_registry import require_installed
+from edgar_warehouse.mdm.store import canonical
+from tests.integration import test_mdm_postgres as core
 
 
 def expected_hash(engine):

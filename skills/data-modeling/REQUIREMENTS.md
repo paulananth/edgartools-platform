@@ -1,7 +1,7 @@
 # Data modeling requirements
 
 The boundary of the data-modeling skill. Decided from `CONTEXT.md`, `KINDS`
-and `PROFILE_KINDS` (`edgar_warehouse/mdm/clean/evidence.py`), the kinds'
+and `PROFILE_KINDS` (`edgar_warehouse/mdm/evidence.py`), the kinds'
 Identifier Contracts (`rules/merge/kinds/`), the relationship types
 (RDM code set `mdm-relationship-types`), and the approved specs
 (`docs/specs/rdm/spec.md`, `docs/specs/agent-context/spec.md`,

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from edgar_warehouse.bookkeeping.clean import destinations
-from edgar_warehouse.mdm.clean import binding, cli, connections, execution
+from edgar_warehouse.mdm import binding, cli, connections, execution
 from edgar_warehouse.workers import mdm_merge
 from edgar_warehouse.workers.__main__ import runtime
 

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 from edgar_warehouse.control_contract import digest
-from edgar_warehouse.mdm.clean import adapters
+from edgar_warehouse.mdm import adapters
 from edgar_warehouse.rules import files, source_engine
 from tests.support.company_fields import before_ticket_129, reading_before_ticket_129
 
@@ -159,7 +159,7 @@ def test_mdm_worker_runtime_pins_configured_mapping_dependencies(part,monkeypatc
     from pathlib import Path
     from edgar_warehouse.workers import mdm_merge,source_mapping
     from edgar_warehouse.workers.__main__ import runtime
-    from edgar_warehouse.mdm.clean import identity, survivorship, evidence
+    from edgar_warehouse.mdm import identity, survivorship, evidence
     paths={**{m.__name__.rsplit('.',1)[1]:Path(m.__file__) for m in (identity,survivorship,evidence)},
            'adapter':Path(adapters.__file__),'mapping':Path(source_mapping.__file__),
            **dict(zip(('engine','steps','native'),source_engine.runtime_files(),strict=True))}

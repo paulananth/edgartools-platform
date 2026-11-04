@@ -48,7 +48,7 @@ from sqlalchemy import create_engine, text
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.bookkeeping.clean.database import grant_profile
 from edgar_warehouse.bookkeeping.clean.destinations import migrate_guard
-from edgar_warehouse.mdm.clean.store import digest, migrate, register_policy
+from edgar_warehouse.mdm.store import digest, migrate, register_policy
 from edgar_warehouse.rules import files
 from tests.engine.test_data_skill_bundle_postgres import _run, _stores, installed  # noqa: F401
 from tests.integration.test_configured_bookkeeping_postgres import databases  # noqa: F401

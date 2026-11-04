@@ -15,9 +15,9 @@ from pathlib import Path
 
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from tests.integration import test_clean_mdm_postgres as core
-from edgar_warehouse.mdm.clean.merge import MergeStage
-from edgar_warehouse.mdm.clean.store import Store, register_policy
+from tests.integration import test_mdm_postgres as core
+from edgar_warehouse.mdm.merge import MergeStage
+from edgar_warehouse.mdm.store import Store, register_policy
 from edgar_warehouse.rules import files
 from tests.integration import test_nport_link_start as nport
 from tests.support import source_chain as chain

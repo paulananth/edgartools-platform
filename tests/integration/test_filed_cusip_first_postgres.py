@@ -9,10 +9,10 @@ holding filing only that ISIN finds its own Security. Invented values only.
 
 from __future__ import annotations
 
-from edgar_warehouse.mdm.clean.record_reads import for_connection
-from edgar_warehouse.mdm.clean import binding
-from edgar_warehouse.mdm.clean.evidence import decision
-from tests.integration import test_clean_mdm_postgres as core
+from edgar_warehouse.mdm.record_reads import for_connection
+from edgar_warehouse.mdm import binding
+from edgar_warehouse.mdm.evidence import decision
+from tests.integration import test_mdm_postgres as core
 from tests.integration import test_nport_link_start as nport
 from tests.integration import test_openfigi_security as figi
 
@@ -50,7 +50,7 @@ def test_a_filed_cusip_and_isin_on_two_securities_bind_by_the_cusip(database):
 
     # A steward revokes that bind and binds it again, withholding nothing: the ISIN
     # is then that Security's too, so the next holding filing only it is ambiguous.
-    from edgar_warehouse.mdm.clean.record_reads import for_connection
+    from edgar_warehouse.mdm.record_reads import for_connection
     with database.application.connect() as conn:
         (bind,) = [d for d in for_connection(conn).related_decisions({both["subject"]})
                    if d["operation"] == "bind" and d["subject"] == both["subject"]]

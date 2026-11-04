@@ -6,7 +6,7 @@ from copy import deepcopy
 
 import pytest
 
-from edgar_warehouse.mdm.clean import target_manifest
+from edgar_warehouse.mdm import target_manifest
 from edgar_warehouse.rules import files
 from tests.mdm import test_ownership_target as ownership
 

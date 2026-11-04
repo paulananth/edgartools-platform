@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from edgar_warehouse.mdm.clean import quality
+from edgar_warehouse.mdm import quality
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "data-quality" / "scripts"))
 import quality_plan  # noqa: E402

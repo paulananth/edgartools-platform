@@ -18,8 +18,8 @@
   },
   "cases": [
     {
-      "retired": "tests/mdm/test_clean_classification.py::TestFirstStepWins::test_sec_saying_operating_company_settles_it",
-      "retained": "tests/mdm/test_clean_classification.py::TestFirstStepWins::test_an_earlier_step_wins_over_a_later_one",
+      "retired": "tests/mdm/test_classification.py::TestFirstStepWins::test_sec_saying_operating_company_settles_it",
+      "retained": "tests/mdm/test_classification.py::TestFirstStepWins::test_an_earlier_step_wins_over_a_later_one",
       "surface": "classification",
       "same_body": true,
       "injected_wrong_verdict_rejected": true

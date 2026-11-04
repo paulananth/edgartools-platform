@@ -1,7 +1,7 @@
 """The MDM store's PostgreSQL 16, one server for the whole session (ticket 98).
 
 Every test still gets its own database, copied from a template migrated once
-per server (test_clean_mdm_postgres.py); only the server and the template are
+per server (test_mdm_postgres.py); only the server and the template are
 shared. A module with its own `postgres` fixture (a kept server) overrides it.
 """
 
@@ -12,7 +12,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import create_engine, text
 
-from tests.integration.test_clean_mdm_postgres import TEMPLATE, Database, _template, _templates, server_key
+from tests.integration.test_mdm_postgres import TEMPLATE, Database, _template, _templates, server_key
 from tests.support import pg16
 
 

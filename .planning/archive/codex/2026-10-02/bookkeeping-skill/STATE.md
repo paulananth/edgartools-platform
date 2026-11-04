@@ -101,8 +101,8 @@ Final checks:
 
 Reproduce with `uv run --extra mdm --extra s3 pytest` and the paths
 `tests/unit/test_bookkeeping_skill_feeds.py`,
-`tests/mdm/test_clean_company_source.py`,
-`tests/mdm/test_clean_gleif_source.py`,
+`tests/mdm/test_company_source.py`,
+`tests/mdm/test_gleif_source.py`,
 `tests/integration/test_bookkeeping_source_feeds_postgres.py`, and
 `tests/integration/test_configured_bookkeeping_postgres.py`.
 Local commands reused the existing stage-work venv with

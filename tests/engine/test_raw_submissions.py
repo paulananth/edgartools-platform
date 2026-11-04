@@ -8,8 +8,8 @@ from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 from edgar_warehouse.workers import source_readings, source_read, mdm_prepare
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.mdm.clean import limits
-from edgar_warehouse.mdm.clean.adapters import normalize, UnsupportedRecord
+from edgar_warehouse.mdm import limits
+from edgar_warehouse.mdm.adapters import normalize, UnsupportedRecord
 
 PERSON = files.source("sec.submissions.person")
 

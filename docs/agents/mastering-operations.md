@@ -5,7 +5,7 @@
 Read the CLI parser and capability registry before running an older command.
 The CLI entry is `edgar_warehouse/cli.py`; configured execution is
 `edgar_warehouse/bookkeeping/clean/`; mastering is
-`edgar_warehouse/mdm/clean/`; source and domain declarations are `rules/`.
+`edgar_warehouse/mdm/`; source and domain declarations are `rules/`.
 
 | Domain | Input and rules | Boundary |
 | --- | --- | --- |

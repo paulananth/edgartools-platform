@@ -11,16 +11,16 @@ import pytest
 from sqlalchemy import func, select
 
 from edgar_warehouse.database_connections import engine_from_env, storage_adapter
-from edgar_warehouse.mdm.clean import binding, matching
-from edgar_warehouse.mdm.clean.evidence import (
+from edgar_warehouse.mdm import binding, matching
+from edgar_warehouse.mdm.evidence import (
     assertion,
     decision,
     deferred_record,
     instant,
 )
-from edgar_warehouse.mdm.clean.merge import MergeStage
-from edgar_warehouse.mdm.clean.record_reads import RecordReader
-from edgar_warehouse.mdm.clean.store import (
+from edgar_warehouse.mdm.merge import MergeStage
+from edgar_warehouse.mdm.record_reads import RecordReader
+from edgar_warehouse.mdm.store import (
     Conflict,
     Store,
     canonical,
@@ -28,7 +28,7 @@ from edgar_warehouse.mdm.clean.store import (
     migrate,
     register_policy,
 )
-from tests.mdm.test_clean_activation import CIK_CONTRACT, COMPANY_BAR, proof
+from tests.mdm.test_activation import CIK_CONTRACT, COMPANY_BAR, proof
 from tests.support.rules_authority import register_dataset
 
 AT = "2026-01-01T00:00:00+00:00"
@@ -788,7 +788,7 @@ try:
                     kept["body"]
                 )
                 if case == "stale_assessment":
-                    from edgar_warehouse.mdm.clean.assessment import StaleAssessment
+                    from edgar_warehouse.mdm.assessment import StaleAssessment
 
                     save(
                         [

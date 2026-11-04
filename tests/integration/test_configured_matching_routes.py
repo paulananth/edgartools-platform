@@ -7,9 +7,9 @@ import sys
 import pytest
 from sqlalchemy import event, text
 
-from edgar_warehouse.mdm.clean import matching, store
+from edgar_warehouse.mdm import matching, store
 from edgar_warehouse.rules import files
-from tests.integration import test_clean_mdm_postgres as core
+from tests.integration import test_mdm_postgres as core
 from tests.mdm.test_configured_pair_comparison import PROGRAM, configured_root
 
 
@@ -23,12 +23,12 @@ def test_invented_route_reaches_normal_merge(database, configured_root, route, a
     program = PROGRAM + '''
 import os
 from sqlalchemy import create_engine, text
-from tests.integration import test_clean_mdm_postgres as core
-from tests.mdm.test_clean_activation import COMPANY_BAR, proof
-from tests.integration.test_clean_name_matching import LEI_CONTRACT
-from edgar_warehouse.mdm.clean.store import migrate, register_policy
-from edgar_warehouse.mdm.clean.matching import candidate_paths, _stored
-from edgar_warehouse.mdm.clean.record_reads import for_connection
+from tests.integration import test_mdm_postgres as core
+from tests.mdm.test_activation import COMPANY_BAR, proof
+from tests.integration.test_name_matching import LEI_CONTRACT
+from edgar_warehouse.mdm.store import migrate, register_policy
+from edgar_warehouse.mdm.matching import candidate_paths, _stored
+from edgar_warehouse.mdm.record_reads import for_connection
 owner = create_engine(os.environ["ROUTE_OWNER_URL"], hide_parameters=True)
 runtime = create_engine(os.environ["ROUTE_RUNTIME_URL"], hide_parameters=True)
 try:
@@ -118,7 +118,7 @@ finally:
 
 def test_populated_candidate_index_upgrade_preserves_history_and_pins(database):
     from sqlalchemy import select
-    from edgar_warehouse.mdm.clean.record_reads import for_connection
+    from edgar_warehouse.mdm.record_reads import for_connection
     db = database
     item = core.source("invented-existing", provenance={"matching":{
         "name_count":{"leis":[["invented-target",1]]}}})
@@ -144,7 +144,7 @@ def test_candidate_containment_checks_exact_array_position_and_duplicates(databa
             ["first"], {"0":["first"]}, [[False,1]], [["",1]],
         ])]
     core.apply(database,1,assertions=items)
-    from edgar_warehouse.mdm.clean.record_reads import for_connection
+    from edgar_warehouse.mdm.record_reads import for_connection
     with database.application.connect() as connection:
         actual = matching._stored(for_connection(connection),"fixture.primary",matching.candidate_paths({})["name_count"],["first","second","first"])
         assert {item["record_key"] for item in actual} == {"invented-0","invented-1"}
@@ -153,7 +153,7 @@ def test_candidate_containment_checks_exact_array_position_and_duplicates(databa
 
 @pytest.mark.parametrize("route", ["identifier", "name_count", "cascade"])
 def test_each_candidate_value_probes_its_real_index(database, route):
-    from edgar_warehouse.mdm.clean.record_reads import for_connection
+    from edgar_warehouse.mdm.record_reads import for_connection
     # Unrelated entries ensure the two probes return only their exact groups.
     items = [core.source("invented-"+str(n), identifiers={"lei":"target-"+str(n)},
         provenance={"matching":{"name_count":{"leis":[["target-"+str(n),1]],

@@ -15,8 +15,8 @@ import copy
 
 from sqlalchemy import text
 
-from edgar_warehouse.mdm.clean.merge import MergeStage
-from edgar_warehouse.mdm.clean.store import Store, register_policy
+from edgar_warehouse.mdm.merge import MergeStage
+from edgar_warehouse.mdm.store import Store, register_policy
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine
 from edgar_warehouse.silver_writer import database as silver
@@ -26,7 +26,7 @@ from edgar_warehouse.silver_writer.sink import PostgresSink
 from edgar_warehouse.silver_writer.writer import MdmIds, land
 from tests.engine.test_ownership_readings import ACCESSION, FILED, filing
 from tests.engine.test_sgml_container import document, submission
-from tests.integration import test_clean_mdm_postgres as core
+from tests.integration import test_mdm_postgres as core
 from tests.integration import test_nport_link_start as nport
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
 

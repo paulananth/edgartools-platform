@@ -104,7 +104,7 @@ def test_an_effective_column_must_be_named_text(tmp_path):
 
 
 def test_a_prepared_effective_time_dates_the_records_mdm_reads(tmp_path):
-    from edgar_warehouse.mdm.clean.adapters import normalize
+    from edgar_warehouse.mdm.adapters import normalize
 
     rows = [{"id": "7", "name": "Acme", "published": "2026-06-30T00:00:00+00:00"}]
     store, envelope = _prepare(tmp_path, rows, effective_column="published")
@@ -123,7 +123,7 @@ def test_links_stated_in_two_dated_files_fold_into_one_link_first_and_last_state
     shows when it was last stated; neither file states a start."""
     from types import SimpleNamespace
 
-    from edgar_warehouse.mdm.clean import relationships
+    from edgar_warehouse.mdm import relationships
 
     entities = {e: {"kind": "company", "status": "accepted", "profiles": []} for e in ("E1", "E2")}
     state = SimpleNamespace(bindings={"S": "E1", "T": "E2"}, canonical={"E1": "E1", "E2": "E2"})

@@ -48,7 +48,7 @@ def _approve_rule(args):
 def _test(args):
     """A test run of one of a source's targets on local stores (ticket 14)."""
     from .proving import TestRunError, run
-    from edgar_warehouse.mdm.clean.target_manifest import run_arguments
+    from edgar_warehouse.mdm.target_manifest import run_arguments
 
     try:
         facts, run_files = run_arguments(args.fact, args.file)

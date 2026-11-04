@@ -10,15 +10,15 @@ import pytest
 
 from edgar_warehouse import context
 from edgar_warehouse.cli import build_parser, main
-from edgar_warehouse.mdm.clean.evidence import KINDS
+from edgar_warehouse.mdm.evidence import KINDS
 from edgar_warehouse.rules import files
 
 def test_every_kind_and_relationship_type_has_a_definition():
     defined = context.definitions()
-    from edgar_warehouse.mdm.clean.catalog import CATALOG
+    from edgar_warehouse.mdm.catalog import CATALOG
     assert set(CATALOG["kinds"]) == KINDS
     assert {k for k, v in defined["kinds"].items() if v.strip()} == KINDS
-    from edgar_warehouse.mdm.clean.relationships import types_of
+    from edgar_warehouse.mdm.relationships import types_of
 
     types = types_of(files.policy())
     assert {t for t, v in context.relationship_definitions().items() if v.strip()} == set(types)
@@ -111,7 +111,7 @@ def test_relationship_definitions_come_from_the_code_set_the_given_policy_pins(m
 
 
 def test_the_policy_of_a_generation_is_found_by_its_digest():
-    from edgar_warehouse.mdm.clean.store import digest
+    from edgar_warehouse.mdm.store import digest
 
     class Adapter:
         def registered_policies(self, conn):

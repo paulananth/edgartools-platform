@@ -215,8 +215,8 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
             finally:
                 runtime.dispose()
         # Invented MDM records use the existing Merge Stage fixture; do not touch a baseline.
-        from tests.integration import test_clean_mdm_postgres as mdm
-        from tests.integration.test_clean_entity_context_postgres import load_group
+        from tests.integration import test_mdm_postgres as mdm
+        from tests.integration.test_entity_context_postgres import load_group
         owner = first.engine(one, "mdm")
         @event.listens_for(owner, "connect")
         def owner_role(connection, _):
@@ -275,7 +275,7 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
         reader = first.engine(one, "mdm", "mdm_runtime")
         try:
             with reader.connect() as conn:
-                from edgar_warehouse.mdm.clean.inspection import counts
+                from edgar_warehouse.mdm.inspection import counts
                 assert sum(counts(reader)["masters"].values()) == 3
         finally:
             reader.dispose()

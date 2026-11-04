@@ -14,12 +14,12 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
-from edgar_warehouse.mdm.clean.consumer import ContractReader
-from edgar_warehouse.mdm.clean.gleif_publication import dataset_contract
-from edgar_warehouse.mdm.clean.merge import MergeStage
-from edgar_warehouse.mdm.clean.publication import LocalContractSink
-from edgar_warehouse.mdm.clean.store import Store, register_policy
-from tests.integration import test_clean_mdm_postgres as core
+from edgar_warehouse.mdm.consumer import ContractReader
+from edgar_warehouse.mdm.gleif_publication import dataset_contract
+from edgar_warehouse.mdm.merge import MergeStage
+from edgar_warehouse.mdm.publication import LocalContractSink
+from edgar_warehouse.mdm.store import Store, register_policy
+from tests.integration import test_mdm_postgres as core
 from tests.support.fresh_mastering import AS_OF, cohort, gleif_cohort
 from tests.support.rules_authority import register_dataset
 
@@ -99,7 +99,7 @@ def test_fresh_company_person_and_relationship_mastering(database, tmp_path):
     assert stage.apply(**second_command)["duplicate"]
     with database.application.connect() as conn:
         assert conn.scalar(text("SELECT count(*) FROM public.mdm_store_batch")) == 2
-        from edgar_warehouse.mdm.clean.inspection import counts
+        from edgar_warehouse.mdm.inspection import counts
         assert sum(counts(database.application)["masters"].values()) == 4
     # A restricted runtime cannot erase or bypass the newly mastered state.
     for sql in ("DELETE FROM public.mdm_store_current", "DELETE FROM public.mdm_store_evidence",

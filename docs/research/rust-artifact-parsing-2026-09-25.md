@@ -55,7 +55,7 @@ called from other commands because the holdings live in an attachment and
 companyfacts is one JSON document per CIK, not one filing
 (`edgar_warehouse/parsers/__init__.py:15-18`). Other families live under
 `edgar_warehouse/application/`, `edgar_warehouse/loaders/`,
-`edgar_warehouse/mdm/clean/`, and `edgar_warehouse/filing_text_projection.py`.
+`edgar_warehouse/mdm/`, and `edgar_warehouse/filing_text_projection.py`.
 `scripts/batch/` calls `filing.xbrl()` (`scripts/batch/batch_test_xbrl.py:38`)
 and `from edgar.xbrl import XBRL`
 (`scripts/batch/batch_financials_10Q.py:2`). Those scripts are not the

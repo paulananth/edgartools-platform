@@ -4,7 +4,7 @@ from copy import deepcopy
 from pathlib import Path
 import re
 from edgar_warehouse.rules import files
-from edgar_warehouse.mdm.clean import sec_company, cascade
+from edgar_warehouse.mdm import sec_company, cascade
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--check', action='store_true')
 args = parser.parse_args()

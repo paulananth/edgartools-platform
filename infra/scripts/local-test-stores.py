@@ -216,7 +216,7 @@ class LocalStores:
             private_write(self.folder(name) / filename, "\n".join(lines) + "\n")
 
     def provision(self, name: str, *, migrate=True, include_silver=False):
-        from edgar_warehouse.mdm.clean.store import migrate as mdm
+        from edgar_warehouse.mdm.store import migrate as mdm
         from edgar_warehouse.rdm.database import migrate as rdm
         from edgar_warehouse.silver_writer.database import migrate as silver
         from edgar_warehouse.rules.db import migrate as rules
@@ -301,8 +301,8 @@ class LocalStores:
                 conn.exec_driver_sql("GRANT USAGE ON SCHEMA mdm TO mdm_verifier,mdm_governance")
                 conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA mdm TO mdm_verifier,mdm_governance")
                 conn.exec_driver_sql("GRANT INSERT ON mdm.policy,mdm.dataset,mdm.dataset_mapping TO mdm_governance")
-                from edgar_warehouse.mdm.clean.prepared_registry import require_installed
-                from edgar_warehouse.mdm.clean.registration import grant
+                from edgar_warehouse.mdm.prepared_registry import require_installed
+                from edgar_warehouse.mdm.registration import grant
                 adapter = require_installed(conn)
                 quote = mdm.dialect.identifier_preparer.quote
                 for table in adapter.tables.values():

@@ -11,7 +11,7 @@ import json
 import time
 from pathlib import Path
 from edgar_warehouse.control_contract import digest
-from edgar_warehouse.mdm.clean import adapters,classification,quality
+from edgar_warehouse.mdm import adapters,classification,quality
 from edgar_warehouse.rules import files,source_engine
 from edgar_warehouse.workers import source_mapping
 

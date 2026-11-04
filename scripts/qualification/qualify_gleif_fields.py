@@ -13,7 +13,7 @@ import zipfile
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 from edgar_warehouse.control_contract import digest
-from edgar_warehouse.mdm.clean import adapters
+from edgar_warehouse.mdm import adapters
 from edgar_warehouse.rules import files, source_engine
 from edgar_warehouse.workers import source_mapping
 

@@ -212,7 +212,7 @@ class Rules:
                     raise Blocked("MDM handoff requires approval of this Rules version")
                 if mdm_engine is None:
                     raise Blocked("MDM activation requires an explicit destination connection")
-                from edgar_warehouse.mdm.clean.store import register_policy, register_dataset, current_reading
+                from edgar_warehouse.mdm.store import register_policy, register_dataset, current_reading
                 receipts = {"rules_digest": selected["digest"], "datasets": {}}
                 # First commit the idempotent MDM handoff. If the Rules status
                 # acknowledgement is lost, retry reconciles registered bodies.

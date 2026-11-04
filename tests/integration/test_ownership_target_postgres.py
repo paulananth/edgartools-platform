@@ -16,7 +16,7 @@ from sqlalchemy import text
 
 from edgar_warehouse.bookkeeping.clean.database import grant_profile
 from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
-from edgar_warehouse.mdm.clean import target_manifest
+from edgar_warehouse.mdm import target_manifest
 from edgar_warehouse.rules import files
 from edgar_warehouse.silver_writer import database as silver
 from edgar_warehouse.silver_writer.cli import spec_file

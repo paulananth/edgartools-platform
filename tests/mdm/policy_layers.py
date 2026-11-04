@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 
-from edgar_warehouse.mdm.clean.store import canonical, digest
+from edgar_warehouse.mdm.store import canonical, digest
 
 
 def _copy(policy: dict) -> dict:
@@ -277,7 +277,7 @@ def without_types_in_rdm(policy: dict) -> dict:
     information"): the relationship types moved from the policy body into RDM
     code set mdm-relationship-types, which the policy pins. Peeled, they are
     the body's own section again (relationship-types-v6)."""
-    from edgar_warehouse.mdm.clean import relationships
+    from edgar_warehouse.mdm import relationships
 
     body = _copy(policy)
     types = relationships.types_of(body)

@@ -27,7 +27,7 @@ alone qualifies a production acquisition feed.
 Reviewed current code and history with `gof-refactor-reviewer`: the configured
 Bookkeeping and stage worklist commits (#732/#734) added a second mirror beside
 Clean MDM's mirror. `bookkeeping/clean/destinations.py:53` and
-`mdm/clean/publication.py:91` duplicate sink delivery contracts. A thin Adapter
+`mdm/publication.py:91` duplicate sink delivery contracts. A thin Adapter
 to one journal avoids maintaining two sinks; its liability is one conversion
 boundary per existing envelope. Keep capability functions and local outboxes;
 no Strategy hierarchy or new orchestrator is justified.

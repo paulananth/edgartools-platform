@@ -8,7 +8,7 @@ import sys
 
 import pytest
 
-from edgar_warehouse.mdm.clean import catalog
+from edgar_warehouse.mdm import catalog
 from edgar_warehouse.rules import files
 
 
@@ -42,10 +42,10 @@ def configured_root(tmp_path):
 
 PROGRAM = '''
 import copy
-from edgar_warehouse.mdm.clean.matching import compare_candidate_records
-from edgar_warehouse.mdm.clean.name_count import VERSION
-from edgar_warehouse.mdm.clean.cascade import VERSION as CASCADE
-from edgar_warehouse.mdm.clean.store import Conflict
+from edgar_warehouse.mdm.matching import compare_candidate_records
+from edgar_warehouse.mdm.name_count import VERSION
+from edgar_warehouse.mdm.cascade import VERSION as CASCADE
+from edgar_warehouse.mdm.store import Conflict
 
 def field(value): return {"op": "value", "value": value}
 place = {"street": "1 INVENTED WAY", "city": "EXAMPLE", "postcode": "11111", "country": "ZZ"}
@@ -125,7 +125,7 @@ def compare(primitive, args):
 assert name_count() == [[True, False]]
 assert eligible() == [[True, False]]
 assert cascade() == [[True, False]]
-from edgar_warehouse.mdm.clean.activation import check_name_binding_rule
+from edgar_warehouse.mdm.activation import check_name_binding_rule
 rule = {"rule_id": "invented-rule", "pair_comparison": "invented-comparison",
     "applies_to_verdict": "invented-kind", "emits": ["bind"], "on_no_match": "wait",
     "source": "invented-right", "holder_source": "invented-left", "when": [

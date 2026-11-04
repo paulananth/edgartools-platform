@@ -211,25 +211,25 @@
       "reason": "Same installed fixture, launcher, configure(kind), join seed and actual helper. producer runs all unconditional current assertions and every history update/old-generation assertion before any added replay/provenance operation. Q01/Q17 retained for same kind/engine."
     },
     {
-      "retired": "tests/integration/test_clean_plan_cache_postgres.py::test_key_lists_finds_lookups_against_array_variables",
+      "retired": "tests/integration/test_plan_cache_postgres.py::test_key_lists_finds_lookups_against_array_variables",
       "proof_kind": "obsolete_implementation_obligation",
       "retained": null,
       "reason": "Obsolete implementation obligation, not claimed exact substitute. The four tests and two regex helpers police custom-plan/whole-list text in removed mdm business routines and former merge.py SQL. Active reader behavior remains checked by tests/integration/test_configured_matching_routes.py::test_each_candidate_value_probes_its_real_index[identifier], [census], [cascade]; tests/architecture/test_mdm_routine_retirement.py::test_runtime_has_no_retired_routine_call prevents revived calls. Retain tests/storage_adapters lookup and migration/concurrency/grant suites."
     },
     {
-      "retired": "tests/integration/test_clean_plan_cache_postgres.py::test_no_function_or_closure_query_searches_with_a_whole_key_list",
+      "retired": "tests/integration/test_plan_cache_postgres.py::test_no_function_or_closure_query_searches_with_a_whole_key_list",
       "proof_kind": "obsolete_implementation_obligation",
       "retained": null,
       "reason": "Obsolete implementation obligation, not claimed exact substitute. The four tests and two regex helpers police custom-plan/whole-list text in removed mdm business routines and former merge.py SQL. Active reader behavior remains checked by tests/integration/test_configured_matching_routes.py::test_each_candidate_value_probes_its_real_index[identifier], [census], [cascade]; tests/architecture/test_mdm_routine_retirement.py::test_runtime_has_no_retired_routine_call prevents revived calls. Retain tests/storage_adapters lookup and migration/concurrency/grant suites."
     },
     {
-      "retired": "tests/integration/test_clean_plan_cache_postgres.py::test_only_functions_that_look_up_key_lists_plan_with_their_keys",
+      "retired": "tests/integration/test_plan_cache_postgres.py::test_only_functions_that_look_up_key_lists_plan_with_their_keys",
       "proof_kind": "obsolete_implementation_obligation",
       "retained": null,
       "reason": "Obsolete implementation obligation, not claimed exact substitute. The four tests and two regex helpers police custom-plan/whole-list text in removed mdm business routines and former merge.py SQL. Active reader behavior remains checked by tests/integration/test_configured_matching_routes.py::test_each_candidate_value_probes_its_real_index[identifier], [census], [cascade]; tests/architecture/test_mdm_routine_retirement.py::test_runtime_has_no_retired_routine_call prevents revived calls. Retain tests/storage_adapters lookup and migration/concurrency/grant suites."
     },
     {
-      "retired": "tests/integration/test_clean_plan_cache_postgres.py::test_whole_list_searches_finds_overlap_and_any_key",
+      "retired": "tests/integration/test_plan_cache_postgres.py::test_whole_list_searches_finds_overlap_and_any_key",
       "proof_kind": "obsolete_implementation_obligation",
       "retained": null,
       "reason": "Obsolete implementation obligation, not claimed exact substitute. The four tests and two regex helpers police custom-plan/whole-list text in removed mdm business routines and former merge.py SQL. Active reader behavior remains checked by tests/integration/test_configured_matching_routes.py::test_each_candidate_value_probes_its_real_index[identifier], [census], [cascade]; tests/architecture/test_mdm_routine_retirement.py::test_runtime_has_no_retired_routine_call prevents revived calls. Retain tests/storage_adapters lookup and migration/concurrency/grant suites."
@@ -277,15 +277,15 @@
       "retired_case_sha256": "e6afc62524b9f0203fb2faf81484f73b76f04c1b312dd7c62b3169697a7fe5f0"
     },
     {
-      "retired": "tests/mdm/test_clean_security_identifier_formats.py::test_both_formats_are_in_the_one_table",
+      "retired": "tests/mdm/test_security_identifier_formats.py::test_both_formats_are_in_the_one_table",
       "proof_kind": "retained_test",
-      "retained": "tests/mdm/test_clean_identifier_types.py::test_the_declared_types_are_formats_and_normalizers",
+      "retained": "tests/mdm/test_identifier_types.py::test_the_declared_types_are_formats_and_normalizers",
       "reason": "Retained body proves cusip and isin belong to identifier_types.TYPES and every TYPES key belongs to the same adapters.FORMATS object, logically including the retired subset-only assertion; it additionally checks normalizer registration."
     },
     {
-      "retired": "tests/mdm/test_clean_survivorship.py::TestSelectFields::test_a_field_records_the_digest_it_was_selected_under",
+      "retired": "tests/mdm/test_survivorship.py::TestSelectFields::test_a_field_records_the_digest_it_was_selected_under",
       "proof_kind": "retained_test",
-      "retained": "tests/mdm/test_clean_survivorship.py::TestKindScopedRules::test_an_old_shape_body_still_records_the_body_digest",
+      "retained": "tests/mdm/test_survivorship.py::TestKindScopedRules::test_an_old_shape_body_still_records_the_body_digest",
       "reason": "Same company(), current_claims([a], AS_OF, set()), old-shape {fields:rules(sec.company)}, sorted subjects and select_fields call; each asserts recorded policy_digest equals its opaque input. Only arbitrary token literal differs (digest-1 versus body-digest), with no different policy shape or branch."
     },
     {

@@ -12,7 +12,7 @@ import json
 
 import pytest
 
-from edgar_warehouse.mdm.clean import adapters
+from edgar_warehouse.mdm import adapters
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 from tests.engine.test_sgml_container import document, submission

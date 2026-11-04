@@ -48,7 +48,7 @@ from pathlib import Path
 import edgar_warehouse.bookkeeping.clean.artifacts as artifact_store
 import edgar_warehouse.control_contract as control_contract
 from edgar_warehouse.control_contract import reference
-from edgar_warehouse.mdm.clean import limits
+from edgar_warehouse.mdm import limits
 from . import source_readings
 
 CHECK = "mdm.prepared"

@@ -86,7 +86,7 @@ def check(spec: dict, names: list[str]) -> None:
         if kind == "reason_if_empty" and types[item["reason"]] != TEXT:
             raise Blocked(f"Check {item['id']}: the reason column {item['reason']} is {TEXT}, not {types[item['reason']]}")
         if kind == "identifier":
-            from edgar_warehouse.mdm.clean.identifier_types import TYPES
+            from edgar_warehouse.mdm.identifier_types import TYPES
 
             if item["type"] not in TYPES:
                 raise Blocked(f"Check {item['id']}: no identifier type {item['type']!r} in rules/identifiers")
@@ -125,7 +125,7 @@ def run(spec: dict, rows: list[dict]) -> tuple[list[dict], dict]:
 
 
 def _identifier(item: dict, rows: list[dict]) -> list[int]:
-    from edgar_warehouse.mdm.clean.identifier_types import TYPES
+    from edgar_warehouse.mdm.identifier_types import TYPES
 
     kind = TYPES[item["type"]]
     return [n for n, row in enumerate(rows) if not _empty(row.get(item["column"]))

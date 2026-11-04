@@ -9,7 +9,7 @@ from pathlib import Path
 import time
 
 import yaml
-from edgar_warehouse.mdm.clean import names
+from edgar_warehouse.mdm import names
 from edgar_warehouse.rules import source_engine
 
 

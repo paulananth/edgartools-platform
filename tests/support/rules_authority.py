@@ -8,7 +8,7 @@ not the Rules approval workflow (covered by the integration acceptance suite).
 from __future__ import annotations
 
 from edgar_warehouse.bookkeeping.clean.config import digest
-from edgar_warehouse.mdm.clean.store import register_dataset as register_from_rules
+from edgar_warehouse.mdm.store import register_dataset as register_from_rules
 
 
 def authority(code: str, body: dict, version: str) -> dict:

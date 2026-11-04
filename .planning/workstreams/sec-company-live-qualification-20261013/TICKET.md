@@ -46,7 +46,7 @@ evidence. Publish the evidence and candidate source version for operator review.
 offline-qualified JSON capture with independent verification and durable-snapshot
 recovery. The Company `capture` target still selects `artifact.copy`; capture
 snapshots are not the receipt-bound raw-document input consumed by
-`mdm/clean/raw_capture.py` and `company_prepare.py`. Capture completeness currently
+`mdm/raw_capture.py` and `company_prepare.py`. Capture completeness currently
 proves presence/shape, not that a returned Company's CIK matches the requested
 scope. Company/page identity, continuation handling, producer evidence and
 capture-to-consumer wiring still need qualification.

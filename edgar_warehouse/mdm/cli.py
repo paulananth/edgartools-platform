@@ -39,7 +39,7 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     capture.add_argument("--file", action="append", help="A run file the target declares: name=path (repeat)")
     capture.add_argument("--all", action="store_true", help="Name every document, processed or not (a forced run); "
                      "by default only documents the Change Journal does not record as processed under these rules")
-    capture.set_defaults(handler=_logged_handler("prepare-capture", _clean("prepare_capture")))
+    capture.set_defaults(handler=_logged_handler("prepare-capture", _command("prepare_capture")))
 
     name_count = mdm_sub.add_parser("name-count", help="Count an SEC population and one configured full GLEIF Golden Copy "
                                 "reading into a Name Count file")
@@ -59,7 +59,7 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
                              "is switched on); the name count then holds its answers")
     name_count.add_argument("--catalog", help="The capture's exchange ticker catalog, by receipt key: the cascade reads "
                                           "each filer's tickers, as the Company chain does")
-    name_count.set_defaults(handler=_logged_handler("name-count", _clean("name_count")))
+    name_count.set_defaults(handler=_logged_handler("name-count", _command("name_count")))
 
     force = mdm_sub.add_parser("force-publish", help="Publish every current record to one consumer, changed or not "
                                "(forced pages of the current snapshot; changes no master data), and write the "
@@ -69,24 +69,24 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     force.add_argument("--page-size", type=int, default=10000, help="Records a page, at most 10000")
     force.add_argument("--run-id", help="Run again with the same pages (a stopped command)")
     force.add_argument("--step", default="graph-publication", help="The publish target's step name")
-    force.set_defaults(handler=_logged_handler("force-publish", _clean("force_publish")))
+    force.set_defaults(handler=_logged_handler("force-publish", _command("force_publish")))
 
     rebuild = mdm_sub.add_parser("rebuild-name-index", help="Owner-only resumable name-index rebuild")
     rebuild.add_argument("--limit", type=int, help="Stop after this many masters; retain resumable progress")
     rebuild.add_argument("--page-size", type=int, default=200, help="Masters per owner transaction (1 to 1000)")
     rebuild.add_argument("--restart", action="store_true", help="Restart overtaken progress from the beginning")
-    rebuild.set_defaults(handler=_logged_handler("rebuild-name-index", _clean("rebuild_name_index")))
+    rebuild.set_defaults(handler=_logged_handler("rebuild-name-index", _command("rebuild_name_index")))
     detail = mdm_sub.add_parser("rebuild-detail-lookup", help="Owner-only resumable detail-lookup rebuild")
     detail.add_argument("--limit", type=int, help="Stop after this many masters; retain resumable progress")
     detail.add_argument("--page-size", type=int, default=200, help="Masters per owner transaction (1 to 1000)")
     detail.add_argument("--restart", action="store_true", help="Restart overtaken progress from the beginning")
-    detail.set_defaults(handler=_logged_handler("rebuild-detail-lookup", _clean("rebuild_detail_lookup")))
+    detail.set_defaults(handler=_logged_handler("rebuild-detail-lookup", _command("rebuild_detail_lookup")))
     convert = mdm_sub.add_parser(
         "convert-native",
         help="Owner-only resumable conversion of a native store (NATIVE_MDM_DATABASE_URL, read only) "
              "into a fresh governed one (MDM_DATABASE_URL)")
     convert.add_argument("--limit", type=int, help="Stop after this many batches; a rerun resumes")
-    convert.set_defaults(handler=_logged_handler("convert-native", _clean("convert_native")))
+    convert.set_defaults(handler=_logged_handler("convert-native", _command("convert_native")))
 
     steward = mdm_sub.add_parser("steward", help="Steward decisions on master data")
     steward_sub = steward.add_subparsers(dest="steward_command", required=True)
@@ -96,18 +96,18 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     split.add_argument("--by", required=True, help="Who splits it, recorded on the decision")
     split.add_argument("--reason", required=True, help="Why, in words, recorded on the decision")
     split.add_argument("--confirm", action="store_true", help="Write the split (without it, only show it)")
-    split.set_defaults(handler=_logged_handler("steward-split", _clean("steward_split")))
+    split.set_defaults(handler=_logged_handler("steward-split", _command("steward_split")))
 
     counts = mdm_sub.add_parser("counts", help="Print MDM entity and record counts")
-    counts.set_defaults(handler=_logged_handler("counts", _clean("counts")))
+    counts.set_defaults(handler=_logged_handler("counts", _command("counts")))
 
     check = mdm_sub.add_parser("check-connectivity", help="Check the MDM database connection and schema")
-    check.set_defaults(handler=_logged_handler("check-connectivity", _clean("check_connectivity")))
+    check.set_defaults(handler=_logged_handler("check-connectivity", _command("check_connectivity")))
 
 
 def _handle_migrate(args: argparse.Namespace) -> int:
-    from edgar_warehouse.mdm.clean.connections import engine_from_env
-    from edgar_warehouse.mdm.clean.store import migrate
+    from edgar_warehouse.mdm.connections import engine_from_env
+    from edgar_warehouse.mdm.store import migrate
 
     engine = engine_from_env("MDM_DATABASE_URL", restricted=False)
     try:
@@ -120,12 +120,12 @@ def _handle_migrate(args: argparse.Namespace) -> int:
     return 0
 
 
-def _clean(name: str) -> Callable[[argparse.Namespace], int]:
+def _command(name: str) -> Callable[[argparse.Namespace], int]:
     """The MDM command function, imported when the command runs."""
     def run(args: argparse.Namespace) -> int:
-        from edgar_warehouse.mdm.clean import cli
+        from edgar_warehouse.mdm import commands
 
-        return getattr(cli, name)(args)
+        return getattr(commands, name)(args)
 
     return run
 

@@ -9,8 +9,8 @@ from edgar_warehouse.rules import files
 
 from edgar_warehouse.rules.source_engine import SourceRejected
 from edgar_warehouse.workers.source_traversal import Traversal
-from tests.mdm.test_clean_name_count import gleif
-from edgar_warehouse.mdm.clean.primitives import NORMALIZERS
+from tests.mdm.test_name_count import gleif
+from edgar_warehouse.mdm.primitives import NORMALIZERS
 
 RULE = Path(__file__).resolve().parents[2] / 'rules/sources/gleif/name-count-names-stream.yaml'
 legal_form_key = NORMALIZERS['normalize_text@legal-form-kept-v1']

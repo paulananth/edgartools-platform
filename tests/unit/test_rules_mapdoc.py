@@ -167,13 +167,13 @@ def test_a_count_reads_as_its_bounds(bounds, words):
 
 
 def test_every_link_rule_has_plain_words():
-    from edgar_warehouse.mdm.clean.adapters import LINK_RULE_NAMES
+    from edgar_warehouse.mdm.adapters import LINK_RULE_NAMES
 
     assert tuple(mapdoc.LINK_RULES) == LINK_RULE_NAMES
 
 
 def test_every_quality_test_and_fix_has_plain_words():
-    from edgar_warehouse.mdm.clean.quality import CHECKS, FIXES
+    from edgar_warehouse.mdm.quality import CHECKS, FIXES
 
     assert set(mapdoc.QUALITY_WORDS) == set(CHECKS) | set(FIXES)
 

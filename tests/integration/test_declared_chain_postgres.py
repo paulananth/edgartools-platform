@@ -15,7 +15,7 @@ import pytest
 
 from edgar_warehouse.bookkeeping.clean.database import grant_profile
 from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
-from edgar_warehouse.mdm.clean.target_manifest import write_manifest
+from edgar_warehouse.mdm.target_manifest import write_manifest
 from edgar_warehouse.rules import files
 from edgar_warehouse.workers import mdm_prepare, source_combine, source_read
 from tests.integration import test_openfigi_security as figi

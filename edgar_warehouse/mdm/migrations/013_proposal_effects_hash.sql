@@ -8,7 +8,7 @@
 -- proposal now keeps `effects_sha256`, the sha256 of the effects' jsonb text,
 -- and save_batch compares the request's hash to it. A proposal stored before
 -- this keeps its `effects` and is checked as before. The proposal as sent may
--- be up to 64 MB; as stored, 16 MB (`edgar_warehouse/mdm/clean/limits.py`).
+-- be up to 64 MB; as stored, 16 MB (`edgar_warehouse/mdm/limits.py`).
 --
 -- The hash compares jsonb text, which is stricter than jsonb equality only for
 -- numbers written two ways (1.0 and 1); the request and its effects are built

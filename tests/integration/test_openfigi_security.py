@@ -29,14 +29,14 @@ import pytest
 from sqlalchemy import text
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.mdm.clean.merge import MergeStage
-from edgar_warehouse.mdm.clean.store import Store, register_policy
+from edgar_warehouse.mdm.merge import MergeStage
+from edgar_warehouse.mdm.store import Store, register_policy
 from edgar_warehouse.rules import files
 from edgar_warehouse.silver_writer import database as silver
 from edgar_warehouse.silver_writer.cli import spec_file
 from edgar_warehouse.silver_writer.sink import PostgresSink
 from edgar_warehouse.silver_writer.writer import MdmIds, land
-from tests.integration import test_clean_mdm_postgres as core
+from tests.integration import test_mdm_postgres as core
 from tests.mdm import policy_layers
 from tests.integration import test_nport_link_start as nport
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
@@ -284,7 +284,7 @@ def test_a_record_joins_the_security_holding_its_cusip_or_creates_it(database, t
         "EXAMPLE CORP", "COM")
     # The Security holds its CUSIP and every listing FIGI (no reverse limit).
     assert joined["status"] == "accepted" and joined["identifiers"] == {"cusip": [EQUITY], "figi": figis(EQUITY)}
-    from edgar_warehouse.mdm.clean.record_reads import for_connection
+    from edgar_warehouse.mdm.record_reads import for_connection
     with database.application.connect() as conn:
         reader = for_connection(conn)
         subjects = reader.subjects([reader.group("cross_reference_records", "composite_figi", "BBGZ0000VS14")])
@@ -297,7 +297,7 @@ def test_a_filed_figi_finds_its_security_and_never_becomes_one_of_its_identifier
     filed FIGI finds the Security OpenFIGI gave it to, and its unheld CUSIP
     joins that Security; a filed FIGI no Security holds is never given to the
     Security the record creates."""
-    from edgar_warehouse.mdm.clean.identifier_types import TYPES
+    from edgar_warehouse.mdm.identifier_types import TYPES
     unheld_figi = next(f"BBG00TSTXX9{d}" for d in "0123456789" if TYPES["figi"].refusal(f"BBG00TSTXX9{d}")[1] is None)
     records, _ = prepared_records(tmp_path, ("cusip",))
     load(database, [

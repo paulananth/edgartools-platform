@@ -25,7 +25,7 @@ supported correcting ownership and composition without a new class hierarchy.
 | `change_journal.decisions` | `acquisition.decisions` |
 | `change_journal.authority` | `rules.acquisition_authority` |
 | `change_journal.source_evidence` | `application.source_evidence` |
-| `change_journal.publication` | `mdm.clean.journal_delivery` |
+| `change_journal.publication` | `mdm.journal_delivery` |
 | `change_journal.skill` | `application.journal_evidence` |
 | Recovery handlers in the journal CLI | `application.journal_recovery` |
 

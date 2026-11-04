@@ -11,10 +11,10 @@ from pathlib import Path
 
 import pytest
 
-from edgar_warehouse.mdm.clean import name_count
+from edgar_warehouse.mdm import name_count
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 from edgar_warehouse.rules import files
-from tests.mdm.test_clean_name_count import (
+from tests.mdm.test_name_count import (
     APPLE, COMPLETE_READING, WAYFAIR, archive, configured, gleif, metadata, TestTheCascade as CascadeFixture,
 )
 
@@ -86,9 +86,9 @@ def test_whole_archive_construction_counts_former_names_branches_duplicates_and_
 
 
 def test_configured_reading_preserves_actual_cascade_assignments():
-    from edgar_warehouse.mdm.clean import cascade
-    from edgar_warehouse.mdm.clean.sec_company import POLICY
-    from edgar_warehouse.mdm.clean.gleif_publication import dataset_contract
+    from edgar_warehouse.mdm import cascade
+    from edgar_warehouse.mdm.sec_company import POLICY
+    from edgar_warehouse.mdm.gleif_publication import dataset_contract
     helper = CascadeFixture()
     filer = cascade.Filer(cik=APPLE[0], key='APPLE INC',
                          place=cascade.place({'street':'1 APPLE PARK WAY','city':'CUPERTINO',

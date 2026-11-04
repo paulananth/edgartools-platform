@@ -26,7 +26,7 @@ def imports(node, package):
     ("from edgar_warehouse import silver_landing_store", "edgar_warehouse"),
     ("from . import loaders", "edgar_warehouse"),
     ("from ..loaders import common", "edgar_warehouse.workers"),
-    ("from ... import silver_landing_store", "edgar_warehouse.mdm.clean"),
+    ("from .. import silver_landing_store", "edgar_warehouse.mdm"),
 ])
 def test_retirement_guard_detects_deliberately_reintroduced_imports(statement, package):
     names = imports(ast.parse(statement).body[0], package)

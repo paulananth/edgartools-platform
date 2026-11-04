@@ -6,8 +6,8 @@ Invented values only."""
 
 from __future__ import annotations
 
-from edgar_warehouse.mdm.clean.merge import MergeStage
-from edgar_warehouse.mdm.clean.store import Store, register_policy
+from edgar_warehouse.mdm.merge import MergeStage
+from edgar_warehouse.mdm.store import Store, register_policy
 from edgar_warehouse.rules import files
 from tests.integration import test_nport_link_start as nport
 from tests.integration import test_openfigi_security as openfigi

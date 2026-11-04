@@ -6,9 +6,9 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy import event, select
 
-from edgar_warehouse.mdm.clean import catalog, prepared_registry
-from edgar_warehouse.mdm.clean.prepared_runs import waiting
-from edgar_warehouse.mdm.clean.store import digest, migrate
+from edgar_warehouse.mdm import catalog, prepared_registry
+from edgar_warehouse.mdm.prepared_runs import waiting
+from edgar_warehouse.mdm.store import digest, migrate
 from tests.storage_adapters.test_governed_mdm_storage import seed
 from tests.storage_adapters.test_prepared_effects import batch
 

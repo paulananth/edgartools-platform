@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 from edgar_warehouse.control_contract import digest
-from edgar_warehouse.mdm.clean import adapters
+from edgar_warehouse.mdm import adapters
 from edgar_warehouse.rules import files,source_engine
 from tests.support.company_fields import before_ticket_129
 from tests.support.name_count_words import old_words

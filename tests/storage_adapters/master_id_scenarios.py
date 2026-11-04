@@ -11,9 +11,9 @@ os.environ["READ_CASE"] = os.environ.get("READ_BASE_CASE", "join")
 g = runpy.run_module("tests.storage_adapters.record_read_scenarios")
 
 from edgar_warehouse.database_connections import engine_from_env
-from edgar_warehouse.mdm.clean.evidence import decision
-from edgar_warehouse.mdm.clean.merge import MergeStage
-from edgar_warehouse.mdm.clean.store import Store
+from edgar_warehouse.mdm.evidence import decision
+from edgar_warehouse.mdm.merge import MergeStage
+from edgar_warehouse.mdm.store import Store
 from edgar_warehouse.silver_writer import database as silver
 from edgar_warehouse.silver_writer.relational import DatabaseSink
 from edgar_warehouse.silver_writer.tables import data_table

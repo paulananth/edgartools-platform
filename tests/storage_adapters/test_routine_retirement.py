@@ -4,8 +4,8 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
-from edgar_warehouse.mdm.clean import catalog, retirement
-from edgar_warehouse.mdm.clean.store import Conflict, Store, digest, migrate
+from edgar_warehouse.mdm import catalog, retirement
+from edgar_warehouse.mdm.store import Conflict, Store, digest, migrate
 from tests.storage_adapters.test_prepared_effects import batch
 from tests.mdm.test_configured_pair_comparison import configured_root  # noqa: F401
 

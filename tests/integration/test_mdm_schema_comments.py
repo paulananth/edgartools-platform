@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import text
 
-from edgar_warehouse.mdm.clean.store import Conflict, migrate
+from edgar_warehouse.mdm.store import Conflict, migrate
 
 
 def _uncommented(conn) -> list[str]:
@@ -45,7 +45,7 @@ def test_every_table_view_column_and_function_has_a_comment(database):
 def test_legacy_schema_is_absent_and_governed_storage_is_installed(database):
     with database.admin.connect() as conn:
         assert conn.scalar(text("SELECT to_regnamespace('mdm_v2')")) is None
-        from edgar_warehouse.mdm.clean.prepared_registry import require_installed
+        from edgar_warehouse.mdm.prepared_registry import require_installed
         assert require_installed(conn).protocol == 6
 
 

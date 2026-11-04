@@ -17,10 +17,10 @@ g = s["g"]
 
 from edgar_warehouse.cli import main
 from edgar_warehouse.context import Context, ContextError
-from edgar_warehouse.mdm.clean import detail_lookups
-from edgar_warehouse.mdm.clean.evidence import decision
-from edgar_warehouse.mdm.clean.record_reads import RecordReader
-from edgar_warehouse.mdm.clean.store import Conflict
+from edgar_warehouse.mdm import detail_lookups
+from edgar_warehouse.mdm.evidence import decision
+from edgar_warehouse.mdm.record_reads import RecordReader
+from edgar_warehouse.mdm.store import Conflict
 
 runtime, owner, root = s["runtime"], g["owner"], s["root"]
 api, kind = g["normal"], g["KIND"]

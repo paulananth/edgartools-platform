@@ -14,7 +14,7 @@ Standing operator rules that override the handoff where they differ:
 ## Checklist
 
 - [x] Verify the source PR and set up the worktree: #780 is OPEN, a draft, head `744cba55`; worktree created off that head. 2026-10-02 09:00 ET
-- [x] Check that the deleted modules have no callers: on origin/main, `stage_daily_index_filing_loader`, `seed_universe_loader` and `mdm.clean.securities.publish` are used only by `loaders/__init__.py` and their own deleted tests; the other hits are docs and `.scratch` notes (git grep). 2026-10-02 09:02 ET
+- [x] Check that the deleted modules have no callers: on origin/main, `stage_daily_index_filing_loader`, `seed_universe_loader` and `mdm.securities.publish` are used only by `loaders/__init__.py` and their own deleted tests; the other hits are docs and `.scratch` notes (git grep). 2026-10-02 09:02 ET
 - [x] Run the new acceptance test (once locally and once in CI). It **fails** with `Conflict: Company policy has no source priority for: fixture.secondary`. The synthetic EMPLOYED_BY link comes from a source that the approved Company rules do not list.
   - Locally: 1 failed, 4 passed in 65 s; no leftover test container.
   - CI integration job: 1 failed, 290 passed in 137 s.

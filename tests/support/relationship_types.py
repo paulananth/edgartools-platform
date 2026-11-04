@@ -24,7 +24,7 @@ def codes_of(types: dict) -> list[dict]:
 
 def read_types(types: dict) -> dict:
     """The types as the Rust engine reads them from code rows; ValueError names a refusal."""
-    from edgar_warehouse.mdm.clean.evidence import KINDS
+    from edgar_warehouse.mdm.evidence import KINDS
     from edgar_warehouse.rules.source_engine import prepare_relationship_types
 
     return prepare_relationship_types(codes_of(types), sorted(KINDS))

@@ -6,7 +6,7 @@ import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.bookkeeping.clean.config import Blocked, validate
-from edgar_warehouse.mdm.clean.target_manifest import write_manifest
+from edgar_warehouse.mdm.target_manifest import write_manifest
 from edgar_warehouse.rules import files
 from tests.support.memory_journal import MemoryJournal
 from tests.support.sec_capture import document, key, person, write_capture

@@ -109,7 +109,7 @@ def filers(companies: dict[str, tuple[str | None, str | None]]) -> dict[str, tup
 def from_company(mdm_engine, keys: set[str]) -> dict[str, tuple[str | None, str | None]]:
     """Each company's SIC and place of incorporation, read from its Company master;
     a key with no master is left out."""
-    from edgar_warehouse.mdm.clean.consumer import ContractReader
+    from edgar_warehouse.mdm.consumer import ContractReader
     from edgar_warehouse.silver_writer.writer import MdmIds
 
     masters = {k: v for k, v in MdmIds(mdm_engine)(COMPANY_SOURCE, "company", keys).items() if v}

@@ -66,7 +66,7 @@ Each view and each of its columns has a `COMMENT ON` in plain English. Ticket
   projections in `mdm.batch.effects` with its `generation` and `created_at`.
   A kind with its own versioned table (with `valid_from`, `valid_to`,
   `from_generation`, `to_generation`) is read from that table instead.
-- The existing reader `ContractReader` (`edgar_warehouse/mdm/clean/consumer.py`)
+- The existing reader `ContractReader` (`edgar_warehouse/mdm/consumer.py`)
   already rebuilds an entity at any generation, follows `canonical_id`, and
   returns `field_provenance` (each field's winning source). The command reads
   every entity lookup through it (at the generation `--as-at` or `--as-of`

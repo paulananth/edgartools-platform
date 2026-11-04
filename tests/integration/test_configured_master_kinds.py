@@ -12,9 +12,9 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
-from edgar_warehouse.mdm.clean import catalog, store
+from edgar_warehouse.mdm import catalog, store
 from edgar_warehouse.rules import files
-from tests.integration import test_clean_mdm_postgres as core
+from tests.integration import test_mdm_postgres as core
 
 
 def test_populated_governed_upgrade_preserves_business_rows(database):
@@ -67,8 +67,8 @@ def test_invented_kind_is_merged_replayed_and_read_without_engine_edits(database
     program = '''
 import os
 from sqlalchemy import create_engine, text
-from tests.integration import test_clean_mdm_postgres as core
-from edgar_warehouse.mdm.clean.store import migrate, register_policy
+from tests.integration import test_mdm_postgres as core
+from edgar_warehouse.mdm.store import migrate, register_policy
 owner = create_engine(os.environ["KIND_TEST_OWNER_URL"])
 runtime = create_engine(os.environ["KIND_TEST_RUNTIME_URL"])
 try:

@@ -25,7 +25,7 @@ from types import SimpleNamespace
 from uuid import NAMESPACE_URL, uuid5
 
 
-from edgar_warehouse.mdm.clean import limits
+from edgar_warehouse.mdm import limits
 
 CHECK = "mdm.committed"
 STAGE = "mastering"
@@ -33,7 +33,7 @@ STAGE = "mastering"
 
 def runtime_files() -> list[Path]:
     """The Merge Stage is part of what a run pins for this profile."""
-    from edgar_warehouse.mdm.clean import connections, execution
+    from edgar_warehouse.mdm import connections, execution
 
     return [Path(getfile(connections)), *execution.runtime_files()]
 
@@ -55,8 +55,8 @@ class Lease:
 
 
 def _store(*, restricted: bool, envelope: dict | None = None):
-    from edgar_warehouse.mdm.clean.connections import engine_from_env
-    from edgar_warehouse.mdm.clean.store import Store
+    from edgar_warehouse.mdm.connections import engine_from_env
+    from edgar_warehouse.mdm.store import Store
 
     return Store(engine_from_env("MDM_DATABASE_URL", restricted=restricted),
                  lease_authority=None if envelope is None else Lease(envelope))
@@ -85,12 +85,12 @@ def _stage(envelope: dict, artifacts, folder: Path) -> tuple[Path, dict]:
 
 def receipt(store, manifest: dict, run_id: str, manifest_digest: str) -> bytes:
     """What MDM holds for the manifest's batches under this run, read back."""
-    from edgar_warehouse.mdm.clean.prepared_runs import receipt as prepared_receipt
+    from edgar_warehouse.mdm.prepared_runs import receipt as prepared_receipt
     return prepared_receipt(store,manifest,run_id,manifest_digest)
 
 
 def execute(envelope: dict, artifacts) -> dict:
-    from edgar_warehouse.mdm.clean.execution import execute_manifest
+    from edgar_warehouse.mdm.execution import execute_manifest
 
     if set(envelope["checks"]) != {CHECK}:
         raise ValueError(f"mdm.merge verifies {CHECK} only")

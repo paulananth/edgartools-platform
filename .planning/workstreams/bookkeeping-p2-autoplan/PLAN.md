@@ -1371,7 +1371,7 @@ external artifact include the upstream delta requirements.
 ## Claude limit-removal coordination and operator ruling
 
 Read-only active worktree inventory and fresh Claude consultation completed. Code
-paths checked: Claude-owned mdm/clean/{limits,merge,store}.py, migration019 and
+paths checked: Claude-owned mdm/{limits,merge,store}.py, migration019 and
 Ticket74/living-doc edits. Codex source/planning ownership remains separate. The
 operator explicitly chose current MDM scope, resolving the broader-cap question.
 Bookkeeping has no new total-work refusal; current protocol boundaries stay unchanged.

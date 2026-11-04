@@ -111,7 +111,7 @@
         ]
       },
       {
-        "path": "edgar_warehouse/mdm/clean/source_publications.py",
+        "path": "edgar_warehouse/mdm/source_publications.py",
         "lines": [
           95
         ]
@@ -306,7 +306,7 @@
         ]
       },
       {
-        "path": "edgar_warehouse/mdm/clean/source_publications.py",
+        "path": "edgar_warehouse/mdm/source_publications.py",
         "lines": [
           96
         ]
@@ -431,7 +431,7 @@
         ]
       },
       {
-        "path": "edgar_warehouse/mdm/clean/source_publications.py",
+        "path": "edgar_warehouse/mdm/source_publications.py",
         "lines": [
           103,
           275
@@ -681,7 +681,7 @@
         ]
       },
       {
-        "path": "edgar_warehouse/mdm/clean/store.py",
+        "path": "edgar_warehouse/mdm/store.py",
         "lines": [
           285
         ]
@@ -778,7 +778,7 @@
         ]
       },
       {
-        "path": "edgar_warehouse/mdm/clean/store.py",
+        "path": "edgar_warehouse/mdm/store.py",
         "lines": [
           285
         ]
@@ -1007,14 +1007,14 @@
     "model": "JournalMirror",
     "callers": [
       {
-        "path": "edgar_warehouse/mdm/clean/cli.py",
+        "path": "edgar_warehouse/mdm/commands.py",
         "lines": [
           20,
           501
         ]
       },
       {
-        "path": "edgar_warehouse/mdm/clean/publication.py",
+        "path": "edgar_warehouse/mdm/publication.py",
         "lines": [
           91,
           111

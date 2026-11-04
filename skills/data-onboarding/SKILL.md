@@ -391,7 +391,7 @@ never unload over the repo's `rules/`.
      none, the folder name. Log it either way.
 5. **A new domain.** If the records are a kind with no merge rules yet (no
    `rules/merge/kinds/<kind>.yaml`), say so. The kind must be in `KINDS`
-   (`edgar_warehouse/mdm/clean/evidence.py`); a kind that is not there
+   (`edgar_warehouse/mdm/evidence.py`); a kind that is not there
    needs the operator's ruling. Its written requirements (its spec under
    `docs/specs/`) are the requirements.
 
@@ -427,7 +427,7 @@ missing, go on and log it.
   codes before you map onto them.
 - `docs/specs/mdm/`: start with `source-evidence.md` and the policy
   spec of the kind you map onto.
-- MDM kinds: `KINDS` in `edgar_warehouse/mdm/clean/evidence.py`.
+- MDM kinds: `KINDS` in `edgar_warehouse/mdm/evidence.py`.
 - The fields MDM keeps for a kind: `edgar-warehouse context <kind> --search`
   shows a live record's fields; the kind's field list in code, or, for a kind
   with none, its consumer spec's projection. Use these names; a new field is
@@ -696,7 +696,7 @@ capture is enough for a source whose rules are already proved on real files
      types, order, refusals, counts and complete evidence. Preserve full
      publication checks and bounded streaming for numbered archive releases.
    - For a diagnostic normalization pass, use
-     `edgar_warehouse.mdm.clean.adapters.normalize` with `contract=`,
+     `edgar_warehouse.mdm.adapters.normalize` with `contract=`,
      `source_code=`, `policy=files.policy(root=<draft folder>)` and captured
      publication facts. This tests mapping and quality only; it does not
      prove installed parsing, leases, receipts or MDM commits.
@@ -731,7 +731,7 @@ capture is enough for a source whose rules are already proved on real files
    - `normalize` runs the quality checks. Each record shows what they did
      under `provenance.quality`, and an `exception` raises
      `UnsupportedRecord("quality_<id>")`. Report the counts
-     (`edgar_warehouse.mdm.clean.quality.counts(records, deferred)`) and up
+     (`edgar_warehouse.mdm.quality.counts(records, deferred)`) and up
      to 10 examples of each.
    - Report the run report checks too: per source, records and those set
      aside, the empty-value rate per field and the newest record's age
@@ -789,7 +789,7 @@ capture is enough for a source whose rules are already proved on real files
    Otherwise, write it as a pytest file that uses the MDM fixtures, and it gets
    its own disposable PostgreSQL 16:
    ```python
-   from tests.integration import test_clean_mdm_postgres as core  # its helpers
+   from tests.integration import test_mdm_postgres as core  # its helpers
    # `postgres` starts one postgres:16 container for the session and removes it
    # after; `database` is a migrated MDM database of its own for each test.
    from tests.integration.conftest import database, postgres  # noqa: F401

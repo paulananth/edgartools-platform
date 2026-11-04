@@ -27,9 +27,9 @@ CHECK = "mdm.published"
 
 
 def runtime_files() -> list[Path]:
-    from edgar_warehouse.mdm.clean import journal_delivery, payloads, publication, store
+    from edgar_warehouse.mdm import journal_delivery, payloads, publication, store
 
-    from edgar_warehouse.mdm.clean import execution
+    from edgar_warehouse.mdm import execution
     return [Path(m.__file__) for m in (journal_delivery, payloads, publication, store)] + execution.runtime_files()
 
 
@@ -43,14 +43,14 @@ def _keys(envelope: dict) -> tuple[str, str]:
 def _publisher(envelope: dict, artifacts, store, consumer: str):
     if consumer == "journal":
         from edgar_warehouse.change_journal.store import ChangeJournal, get_engine
-        from edgar_warehouse.mdm.clean.journal_delivery import JournalPublisher
+        from edgar_warehouse.mdm.journal_delivery import JournalPublisher
 
         body = artifacts.json(envelope["rules"])["body"]
         source = body.get("source") or body.get("pipeline")
         feed = envelope["keys"].get("feed") or (body.get("bronze") or {}).get("family") or source
         origin = {"run_id": envelope["claim"]["run_id"], "source": source, "feed": feed}
         return JournalPublisher(ChangeJournal(get_engine()), store.engine, origin)
-    from edgar_warehouse.mdm.clean.publication import LocalContractSink
+    from edgar_warehouse.mdm.publication import LocalContractSink
 
     location = urlparse(envelope["output"])
     if location.scheme != "file":
@@ -59,7 +59,7 @@ def _publisher(envelope: dict, artifacts, store, consumer: str):
 
 
 def receipt(store, batch_id: str, consumer: str) -> bytes:
-    from edgar_warehouse.mdm.clean.prepared_publication import receipt as prepared_receipt
+    from edgar_warehouse.mdm.prepared_publication import receipt as prepared_receipt
     return prepared_receipt(store, batch_id, consumer)
 
 
@@ -92,7 +92,7 @@ def verify(envelope: dict, artifacts) -> tuple[dict, list]:
         expected = receipt(store, batch_id, consumer)
         if json.loads(expected).get("unchanged"):
             return _same(envelope, artifacts, expected)
-        from edgar_warehouse.mdm.clean.prepared_publication import retained
+        from edgar_warehouse.mdm.prepared_publication import retained
         _, row = retained(store, batch_id, consumer)
         payload = json.loads(bytes(row["payload"]))
         publisher = _publisher(envelope, artifacts, store, consumer)

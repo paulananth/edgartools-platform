@@ -19,7 +19,7 @@
       "sha256": "7a209bf5f38a179e24b6a57988f9dfb2f0e27df204e95fe6cd19541a5b19a9de"
     },
     {
-      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/edgar_warehouse/mdm/clean/gleif_source.py",
+      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/edgar_warehouse/mdm/gleif_source.py",
       "sha256": "a4c6d548f36eae6a8332ae14036e3fc64260f04d9aabeaa88f5aef3dbd9b7c0f"
     },
     {
@@ -27,11 +27,11 @@
       "sha256": "87898c61aa6b1ffe2432b97bcd1ce05f4880b2f88e626c23fb42ef105e342278"
     },
     {
-      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/edgar_warehouse/mdm/clean/store.py",
+      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/edgar_warehouse/mdm/store.py",
       "sha256": "53cc68796257299f2e0b94a86d67422971de169a99a84de20d95f4d6c3730651"
     },
     {
-      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/edgar_warehouse/mdm/clean/evidence.py",
+      "path": "/private/tmp/edgartools-platform-codex-streamed-json-20261005/edgar_warehouse/mdm/evidence.py",
       "sha256": "319e47cc010432da81665bfaad37e760fc99c07d60185c1076308cb4f9a46d03"
     },
     {

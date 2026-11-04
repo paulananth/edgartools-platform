@@ -9,8 +9,8 @@ import zipfile
 
 import pytest
 
-from edgar_warehouse.mdm.clean.gleif_publication import attest_publication
-from edgar_warehouse.mdm.clean.gleif_publication import FORMATS
+from edgar_warehouse.mdm.gleif_publication import attest_publication
+from edgar_warehouse.mdm.gleif_publication import FORMATS
 from edgar_warehouse.rules.source_engine import SourceRejected
 from edgar_warehouse.workers.source_attestation import attest_zip
 from tests.engine.test_gleif_reading_contracts import MEMBERS, configured, archive, records
@@ -100,10 +100,10 @@ def test_generic_callback_failure_identity(failure):
 def test_retired_inspector_and_reader_have_no_runtime_entry_point():
     import importlib.util
 
-    from edgar_warehouse.mdm.clean import gleif_publication
+    from edgar_warehouse.mdm import gleif_publication
     assert not hasattr(gleif_publication, "inspect_archive")
     for retired in ("gleif_source", "native_consumption", "source_publications"):
-        assert importlib.util.find_spec(f"edgar_warehouse.mdm.clean.{retired}") is None
+        assert importlib.util.find_spec(f"edgar_warehouse.mdm.{retired}") is None
 
 
 @pytest.mark.parametrize("fault", ["crc", "expanded_length", "second_member", "encrypted"])

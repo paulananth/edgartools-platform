@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from edgar_warehouse.mdm.clean import sec_company, gleif_publication
-from edgar_warehouse.mdm.clean.store import canonical, digest
+from edgar_warehouse.mdm import sec_company, gleif_publication
+from edgar_warehouse.mdm.store import canonical, digest
 from edgar_warehouse.rules import files
 from tests.mdm import policy_layers
 from tests.support.company_fields import before_ticket_129

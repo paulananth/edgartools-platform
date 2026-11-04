@@ -15,7 +15,7 @@ document; the [release gates](#release-gates) say what must be true first.
 Read against: `origin/main` `7467b114` and MDM's
 `origin/codex/clean-mdm-integration` `a19463be9be7` (read-only). Where this
 spec cites an MDM migration it pins the sha256 that
-`edgar_warehouse/mdm/clean/store.py` records in `mdm.migration.checksum`,
+`edgar_warehouse/mdm/store.py` records in `mdm.migration.checksum`,
 so drift between this text and the installed table is visible by one
 `SELECT`.
 
@@ -25,7 +25,7 @@ Legacy MDM (`edgar_warehouse/mdm/` outside `clean/`, ADR 0007's
 `mdm_change_log`/`mdm_relationship_instance`/`mdm_entity`) is being
 decommissioned. **Nothing in this specification targets legacy MDM.** There
 is one MDM and one set of MDM tables: MDM's `mdm` schema
-(`edgar_warehouse/mdm/clean/`, `docs/specs/mdm/`). This spec points at
+(`edgar_warehouse/mdm/`, `docs/specs/mdm/`). This spec points at
 those tables by name and defining migration and never restates their DDL.
 `mdm` is MDM's schema name, chosen to sit beside legacy until legacy
 is dropped; it is not a second MDM.

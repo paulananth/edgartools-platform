@@ -1354,7 +1354,7 @@ category, mapped quality, names. Empty falsey containers yield no names;
 truthy non-object containers refuse. Skipped records must not evaluate name
 counts or registration. Qualification disables custom steps and includes
 paired faults that prove refusal order. Holder aggregation and
-cascade decisions remain in `edgar_warehouse/mdm/clean/name_count.py`, which
+cascade decisions remain in `edgar_warehouse/mdm/name_count.py`, which
 Name Count and matching still import. Whole-source construction (#901) and
 the installed population through the earlier in-process bundles (#905, #907)
 are qualified; the `mastering` target's installed proof masters the 6,414

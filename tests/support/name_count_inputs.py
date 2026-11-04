@@ -33,7 +33,7 @@ def gleif_archive(tmp_path, records=()):
 def gleif_reading(folder, archive, wanted, count):
     """The Golden Copy through its configured complete reading, as the `source.read` worker writes it."""
     from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-    from edgar_warehouse.mdm.clean.name_count_file import GLEIF_READING
+    from edgar_warehouse.mdm.name_count_file import GLEIF_READING
     from edgar_warehouse.rules import files
     from edgar_warehouse.workers import source_read
 

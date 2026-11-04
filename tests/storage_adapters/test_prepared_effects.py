@@ -55,8 +55,8 @@ def count(adapter, table):
 
 
 def test_native_connection_uses_configured_driver_and_restricted_principal(adapters, storage_api, monkeypatch):
-    from edgar_warehouse.mdm.clean.connections import engine_from_env
-    from edgar_warehouse.mdm.clean.store import storage_adapter as native_storage_adapter
+    from edgar_warehouse.mdm.connections import engine_from_env
+    from edgar_warehouse.mdm.store import storage_adapter as native_storage_adapter
 
     owner, runtime, role = adapters
     selected = runtime.engine.dialect.name
@@ -97,14 +97,14 @@ def native_registry_database(database_factory):
 
 def test_native_policy_registration_uses_the_selected_engine_and_transaction(native_registry_database, storage_api):
     """Exercise the actual native registration caller, not an opaque effect."""
-    from edgar_warehouse.mdm.clean.store import current_reading, reading_at, register_policy
-    from edgar_warehouse.mdm.clean.merge import MergeStage
+    from edgar_warehouse.mdm.store import current_reading, reading_at, register_policy
+    from edgar_warehouse.mdm.merge import MergeStage
     from tests.support.rules_authority import register_dataset
 
     admin, runtime, role = native_registry_database
     metadata, tables = storage_api.native_registry_model(admin.dialect.name)
     if admin.dialect.name == "mysql":
-        from edgar_warehouse.mdm.clean.store import migrate
+        from edgar_warehouse.mdm.store import migrate
         migrate(admin,application_role=role)
     with admin.begin() as conn:
         if metadata.schema:
@@ -927,13 +927,13 @@ def test_shared_identity_survivorship_and_links_prepare_the_same_storage_input(
     This proves the prepared-effect seam, not a replacement of the native
     runtime's Rules/Bookkeeping registration and source-activation workflow.
     """
-    from edgar_warehouse.mdm.clean.evidence import PROFILE_KINDS, assertion
-    from edgar_warehouse.mdm.clean.identity import replay
-    from edgar_warehouse.mdm.clean.relationships import project, types_of
-    from edgar_warehouse.mdm.clean.store import canonical, digest
-    from edgar_warehouse.mdm.clean.survivorship import current_claims
+    from edgar_warehouse.mdm.evidence import PROFILE_KINDS, assertion
+    from edgar_warehouse.mdm.identity import replay
+    from edgar_warehouse.mdm.relationships import project, types_of
+    from edgar_warehouse.mdm.store import canonical, digest
+    from edgar_warehouse.mdm.survivorship import current_claims
     from edgar_warehouse.rules.source_engine import prepare_master_records
-    from tests.integration.test_clean_mdm_postgres import identity_and_binding
+    from tests.integration.test_mdm_postgres import identity_and_binding
     from tests.support.fresh_mastering import AS_OF, cohort
 
     _, runtime, _ = adapters

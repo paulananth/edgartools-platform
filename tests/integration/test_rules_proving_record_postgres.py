@@ -5,7 +5,7 @@ import pytest
 
 from edgar_warehouse.rules import files, proving
 from edgar_warehouse.rules.db import Rules
-from edgar_warehouse.mdm.clean.store import digest
+from edgar_warehouse.mdm.store import digest
 from tests.integration.test_configured_bookkeeping_postgres import databases  # noqa: F401
 
 PERSON = "sec.submissions.person"
