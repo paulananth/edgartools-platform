@@ -30,12 +30,13 @@ Priority: 24, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md)
   - Built (2026-11-04 06:23 ET): a part may carry `longest` (a length range), `rules/identifiers/ticker.yaml` v1 (1 to 9 letters or digits), pinned in `tests/mdm/test_identifier_types.py`; the new test failed before (`BRKB` refused as `invalid_ticker`) and passes; identifier, architecture and mapdoc tests pass (313). Still open: dropping the separators with `regex_replace` in the OpenFIGI and Form 4 record rules, and the match count
 - [ ] ~~The class-title primitive: a class title binds to that letter's Security~~ not needed for 4 of 1,877 issuers (those find several share classes and wait); decide after the ticker route is proved
 
-- [ ] GoF consult on the matching code
-- [ ] The Form 4 class recipe (deferred here from 130) and the Dataset Contract `sec.ownership.security.v1`
-- [ ] The matching rule (a new versioned primitive): a class title binds to that letter's Security
-- [ ] That attachment does not add a Security (no mint; Security count unchanged)
-- [ ] Plain "Common Stock" binds with one common-stock share-class FIGI, waits with two or more
-- [ ] Nothing matching waits for review
+- [x] GoF consult (2026-11-04 07:20 ET): no matching code changes; the route is configuration. The one code change, an identifier part's length range in `identifier_types.py`, was consulted: leave the loader, add one optional field
+- [x] The Dataset Contract `sec.ownership.security.v1` (2026-11-04 07:20 ET, `rules/sources/sec.ownership/source.yaml`): one record per issuer CIK, symbol and class title; the symbol is a `ticker` cross-reference, lookup only; no field. The class recipe is replaced by the ticker route
+- [x] The matching rule (2026-11-04 07:20 ET): not a new primitive; `form4-security-ticker` (`identifier_match@1` on `ticker`, `on_no_match: wait`, `on_several: review`) in `rules/merge/kinds/security.yaml`, and the contract `ticker` claims forward 3 (616 of 154,511 OpenFIGI tickers sit on more than one CUSIP, at most 3). Verified by `tests/integration/test_form4_security_ticker.py`: with the rule off, 2 of its 3 tests fail
+- [x] That attachment does not add a Security (2026-11-04 07:20 ET): a symbol no Security holds waits and the Security count is unchanged; a found one adds nothing to the Security's identifiers (`test_a_symbol_no_security_holds_waits_and_creates_no_security`, `test_a_filed_symbol_finds_the_one_security_holding_its_ticker_and_makes_nothing`)
+- [ ] ~~Plain "Common Stock" binds with one common-stock share-class FIGI, waits with two or more~~ deferred with the class-title primitive: the symbol, not the title, finds the Security; a symbol reaching several Securities goes to review
+- [x] Nothing matching waits (2026-11-04 07:20 ET): no Security holds the ticker, the record stays unbound and no Security is made (same test); several Securities hold it, a review names the ticker (`test_a_reused_ticker_held_by_two_securities_goes_to_review`)
+- [ ] The Form 4 Security record from the filings: a `security_record` table in `ownership-xml.yaml` and `ownership-sgml.yaml` (issuer CIK, symbol with separators dropped by `regex_replace`, class title), one record per key over the delivery, and its prepare and merge steps in the ownership bookkeeping target
 - [ ] `ownership_line`'s Security link through the new source record
 - [ ] Proving Run on a disposable PostgreSQL 16, counts per kind of evidence
 - [ ] Switch-on: standing approval given (operator, 2026-11-04 07:00 ET: "switch on for form 4 keep it standing approval for ticket 190 191"), so no question is asked; it is switched on after the limited test passes and its counts are recorded here
