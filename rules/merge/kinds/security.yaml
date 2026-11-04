@@ -22,6 +22,8 @@ defaults:
   - openfigi.security.v3
   - sec.thirteenf.securities.v1
   - sec.nport.security.v2
+  # Last, and it states no field: the Form 4 symbol only finds a Security (ticket 24).
+  - sec.ownership.security.v1
   allow_unknown_effective: true
 rules:
 # Tier A: the issued CUSIP. A record joins the one Security that holds its
@@ -168,6 +170,28 @@ rules:
   - primitive: identifier_cardinality@1
     args:
       namespace: figi
+# "A Form 4's symbol finds its Security" (ticket 24; operator, 2026-11-04, "Yes, Form 4 route
+# only"): the trading symbol an issuer files with an insider filing, a cross-reference, finds
+# the Security OpenFIGI gave that ticker to. The filing does not issue tickers, so the value is
+# never that Security's: the rule creates nothing, merges nothing, waits when no Security holds
+# the ticker and sends several Securities (a reused ticker) to review. It needs OpenFIGI first.
+- rule_id: form4-security-ticker
+  version: 2026-11-04.symbol-finds-the-security
+  family: binding
+  source: sec.ownership.security.v1
+  applies_to_verdict: security
+  emits:
+  - bind
+  on_no_match: wait
+  on_several: review
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: ticker
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: ticker
+      max_per_10k: 5
 identifiers:
   cusip:
     authority: CUSIP Global Services (ANSI X9.6)
@@ -293,16 +317,20 @@ identifiers:
       max_per_10k: 5
   # A listing's trading symbol (ticket 24; operator, 2026-11-04, "Yes, Form 4 route only"):
   # OpenFIGI issues it, only the Form 4 rule matches by it, it never merges two
-  # Securities. A ticker is reused over the years, so no reverse limit: a rule on
-  # it sends several Securities to review.
+  # Securities. A ticker is reused over the years: a rule on it sends several
+  # Securities to review.
   ticker:
     authority: the listing's trading symbol, as OpenFIGI states it
     sources:
     - openfigi.security.v3
     # rules/identifiers/ticker.yaml (ticket 24): one to nine letters or digits, upper-cased.
     normalizer: normalize_identifier@ticker-v1
+    # A ticker is reused: in the 2026 Q2 OpenFIGI capture 616 of 154,511 tickers (0.4%) sit on
+    # more than one CUSIP, at most 3. A ticker may lead to 3 Securities without a review of
+    # its own; the Form 4 rule sends a symbol that reaches several to review, never merges.
+    # A Security may hold several tickers (one per listing), so no reverse limit.
     claim:
-      forward: null
+      forward: 3
       reverse: null
     compatibility:
       field: kind

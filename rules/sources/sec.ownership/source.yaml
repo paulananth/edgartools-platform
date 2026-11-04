@@ -94,6 +94,55 @@ bookkeeping:
           checks: [input.hash, output.receipt, journal.recorded]
       checks: [manifest.hash, work.accounting, journal.delivered]
 dataset_contracts:
+  # The issuer's security a Form 3, 4 or 5 names (ticket 24; operator, 2026-11-04, "Yes, Form 4
+  # route only"): one record per issuer CIK, trading symbol and class title. It files the
+  # symbol as a cross-reference, lookup only: it finds the Security OpenFIGI gave that ticker
+  # to, is never its identifier, and creates nothing (the matching rule waits on a miss).
+  sec.ownership.security.v1:
+    contract:
+      provider: SEC
+      family: filing_artifact
+      schema_version: sec-ownership-security-v1
+      record_key: one security an issuer names (the issuer CIK, the trading symbol it files, the class title)
+      publication_key: the filing's accession number
+      effective_time: the filing's period of report
+      semantics: patch
+      completeness: the securities one filing names; no retirement by absence
+      # A symbol that is not a ticker, or none, sets the record aside and never stops the run.
+      nonblocking_deferred_reasons:
+      - invalid_ticker
+      - missing_record_identity
+      adapter:
+        reading:
+          source: sec.ownership
+          read:
+            format: json
+            limits: {max_bytes: 33554432, max_records: 1}
+            assertions:
+            - test: {test: {path: ., kind: object}}
+              reason: Mapped input must be an object
+            tables:
+              mapped:
+                each: .
+                columns:
+                  fields:
+                    object:
+                      fields: {}
+                  matching:
+                    object:
+                      fields: {}
+        version: sec-ownership-security-v1
+        retain_deferred: true
+        source_record_provenance: true
+        kind: security
+        record_key:
+        - issuer_cik
+        - symbol
+        - security_title
+        cross_references:
+          ticker: symbol
+        cross_reference_formats:
+          ticker: ticker
   sec.ownership.reporting_owner.v1:
     contract:
       provider: SEC
