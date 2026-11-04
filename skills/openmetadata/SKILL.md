@@ -441,13 +441,21 @@ different jobs:
   runs an installed OpenMetadata Application, and
   `/api/v1/governance/workflowDefinitions/name/{fqn}/trigger` starts a governance
   workflow. Neither route makes a catalog `Pipeline` runnable.
-- OpenMetadata also has native Data Contracts. On 2.0.2,
-  `POST /api/v1/dataContracts/validate` checks a draft request against existing
-  entity metadata without creating a contract. This checks the contract shape and
-  metadata constraints; it is not a test over stored rows or a pipeline run. The
-  persisted contract's `POST /api/v1/dataContracts/{id}/validate` is a separate
-  operation. The current Rules catalog plan does not publish Data Contracts, and
-  contract validation does not run a source pipeline or Bookkeeping operation.
+- OpenMetadata also has native Data Contracts. On the local 2.0.2 server,
+  `POST /api/v1/dataContracts/validate` validated a draft request against
+  existing entity metadata without creating a contract. This checks the request
+  and metadata; it does not run tests against stored rows. A persisted contract's
+  `POST /api/v1/dataContracts/{id}/validate` is a different operation: current
+  2.0.x documentation says it checks schema and semantics and, when quality
+  expectations are attached, triggers the contract's test-suite pipeline. That
+  behavior has not been exercised on this 2.0.2 instance. The
+  `DataContractValidationApplication` is installed and enabled locally with a
+  daily schedule, but there are no contracts to validate. The Rules catalog
+  currently has no Data Contracts.
+- A contract does not make every policy enforceable. The 2.0.x contract guide
+  says security, terms of use and SLA values document expectations; security and
+  SLA are not evaluated by a contract run. Do not present them as access control
+  or operational enforcement.
 
 Before calling OpenMetadata a plug-and-play execution or operations control
 plane, check the installed version's API schema for a trigger on the exact
@@ -457,12 +465,16 @@ Require readback of both run status and verified output. A `Pipeline` entity,
 task list, lineage edge, or successful catalog publish does not meet that bar.
 
 The local `infra/openmetadata/docker-compose.yml` has no ingestion runner and
-sets `PIPELINE_SERVICE_CLIENT_ENABLED` to false. In this deployment
-OpenMetadata is a catalog projection; Bookkeeping retains data-operation run
-ownership. Making OpenMetadata trigger and govern those operations requires an
-orchestrator or a control-plane integration and is not a no-build catalog
-configuration. Do not imply that changing catalog metadata changes the
-execution path.
+sets `PIPELINE_SERVICE_CLIENT_ENABLED` to false. Live API readback also finds no
+ingestion pipelines and no connection on the `CustomDatabase` service. The
+installed Data Contract Validation app reports `supportsIngestionRunner=false`;
+there are 52 configured quality cases but zero latest results. OpenMetadata's
+no-code test UI still needs a usable source connection and workflow executor;
+catalog cases alone are not run tests. In this deployment OpenMetadata is a
+catalog projection; Bookkeeping retains data-operation run ownership. Making
+OpenMetadata trigger and govern those operations requires an orchestrator or a
+control-plane integration and is not a no-build catalog configuration. Do not
+imply that changing catalog metadata changes the execution path.
 
 The native schema does not by itself prove a UI can render separate control
 lanes, expandable stage detail or shared-step navigation. Preserve control-link
@@ -521,6 +533,9 @@ receipt and any additional qualification in the task record, not this skill.
 - [Domains](https://docs.open-metadata.org/v2.0.x/how-to-guides/data-marketplace/domains)
 - [Data products](https://docs.open-metadata.org/v2.0.x/how-to-guides/data-marketplace/data-products)
 - [Classification](https://docs.open-metadata.org/v2.0.x/how-to-guides/data-governance/classification)
+- [Data Contracts: validation and enforcement limits](https://docs.open-metadata.org/v2.0.x/how-to-guides/data-contracts/spec)
+- [Ingestion execution options](https://docs.open-metadata.org/v2.0.x/deployment/ingestion)
+- [Data Quality](https://docs.open-metadata.org/v2.0.x/how-to-guides/data-quality-observability/quality)
 - [Versioned create schemas](https://github.com/open-metadata/OpenMetadata/tree/2.0.2-release/openmetadata-spec/src/main/resources/json/schema/api)
 - [Lineage schema](https://github.com/open-metadata/OpenMetadata/blob/2.0.2-release/openmetadata-spec/src/main/resources/json/schema/type/entityLineage.json)
 - [Column-tag readback implementation](https://github.com/open-metadata/OpenMetadata/blob/2.0.2-release/openmetadata-service/src/main/java/org/openmetadata/service/jdbi3/TableRepository.java)
