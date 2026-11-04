@@ -276,3 +276,14 @@ one rebuilds both derived tables for every company: both are snapshots, and the
 writer removes any row a delivery lacks, so a delivery of some companies would
 remove the rest. Rebuilding only the changed companies needs a writer that
 replaces by partition (`company_key`); that is not built.
+
+## RDM code sets and their sources
+
+Reloaded from `rules/reference/published/` by `scripts/dev/reload_rdm.py` (ticket 189); the words of each are in
+`WORDS` there.
+
+| Code set | Source | Ticket |
+|---|---|---|
+| `financial-line-items` | internal: the line-item map `rules/sources/sec.company-facts/line-items.yaml` and company-financials research 01 | 46 |
+| `corporate-tax-rates` | OECD Corporate Tax Statistics, dataflow `OECD.CTP.TPS` `DSD_TAX_CIT@DF_CIT` 2.0 (combined central and sub-central statutory rate) | 133 |
+| `sec-sic-codes` | the SEC's company submissions: 407 SIC codes, each with its one description; `0000` kept invalid | 129 |

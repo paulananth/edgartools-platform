@@ -493,3 +493,14 @@ Prove a Security contract or merge rule at the level [Choose the cheapest proof]
 OpenFIGI first was switched on from the completed figi-full store (2026-10-24). CUSIP answers created the Securities. ISIN bundle 1 held the new case, one CUSIP offered two ISINs that share a FIGI. Bundles 2–8 stayed unchecked. Its ISIN target reads the complete CUSIP runs' `figi_ids`, so those CUSIP runs finish first in the same store.
 - Report counts only: Securities, held back by reason, identifiers on two
   Securities. Never an identifier or a name from the data.
+
+## RDM code sets and their sources
+
+Reloaded from `rules/reference/published/` by `scripts/dev/reload_rdm.py` (ticket 189); the words of each are in
+`WORDS` there.
+
+| Code set | Source | Ticket |
+|---|---|---|
+| `openfigi-country-composite` | OpenFIGI mapping answers, measured on the local capture: the countries whose ISINs come back with the country's own composite exchange code | 120 |
+| `iso-10383-mic` | ISO 10383 market identifier codes (every active MIC, ISO's market name as label), with OpenFIGI's exchange-code answers as a crosswalk for 246 MICs | 138 |
+| `nport-filed-currencies` | the 80 three-letter currency codes the N-PORT 2026 Q2 holdings file, ISO 4217 names as labels | 138 |
