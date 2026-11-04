@@ -505,6 +505,12 @@ an executable OpenMetadata definition or connect an external executor that
 actually runs the rule, then read back real results. Do not relabel `Other` as a
 database platform to make the cases appear executable.
 
+Keep a correction distinct from a test. Do not publish a configured correction
+as an OpenMetadata test case unless it is itself an executable assertion;
+otherwise the Test Cases surface can imply that the correction runs or has a
+pass/fail result. Keep the correction in its owning Rules configuration and
+describe it as a planned action when projecting it as metadata.
+
 A result is `POST /api/v1/dataQuality/testCases/testCaseResults/{caseFQN}` with
 `timestamp`, `testCaseStatus` (`Success` or `Failed`), `testResultValue`,
 `passedRows` and `failedRows`; read it as `testCaseResult` with
