@@ -35,7 +35,7 @@ ROWS = [
 
 
 def test_the_reading_columns_are_the_specs():
-    reading = set(files.load(FOLDER / "custody-csv.yaml")["read"]["tables"]["custody"]["columns"])
+    reading = set(files.load(FOLDER / "custody-csv.yaml")["read"]["tables"]["custody_facts"]["columns"])
     columns = {c["name"] for c in silver_spec.check(files.load(FOLDER / "silver-custody.yaml"))["columns"]}
     assert columns == reading  # the writer refuses a field the spec does not name
 
