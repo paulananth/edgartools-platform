@@ -202,6 +202,13 @@ def registration_authority(export: dict, code: str, contract: dict) -> dict:
     }
 
 
+def masters_nothing(kind: str, body: dict) -> bool:
+    """A source with no Dataset Contract, no `mdm` target and no acquisition maps one to one into silver:
+    there is nothing to prove (operator, 2026-11-03: "There is nothing to prove in silver")."""
+    targets = ((body.get("bookkeeping") or {}).get("targets") or {})
+    return kind == "source" and "dataset_contracts" not in body and "acquisition" not in body and "mdm" not in targets
+
+
 def proof_holds(export: dict) -> bool:
     """A version's test evidence stands: its proof passed, or the operator
     overruled a failing one when approving this exact version."""

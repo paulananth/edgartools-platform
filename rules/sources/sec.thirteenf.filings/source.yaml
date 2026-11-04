@@ -13,8 +13,6 @@ execution: {profile: source.read, workers: 1, max_artifacts: 512}
 read:
   format: json
   limits: {max_bytes: 33554432, max_records: 100000}
-  context:
-    cik: {type: integer}
   assertions:
   - test: {test: {path: ., kind: object}}
     reason: A submissions document must be a JSON object
@@ -56,7 +54,7 @@ read:
         accession_number:
           text: {path: accession_number, trim: false, null_if: [""], coerce: python}
         cik:
-          context: {name: cik}
+          text: {path: cik, from: document, trim: false, null_if: [""]}
         form:
           text: {path: form, trim: false, null_if: [""], coerce: python}
         filing_date:
@@ -81,7 +79,6 @@ bookkeeping:
           units: {slices: {bytes: 8388608}}
           input:
             files: "*/submissions/sec/cik=*/main/*"
-            context: {cik: {segment: cik, as: integer}}
         # The managers' Companies are mastered by sec.company, which runs first.
         - name: land
           operation: silver.land
