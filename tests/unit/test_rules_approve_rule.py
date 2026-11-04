@@ -86,6 +86,18 @@ def test_the_command_switches_one_rule_on(root, capsys):
 IDENTIFIER_RULE = "openfigi-security-isin"
 
 
+NAME_RULE_NOT_ON = "sec-gleif-name-declared-only"
+
+
+def declare_name_rule_not_on(root):
+    """A name rule that is declared and not switched on: every live name rule is switched on now."""
+    path = root / "merge" / "kinds" / "company.yaml"
+    text = path.read_text()
+    start = text.index("- rule_id: sec-gleif-name-postal")
+    end = text.index("\n- rule_id: ", start + 5) + 1
+    path.write_text(text[:end] + text[start:end].replace("sec-gleif-name-postal", NAME_RULE_NOT_ON) + text[end:])
+
+
 @pytest.fixture
 def identifier_root(tmp_path):
     """A copy of the rules with the identifier rule off and the ISIN contract not yet verified."""
@@ -153,13 +165,14 @@ def test_an_identifier_rule_is_switched_on_with_its_proving_run(identifier_root)
 
 def test_an_identifier_rule_needs_its_report_and_a_contract_verified_once(identifier_root, tmp_path):
     root, report = identifier_root
+    declare_name_rule_not_on(root)
     unchanged = {p: p.read_text() for p in ((root / "merge" / "policy.yaml"),
                                             (root / "merge" / "kinds" / "security.yaml"))}
     with pytest.raises(files.RulesFileError, match="not a file"):
         files.approve_identifier_rule(IDENTIFIER_RULE, proof=tmp_path / "none.json", reason="r", by="Operator",
                                       words="yes", at=AT, root=root)
     with pytest.raises(files.RulesFileError, match="does not join on an identifier"):
-        files.approve_identifier_rule("sec-gleif-name-country", proof=report, reason="r", by="Operator", words="yes",
+        files.approve_identifier_rule(NAME_RULE_NOT_ON, proof=report, reason="r", by="Operator", words="yes",
                                       at=AT, root=root)
     with pytest.raises(files.RulesFileError, match="exact words"):
         files.approve_identifier_rule(IDENTIFIER_RULE, proof=report, reason="r", by="Operator", words=" ",

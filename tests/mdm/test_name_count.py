@@ -174,7 +174,7 @@ class TestTheCascade:
         answer = found["cascade"]["assignments"]["0000320193"]
         assert (answer["lei"], answer["pass"], answer["via"]) == ("HWUPKR0MPOU8FGXBT394", "name and city or postcode", "legal name")
         assert answer["flags"] == ["name held by another candidate"]
-        assert [p["pass"] for p in found["cascade"]["passes"]] == ["name and city or postcode", "name and country", "name alone"]
+        assert [p["pass"] for p in found["cascade"]["passes"]] == ["name and city or postcode"]
 
     def test_an_entity_the_rules_find_ineligible_never_binds(self):
         found = self.run([self.native("HWUPKR0MPOU8FGXBT394", "Apple Inc.", "1 Apple Park Way", status="INACTIVE")])

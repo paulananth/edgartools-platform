@@ -419,9 +419,29 @@ def without_pass_business_names(policy: dict) -> dict:
     return body
 
 
+def without_name_only_passes_deleted(policy: dict) -> dict:
+    """Operator, 2026-11-03: "delete p6 and p7". The passes "name and country" (2 labelled pairs that read as a
+    namesake) and "name alone" (a different entity among 14 labels) deleted. Peeled, they stand again after
+    "name and city or postcode", which they equal but for their name and the parts compared."""
+    body = _copy(policy)
+    rules = body["kinds"]["company"]["rules"]
+    at = next(i for i, r in enumerate(rules) if r["rule_id"] == "sec-gleif-name-city-or-postcode")
+    restored = []
+    for rule_id, label, parts in (("sec-gleif-name-country", "name and country", []),
+                                  ("sec-gleif-name-alone", "name alone", None)):
+        rule = _copy(rules[at])
+        rule["rule_id"] = rule_id
+        rule["when"][0]["args"].update({"pass": label, "compare": parts})
+        restored.append(rule)
+    rules[at + 1:at + 1] = restored
+    return body
+
+
 # Newest first: each layer, and Company's policy digest with it and every
 # layer after it still on.
 LAYERS = [
+    # The two name-only passes deleted: "delete p6 and p7" (2026-11-03, ticket 09).
+    (without_name_only_passes_deleted, "1df4a51dff797cb4d0bb92832e0727f1558ab37534e2ca6d2620259ae92cc05c"),
     # Cascade rules named by what they compare: "yes rename all four" (2026-11-03, ticket 09).
     (without_pass_business_names, "cc088e7403557025320b9d86bb2abc0486acb830de938639c32f392295123ce9"),
     # The capacity `other` on EMPLOYED_BY: "Capacity `other` on EMPLOYED_BY (Recommended)" (2026-11-03, ticket 182).

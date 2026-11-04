@@ -344,9 +344,10 @@ rules:
 # were deleted (operator, 2026-10-30: "do not use p1 or p4, p5 can match on
 # postel code"): a pair either matched agrees on the city or the postcode, so
 # it takes their links, the 4 flagged ones included ("Link them
-# (Recommended)"). "Name and country" is held on 2 labelled pairs that read as
-# a parent or namesake; "name alone" stays off (a different entity among its
-# labels). "Name, street and postcode" and "name, street and city" were deleted
+# (Recommended)"). "Name and country" and "name alone" were deleted (operator,
+# 2026-11-03: "delete p6 and p7"): the first rested on 2 labelled pairs that
+# read as a namesake, the second had a different entity among its 14 labels.
+# "Name, street and postcode" and "name, street and city" were deleted
 # (ticket 09; operator, 2026-10-17: "Delete both"): too few new links to prove
 # (8 and 22 of 52 needed); a pair either matched shares the postcode or the
 # city, which "name and city or postcode" now compares. Each pass is named by
@@ -367,64 +368,6 @@ rules:
       compare:
       - - city
         - postcode
-      over_shared: 25
-      refused_flags: []
-      sec_normalizer: normalize_text@sec-legal-form-kept-v1
-      gleif_normalizer: normalize_text@legal-form-kept-v1
-  - primitive: gleif_entity_eligible@1
-    args:
-      categories:
-      - GENERAL
-      entity_statuses:
-      - ACTIVE
-      refused_registration_statuses:
-      - ANNULLED
-      - DUPLICATE
-  - primitive: holds_no_other_lei@1
-    args: {}
-- rule_id: sec-gleif-name-country
-  version: 2026-11-03.named-by-what-it-compares
-  family: name_binding
-  source: gleif.level1.v1
-  holder_source: sec.company.v1
-  applies_to_verdict: company
-  emits:
-  - bind
-  on_no_match: wait
-  when:
-  - primitive: cascade_pass@1
-    args:
-      pass: name and country
-      compare: []
-      over_shared: 25
-      refused_flags: []
-      sec_normalizer: normalize_text@sec-legal-form-kept-v1
-      gleif_normalizer: normalize_text@legal-form-kept-v1
-  - primitive: gleif_entity_eligible@1
-    args:
-      categories:
-      - GENERAL
-      entity_statuses:
-      - ACTIVE
-      refused_registration_statuses:
-      - ANNULLED
-      - DUPLICATE
-  - primitive: holds_no_other_lei@1
-    args: {}
-- rule_id: sec-gleif-name-alone
-  version: 2026-11-03.named-by-what-it-compares
-  family: name_binding
-  source: gleif.level1.v1
-  holder_source: sec.company.v1
-  applies_to_verdict: company
-  emits:
-  - bind
-  on_no_match: wait
-  when:
-  - primitive: cascade_pass@1
-    args:
-      pass: name alone
-      compare: null
       over_shared: 25
       refused_flags: []
       sec_normalizer: normalize_text@sec-legal-form-kept-v1
