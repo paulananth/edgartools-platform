@@ -3,7 +3,7 @@
 Priority: 70, tier 5, needs SEC requests or AWS. Map: [Rebuild priorities](../map.md). Moved from `.scratch/release-readiness/issues/103-backfill-mega-cap-missing-bronze-objects.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
 Type: task
-Status: open
+Status: resolved (2026-11-03 18:56 ET), obsolete: see Closing
 
 ## Question
 
@@ -47,3 +47,12 @@ An operator decision is made and, if a backfill is chosen, it's run and
 verified for all 7 CIKs (re-diff each CIK's `sec_raw_object` storage paths
 against a fresh S3 listing, expect 0 missing) — mirroring Ticket 90's own
 verification method.
+
+## Closing
+
+Closed 2026-11-03 18:56 ET as obsolete. It repairs rows of the old warehouse (`sec_raw_object`) that point at keys missing from its S3 bronze bucket. The rebuild replaced that pipeline (operator, 2026-09-26: no more production or legacy; 2026-11-03: no production Snowflake now), `targeted-resync` is no longer a command in `edgar_warehouse`, and the rebuilt platform captures SEC files as additive, immutable bronze with a receipt each, so no row can point at a key never written.
+
+## Checklist
+
+- [ ] ~~Backfill the missing bronze objects~~ not needed: the old pipeline is retired and the command is gone
+- [x] Learning → skill: none (2026-11-03 18:56 ET); the cause (repair scripts that updated rows without writing objects) is covered by receipts on every captured file
