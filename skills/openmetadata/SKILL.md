@@ -437,6 +437,14 @@ different jobs:
   pipeline-service client. `POST /api/v1/services/ingestionPipelines/trigger/{id}`
   triggers metadata ingestion. It does not start the platform's source capture,
   Bookkeeping steps, MDM merge, RDM publication or Silver loads.
+- Execution support is integration-specific, not a generic property of a
+  catalog `Pipeline`. Current 2.0.x documentation says the dbt Cloud integration
+  can execute models directly and track executions; dbt Core integration reads
+  artifacts from storage that a separate dbt run produced. This is documented
+  behavior, not verified against the local 2.0.2 deployment. It does not execute
+  the platform's Bookkeeping targets or make arbitrary catalog pipelines
+  runnable. Verify the exact connector, account/job and run path before calling
+  a workflow controlled by OpenMetadata.
 - Other trigger routes are scoped to their own object: `/api/v1/apps/trigger/{name}`
   runs an installed OpenMetadata Application, and
   `/api/v1/governance/workflowDefinitions/name/{fqn}/trigger` starts a governance
