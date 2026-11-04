@@ -144,6 +144,7 @@ PINNED = {
     ("figi", 2): "040addeb2f49daa51627620eee853785764bbbd30a2ebade302475a89ae48cc3",
     ("sedol", 1): "8fa0cb7dddfcd15e892a5a74dbce6fb19c1c3da1bd9ab9559ce6fa1fb0ba6df3",
     ("loanx", 1): "781d1eb3655508412be932a9b1963a9c86932d74b9f7d6998fbfa258888752d3",
+    ("ticker", 1): "469a9cdea42454f39527e893c9e3b2110d7af02eb532b69d0a3d1263538a73a5",
 }
 
 
@@ -206,3 +207,15 @@ def test_a_loanx_is_lx_and_six_digits():
     assert loanx.refusal("LX12345")[1] == "invalid_loanx"
     assert loanx.refusal("LX123456789012")[1] == "invalid_loanx"
     assert loanx.refusal("XX123456")[1] == "invalid_loanx"
+
+
+def test_a_part_may_run_from_one_character_to_its_longest():
+    # A ticker is 1 to 9 letters or digits (ticket 24; the separators of a class ticker are
+    # dropped by the source rules, so the declaration sees letters and digits only).
+    ticker = identifier_types.load()["ticker"]
+    assert ticker.refusal(" brkb ") == ("BRKB", None)
+    assert ticker.refusal("A") == ("A", None)
+    assert ticker.refusal("ABCDEFGHI") == ("ABCDEFGHI", None)
+    assert ticker.refusal("ABCDEFGHIJ")[1] == "invalid_ticker"
+    assert ticker.refusal("BRK-B")[1] == "invalid_ticker"
+    assert ticker.refusal("")[1] == "invalid_ticker"
