@@ -34,19 +34,19 @@ reduce:
       count: filings
       sample: filed_sample
       sample_limit: 1
-    isin_filed:
+    no_cusip_filed:
       source: issuers
-      table: isin_issuer
-      keys: [isin]
+      table: no_cusip_issuer
+      keys: [no_cusip_key]
       mode: members
       member: filed
       count: filings
       sample: filed_sample
       sample_limit: 1
-    isin_issuers:
+    no_cusip_issuers:
       source: issuers
-      table: isin_issuer
-      keys: [isin]
+      table: no_cusip_issuer
+      keys: [no_cusip_key]
       mode: members
       member: issuer_lei
       count: issuers

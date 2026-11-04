@@ -266,6 +266,8 @@ moves the Mastering Policy's digest, so it needs its test run and the
 operator's approval of the new digest (data-onboarding, "a merge-rule change
 moves pinned digests").
 
+**The key of a Security is its CUSIP, else its ISIN, else its SEDOL, else its LoanX** (ticket 190; operator, 2026-11-04: "You can not build every make isin work for others", "Always build generic"). The no-CUSIP branch (`no_cusip_*` in the N-PORT rules) takes the first class a holding files, `key_kind` names it and `record.yaml` gives the identifier of that class. A SEDOL or LoanX filed beside a CUSIP or an ISIN is stored on the Security and never matches: funds file one SEDOL on several Securities (1,590 of 26,081), and an unrestricted rule merged two CUSIP Securities. Their rules match only a record keyed by their class (`field_in_set@1` on `provenance.matching.key_class`), and the keyed records are published in the second target, `mastering_other_keys`, which reads the first run's combine with `record.yaml`'s `batch` context set to `other`. A new class is a lookup set, one line in each key coalesce (source.yaml, issuers.yaml, holding-rows.yaml) and one rule: the rules language has no list, so an engine key-class list waits for a fourth class.
+
 ### 3. Held back
 
 A record a contract sets aside never reaches matching. It waits with an open
@@ -486,10 +488,17 @@ for their switch-on after the merge part A2):
    them, else creates one.
 5. 13F, then Securities `mastering` (N-PORT): each looks up first, then
    creates.
+6. Securities `mastering_other_keys` (N-PORT, ticket 190), then the Form 4
+   `security_symbols` (ownership, ticket 24): the Securities keyed by a SEDOL
+   or a LoanX, and the symbols a Form 4 files, each after the Securities they
+   look up exist. Neither is in `rules/source-sequence.yaml`, which names one
+   target a source.
 
-Inside one batch the Merge Stage binds every record that finds a held
-Security before any record creates one, so a value it adds is found by the
-rest of the batch.
+Inside one batch the Merge Stage binds a record to a Security that is already
+stored; a Security a record of the same batch creates is not found by another
+record of it (a SEDOL-keyed record loaded with its CUSIP's record made a
+second Security: 7 Securities, not 5). A record that must find another's
+value is published in a later batch.
 
 `rules/source-sequence.yaml` holds the order; a source reads another
 finished run by `{run: {source, target, step}}` (Bookkeeping SPEC).

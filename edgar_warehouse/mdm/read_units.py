@@ -208,12 +208,18 @@ def form(step: dict, run, units: dict) -> list[dict]:
                              "give a large set as a lookup set instead")
     contract = run.store.put(run.inputs, body)
     if "pieces" in shape:
-        if run.by_name[shape["pieces"]["step"]]["operation"] != "source.combine":
-            raise ValueError(f"Step {name}: pieces are read from a source.combine step")
-        (before,) = units[shape["pieces"]["step"]]
+        if "run" in shape["pieces"]:  # another run's combine, read as it was verified (ticket 190)
+            (before,) = run_units(run, shape["pieces"]["run"])
+            slot = before
+        else:
+            if run.by_name[shape["pieces"]["step"]]["operation"] != "source.combine":
+                raise ValueError(f"Step {name}: pieces are read from a source.combine step")
+            (before,) = units[shape["pieces"]["step"]]
+            slot = {"step": shape["pieces"]["step"], "key": before["keys"]["unit"]}
+        given = {value_name: context_value(template, name, run) for value_name, template in shape.get("context", {}).items()}
         return [unit(f"{run.root}/{name}/reading.json", {"unit": name}, {"compose": {
-            "document": {"version": 4, "contract": contract, "pieces": {"slot": "pieces"}},
-            "slots": {"pieces": {"step": shape["pieces"]["step"], "key": before["keys"]["unit"]}}}})]
+            "document": {"version": 4, "contract": contract, "pieces": {"slot": "pieces"}, **({"context": given} if given else {})},
+            "slots": {"pieces": slot}}})]
     keys = [shape["runfile"]] if "runfile" in shape else [
         key for key in run.keys if fnmatch.fnmatchcase(key, shape.get("files", "*"))]
     if not keys:

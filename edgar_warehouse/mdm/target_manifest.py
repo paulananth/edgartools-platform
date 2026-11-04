@@ -233,11 +233,12 @@ def _other_runs(steps: list[dict], bookkeeping) -> dict:
         for step in steps:
             shape = step.get("input", {})
             for kind, named in [*(("reading", v) for v in shape.get("readings", {}).values()),
-                                *(("lookup", v) for v in shape.get("lookups", {}).values())]:
+                                *(("lookup", v) for v in shape.get("lookups", {}).values()),
+                                *(("pieces", shape["pieces"]) for _ in [0] if "pieces" in shape)]:
                 if "run" not in named:
                     continue
                 if step["operation"] != ("source.combine" if kind == "reading" else "source.read"):
-                    raise ValueError(f"Step {step['name']}: a combine's reading or a read's lookup reads another run's step")
+                    raise ValueError(f"Step {step['name']}: a combine's reading or a read's lookup or pieces reads another run's step")
                 label = read_units.run_label(named["run"])
                 if label in others:
                     continue

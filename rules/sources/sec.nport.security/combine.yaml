@@ -35,14 +35,14 @@ combine:
     # The earliest filing date of the CUSIP's holdings that name an issuer
     # (ticket 113): the ISSUED_BY link's start.
     cusip_filed: {source: issuers, table: cusip_filed, key: cusip, value: filed_sample, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
-    isin_filed: {source: issuers, table: isin_filed, key: isin, value: filed_sample, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
-    isin_name: {source: securities, table: isin_names, key: isin, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
-    isin_title: {source: securities, table: isin_titles, key: isin, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
-    isin_lei: {source: securities, table: isin_leis, key: isin, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
-    isin_class: {source: securities, table: isin_classes, key: isin, value: class_sample, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {classes: 1}}
-    isin_classes: {source: securities, table: isin_classes, key: isin, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    no_cusip_filed: {source: issuers, table: no_cusip_filed, key: no_cusip_key, value: filed_sample, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    no_cusip_name: {source: securities, table: no_cusip_names, key: no_cusip_key, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    no_cusip_title: {source: securities, table: no_cusip_titles, key: no_cusip_key, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    no_cusip_lei: {source: securities, table: no_cusip_leis, key: no_cusip_key, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    no_cusip_class: {source: securities, table: no_cusip_classes, key: no_cusip_key, value: class_sample, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {classes: 1}}
+    no_cusip_classes: {source: securities, table: no_cusip_classes, key: no_cusip_key, value: ., mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
     # As `cusip_issuer`, for an ISIN-only Security (ticket 102).
-    isin_issuer: {source: issuers, table: isin_issuers, key: isin, value: issuer_sample, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {issuers: 1}}
+    no_cusip_issuer: {source: issuers, table: no_cusip_issuers, key: no_cusip_key, value: issuer_sample, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {issuers: 1}}
     # The most-filed value of each fact (reduce.yaml's `most_*`; ticket 138).
     asset_category: {source: securities, table: most_asset_category, key: key, value: asset_category, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
     issuer_type: {source: securities, table: most_issuer_type, key: key, value: issuer_type, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
@@ -71,13 +71,13 @@ combine:
         loanx: {group: filed_loanxs, key: key, on_missing: skip, replace: false}
         issuer: {group: cusip_issuer, key: key, on_missing: skip, replace: false}
         filed: {group: cusip_filed, key: key, on_missing: skip, replace: false}
-        isin_name: {group: isin_name, key: key, on_missing: skip, replace: false}
-        isin_title: {group: isin_title, key: key, on_missing: skip, replace: false}
-        isin_lei: {group: isin_lei, key: key, on_missing: skip, replace: false}
-        isin_class: {group: isin_class, key: key, on_missing: skip, replace: false}
-        isin_classes: {group: isin_classes, key: key, on_missing: skip, replace: false}
-        isin_issuer: {group: isin_issuer, key: key, on_missing: skip, replace: false}
-        isin_filed: {group: isin_filed, key: key, on_missing: skip, replace: false}
+        no_cusip_name: {group: no_cusip_name, key: key, on_missing: skip, replace: false}
+        no_cusip_title: {group: no_cusip_title, key: key, on_missing: skip, replace: false}
+        no_cusip_lei: {group: no_cusip_lei, key: key, on_missing: skip, replace: false}
+        no_cusip_class: {group: no_cusip_class, key: key, on_missing: skip, replace: false}
+        no_cusip_classes: {group: no_cusip_classes, key: key, on_missing: skip, replace: false}
+        no_cusip_issuer: {group: no_cusip_issuer, key: key, on_missing: skip, replace: false}
+        no_cusip_filed: {group: no_cusip_filed, key: key, on_missing: skip, replace: false}
         asset_category: {group: asset_category, key: key, on_missing: skip, replace: false}
         issuer_type: {group: issuer_type, key: key, on_missing: skip, replace: false}
         investment_country: {group: investment_country, key: key, on_missing: skip, replace: false}
