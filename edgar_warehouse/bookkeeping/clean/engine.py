@@ -152,12 +152,13 @@ class Bookkeeping:
         reference(inputs_ref)
         export = self.artifacts.json(rules_ref)
         proof = export.get("proof")
-        from edgar_warehouse.rules.acquisition_authority import proof_holds
+        from edgar_warehouse.rules.acquisition_authority import masters_nothing, proof_holds
 
-        if (export.get("status") != "active" or not isinstance(proof, dict) or not proof_holds(export)
-                or digest(export["body"]) != export.get("digest")):
+        silver_only = masters_nothing(export.get("kind"), export.get("body") or {})  # nothing to prove
+        if (export.get("status") != "active" or digest(export["body"]) != export.get("digest")
+                or not (silver_only or (isinstance(proof, dict) and proof_holds(export)))):
             raise Blocked("Submission requires a proven active Rules export")
-        reference({"uri": rules_ref["uri"], "sha256": proof.get("batch_hash")})
+        reference({"uri": rules_ref["uri"], "sha256": (proof or {}).get("batch_hash") or export["digest"]})
         config = validate(export["body"], target)
         if scope.get("feed") and "acquisition" not in export["body"]:
             raise Blocked("Retired acquisition feed cannot be submitted")

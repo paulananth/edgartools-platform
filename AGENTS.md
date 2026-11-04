@@ -83,8 +83,9 @@ recovery, use [data-operations](skills/data-operations/SKILL.md).
   Read [the load sequence](docs/initial-and-daily-source-load.md) before SEC,
   GLEIF or OpenFIGI loads. Provider access retains its existing authorization.
 - Use one permanent local PostgreSQL 16 server shared by all agents. Initialize
-  MDM, RDM, Rules, Bookkeeping and Change Journal by default; retain existing
-  silver without initializing or migrating it.
+  MDM, RDM, Rules, Bookkeeping, Change Journal and Silver by default (operator,
+  2026-11-03: "pipeline must complete both mdm and silver together"); a run's
+  env files carry the silver login.
   All agents look up the same Company identities in the shared MDM.
   The server runs on the Docker context already configured on the machine
   (operator, 2026-10-17). Start, inspect, back up and copy it with

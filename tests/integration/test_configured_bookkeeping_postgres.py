@@ -221,6 +221,13 @@ def test_submission_rejects_invalid_proof_or_unapproved_mastering(databases, tmp
     book, rid, inputs, _ = submit(databases, tmp_path)
     rules = book.artifacts.json(book._run(rid)["submission"]["rules"])
     invalid = deepcopy(rules)
+    # A source that masters nothing needs no proof (ticket 187), so the proof is damaged on a source that
+    # masters: a pipeline whose first step merges into MDM, with its digest and its proof's digest kept equal.
+    invalid["kind"] = "pipeline"
+    invalid["body"]["bookkeeping"]["targets"]["silver"]["steps"][0]["operation"] = "mdm.merge"
+    invalid["body"]["dataset_contracts"] = {"fixture": {"contract": {}}}
+    invalid["digest"] = digest(invalid["body"])
+    invalid["proof"]["digest"] = invalid["digest"]
     if damage == "failed":
         invalid["proof"]["passed"] = False
     elif damage == "truthy":
@@ -230,13 +237,7 @@ def test_submission_rejects_invalid_proof_or_unapproved_mastering(databases, tmp
     elif damage == "batch_hash":
         invalid["proof"]["batch_hash"] = "missing"
     else:
-        # A mastering operation still requires approval when the document
-        # kind is pipeline and its target has a different name.
-        invalid["kind"] = "pipeline"
-        invalid["body"]["bookkeeping"]["targets"]["silver"]["steps"][0]["operation"] = "mdm.merge"
-        invalid["body"]["dataset_contracts"] = {"fixture": {"contract": {}}}
-        invalid["digest"] = digest(invalid["body"])
-        invalid["proof"]["digest"] = invalid["digest"]
+        assert damage == "unapproved_operation"  # a mastering operation still requires approval (shaped above)
     ref = book.artifacts.put(tmp_path.as_uri() + "/invalid", invalid)
     proposed = str(uuid4())
     with pytest.raises(Blocked):

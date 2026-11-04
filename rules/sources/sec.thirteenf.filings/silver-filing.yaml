@@ -7,7 +7,7 @@
 # filing's facts never change; an amendment is a filing of its own.
 table: thirteenf_filing
 definition: One Form 13F report (or notice, or amendment) a manager filed, linked to the manager Company by CIK.
-grain: one row per accession number
+grain: one row per accession number and manager (a filing listed by two managers has a row for each)
 columns:
 - name: accession_number
   type: VARCHAR
@@ -16,10 +16,10 @@ columns:
   source: filings.recent.accessionNumber
   sensitivity: none
 - name: cik
-  type: BIGINT
+  type: VARCHAR
   nullable: false
-  definition: The manager's CIK, the filer whose submissions list holds the filing; the key to its Company.
-  source: the capture's folder, cik=<number>
+  definition: The manager's CIK, 10 digits as filed, the filer whose submissions list holds the filing; the key to its Company.
+  source: cik
   sensitivity: none
 - name: form
   type: VARCHAR
@@ -53,6 +53,7 @@ columns:
   sensitivity: none
 key:
 - accession_number
+- cik
 links:
 - columns:
   - cik

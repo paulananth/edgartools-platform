@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Persistent shared PostgreSQL 16, with optional silver for isolated tests.
+"""Persistent shared PostgreSQL 16 with silver beside MDM, so a run completes both together.
 
 Run with uv run --extra mdm infra/scripts/local-test-stores.py --help.
 Connection details are written to a private env file, never stdout.
@@ -442,7 +442,7 @@ def main():
         part = sub.add_parser(command)
         part.add_argument("name")
         if command == "up":
-            part.add_argument("--include-silver", action="store_true", help="Also initialize silver (isolated tests only)")
+            part.add_argument("--no-silver", action="store_true", help="Leave silver out (a core-only isolated test)")
         if command == "copy":
             part.add_argument("--snapshot", type=Path, help="Omit to copy the latest verified baseline")
         if command == "backup":
@@ -452,7 +452,7 @@ def main():
     try:
         with stores.locked(args.name):
             if args.command == "up":
-                stores.start(args.name, include_silver=args.include_silver)
+                stores.start(args.name, include_silver=not args.no_silver)
             elif args.command == "stop":
                 stores.stop(args.name)
             elif args.command == "backup":

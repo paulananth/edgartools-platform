@@ -89,6 +89,12 @@ class Loader:
         self.reading = target_of(source, target)
         self.runtimes: dict[str, str] = {}
         env = duties(stores)
+        lands = [step["name"] for step in self.reading["bookkeeping"]["targets"][target]["steps"]
+                 if step.get("operation") == "silver.land"]
+        bare = [duty for duty in ("worker", "verifier") if lands and not env[duty].get("SILVER_DATABASE_URL")]
+        if bare:
+            raise RunStopped(f"{source} {target} lands silver (steps {', '.join(lands)}) but the {' and '.join(bare)} "
+                             f"env file has no silver login: start the stores with infra/scripts/local-test-stores.py up <name>")
         self.root = manifest_root(env) / "load" / source / target
         self.commands = Commands(env, (self.root / "reports").as_uri(), deadline=time.monotonic() + minutes * 60,
                                  log=stores / "load-errors.log", workers=workers)

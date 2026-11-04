@@ -33,6 +33,8 @@ def key(cik):
 def submissions(cik):
     rows = [(f"{cik:010d}-26-000001", "13F-HR", "2026-02-10", "2025-12-31"), (f"{cik:010d}-26-000002", "10-K", "2026-02-11", "2025-12-31"),
             (f"{cik:010d}-26-000003", "13F-HR/A", "2026-03-01", "2025-12-31"), (f"{cik:010d}-26-000004", "13F-NT", "2026-02-12", "")]
+    if cik == 222:  # a report the first manager filed with this one (SEC lists it under both CIKs)
+        rows.append(("0000000111-26-000001", "13F-HR", "2026-02-10", "2025-12-31"))
     fields = ("accessionNumber", "form", "filingDate", "reportDate")
     recent = {name: [row[i] for row in rows] for i, name in enumerate(fields)}
     recent["acceptanceDateTime"] = [f"{row[2]}T16:00:00.000Z" for row in rows]
@@ -79,8 +81,8 @@ def test_each_managers_13f_reports_land_in_silver_and_other_forms_do_not(databas
     manifest = book.artifacts.put(tmp_path.as_uri() + "/submitted", {"version": 2, "steps": steps})
     body = {"source": f"filings-{uuid4().hex}", "bookkeeping": {"version": 2, "targets": {"silver": target}}}
     saved = databases.rules.save("source", body["source"], "1", body)
-    databases.rules.prove("source", body["source"], "1",
-                          {"digest": saved["digest"], "batch_hash": manifest["sha256"], "passed": True})
+    # Silver maps one to one, so there is no proof and no approval (operator, 2026-11-03).
+    assert saved["status"] == "draft"
     databases.rules.activate("source", body["source"], "1")
     rules = databases.rules.resolve("source", body["source"], root=tmp_path.as_uri() + "/rules")
     rid = book.start(rules_ref=rules, inputs_ref=manifest, target="silver", scope={"test": body["source"]})
@@ -95,12 +97,15 @@ def test_each_managers_13f_reports_land_in_silver_and_other_forms_do_not(databas
         monkeypatch.setattr(mdm.application, "dispose", lambda: None)
         state = drive(book, rid, databases.ledger, workers=workers)
         with runtime.connect() as conn:
-            rows = list(conn.execute(text("SELECT * FROM silver.thirteenf_filing ORDER BY accession_number")).mappings())
+            rows = list(conn.execute(text("SELECT * FROM silver.thirteenf_filing ORDER BY accession_number, cik")).mappings())
 
     assert state["run"]["state"] == "complete" and state["counts"] == {"verified": 4}
     assert [(r["cik"], r["form"], str(r["report_date"] or "")) for r in rows] == [
-        (111, "13F-HR", "2025-12-31"), (111, "13F-HR/A", "2025-12-31"), (111, "13F-NT", ""),
-        (222, "13F-HR", "2025-12-31"), (222, "13F-HR/A", "2025-12-31"), (222, "13F-NT", "")]  # the 10-K is left out
+        ("0000000111", "13F-HR", "2025-12-31"), ("0000000222", "13F-HR", "2025-12-31"),  # one report, two managers: a row each
+        ("0000000111", "13F-HR/A", "2025-12-31"), ("0000000111", "13F-NT", ""),
+        ("0000000222", "13F-HR", "2025-12-31"), ("0000000222", "13F-HR/A", "2025-12-31"), ("0000000222", "13F-NT", "")]
+    # The CIK is 10 digits as filed: the form a Company's record key takes, so the link finds the manager
+    # (the folder's `cik=111` has no padding and matched no Company: 20,088 filings landed unlinked).
     assert rows[0]["accession_number"] == "0000000111-26-000001" and str(rows[0]["filing_date"]) == "2026-02-10"
     assert all(r["manager_mdm_id"] is None for r in rows)  # nothing is mastered in this empty MDM
     assert not {"name", "entity_name"} & set(rows[0])  # the manager's name is the Company's

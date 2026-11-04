@@ -199,9 +199,12 @@ class Rules:
             selected = self._version(conn, kind, name, version)
             if selected["status"] == "active":
                 return
-            if selected["status"] != "proven":
-                raise Blocked("Only a proven version can activate")
             body = json.loads(selected["body"])
+            from edgar_warehouse.rules.acquisition_authority import masters_nothing
+
+            one_to_one = masters_nothing(kind, body)
+            if selected["status"] != "proven" and not (one_to_one and selected["status"] == "draft"):
+                raise Blocked("Only a proven version can activate")
             if "acquisition" in body and "acquisition" in selected["proof"]:
                 from edgar_warehouse.rules.acquisition_authority import validation_proof
                 validation_proof(body, selected["proof"], artifacts=Artifacts())

@@ -238,3 +238,17 @@ def test_a_source_with_acquisition_switches_on_its_pipes_on_a_test_run(pg, popul
     assert export["status"] == "active" and processing_authority(export)["digest"] == saved["digest"]
     with pytest.raises(Blocked, match="qualify every declared acquisition feed"):
         frozen_authority(export, "fixture")
+
+
+def test_a_source_that_masters_nothing_activates_without_a_proof(pg, populated):
+    """Silver maps one to one (operator, 2026-11-03: "There is nothing to prove in silver"): a source with no
+    Dataset Contract activates from draft; one with a Dataset Contract still needs its proof."""
+    from edgar_warehouse.rules import files
+
+    agent = pg["agent"]
+    body = files.source("sec.thirteenf.filings")
+    assert "dataset_contracts" not in body
+    saved = agent.save("source", "sec.thirteenf.filings", "1", body)
+    assert agent.version("source", saved["name"], "1")["status"] == "draft"
+    agent.activate("source", saved["name"], "1")
+    assert agent.version("source", saved["name"], "1")["status"] == "active"
