@@ -1,4 +1,4 @@
-"""merge_on_green.sh removes the merged PR's worktree and branch, and only that."""
+"""merge_on_green.sh merges and leaves the worktree and branch alone (operator, 2026-11-03)."""
 
 import os
 import subprocess
@@ -44,23 +44,15 @@ def run_script(tmp_path, branch, dirty=False):
     return done, work, branches
 
 
-def test_the_merged_prs_worktree_and_branch_are_removed(tmp_path):
+def test_the_merged_prs_worktree_and_branch_are_kept(tmp_path):
     done, work, branches = run_script(tmp_path, "claude/topic")
     assert done.returncode == 0, done.stderr
     assert "merged" in done.stdout
-    assert not work.exists()
-    assert branches.strip() == ""
-
-
-def test_a_worktree_with_unsaved_files_is_kept_and_the_merge_still_succeeds(tmp_path):
-    done, work, branches = run_script(tmp_path, "claude/topic", dirty=True)
-    assert done.returncode == 0, done.stderr
-    assert (work / "unsaved.txt").exists()
+    assert work.exists()
     assert "claude/topic" in branches
 
 
-def test_a_worktree_on_another_branch_is_kept(tmp_path):
-    done, work, branches = run_script(tmp_path, "claude/other")
+def test_a_worktree_with_unsaved_files_is_kept(tmp_path):
+    done, work, branches = run_script(tmp_path, "claude/topic", dirty=True)
     assert done.returncode == 0, done.stderr
-    assert work.exists()
-    assert "claude/other" in branches
+    assert (work / "unsaved.txt").exists()
