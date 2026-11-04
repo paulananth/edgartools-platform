@@ -132,7 +132,7 @@ def without_p2_p3_deleted(policy: dict) -> dict:
     return body
 
 
-def without_p6_p7_deleted(policy: dict) -> dict:
+def without_name_only_passes_deleted(policy: dict) -> dict:
     """Rebuild priorities ticket 09 (operator, 2026-11-03: "delete p6 and p7"):
     cascade passes P6 and P7 deleted, P6 on 2 labelled pairs that read as a
     namesake and P7 on a different entity among its 14 labels. Peeled, they
@@ -413,8 +413,8 @@ def without_other_capacity(policy: dict) -> dict:
 # Newest first: each layer, and Company's policy digest with it and every
 # layer after it still on.
 LAYERS = [
-    # P6 and P7 deleted: "delete p6 and p7" (2026-11-03, ticket 09).
-    (without_p6_p7_deleted, "0425daf9dc3442ccc95d049f520c1bfd67268d7263cba4e01a1a1cc7ec7ce6ab"),
+    # The two name-only passes deleted: "delete p6 and p7" (2026-11-03, ticket 09).
+    (without_name_only_passes_deleted, "0425daf9dc3442ccc95d049f520c1bfd67268d7263cba4e01a1a1cc7ec7ce6ab"),
     # The capacity `other` on EMPLOYED_BY: "Capacity `other` on EMPLOYED_BY (Recommended)" (2026-11-03, ticket 182).
     (without_other_capacity, "a24c4ac2bd970feba807d28fc4ae9b5539adc49e7826c9aadff45424629244e7"),
     # P5 compares the city or the postcode; P1 and P4 deleted: "do not use p1 or p4, p5 can match on
