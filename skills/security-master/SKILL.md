@@ -495,6 +495,8 @@ until the operator permits it.
 
 ## Proving a change
 
+**Check the premise in the rules before measuring.** A count taken with code a ticket has since removed is not evidence (ticket 127: 2,688 folded Securities were measured with the FIGI fold ticket 138 had ended, and the operator ruled on that number). Read the current rules for the step first, then measure the behaviour that runs, with a test.
+
 Prove a Security contract or merge rule at the level [Choose the cheapest proof](../mdm-engineering/SKILL.md#choose-the-cheapest-proof) names. The whole quarter is that proof only when the claim is the quarter's totals or switch-on. When it is, 2026 Q2, one record per Security, takes about 3 h 10 min a pass on a laptop; keep it on power ("Make the Securities run faster", ticket 122).
 
 OpenFIGI first was switched on from the completed figi-full store (2026-10-24). CUSIP answers created the Securities. ISIN bundle 1 held the new case, one CUSIP offered two ISINs that share a FIGI. Bundles 2–8 stayed unchecked. Its ISIN target reads the complete CUSIP runs' `figi_ids`, so those CUSIP runs finish first in the same store.
