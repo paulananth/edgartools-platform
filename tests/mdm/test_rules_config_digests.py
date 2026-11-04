@@ -127,6 +127,9 @@ WITHOUT_TICKET_129_FIELDS = {
     "gleif.level1.v1": "d03454b6e1f76e3d98378193dce2e5fd60df0a95180e3a1aeb7397a3cd8cc8b0",
 }
 def _with_company_fields_back(contract: dict, code: str) -> dict:
+    from tests.support.name_count_words import before_name_id
+
+    contract = before_name_id(contract)  # ticket 01: the name id and its version came after
     assert _historic_digest(contract) == WITHOUT_TICKET_129_FIELDS[code], code
     return before_ticket_129(contract, code)
 

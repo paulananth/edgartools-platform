@@ -304,7 +304,7 @@ dataset_contracts:
           - name_count
           - sic
           - state_of_incorporation
-        version: sec-company-landing-v8
+        version: sec-company-landing-v9
         retain_deferred: true
         source_record_provenance: true
         record_key:
@@ -324,6 +324,13 @@ dataset_contracts:
           cik: cik
         identifier_formats:
           cik: sec_cik
+        # The name id (ticket 01; operator, 2026-11-04: exact name only): the name as an
+        # id made from it, lookup only, so a record that carries only a name (a Form ADV
+        # custodian) can find this Company. Never decides which record is which.
+        cross_references:
+          name_id: entity_name
+        cross_reference_formats:
+          name_id: name_id@1
         # Behind the operator's decision (2026-09-27): capture hashes, run id and
         # sync time stay beside the record, not in it. The next SEC mapping
         # drops them; do not copy this block as an example.

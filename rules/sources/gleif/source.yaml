@@ -396,7 +396,7 @@ dataset_contracts:
                             path: nport_issuer
                             path_mode: literal
                       omit_nulls: true
-        version: gleif-native-record-v1
+        version: gleif-native-record-v2
         native_member: level1
         retain_deferred: true
         source_record_provenance: true
@@ -423,6 +423,12 @@ dataset_contracts:
           lei: LEI.$
         identifier_formats:
           lei: lei
+        # The name id (ticket 01; operator, 2026-11-04: exact name only): lookup only, so a
+        # record that carries only a name (a Form ADV custodian) can find this Company.
+        cross_references:
+          name_id: Entity.LegalName.$
+        cross_reference_formats:
+          name_id: name_id@1
         relationships:
         # GLEIF's SuccessorEntity (profiling ticket 04c): one link per
         # successor LEI (a demerger lists several; a successor named only, with
