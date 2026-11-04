@@ -81,9 +81,19 @@ bookkeeping:
           key: "{batch_id}"
           leases: ["mdm:consumer:{consumer}"]
           checks: [input.hash, output.receipt, mdm.committed]
+        # The amount each custodian holds (Schedule D 5.K(3)(g)) lands in silver once the adviser's
+        # filing is mastered here and the custodians are, which the `custodians` target (run first)
+        # did: each row finds both Companies by lookup (silver-custody.yaml).
+        - name: land_custody
+          operation: silver.land
+          requires: [read_custody, merge]
+          key: "{unit}"
+          leases: ["silver:{silver}"]
+          checks: [input.hash, output.receipt, silver.landed]
+          input: {keys: {table: custody, silver: adv_custody}}
         - name: processed
           operation: journal.record
-          requires: [merge]
+          requires: [land_custody]
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, journal.recorded]

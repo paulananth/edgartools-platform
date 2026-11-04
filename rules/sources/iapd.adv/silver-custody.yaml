@@ -1,0 +1,88 @@
+# The silver table of Form ADV custody rows (ticket 01; operator, 2026-10-09: "why do i need the amount ?
+# that is a fact"): the amount an adviser reports as held for it by a custodian is a fact kept in silver,
+# one row per filing and custodian row, linked to both Companies by MDM id (the adviser by its filing, the
+# custodian by its custodian id), never on the CUSTODIAN link. Rows are the custody reading's `custody` table
+# (Schedule D 5.K(3), custody-csv.yaml). One system of record (ticket 143): the custodian's name, address
+# and identifiers are the custodian Company's, in MDM, so the row holds only the filing's own facts.
+# Measured over the 13 local months (June 2025 to June 2026), counts only: 50,152 rows; every amount is a
+# whole number of at most 13 digits (no decimals, none empty, none negative); 1,156 rows name a related
+# person (Y) and 48,996 do not (N). Append only: a filed row never changes; an amendment is a new filing.
+table: adv_custody
+definition: "One custodian named in Schedule D 5.K(3) of one Form ADV filing, with the amount it holds, linked to the adviser and the custodian."
+grain: "one row per filing and custody row (a custodian listed twice is two rows)"
+columns:
+- name: filing_id
+  type: VARCHAR
+  nullable: false
+  definition: "The Form ADV filing's id (FilingID)."
+  source: "Filing ID"
+  sensitivity: none
+- name: row
+  type: BIGINT
+  nullable: false
+  definition: "The row's place among the file's custody rows, from 1."
+  source: "the row's order in the file"
+  sensitivity: none
+- name: custodian_id
+  type: VARCHAR
+  nullable: false
+  definition: "The custodian as the custodian record names it: its BD number, else its LEI, else its name (bd:, lei: or name:)."
+  source: "5K(3)(e), then (f), then (a)"
+  sensitivity: none
+- name: related_person
+  type: VARCHAR
+  nullable: true
+  definition: "Y when the custodian is a related person of the adviser, N when it is not."
+  source: "5K(3)(d)"
+  sensitivity: none
+- name: amount
+  type: BIGINT
+  nullable: true
+  definition: "The adviser's assets the custodian holds, in dollars, as reported."
+  source: "5K(3)(g)"
+  sensitivity: none
+- name: published
+  type: VARCHAR
+  nullable: false
+  definition: "The end of the month the bulk file covers, from the run (an ISO 8601 instant)."
+  source: "the run's published fact"
+  sensitivity: none
+key:
+- filing_id
+- row
+links:
+- columns:
+  - filing_id
+  kind: company
+  source_code: iapd.adv.filings.v1
+  to_part: adviser
+  source_key: filing_id
+  mdm_id_column: adviser_mdm_id
+- columns:
+  - custodian_id
+  kind: company
+  source_code: iapd.adv.custodians.v1
+  to_part: custodian
+  source_key: custodian_id
+  mdm_id_column: custodian_mdm_id
+time:
+  as_of: published
+  as_at: published
+  event_time: null
+partition:
+- published
+load_mode: append
+why: >-
+  A custody row is transaction data: what one adviser reports one custodian holds for it at one filing.
+  It lands in silver with the MDM ids of the adviser and the custodian found by their record keys,
+  never as a property of the CUSTODIAN link (operator, 2026-10-09). A row whose Company is not mastered
+  yet keeps an empty MDM id, which `silver refresh-ids` fills later. Append, since a filed row never changes.
+checks:
+- id: related_person_is_y_or_n
+  check: in_set
+  column: related_person
+  values:
+  - Y
+  - N
+  on_fail: flag
+  why: The form answers whether the custodian is a related person with Y or N; any other answer lands flagged, never refused.

@@ -59,13 +59,15 @@ def prepared(databases, tmp_path, target):
         grant_profile(databases.admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")
     reading = deepcopy(target_manifest.rules_files.source(SOURCE))
     plan = deepcopy(reading["bookkeeping"]["targets"][target])
-    assert [s["name"] for s in plan["steps"][-2:]] == ["merge", "processed"]
-    plan["steps"] = plan["steps"][:-2]
+    names = [s["name"] for s in plan["steps"]]
+    assert names[names.index("merge"):] in (["merge", "processed"], ["merge", "land_custody", "processed"])
+    plan["steps"] = plan["steps"][:names.index("merge")]  # the merge, the silver landing and the journal step have their own tests
     body = {"source": f"iapd-{uuid4().hex}", "bookkeeping": {"version": 2, "targets": {target: plan}}}
     book = Bookkeeping(databases.runtime)
     book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)
     steps = book.artifacts.json(report["manifest"])["steps"]
-    del steps["merge"], steps["processed"]
+    for later in ("merge", "land_custody", "processed"):
+        steps.pop(later, None)
     manifest = book.artifacts.put(tmp_path.as_uri() + "/submitted", {"version": 2, "steps": steps})
     saved = databases.rules.save("source", body["source"], "1", body)
     databases.rules.prove("source", body["source"], "1",
