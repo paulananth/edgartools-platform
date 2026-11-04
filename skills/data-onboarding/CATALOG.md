@@ -43,13 +43,13 @@ name is not semantic enrichment.
 | Object | Completion evidence |
 |---|---|
 | Entity domain | One native domain for every declared entity kind; distinguish definition-only kinds from operationally qualified ones |
-| Business glossary | One glossary per entity domain, plus the shared glossary, projected from `CONTEXT.md`. Suggested, not approved. OpenMetadata storage is the openmetadata skill |
+| Business glossary | One glossary per entity domain, projected from `CONTEXT.md`; no shared glossary or `Shared` domain. Suggested, not approved. OpenMetadata storage is the openmetadata skill |
 | Business terms | Definitions and asset/column associations derived from the model and contracts; actual review status recorded |
 | Datasets and fields | Clear business names, definitions, grain, provenance, master links and system-of-record boundaries |
 | Pipelines | Every source and standalone target, its purpose, declared tasks, operations and dependencies; definitions do not imply enabled execution |
 | Relationships | Pinned types, capacities, endpoint kinds and declared source lineage |
 | Data quality | Named native test cases for configured checks, preserving semantics and failure action; corrections and proposals remain distinct |
-| Mapping Documents | All configured sources, kinds, standalone pipelines and pinned relationship definitions; steward Notes preserved |
+| Mapping Documents | Keep complete source, kind, pipeline and relationship documents with steward Notes. OpenMetadata completion requires the full document on its pipeline and links from relevant tables; the current publisher does not yet publish or verify that projection |
 | Ownership | Existing authorized business owners where specified; otherwise an explicit unassigned responsibility, never the ingestion bot as a fabricated business owner |
 | Data product | Three named packages: the mastered legal entity, the mastered instrument, and fundamental measures. Each takes that subject's domain. The test is in `skills/data-catalog/references/MODEL.md` |
 | Classification | Data class from the data-modeling skill, and the built-in certification that marks the store: Gold on the master and reference stores, Silver on the prepared store. A proposed prepared-store table is Silver and has no data class. A source dataset has no certification and no data class |

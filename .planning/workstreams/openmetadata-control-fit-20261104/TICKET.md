@@ -1,0 +1,13 @@
+# Check OpenMetadata as a no-build operations control plane
+
+## Checklist
+
+- [x] Audit the current catalog and its direct API readback, including domains, glossary, assets, products, quality definitions and lineage. Current Rules plan and API matched: 8 domains, 8 glossaries, 22 terms, 65 tables, 19 pipelines, 52 cases, 3 products; direct domain/pipeline/glossary edge checks had zero missing or extra edges (2026-11-04 08:16 ET).
+- [x] Test the native execution boundary: distinguish catalog pipelines from metadata-ingestion pipelines and inspect trigger and status support. Swagger/API showed 19 catalog pipelines, zero status records, zero ingestion pipelines; trigger exists only for ingestion pipelines (2026-11-04 08:16 ET).
+- [x] Trace a configured source through Bookkeeping and its workers; determine whether OpenMetadata can control the same execution without an integration. The configured SEC ownership path runs source.read, mdm.prepare, mdm.merge, silver.land and journal.record through registered worker profiles (2026-11-04 08:16 ET).
+- [x] Review operator-facing status and identify any UI evidence that cannot be checked under repository tooling rules. CLI readback is clearly labeled confirmed and scopes its claim; rendered UI inspection is unavailable because repository rules prohibit browser/GUI use (2026-11-04 08:16 ET).
+- [x] Compare Mapping Document work in other worktrees with current main; preserve the WIP branch and accurately record whether the current publisher implements it. Mapping publisher code/tests remain uncommitted in `codex/t181-openmetadata-mapping`; latest main has no `mappingDocument`/`mappingPipelines` publisher implementation, and that worktree was left untouched (2026-11-04 08:16 ET).
+- [x] Reset only the owned OpenMetadata catalog scope, preserve server volumes/settings, then republish and verify by independent readback. Removed 2 services, 3 products, 2 custom quality definitions, 22 terms, 8 glossaries and 8 domains; publish and `check` both confirmed 65 assets, 19 pipelines and 131 lineage edges; API readback found zero Shared domains/glossaries (2026-11-04 08:25 ET).
+- [x] Update only shared skills with verified capability boundaries; run the required skill documentation checks. Updated OpenMetadata, data-catalog, data-onboarding and data-operations skills; genericity 93 passed, guide paths 2 passed, `git diff --check` clean (2026-11-04 08:26 ET).
+- [ ] Publish the completed skill change on a fresh branch with CI evidence.
+- [ ] Learning → skill: record the no-build capability test and endpoint distinction in `skills/openmetadata/SKILL.md`.
