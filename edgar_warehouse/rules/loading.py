@@ -148,7 +148,7 @@ class Loader:
         return final
 
     def bundle(self, number: int, total: int, keys: list[str], *, folder: Path, capture: Path, capture_run: str,
-               as_of: str, extra: list[str]) -> dict:
+               as_of: str, revision: int, extra: list[str]) -> dict:
         """Prepare one bundle, then submit and drive it unless every document is loaded already."""
         where = folder / f"bundle-{number:03d}"
         where.mkdir(parents=True, exist_ok=True)
@@ -156,7 +156,7 @@ class Loader:
         prepared = json.loads(self.commands(
             "worker", "mdm", "prepare-capture", "--source", self.source, "--target", self.target,
             "--capture", str(capture), "--documents", str(where / "documents.json"), "--capture-run", capture_run,
-            "--as-of", as_of, "--revision", "0", "--output", str(where / "manifest"), *extra))
+            "--as-of", as_of, "--revision", str(revision), "--output", str(where / "manifest"), *extra))
         fresh = prepared["scope"]["documents"]
         entry = {"bundle": number, "documents": len(keys), "new": fresh, "run_id": None}
         if prepared["manifest"] is None:
@@ -212,7 +212,8 @@ class Loader:
                     bundles=len(cut))
         return plan
 
-    def load(self, *, capture: Path, capture_run: str, as_of: str, facts: list[str], run_files: list[str]) -> dict:
+    def load(self, *, capture: Path, capture_run: str, as_of: str, facts: list[str], run_files: list[str],
+             revision: int = 0) -> dict:
         result = {"source": self.source, "target": self.target, "finished_open_runs": [], "bundles": []}
         unfinished, result["left_as_they_are"] = self.open_runs()
         for run_id, why in result["left_as_they_are"].items():
@@ -242,7 +243,7 @@ class Loader:
         result["bundles"] = self.at_once([
             (f"bundle {number}", lambda number=number, keys=keys: self.bundle(
                 number, len(cut), keys, folder=folder, capture=capture, capture_run=capture_run, as_of=as_of,
-                extra=extra))
+                revision=revision, extra=extra))
             for number, keys in enumerate(cut, 1)])
         self.say(f"Done: {sum(b['new'] for b in result['bundles'])} documents loaded, "
                  f"{sum(b['documents'] - b['new'] for b in result['bundles'])} already loaded before")
@@ -260,7 +261,7 @@ def _handle(args) -> int:
             raise RunStopped("--capture-run is required unless --plan")
         result = loader.load(capture=args.capture.expanduser(), capture_run=args.capture_run,
                              as_of=args.as_of or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                             facts=args.fact or [], run_files=args.file or [])
+                             facts=args.fact or [], run_files=args.file or [], revision=args.revision)
     except (RunStopped, ValueError) as error:
         print(f"Load stopped: {error}", file=sys.stderr)
         print("Run the same command again to carry on from here.", file=sys.stderr)
@@ -287,6 +288,9 @@ def register(subparsers) -> None:
                         help="Bundles loaded at once, each its own run with its own verifier (default 1)")
     parser.add_argument("--minutes", type=float, default=120, help="Stop after this long; rerun to carry on")
     parser.add_argument("--as-of", help="The load's time, UTC (YYYY-MM-DDTHH:MM:SSZ); default now")
+    parser.add_argument("--revision", type=int, default=0,
+                        help="The source publication's order (default 0): a delivery whose inputs changed (a new Name "
+                             "Count, say) is a new publication and needs a higher revision than the one loaded before")
     parser.add_argument("--fact", action="append", help="A run fact the target declares: name=value (repeat)")
     parser.add_argument("--file", action="append", help="A run file the target declares: name=path (repeat)")
     parser.set_defaults(handler=_handle)
