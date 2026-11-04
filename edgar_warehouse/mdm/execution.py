@@ -52,7 +52,7 @@ def runtime_files() -> list[Path]:
                      ("database_adapter.py", "adapter_model.py", "adapter_sql.py", "registry_migration.py")]
     return [Path(__file__), *[Path(getfile(module)) for module in modules],
             *source_engine.runtime_files(), catalog.path(), *adapter_files,
-            *[Path(store.__file__).parents[1] / "migrations" / module.MIGRATION
+            *[Path(store.__file__).parent / "migrations" / module.MIGRATION
               for module in (registration, retirement)]]
 
 

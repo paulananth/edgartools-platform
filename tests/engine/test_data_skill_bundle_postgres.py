@@ -346,8 +346,8 @@ row["payload_hash"] = hashlib.sha256(payloads.payload_text(row).encode()).hexdig
 assert payloads.prepare(row)["objects"] == [{"x":1.23}]
 assert set(source_engine.runtime_files()) <= set(mdm_publish.runtime_files())
 assert Path(payloads.__file__) in mdm_publish.runtime_files()
-assert (Path(store.__file__).parents[1]/"migrations/016_publication_inputs.sql").is_file()
-assert all((Path(store.__file__).parents[1]/"migrations"/name).is_file() for name in store.MIGRATIONS)
+assert (Path(store.__file__).parent/"migrations/016_publication_inputs.sql").is_file()
+assert all((Path(store.__file__).parent/"migrations"/name).is_file() for name in store.MIGRATIONS)
 print("publication preparation installed")
 ''', cwd=root)
     assert result.returncode == 0, result.stderr

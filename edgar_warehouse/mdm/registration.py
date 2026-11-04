@@ -12,7 +12,7 @@ SIGNATURE = "public.mdm_store_register_pin(text,text)"
 
 
 def _source():
-    body = (Path(__file__).parents[1] / "migrations" / MIGRATION).read_text()
+    body = (Path(__file__).parent / "migrations" / MIGRATION).read_text()
     return body, hashlib.sha256(body.encode()).hexdigest()
 
 

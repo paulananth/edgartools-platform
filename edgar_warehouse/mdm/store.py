@@ -119,7 +119,7 @@ def migrate(
         return result
     if engine.dialect.name != "postgresql":
         raise ValueError("MDM requires PostgreSQL 16")
-    path = Path(__file__).parents[1] / "migrations" / BASELINE
+    path = Path(__file__).parent / "migrations" / BASELINE
     source = path.read_text()
     checksum = hashlib.sha256(source.encode()).hexdigest()
     quote = engine.dialect.identifier_preparer.quote

@@ -19,7 +19,7 @@ def require_retired(conn):
 
 
 def _migration():
-    source = (Path(__file__).parents[1] / "migrations" / MIGRATION).read_text()
+    source = (Path(__file__).parent / "migrations" / MIGRATION).read_text()
     return source, hashlib.sha256(source.encode()).hexdigest()
 
 

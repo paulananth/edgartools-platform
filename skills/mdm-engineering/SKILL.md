@@ -341,6 +341,11 @@ masters needs its rebuild before readers accept it.
   batch's request once (the distinct batch keys), never once a record. A
   whole-store check still reads the current records (`iter_type`).
 
+A module that moves between folders (ticket 73) also breaks the paths it computes from its own
+location: `Path(__file__).parents[N]` and `.parent`. Before the move, grep `parents\[`,
+`__file__` and the files a runtime pin lists (`rules/`, `migrations/`), and run the whole CI set
+(`tests/unit tests/architecture tests/mdm` plus `tests/engine`), not the tests of one folder.
+
 ## Writes and transactions
 
 - Commit only when the work a checkpoint claims is itself durable, and roll
