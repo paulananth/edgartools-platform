@@ -391,9 +391,39 @@ def without_other_capacity(policy: dict) -> dict:
     return body
 
 
+# The three cascade rules before they were named by what they compare: id, version, pass label.
+RETIRED_PASS_NAMES = {
+    "sec-gleif-name-city-or-postcode": ("sec-gleif-cascade-p5", "2026-10-30.1", "P5"),
+    "sec-gleif-name-country": ("sec-gleif-cascade-p6", "2026-09-28.1", "P6"),
+    "sec-gleif-name-alone": ("sec-gleif-cascade-p7", "2026-09-28.1", "P7"),
+}
+RETIRED_ENTRY_REASON = (
+    "ticket 09, the cascade pass P5 (name and city or postcode; P1 and P4 deleted): every new link over the "
+    "whole SEC population labelled, 251/251 the same entity (110 Codex independent review, 141 operator), 0 of "
+    "159 adversarial (other name, incorporation conflict, name held by another candidate)")
+
+
+def without_pass_business_names(policy: dict) -> dict:
+    """Operator, 2026-11-03: "i dont want anything named p1, p4 it should have the actual policy" and "yes
+    rename all four": each cascade rule is named by what it compares. Peeled, the rules carry their pass
+    numbers again (ids, versions, pass labels, and the measured entry's id, version and reason)."""
+    body = _copy(policy)
+    for rule in body["kinds"]["company"]["rules"]:
+        if rule["rule_id"] in RETIRED_PASS_NAMES:
+            rule["rule_id"], rule["version"], label = RETIRED_PASS_NAMES[rule["rule_id"]]
+            rule["when"][0]["args"]["pass"] = label
+    for entry in body["automatic_rules"]:
+        if entry.get("rule_id") in RETIRED_PASS_NAMES:
+            entry["rule_id"], entry["rule_version"], _ = RETIRED_PASS_NAMES[entry["rule_id"]]
+            entry["proof"]["reason"] = RETIRED_ENTRY_REASON
+    return body
+
+
 # Newest first: each layer, and Company's policy digest with it and every
 # layer after it still on.
 LAYERS = [
+    # Cascade rules named by what they compare: "yes rename all four" (2026-11-03, ticket 09).
+    (without_pass_business_names, "cc088e7403557025320b9d86bb2abc0486acb830de938639c32f392295123ce9"),
     # The capacity `other` on EMPLOYED_BY: "Capacity `other` on EMPLOYED_BY (Recommended)" (2026-11-03, ticket 182).
     (without_other_capacity, "a24c4ac2bd970feba807d28fc4ae9b5539adc49e7826c9aadff45424629244e7"),
     # P5 compares the city or the postcode; P1 and P4 deleted: "do not use p1 or p4, p5 can match on

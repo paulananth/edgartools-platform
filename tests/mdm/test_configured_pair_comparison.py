@@ -52,7 +52,7 @@ place = {"street": "1 INVENTED WAY", "city": "EXAMPLE", "postcode": "11111", "co
 entry = {"version": VERSION, "key": "INVENTED LAB INC", "invented_keys": ["origin-1"],
          "invented_key_count": 1, "invented_matches": [["target-1", "2026-01-01T00:00:00Z"]],
          "invented_match_count": 1, "invented_other_count": 0,
-         "invented_assignment": {"version": CASCADE, "pass": "P1", "invented_target": "target-1",
+         "invented_assignment": {"version": CASCADE, "pass": "name and full address", "invented_target": "target-1",
              "last_update": "2026-01-01T00:00:00Z", "key": "INVENTED LAB INC", "flags": [], "via": "legal name"}}
 left = {"record_key": "origin-1", "fields": {"invented_name": field("INVENTED LAB INC")},
         "provenance": {"matching": {"invented_name_count": entry, "invented_location": place}}}
@@ -67,10 +67,10 @@ def compare(primitive, args):
     return compare_candidate_records({"when": [{"primitive": primitive, "args": args}]}, [(left, right)])
 def name_count(): return compare("name_census_match@1", names)
 def eligible(): return compare("gleif_entity_eligible@1", eligibility)
-def cascade(): return compare("cascade_pass@1", {**names, "pass": "P1", "compare": ["street", "city", "postcode"], "refused_flags": []})
-def either(**changes):  # P5's shape: the city or the postcode
+def cascade(): return compare("cascade_pass@1", {**names, "pass": "name and full address", "compare": ["street", "city", "postcode"], "refused_flags": []})
+def either(**changes):  # the shape of "name and city or postcode": the city or the postcode
     right["provenance"]["matching"]["invented_preferred"] = {**place, **changes}
-    return compare("cascade_pass@1", {**names, "pass": "P1", "compare": [["city", "postcode"]], "refused_flags": []})
+    return compare("cascade_pass@1", {**names, "pass": "name and full address", "compare": [["city", "postcode"]], "refused_flags": []})
 '''
 
 

@@ -788,6 +788,9 @@ class TestANameBindingRule:
             check_policy(body)
 
 
+CASCADE_RULES = {"sec-gleif-name-city-or-postcode", "sec-gleif-name-country", "sec-gleif-name-alone"}
+
+
 class TestTheNameMatchingRules:
     """Ticket 08: the matching rules are declared in the live policy, not active."""
 
@@ -798,7 +801,7 @@ class TestTheNameMatchingRules:
             r
             for r in POLICY["kinds"]["company"]["rules"]
             if r["family"] == "name_binding"
-            and not r["rule_id"].startswith("sec-gleif-cascade-")  # ticket 21, off
+            and r["rule_id"] not in CASCADE_RULES  # ticket 21
         ]
         assert declared == [NAME_STATE, NAME_POSTCODE]
         assert POLICY["kinds"]["company"]["bars"]["name_binding"] == COMPANY_BAR
@@ -809,13 +812,13 @@ class TestTheNameMatchingRules:
         # then the three Form ADV matching rules (rebuild priorities ticket
         # 76, "Switch on all three (Recommended)", 2026-10-17 08:31 ET), then
         # the N-PORT registrant's (ticket 79, "Switch on all six (Recommended)",
-        # 2026-10-17 21:03 ET), then the cascade pass P5 (ticket 09, "P5 now,
-        # hold P1/P4/P6 (Recommended)", 2026-10-30 18:20 ET).
+        # 2026-10-17 21:03 ET), then the cascade pass "name and city or postcode" (ticket 09, operator
+        # words "P5 now, hold P1/P4/P6 (Recommended)", 2026-10-30 18:20 ET).
         company = policy_layers.company_part(POLICY)["automatic_rules"]
         assert company[:2] == [APPROVED_ACTIVATION, CIK_ACTIVATION]
         assert [e["rule_id"] for e in company[2:]] == [
             "sec-gleif-name-jurisdiction", "sec-gleif-name-postal", *policy_layers.FORM_ADV_RULES,
-            "nport-registrant-cik", "sec-gleif-cascade-p5"]
+            "nport-registrant-cik", "sec-gleif-name-city-or-postcode"]
         check_policy(POLICY)
 
     def test_an_activation_needs_the_operators_approval(self):
@@ -869,7 +872,7 @@ def test_a_cascade_pass_with_invalid_arguments_is_refused(changes):
     from edgar_warehouse.mdm.activation import check_name_binding_rule
 
     rule = copy.deepcopy(next(r for r in POLICY["kinds"]["company"]["rules"]
-                              if r["rule_id"] == "sec-gleif-cascade-p5"))
+                              if r["rule_id"] == "sec-gleif-name-city-or-postcode"))
     rule["when"][0]["args"] = {**rule["when"][0]["args"], **changes}
     with pytest.raises(Conflict, match="invalid pass arguments"):
         check_name_binding_rule("company", rule, POLICY["kinds"])
@@ -879,7 +882,7 @@ def test_a_cascade_pass_must_keep_the_one_lei_veto():
     from edgar_warehouse.mdm.activation import check_name_binding_rule
 
     rule = copy.deepcopy(next(r for r in POLICY["kinds"]["company"]["rules"]
-                              if r["rule_id"] == "sec-gleif-cascade-p7"))
+                              if r["rule_id"] == "sec-gleif-name-alone"))
     rule["when"] = [t for t in rule["when"] if t["primitive"] != "holds_no_other_lei@1"]
     with pytest.raises(Conflict, match="one-LEI veto"):
         check_name_binding_rule("company", rule, POLICY["kinds"])
@@ -890,8 +893,8 @@ def test_two_cascade_passes_with_one_name_are_refused():
 
     body = copy.deepcopy(POLICY)
     rules = body["kinds"]["company"]["rules"]
-    second = next(r for r in rules if r["rule_id"] == "sec-gleif-cascade-p6")
-    second["when"][0]["args"]["pass"] = "P5"
+    second = next(r for r in rules if r["rule_id"] == "sec-gleif-name-country")
+    second["when"][0]["args"]["pass"] = "name and city or postcode"
     with pytest.raises(Conflict, match="must be unique"):
         check_policy(body)
 

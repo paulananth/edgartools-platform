@@ -37,7 +37,7 @@ def name_count_of(tmp_path, capture, **changes):
     folder, population, archive, metadata, wanted = capture
     if "gleif_reading" not in changes:
         changes["gleif_reading"] = gleif_reading(tmp_path / "r", archive, wanted, len(RECORDS))
-    # A switched-on pass (P5, ticket 09) runs the cascade on every name count, which reads the capture's catalog.
+    # A switched-on pass ("name and city or postcode", ticket 09) runs the cascade on every name count, which reads the capture's catalog.
     return write_name_count(capture=str(folder), population=str(population), gleif_metadata=str(metadata),
                                 **{"output": str(tmp_path / "x.json"), "catalog": CATALOG, **changes})
 
@@ -64,7 +64,7 @@ def test_it_writes_the_name_count(tmp_path, capture):
                           "other_name_holders": 1},
             "OLD NAME INC": {"ciks": ["0000000001", "0000320193"], "cik_count": 2, "leis": [], "lei_count": 0,
                              "other_name_holders": 1}}}
-    # A pass is switched on (P5, ticket 09), so the name count also holds the cascade's answers (tested below).
+    # A pass is switched on ("name and city or postcode", ticket 09), so the name count also holds the cascade's answers (tested below).
     assert name_count.pop("cascade")["version"] == "sec-gleif-cascade-v1"
     assert canonical(name_count) == canonical(expected)
     assert name_count["entries"]["APPLE INC"]["cik_count"] == 2  # two filers hold the name
@@ -152,7 +152,7 @@ def test_metadata_the_publisher_would_not_have_written_is_refused(tmp_path, capt
 
 
 def test_a_switched_on_cascade_runs_and_the_name_count_holds_its_answers(tmp_path, capture):
-    # P5 is switched on (ticket 09): every name count runs the cascade, asked for or not, and refuses to
+    # "Name and city or postcode" is switched on (ticket 09): every name count runs the cascade, asked for or not, and refuses to
     # run without the capture's catalog, which the cascade reads each filer's tickers from.
     folder, population, archive, metadata, wanted = capture
     reading = gleif_reading(tmp_path / "r", archive, wanted, len(RECORDS))

@@ -198,7 +198,7 @@ def count_addresses(places: Iterable[Place]) -> Counter:
 def agrees(sec: Place, gleif: Place, compare: list | None) -> bool:
     """Whether two places agree on a pass's parts. `None`: the name alone;
     `[]`: the country alone. A part given as a list agrees when any one of
-    its parts does (P5: the city or the postcode; operator, 2026-10-30)."""
+    its parts does ("name and city or postcode": the city or the postcode; operator, 2026-10-30)."""
     if compare is None:
         return True
     if not sec.country or sec.country != gleif.country:

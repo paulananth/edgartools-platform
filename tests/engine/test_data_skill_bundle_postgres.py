@@ -1174,7 +1174,7 @@ if with_name_count:
         "gleif":{"file_content":"GLEIF_FULL_PUBLISHED"},
         "normalizers":{"sec":"normalize_text@sec-legal-form-kept-v1","gleif":"normalize_text@legal-form-kept-v1"},
         "entries":{"EXAMPLE":{"cik_count":1,"lei_count":1,"ciks":["0000000001"],"leis":[["L1","2026-09-11"]]}},
-        "cascade":{"version":"sec-gleif-cascade-v1","assignments":{"0000000001":{"lei":"L1","pass":"P1"}}}}
+        "cascade":{"version":"sec-gleif-cascade-v1","assignments":{"0000000001":{"lei":"L1","pass":"name and full address"}}}}
     raw = store.put(folder.as_uri(),name_count)
     def bind(value):
         if isinstance(value,str): return raw["sha256"] if value == "0"*64 else value
@@ -1206,7 +1206,7 @@ assert row["tickers"] == ["A","B","C"]
 assert row["business_address"]["country"] == "GB" and row["business_address"]["street"] == "Raw"
 if with_name_count:
     expected = {"name_count":raw["sha256"],"version":name_count["version"],"key":"EXAMPLE",**name_count["entries"]["EXAMPLE"],
-        "cascade":{"name_count":raw["sha256"],"version":name_count["cascade"]["version"],"lei":"L1","pass":"P1"}}
+        "cascade":{"name_count":raw["sha256"],"version":name_count["cascade"]["version"],"lei":"L1","pass":"name and full address"}}
     assert row["name_count"] == expected and "_name_key" not in row
 prepare = {"input":combined,"output":(folder / "mdm/manifest.json").as_uri(),"checks":["mdm.prepared"],
     "keys":{"table":"company","dataset":"sec.company.v1","policy":"0"*64,

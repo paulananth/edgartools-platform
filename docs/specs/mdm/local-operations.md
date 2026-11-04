@@ -146,7 +146,7 @@ edgar-warehouse mdm name-count \
 ```
 
 `--catalog` names the capture's exchange catalog. It is required while a
-cascade pass is switched on (P5 since ticket 09): the Name Count then runs the
+cascade pass is switched on ("name and city or postcode" since ticket 09): the Name Count then runs the
 cascade, which reads each filer's tickers, and refuses to run without it.
 
 The metadata file holds the archive's verified publication metadata

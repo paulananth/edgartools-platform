@@ -7,11 +7,11 @@ from collections import Counter
 from edgar_warehouse.mdm.cascade import Entity, Filer, assign, fit_place, place
 
 PASSES = [
-    {"pass": "P1", "compare": ["street", "city", "postcode"]},
-    {"pass": "P2", "compare": ["street", "postcode"]},
-    {"pass": "P4", "compare": ["postcode"]},
-    {"pass": "P6", "compare": []},
-    {"pass": "P7", "compare": None},
+    {"pass": "name and full address", "compare": ["street", "city", "postcode"]},
+    {"pass": "name, street and postcode", "compare": ["street", "postcode"]},
+    {"pass": "name and postcode", "compare": ["postcode"]},
+    {"pass": "name and country", "compare": []},
+    {"pass": "name alone", "compare": None},
 ]
 HQ = {"street": "1 MAIN ST", "city": "AUSTIN", "postcode": "78701", "country": "US"}
 
@@ -35,7 +35,7 @@ def _run(filers, entities, counts=None):
 
 def test_the_strictest_agreeing_pass_binds_and_records_itself():
     found = _run([_filer("1")], [_entity("L1")])
-    assert found == {"1": {"lei": "L1", "last_update": "2026-09-01", "pass": "P1", "flags": [],
+    assert found == {"1": {"lei": "L1", "last_update": "2026-09-01", "pass": "name and full address", "flags": [],
                            "key": "ACME INC", "via": "legal name"}}
 
 
@@ -43,7 +43,7 @@ def test_a_later_pass_takes_what_an_earlier_one_left():
     far = _place(street="9 ELM ST", city="DALLAS")  # only the postcode agrees
     found = _run([_filer("1"), _filer("2", key="BETA LLC")],
                  [_entity("L1"), _entity("L2", keys=("BETA LLC",), where=far)])
-    assert found["1"]["pass"] == "P1" and found["2"]["pass"] == "P4"
+    assert found["1"]["pass"] == "name and full address" and found["2"]["pass"] == "name and postcode"
 
 
 def test_two_filers_agreeing_with_one_entity_bind_nothing():
@@ -62,7 +62,7 @@ def test_an_earlier_bind_leaves_the_rest_to_a_later_pass_one_to_one():
 def test_an_over_shared_address_is_compared_only_by_country():
     counts = Counter({_place().key: 26})
     found = _run([_filer("1")], [_entity("L1")], counts)
-    assert found["1"]["pass"] == "P6"
+    assert found["1"]["pass"] == "name and country"
 
 
 def test_a_withheld_address_is_compared_only_by_country():
@@ -70,7 +70,7 @@ def test_a_withheld_address_is_compared_only_by_country():
     agent = fit_place(record, {"address": {**HQ, "street": "1209 ORANGE ST"}})
     assert agent.street == frozenset() and agent.country == "US"
     found = _run([_filer("1", where=agent)], [_entity("L1")])
-    assert found["1"]["pass"] == "P6"
+    assert found["1"]["pass"] == "name and country"
 
 
 def test_the_headquarters_address_comes_before_the_legal_address():
@@ -96,7 +96,7 @@ def test_a_conflict_in_place_of_incorporation_binds_and_is_flagged():
 def test_name_alone_binds_only_one_to_one():
     abroad = place({"country": "GB"})
     found = _run([_filer("1", where=abroad)], [_entity("L1")])
-    assert found["1"]["pass"] == "P7"
+    assert found["1"]["pass"] == "name alone"
 
 
 def _record(fields, matching, withheld=(), **extra):
@@ -129,18 +129,18 @@ def test_the_passes_come_from_the_company_rules_in_order():
     from edgar_warehouse.mdm.cascade import spec
 
     def rule(n, compare):
-        return {"rule_id": f"p{n}", "when": [
-            {"primitive": "cascade_pass@1", "args": {"pass": f"P{n}", "compare": compare, "over_shared": 25}},
+        return {"rule_id": f"pass-{n}", "when": [
+            {"primitive": "cascade_pass@1", "args": {"pass": ["name and full address", "name, street and postcode"][n - 1], "compare": compare, "over_shared": 25}},
             {"primitive": "gleif_entity_eligible@1", "args": {"entity_statuses": ["ACTIVE"],
                                                               "refused_registration_statuses": ["ANNULLED"]}}]}
 
     policy = {"kinds": {"company": {"rules": [rule(1, ["street"]), {"rule_id": "other", "when": []}, rule(2, None)]}}}
     found = spec(policy)
-    assert [p["pass"] for p in found["passes"]] == ["P1", "P2"] and found["over_shared"] == 25
+    assert [p["pass"] for p in found["passes"]] == ["name and full address", "name, street and postcode"] and found["over_shared"] == 25
     assert found["entity_statuses"] == ["ACTIVE"]
 
 
-EITHER = [{"pass": "P5", "compare": [["city", "postcode"]]}]  # operator, 2026-10-30
+EITHER = [{"pass": "name and city or postcode", "compare": [["city", "postcode"]]}]  # operator, 2026-10-30
 
 
 def _either(where):
@@ -148,11 +148,11 @@ def _either(where):
 
 
 def test_a_part_listed_as_alternatives_agrees_on_the_city_alone():
-    assert _either(_place(street="9 ELM ST", postcode="10001"))["1"]["pass"] == "P5"
+    assert _either(_place(street="9 ELM ST", postcode="10001"))["1"]["pass"] == "name and city or postcode"
 
 
 def test_a_part_listed_as_alternatives_agrees_on_the_postcode_alone():
-    assert _either(_place(street="9 ELM ST", city="DALLAS"))["1"]["pass"] == "P5"
+    assert _either(_place(street="9 ELM ST", city="DALLAS"))["1"]["pass"] == "name and city or postcode"
 
 
 def test_a_part_listed_as_alternatives_needs_one_of_them():
