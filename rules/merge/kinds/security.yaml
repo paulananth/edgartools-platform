@@ -335,6 +335,11 @@ identifiers:
     compatibility:
       field: kind
       predicate: kind_equal@1
+    verification:
+      corpus_sha256: e2d24ec0ef62358c6df4149c8cc891bb40a14fe3f3d2fcbf98e537c0be62a4f1
+      approved_by: operator
+      approved_at: "2026-11-04T17:01:47Z"
+      reason: "ticket 24 limited test (.scratch/rebuild-priorities/research/24_limited_test.json), approved under the operator's standing approval (2026-11-04: switch on for form 4 keep it standing approval for ticket 190 191, and \"Yes, Form 4 route only\"). 2026 Q2 Form 4 filings (5,356, the real reading) against the OpenFIGI tickers: 1,882 issuer and symbol records, 1,419 bind to one Security, 330 wait because no Security holds the ticker, 96 go to review because the ticker reaches several Securities (at most 3), 37 file no symbol; none makes a Security; tests/integration/test_form4_security_ticker.py: the rule off fails 2 of 3, a second pass changes nothing"
     tolerance:
       unit: items
       warm_up_decisions: 10000

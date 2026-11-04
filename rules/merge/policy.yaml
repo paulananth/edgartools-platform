@@ -377,6 +377,17 @@ automatic_rules:
   rule_version: 2026-10-26.1
   verdict: bind
   activation: deterministic
+# form4-security-ticker (ticket 24): the trading symbol a Form 3, 4 or 5 files finds the Security OpenFIGI
+# gave that ticker to; it creates nothing, waits when none holds it and sends several to review. Switched
+# on under the operator's standing approval, 2026-11-04 (\"switch on for form 4 keep it standing approval
+# for ticket 190 191\"), after the limited test (.scratch/rebuild-priorities/research/24_limited_test.json,
+# sha256 e2d24ec0...62a4f1) passed. It activates on the ticker's verified Identifier Contract.
+- kind: security
+  family: binding
+  rule_id: form4-security-ticker
+  rule_version: 2026-11-04.symbol-finds-the-security
+  verdict: bind
+  activation: deterministic
 # sec-gleif-name-city-or-postcode ("Name and city or postcode", ticket 09;
 # renamed from its pass number, operator, 2026-11-03): switched on by
 # operator, 2026-10-30 18:20 ET, comparing the city; then, the same evening, in
