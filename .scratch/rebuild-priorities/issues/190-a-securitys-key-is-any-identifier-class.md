@@ -2,7 +2,7 @@
 
 Priority: 190. Map: [Rebuild priorities](../map.md). Opened 2026-11-04 01:44 ET, from [ticket 125](125-securities-and-funds-uniquely-identifiable.md) (operator, 2026-11-03: "yes do option 1 and open the follow-up ticket").
 
-Type: task. Status: open. Blocked by: [125](125-securities-and-funds-uniquely-identifiable.md) (its SEDOL and LoanX join slice, which this follows).
+Type: task. Status: approved to build (operator, 2026-11-04 06:46 ET: "approve 190 and 191"). Blocked by: [125](125-securities-and-funds-uniquely-identifiable.md) (its SEDOL and LoanX join slice, which this follows).
 
 ## Question
 

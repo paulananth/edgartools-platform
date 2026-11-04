@@ -3,7 +3,7 @@
 Priority: 20, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md). Moved from `.scratch/mastering-to-done/issues/19-restore-the-catalog-and-publish-person.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
 Type: task
-Status: claimed (Codex, 2026-10-30); expanded by the operator to all configured entities and pipelines.
+Status: claimed (Codex, 2026-10-30; the operator, 2026-11-04 06:46 ET: "ticket 20 to codex", so Claude does not work it); expanded by the operator to all configured entities and pipelines.
 Blocked by: none for metadata from existing configuration; missing source configuration remains a recorded coverage gap, not authority to activate sources.
 
 ## Question

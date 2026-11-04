@@ -2,7 +2,7 @@
 
 Priority: 191. Map: [Rebuild priorities](../map.md). Opened 2026-11-04 04:22 ET, from [ticket 125](125-securities-and-funds-uniquely-identifiable.md) (its third slice).
 
-Type: task. Status: open. Blocked by: none.
+Type: task. Status: approved to build (operator, 2026-11-04 06:46 ET: "approve 190 and 191"). Blocked by: none.
 
 ## Question
 
