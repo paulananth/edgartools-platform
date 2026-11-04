@@ -43,7 +43,9 @@ def retired(key, outcome):
 
 def historical_assertion(assertion):
     """Compare the rename's output with the retained pre-rename oracle."""
-    body = dict(assertion)
+    from tests.support.name_count_words import without_name_id
+
+    body = without_name_id(assertion)  # ticket 01: the name id came after
     body["source_code"] = "sec.submissions.company.v1"
     body["subject"] = digest([body["source_code"], body["record_key"]])
     body["assertion_id"] = digest({k: v for k, v in body.items() if k != "assertion_id"})
