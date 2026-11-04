@@ -16,6 +16,9 @@ platform"; MDM's hosted target is Snowflake Postgres or Databricks Lakebase).
    commands a `--help` or the repo shows): "if agents can figure it out alone
    delete it from claude.md".
 
+`AGENTS.md` (Codex and Grok) holds only what those runtimes need beyond this file and points here for the
+shared rules; it never copies them, since copies drift (ticket 63, 2026-11-03).
+
 **Before any AWS, Snowflake, dbt, Terraform, image or deploy command**, use the
 [aws-snowflake-operations](skills/aws-snowflake-operations/SKILL.md) skill: the
 one live AWS account, the decommissioned dev environments, the Snowflake rules
