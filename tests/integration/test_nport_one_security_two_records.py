@@ -3,7 +3,7 @@
 Ticket 138 ended the fold of an ISIN-only holding into its CUSIP by FIGI: a CUSIP's
 holdings and an ISIN-only holding are two records, and MDM finds the one Security for
 either. This pins what the Security's ISSUED_BY link is then: its start when both records
-name the issuer (the earliest filing), and its links when they name two issuers (one each).
+name the issuer (the earliest filing), and its links when they name two issuers (none, and a review).
 Invented values only.
 """
 
@@ -62,7 +62,7 @@ def test_the_records_of_one_security_give_it_one_link_starting_at_the_earliest_f
     assert link.starts(database) == [(link.MAY28, "stated")]
 
 
-def test_records_of_one_security_naming_two_issuers_give_it_one_link_each(database, tmp_path):
+def test_records_of_one_security_naming_two_issuers_give_it_no_link_and_a_review(database, tmp_path):
     made = two_records(tmp_path, LEI_OTHER, "28-MAY-2026")
     stage, policy = link.mastered_issuer(database)
     # The second issuer is mastered too, as the first is.
@@ -74,9 +74,6 @@ def test_records_of_one_security_naming_two_issuers_give_it_one_link_each(databa
     link.apply(stage, policy, "q2", made, 5)
     securities = [v for v in core.documents(database, "entity").values() if v["kind"] == "security" and v.get("status") != "alias"]
     assert len(securities) == 1
-    # Today: one ISSUED_BY link per issuer, each at its own earliest filing, and no review. Inside
-    # one record, two issuers give no link (source.yaml); across two records they give two.
-    links = sorted(p["valid_from"][:10] for b in core.documents(database, "relationship").values()
-                   if b["type"] == "ISSUED_BY" for p in b["periods"])
-    assert links == ["2026-05-28", "2026-06-05"]
-    assert not [r for r in core.documents(database, "review").values() if r.get("open")]
+    # A Security has one issuer (relationship types version 3): neither link stands, and a review asks.
+    assert not [b for b in core.documents(database, "relationship").values() if b["type"] == "ISSUED_BY"]
+    assert "conflicting_targets" in [r["reason"] for r in core.documents(database, "review").values() if r.get("open")]

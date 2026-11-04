@@ -116,10 +116,12 @@ WORDS = {
         authority="internal", ticket="132",
         usage=[("mdm", "relationship", "type", "exact")],
         hints=[("meaning", "A type's properties: from and to (the kinds at each end), from_profile and to_profile, "
-                           "hierarchy, cycles, one_parent, ultimate_parent and ultimate_type, keeps_start, ends_parent_links.")],
+                           "hierarchy, cycles, one_parent, one_target, ultimate_parent and ultimate_type, keeps_start, ends_parent_links.")],
         versions={"1": ("claude (ticket 132)", "Use RDM for keeping types and other information; "
                                                "Add code properties to RDM (Recommended)"),
-                  "2": ("claude (ticket 182)", None)}),
+                  "2": ("claude (ticket 182)", None),
+                  "3": ("claude (ticket 24)", "This can't be true \"Security with two issuers keep two ISSUED_BY links\" "
+                                              "fix the root cause")}),
     "mdm-relationship-types-before-real-names": dict(
         name="MDM relationship types before the real names",
         definition="The table of relationship types as the operator approved it before the types took their real "

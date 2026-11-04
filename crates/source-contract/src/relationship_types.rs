@@ -48,6 +48,7 @@ pub struct TypeRules {
     pub ultimate_type: Option<String>,
     ends_parent_links: Option<bool>,
     keeps_start: Option<bool>,
+    one_target: Option<bool>,
 }
 
 impl TypeRules {
@@ -74,6 +75,12 @@ impl TypeRules {
     /// The earliest start seen is kept.
     pub fn keeps_start(&self) -> bool {
         self.keeps_start == Some(true)
+    }
+
+    /// An entity has one target at a time (a Security has one issuer): two targets over
+    /// overlapping periods set both links aside and ask for review.
+    pub fn is_one_target(&self) -> bool {
+        self.one_target == Some(true)
     }
 
     /// The type's ultimate-parent algorithm; the check refuses a name it does not know.
@@ -144,7 +151,11 @@ pub fn check(types: &Map<String, Value>, kinds: Option<&BTreeSet<String>>) -> Re
                 ))
             }
         }
-        for (flag, value) in [("ends_parent_links", rules.ends_parent_links), ("keeps_start", rules.keeps_start)] {
+        for (flag, value) in [
+            ("ends_parent_links", rules.ends_parent_links),
+            ("keeps_start", rules.keeps_start),
+            ("one_target", rules.one_target),
+        ] {
             if value.is_some() && (value != Some(true) || hierarchy) {
                 return Err(format!("Relationship type {name}: {flag} is true, on a link that is no parent"));
             }
@@ -261,6 +272,8 @@ mod tests {
             (json!({"hierarchy": true, "cycles": "invalid", "ultimate_parent": "invented", "ultimate_type": "T"}), "unknown ultimate-parent"),
             (json!({"ultimate_type": "T"}), "names its ultimate_type"),
             (json!({"keeps_start": false}), "no parent"),
+            (json!({"one_target": false}), "no parent"),
+            (json!({"hierarchy": true, "cycles": "review", "one_target": true}), "no parent"),
             (json!({"hierarchy": true, "cycles": "review", "ends_parent_links": true}), "no parent"),
             (json!({"capacities": ["director"]}), "its child codes"),
             (json!({"to_profile": " "}), "a role's name"),

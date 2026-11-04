@@ -381,6 +381,17 @@ def without_place_codes(policy: dict) -> dict:
     return {k: v for k, v in _copy(policy).items() if k != "reference"}
 
 
+def without_one_issuer(policy: dict) -> dict:
+    """Ticket 24 (operator, 2026-11-04: "This can't be true 'Security with two issuers keep two
+    ISSUED_BY links' fix the root cause"): the relationship types pinned at version 3, which states
+    that a Security has one issuer at a time. Peeled, the pin is version 2."""
+    body = _copy(policy)
+    pin = body["reference_pins"][body["relationships"]["pin"]]
+    pin["version"] = "2"
+    pin["sha256"] = "0ef43fd1905cb62d323acebfdfb341702c78e96e4670952d7c9dbdb074662078"
+    return body
+
+
 def without_other_capacity(policy: dict) -> dict:
     """Ticket 182 (operator, 2026-11-03: "Capacity `other` on EMPLOYED_BY (Recommended)"): the relationship
     types pinned at version 2, which adds the capacity `other` to EMPLOYED_BY. Peeled, the pin is version 1."""
@@ -440,6 +451,8 @@ def without_name_only_passes_deleted(policy: dict) -> dict:
 # Newest first: each layer, and Company's policy digest with it and every
 # layer after it still on.
 LAYERS = [
+    # A Security has one issuer at a time (ticket 24, relationship types version 3).
+    (without_one_issuer, "97905f9416668c213d74eabe9aea2c237c77d6faec1394f15927a402b2e24baf"),
     # The two name-only passes deleted: "delete p6 and p7" (2026-11-03, ticket 09).
     (without_name_only_passes_deleted, "1df4a51dff797cb4d0bb92832e0727f1558ab37534e2ca6d2620259ae92cc05c"),
     # Cascade rules named by what they compare: "yes rename all four" (2026-11-03, ticket 09).
