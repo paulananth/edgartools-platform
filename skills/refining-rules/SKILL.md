@@ -297,7 +297,14 @@ Never invent a command.
   `sec-gleif-name-postal`; the cascade pass `sec-gleif-name-city-or-postcode` (the passes that compared less are deleted)
   (`cascade_pass@1`; "name and city or postcode" compares `[[city, postcode]]`); the code in
   `edgar_warehouse/mdm/name_count.py` and `cascade.py`
-  (ticket 09).
+  (ticket 09). Name a matching rule by what it compares, never by a pass
+  number (operator, 2026-11-03). A rename or a deletion moves the policy
+  digest: add a policy layer in `tests/mdm/policy_layers.py` that restores the
+  old form, then run the whole CI set (`tests/unit tests/architecture
+  tests/mdm` and the engine and integration files that name the rule), since
+  the mapping-document test, the Company mastering fixture digest and the
+  installed-bundle test each hold the rule list (ticket 09 needed three extra
+  pushes).
 - Issued identifiers: those with an Identifier Contract in a kind file (today `cik`; GLEIF states `lei`). Name-rule proofs:
   `.scratch/company-mastering/research/08-*` and `12-*`. A proving run:
   `.scratch/company-mastering/research/27_proving_run.py`.
