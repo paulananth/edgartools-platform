@@ -2,7 +2,7 @@
 
 Priority: 114 (taken first: operator, 2026-10-19, "must onboard company no excuses"). Map: [Rebuild priorities](../map.md).
 
-Type: task. Status: in progress (Claude, 2026-10-19). Then GLEIF and the rest, one source at a time (operator, 2026-10-19: "Can you turn on company mastering one source at a time sec, geilf, and the rest"). Blocked by: none. Takes over: ticket 02's and ticket 71's "Activate the SEC Company source" parts for a local switch-on; Grok's stopped Company proving run (#1098's handoff, 2026-10-18).
+Type: task. Status: resolved (2026-11-03 18:54 ET; live acquisition is ticket 71's). Then GLEIF and the rest, one source at a time (operator, 2026-10-19: "Can you turn on company mastering one source at a time sec, geilf, and the rest"). Blocked by: none. Takes over: ticket 02's and ticket 71's "Activate the SEC Company source" parts for a local switch-on; Grok's stopped Company proving run (#1098's handoff, 2026-10-18).
 
 ## Operator rulings
 
@@ -35,5 +35,5 @@ Type: task. Status: in progress (Claude, 2026-10-19). Then GLEIF and the rest, o
 - [x] Slice 1 three-axis review (2026-10-19 08:21 ET): GoF "leave it" (one readability edit taken); Standards: a run with no feed could hold a capture step, an empty feed counted as none, no test through `Bookkeeping.start` (all fixed, 2 tests); Spec: stale "activation needs an acquisition proof" in COMPLETION.md and two docs (rewritten), how live data is switched on later (APPROVE.md: a new version). 188 passed
 - [x] Slice 1 PR, CI, merge (#1108 merged 2026-10-19 08:30 ET)
 - [x] The `rules run` fix: PR #1110 merged 2026-10-19 08:51 ET; its reviews (GoF: leave it; Standards: name a source only for a source document; Spec: the carried proofs' exact account) landed after the merge, so they follow in a second PR
-- [ ] Tickets 02, 71 and 14 updated
-- [ ] Learning → skill
+- [x] Tickets 02, 71 and 14 updated (2026-11-03 18:54 ET): 02 and 71 now say the local switch-on over captured files was done by 114 and only live acquisition stays in 71; 14 needs no change (114 dropped the declared Company writer, so its version-1 limit no longer blocks)
+- [x] Learning → skill (2026-11-03 18:54 ET): already held: `skills/data-onboarding/APPROVE.md` ("Live acquisition (a run with a feed, the capture worker) also needs an acquisition proof") and `skills/bookkeeping/RUN.md` / `SKILL.md` (a feed is named only for live acquisition); no new line
