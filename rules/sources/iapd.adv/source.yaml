@@ -90,7 +90,7 @@ bookkeeping:
           key: "{unit}"
           leases: ["silver:{silver}"]
           checks: [input.hash, output.receipt, silver.landed]
-          input: {keys: {table: custody, silver: adv_custody}}
+          input: {keys: {table: custody_facts, silver: adv_custody}}
         - name: processed
           operation: journal.record
           requires: [land_custody]

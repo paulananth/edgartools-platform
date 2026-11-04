@@ -88,4 +88,4 @@ def test_the_amount_each_custodian_holds_lands_in_silver_after_the_filings_merge
     filing is mastered; the journal records the file only after the landing."""
     steps = Artifacts().json(write_manifest(**capture(tmp_path, "mastering", [8, 9]))["manifest"])["steps"]
     assert len(steps["land_custody"]) == len(steps["read_custody"])  # each read unit lands its own rows
-    assert {(u["keys"]["table"], u["keys"]["silver"]) for u in steps["land_custody"]} == {("custody", "adv_custody")}
+    assert {(u["keys"]["table"], u["keys"]["silver"]) for u in steps["land_custody"]} == {("custody_facts", "adv_custody")}

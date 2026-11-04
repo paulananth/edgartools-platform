@@ -92,3 +92,38 @@ read:
                 null_if: ["name:"]
         amount: {text: {path: "5K(3)(g)", path_mode: literal, null_if: [""]}}
         published: {context: {name: published}}
+    # The silver table's rows (silver-custody.yaml): the facts of the row and the custodian's key. The
+    # custodian's name, address and identifiers are fields of the master record (silver keeps no master
+    # field, ticket 143), so they stay in `custody` above, for MDM.
+    custody_facts:
+      each: record
+      columns:
+        filing_id: {text: {path: "Filing ID", path_mode: literal}}
+        row: {ordinal: {}}
+        related_person: {text: {path: "5K(3)(d)", path_mode: literal, null_if: [""]}}
+        custodian_id:
+          coalesce:
+            skip: "null"
+            values:
+            - text:
+                path: "5K(3)(e)"
+                path_mode: literal
+                transforms: [{trim: true}, {pad: {left: "bd:", right: ""}}]
+                null_if: ["bd:"]
+            - text:
+                path: "5K(3)(f)"
+                path_mode: literal
+                transforms:
+                - trim: true
+                - regex_replace: {pattern: "^.*[^A-Z0-9].*$", with: ""}
+                - regex_replace: {pattern: "^.{0,19}$|^.{21,}$", with: ""}
+                - regex_replace: {pattern: "^.{18}[^0-9].$|^.{19}[^0-9]$", with: ""}
+                - pad: {left: "lei:", right: ""}
+                null_if: ["lei:"]
+            - text:
+                path: "5K(3)(a)"
+                path_mode: literal
+                transforms: [{trim: true}, {case: upper}, {pad: {left: "name:", right: ""}}]
+                null_if: ["name:"]
+        amount: {text: {path: "5K(3)(g)", path_mode: literal, null_if: [""]}}
+        published: {context: {name: published}}

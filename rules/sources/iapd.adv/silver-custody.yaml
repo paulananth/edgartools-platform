@@ -1,9 +1,10 @@
 # The silver table of Form ADV custody rows (ticket 01; operator, 2026-10-09: "why do i need the amount ?
 # that is a fact"): the amount an adviser reports as held for it by a custodian is a fact kept in silver,
 # one row per filing and custodian row, linked to both Companies by MDM id (the adviser by its filing, the
-# custodian by its custodian id), never on the CUSTODIAN link. Rows are the custody reading's `custody` table
-# (Schedule D 5.K(3), custody-csv.yaml). One system of record (ticket 143): the custodian's name, address
-# and identifiers are the custodian Company's, in MDM, so the row holds only the filing's own facts.
+# custodian by its custodian id), never on the CUSTODIAN link. Rows are the custody reading's table
+# (Schedule D 5.K(3), custody-csv.yaml), table `custody_facts`, every column of it (the writer refuses a
+# field the spec does not name). The custodian's name, address and identifiers are fields of the master
+# record, so they are not here (ticket 143): the custodian Company in MDM is found by `custodian_id`.
 # Measured over the 13 local months (June 2025 to June 2026), counts only: 50,152 rows; every amount is a
 # whole number of at most 13 digits (no decimals, none empty, none negative); 1,156 rows name a related
 # person (Y) and 48,996 do not (N). Append only: a filed row never changes; an amendment is a new filing.
