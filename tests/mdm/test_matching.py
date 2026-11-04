@@ -187,7 +187,7 @@ def _pass(rule_id):
     return next(r for r in _POLICY["kinds"]["company"]["rules"] if r["rule_id"] == rule_id)
 
 
-CITY_OR_POSTCODE, COUNTRY, ALONE = "sec-gleif-name-city-or-postcode", "sec-gleif-name-country", "sec-gleif-name-alone"
+CITY_OR_POSTCODE = "sec-gleif-name-city-or-postcode"
 
 
 ELSEWHERE = {"street": "9 ELSEWHERE RD", "city": "SAN JOSE", "postcode": "95110"}
@@ -206,12 +206,11 @@ def cascaded(pass_="name and city or postcode", flags=(), via="legal name", **ad
 
 def test_a_cascade_pass_binds_the_pair_the_name_count_named_in_that_pass():
     assert _passes(_pass(CITY_OR_POSTCODE), *cascaded())
-    assert not _passes(_pass(COUNTRY), *cascaded())  # the name count named another pass
+    assert not _passes(_pass(CITY_OR_POSTCODE), *cascaded(pass_="name alone"))  # the name count named another pass
 
 
 def test_a_cascade_pass_rechecks_the_address_on_the_stage_rows():
     assert not _passes(_pass(CITY_OR_POSTCODE), *cascaded(**ELSEWHERE))
-    assert _passes(_pass(ALONE), *cascaded(pass_="name alone", **ELSEWHERE))
 
 
 def test_p5_agrees_on_the_city_or_the_postcode():

@@ -1,6 +1,6 @@
 {
  "as_of": "2026-09-29T15:00:00Z",
- "policy_digest": "dde16878360380a0933218e9cc787821d5bea7d2120cda3e789b96a9b6da7cd7",
+ "policy_digest": "8a3b98676cc4a3a7082501c377b75c08f3ba7047f97a6c2596032ea69489cdd0",
  "scope": {
   "mode": "bounded_sample",
   "selected_records": 3,
