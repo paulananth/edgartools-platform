@@ -1360,10 +1360,12 @@ dataset_contracts:
           cusip: cusip
           isin: isin
           figi: figis
+          ticker: ticker
         identifier_formats:
           cusip: cusip
           isin: isin
           figi: figi
+          ticker: ticker
         detail_keys:
           listings: figi
         # Lookup only (operator, 2026-10-25: composite and share-class FIGI
@@ -1371,4 +1373,3 @@ dataset_contracts:
         cross_references:
           composite_figi: composite_figi
           share_class_figi: share_class_figi
-          openfigi_ticker: ticker

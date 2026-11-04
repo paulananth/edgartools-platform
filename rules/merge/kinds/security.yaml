@@ -291,3 +291,23 @@ identifiers:
       unit: items
       warm_up_decisions: 10000
       max_per_10k: 5
+  # A listing's trading symbol (ticket 24; operator, 2026-11-04, "Yes, Form 4 route only"):
+  # OpenFIGI issues it, only the Form 4 rule matches by it, it never merges two
+  # Securities. A ticker is reused over the years, so no reverse limit: a rule on
+  # it sends several Securities to review.
+  ticker:
+    authority: the listing's trading symbol, as OpenFIGI states it
+    sources:
+    - openfigi.security.v3
+    # rules/identifiers/ticker.yaml (ticket 24): one to nine letters or digits, upper-cased.
+    normalizer: normalize_identifier@ticker-v1
+    claim:
+      forward: null
+      reverse: null
+    compatibility:
+      field: kind
+      predicate: kind_equal@1
+    tolerance:
+      unit: items
+      warm_up_decisions: 10000
+      max_per_10k: 5

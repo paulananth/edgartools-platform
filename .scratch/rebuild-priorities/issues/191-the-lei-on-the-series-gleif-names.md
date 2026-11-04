@@ -1,5 +1,7 @@
 # 191: The LEI on the series GLEIF names
 
+Switch-on: standing approval (operator, 2026-11-04 07:00 ET: "switch on for form 4 keep it standing approval for ticket 190 191"): it is switched on once its limited test passes, with the counts recorded here and no question asked.
+
 Priority: 191. Map: [Rebuild priorities](../map.md). Opened 2026-11-04 04:22 ET, from [ticket 125](125-securities-and-funds-uniquely-identifiable.md) (its third slice).
 
 Type: task. Status: approved to build (operator, 2026-11-04 06:46 ET: "approve 190 and 191"). Blocked by: none.
