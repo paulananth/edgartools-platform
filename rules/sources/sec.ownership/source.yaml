@@ -93,9 +93,46 @@ bookkeeping:
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, journal.recorded]
       checks: [manifest.hash, work.accounting, journal.delivered]
+    # The issuer's security (ticket 24; operator, 2026-11-04, "Yes, Form 4 route only"): the trading
+    # symbol each filing names finds its Security by ticker. A target prepares one publication, so
+    # this one reads only each filing's issuer and symbol (ownership-security-sgml.yaml), far less
+    # than the lines. It creates no Security, so OpenFIGI's Securities are mastered first; a symbol
+    # no Security holds yet waits unbound.
+    security_symbols:
+      steps:
+        - name: read_security
+          operation: source.read
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {slices: {bytes: 8388608}}
+          input: {contract: ownership-security-sgml.yaml, files: "*.txt"}
+        - name: prepare_security
+          operation: mdm.prepare
+          requires: [read_security]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, mdm.prepared]
+          input:
+            keys: {table: security_record, record_column: record, dataset: sec.ownership.security.v1}
+            readings: {read: {all: read_security}}
+        - name: merge_security
+          operation: mdm.merge
+          requires: [prepare_security]
+          key: "{batch_id}"
+          leases: ["mdm:consumer:{consumer}"]
+          checks: [input.hash, output.receipt, mdm.committed]
+        - name: processed_security
+          operation: journal.record
+          requires: [merge_security]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, journal.recorded]
+      checks: [manifest.hash, work.accounting, journal.delivered]
 dataset_contracts:
   # The issuer's security a Form 3, 4 or 5 names (ticket 24; operator, 2026-11-04, "Yes, Form 4
-  # route only"): one record per issuer CIK, trading symbol and class title. It files the
+  # route only"): one record per filing, with the issuer CIK and the trading symbol. It files the
   # symbol as a cross-reference, lookup only: it finds the Security OpenFIGI gave that ticker
   # to, is never its identifier, and creates nothing (the matching rule waits on a miss).
   sec.ownership.security.v1:
@@ -103,7 +140,7 @@ dataset_contracts:
       provider: SEC
       family: filing_artifact
       schema_version: sec-ownership-security-v1
-      record_key: one security an issuer names (the issuer CIK, the trading symbol it files, the class title)
+      record_key: one security an issuer names on one filing (the issuer CIK, the trading symbol it files)
       publication_key: the filing's accession number
       effective_time: the filing's period of report
       semantics: patch
@@ -138,7 +175,6 @@ dataset_contracts:
         record_key:
         - issuer_cik
         - symbol
-        - security_title
         cross_references:
           ticker: symbol
         cross_reference_formats:

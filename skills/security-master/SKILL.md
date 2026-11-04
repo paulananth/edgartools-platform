@@ -52,7 +52,8 @@ the value, matching or lookup only, the source, first seen, last seen.
 | CUSIP, ISIN, each listing FIGI | matching, from any source (a FIGI 13F or N-PORT files too) |
 | composite FIGI, share-class FIGI | lookup only: 9 composite and 2 share-class FIGIs are on CUSIPs whose names or types differ ("Lookup only", 2026-10-25) |
 | SEDOL, CINS, LoanX | matching, each under its verified Identifier Contract (ticket 125) |
-| ticker, ticker + exchange, Bloomberg ID | lookup only: 17,941 (ticker, exchange) pairs are on two or more CUSIPs (55,057 CUSIPs, 2026-10-15 capture) |
+| ticker (letters and digits, one to nine once a slash, dash or dot is dropped) | OpenFIGI issues it; only the Form 4 rule matches by it (ticket 24; operator, 2026-11-04, "Yes, Form 4 route only"): 616 of 154,511 sit on two or more CUSIPs, at most 3, so its claim is 3 and a symbol reaching several Securities goes to review |
+| ticker + exchange, Bloomberg ID | lookup only: 17,941 raw (ticker, exchange) pairs are on two or more CUSIPs (55,057 CUSIPs, 2026-10-15 capture), mostly a bond's description written in the ticker field |
 
 **Each source does the same: look up, then master.** A source record carries
 every identifier it has (a list where it has several, such as every listing
@@ -93,9 +94,14 @@ CUSIPs, the old one with its last-seen date).
 - **N-PORT adds fields.** A holding's record looks up its CUSIP, ISIN or other
   issued identifier; it mints only when none is found. Its seven pairing steps
   (`cusips_found` to `fold`) go.
-- **Form 4** finds a class by its trading symbol only among the Securities of
-  the filing's issuer Company: one found attaches, none or two go to review
-  (ticket 24). The ticker still joins nothing.
+- **Form 4** finds its Security by the issuer's trading symbol (ticket 24): the
+  `security_symbols` target reads only each filing's issuer and symbol, and
+  `form4-security-ticker` binds the symbol to the one Security OpenFIGI gave
+  that ticker to. None held waits unbound, several go to review, and it makes
+  nothing, so OpenFIGI is mastered first. The symbol is never an identifier of
+  the Security it finds. A single-valued identifier that fails its shape refuses
+  the whole record, so OpenFIGI's record rule leaves a bond's description in the
+  ticker field empty instead.
 
 **Load order and Field Survivorship:** OpenFIGI, then 13F, then N-PORT
 (operator, 2026-10-25: "this should be second source", then "Load and

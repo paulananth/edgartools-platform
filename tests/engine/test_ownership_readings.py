@@ -19,17 +19,19 @@ from tests.engine.test_sgml_container import document, submission
 
 FOLDER = files.ROOT / "sources" / "sec.ownership"
 XML, SGML = (files.load(FOLDER / f"ownership-{shape}.yaml") for shape in ("xml", "sgml"))
+SECURITY = files.load(FOLDER / "ownership-security-sgml.yaml")
 ACCESSION = "0000000000-26-000001"
 
 
-def filing(*, date="2026-01-05", swap="0", code="P", director="1", coding=True, flag="0", root="ownershipDocument") -> bytes:
+def filing(*, date="2026-01-05", swap="0", code="P", director="1", coding=True, flag="0", root="ownershipDocument",
+           symbol="EXW") -> bytes:
     coded = (f"<transactionCoding><transactionFormType>4</transactionFormType><transactionCode>{code}</transactionCode>"
              f"<equitySwapInvolved>{swap}</equitySwapInvolved></transactionCoding>") if coding else ""
     return f"""<?xml version="1.0"?>
 <{root}>
  <schemaVersion>X0508</schemaVersion><documentType>4</documentType><periodOfReport>{date}</periodOfReport>
  <notSubjectToSection16>{flag}</notSubjectToSection16><aff10b5One>true</aff10b5One>
- <issuer><issuerCik>0000000001</issuerCik><issuerName>Example Widgets Inc</issuerName><issuerTradingSymbol>EXW</issuerTradingSymbol></issuer>
+ <issuer><issuerCik>0000000001</issuerCik><issuerName>Example Widgets Inc</issuerName><issuerTradingSymbol>{symbol}</issuerTradingSymbol></issuer>
  <reportingOwner>
   <reportingOwnerId><rptOwnerCik>0000000002</rptOwnerCik><rptOwnerName>Sample Holder</rptOwnerName></reportingOwnerId>
   <reportingOwnerRelationship><isDirector>{director}</isDirector></reportingOwnerRelationship>
@@ -173,3 +175,19 @@ def test_each_line_carries_its_filing_issuer_as_of_and_filing_date():
     adapter = files.mdm_contract("sec.ownership", "sec.ownership.reporting_owner.v1")["adapter"]
     assert owner["owner_record_key"] == adapters.record_key(owner, adapter["record_key"])
     assert bare(filing(), filed=None)["non_derivative_transaction"][0]["filed"] is None
+
+
+@pytest.mark.parametrize("filed, kept", [("EXW", "EXW"), (" exw ", "EXW"), ("EXW-B", "EXWB"), ("EXW.B", "EXWB"), ("EXW/B", "EXWB"),
+                                          ("NONE", None), ("N/A", None), ("none", None), ("", None)])
+def test_the_issuers_filed_symbol_is_a_ticker_without_separators_or_none(filed, kept):
+    """Ticket 24: the security record the Form 4 route reads keeps letters and digits; a filed "NONE" or "N/A" is no symbol."""
+    sgml = submission(document(b"form4.xml", b"<XML>\n" + filing(symbol=filed) + b"</XML>"),
+                      header=f"ACCESSION NUMBER:\t{ACCESSION}\n".encode())
+    (row,) = SourceEngine(SECURITY).read(sgml).tables["security_record"]
+    assert row["record"] == {"accession_number": ACCESSION, "issuer_cik": "0000000001", "symbol": kept}
+
+
+def test_the_symbol_reading_shares_the_ownership_readings_root_and_limits():
+    for part in ("format", "container", "root", "limits"):
+        assert SECURITY["read"][part] == SGML["read"][part], part
+    assert SECURITY["read"]["context"]["accession_number"] == SGML["read"]["context"]["accession_number"]
