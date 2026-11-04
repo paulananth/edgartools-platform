@@ -228,7 +228,7 @@ def _source_sheets(name: str, body: dict, policy: dict, root: Path) -> dict[str,
     critical = [["Dataset", "MDM field", "Test", "When it fails", "Rules path"]]
     quality = [["Dataset", "Id", "Fix or check", "What it does", "Reads", "When it fails", "Rules path"]]
     wins = [["Kind", "MDM field", "Filled by, first wins", "Winner", "Rule", "Rules path"]]
-    from edgar_warehouse.mdm.clean.activation import binding_namespaces
+    from edgar_warehouse.mdm.activation import binding_namespaces
 
     def joins(code: str) -> set[str]:
         """The identifiers a matching rule joins this dataset's records on: a

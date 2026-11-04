@@ -18,9 +18,9 @@ else:
     s = runpy.run_module("tests.storage_adapters.master_id_scenarios")
     g = s["g"]
 
-from edgar_warehouse.mdm.clean.consumer import ContractReader
-from edgar_warehouse.mdm.clean.evidence import decision
-from edgar_warehouse.mdm.clean.store import digest, register_policy
+from edgar_warehouse.mdm.consumer import ContractReader
+from edgar_warehouse.mdm.evidence import decision
+from edgar_warehouse.mdm.store import digest, register_policy
 from tests.storage_adapters.test_prepared_effects import assert_index_lookup
 
 runtime, root = s["runtime"], s["root"]
@@ -233,8 +233,8 @@ try:
         adapter = g["normal"]
         assert_index_lookup(runtime, adapter.type_count_statement(["entity"]), adapter.tables["current"].name)
         import hashlib
-        from edgar_warehouse.mdm.clean.inspection import HASH_CONTRACT, counts
-        from edgar_warehouse.mdm.clean.store import canonical
+        from edgar_warehouse.mdm.inspection import HASH_CONTRACT, counts
+        from edgar_warehouse.mdm.store import canonical
 
         report = counts(runtime)
         assert report["masters"] == {g["KIND"]: 1}
@@ -252,7 +252,7 @@ try:
                                 bytes(rows[object_type, key]["body"]) + b"\n")
         assert report["current_records_md5"] == expected.hexdigest()
         assert counts(runtime) == report
-        from edgar_warehouse.mdm.clean.evidence import deferred_record
+        from edgar_warehouse.mdm.evidence import deferred_record
         held = deferred_record(source_code=s["secondary"], publication_key="1",
             record_locator="invented-inspection-held", schema_version="1",
             reason="invented_missing_key", raw_record={"invented_amount": 7},
@@ -380,7 +380,7 @@ try:
         for table in (proposal, events):
             assert_index_lookup(runtime, query, table.name)
     if case == "review_pages":
-        from edgar_warehouse.mdm.clean.record_reads import RecordReader
+        from edgar_warehouse.mdm.record_reads import RecordReader
 
         related = RecordReader(g["normal"]).projections(reviews=[root])
         expected = {item["object_id"]: item["body"] for item in related if item["object_type"] == "review"}

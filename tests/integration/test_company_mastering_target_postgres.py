@@ -19,13 +19,13 @@ from uuid import uuid4
 
 from edgar_warehouse.bookkeeping.clean.database import grant_profile
 from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
-from edgar_warehouse.mdm.clean.target_manifest import write_manifest
+from edgar_warehouse.mdm.target_manifest import write_manifest
 from edgar_warehouse.rules import files
 from edgar_warehouse.workers import mdm_prepare, source_combine, source_read
 from tests.integration.test_configured_bookkeeping_postgres import databases  # noqa: F401
-from edgar_warehouse.mdm.clean import limits
-from edgar_warehouse.mdm.clean.store import canonical
-from tests.mdm.test_clean_company_preparation import ACME, APPLE, CATALOG_ROWS, MSFT, PINS, name_count_capture, documents
+from edgar_warehouse.mdm import limits
+from edgar_warehouse.mdm.store import canonical
+from tests.mdm.test_mdm_company_preparation import ACME, APPLE, CATALOG_ROWS, MSFT, PINS, name_count_capture, documents
 from tests.support.memory_journal import MemoryJournal
 from tests.support.bookkeeping_protocol import drive
 from tests.support.sec_capture import CATALOG, document, key

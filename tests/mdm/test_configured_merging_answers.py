@@ -28,8 +28,8 @@ def outcome(call):
 
 
 def answers(cases):
-    from edgar_warehouse.mdm.clean import identity, survivorship
-    from edgar_warehouse.mdm.clean.evidence import assertion, decision
+    from edgar_warehouse.mdm import identity, survivorship
+    from edgar_warehouse.mdm.evidence import assertion, decision
     rng = random.Random(81403)
     values = [True, 1, 1.0, 10**80, -0.0, 1e-7, {'é': [1.0, True]}, ['雪', None]]
     for index in range(cases):

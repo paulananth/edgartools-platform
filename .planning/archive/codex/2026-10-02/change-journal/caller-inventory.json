@@ -693,7 +693,7 @@
     "path": "edgar_warehouse/bookkeeping/clean/cli.py",
     "imports": [
       {
-        "module": "edgar_warehouse.mdm.clean.publication",
+        "module": "edgar_warehouse.mdm.publication",
         "names": [
           "LocalContractSink"
         ],
@@ -721,7 +721,7 @@
     "owner": "legacy stack unless explicitly replaced in qualification matrix"
   },
   {
-    "path": "edgar_warehouse/mdm/clean/store.py",
+    "path": "edgar_warehouse/mdm/store.py",
     "imports": [
       {
         "module": "edgar_warehouse.bookkeeping.clean.destinations",

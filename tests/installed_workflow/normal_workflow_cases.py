@@ -12,12 +12,12 @@ import pytest
 from sqlalchemy import event, select, text
 from sqlalchemy.exc import DBAPIError
 
-from edgar_warehouse.mdm.clean import prepared_registry
-from edgar_warehouse.mdm.clean.evidence import decision
-from edgar_warehouse.mdm.clean.merge import MergeStage
-from edgar_warehouse.mdm.clean.prepared_runs import waiting
-from edgar_warehouse.mdm.clean.record_reads import RecordReader
-from edgar_warehouse.mdm.clean.store import Conflict, Store, migrate, register_policy
+from edgar_warehouse.mdm import prepared_registry
+from edgar_warehouse.mdm.evidence import decision
+from edgar_warehouse.mdm.merge import MergeStage
+from edgar_warehouse.mdm.prepared_runs import waiting
+from edgar_warehouse.mdm.record_reads import RecordReader
+from edgar_warehouse.mdm.store import Conflict, Store, migrate, register_policy
 from tests.storage_adapters.test_destination_authority import proof
 
 case = os.environ["WORKFLOW_CASE"].split("-", 1)[1]
@@ -151,7 +151,7 @@ elif case.startswith("upgrade"):
               **pinned_types({"invented_link":{"from":[g["KIND"]],"to":[g["KIND"]]}})}
     with owner.begin() as conn:
         pin = register_policy(conn,policy)
-    from edgar_warehouse.mdm.clean.evidence import subject_key
+    from edgar_warehouse.mdm.evidence import subject_key
     records = [g["record"]("invented-waiting-"+str(n), identifiers={g["NAMESPACE"]:str(500+n)},
         relationships=[{"type":"invented_link","target_subject":subject_key(g["PRIMARY"],"future"),
                         "valid_from":g["AT"],"valid_to":None,"scope":"invented"}]) for n in range(3)]
@@ -186,7 +186,7 @@ elif case.startswith("identifier_"):
     from pathlib import Path
     from unittest.mock import patch
     from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-    from edgar_warehouse.mdm.clean.run import RunCoordinator
+    from edgar_warehouse.mdm.run import RunCoordinator
     from edgar_warehouse.workers import mdm_merge
     os.environ["MDM_DATABASE_URL"] = os.environ["READ_RUNTIME_URL"]
     os.environ["MDM_APPLICATION_ROLE"] = os.environ["READ_RUNTIME_ROLE"]

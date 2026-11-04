@@ -20,7 +20,7 @@ def test_removing_person_fixture_conversion_preserves_all_assertion_ids_and_prov
     import json
 
     from edgar_warehouse.rules import files
-    from edgar_warehouse.mdm.clean.store import digest
+    from edgar_warehouse.mdm.store import digest
     from tests.mdm.test_rules_config_digests import WITHOUT_TICKET_129_FIELDS, _with_company_fields_back
     from tests.support.name_count_words import old_words
     from tests.support import person_quality

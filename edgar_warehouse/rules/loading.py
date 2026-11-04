@@ -28,7 +28,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.mdm.clean import raw_capture
+from edgar_warehouse.mdm import raw_capture
 
 from . import files
 from .driving import Commands, RunStopped, duties, manifest_root

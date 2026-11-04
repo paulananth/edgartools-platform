@@ -43,7 +43,7 @@ class MdmIds:
         with self.engine.connect().execution_options(
             isolation_level="REPEATABLE READ"
         ) as conn:
-            from edgar_warehouse.mdm.clean.record_reads import for_connection
+            from edgar_warehouse.mdm.record_reads import for_connection
 
             return for_connection(conn).master_ids(source_code, kind, keys)
 

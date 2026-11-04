@@ -26,7 +26,7 @@ code is what runs and this document is the defect.
 MDM's Merge Stage already runs under a **policy document**:
 `mdm.policy (digest, body jsonb)` (`edgar_warehouse/mdm/migrations/023_clean_mdm.sql:10-13`),
 one immutable body pinned per batch and loaded at
-`edgar_warehouse/mdm/clean/merge.py:179-184`. Today that body is a Python
+`edgar_warehouse/mdm/merge.py:179-184`. Today that body is a Python
 dict (then in `clean/company_source.py`; today the policy is `rules/merge/`,
 read through `clean/sec_company.py`) whose only declarative content is
 per-field survivorship; its `automatic_rules` list must be empty or the
@@ -690,7 +690,7 @@ decide, in the order they bite:
 4. ~~A Person-only edit does not change Company field provenance (item 13.1
    resolved one way or the other, recorded).~~ **Met 2026-09-23**: item 13.1
    resolved and recorded; asserted directly in
-   `tests/mdm/test_clean_survivorship.py`.
+   `tests/mdm/test_survivorship.py`.
 5. The deterministic tolerance has tripped at least once on an injected
    fault in a non-production run, and never on the production cohort,
    before any deterministic rule runs alone.

@@ -8,8 +8,8 @@ from copy import deepcopy
 import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.mdm.clean import target_manifest
-from edgar_warehouse.mdm.clean.store import canonical, digest
+from edgar_warehouse.mdm import target_manifest
+from edgar_warehouse.mdm.store import canonical, digest
 from edgar_warehouse.rules import files
 from tests.mdm import test_ownership_target as ownership
 from tests.mdm import test_thirteenf_securities_target as thirteenf
@@ -144,7 +144,7 @@ def test_a_context_value_may_be_a_folder_segment_of_the_key(monkeypatch, tmp_pat
 
 
 def test_a_folder_segment_is_filled_as_text_or_as_an_integer():
-    from edgar_warehouse.mdm.clean import read_units
+    from edgar_warehouse.mdm import read_units
     key = "bronze/cik=320193/year=2026/doc.json"
     assert read_units.fill({"segment": "cik"}, key) == "320193"
     assert read_units.fill({"segment": "cik", "as": "integer"}, key) == 320193

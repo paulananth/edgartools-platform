@@ -2,8 +2,8 @@
 
 import pytest
 
-from edgar_warehouse.mdm.clean.evidence import KINDS, assertion
-from edgar_warehouse.mdm.clean.matching import candidate_routes
+from edgar_warehouse.mdm.evidence import KINDS, assertion
+from edgar_warehouse.mdm.matching import candidate_routes
 from edgar_warehouse.rules.source_engine import prepare_record_lookups
 
 AT = "2026-01-01T00:00:00+00:00"

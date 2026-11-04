@@ -5,8 +5,8 @@ import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.control_contract import digest
-from edgar_warehouse.mdm.clean import cascade
-from edgar_warehouse.mdm.clean.name_count import entry as name_count_entry
+from edgar_warehouse.mdm import cascade
+from edgar_warehouse.mdm.name_count import entry as name_count_entry
 from edgar_warehouse.rules import files
 from edgar_warehouse.workers import source_read, source_combine, mdm_prepare
 from tests.engine.test_company_combination_contract import captures,read,blueprint

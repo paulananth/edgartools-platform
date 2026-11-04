@@ -32,7 +32,7 @@ def test_normal_prepared_merge(case, kind, database_factory, configured_root):
     (configured_root / "mastering/engine-v1.yaml").write_text(files.dumps(body))
     with database_factory() as (owner, runtime, role):
         if owner.dialect.name == "mssql":
-            from edgar_warehouse.mdm.clean.store import migrate
+            from edgar_warehouse.mdm.store import migrate
             with pytest.raises(ValueError, match="PostgreSQL"):
                 migrate(owner, application_role=role, prepared=True)
             return
@@ -56,7 +56,7 @@ def test_installed_normal_prepared_merge(kind, source_code, installed, database_
     import json
     from uuid import uuid4
 
-    from tests.mdm.test_clean_activation import CIK_CONTRACT
+    from tests.mdm.test_activation import CIK_CONTRACT
     from tests.support.rules_authority import authority
     from tests.support.reading import reading
 
@@ -89,12 +89,12 @@ import source_contract
 import edgar_control
 from sqlalchemy import func, select
 from edgar_warehouse.database_connections import engine_from_env, storage_adapter
-from edgar_warehouse.mdm.clean import prepared
-from edgar_warehouse.mdm.clean.evidence import assertion, decision
-from edgar_warehouse.mdm.clean.merge import MergeStage
-from edgar_warehouse.mdm.clean.record_reads import RecordReader
-from edgar_warehouse.mdm.clean.store import Store, migrate, register_policy, register_dataset
-from edgar_warehouse.mdm.clean.consumer import ContractReader
+from edgar_warehouse.mdm import prepared
+from edgar_warehouse.mdm.evidence import assertion, decision
+from edgar_warehouse.mdm.merge import MergeStage
+from edgar_warehouse.mdm.record_reads import RecordReader
+from edgar_warehouse.mdm.store import Store, migrate, register_policy, register_dataset
+from edgar_warehouse.mdm.consumer import ContractReader
 from edgar_warehouse.silver_writer.writer import MdmIds
 from edgar_warehouse.context import Context
 assert Path(prepared.__file__).resolve().is_relative_to(Path(INSTALL).resolve())
@@ -256,7 +256,7 @@ with redirect_stdout(output):
     status=main(["context","relationship",pointer["entity_id"],"--as-at",at,"--detail","full"])
 assert status==0 and json.loads(output.getvalue())["related_count"]==1
 from unittest.mock import patch
-from edgar_warehouse.mdm.clean import master_search
+from edgar_warehouse.mdm import master_search
 from edgar_warehouse.context import ContextError
 missed=assertion(source_code="invented.authority",record_key="one",publication_key="five",
     revision=5,effective_at="2026-01-05T00:00:00Z",kind="invented-kind",

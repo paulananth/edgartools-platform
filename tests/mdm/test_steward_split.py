@@ -2,9 +2,9 @@
 The Merge Stage's replay of it runs on PostgreSQL and MySQL in tests/storage_adapters/test_steward_split.py."""
 import pytest
 
-from edgar_warehouse.mdm.clean import steward
-from edgar_warehouse.mdm.clean.evidence import decision
-from edgar_warehouse.mdm.clean.store import Conflict
+from edgar_warehouse.mdm import steward
+from edgar_warehouse.mdm.evidence import decision
+from edgar_warehouse.mdm.store import Conflict
 
 MERGE = decision("merge", actor="rule:fixture@1", reason="same FIGI", at="2026-01-01T00:00:00Z",
                  left="entity-a", right="entity-b")

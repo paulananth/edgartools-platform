@@ -112,8 +112,8 @@ def test_mysql_empty_marker_recovery_requires_its_original_shape(database_factor
 
 
 def test_rules_activation_reuses_the_actual_selected_master_reading(database_factory):
-    from edgar_warehouse.mdm.clean import catalog
-    from edgar_warehouse.mdm.clean.store import migrate as migrate_master, current_reading
+    from edgar_warehouse.mdm import catalog
+    from edgar_warehouse.mdm.store import migrate as migrate_master, current_reading
     with database_factory() as (_, approval_login, approval_role):
         if approval_login.dialect.name == "mssql":
             pytest.skip("Full SQL Server Rules qualification follows PostgreSQL/MySQL")

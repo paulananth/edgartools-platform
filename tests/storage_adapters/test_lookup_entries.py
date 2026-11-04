@@ -176,9 +176,9 @@ def test_interrupted_lookup_upgrade_refuses_writes_and_recovers_populated_state(
 
 
 def test_retained_readings_and_decisions_are_retrieved_through_their_references(lookup_store, storage_api):
-    from edgar_warehouse.mdm.clean.evidence import assertion, decision, subject_key
+    from edgar_warehouse.mdm.evidence import assertion, decision, subject_key
     from edgar_warehouse.rules.source_engine import prepare_record_history
-    from edgar_warehouse.mdm.clean.record_reads import read_affected_records
+    from edgar_warehouse.mdm.record_reads import read_affected_records
 
     owner, runtime, lease, request = lookup_store
     at = "2026-01-01T00:00:00+00:00"
@@ -227,9 +227,9 @@ def test_retained_readings_and_decisions_are_retrieved_through_their_references(
 
 
 def test_native_candidate_routes_reindex_without_business_versions(lookup_store, storage_api):
-    from edgar_warehouse.mdm.clean.evidence import assertion
+    from edgar_warehouse.mdm.evidence import assertion
     from edgar_warehouse.rules.source_engine import prepare_record_lookups, prepare_record_history
-    from edgar_warehouse.mdm.clean.record_reads import RecordReader
+    from edgar_warehouse.mdm.record_reads import RecordReader
 
     owner, runtime, lease, request = lookup_store
     item = assertion(source_code="invented.source",record_key="one",publication_key="first",
@@ -278,9 +278,9 @@ def test_native_candidate_routes_reindex_without_business_versions(lookup_store,
 
 
 def test_record_reader_serves_binding_and_correction_from_native_indexes(lookup_store,storage_api):
-    from edgar_warehouse.mdm.clean import binding,correction,matching
-    from edgar_warehouse.mdm.clean.evidence import assertion,decision
-    from edgar_warehouse.mdm.clean.record_reads import RecordReader
+    from edgar_warehouse.mdm import binding,correction,matching
+    from edgar_warehouse.mdm.evidence import assertion,decision
+    from edgar_warehouse.mdm.record_reads import RecordReader
     from edgar_warehouse.rules.source_engine import prepare_record_history,prepare_record_lookups
 
     owner,runtime,lease,request = lookup_store

@@ -6,8 +6,8 @@ import shutil
 
 import pytest
 
-from edgar_warehouse.mdm.clean.activation import activated, check_policy
-from edgar_warehouse.mdm.clean.store import Conflict
+from edgar_warehouse.mdm.activation import activated, check_policy
+from edgar_warehouse.mdm.store import Conflict
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.cli import register
 

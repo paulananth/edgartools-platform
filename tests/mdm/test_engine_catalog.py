@@ -8,7 +8,7 @@ import sys
 
 import pytest
 
-from edgar_warehouse.mdm.clean import catalog, execution
+from edgar_warehouse.mdm import catalog, execution
 from edgar_warehouse.rules import files
 
 
@@ -78,9 +78,9 @@ def test_invented_kind_profile_and_approval_floor_are_loaded_without_engine_edit
     write(tmp_path, body)
     assert catalog.load(tmp_path) == body
     program = '''
-from edgar_warehouse.mdm.clean.evidence import KINDS, PROFILE_KINDS, assertion, validate_assertion
-from edgar_warehouse.mdm.clean.activation import check_policy
-from edgar_warehouse.mdm.clean.store import Conflict
+from edgar_warehouse.mdm.evidence import KINDS, PROFILE_KINDS, assertion, validate_assertion
+from edgar_warehouse.mdm.activation import check_policy
+from edgar_warehouse.mdm.store import Conflict
 assert "invented-kind" in KINDS
 assert PROFILE_KINDS["invented-profile"] == {"invented-kind"}
 body = assertion(source_code="invented-source", record_key="invented-key", publication_key="invented-delivery",
@@ -116,8 +116,8 @@ def test_same_process_catalog_drift_is_refused_before_execution_identity(tmp_pat
     shutil.copytree(files.ROOT, tmp_path, dirs_exist_ok=True)
     if initial == "fallback": (tmp_path / catalog.RELATIVE).unlink()
     program = '''
-from edgar_warehouse.mdm.clean import catalog, execution
-from edgar_warehouse.mdm.clean.activation import check_policy
+from edgar_warehouse.mdm import catalog, execution
+from edgar_warehouse.mdm.activation import check_policy
 from edgar_warehouse.rules import files
 assert catalog.path().read_bytes() == catalog.LOADED_BYTES
 selected = files.ROOT / catalog.RELATIVE
@@ -171,8 +171,8 @@ def test_invented_reference_selector_reaches_normal_matching_caller(tmp_path):
     body["legacy_jurisdiction_table"] = "invented-alias"
     write(tmp_path, body)
     program = '''
-from edgar_warehouse.mdm.clean.names import REFERENCE_TABLES, edgar_jurisdiction
-from edgar_warehouse.mdm.clean.matching import compare_candidate_records
+from edgar_warehouse.mdm.names import REFERENCE_TABLES, edgar_jurisdiction
+from edgar_warehouse.mdm.matching import compare_candidate_records
 assert REFERENCE_TABLES == {"invented-alias": {"SYNTHETIC": "ZZ-Q"}}
 assert edgar_jurisdiction("synthetic") == "ZZ-Q"
 rule = {"when": [{"primitive": "jurisdiction_agrees@1", "args": {
@@ -190,7 +190,7 @@ assert compare_candidate_records(rule, [(left, right)]) == [[False, False]]
 
 @pytest.mark.parametrize("reverse", [False, True])
 def test_configured_crosswalk_refuses_ambiguous_targets_in_either_order(monkeypatch, reverse):
-    from edgar_warehouse.mdm.clean.names import load_reference_tables
+    from edgar_warehouse.mdm.names import load_reference_tables
 
     crosswalk = [["invented-target", "one", "ZZ-Q", "exact"],
                  ["invented-target", "two", "YY-Q", "exact"]]

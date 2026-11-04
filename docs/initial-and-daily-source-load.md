@@ -87,7 +87,7 @@ separate from local processing.
 
 ### What the Journal actually compares
 
-The implemented selector in `edgar_warehouse/mdm/clean/changed_files.py`
+The implemented selector in `edgar_warehouse/mdm/changed_files.py`
 uses the source, file key, content hash and processing identity. Company and
 Person call it before constructing their work manifests. Company includes the
 logical Name Count content and catalog hash as shared inputs: a new capture

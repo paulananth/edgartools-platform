@@ -25,8 +25,8 @@ from edgar_warehouse.control_contract import Blocked
 from edgar_warehouse.silver_writer import database as silver
 from edgar_warehouse.silver_writer.sink import PostgresSink
 from edgar_warehouse.silver_writer.writer import MdmIds, land, refresh_ids
-from tests.integration import test_clean_entity_context_postgres as entity_context
-from tests.integration import test_clean_mdm_postgres as core
+from tests.integration import test_entity_context_postgres as entity_context
+from tests.integration import test_mdm_postgres as core
 from tests.support import pg16
 from tests.unit.test_silver_writer import a_spec
 

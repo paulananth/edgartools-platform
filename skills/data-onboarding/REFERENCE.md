@@ -1,7 +1,7 @@
 # Rules file reference
 
 What a `rules/sources/<source>/source.yaml` file may say, and how MDM
-reads it (`edgar_warehouse/mdm/clean/adapters.py`, `normalize`).
+reads it (`edgar_warehouse/mdm/adapters.py`, `normalize`).
 
 ## The file
 
@@ -95,7 +95,7 @@ require it to equal `adapter.version`. So:
   approves it. A change to a record key, the publication key or the
   identifiers needs a new source code instead: the engine refuses it within
   one source code (`PROTECTED_ADAPTER_PARTS` in
-  `edgar_warehouse/mdm/clean/store.py`). Cross-references never decide which
+  `edgar_warehouse/mdm/store.py`). Cross-references never decide which
   record is which, so adding one is a new version, not a new source code.
 
 ## Optional envelope keys
@@ -131,7 +131,7 @@ source's parser produces it, not from the raw file, when a parser exists.
 |---|---|
 | `version` | The mapping's own version name, e.g. `acme-firm-record-v1`. |
 | `record_key` | A list of paths that together identify one record. |
-| `record_key_format` | A named format, checked and normalized: a declared identifier type ("Identifier types", below) or one written in code (`FORMATS`, `edgar_warehouse/mdm/clean/adapters.py`). |
+| `record_key_format` | A named format, checked and normalized: a declared identifier type ("Identifier types", below) or one written in code (`FORMATS`, `edgar_warehouse/mdm/adapters.py`). |
 | `kind` | Every record is this kind (from `KINDS`). |
 | `kind_field`, `kind_values` | The path holding the source's category, and the kind for each category the source accepts, e.g. `CORP: <kind>`. |
 | `probable_kind_values` | What a record in another category probably is. It sorts the record without making an identity. |
@@ -285,7 +285,7 @@ is now a data quality fix (`blank_values@1`, below).
 
 `rules/sources/<source>/quality.yaml` holds the checks and fixes run on each
 record after the mapping and before the merge
-(`edgar_warehouse/mdm/clean/quality.py`):
+(`edgar_warehouse/mdm/quality.py`):
 
 ```yaml
 version: <quality version name>       # e.g. acme-firm-quality-v1; a change is a new name
@@ -404,7 +404,7 @@ writing a new one.
 
 The examples above in plain words, from today's sources:
 
-- Fields: Company's are `FIELDS` in `edgar_warehouse/mdm/clean/sec_company.py`;
+- Fields: Company's are `FIELDS` in `edgar_warehouse/mdm/sec_company.py`;
   Person's are in its consumer spec, `docs/specs/person/consumer.md`.
 - Joining identifiers: `cik`, the one Identifier Contract today; a ticker on a company's record belongs
   to the security's contract.

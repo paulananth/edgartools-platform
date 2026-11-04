@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from edgar_warehouse.mdm.clean.evidence import instant
+from edgar_warehouse.mdm.evidence import instant
 from edgar_warehouse.rules.mapdoc import custom_parsing
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 from edgar_warehouse.rules.steps import epoch_microseconds

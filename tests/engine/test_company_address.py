@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.mdm.clean.names import edgar_jurisdiction
+from edgar_warehouse.mdm.names import edgar_jurisdiction
 from edgar_warehouse.rules import files
 from tests.support import place_codes
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
@@ -110,4 +110,4 @@ def test_nontext_place_keys_refuse_without_destination_write(tmp_path):
 def test_executable_address_derivation_is_retired():
     import importlib.util
     # The landed Company reader and its address derivation are gone (Issue 20 L4).
-    assert importlib.util.find_spec("edgar_warehouse.mdm.clean.company_source") is None
+    assert importlib.util.find_spec("edgar_warehouse.mdm.company_source") is None

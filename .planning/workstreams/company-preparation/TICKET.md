@@ -21,9 +21,9 @@ Independent Standards/GoF and Spec reviewers found one comparator evidence gap: 
 ## Active retirement callers
 
 - `silver_landing_store.py`: imports/calls stage_company_loader, stage_address_loader and stage_recent_filing_loader from bronze_submission_extractors.
-- `mdm/clean/cli.py`: calls prepare_company_bundle and write_name_census.
-- `mdm/clean/name_census.py`: imports retained GLEIF inspect_archive.
-- `mdm/clean/source_publications.py`: imports retained GLEIF validate_release/inspect_archive.
-- `mdm/clean/native_consumption.py`: imports retained GLEIF record_evidence.
+- `mdm/cli.py`: calls prepare_company_bundle and write_name_census.
+- `mdm/name_census.py`: imports retained GLEIF inspect_archive.
+- `mdm/source_publications.py`: imports retained GLEIF validate_release/inspect_archive.
+- `mdm/native_consumption.py`: imports retained GLEIF record_evidence.
 
 These live callers contradict complete retirement. The configured main read block supplies raw Company/filing/address tables; it does not establish census/cascade, catalog, paginated history, producer provenance or universal malformed-input equivalence. The final parent item stays unchecked.

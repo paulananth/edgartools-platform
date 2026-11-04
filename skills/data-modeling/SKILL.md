@@ -48,7 +48,7 @@ Read these before deciding, and use their words:
   The glossary Relations Graph links the identity term of the type's
   `from` end to that type term, with the type as the edge. A mention is
   not a relation.
-- `edgar_warehouse/mdm/clean/evidence.py`: `KINDS` (the master kinds) and
+- `edgar_warehouse/mdm/evidence.py`: `KINDS` (the master kinds) and
   `PROFILE_KINDS` (a profile and the kinds it may hang on).
 - `rules/merge/kinds/<kind>.yaml`, `identifiers`: the kind's Identifier
   Contract, the namespaces that decide identity.

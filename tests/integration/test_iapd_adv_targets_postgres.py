@@ -15,7 +15,7 @@ import pytest
 
 from edgar_warehouse.bookkeeping.clean.database import grant_profile
 from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
-from edgar_warehouse.mdm.clean import target_manifest
+from edgar_warehouse.mdm import target_manifest
 from edgar_warehouse.workers import mdm_prepare, source_combine, source_read
 from tests.integration.test_adv_custodian_link import BASE, BD, CUSTODY, LEI, csv_text, custody, filing
 from tests.integration.test_configured_bookkeeping_postgres import databases  # noqa: F401

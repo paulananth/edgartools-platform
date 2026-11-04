@@ -16,8 +16,8 @@ from sqlalchemy import event, inspect, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.schema import CreateSchema
 
-from edgar_warehouse.mdm.clean import catalog
-from edgar_warehouse.mdm.clean.store import (
+from edgar_warehouse.mdm import catalog
+from edgar_warehouse.mdm.store import (
     current_reading,
     migrate,
     reading_at,
@@ -45,7 +45,7 @@ def test_registry_retains_exact_configuration_numbers(database, storage_api):
     }
     digest = sha256(storage_api.canonical(body)).hexdigest()
     if owner.dialect.name == "mysql":
-        from edgar_warehouse.mdm.clean.store import migrate
+        from edgar_warehouse.mdm.store import migrate
 
         migrate(owner, application_role=role)
     with owner.begin() as conn:
@@ -286,7 +286,7 @@ def test_normal_governed_storage(case, database, storage_api, monkeypatch):
         elif case == "prepared_retention":
             from tests.storage_adapters.test_prepared_effects import batch
 
-            from edgar_warehouse.mdm.clean.store import digest as content_digest
+            from edgar_warehouse.mdm.store import digest as content_digest
             adapter = storage_api.Adapter(owner, prefix="mdm_store", protocol=6)
             request = batch(storage_api, governed=True, workflow=True, indexes=(),
                 pins={"policy": digest, "catalog": content_digest(catalog.CATALOG)})
@@ -462,8 +462,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from sqlalchemy.engine import make_url
 from edgar_warehouse.database_connections import storage_adapter
-from edgar_warehouse.mdm.clean.connections import engine_from_env
-from edgar_warehouse.mdm.clean.store import migrate, register_policy
+from edgar_warehouse.mdm.connections import engine_from_env
+from edgar_warehouse.mdm.store import migrate, register_policy
 api=storage_adapter()
 assert "bundle_data" in str(Path(api.__file__).resolve())
 selected=make_url(os.environ["MDM_DATABASE_URL"]).get_backend_name()

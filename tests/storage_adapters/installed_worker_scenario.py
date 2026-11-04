@@ -20,10 +20,10 @@ from edgar_warehouse.change_journal.database import migrate as migrate_journal
 from edgar_warehouse.change_journal.store import ChangeJournal, get_engine
 from edgar_warehouse.cli import main
 from edgar_warehouse.database_connections import engine_from_env, storage_adapter
-from edgar_warehouse.mdm.clean import prepared_runs
-from edgar_warehouse.mdm.clean.evidence import assertion
-from edgar_warehouse.mdm.clean.run import RunCoordinator
-from edgar_warehouse.mdm.clean.store import Store, migrate, register_dataset, register_policy
+from edgar_warehouse.mdm import prepared_runs
+from edgar_warehouse.mdm.evidence import assertion
+from edgar_warehouse.mdm.run import RunCoordinator
+from edgar_warehouse.mdm.store import Store, migrate, register_dataset, register_policy
 from edgar_warehouse.workers import mdm_merge, mdm_publish
 
 SPEC = json.loads(sys.stdin.read())
@@ -102,13 +102,13 @@ elif task["mode"]=="lost_ack":
             assert str(error)=="invented terminal interruption"; result={"interrupted":True}
         else: raise AssertionError("interruption did not occur")
 elif task["mode"]=="lost_delivery":
-    with patch("edgar_warehouse.mdm.clean.journal_delivery.JournalPublisher.verify",side_effect=RuntimeError("invented delivery interruption")):
+    with patch("edgar_warehouse.mdm.journal_delivery.JournalPublisher.verify",side_effect=RuntimeError("invented delivery interruption")):
         try: worker.execute(envelope,artifacts)
         except RuntimeError as error:
             assert str(error)=="invented delivery interruption"; result={"interrupted":True}
         else: raise AssertionError("interruption did not occur")
 elif task["mode"]=="retry":
-    with patch("edgar_warehouse.mdm.clean.merge.MergeStage.apply",side_effect=AssertionError("retry merged again")):
+    with patch("edgar_warehouse.mdm.merge.MergeStage.apply",side_effect=AssertionError("retry merged again")):
         result=worker.execute(envelope,artifacts)
 else: result=worker.execute(envelope,artifacts)
 print(json.dumps(result))

@@ -8,12 +8,12 @@ from pathlib import Path
 from uuid import uuid4
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.mdm.clean import changed_files
-from edgar_warehouse.mdm.clean.target_manifest import write_manifest
+from edgar_warehouse.mdm import changed_files
+from edgar_warehouse.mdm.target_manifest import write_manifest
 from edgar_warehouse.workers import journal_record
-from tests.mdm.test_clean_company_preparation import capture as company_capture  # noqa: F401
-from tests.mdm.test_clean_company_preparation import name_count_capture, documents as company_documents, prepare
-from tests.mdm.test_clean_company_preparation import CATALOG_ROWS
+from tests.mdm.test_mdm_company_preparation import capture as company_capture  # noqa: F401
+from tests.mdm.test_mdm_company_preparation import name_count_capture, documents as company_documents, prepare
+from tests.mdm.test_mdm_company_preparation import CATALOG_ROWS
 from tests.support.memory_journal import MemoryJournal
 from tests.support.sec_capture import address, document, key, write_capture
 

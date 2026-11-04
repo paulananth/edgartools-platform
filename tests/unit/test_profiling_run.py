@@ -75,7 +75,7 @@ def test_every_part_gets_a_silver_table_and_new_kind_questions(result):
     assert "member" in asked and result["findings"]["approval"]["status"] == "draft"
 
 
-def test_clean_data_still_gets_its_quality_rules(result):
+def test_data_still_gets_its_quality_rules(result):
     rules = {(q["check"], q["column"]): q["rows"] for q in part(result, "member")["quality"]}
     assert rules[("missing", "member_id")] == 0  # a key column always filled is still a rule
     visits = {(q["check"], q["column"]): q["rows"] for q in part(result, "visit")["quality"]}

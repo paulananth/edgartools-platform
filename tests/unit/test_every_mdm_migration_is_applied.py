@@ -5,7 +5,7 @@ never applied it and no test noticed.
 """
 from pathlib import Path
 
-from edgar_warehouse.mdm.clean import registration, retirement, store
+from edgar_warehouse.mdm import registration, retirement, store
 
 FOLDER = Path(store.__file__).parents[1] / "migrations"
 

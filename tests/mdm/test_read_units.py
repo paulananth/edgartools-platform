@@ -6,9 +6,9 @@ import json
 import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.mdm.clean import read_units
-from edgar_warehouse.mdm.clean.store import Conflict
-from edgar_warehouse.mdm.clean.target_manifest import write_manifest
+from edgar_warehouse.mdm import read_units
+from edgar_warehouse.mdm.store import Conflict
+from edgar_warehouse.mdm.target_manifest import write_manifest
 from edgar_warehouse.rules import files
 from tests.integration import test_declared_chain_postgres as chain
 from tests.support.memory_journal import MemoryJournal
@@ -78,7 +78,7 @@ def test_a_pattern_no_document_matches_is_refused(tmp_path, monkeypatch):
 
 
 def test_a_capture_key_outside_the_capture_is_refused(tmp_path):
-    from edgar_warehouse.mdm.clean import raw_capture
+    from edgar_warehouse.mdm import raw_capture
 
     with pytest.raises(Conflict, match="stays inside the capture"):
         raw_capture.path(tmp_path, "../elsewhere.json")
@@ -201,7 +201,7 @@ def test_a_step_naming_an_undeclared_fact_is_refused():
 
 
 def test_run_arguments_read_a_fact_as_json_else_text():
-    from edgar_warehouse.mdm.clean.target_manifest import run_arguments
+    from edgar_warehouse.mdm.target_manifest import run_arguments
     assert run_arguments(["n=3", "label=x"], ["scope=/s.json"]) == ({"n": 3, "label": "x"}, {"scope": "/s.json"})
     with pytest.raises(ValueError, match="each name once"):
         run_arguments(["n=3", "n=4"], None)

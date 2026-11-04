@@ -19,7 +19,7 @@ MAX_INPUT = 8 * 1024**2
 
 def _events(envelope: dict, body: dict) -> list[dict]:
     from edgar_warehouse.change_journal.store import envelope as event
-    from edgar_warehouse.mdm.clean import changed_files
+    from edgar_warehouse.mdm import changed_files
 
     if body.get("version") != 1 or not isinstance(body.get("files"), list) or not body["files"]:
         raise ValueError("journal.record reads a version 1 list of files")
@@ -33,7 +33,7 @@ def _events(envelope: dict, body: dict) -> list[dict]:
 
 
 def _journal():
-    from edgar_warehouse.mdm.clean.changed_files import journal
+    from edgar_warehouse.mdm.changed_files import journal
 
     return journal()
 
@@ -41,7 +41,7 @@ def _journal():
 def _forced(envelope: dict, body: dict) -> dict:
     """A forced run's own record: which run reprocessed which files."""
     from edgar_warehouse.change_journal.store import envelope as event
-    from edgar_warehouse.mdm.clean import changed_files
+    from edgar_warehouse.mdm import changed_files
 
     return event(producer=changed_files.PRODUCER, event_key=f"files.forced:{envelope['claim']['run_id']}",
                  run_id=envelope["claim"]["run_id"], source=body["source"], feed=body["feed"],
@@ -64,7 +64,7 @@ def _matches(receipt: dict | None, value: dict) -> bool:
 
 def execute(envelope: dict, artifacts) -> dict:
     from edgar_warehouse.change_journal import JournalConflict
-    from edgar_warehouse.mdm.clean import changed_files
+    from edgar_warehouse.mdm import changed_files
 
     if set(envelope["checks"]) != {CHECK}:
         raise ValueError(f"journal.record verifies {CHECK} only")

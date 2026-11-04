@@ -18,7 +18,7 @@ Independent Standards/GoF review found no scoped blockers or justified pattern r
 
 ## Runtime retirement evidence
 
-An exhaustive runtime/package consumer search found no executable references to SilverLandingStore. Its only loader consumer was its own unused stage_submission method. All four runtime source files are removed. Frozen implementations under tests/support preserve independent historical parity and rollback-fixture tests; installed wheels do not package those archives. No wrapper or runtime fallback replaces the retired APIs. Active mdm/clean/company_source preparation and provenance remain unfinished.
+An exhaustive runtime/package consumer search found no executable references to SilverLandingStore. Its only loader consumer was its own unused stage_submission method. All four runtime source files are removed. Frozen implementations under tests/support preserve independent historical parity and rollback-fixture tests; installed wheels do not package those archives. No wrapper or runtime fallback replaces the retired APIs. Active mdm/company_source preparation and provenance remain unfinished.
 
 Post-removal unit, architecture and affected engine tests: 826 passed/no skips in 150.93 seconds. Independent Standards review identified incomplete future import detection; the guard now resolves absolute module aliases and relative imports, and all six deliberate reintroduction cases fail the retirement boundary (7 guard tests pass). Reviewer confirmed closure.
 

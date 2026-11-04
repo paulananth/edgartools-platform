@@ -28,7 +28,7 @@ events/verify; no domain registry or callback is constructed there.
 
 Provider capture belongs to `acquisition.capture`; policy/registration authority
 to `rules.acquisition_authority`; source inventories to
-`application.source_evidence`; MDM delivery to `mdm.clean.journal_delivery`.
+`application.source_evidence`; MDM delivery to `mdm.journal_delivery`.
 The application composes existing owner recovery routes through
 `application.journal_recovery`, and producer workflow evidence through
 `application.journal_evidence`. These integrations depend on the journal

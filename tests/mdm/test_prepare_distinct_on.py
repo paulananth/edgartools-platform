@@ -5,7 +5,7 @@ from copy import deepcopy
 import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.mdm.clean import target_manifest
+from edgar_warehouse.mdm import target_manifest
 from edgar_warehouse.rules import files
 from tests.mdm.test_ownership_target import SOURCE, capture
 

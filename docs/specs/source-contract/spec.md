@@ -527,7 +527,7 @@ dataset:
 
 The `contract` is MDM's own Dataset Contract. Its `adapter` block is
 read by MDM's `normalize`
-(`edgar_warehouse/mdm/clean/adapters.py:49-158`), one silver row to one
+(`edgar_warehouse/mdm/adapters.py:49-158`), one silver row to one
 assertion. The prototype carried the then fixture `publication_v1/dataset.json` (deleted, ticket 88) into
 a contract verbatim (JSON is YAML 1.2), and `normalize` mapped it as
 expected.
@@ -1005,7 +1005,7 @@ gate:
 The lifecycle in §4.2 **works only for the first version of each source**
 today:
 - MDM stores one Dataset Contract body per `source_code`, forever
-  (`edgar_warehouse/mdm/clean/store.py:217-224`: "Dataset contract is
+  (`edgar_warehouse/mdm/store.py:217-224`: "Dataset contract is
   immutable; register a new versioned contract").
 - `adapter.version` enters every `assertion_id`, and the store is unique on
   `(source_code, record_key, publication_key)`.

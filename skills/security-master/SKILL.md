@@ -219,7 +219,7 @@ their Identifier Contract is verified (`policy.yaml`, `automatic_rules`,
 Every field any source supplies reaches the Security (a kind-level
 `defaults` rule, operator 2026-09-24): a field only one source gives comes from
 it; the priority decides only where several give it. For each field
-(`edgar_warehouse/mdm/clean/survivorship.py`, ranked by the engine's
+(`edgar_warehouse/mdm/survivorship.py`, ranked by the engine's
 `survivorship::rank`):
 
 1. **A steward's override wins.** A source that disagrees with it opens an

@@ -8,10 +8,10 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import text
 
-from edgar_warehouse.mdm.clean import scope
-from edgar_warehouse.mdm.clean.evidence import KINDS, assertion, decision, subject_key
-from edgar_warehouse.mdm.clean.record_reads import RecordReader
-from edgar_warehouse.mdm.clean.store import Conflict
+from edgar_warehouse.mdm import scope
+from edgar_warehouse.mdm.evidence import KINDS, assertion, decision, subject_key
+from edgar_warehouse.mdm.record_reads import RecordReader
+from edgar_warehouse.mdm.store import Conflict
 from edgar_warehouse.rules.source_engine import (
     prepare_record_history,
     prepare_record_lookups,

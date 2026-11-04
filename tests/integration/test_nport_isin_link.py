@@ -16,11 +16,11 @@ from pathlib import Path
 
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.mdm.clean.evidence import subject_key
-from edgar_warehouse.mdm.clean.merge import MergeStage
-from edgar_warehouse.mdm.clean.store import Store, register_policy
+from edgar_warehouse.mdm.evidence import subject_key
+from edgar_warehouse.mdm.merge import MergeStage
+from edgar_warehouse.mdm.store import Store, register_policy
 from edgar_warehouse.rules import files
-from tests.integration import test_clean_mdm_postgres as core
+from tests.integration import test_mdm_postgres as core
 from tests.integration import test_nport_link_start as cusip
 from tests.support.rules_authority import register_dataset
 

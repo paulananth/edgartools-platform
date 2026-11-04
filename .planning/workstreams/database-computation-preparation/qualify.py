@@ -26,14 +26,14 @@ import psutil
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 
-from edgar_warehouse.mdm.clean import payloads
-from edgar_warehouse.mdm.clean.journal_delivery import JournalPublisher
-from edgar_warehouse.mdm.clean.publication import LocalContractSink
-from edgar_warehouse.mdm.clean.store import Store, canonical
+from edgar_warehouse.mdm import payloads
+from edgar_warehouse.mdm.journal_delivery import JournalPublisher
+from edgar_warehouse.mdm.publication import LocalContractSink
+from edgar_warehouse.mdm.store import Store, canonical
 from edgar_warehouse.rules import source_engine
 from edgar_warehouse.workers import mdm_publish
-from tests.integration import test_clean_mdm_postgres as core
-from tests.integration.test_clean_outbox_names_batch import journal_policy
+from tests.integration import test_mdm_postgres as core
+from tests.integration.test_outbox_names_batch import journal_policy
 from tests.support import pg16
 from edgar_warehouse.change_journal.database import migrate as migrate_journal
 from edgar_warehouse.change_journal.store import ChangeJournal
@@ -43,7 +43,7 @@ RUN_ID = "00000000-0000-0000-0000-000000000001"
 
 
 def baseline_journal():
-    code = subprocess.run(["git", "show", f"{BASELINE}:edgar_warehouse/mdm/clean/journal_delivery.py"],
+    code = subprocess.run(["git", "show", f"{BASELINE}:edgar_warehouse/mdm/journal_delivery.py"],
                           cwd=ROOT, capture_output=True, text=True, check=True).stdout
     module = types.ModuleType("publication_baseline")
     exec(compile(code, "pinned-baseline-journal_delivery.py", "exec"), module.__dict__)

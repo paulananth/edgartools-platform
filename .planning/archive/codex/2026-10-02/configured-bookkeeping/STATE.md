@@ -41,7 +41,7 @@ in Claude's worktrees or planning directories.
 
 Used `gof-refactor-reviewer` before implementation, including its smells,
 refactoring mechanics and consequences references. Read existing code and
-git history for `bookkeeping/store.py` and `mdm/clean/store.py`.
+git history for `bookkeeping/store.py` and `mdm/store.py`.
 
 Overall: keep existing business capabilities; replace the requested control
 boundary with a small registry of functions. No State/Strategy class hierarchy.
@@ -53,7 +53,7 @@ boundary with a small registry of functions. No State/Strategy class hierarchy.
    new methods and callers. The requested shared capability registry makes
    source selection declarative. Its cost is an explicit migration of existing
    callers; implementing the core alone does not eliminate that cost.
-2. `mdm/clean/store.py` already centralizes atomic commits and consumer fence
+2. `mdm/store.py` already centralizes atomic commits and consumer fence
    completion. Keep it. A narrow authority adapter can call a store-local
    guard inside those transactions while retaining existing request hashes.
    Its cost is one extra authorization call and requiring destination schema

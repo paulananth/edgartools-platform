@@ -14,9 +14,9 @@ from uuid import uuid4
 
 import pytest
 
-from edgar_warehouse.mdm.clean.evidence import assertion
-from edgar_warehouse.mdm.clean.identifier_types import TYPES
-from edgar_warehouse.mdm.clean.matching import candidate_routes
+from edgar_warehouse.mdm.evidence import assertion
+from edgar_warehouse.mdm.identifier_types import TYPES
+from edgar_warehouse.mdm.matching import candidate_routes
 from edgar_warehouse.rules.source_engine import (
     link_matching_records,
     plan_record_matches,
@@ -202,7 +202,7 @@ def binds(result):
 
 
 def stored(operation, left, right, **more):
-    from edgar_warehouse.mdm.clean.evidence import decision
+    from edgar_warehouse.mdm.evidence import decision
     return decision(operation, actor="steward", reason="fixture", at="2026-01-01T00:00:00Z",
                     left=left, right=right, **more)
 
@@ -369,7 +369,7 @@ def test_a_master_over_its_reverse_limit_goes_to_review():
 
 
 def test_a_contract_maps_a_list_of_one_identifier_kind_checked_and_once_each():
-    from edgar_warehouse.mdm.clean.adapters import UnsupportedRecord, normalize
+    from edgar_warehouse.mdm.adapters import UnsupportedRecord, normalize
     from tests.support.reading import reading
 
     contract = {"schema_version": "1", "adapter": {

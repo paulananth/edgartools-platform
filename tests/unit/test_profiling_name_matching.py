@@ -108,7 +108,7 @@ def test_an_id_from_the_name_folds_variants_and_keeps_what_tells_entities_apart(
 
 
 def test_the_profiling_name_id_is_the_engines_cross_reference_format():
-    from edgar_warehouse.mdm.clean.adapters import FORMATS, UnsupportedRecord
+    from edgar_warehouse.mdm.adapters import FORMATS, UnsupportedRecord
 
     for name in ("ACME, Inc./DE", "Alpha Growth Fund Class A", "Straße  Holdings", "ＡＣＭＥ widgets"):
         assert FORMATS["name_id@1"](name) == nm.name_id(name)

@@ -296,7 +296,7 @@ Never invent a command.
   population); the name rules `sec-gleif-name-jurisdiction` and
   `sec-gleif-name-postal`; the cascade passes `sec-gleif-cascade-p5` to `-p7`
   (`cascade_pass@1`; P5 compares `[[city, postcode]]`); the code in
-  `edgar_warehouse/mdm/clean/name_count.py` and `cascade.py`
+  `edgar_warehouse/mdm/name_count.py` and `cascade.py`
   (ticket 09).
 - Issued identifiers: those with an Identifier Contract in a kind file (today `cik`; GLEIF states `lei`). Name-rule proofs:
   `.scratch/company-mastering/research/08-*` and `12-*`. A proving run:

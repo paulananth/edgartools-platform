@@ -2,9 +2,9 @@
 
 import pytest
 
-from edgar_warehouse.mdm.clean.evidence import KINDS, assertion
-from edgar_warehouse.mdm.clean.store import digest
-from edgar_warehouse.mdm.clean.survivorship import current_claims, profile_key
+from edgar_warehouse.mdm.evidence import KINDS, assertion
+from edgar_warehouse.mdm.store import digest
+from edgar_warehouse.mdm.survivorship import current_claims, profile_key
 
 
 @pytest.mark.parametrize("kind", sorted(KINDS))

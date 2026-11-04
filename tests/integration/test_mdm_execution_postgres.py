@@ -6,10 +6,10 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import text
 
-from edgar_warehouse.mdm.clean.connections import engine_from_env
-from edgar_warehouse.mdm.clean.execution import execute_manifest
-from edgar_warehouse.mdm.clean.store import Conflict, Store
-from tests.integration.test_clean_run_pins_postgres import manifest, registered  # noqa: F401
+from edgar_warehouse.mdm.connections import engine_from_env
+from edgar_warehouse.mdm.execution import execute_manifest
+from edgar_warehouse.mdm.store import Conflict, Store
+from tests.integration.test_run_pins_postgres import manifest, registered  # noqa: F401
 
 
 def test_complete_execution_commits_every_batch_and_retry_has_no_new_effects(database, registered, tmp_path):

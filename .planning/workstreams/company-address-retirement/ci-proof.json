@@ -13,7 +13,7 @@
   },
   "prerequisite_skips": 0,
   "deliberate_fault": {
-    "test": "tests/mdm/test_clean_company_source.py::TestMatchingEvidenceIsPinned::test_the_business_address_and_census_entry_travel_with_the_record",
+    "test": "tests/mdm/test_company_source.py::TestMatchingEvidenceIsPinned::test_the_business_address_and_census_entry_travel_with_the_record",
     "isolated_runtime_recipe_country": "ZZ",
     "expected_country": "US",
     "caught_at": "prepared record address assertion",

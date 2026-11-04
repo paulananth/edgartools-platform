@@ -49,7 +49,7 @@ Dataset Contracts declares `read` at the source, contract or adapter level.
 The common configured MDM intake is
 [`mdm.ingest`](../../edgar_warehouse/bookkeeping/clean/mdm_capabilities.py#L145)
 → [`normalize_input`](../../edgar_warehouse/bookkeeping/clean/source_input.py#L12)
-→ [`adapters.normalize`](../../edgar_warehouse/mdm/clean/adapters.py#L245).
+→ [`adapters.normalize`](../../edgar_warehouse/mdm/adapters.py#L245).
 It verifies fixed NDJSON input and frozen registered contracts; it does not
 interpret an arbitrary configured raw JSON/XML/CSV grammar. CLI/config probing
 passed; database or hosted source execution was not exercised.
@@ -73,48 +73,48 @@ The source-specific pagination grammar is also Python: [`register_company_expans
 
 ### 2. Company landing-to-mastering input
 
-[`company_source.py`](../../edgar_warehouse/mdm/clean/company_source.py#L101) reads fixed Silver table shapes and prepares a Company input record:
+[`company_source.py`](../../edgar_warehouse/mdm/company_source.py#L101) reads fixed Silver table shapes and prepares a Company input record:
 
 - `_catalog_tickers` groups by CIK, sorts source ranks and deduplicates tickers.
 - `_filed_forms` groups distinct forms by CIK.
 - `_business_addresses` picks `address_type == business`.
-- [`business_address`](../../edgar_warehouse/mdm/clean/company_source.py#L158) pivots fixed SEC address columns, selects `state_or_country` or `country_code`, and derives region/country using the configured SEC place-code reference.
-- [`prepare_company_bundle`](../../edgar_warehouse/mdm/clean/company_source.py#L383) explicitly pins and joins Company, filing, address, ticker and Name Census evidence before writing records.
-- [`census_filers`](../../edgar_warehouse/mdm/clean/company_source.py#L577) joins former names to Companies; [`cascade_filers`](../../edgar_warehouse/mdm/clean/company_source.py#L626) adds business addresses and delegates mapped fields to the approved contract.
+- [`business_address`](../../edgar_warehouse/mdm/company_source.py#L158) pivots fixed SEC address columns, selects `state_or_country` or `country_code`, and derives region/country using the configured SEC place-code reference.
+- [`prepare_company_bundle`](../../edgar_warehouse/mdm/company_source.py#L383) explicitly pins and joins Company, filing, address, ticker and Name Census evidence before writing records.
+- [`census_filers`](../../edgar_warehouse/mdm/company_source.py#L577) joins former names to Companies; [`cascade_filers`](../../edgar_warehouse/mdm/company_source.py#L626) adds business addresses and delegates mapped fields to the approved contract.
 
-Callers: [`register_company_mdm_preparation`](../../edgar_warehouse/bookkeeping/clean/company.py#L466), [`prepare_clean_company`](../../edgar_warehouse/mdm/clean/cli.py#L399) and [`name_census`](../../edgar_warehouse/mdm/clean/cli.py#L417). This preparation is upstream of the configured `adapters.normalize` mapping.
+Callers: [`register_company_mdm_preparation`](../../edgar_warehouse/bookkeeping/clean/company.py#L466), [`prepare_clean_company`](../../edgar_warehouse/mdm/commands.py#L399) and [`name_census`](../../edgar_warehouse/mdm/commands.py#L417). This preparation is upstream of the configured `adapters.normalize` mapping.
 
 ### 3. Native GLEIF archive decoding
 
 The source configuration explicitly documents the boundary: [`rules/sources/gleif/source.yaml`](../../rules/sources/gleif/source.yaml#L1) says parsing stays in `gleif_source.py` and has no `read` section.
 
-[`gleif_source.py`](../../edgar_warehouse/mdm/clean/gleif_source.py#L28) contains hardcoded member/CDF versions, JSON wrapper names, XML root/header/container/record names and namespaces. Its custom decoder uses libraries as tokenizers:
+[`gleif_source.py`](../../edgar_warehouse/mdm/gleif_source.py#L28) contains hardcoded member/CDF versions, JSON wrapper names, XML root/header/container/record names and namespaces. Its custom decoder uses libraries as tokenizers:
 
-- [`_json_records`](../../edgar_warehouse/mdm/clean/gleif_source.py#L105): `ijson` event consumption with a required wrapper and duplicate-key/depth/trailing-data checks.
-- [`_xml_value`](../../edgar_warehouse/mdm/clean/gleif_source.py#L146): attributes become `@name`, text becomes `$`, and repeated child elements become lists.
-- [`_xml_records`](../../edgar_warehouse/mdm/clean/gleif_source.py#L164): `lxml` streaming events with GLEIF-specific header/content structure; the relationship member receives an additional wrapper.
-- [`inspect_archive`](../../edgar_warehouse/mdm/clean/gleif_source.py#L239): one unencrypted ZIP member, bounded compressed/expanded/record sizes, hash and count verification, decoder selection and callbacks.
+- [`_json_records`](../../edgar_warehouse/mdm/gleif_source.py#L105): `ijson` event consumption with a required wrapper and duplicate-key/depth/trailing-data checks.
+- [`_xml_value`](../../edgar_warehouse/mdm/gleif_source.py#L146): attributes become `@name`, text becomes `$`, and repeated child elements become lists.
+- [`_xml_records`](../../edgar_warehouse/mdm/gleif_source.py#L164): `lxml` streaming events with GLEIF-specific header/content structure; the relationship member receives an additional wrapper.
+- [`inspect_archive`](../../edgar_warehouse/mdm/gleif_source.py#L239): one unencrypted ZIP member, bounded compressed/expanded/record sizes, hash and count verification, decoder selection and callbacks.
 
-Callers include publication validation in [`source_publications.py`](../../edgar_warehouse/mdm/clean/source_publications.py#L329) and Name Census construction in [`name_census.py`](../../edgar_warehouse/mdm/clean/name_census.py#L154). Hash, count and security checks are format safeguards; the member/tag/wrapper grammar is source-specific custom parsing.
+Callers include publication validation in [`source_publications.py`](../../edgar_warehouse/mdm/source_publications.py#L329) and Name Census construction in [`name_census.py`](../../edgar_warehouse/mdm/name_census.py#L154). Hash, count and security checks are format safeguards; the member/tag/wrapper grammar is source-specific custom parsing.
 
 ### 4. Native GLEIF interpretation before configured mapping
 
-[`record_evidence`](../../edgar_warehouse/mdm/clean/gleif_source.py#L400) performs source-specific interpretation before calling `normalize`:
+[`record_evidence`](../../edgar_warehouse/mdm/gleif_source.py#L400) performs source-specific interpretation before calling `normalize`:
 
 - Reads fixed relationship endpoint fields, requires LEI endpoint types and approved Company scope.
 - Selects exactly one `RELATIONSHIP_PERIOD`, interprets dates and requires compatible ACTIVE/INACTIVE intervals.
 - Rebuilds the relationship into a smaller fixed intermediate record.
 - Reads fixed Level 1 category paths and validates a hardcoded category set.
 - Reads fixed exception categories/reasons and defers reporting exceptions rather than creating a fabricated parent relationship.
-- [`_refuse_deletion`](../../edgar_warehouse/mdm/clean/gleif_source.py#L388) handles the GLEIF deletion extension.
+- [`_refuse_deletion`](../../edgar_warehouse/mdm/gleif_source.py#L388) handles the GLEIF deletion extension.
 
-The final master projection is configuration-driven: [`dataset_contract`](../../edgar_warehouse/mdm/clean/gleif_source.py#L367) loads mappings from source YAML, and [`record_evidence`](../../edgar_warehouse/mdm/clean/gleif_source.py#L513) delegates to `normalize`. [`native_consumption.py`](../../edgar_warehouse/mdm/clean/native_consumption.py#L11) imports and uses `record_evidence`; this is not a standalone unused helper.
+The final master projection is configuration-driven: [`dataset_contract`](../../edgar_warehouse/mdm/gleif_source.py#L367) loads mappings from source YAML, and [`record_evidence`](../../edgar_warehouse/mdm/gleif_source.py#L513) delegates to `normalize`. [`native_consumption.py`](../../edgar_warehouse/mdm/native_consumption.py#L11) imports and uses `record_evidence`; this is not a standalone unused helper.
 
 ### 5. SEC/GLEIF Name Census extraction
 
-[`name_census.py`](../../edgar_warehouse/mdm/clean/name_census.py#L53) explicitly reads `OtherEntityNames.OtherEntityName` and `TransliteratedOtherEntityNames.TransliteratedOtherEntityName`. Its [`on_record`](../../edgar_warehouse/mdm/clean/name_census.py#L133) callback reads fixed GLEIF Entity/LEI/LegalName/Registration fields and excludes BRANCH records from the ordinary census. [`cascade_entity`](../../edgar_warehouse/mdm/clean/name_census.py#L76) admits GENERAL for the cascade, then calls configured field/quality mappings.
+[`name_census.py`](../../edgar_warehouse/mdm/name_census.py#L53) explicitly reads `OtherEntityNames.OtherEntityName` and `TransliteratedOtherEntityNames.TransliteratedOtherEntityName`. Its [`on_record`](../../edgar_warehouse/mdm/name_census.py#L133) callback reads fixed GLEIF Entity/LEI/LegalName/Registration fields and excludes BRANCH records from the ordinary census. [`cascade_entity`](../../edgar_warehouse/mdm/name_census.py#L76) admits GENERAL for the cascade, then calls configured field/quality mappings.
 
-The census reuses registered versioned name normalizers, but those source field selections and exclusions are still Python. Caller: [`write_name_census`](../../edgar_warehouse/mdm/clean/company_source.py#L713), exposed by the MDM CLI and used in Company preparation.
+The census reuses registered versioned name normalizers, but those source field selections and exclusions are still Python. Caller: [`write_name_census`](../../edgar_warehouse/mdm/company_source.py#L713), exposed by the MDM CLI and used in Company preparation.
 
 ### 6. Ticker-catalog completeness grammar
 
@@ -129,7 +129,7 @@ This is reachable source-specific validation, **not a ticker row parser or an ac
 | [`stage_daily_index_filing_loader`](https://github.com/paulananth/edgartools-platform/blob/542a9fa04f4359bed7e097b4cb1d5fa4b89ede15/edgar_warehouse/loaders/bronze_daily_index_extractors.py#L9) | SEC daily index regex, accession extraction, dates, URL and record hash | Exported at baseline; no production call found. Subsequently deleted by #781. |
 | [`seed_universe_loader`](https://github.com/paulananth/edgartools-platform/blob/542a9fa04f4359bed7e097b4cb1d5fa4b89ede15/edgar_warehouse/loaders/bronze_reference_extractors.py#L8) | Two SEC ticker JSON shapes to CIK/ticker/exchange rows | Exported at baseline; no production call found. Subsequently deleted by #781. |
 | [`_parse_company_ticker_rows`](../../edgar_warehouse/silver_landing_store.py#L601) | Similar ticker shape decoder | Definition and historical completeness-check comment; no production call found. `replace_company_tickers` takes already parsed rows. |
-| [`securities.publish` / `_title`](https://github.com/paulananth/edgartools-platform/blob/542a9fa04f4359bed7e097b4cb1d5fa4b89ede15/edgar_warehouse/mdm/clean/securities.py#L11) | 13F CUSIP grouping and regex Class A/B/C or Option title inference | No production import/call found at baseline. Subsequently deleted by #781. |
+| [`securities.publish` / `_title`](https://github.com/paulananth/edgartools-platform/blob/542a9fa04f4359bed7e097b4cb1d5fa4b89ede15/edgar_warehouse/mdm/securities.py#L11) | 13F CUSIP grouping and regex Class A/B/C or Option title inference | No production import/call found at baseline. Subsequently deleted by #781. |
 
 These findings use source-wide symbol searches outside tests, then caller inspection. They are evidence for follow-up review, not authorization to delete shared contracts or source evidence.
 
@@ -139,11 +139,11 @@ The old `edgar_warehouse/parsers/` directory and old `runtime.py` are absent at 
 
 | Area | Configuration controls | Code controls |
 | --- | --- | --- |
-| [`adapters.normalize`](../../edgar_warehouse/mdm/clean/adapters.py#L245) | Field paths, kind/kind values/classification, identifiers, profiles and relationships | Path traversal, shape validation and projection algorithms. |
-| [`adapters.FORMATS`](../../edgar_warehouse/mdm/clean/adapters.py#L36) | `sec_cik` / `lei` format names; since rebuild priorities ticket 81, declared identifier types (`rules/identifiers/`: parts, case, check-digit family) | Zero-padding/nonzero numeric CIK checks and LEI syntax/mod-97 checksum; one implementation of each check-digit family. |
-| [`quality.CHECKS` / `FIXES`](../../edgar_warehouse/mdm/clean/quality.py#L237) | Versioned checks/fixes and arguments from source quality YAML | State-tag regex, blanking and address-standardization implementations. [`_UNIT` / `_WORDS`](../../edgar_warehouse/mdm/clean/quality.py#L178) encode unit removal and abbreviation spellings. |
-| [`primitives.NORMALIZERS`](../../edgar_warehouse/mdm/clean/primitives.py#L76) | Normalizer names and policy predicate arguments/order | Fixed implementations including [`names.legal_form_key`](../../edgar_warehouse/mdm/clean/names.py#L23), legal-form spellings and SEC conformed-name tag removal. |
-| [`names.edgar_jurisdiction`](../../edgar_warehouse/mdm/clean/names.py#L62) | SEC place-code reference file | Lookup/country/subdivision comparison algorithms and US territory handling. |
+| [`adapters.normalize`](../../edgar_warehouse/mdm/adapters.py#L245) | Field paths, kind/kind values/classification, identifiers, profiles and relationships | Path traversal, shape validation and projection algorithms. |
+| [`adapters.FORMATS`](../../edgar_warehouse/mdm/adapters.py#L36) | `sec_cik` / `lei` format names; since rebuild priorities ticket 81, declared identifier types (`rules/identifiers/`: parts, case, check-digit family) | Zero-padding/nonzero numeric CIK checks and LEI syntax/mod-97 checksum; one implementation of each check-digit family. |
+| [`quality.CHECKS` / `FIXES`](../../edgar_warehouse/mdm/quality.py#L237) | Versioned checks/fixes and arguments from source quality YAML | State-tag regex, blanking and address-standardization implementations. [`_UNIT` / `_WORDS`](../../edgar_warehouse/mdm/quality.py#L178) encode unit removal and abbreviation spellings. |
+| [`primitives.NORMALIZERS`](../../edgar_warehouse/mdm/primitives.py#L76) | Normalizer names and policy predicate arguments/order | Fixed implementations including [`names.legal_form_key`](../../edgar_warehouse/mdm/names.py#L23), legal-form spellings and SEC conformed-name tag removal. |
+| [`names.edgar_jurisdiction`](../../edgar_warehouse/mdm/names.py#L62) | SEC place-code reference file | Lookup/country/subdivision comparison algorithms and US territory handling. |
 
 Configuration-driven does not mean there is no custom code. A named, versioned implementation may be the intended extension point. The sharper question is whether source grammar, mappings and policy choices remain inspectable and pinned in the contract, or are hidden in an upstream reader.
 

@@ -262,7 +262,7 @@ Learned the hard way; each is a standing operator rule.
 | Source engine (reading and combining files; Rust behind a Python facade) | `crates/source-contract/`, `edgar_warehouse/rules/source_engine.py` |
 | Rules: source extracts, Dataset Contracts, quality, merge rules, identifier types | `rules/`, read by `edgar_warehouse/rules/files.py` |
 | Workers and Bookkeeping | `edgar_warehouse/workers/`, `edgar_warehouse/bookkeeping/` |
-| MDM store and the Merge Stage | `edgar_warehouse/mdm/clean/`, migrations in `edgar_warehouse/mdm/migrations/` |
+| MDM store and the Merge Stage | `edgar_warehouse/mdm/`, migrations in `edgar_warehouse/mdm/migrations/` |
 | RDM | `edgar_warehouse/rdm/` |
 | Silver writer | `edgar_warehouse/silver_writer/` |
 | Agent context command | `edgar_warehouse/context.py` |
@@ -278,7 +278,7 @@ Learned the hard way; each is a standing operator rule.
 | Docker images | `Dockerfile`, `Dockerfile.warehouse-deps`, `Dockerfile.mdm-deps`, `Dockerfile.mdm-neo4j` |
 | Shared local PostgreSQL | `docs/local-agent-testing.md`, `infra/scripts/local-test-stores.py` |
 
-Large files should be read in chunks before editing: `edgar_warehouse/mdm/clean/merge.py`, `skills/data-platform/READING.md` and `skills/data-onboarding/SKILL.md`.
+Large files should be read in chunks before editing: `edgar_warehouse/mdm/merge.py`, `skills/data-platform/READING.md` and `skills/data-onboarding/SKILL.md`.
 
 ## Tooling Rules
 

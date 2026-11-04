@@ -37,7 +37,7 @@ without changing the active variation points.
 | --- | --- |
 | `edgar_warehouse/loaders/bronze_daily_index_extractors.py` | Only exported by loaders package and used by its two retired daily-index tests. No active command, capability, skill, script or dashboard calls it. |
 | `edgar_warehouse/loaders/bronze_reference_extractors.py` | Only exported as seed_universe_loader. No executable caller. A dbt comment is a historical reference, not a Python importer. |
-| `edgar_warehouse/mdm/clean/securities.py` | Only imported by its standalone 13F publisher test. It is outside the requested Company/Person/Relationship scope. The shared identity and typed relationship contracts are retained. |
+| `edgar_warehouse/mdm/securities.py` | Only imported by its standalone 13F publisher test. It is outside the requested Company/Person/Relationship scope. The shared identity and typed relationship contracts are retained. |
 
 Imports and exported names were removed from `loaders/__init__.py`.
 Company submission loaders and their coverage remain.

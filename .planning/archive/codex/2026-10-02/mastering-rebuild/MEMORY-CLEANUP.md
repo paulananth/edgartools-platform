@@ -20,7 +20,7 @@ Do not rewrite the generated MEMORY.md or delete historical rollout evidence.
 
 Supersede implementation guidance that identifies legacy MDM tables or
 `mdm_v2` as the active schema. Current mastering lives in
-`edgar_warehouse/mdm/clean/`, schema `mdm`, from the rebased platform-validation
+`edgar_warehouse/mdm/`, schema `mdm`, from the rebased platform-validation
 baseline. The executable CLI offers Rules, Bookkeeping, Change Journal,
 Clean MDM and Snowflake environment resolution. Retired warehouse and legacy
 MDM commands must be verified against `--help`, not restored from memory.

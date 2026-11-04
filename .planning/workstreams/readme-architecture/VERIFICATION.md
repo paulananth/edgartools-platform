@@ -13,11 +13,11 @@ catalog publication, infrastructure change or runtime deployment performed.
 | Catalog generation is one way, from files, and can describe drafts | `edgar_warehouse/rules/catalog.py:plan`, `publish`, `_profiles`; `edgar_warehouse/rules/cli.py:_catalog` |
 | Profile-based silver/RDM catalog metadata is conditional on supplied summaries | No `rules/sources/*/profile.yaml` in this baseline; current plan has 13 tables and 8 lineage links. Catalog tests exercise profile-enabled plans. |
 | Catalog quality requirements do not establish silver runtime enforcement | `skills/data-quality/SKILL.md`, especially its silver boundary |
-| Identity binding, consolidation and field selection are separate | `CONTEXT.md`; `edgar_warehouse/mdm/clean/identity.py`, `merge.py`, `scope.py` |
+| Identity binding, consolidation and field selection are separate | `CONTEXT.md`; `edgar_warehouse/mdm/identity.py`, `merge.py`, `scope.py` |
 | Merge proposals are rechecked under the lock; proposal and batch share a transaction | `MergeStage.apply`, `_check_rule_proposals`, `_execute`; migration 020 and Ticket 77 |
 | Publication intent is atomic with master state; delivery is separate and verified | `edgar_warehouse/workers/mdm_merge.py`, `mdm_publish.py`; `skills/data-platform/SKILL.md` mastering section |
 | Configured Company, Person and Security rules exist; source qualification is distinct from deployment | `rules/merge/kinds/{company,person,security}.yaml`; the Security rule records the approved 13F Identifier Contract proof |
-| Rust/Python/database responsibility boundaries | `docs/architecture/runtime-responsibilities.md`, `edgar_warehouse/rules/source_engine.py`, `edgar_warehouse/mdm/clean/identity.py` |
+| Rust/Python/database responsibility boundaries | `docs/architecture/runtime-responsibilities.md`, `edgar_warehouse/rules/source_engine.py`, `edgar_warehouse/mdm/identity.py` |
 | Configured capture and AWS/silver integrations remain separate boundaries | `docs/configured-capture.md`, Company `artifact.copy` target, `skills/data-onboarding/SKILL.md`, `infra/scripts/install.sh` |
 
 ## Validation

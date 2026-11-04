@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from edgar_warehouse.mdm.clean.names import legal_form_key, sec_legal_form_key
+from edgar_warehouse.mdm.names import legal_form_key, sec_legal_form_key
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 from edgar_warehouse.rules import files
 

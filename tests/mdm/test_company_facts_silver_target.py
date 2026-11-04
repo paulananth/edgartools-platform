@@ -7,7 +7,7 @@ import json
 import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.mdm.clean.target_manifest import write_manifest
+from edgar_warehouse.mdm.target_manifest import write_manifest
 from tests.support.memory_journal import MemoryJournal
 
 SOURCE = "sec.company-facts"
@@ -87,7 +87,7 @@ def test_a_file_already_recorded_under_the_same_rules_is_skipped_and_a_changed_o
 def test_changed_rules_name_every_file_again(tmp_path, monkeypatch):
     from uuid import uuid4
 
-    from edgar_warehouse.mdm.clean import changed_files
+    from edgar_warehouse.mdm import changed_files
     from edgar_warehouse.workers import journal_record
 
     options = capture(tmp_path, [42, 43])
@@ -104,7 +104,7 @@ def test_changed_rules_name_every_file_again(tmp_path, monkeypatch):
 
 
 def test_a_landing_that_names_no_table_is_refused():
-    from edgar_warehouse.mdm.clean import target_manifest as tm
+    from edgar_warehouse.mdm import target_manifest as tm
 
     with pytest.raises(ValueError, match="table and silver"):
         tm.FORMS["silver.land"]({"name": "land", "requires": ["facts"], "input": {"keys": {"table": "company_fact"}}},
@@ -112,7 +112,7 @@ def test_a_landing_that_names_no_table_is_refused():
 
 
 def test_a_derivation_that_names_no_build_is_refused():
-    from edgar_warehouse.mdm.clean import target_manifest as tm
+    from edgar_warehouse.mdm import target_manifest as tm
 
     with pytest.raises(ValueError, match="build, silver"):
         tm.FORMS["silver.derive"]({"name": "line_items", "requires": ["land"], "input": {"keys": {"build": "x"}}}, None, {"land": []})
@@ -122,7 +122,7 @@ def _landing(requires):
     """`_land` over an invented target: a read step, a preparation, a merge and the landing."""
     from types import SimpleNamespace
 
-    from edgar_warehouse.mdm.clean import target_manifest
+    from edgar_warehouse.mdm import target_manifest
 
     by_name = {"read": {"operation": "source.read"}, "prepare": {"operation": "mdm.prepare"},
                "merge": {"operation": "mdm.merge"}, "land": {"operation": "silver.land"}}

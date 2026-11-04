@@ -7,7 +7,7 @@
   "sec_keys_sha256": "e0d8ec8fa1e4d65dbfdbaa86bc517d28dcf0e3b426ef0b57fe39e95a899417f3",
   "inputs_and_code_sha256": {
     "/private/tmp/edgartools-platform-codex-company-preparation-20261007/scripts/qualification/qualify_company_name_keys.py": "79f3496c44deb13f43353253368e698e1ef001dfe947265125617d7f50f9063a",
-    "/private/tmp/edgartools-platform-codex-company-preparation-20261007/edgar_warehouse/mdm/clean/names.py": "c2fa9635d672e1c9aa9417e446d97bf942b2821b7762bf0ddc5993f15ea7b98c",
+    "/private/tmp/edgartools-platform-codex-company-preparation-20261007/edgar_warehouse/mdm/names.py": "c2fa9635d672e1c9aa9417e446d97bf942b2821b7762bf0ddc5993f15ea7b98c",
     "/private/tmp/edgartools-platform-codex-company-preparation-20261007/edgar_warehouse/rules/source_engine.py": "5c5ee6373032a902ca97a2573a287cdfbdb4ca584580832ac64a57e713c059a4",
     "/private/tmp/edgartools-platform-codex-company-preparation-20261007/edgar_warehouse/rules/steps.py": "f19b77ba57a038b9742e7fcf25b4545266c6ec46ca6f732737ac743ea350e810",
     "/private/tmp/codex-company-name-final-site-20261007/source_contract/source_contract.abi3.so": "f612ec8c3fedaa4e5905a83319af15b8580d0ce697c06ba506bb8a8ad3536477",

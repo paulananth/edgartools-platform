@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from edgar_warehouse.cli import build_parser
-from edgar_warehouse.mdm.clean import cli as clean_cli
+from edgar_warehouse.mdm import commands as commands
 
 NAME_COUNT = ["--capture", "c", "--population", "p", "--gleif-reading", "a",
           "--gleif-reading-sha256", "s", "--gleif-metadata", "x", "--output", "o"]
@@ -22,7 +22,7 @@ NAME_COUNT = ["--capture", "c", "--population", "p", "--gleif-reading", "a",
 ])
 def test_each_command_runs_its_function(monkeypatch, argv, function):
     called = []
-    monkeypatch.setattr(clean_cli, function, lambda args: called.append(args.mdm_command) or 0)
+    monkeypatch.setattr(commands, function, lambda args: called.append(args.mdm_command) or 0)
     args = build_parser().parse_args(argv)
     assert args.handler(args) == 0 and called == [argv[1]]
 
@@ -51,12 +51,12 @@ def test_retired_commands_stay_unavailable():
 def test_force_publish_uses_the_governed_route(monkeypatch, tmp_path, capsys):
     import json
     from types import SimpleNamespace
-    from edgar_warehouse.mdm.clean import forced_publication, store
+    from edgar_warehouse.mdm import forced_publication, store
 
     calls, disposed = [], []
     engine = SimpleNamespace(dispose=lambda: disposed.append(True))
     selected = object()
-    monkeypatch.setattr(clean_cli, "engine_from_env", lambda name: engine)
+    monkeypatch.setattr(commands, "engine_from_env", lambda name: engine)
     monkeypatch.setattr(store, "Store", lambda candidate: selected if candidate is engine else None)
 
     def page(actual, consumer, run, number, after, limit):
@@ -67,7 +67,7 @@ def test_force_publish_uses_the_governed_route(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(forced_publication, "page", page)
     args = build_parser().parse_args(["mdm", "force-publish", "--consumer", "invented-export",
                                      "--output", str(tmp_path / "output")])
-    assert clean_cli.force_publish(args) == 0
+    assert commands.force_publish(args) == 0
     report = json.loads(capsys.readouterr().out)
     assert report["pages"] == report["records"] == 1 and report["forced"] is True
     assert calls == [("invented-export", 1)] and disposed == [True]

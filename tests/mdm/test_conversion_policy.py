@@ -2,9 +2,9 @@
 
 import pytest
 
-from edgar_warehouse.mdm.clean.conversion import pinned
-from edgar_warehouse.mdm.clean.relationships import types_of
-from edgar_warehouse.mdm.clean.store import Conflict
+from edgar_warehouse.mdm.conversion import pinned
+from edgar_warehouse.mdm.relationships import types_of
+from edgar_warehouse.mdm.store import Conflict
 from edgar_warehouse.rules import files
 
 TODAY = types_of(files.policy())

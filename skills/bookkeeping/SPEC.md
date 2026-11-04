@@ -114,7 +114,7 @@ capabilities, missing keys and dependency cycles block execution.
 
 A section of `version: 2` lets each step also say how its units are formed
 and what each unit's input names, so one writer builds the run's input
-manifest from the declaration (`mdm/clean/target_manifest.py`) and a source
+manifest from the declaration (`mdm/target_manifest.py`) and a source
 needs no writer of its own:
 
 - `units`: `one` (the default), `{slices: {bytes: N}}` (the bundle's

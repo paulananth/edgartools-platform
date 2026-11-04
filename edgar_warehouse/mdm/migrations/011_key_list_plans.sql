@@ -15,6 +15,6 @@
 -- The setting applies only while the function runs. It is not set for the
 -- session: the per-row statements in write_batch and keep_stage then plan on
 -- every call and took twice as long. tests/integration/
--- test_clean_plan_cache_postgres.py holds the rule for every function.
+-- test_plan_cache_postgres.py holds the rule for every function.
 
 ALTER FUNCTION mdm.match_proposal_snapshot(jsonb) SET plan_cache_mode TO force_custom_plan;

@@ -6,8 +6,8 @@ import json
 from uuid import uuid4
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.mdm.clean import changed_files
-from edgar_warehouse.mdm.clean.target_manifest import write_manifest
+from edgar_warehouse.mdm import changed_files
+from edgar_warehouse.mdm.target_manifest import write_manifest
 from edgar_warehouse.workers import journal_record
 from tests.support.memory_journal import MemoryJournal
 

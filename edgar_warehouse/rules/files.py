@@ -320,7 +320,7 @@ def approve_rule(rule_id: str, *, by: str, words: str, at: str, root: Path | Non
     `pending-proofs.yaml` goes into `policy.yaml` with the approval stamped on
     it. Appended as text, so the policy's comments stay. No proof, no approval;
     a proof that falls short of its kind's bar is refused with the reason."""
-    from edgar_warehouse.mdm.clean.activation import check_policy
+    from edgar_warehouse.mdm.activation import check_policy
 
     root = root or ROOT
     if not by.strip() or not words.strip():
@@ -378,7 +378,7 @@ def approve_identifier_rule(rule_id: str, *, proof: Path, reason: str, by: str, 
     so the files' comments stay; both files are restored if either does not read back as written."""
     import hashlib
 
-    from edgar_warehouse.mdm.clean.activation import check_policy
+    from edgar_warehouse.mdm.activation import check_policy
 
     root = root or ROOT
     if not by.strip() or not words.strip():
@@ -514,7 +514,7 @@ def check_document(kind: str, body: dict) -> None:
 
             acquisition(body)
     elif kind == "merge":
-        from edgar_warehouse.mdm.clean.activation import check_policy
+        from edgar_warehouse.mdm.activation import check_policy
 
         check_policy(body)
 
@@ -535,7 +535,7 @@ def check(names: list[str] | None = None, root: Path | None = None) -> dict:
     reason it is refused. Named sources only, when names are given. A loader's message
     can quote a private YAML line, so its refusal names the error's kind and the file only."""
     from edgar_warehouse.control_contract import Blocked
-    from edgar_warehouse.mdm.clean.store import Conflict
+    from edgar_warehouse.mdm.store import Conflict
 
     results = {}
     for kind, name, path in documents(root):

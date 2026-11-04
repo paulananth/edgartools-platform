@@ -11,9 +11,9 @@ import pytest
 from sqlalchemy import event, select, text
 from sqlalchemy.exc import DBAPIError
 
-from edgar_warehouse.mdm.clean import catalog
-from edgar_warehouse.mdm.clean.prepared_registry import mapping_pin, schema_pin
-from edgar_warehouse.mdm.clean.store import (
+from edgar_warehouse.mdm import catalog
+from edgar_warehouse.mdm.prepared_registry import mapping_pin, schema_pin
+from edgar_warehouse.mdm.store import (
     Conflict,
     Store,
     digest,
@@ -46,7 +46,7 @@ def test_prepared_owner_registry(case, database_factory, storage_api, monkeypatc
                 migrate(owner, application_role=role, prepared=True)
             return
         if case == "native_populated":
-            from edgar_warehouse.mdm.clean import prepared_registry
+            from edgar_warehouse.mdm import prepared_registry
 
             # Reconstruct the historical owner schema, with no governed admission.
             # No retired Python caller is copied into the test harness.

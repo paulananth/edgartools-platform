@@ -21,10 +21,10 @@ from sqlalchemy.exc import DBAPIError
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.bookkeeping.clean.database import grant_profile
 from edgar_warehouse.bookkeeping.clean.destinations import migrate_guard
-from edgar_warehouse.mdm.clean.store import Conflict, register_policy
+from edgar_warehouse.mdm.store import Conflict, register_policy
 from edgar_warehouse.cli import main
 from edgar_warehouse.workers import mdm_merge
-from tests.integration import test_clean_mdm_postgres as core
+from tests.integration import test_mdm_postgres as core
 from tests.integration.test_configured_bookkeeping_postgres import databases  # noqa: F401
 from tests.support.relationship_types import with_relationship_types
 from tests.support.rules_approval import approve
@@ -221,7 +221,7 @@ def test_a_killed_worker_resumes_after_its_first_committed_batch(mdm, tmp_path, 
 import json, os, time
 from pathlib import Path
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.mdm.clean.run import RunCoordinator
+from edgar_warehouse.mdm.run import RunCoordinator
 from edgar_warehouse.workers import mdm_merge
 execute = RunCoordinator.execute
 def pause_after_commit(self, *args, **kwargs):

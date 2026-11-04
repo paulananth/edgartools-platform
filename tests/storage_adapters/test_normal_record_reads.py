@@ -32,7 +32,7 @@ def test_normal_record_read_phase(case, database_factory, configured_root):
     (configured_root / "mastering/engine-v1.yaml").write_text(files.dumps(body))
     with database_factory() as (owner, runtime, role):
         if owner.dialect.name == "mssql":
-            from edgar_warehouse.mdm.clean.merge import MergeStage
+            from edgar_warehouse.mdm.merge import MergeStage
 
             with pytest.raises(ValueError, match="PostgreSQL and MySQL"):
                 MergeStage.propose_on(
@@ -79,9 +79,9 @@ def test_installed_normal_read_phase(installed, database_factory, configured_roo
 import os
 from pathlib import Path
 from edgar_warehouse.database_connections import engine_from_env
-from edgar_warehouse.mdm.clean.evidence import assertion
-from edgar_warehouse.mdm.clean.merge import MergeStage
-from edgar_warehouse.mdm.clean.store import Store, migrate, register_policy
+from edgar_warehouse.mdm.evidence import assertion
+from edgar_warehouse.mdm.merge import MergeStage
+from edgar_warehouse.mdm.store import Store, migrate, register_policy
 from edgar_warehouse.rules.source_engine import prepare_scope_lookups
 from edgar_warehouse.database_connections import storage_adapter
 assert "bundle_data" in str(Path(storage_adapter().__file__).resolve())
@@ -114,7 +114,7 @@ publications,entries=prepare_scope_lookups({"previous":[],"identities":[],
 assert not publications and len(entries)==2
 print("installed normal read phase passed")
 """
-        from tests.mdm.test_clean_activation import CIK_CONTRACT
+        from tests.mdm.test_activation import CIK_CONTRACT
 
         contract = {
             **CIK_CONTRACT,

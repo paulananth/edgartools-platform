@@ -111,7 +111,7 @@ dataset_contracts:
 # the records input is composed from the verified readings.
 # Version 2 (ticket 14): each step also says how its units are formed and what
 # each unit's input names, so one writer builds the run's input manifest
-# (`mdm/clean/target_manifest.py`) and this source needs no writer of its own.
+# (`mdm/target_manifest.py`) and this source needs no writer of its own.
 bookkeeping:
   version: 2
   targets:

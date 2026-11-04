@@ -8,11 +8,11 @@ from uuid import uuid4
 os.environ["READ_CASE"] = os.environ.get("READ_BASE_CASE", "join")
 g = runpy.run_module("tests.storage_adapters.record_read_scenarios")
 
-from edgar_warehouse.mdm.clean import steward
-from edgar_warehouse.mdm.clean.evidence import decision
-from edgar_warehouse.mdm.clean.merge import MergeStage
-from edgar_warehouse.mdm.clean.record_reads import RecordReader
-from edgar_warehouse.mdm.clean.store import Conflict, Store
+from edgar_warehouse.mdm import steward
+from edgar_warehouse.mdm.evidence import decision
+from edgar_warehouse.mdm.merge import MergeStage
+from edgar_warehouse.mdm.record_reads import RecordReader
+from edgar_warehouse.mdm.store import Conflict, Store
 from edgar_warehouse.silver_writer.writer import MdmIds
 
 runtime = g["runtime"]
@@ -52,7 +52,7 @@ try:
     assert done["written"] is True and done["by"] == "Sam" and done["reason"] == "two different issuers"
     assert ids(secondary, kind, {"two", "later"}) == {"two": root, "later": other}  # both masters return
 
-    from edgar_warehouse.mdm.clean.prepared_registry import require_installed
+    from edgar_warehouse.mdm.prepared_registry import require_installed
 
     with runtime.connect() as conn:
         reader = RecordReader(require_installed(conn), connection=conn)

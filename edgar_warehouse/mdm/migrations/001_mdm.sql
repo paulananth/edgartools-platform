@@ -1,11 +1,11 @@
 -- MDM schema baseline.
 --
 -- The schema MDM keeps its master data in, created in one file. It replaces
--- the Clean MDM migrations 023-043 (schema mdm_v2), which built the same
+-- the earlier MDM migrations 023-043 (schema mdm_v2), which built the same
 -- tables step by step; this file is their end state, re-baselined under the
 -- business names the operator chose on 2026-09-30 (platform validation
 -- slice 3). Later changes are new numbered files, applied once each by
--- `mdm migrate` (edgar_warehouse/mdm/clean/store.py).
+-- `mdm migrate` (edgar_warehouse/mdm/store.py).
 --
 -- Contents, in order: tables and their keys, functions, views (including the
 -- per-kind views, generated), indexes, triggers, then a comment on every

@@ -64,7 +64,7 @@ def test_a_body_that_is_not_json_is_refused():
 
 def test_save_refuses_what_check_refuses_before_writing():
     from edgar_warehouse.control_contract import Blocked
-    from edgar_warehouse.mdm.clean.store import Conflict
+    from edgar_warehouse.mdm.store import Conflict
     from edgar_warehouse.rules.db import Rules
 
     rules = Rules(engine=None)  # a refusal comes before any database work

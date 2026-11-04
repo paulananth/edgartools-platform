@@ -169,7 +169,7 @@ reached once per batch; the save repeats that read under the lock, and a
 change makes the proposal stale. An excluded pair goes to review.
 
 **Which values a record gives its master** is decided in one place,
-`edgar_warehouse/mdm/clean/withholding.py`. Every reader that answers
+`edgar_warehouse/mdm/withholding.py`. Every reader that answers
 "which master holds this value" or "which values does this master hold"
 runs its own query, then asks it: both stores' holder lookups, the portable
 carrier read, name matching's held values, the agent lookup, the planner's
@@ -453,17 +453,17 @@ These name this repo's code and the failures each rule came from.
   and policies on PostgreSQL, MySQL and SQL Server, plus every other affected
   kind/source, applying the qualification checks above. These are concrete
   test cohorts, not limits on the shared merge algorithm.
-- **Code:** the Merge Stage is `edgar_warehouse/mdm/clean/merge.py`, and what
-  a batch reads is `edgar_warehouse/mdm/clean/scope.py`; the
-  input cut is `edgar_warehouse/mdm/clean/limits.py` (1,000 records and
+- **Code:** the Merge Stage is `edgar_warehouse/mdm/merge.py`, and what
+  a batch reads is `edgar_warehouse/mdm/scope.py`; the
+  input cut is `edgar_warehouse/mdm/limits.py` (1,000 records and
   1 MiB a batch); the migrations are registered in
-  `edgar_warehouse/mdm/clean/store.py` (`MIGRATIONS`).
+  `edgar_warehouse/mdm/store.py` (`MIGRATIONS`).
 - **Tests that hold the rules:**
   `tests/architecture/test_mdm_routine_retirement.py` (retired calculation
   callers stay absent), `tests/storage_adapters/test_record_scope.py`
   (indexed scope and validated references),
   `tests/storage_adapters/test_prepared_effects.py` (indexed reads and a request
-  beyond the former size cap), and `tests/mdm/test_clean_limits.py` (input
+  beyond the former size cap), and `tests/mdm/test_limits.py` (input
   batching keeps an oversized record).
 - **No size refusal** (rebuild ticket 74): a 10,000-record closure cap and a
   16 MiB request cap, chosen for a local machine, stopped the ownership
