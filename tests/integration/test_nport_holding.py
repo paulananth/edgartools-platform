@@ -189,3 +189,53 @@ def test_a_link_pointed_at_another_dataset_contract_finds_nothing(database, tmp_
         land(PostgresSink(runtime), spec["table"], rows, MdmIds(database.application))
         with runtime.connect() as conn:
             assert conn.scalar(text("SELECT security_mdm_id FROM silver.nport_holding")) is None
+
+
+def test_the_mastering_target_lands_the_holdings_after_the_securities_merge():
+    """The holdings reach silver through the target's own `silver.land` step (ticket 79), after the merge."""
+    steps = {s["name"]: s for s in files.source("sec.nport.security")["bookkeeping"]["targets"]["mastering"]["steps"]}
+    land = steps["land_holding"]
+    assert land["operation"] == "silver.land" and land["requires"] == ["holding_rows", "merge"]
+    assert land["input"]["keys"] == {"table": "holding", "silver": spec_file(FOLDER / "silver-holding.yaml", None)["table"]}
+    assert steps["processed"]["requires"] == ["land_holding"]  # the Change Journal records only what landed
+
+
+def test_the_land_step_lands_every_holding_once_and_its_verifier_confirms(database, tmp_path, monkeypatch):
+    import json
+
+    from edgar_warehouse.workers import silver_land
+
+    rows = holding_rows(tmp_path / "rows")
+
+    class Store:
+        def __init__(self):
+            self.written = {}
+
+        def put_bytes(self, uri, data):
+            self.written[uri] = data
+            return {"uri": uri, "sha256": "invented"}
+
+        def verified(self, ref, **_):
+            return self.written[ref["uri"]]
+
+    envelope = {"checks": ["silver.landed"], "output": "memory://land/0.json",
+                "keys": {"unit": "holdings-0", "table": "holding", "silver": "nport_holding"},
+                "input": {"uri": "memory://rows/0.json", "sha256": "invented"}}
+    monkeypatch.setattr(silver_land, "_artifacts", lambda e, a: iter([{"tables": {"holding": copy.deepcopy(rows)}}]))
+    with silver_database(database.admin) as (owner, runtime):
+        silver.migrate(owner, runtime_role=RUNTIME)
+        assert silver.register(owner, spec_file(FOLDER / "silver-holding.yaml", None), runtime_role=RUNTIME)["created"]
+        monkeypatch.setattr(silver_land, "engines", lambda: (runtime, database.application))
+        monkeypatch.setattr(runtime, "dispose", lambda: None)
+        monkeypatch.setattr(database.application, "dispose", lambda: None)
+        store = Store()
+        out = silver_land.execute(envelope, store)
+        receipt = json.loads(store.written[out["uri"]])
+        assert receipt["rows"] == len(rows) == receipt["distinct_keys"]
+        with runtime.connect() as conn:
+            assert conn.scalar(text("SELECT count(*) FROM silver.nport_holding")) == len(rows)
+        silver_land.execute(envelope, Store())  # a retry changes nothing
+        with runtime.connect() as conn:
+            assert conn.scalar(text("SELECT count(*) FROM silver.nport_holding")) == len(rows)
+        candidate = {"uri": out["uri"], "sha256": "invented"}
+        assert silver_land.verify({**envelope, "candidate": candidate}, store) == ({"silver.landed": True}, [])

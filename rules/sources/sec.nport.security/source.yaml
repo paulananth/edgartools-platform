@@ -866,9 +866,19 @@ bookkeeping:
           key: "{batch_id}"
           leases: ["mdm:consumer:{consumer}"]
           checks: [input.hash, output.receipt, mdm.committed]
+        # The holdings land in silver once the Securities they link to are merged
+        # (ticket 79, as ticket 183 did for 13F): the silver writer finds each
+        # row's Security, Fund and registrant Company by lookup.
+        - name: land_holding
+          operation: silver.land
+          requires: [holding_rows, merge]
+          key: "{unit}"
+          leases: ["silver:{silver}"]
+          checks: [input.hash, output.receipt, silver.landed]
+          input: {keys: {table: holding, silver: nport_holding}}
         - name: processed
           operation: journal.record
-          requires: [merge]
+          requires: [land_holding]
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, journal.recorded]

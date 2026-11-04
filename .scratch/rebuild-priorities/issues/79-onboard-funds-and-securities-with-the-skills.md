@@ -2,7 +2,7 @@
 
 Priority: 79, tier 1, in flight (raised by the operator, 2026-10-14). Map: [Rebuild priorities](../map.md).
 
-Type: task (onboarding). Status: claimed (Claude, 2026-10-14 ET, branch `claude/nport-onboarding`). Blocked by: none.
+Type: task (onboarding). Status: resolved (2026-11-03 20:42 ET). Claimed 2026-10-14 (Claude). Blocked by: none.
 
 ## Why
 
@@ -15,13 +15,13 @@ The data: the SEC's Form N-PORT quarterly data set for 2026q2, one zip downloade
 - [x] The capture: `2026q2_nport.zip`, one request, 440,699,889 bytes, sha256 `077cc836…`, 32 members (30 TSV tables, a metadata file, a readme), 1.55 GB unpacked 2026-10-14 17:37 ET
 - [x] discover: data-profiling over every table; the operator's answers; approved findings (13F 2026-10-14 20:54 ET; N-PORT 2026-10-15 06:29 ET)
 - [x] plan-parts: one onboarding per part, in dependency order: N-PORT Security, registrant Company, Fund, HOLDS (onboarding log) 2026-10-15 06:29 ET
-- [ ] For each part: identify, profile, map (the source extract and the Dataset Contract), quality, metadata, test, approve, switch-on
+- [x] (2026-11-03 20:42 ET) For each part: identify, profile, map (the source extract and the Dataset Contract), quality, metadata, test, approve, switch-on
   - [x] Part 1, N-PORT Security with OpenFIGI deciding a CUSIP's ISIN: test run, quality (issuer name stand-in withheld), Proving Run (423,562 Securities, 0 CUSIPs and 0 ISINs on two, second pass changed nothing), rules approved under the standing words; #999 merged 2026-10-16 06:29 ET
   - [x] Part 2, the registrant as a Company: test run, Proving Run (1,947 Companies, 0 CIKs on two, second pass changed nothing), rules approved under the standing words; #1001 merged 2026-10-16 07:55 ET
   - [x] Part 3, the Fund (kind `fund_structure`): test run, Proving Run (12,937 Funds, 0 series ids and 0 LEIs on two, second pass changed nothing), rules approved under the standing words; #1003 merged on the operator's words "merge one by one" 2026-10-16 09:13 ET
   - [ ] ~~IS_SUBFUND_OF from a Fund to its registrant~~ deferred (operator, 2026-10-16: "Funds now, link later (Recommended)"): a profile needs a stated start date and no capture states when a series began; the registrant's CIK stays on each Fund, lookup only
   - [x] Switch-on of parts 1-3's six matching rules (`nport-security-cusip`, `nport-security-isin`, `nport-isin-security-isin`, `nport-registrant-cik`, `nport-fund-series`, `nport-fund-lei`): operator, 2026-10-17 21:03 ET, "Switch on all six (Recommended)"; each on its Identifier Contract, verified by its Proving Run report's sha256 (Security `0832f611…`, registrant CIK `e217bf4d…`, Fund `792af1f5…`, each checked against the file); the tests that stamped a contract or switched these rules on for themselves now read the live policy; 813 MDM and N-PORT tests and 263 policy-reading tests pass, `mapdoc check` clean (2026-10-18 12:30 ET)
-- [ ] Securities from 13F: CUSIP and ticker attached to the Security
+- [x] (2026-11-03 20:42 ET) Securities from 13F: CUSIP and ticker attached to the Security
   - [x] 13F findings approved: operator, "yes approve the 13F findings", 2026-10-14 20:54 ET
   - [x] map: `rules/sources/sec.thirteenf.information_table/` and `rules/merge/kinds/security.yaml` (matching rule `security-cusip`, declared, not switched on); tested on all 999 local files, 20,311 Securities accepted, 9,631 set aside (onboarding log) 2026-10-14 22:31 ET
   - [x] quality: 0 checks drafted, no `quality.yaml` (onboarding log; skill line in PR #982) 2026-10-15 05:30 ET
@@ -43,14 +43,14 @@ The data: the SEC's Form N-PORT quarterly data set for 2026q2, one zip downloade
   - [x] Three-axis review: GoF "leave it" (the fold group and CUSIP placeholders now sit in three files; the contract format cannot share one definition, and neither has drifted); Standards: no quality checks (added), no landing proof (added), no catalog entry (deferred, below); Spec: a filing with series id "N/A" would stop the holding step (sec.nport.fund's reading keeps that row with an empty id, which a lookup refuses), fixed with `holding-series.yaml`, tested; 2026q2 has no such filing, so the major-issuer counts stand (2026-10-22 11:11 ET)
   - [ ] ~~The Data Catalog entry (`profile.yaml`)~~ deferred: no N-PORT part has a catalog entry yet (none of `sec.nport.*` has `profile.yaml`); it is generated from the approved findings for the whole source in one change, not this part alone
   - [x] The Data Catalog shows `nport_holding` as it lands (operator, 2026-10-22: "Catalog fix now (Recommended)"): the catalog reads each source's registered silver specs (`silver-*.yaml`) through the silver writer's own column list, so a profile's proposal no longer stands in for the real table; `nport_holding` shows 27 columns with its MDM ids and `as_of`, and OpenFIGI's `openfigi_listing` its registered form; `tests/unit/test_rules_catalog.py` 12 passed (2026-10-22 16:11 ET)
-  - [ ] Landing against the production silver database: `silver register` and `silver land`. Gap: Bookkeeping has no silver-landing step, so a run cannot land the rows itself; until one exists, `edgar-warehouse silver land nport_holding <rows>` lands them (data-operations)
+  - [x] (2026-11-03 20:42 ET) Landing: the Bookkeeping gap is closed by ticket 169's `silver.land` step; `rules/sources/sec.nport.security/source.yaml` gains `land_holding` (requires `holding_rows` and `merge`; `processed` requires it), as ticket 183 did for 13F; `MAPPING.xlsx` regenerated (`rules mapdoc check` clean). Tests: `test_the_mastering_target_lands_the_holdings_after_the_securities_merge` (fails with KeyError `land_holding` on the old source) and `test_the_land_step_lands_every_holding_once_and_its_verifier_confirms` (the worker lands every row once, a retry changes nothing, the verifier confirms); with the N-PORT, rules and catalog tests, 109 passed. No production silver database exists now (rebuild), so the shared local silver store is where a run lands
 - [x] The silver holding row's as-of date (operator, 2026-10-22: "Don't we need a as of date for holdings"): `nport_holding.as_of`, each filing's `SUBMISSION.REPORT_DATE` ("date as of which information is reported") by accession, read by `filings.yaml` as the filing date is; not `REPORT_ENDING_PERIOD`, the fund's fiscal year end. Real 2026 Q2 file: all 14,416 filings give a date, 255 earlier than 2026, so the row's date is its own, never the quarter. Tests: N-PORT holding, link start, ISIN, OpenFIGI, rules, catalog, mapdoc and the skill bundle 267 passed (2026-10-22 15:37 ET)
-- [ ] Every gap in a skill found on the way: fixed in the skill, on its own branch
+- [x] (2026-11-03 20:42 ET) Every gap in a skill found on the way: fixed in the skill, on its own branch
   - [x] data-profiling, catalog: a registered silver spec replaces the profile's proposal of the same table (2026-10-22 16:11 ET)
 - [x] Learning → skill (as-of date): `skills/data-onboarding/SKILL.md`, Relationships: two report dates are told apart by their values, and the rows outside the delivery's window are counted (2026-10-22 15:37 ET)
   - [x] ticket 81 (identifier types as configuration, #975 merged), ticket 82 (a reduction reads several source extracts, #978 merged), profiler reuse (#976 merged)
   - [x] ticket 83 (no output caps, #981), data-quality and identifier types (#982), profiler issued identifiers (#983): CI green, merged one by one on the operator's words "merge one by one" 2026-10-15 06:07 ET
-- [ ] PR, CI green, merge on the operator's word
+- [x] (2026-11-03 20:42 ET) PR, CI green, merge on the operator's word
   - [x] #984, the 13F Security, switched on: CI green, merged by the operator 2026-10-15 06:55 ET
   - [x] the N-PORT parts 1 and 2: #999 and #1001, CI green, merged on the operator's words "merge one by one" 2026-10-16 07:55 ET
   - [x] part 3: #1003, CI green, merged on the operator's words "merge one by one" 2026-10-16 09:13 ET; main's CI green after it
@@ -59,3 +59,4 @@ The data: the SEC's Form N-PORT quarterly data set for 2026q2, one zip downloade
   - [ ] ~~A shared `with_rules_on` test helper~~ deferred to ticket 108 (GoF, 2026-10-18): four test files switch a rule on locally with the same five lines; nothing is broken
 - [x] Learning → skill: `skills/data-onboarding/SKILL.md`, "Two targets": a link on each transaction row is a silver lookup, never a list on a record (1,000 members), the row's key is the master's record key, rows get their own reading, production limits are the engine's ceilings (listed), and the largest real case is checked before any run (2026-10-22 11:08 ET)
 - [x] The N-PORT run wiring follows ticket 113 (operator, 2026-10-19): the quarter stays in silver, not MDM; an ISSUED_BY link starts at its filing date, else the quarter date, and a link that exists keeps its start — done by ticket 113 (#1107 merged 2026-10-19 07:38 ET) (2026-10-22 11:08 ET)
+- [x] (2026-11-03 20:42 ET) Learning → skill: `skills/data-onboarding/SKILL.md`, Two targets (step 2) and the gaps table: a pipeline lands a table through a `silver.land` step; the "not built" row was stale since ticket 169
