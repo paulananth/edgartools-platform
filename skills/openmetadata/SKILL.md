@@ -649,3 +649,33 @@ forbidden shared object. A zero-removal publish after the rebuild is expected;
 it means the fresh catalog already matches the plan. Report deletion counts
 separately from publication counts. A catalog reset does not reset the
 OpenMetadata server or prove that metadata ingestion or data pipelines ran.
+
+## Full local instance rebuild
+
+This is separate from a catalog-only clean rebuild. It removes all local
+OpenMetadata PostgreSQL and Elasticsearch data, including users, workflows,
+roles, global glossary objects, and instance settings. Use it only when the
+operator explicitly requests a full instance reset. Before deleting anything,
+state that impact and identify the exact volumes:
+`edgartools-catalog_db-data` and `edgartools-catalog_es-data`.
+
+Before stopping the stack, confirm the active Docker context and identify the
+compose project from `docker compose -f infra/openmetadata/docker-compose.yml
+ps`. List its containers and volumes by the Docker Compose project label; verify
+the only volumes being removed are the `db-data` and `es-data` volumes owned by
+`edgartools-catalog`, and that no unrelated container uses them. If names,
+labels, or consumers differ, stop and report them before deleting anything.
+
+After that scope is confirmed, run `docker compose -f
+infra/openmetadata/docker-compose.yml down -v`. Verify those two volumes are
+absent, then redeploy with `docker compose -f
+infra/openmetadata/docker-compose.yml up -d`. Wait for PostgreSQL,
+Elasticsearch, migrations, and `openmetadata-server` to report healthy; read
+`GET /api/v1/system/version` and require the configured version. Create a fresh
+local administrator token only after deployment is healthy. Then follow the
+catalog-only workflow: read the side-effect-free Rules plan, publish its
+configured catalog, require publisher readback, run the independent read-only
+check, and verify the exact domain and glossary inventory plus the absence of
+any forbidden shared object. Report the server rebuild separately from catalog
+publication. Do not remove images, other projects' containers, or other
+volumes.
