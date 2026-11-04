@@ -393,6 +393,11 @@ Keep configuration, send and confirmation as three separate facts:
    independently and is read-only. A matching readback is required before
    calling the checked scope confirmed.
 
+The CLI writes one concise status line to stderr and structured JSON to stdout.
+For an interactive terminal, append `>/dev/null` to show only the status line;
+leave stdout available when an automation needs the JSON. A plan's JSON includes
+the full configured catalog and can be thousands of lines.
+
 Use **pending** for plan-only work, **partial** when a send may have occurred
 but confirmation is absent or an API request/readback reports failure or drift,
 **failed** when planning or configuration prevented a publish attempt, and
@@ -401,6 +406,9 @@ the relevant native readback matches.
 For failures, name the stage, give a short cause, and state the next action.
 Show the destination as scheme and host only. Never include user info, tokens,
 query strings, or raw response bodies in an operator report.
+Plan counts and confirmation apply only to the exact rules revision checked. After
+a rebase or rules change, rerun plan and check; a previously confirmed catalog can
+be stale against the newer configuration.
 
 The current CLI does not provide trustworthy per-object created-versus-updated
 counts; do not infer these from plan counts or a successful PUT. Mark them
@@ -429,6 +437,17 @@ different jobs:
   pipeline-service client. `POST /api/v1/services/ingestionPipelines/trigger/{id}`
   triggers metadata ingestion. It does not start the platform's source capture,
   Bookkeeping steps, MDM merge, RDM publication or Silver loads.
+- Other trigger routes are scoped to their own object: `/api/v1/apps/trigger/{name}`
+  runs an installed OpenMetadata Application, and
+  `/api/v1/governance/workflowDefinitions/name/{fqn}/trigger` starts a governance
+  workflow. Neither route makes a catalog `Pipeline` runnable.
+- OpenMetadata also has native Data Contracts. On 2.0.2,
+  `POST /api/v1/dataContracts/validate` checks a draft request against existing
+  entity metadata without creating a contract. This checks the contract shape and
+  metadata constraints; it is not a test over stored rows or a pipeline run. The
+  persisted contract's `POST /api/v1/dataContracts/{id}/validate` is a separate
+  operation. The current Rules catalog plan does not publish Data Contracts, and
+  contract validation does not run a source pipeline or Bookkeeping operation.
 
 Before calling OpenMetadata a plug-and-play execution or operations control
 plane, check the installed version's API schema for a trigger on the exact
@@ -572,16 +591,18 @@ an object cannot be shown to be owned; global domains, glossaries, terms,
 products, and quality definitions can contain unrelated curation. Record the
 IDs and counts for the reviewed scope.
 
-Delete in dependency order: owned pipeline service, owned database service,
-owned products, owned custom quality definitions, owned glossary terms, owned
-glossaries, owned domains, then owned custom tags. For services, verify the
-exact service name and FQN first, delete by returned ID with
-`recursive=true&hardDelete=true`, then repeat the GET and require 404. For each
-other resource, use its native API and returned ID; use recursive deletion only
-when the owned children are in the reviewed scope. Keep built-in definitions,
-classifications, tags, relationships, workflows, and settings unless the plan
-explicitly owns them. If a delete fails or ownership becomes unclear, stop and
-account for remaining objects before continuing.
+Delete in dependency order: owned products, owned quality cases, owned custom
+quality definitions, owned pipeline service, owned database service, owned
+glossary terms, owned glossaries, owned domains, then owned custom tags. Remove
+products and cases before their referenced tables. Delete the pipeline service
+before the database service. For services, verify the exact service name and
+FQN first, delete by returned ID with `recursive=true&hardDelete=true`, then
+repeat the GET and require 404. For each other resource, use its native API and
+returned ID; use recursive deletion only when the owned children are in the
+reviewed scope. Keep built-in definitions, classifications, tags,
+relationships, workflows, and settings unless the plan explicitly owns them. If
+a delete fails or ownership becomes unclear, stop and account for remaining
+objects before continuing.
 
 Publish the current plan only after the reviewed scope is empty. Require the
 publish result's readback to match, run `rules catalog check` independently,
