@@ -160,7 +160,7 @@ fn prepared_address(record: &Object, names: &[String]) -> Result<Object, String>
     )]))
 }
 /// One part a pass compares, or a list of parts any one of which agreeing is
-/// enough (P5: the city or the postcode; operator, 2026-10-30).
+/// enough ("name and city or postcode": the city or the postcode; operator, 2026-10-30).
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum Part {

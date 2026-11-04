@@ -138,7 +138,7 @@ if case.startswith(("name_", "cascade_")):
     args = (
         {
             **names,
-            "pass": "P1",
+            "pass": "name and full address",
             "compare": ["street", "city", "postcode"],
             "refused_flags": [],
             "over_shared": 10,

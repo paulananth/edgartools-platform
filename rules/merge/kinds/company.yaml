@@ -338,20 +338,21 @@ rules:
 # place of incorporation is flagged, and the proof decides (2026-09-28).
 # Declared, not switched on: each pass needs its own proof and the
 # operator's approval (ticket 20). The two rules above stay until then.
-# P5 is switched on (ticket 09; operator, 2026-10-30 18:20 ET: "P5 now, hold
-# P1/P4/P6 (Recommended)"; its proof is in policy.yaml). P5 compares the city or
-# the postcode, and P1 (street, city and postcode) and P4 (postcode) were
-# deleted (operator, 2026-10-30: "do not use p1 or p4, p5 can match on postel
-# code"): a pair either matched agrees on the city or the postcode, so P5 takes
-# their links, the 4 flagged ones included ("Link them (Recommended)"). P6 is
-# held on 2 labelled pairs that read as a parent or namesake; P7 stays off (a
-# different entity among its labels).
-# P2 (street and postcode) and P3 (street and city) were deleted (ticket 09;
-# operator, 2026-10-17: "Delete both"): too few new links to prove (8 and 22
-# of 52 needed); a pair either matched shares the postcode or the city, which
-# P5 now compares. The other passes keep their names.
-- rule_id: sec-gleif-cascade-p5
-  version: 2026-10-30.1
+# "Name and city or postcode" is switched on (ticket 09; operator, 2026-10-30
+# 18:20 ET; its proof is in policy.yaml). It compares the city or the postcode;
+# "name and full address" (street, city and postcode) and "name and postcode"
+# were deleted (operator, 2026-10-30: "do not use p1 or p4, p5 can match on
+# postel code"): a pair either matched agrees on the city or the postcode, so
+# it takes their links, the 4 flagged ones included ("Link them
+# (Recommended)"). "Name and country" is held on 2 labelled pairs that read as
+# a parent or namesake; "name alone" stays off (a different entity among its
+# labels). "Name, street and postcode" and "name, street and city" were deleted
+# (ticket 09; operator, 2026-10-17: "Delete both"): too few new links to prove
+# (8 and 22 of 52 needed); a pair either matched shares the postcode or the
+# city, which "name and city or postcode" now compares. Each pass is named by
+# what it compares (operator, 2026-11-03: no pass numbers).
+- rule_id: sec-gleif-name-city-or-postcode
+  version: 2026-11-03.named-by-what-it-compares
   family: name_binding
   source: gleif.level1.v1
   holder_source: sec.company.v1
@@ -362,7 +363,7 @@ rules:
   when:
   - primitive: cascade_pass@1
     args:
-      pass: P5
+      pass: name and city or postcode
       compare:
       - - city
         - postcode
@@ -381,8 +382,8 @@ rules:
       - DUPLICATE
   - primitive: holds_no_other_lei@1
     args: {}
-- rule_id: sec-gleif-cascade-p6
-  version: 2026-09-28.1
+- rule_id: sec-gleif-name-country
+  version: 2026-11-03.named-by-what-it-compares
   family: name_binding
   source: gleif.level1.v1
   holder_source: sec.company.v1
@@ -393,7 +394,7 @@ rules:
   when:
   - primitive: cascade_pass@1
     args:
-      pass: P6
+      pass: name and country
       compare: []
       over_shared: 25
       refused_flags: []
@@ -410,8 +411,8 @@ rules:
       - DUPLICATE
   - primitive: holds_no_other_lei@1
     args: {}
-- rule_id: sec-gleif-cascade-p7
-  version: 2026-09-28.1
+- rule_id: sec-gleif-name-alone
+  version: 2026-11-03.named-by-what-it-compares
   family: name_binding
   source: gleif.level1.v1
   holder_source: sec.company.v1
@@ -422,7 +423,7 @@ rules:
   when:
   - primitive: cascade_pass@1
     args:
-      pass: P7
+      pass: name alone
       compare: null
       over_shared: 25
       refused_flags: []

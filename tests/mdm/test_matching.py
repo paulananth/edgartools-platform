@@ -148,7 +148,7 @@ def test_a_cascade_pass_checks_the_gleif_version_by_its_effective_time():
     for effective_at, passes in [("2026-08-31T20:00:00-04:00", True), ("2026-09-03T00:00:00+00:00", False)]:
         record, other = cascaded()
         other["effective_at"] = effective_at
-        assert _passes(_pass(5), record, other) is passes, effective_at
+        assert _passes(_pass(CITY_OR_POSTCODE), record, other) is passes, effective_at
 
 
 def test_a_field_path_is_read_from_the_rule():
@@ -183,14 +183,17 @@ def test_an_argument_the_test_cannot_honour_is_refused(primitive, changes, reaso
 HQ = {"street": "1 APPLE PARK WAY", "city": "CUPERTINO", "postcode": "95014", "country": "US"}
 
 
-def _pass(n):
-    return next(r for r in _POLICY["kinds"]["company"]["rules"] if r["rule_id"] == f"sec-gleif-cascade-p{n}")
+def _pass(rule_id):
+    return next(r for r in _POLICY["kinds"]["company"]["rules"] if r["rule_id"] == rule_id)
+
+
+CITY_OR_POSTCODE, COUNTRY, ALONE = "sec-gleif-name-city-or-postcode", "sec-gleif-name-country", "sec-gleif-name-alone"
 
 
 ELSEWHERE = {"street": "9 ELSEWHERE RD", "city": "SAN JOSE", "postcode": "95110"}
 
 
-def cascaded(pass_="P5", flags=(), via="legal name", **address):
+def cascaded(pass_="name and city or postcode", flags=(), via="legal name", **address):
     record = sec()
     record["provenance"]["matching"]["address"] = {**HQ, **address}
     record["provenance"]["matching"]["name_count"]["cascade"] = {
@@ -202,37 +205,37 @@ def cascaded(pass_="P5", flags=(), via="legal name", **address):
 
 
 def test_a_cascade_pass_binds_the_pair_the_name_count_named_in_that_pass():
-    assert _passes(_pass(5), *cascaded())
-    assert not _passes(_pass(6), *cascaded())  # the name count named P5
+    assert _passes(_pass(CITY_OR_POSTCODE), *cascaded())
+    assert not _passes(_pass(COUNTRY), *cascaded())  # the name count named another pass
 
 
 def test_a_cascade_pass_rechecks_the_address_on_the_stage_rows():
-    assert not _passes(_pass(5), *cascaded(**ELSEWHERE))
-    assert _passes(_pass(7), *cascaded(pass_="P7", **ELSEWHERE))
+    assert not _passes(_pass(CITY_OR_POSTCODE), *cascaded(**ELSEWHERE))
+    assert _passes(_pass(ALONE), *cascaded(pass_="name alone", **ELSEWHERE))
 
 
 def test_p5_agrees_on_the_city_or_the_postcode():
-    assert _passes(_pass(5), *cascaded(street="9 ELSEWHERE RD", postcode="95110"))  # the city agrees
-    assert _passes(_pass(5), *cascaded(street="9 ELSEWHERE RD", city="SAN JOSE"))  # the postcode agrees
+    assert _passes(_pass(CITY_OR_POSTCODE), *cascaded(street="9 ELSEWHERE RD", postcode="95110"))  # the city agrees
+    assert _passes(_pass(CITY_OR_POSTCODE), *cascaded(street="9 ELSEWHERE RD", city="SAN JOSE"))  # the postcode agrees
 
 
 def test_a_cascade_pass_refuses_a_flag_its_rule_refuses():
     pair = cascaded(flags=[_cascade.CONFLICT])
-    assert _passes(_pass(5), *pair)
-    assert not _passes(with_args(_pass(5), "cascade_pass@1", refused_flags=[_cascade.CONFLICT]), *pair)
+    assert _passes(_pass(CITY_OR_POSTCODE), *pair)
+    assert not _passes(with_args(_pass(CITY_OR_POSTCODE), "cascade_pass@1", refused_flags=[_cascade.CONFLICT]), *pair)
 
 
 def test_a_cascade_pass_needs_the_gleif_legal_name_unless_the_name_census_matched_another():
     record, other = cascaded()
     other["fields"]["name"] = value("APPLE KABUSHIKI KAISHA")
-    assert not _passes(_pass(5), record, other)
+    assert not _passes(_pass(CITY_OR_POSTCODE), record, other)
     record, other = cascaded(via="other name")
     other["fields"]["name"] = value("APPLE KABUSHIKI KAISHA")
-    assert _passes(_pass(5), record, other)
+    assert _passes(_pass(CITY_OR_POSTCODE), record, other)
 
 
 def test_a_pair_a_refused_flag_holds_back_goes_to_a_steward():
-    rule = with_args(_pass(5), "cascade_pass@1", refused_flags=[_cascade.CONFLICT])
+    rule = with_args(_pass(CITY_OR_POSTCODE), "cascade_pass@1", refused_flags=[_cascade.CONFLICT])
     assert _refused_by_flag(rule, *cascaded(flags=[_cascade.CONFLICT]))
     assert not _refused_by_flag(rule, *cascaded(flags=[_cascade.CONFLICT], **ELSEWHERE))
-    assert not _refused_by_flag(_pass(5), *cascaded(**ELSEWHERE))
+    assert not _refused_by_flag(_pass(CITY_OR_POSTCODE), *cascaded(**ELSEWHERE))

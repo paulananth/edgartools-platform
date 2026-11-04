@@ -294,8 +294,8 @@ Never invent a command.
   `rules/sources/sec.company/name-count-*.yaml` and
   `rules/sources/gleif/name-count-*.yaml`; about 11 minutes over the whole
   population); the name rules `sec-gleif-name-jurisdiction` and
-  `sec-gleif-name-postal`; the cascade passes `sec-gleif-cascade-p5` to `-p7`
-  (`cascade_pass@1`; P5 compares `[[city, postcode]]`); the code in
+  `sec-gleif-name-postal`; the cascade passes `sec-gleif-name-city-or-postcode`, `-name-country` and `-name-alone`
+  (`cascade_pass@1`; "name and city or postcode" compares `[[city, postcode]]`); the code in
   `edgar_warehouse/mdm/name_count.py` and `cascade.py`
   (ticket 09).
 - Issued identifiers: those with an Identifier Contract in a kind file (today `cik`; GLEIF states `lei`). Name-rule proofs:

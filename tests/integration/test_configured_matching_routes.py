@@ -34,7 +34,7 @@ runtime = create_engine(os.environ["ROUTE_RUNTIME_URL"], hide_parameters=True)
 try:
     migrate(owner, application_role="clean_application")
     primitive = "cascade_pass@1" if os.environ["ROUTE"] == "cascade" else "name_census_match@1"
-    args = names if primitive == "name_census_match@1" else {**names, "pass":"P1",
+    args = names if primitive == "name_census_match@1" else {**names, "pass":"name and full address",
         "compare":["street","city","postcode"], "refused_flags":[], "over_shared":10}
     tests = [{"primitive":primitive,"args":args},
         {"primitive":"gleif_entity_eligible@1","args":eligibility},

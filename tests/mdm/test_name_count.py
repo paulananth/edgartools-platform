@@ -172,9 +172,9 @@ class TestTheCascade:
         found = self.run([self.native("HWUPKR0MPOU8FGXBT394", "Apple Inc.", "1 Apple Park Way"),
                           self.native("5493001KJTIIGC8Y1R12", "Apple Inc.", "1 Rue de Paris", country="FR")])
         answer = found["cascade"]["assignments"]["0000320193"]
-        assert (answer["lei"], answer["pass"], answer["via"]) == ("HWUPKR0MPOU8FGXBT394", "P5", "legal name")
+        assert (answer["lei"], answer["pass"], answer["via"]) == ("HWUPKR0MPOU8FGXBT394", "name and city or postcode", "legal name")
         assert answer["flags"] == ["name held by another candidate"]
-        assert [p["pass"] for p in found["cascade"]["passes"]] == ["P5", "P6", "P7"]
+        assert [p["pass"] for p in found["cascade"]["passes"]] == ["name and city or postcode", "name and country", "name alone"]
 
     def test_an_entity_the_rules_find_ineligible_never_binds(self):
         found = self.run([self.native("HWUPKR0MPOU8FGXBT394", "Apple Inc.", "1 Apple Park Way", status="INACTIVE")])
@@ -190,8 +190,8 @@ def test_a_record_carries_its_ciks_cascade_answer_inside_its_name_count_entry():
     found = counted_names([APPLE], [gleif("HWUPKR0MPOU8FGXBT394", "Apple Inc.")])
     row = {"cik": 320193, "entity_name": "APPLE INC"}
     assert "cascade" not in name_count_evidence(found, row, "d")  # no passes: as before
-    found["cascade"] = {"version": "sec-gleif-cascade-v1", "assignments": {"0000320193": {"lei": "L", "pass": "P1"}}}
+    found["cascade"] = {"version": "sec-gleif-cascade-v1", "assignments": {"0000320193": {"lei": "L", "pass": "name and full address"}}}
     carried = name_count_evidence(found, row, "d")
     assert carried["key"] == "APPLE INC"
-    assert carried["cascade"] == {"name_count": "d", "version": "sec-gleif-cascade-v1", "lei": "L", "pass": "P1"}
+    assert carried["cascade"] == {"name_count": "d", "version": "sec-gleif-cascade-v1", "lei": "L", "pass": "name and full address"}
     assert "cascade" not in name_count_evidence(found, {"cik": 1, "entity_name": "APPLE INC"}, "d")
