@@ -1,0 +1,15 @@
+# Ticker (the trading symbol a listing carries, as OpenFIGI and a Form 4 write it):
+# one to nine letters or digits once the separators of a class ticker (a slash, a dash,
+# a dot or a space: BRK/B, BRK-B, BRK.B) are dropped by the source rules on both sides.
+# Ticket 24: a Form 4's issuer trading symbol finds the Security through this identifier.
+# It is not unique (a ticker is reused over the years), so a rule on it waits for review
+# when it finds several Securities, and it never merges two.
+# A change to this file is a new version: its normalizer gets a new name.
+identifier: ticker
+version: 1
+description: "One to nine letters or digits, separators dropped by the source rules. Upper-cased."
+case: upper
+parts:
+  - length: 1
+    longest: 9
+    characters: [digits, letters]

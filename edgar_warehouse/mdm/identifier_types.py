@@ -238,10 +238,13 @@ def declared(body: dict, name: str) -> IdentifierType:
         length = part.get("length") if isinstance(part, dict) else None
         if type(length) is not int or length < 1:
             raise DeclarationError(f"{where}: each part has a `length` from 1")
+        longest = part.get("longest", length) if isinstance(part, dict) else length
+        if type(longest) is not int or longest < length:
+            raise DeclarationError(f"{where}: `longest` is a whole number, not below `length`")
         cls, chars = _characters(part, where)
-        pattern += cls + "{%d}" % length
+        pattern += cls + ("{%d}" % length if longest == length else "{%d,%d}" % (length, longest))
         allowed |= chars
-        total += length
+        total += longest
     case = body.get("case", "as filed")
     if case not in ("upper", "as filed"):
         raise DeclarationError(f"{where}: `case` is upper or as filed")
