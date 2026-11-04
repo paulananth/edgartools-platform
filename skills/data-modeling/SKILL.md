@@ -62,7 +62,9 @@ Read these before deciding, and use their words:
   either is a code set version in RDM. A yaml table, a test fixture, a Python or Rust constant or a
   second copy in a test is a copy outside RDM: read the code set (by its pinned version, for a
   historic one) instead. `rules/reference/published/` is the form RDM publishes a version in, not a
-  place to edit or copy from.
+  place to edit or copy from. Write a published file with `rdm.store.canonical` (rows in its order, then the
+  sha256 of those bytes in `pin.json`), never by hand: `tests/unit/test_reference_preparation.py` rebuilds each
+  one and fails on any other row order (ticket 188, CI).
 - `docs/specs/rdm/spec.md` and `docs/specs/agent-context/spec.md`: how
   reference data and agent context are kept.
 
