@@ -71,3 +71,17 @@ def test_a_second_pass_changes_nothing_and_changed_rules_name_every_file_again(t
     after = write_manifest(**{**options, "output": str(tmp_path / "other")})
     named = Artifacts().json(Artifacts().json(after["manifest"])["steps"]["processed"][0]["input"])["files"]
     assert [f["key"] for f in named] == [key(1), key(2)]
+
+
+def test_the_security_symbols_target_reads_the_symbol_then_prepares_and_merges_it(tmp_path):
+    """Ticket 24: a second target, since a target prepares one publication. It lands nothing in
+    silver and reads only the issuer and symbol of each filing."""
+    report = write_manifest(**{**capture(tmp_path, [1, 2]), "target": "security_symbols"})
+    steps = Artifacts().json(report["manifest"])["steps"]
+    assert set(steps) == {"read_security", "prepare_security", "merge_security", "processed_security"}
+    (read,) = steps["read_security"]
+    assert steps["prepare_security"][0]["keys"]["table"] == "security_record"
+    assert steps["prepare_security"][0]["keys"]["dataset"] == "sec.ownership.security.v1"
+    recorded_files = Artifacts().json(steps["processed_security"][0]["input"])["files"]
+    assert [f["key"] for f in recorded_files] == [key(1), key(2)]
+    assert read["keys"]["unit"]
