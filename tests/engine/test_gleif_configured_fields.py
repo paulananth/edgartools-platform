@@ -121,8 +121,12 @@ def test_configured_normalization_preserves_assertion_ids_and_deferrals(case):
     publication={'artifact_sha256':'a'*64,'member':'level1','publication_key':'fixture',
                  'revision':1,'effective_at':None}
     try:
-        outcome=('assertion',digest(adapters.normalize(row,source_code='gleif.level1.v1',contract=retired_contract('level1'),
-                                                         publication=publication)))
+        from tests.support.name_count_words import without_name_id
+
+        assertion=adapters.normalize(row,source_code='gleif.level1.v1',contract=retired_contract('level1'),publication=publication)
+        earlier=without_name_id(assertion)  # ticket 01: the name id came after
+        earlier['assertion_id']=digest({k:v for k,v in earlier.items() if k!='assertion_id'})
+        outcome=('assertion',digest(earlier))
     except adapters.UnsupportedRecord as error:
         outcome=('deferred',error.reason,digest(error.detail),error.probable_kind)
     retired(f'gleif/normalize/{case}',outcome)
