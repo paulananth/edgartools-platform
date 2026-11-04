@@ -132,6 +132,25 @@ def without_p2_p3_deleted(policy: dict) -> dict:
     return body
 
 
+def without_p6_p7_deleted(policy: dict) -> dict:
+    """Rebuild priorities ticket 09 (operator, 2026-11-03: "delete p6 and p7"):
+    cascade passes P6 and P7 deleted, P6 on 2 labelled pairs that read as a
+    namesake and P7 on a different entity among its 14 labels. Peeled, they
+    stand again after P5, which they follow in the cascade's order."""
+    body = _copy(policy)
+    rules = body["kinds"]["company"]["rules"]
+    at = next(i for i, r in enumerate(rules) if r["rule_id"] == "sec-gleif-cascade-p5")
+    restored = []
+    for name, parts in (("P6", []), ("P7", None)):
+        rule = _copy(rules[at])
+        rule["rule_id"] = f"sec-gleif-cascade-{name.lower()}"
+        rule["version"] = "2026-09-28.1"
+        rule["when"][0]["args"].update({"pass": name, "compare": parts})
+        restored.append(rule)
+    rules[at + 1:at + 1] = restored
+    return body
+
+
 # P5's measured entry as switched on at 18:20 ET (ticket 09), before it compared the postcode too.
 P5_CITY_ENTRY = {
     "kind": "company",
@@ -394,6 +413,8 @@ def without_other_capacity(policy: dict) -> dict:
 # Newest first: each layer, and Company's policy digest with it and every
 # layer after it still on.
 LAYERS = [
+    # P6 and P7 deleted: "delete p6 and p7" (2026-11-03, ticket 09).
+    (without_p6_p7_deleted, "0425daf9dc3442ccc95d049f520c1bfd67268d7263cba4e01a1a1cc7ec7ce6ab"),
     # The capacity `other` on EMPLOYED_BY: "Capacity `other` on EMPLOYED_BY (Recommended)" (2026-11-03, ticket 182).
     (without_other_capacity, "a24c4ac2bd970feba807d28fc4ae9b5539adc49e7826c9aadff45424629244e7"),
     # P5 compares the city or the postcode; P1 and P4 deleted: "do not use p1 or p4, p5 can match on

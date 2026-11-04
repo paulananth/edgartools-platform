@@ -203,12 +203,11 @@ def cascaded(pass_="P5", flags=(), via="legal name", **address):
 
 def test_a_cascade_pass_binds_the_pair_the_name_count_named_in_that_pass():
     assert _passes(_pass(5), *cascaded())
-    assert not _passes(_pass(6), *cascaded())  # the name count named P5
+    assert not _passes(_pass(5), *cascaded(pass_="P6"))  # the name count named another pass
 
 
 def test_a_cascade_pass_rechecks_the_address_on_the_stage_rows():
     assert not _passes(_pass(5), *cascaded(**ELSEWHERE))
-    assert _passes(_pass(7), *cascaded(pass_="P7", **ELSEWHERE))
 
 
 def test_p5_agrees_on_the_city_or_the_postcode():

@@ -294,7 +294,7 @@ Never invent a command.
   `rules/sources/sec.company/name-count-*.yaml` and
   `rules/sources/gleif/name-count-*.yaml`; about 11 minutes over the whole
   population); the name rules `sec-gleif-name-jurisdiction` and
-  `sec-gleif-name-postal`; the cascade passes `sec-gleif-cascade-p5` to `-p7`
+  `sec-gleif-name-postal`; the cascade pass `sec-gleif-cascade-p5` (P1 to P4, P6 and P7 are deleted)
   (`cascade_pass@1`; P5 compares `[[city, postcode]]`); the code in
   `edgar_warehouse/mdm/name_count.py` and `cascade.py`
   (ticket 09).
