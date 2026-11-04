@@ -406,6 +406,19 @@ beside a checkout (`Path(__file__).parents[n] / "rules"`): the installed
 bundle ships `rules/` elsewhere, and the bundle test loads each such file
 from the installed bundle (ticket 48).
 
+### Learned on a record that carries only a name (ticket 01, 2026-11-04)
+
+- **The name rules (`name_binding`) serve one pair of sources only**: they need a Name Count and a place test, so
+  a Form ADV custodian named only by its name cannot use them. The rule for it is the `exact_name_binding`
+  family (`edgar_warehouse/mdm/exact_name.py`): a source, its `holder_sources`, `key: name_id@1`, finds
+  and never creates (`on_no_match: wait`, `on_several: review`).
+- **Both sides must carry the name id as a cross-reference** (`name_id@1`, one fold for every source);
+  a holder source that does not map it cannot be found. Adding it is a new contract version, not a new
+  source code, and every test that compares with a digest recorded before it puts the name id and the
+  version back first (`tests/support/name_count_words.py`, `before_name_id`, `without_name_id`).
+- **A new candidate route changes the routes digest** that every stored record is indexed under
+  (`matching_routes_sha256`); stored records must be reindexed, a rebuild store simply loads again.
+
 ### Learned on a lookup-only route (ticket 24, 2026-11-04)
 
 - **An installed-bundle test reads the committed rules.** `tests/engine/test_data_skill_bundle_postgres.py`
