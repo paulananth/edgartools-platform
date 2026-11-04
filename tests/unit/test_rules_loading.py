@@ -42,11 +42,14 @@ class Recorded:
 
     def __init__(self, open_runs=(), processed=(), versions=None, pinned=None):
         self.calls, self.open, self.processed, self.submitted = [], list(open_runs), set(processed), 0
+        self.revisions = []
         self.deadline = float("inf")
         self.versions, self.pinned = versions or {}, pinned or {}
 
     def __call__(self, duty, *args):
         self.calls.append(args[:2])
+        if args[:2] == ("mdm", "prepare-capture"):
+            self.revisions.append(args[args.index("--revision") + 1])
         if args[:2] == ("workers", "describe"):
             return json.dumps({"profile": args[2], "runtime": "this-checkout"})
         if args[:2] == ("rules", "status"):
@@ -99,6 +102,18 @@ def test_each_new_bundle_is_prepared_submitted_and_driven(tmp_path, monkeypatch)
     assert [(b["documents"], b["new"], b["run_id"]) for b in result["bundles"]] == [(2, 0, None), (1, 1, "new-1")]
     assert ("drive", "new-1", ("read",)) in commands.calls  # the run's frozen steps, not the files on disk
     assert (tmp_path / "m" / "load" / "example" / "by_letter" / "2026-10-25T000000Z" / "bundle-002").is_dir()
+
+
+def test_a_load_names_the_publication_revision_and_defaults_to_the_first(tmp_path, monkeypatch):
+    folder = capture(tmp_path / "c", "letters/a.json")
+    named, plain = Recorded(), Recorded()
+
+    loader(tmp_path, monkeypatch, named).load(
+        capture=folder, capture_run="capture-1", as_of="2026-10-25T00:00:00Z", facts=[], run_files=[], revision=3)
+    loader(tmp_path, monkeypatch, plain).load(
+        capture=folder, capture_run="capture-1", as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
+
+    assert (named.revisions, plain.revisions) == (["3"], ["0"])
 
 
 def test_a_run_left_open_is_finished_before_anything_new(tmp_path, monkeypatch):

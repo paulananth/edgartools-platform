@@ -238,6 +238,11 @@ edgar-warehouse load \
   those files.
 - Add `--fact name=value` and `--file name=path` for each input the target's
   `run` declares.
+- **A reload whose inputs changed needs `--revision N`** (default 0, the
+  first publication). A changed input (a new Name Count, say) changes a record under the
+  same revision, and the Stage refuses it ("Source native revision has
+  contradictory publications"): pass a revision higher than the last load's
+  (ticket 09, 2026-11-04: the bundles all stopped at merge until it was raised).
 - **A source's Bookkeeping section must be version 2.** `load` cannot plan a
   version 1 section: every bundle stops at `mdm prepare-capture` with "must be
   version 2" before any run is submitted. Check
