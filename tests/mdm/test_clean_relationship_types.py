@@ -23,39 +23,6 @@ from edgar_warehouse.mdm.clean.activation import check_policy
 from edgar_warehouse.mdm.clean.store import Conflict
 from edgar_warehouse.rules import files
 
-LEGAL = ["company", "fund_structure", "government", "international_organization"]
-# The table as the code held it before this ticket (CONTRACTS, CAPACITIES,
-# HIERARCHIES and the type lists inside `project`), frozen here as the golden copy.
-BEFORE = {
-    "AUDITED_BY": {"from": ["company"], "to": ["company"], "to_profile": "audit_firm"},
-    "ISSUED_BY": {"from": ["security"], "to": LEGAL},
-    # EMPLOYED_BY gained the capacity `other` (ticket 182: the Form 3/4/5 "Other (specify below)" box).
-    "EMPLOYED_BY": {"from": ["person"], "to": ["company"], "capacities": ["director", "employee", "officer", "other"]},
-    "CONTROLS": {"from": ["person"], "to": ["company"], "capacities": ["control_person", "owner", "ten_percent_owner"]},
-    "HOLDS": {"from": ["company", "fund_structure", "person"], "to": ["security"]},
-    "MANAGES_FUND": {"from": ["company", "person"], "to": ["company", "fund_structure"],
-                     "from_profile": "adviser", "to_profile": "fund"},
-    "OWNERSHIP_PARENT": {"from": LEGAL, "to": LEGAL, "hierarchy": True, "cycles": "review"},
-    "ACCOUNTING_PARENT": {"from": LEGAL, "to": LEGAL, "hierarchy": True, "cycles": "invalid", "one_parent": True,
-                          "ultimate_parent": "accounting-chain-v1"},
-    "IS_DIRECTLY_CONSOLIDATED_BY": {"from": ["company"], "to": ["company"], "hierarchy": True, "cycles": "invalid",
-                                    "one_parent": True, "ultimate_parent": "accounting-chain-v1"},
-    "IS_ULTIMATELY_CONSOLIDATED_BY": {"from": ["company"], "to": ["company"], "hierarchy": True,
-                                      "cycles": "invalid", "one_parent": True},
-    "REPORTED_ULTIMATE_PARENT": {"from": LEGAL, "to": LEGAL},
-    "IS_INTERNATIONAL_BRANCH_OF": {"from": ["branch"], "to": LEGAL, "hierarchy": True, "cycles": "invalid"},
-    "VENUE_OPERATOR": {"from": ["venue"], "to": LEGAL},
-    "VENUE_SEGMENT_OF": {"from": ["venue"], "to": ["venue"], "hierarchy": True, "cycles": "invalid"},
-    "IS_SUBFUND_OF": {"from": ["company", "fund_structure"], "to": ["company", "fund_structure"],
-                      "from_profile": "fund", "to_profile": "fund", "hierarchy": True, "cycles": "invalid"},
-    "IS_FEEDER_TO": {"from": ["company", "fund_structure"], "to": ["company", "fund_structure"],
-                     "from_profile": "fund", "to_profile": "fund", "hierarchy": True, "cycles": "invalid"},
-    "IS_FUND-MANAGED_BY": {"from": ["company", "fund_structure"], "to": ["company", "person"],
-                           "from_profile": "fund"},
-}
-
-
-# The types under their sources' own names (profiling ticket 04b; each name
 # approved by the operator one by one, 2026-10-07).
 REAL_NAMES = {
     "IS_DIRECTLY_CONSOLIDATED_BY", "IS_ULTIMATELY_CONSOLIDATED_BY", "SUCCESSOR_ENTITY", "IS_SUBSIDIARY_OF",
@@ -68,12 +35,6 @@ REAL_NAMES = {
 def test_the_code_set_names_every_type_as_its_source_does():
     types = relationships.types_of(files.policy())
     assert set(types) == REAL_NAMES
-    # Every type the old table had either keeps its name and rules, or is gone.
-    for name, spec in BEFORE.items():
-        if name in types and name not in ("IS_DIRECTLY_CONSOLIDATED_BY", "IS_ULTIMATELY_CONSOLIDATED_BY"):
-            # ISSUED_BY keeps its start since ticket 113 (2026-10-19); its rules are otherwise the same.
-            found = {k: v for k, v in types[name].items() if not (name == "ISSUED_BY" and k == "keeps_start")}
-            assert found == spec, name
     # The direct parent derives its ultimate parent as the stated type's name.
     assert types["IS_DIRECTLY_CONSOLIDATED_BY"]["ultimate_type"] == "IS_ULTIMATELY_CONSOLIDATED_BY"
     # A capacity is a child code of its type.
@@ -182,3 +143,20 @@ def test_every_capacity_a_contract_states_is_one_its_type_has():
     assert stated, "the ownership feed states capacities"
     for type_name, capacity in stated:
         assert capacity in types[type_name].get("capacities", []), (type_name, capacity)
+
+
+def test_version_2_of_the_code_set_adds_only_the_other_capacity():
+    # Both versions are read from RDM by their pins (ticket 188); no second copy of the table is kept here.
+    from edgar_warehouse.mdm.clean.evidence import KINDS
+    from edgar_warehouse.rules.source_engine import prepare_relationship_types
+
+    pin = files.reference_pin("mdm-relationship-types")
+    assert pin["version"] == "2"
+    first = {**pin, "version": "1", "sha256": "9a0a3525e9427ab88405240a81b85be9d89a54c540b0c53770bdd269df7c4d33"}
+    before = prepare_relationship_types(files.published_reference(first), sorted(KINDS))
+    after = prepare_relationship_types(files.published_reference(pin), sorted(KINDS))
+    assert set(before) == set(after)
+    assert {n for n in after if after[n] != before[n]} == {"EMPLOYED_BY"}
+    assert after["EMPLOYED_BY"]["capacities"] == [*before["EMPLOYED_BY"]["capacities"], "other"]
+    assert {k: v for k, v in after["EMPLOYED_BY"].items() if k != "capacities"} == \
+           {k: v for k, v in before["EMPLOYED_BY"].items() if k != "capacities"}
