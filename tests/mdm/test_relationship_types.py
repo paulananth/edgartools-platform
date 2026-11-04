@@ -147,7 +147,7 @@ def test_every_capacity_a_contract_states_is_one_its_type_has():
 
 def test_version_2_of_the_code_set_adds_only_the_other_capacity():
     # Both versions are read from RDM by their pins (ticket 188); no second copy of the table is kept here.
-    from edgar_warehouse.mdm.clean.evidence import KINDS
+    from edgar_warehouse.mdm.evidence import KINDS
     from edgar_warehouse.rules.source_engine import prepare_relationship_types
 
     pin = files.reference_pin("mdm-relationship-types")
