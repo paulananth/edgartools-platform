@@ -33,6 +33,14 @@ Type: task. Status: in progress (2026-11-03 19:15 ET, Claude; part 1 done). Bloc
   GLEIF names keeps it as an identifier; the others keep it as a filed
   cross-reference.
 
+## Plan for the open rule changes (2026-11-03 20:49 ET, from reading the configured files)
+
+Three slices, each its own branch and PR, configuration first (no engine code), each approved under the standing approval with a test run on invented data:
+
+1. **Fund for a filing with no series id** (the Fund kind, `rules/sources/sec.nport.fund/`): `source.yaml` stops dropping a blank series id (its `select`) and gives each filing a fund key (the series id, else the registrant's CIK, which the reading already joins as `cik`); `reduce.yaml` and `combine.yaml` group by that key; the Dataset Contract's `record_key`, `identifiers` and `cross_references` carry it; `rules/merge/kinds/fund_structure.yaml` gains one binding rule on the registrant CIK (as `nport-fund-series`) with its Identifier Contract, its `verification` from the test run's report, and `policy.yaml`'s `automatic_rules`; the two mapping workbooks are regenerated and the policy digests in `tests/mdm` follow.
+2. **The Securities chain reads SEDOL and LoanX by label** (`rules/sources/sec.nport.security/`): `identifiers.yaml` (now only ISIN-shaped values) also yields the "other identifier" pairs by label (`rules/identifiers/sedol.yaml`, `loanx.yaml` already hold the types); `holding.yaml`, `reduce.yaml`, `record.yaml` and `combine.yaml` carry them; a Security with no CUSIP or ISIN is keyed by one; the Security kind gains the two binding rules and Identifier Contracts; Bloomberg ids and FIGIs stay cross-references.
+3. **The LEI on the series GLEIF names** (`combine.yaml` of the Fund source): today a shared LEI joins no series (`lei_once`); the rule reads the GLEIF legal name for each shared LEI from GLEIF's run (the "read another run" lookup, ticket 120) and joins the LEI to the one series whose name it equals; a name that is the adviser's, trust's or company's joins none (3 of 15 in 2026 Q2).
+
 ## Checklist
 
 GLEIF permission: operator, 2026-11-03, "agreed for ticket 125" (the Golden Copy download). It was not needed: the 2026-09-11 16:00 Golden Copy was already on disk.
