@@ -2,8 +2,9 @@
 # that is a fact"): the amount an adviser reports as held for it by a custodian is a fact kept in silver,
 # one row per filing and custodian row, linked to both Companies by MDM id (the adviser by its filing, the
 # custodian by its custodian id), never on the CUSTODIAN link. Rows are the custody reading's `custody` table
-# (Schedule D 5.K(3), custody-csv.yaml). One system of record (ticket 143): the custodian's name, address
-# and identifiers are the custodian Company's, in MDM, so the row holds only the filing's own facts.
+# (Schedule D 5.K(3), custody-csv.yaml), every column of it (the writer refuses a field the spec does not
+# name): the custodian's name, address and identifiers are what this filing reports, one statement per
+# filing; the custodian Company in MDM is found by `custodian_id` and holds the mastered facts.
 # Measured over the 13 local months (June 2025 to June 2026), counts only: 50,152 rows; every amount is a
 # whole number of at most 13 digits (no decimals, none empty, none negative); 1,156 rows name a related
 # person (Y) and 48,996 do not (N). Append only: a filed row never changes; an amendment is a new filing.
@@ -28,6 +29,60 @@ columns:
   nullable: false
   definition: "The custodian as the custodian record names it: its BD number, else its LEI, else its name (bd:, lei: or name:)."
   source: "5K(3)(e), then (f), then (a)"
+  sensitivity: none
+- name: legal_name
+  type: VARCHAR
+  nullable: true
+  definition: "The custodian's legal name as this filing reports it."
+  source: "5K(3)(a)"
+  sensitivity: none
+- name: business_name
+  type: VARCHAR
+  nullable: true
+  definition: "The custodian's business name as this filing reports it."
+  source: "5K(3)(b)"
+  sensitivity: none
+- name: city
+  type: VARCHAR
+  nullable: true
+  definition: "The custodian's city as this filing reports it."
+  source: "5K(3)(c) City"
+  sensitivity: none
+- name: state
+  type: VARCHAR
+  nullable: true
+  definition: "The custodian's state as this filing reports it."
+  source: "5K(3)(c) State"
+  sensitivity: none
+- name: country
+  type: VARCHAR
+  nullable: true
+  definition: "The custodian's country as this filing reports it."
+  source: "5K(3)(c) Country"
+  sensitivity: none
+- name: bd_number
+  type: VARCHAR
+  nullable: true
+  definition: "The custodian's SEC broker-dealer registration number as this filing reports it."
+  source: "5K(3)(e)"
+  sensitivity: none
+- name: other_id
+  type: VARCHAR
+  nullable: true
+  definition: "The value the filing gives for the custodian's LEI or other identifier, as written."
+  source: "5K(3)(f)"
+  sensitivity: none
+- name: lei
+  type: VARCHAR
+  nullable: true
+  definition: "The LEI-shaped value of that field, when it is one."
+  source: "5K(3)(f), kept only when LEI-shaped"
+  sensitivity: none
+- name: custodian_lei
+  type: VARCHAR
+  nullable: true
+  definition: "That LEI, only when the row has no BD number (it then identifies the custodian)."
+  source: "5K(3)(f) when 5K(3)(e) is empty"
   sensitivity: none
 - name: related_person
   type: VARCHAR
