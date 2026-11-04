@@ -377,6 +377,22 @@ automatic_rules:
   rule_version: 2026-10-26.1
   verdict: bind
   activation: deterministic
+# nport-security-sedol and nport-security-loanx (ticket 190): a holding with neither a CUSIP nor an ISIN
+# is keyed by its SEDOL, else its LoanX. Switched on under the operator's standing approval, 2026-11-04
+# (\"switch on for form 4 keep it standing approval for ticket 190 191\"), after the limited test
+# (.scratch/rebuild-priorities/research/190_limited_test.json, sha256 4f0b84b2...ec11ba) passed.
+- kind: security
+  family: binding
+  rule_id: nport-security-sedol
+  rule_version: 2026-11-04.1
+  verdict: bind
+  activation: deterministic
+- kind: security
+  family: binding
+  rule_id: nport-security-loanx
+  rule_version: 2026-11-04.1
+  verdict: bind
+  activation: deterministic
 # sec-gleif-name-city-or-postcode ("Name and city or postcode", ticket 09;
 # renamed from its pass number, operator, 2026-11-03): switched on by
 # operator, 2026-10-30 18:20 ET, comparing the city; then, the same evening, in

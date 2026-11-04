@@ -4,7 +4,8 @@ The real chain on invented holdings (the holdings extract with the `isin`, `sedo
 pair sets, reduce.yaml, combine.yaml, mdm.prepare and the Dataset Contract's records): a holding
 keyed by its CUSIP, or by its ISIN when it has none, that files one SEDOL or one LoanX gives
 its Security that identifier; two values on one Security are both kept; a holding with neither
-a CUSIP nor an ISIN makes no Security (ticket 190 would). Invented values only.
+a CUSIP nor an ISIN is keyed by its ISIN, else its SEDOL, else its LoanX (ticket 190; one shared
+path, so a class is a line of configuration and a test). Invented values only.
 """
 
 from __future__ import annotations
@@ -19,13 +20,16 @@ from tests.integration import test_nport_link_start as cusip
 CUSIP, CUSIP_TWO = "ZZ0000013", "ZZ0000021"  # invented, check digits valid
 ISIN = "ZZ0000000016"  # invented, check digit valid
 SEDOL, SEDOL_TWO, LOANX = "C000008", "B000009", "LX000001"  # invented, SEDOL check digits valid
+SEDOL_ALONE, LOANX_ALONE = "D000007", "LX000002"  # on holdings with no CUSIP and no ISIN
 HOLDINGS = [["A-1", "1", "Example Corp", "", "Note", CUSIP],        # CUSIP and a SEDOL
             ["A-1", "2", "Example Corp", "", "Note", CUSIP],        # the same CUSIP, a second SEDOL
             ["A-1", "3", "Other Inc", "", "Loan", CUSIP_TWO],       # CUSIP and a LoanX
             ["A-1", "4", "Third Ltd", "", "Note", ""],              # no CUSIP: keyed by its ISIN, with a SEDOL
-            ["A-1", "5", "Fourth Ltd", "", "Note", ""]]             # no CUSIP, no ISIN: only a SEDOL
-SEDOLS = [["1", SEDOL], ["2", SEDOL_TWO], ["4", SEDOL], ["5", SEDOL_TWO]]
-LOANXS = [["3", LOANX]]
+            ["A-1", "5", "Fourth Ltd", "", "Note", ""],             # no CUSIP, no ISIN: only a SEDOL
+            ["A-1", "6", "Fourth Ltd", "", "Note", ""],             # the same SEDOL again: the same Security
+            ["A-1", "7", "Fifth Ltd", "", "Loan", ""]]              # no CUSIP, no ISIN: only a LoanX
+SEDOLS = [["1", SEDOL], ["2", SEDOL_TWO], ["4", SEDOL], ["5", SEDOL_ALONE], ["6", SEDOL_ALONE]]
+LOANXS = [["3", LOANX], ["7", LOANX_ALONE]]
 ISINS = [["4", ISIN]]
 
 
@@ -51,6 +55,17 @@ def test_a_sedol_and_a_loanx_join_the_security_their_holding_keys(tmp_path):
     assert found[ISIN]["isin"] == ISIN and found[ISIN]["sedol"] == [SEDOL]
 
 
-def test_a_holding_with_neither_cusip_nor_isin_makes_no_security(tmp_path):
-    keys = {r["provenance"]["record_key"] for r in prepared_records(tmp_path)}
-    assert keys == {CUSIP, CUSIP_TWO, ISIN}
+def test_a_holding_with_no_cusip_and_no_isin_is_keyed_by_its_sedol_or_its_loanx(tmp_path):
+    made = prepared_records(tmp_path)
+    records = {r["provenance"]["record_key"]: r for r in made}
+    assert set(records) == {CUSIP, CUSIP_TWO, ISIN, SEDOL_ALONE, LOANX_ALONE} and len(made) == 5
+    # Two holdings filing the same SEDOL are one Security, whose key is the one class it files.
+    assert records[SEDOL_ALONE]["identifiers"] == {"sedol": SEDOL_ALONE}
+    assert records[LOANX_ALONE]["identifiers"] == {"loanx": LOANX_ALONE}
+
+
+def test_a_holding_with_a_cusip_or_an_isin_keeps_that_key_whatever_else_it_files(tmp_path):
+    records = {r["provenance"]["record_key"]: r for r in prepared_records(tmp_path)}
+    assert records[CUSIP]["identifiers"]["cusip"] == CUSIP and CUSIP in records
+    assert records[ISIN]["identifiers"]["isin"] == ISIN and records[ISIN]["identifiers"]["sedol"] == [SEDOL]
+    assert SEDOL not in records  # a SEDOL filed beside a CUSIP or an ISIN joins; it never keys

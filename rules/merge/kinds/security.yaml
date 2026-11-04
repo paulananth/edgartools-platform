@@ -111,6 +111,54 @@ rules:
   - primitive: identifier_cardinality@1
     args:
       namespace: isin
+# A Security filed with neither a usable CUSIP nor an ISIN is keyed by its SEDOL, else its LoanX
+# (ticket 190; operator, 2026-11-04: "You can not build every make isin work for others", "Always
+# build generic"): it joins the Security that holds the value, or is created; a value held by two
+# Securities goes to review. One rule per identifier kind, since a matching rule names one.
+- rule_id: nport-security-sedol
+  version: 2026-11-04.1
+  family: binding
+  source: sec.nport.security.v2
+  applies_to_verdict: security
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  # Only a record keyed by it: a SEDOL filed beside a CUSIP or an ISIN is stored, never matched,
+  # since funds file one SEDOL on several Securities (2026 Q2: see the contract's verification).
+  - primitive: field_in_set@1
+    args:
+      field: provenance.matching.key_class
+      values:
+      - sedol
+  - primitive: identifier_match@1
+    args:
+      namespace: sedol
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: sedol
+- rule_id: nport-security-loanx
+  version: 2026-11-04.1
+  family: binding
+  source: sec.nport.security.v2
+  applies_to_verdict: security
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  # Only a record keyed by it: a LOANX filed beside a CUSIP or an ISIN is stored, never matched,
+  # since funds file one LOANX on several Securities (2026 Q2: see the contract's verification).
+  - primitive: field_in_set@1
+    args:
+      field: provenance.matching.key_class
+      values:
+      - loanx
+  - primitive: identifier_match@1
+    args:
+      namespace: loanx
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: loanx
 # OpenFIGI (ticket 138; operator, 2026-10-25: "there should be one processing
 # with all the identifier and this is the first load", "first lookup if not
 # exists then master"): one record per identifier asked, CUSIP or ISIN, with
@@ -248,8 +296,8 @@ identifiers:
   # A SEDOL and a LoanX (ticket 125; operator, 2026-10-20: "SEDOL, CINS, LoanX
   # (Recommended)"): the fund's own "other identifier" rows told apart by their
   # label and shape. Each joins the Security its holding already keys by its CUSIP
-  # or ISIN; no matching rule reads them, so they carry no verification until one does
-  # (ticket 190 makes a holding with neither a CUSIP nor an ISIN create a Security).
+  # or ISIN, and, with neither, key a Security (ticket 190: rules nport-security-sedol and
+  # nport-security-loanx, verified below on the limited test).
   # An issuer may hold one SEDOL for several listings, so no reverse limit.
   sedol:
     authority: SEDOL (London Stock Exchange), the Stock Exchange Daily Official List
@@ -259,11 +307,16 @@ identifiers:
     # verified, upper-cased.
     normalizer: normalize_identifier@sedol-v1
     claim:
-      forward: null
+      forward: 5
       reverse: null
     compatibility:
       field: kind
       predicate: kind_equal@1
+    verification:
+      corpus_sha256: 4f0b84b23c40811909c01cb132fa0bbfd10bd34a89840bd1eae8673dabec11ba
+      approved_by: operator
+      approved_at: "2026-11-04T14:34:50Z"
+      reason: "ticket 190 limited test (.scratch/rebuild-priorities/research/190_limited_test.json), approved under the operator's standing approval (2026-11-04: switch on for form 4 keep it standing approval for ticket 190 191). 2026 Q2 N-PORT: 1,122 Securities keyed by a SEDOL alone; of 26,081 SEDOLs filed on a keyed holding, 1,590 sit on several Securities (a SEDOL is one per listing, so no limit) and a rule on one goes to review; both load orders, a second pass changed nothing (tests/integration/test_nport_security_other_keys.py)"
     tolerance:
       unit: items
       warm_up_decisions: 10000
@@ -275,11 +328,16 @@ identifiers:
     # rules/identifiers/loanx.yaml (ticket 125): LX and six digits, upper-cased.
     normalizer: normalize_identifier@loanx-v1
     claim:
-      forward: null
+      forward: 5
       reverse: null
     compatibility:
       field: kind
       predicate: kind_equal@1
+    verification:
+      corpus_sha256: 4f0b84b23c40811909c01cb132fa0bbfd10bd34a89840bd1eae8673dabec11ba
+      approved_by: operator
+      approved_at: "2026-11-04T14:34:50Z"
+      reason: "ticket 190 limited test (.scratch/rebuild-priorities/research/190_limited_test.json), approved under the operator's standing approval (2026-11-04: switch on for form 4 keep it standing approval for ticket 190 191). 2026 Q2 N-PORT: 2,238 Securities keyed by a LoanX alone; of 2,459 LoanX values filed on a keyed holding, 204 sit on several Securities and a rule on one goes to review; both load orders, a second pass changed nothing (tests/integration/test_nport_security_other_keys.py)"
     tolerance:
       unit: items
       warm_up_decisions: 10000

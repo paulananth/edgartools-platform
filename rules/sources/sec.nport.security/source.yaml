@@ -100,7 +100,7 @@ read:
             - "000000000"
             - "999999999"
         # The Security's one key (ticket 120; operator, 2026-10-20: "One master
-        # record"): its CUSIP, else its ISIN (security_isin below). A CUSIP has 9
+        # record"): its CUSIP, else its ISIN (security_no_cusip below). A CUSIP has 9
         # characters and an ISIN 12, so the two never meet.
         key:
           text:
@@ -199,7 +199,7 @@ read:
               text:
                 path: HOLDING_ID
             on_many: "null"
-    security_isin:
+    security_no_cusip:
       each: .
       select:
         choose:
@@ -223,12 +223,12 @@ read:
               condition:
                 equal:
                   left:
-                    member_value:
-                      lookup: isin
-                      key:
-                        text:
-                          path: HOLDING_ID
-                      on_many: "null"
+                    coalesce:
+                      skip: "null"
+                      values:
+                      - member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+                      - member_value: {lookup: sedol, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+                      - member_value: {lookup: loanx, key: {text: {path: HOLDING_ID}}, on_many: "null"}
                   right:
                     value:
                       path: NO_SUCH_COLUMN
@@ -243,20 +243,20 @@ read:
             value:
               path: NO_SUCH_COLUMN
       columns:
-        isin:
-          member_value:
-            lookup: isin
-            key:
-              text:
-                path: HOLDING_ID
-            on_many: "null"
+        no_cusip_key:
+          coalesce:
+            skip: "null"
+            values:
+            - member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+            - member_value: {lookup: sedol, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+            - member_value: {lookup: loanx, key: {text: {path: HOLDING_ID}}, on_many: "null"}
         key:
-          member_value:
-            lookup: isin
-            key:
-              text:
-                path: HOLDING_ID
-            on_many: "null"
+          coalesce:
+            skip: "null"
+            values:
+            - member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+            - member_value: {lookup: sedol, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+            - member_value: {lookup: loanx, key: {text: {path: HOLDING_ID}}, on_many: "null"}
         issuer_name:
           text:
             path: ISSUER_NAME
@@ -275,9 +275,33 @@ read:
         currency: {text: {path: CURRENCY_CODE, default: "", transforms: [{case: upper}], null_if: [""]}}
         restricted: {text: {path: IS_RESTRICTED_SECURITY, default: "", transforms: [{case: upper}], null_if: [""]}}
         derivative_category: {text: {path: DERIVATIVE_CAT, default: "", transforms: [{case: upper}], null_if: [""]}}
+        # Which class the key is (ticket 190): the first of the classes the holding files,
+        # in the order of the key above.
         key_kind:
-          const:
-            value: isin
+          coalesce:
+            skip: "null"
+            values:
+            - choose:
+                condition:
+                  equal:
+                    left: {member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}}
+                    right: {value: {path: NO_SUCH_COLUMN}}
+                then: {value: {path: NO_SUCH_COLUMN}}
+                else: {const: {value: isin}}
+            - choose:
+                condition:
+                  equal:
+                    left: {member_value: {lookup: sedol, key: {text: {path: HOLDING_ID}}, on_many: "null"}}
+                    right: {value: {path: NO_SUCH_COLUMN}}
+                then: {value: {path: NO_SUCH_COLUMN}}
+                else: {const: {value: sedol}}
+            - choose:
+                condition:
+                  equal:
+                    left: {member_value: {lookup: loanx, key: {text: {path: HOLDING_ID}}, on_many: "null"}}
+                    right: {value: {path: NO_SUCH_COLUMN}}
+                then: {value: {path: NO_SUCH_COLUMN}}
+                else: {const: {value: loanx}}
         period:
           context: {name: period}
     key_sedol:
@@ -355,7 +379,7 @@ read:
     # after CL, CLASS or CLS, from equity holdings (asset category EC) only,
     # so a bond tranche's "CL A" names none; a holding naming none is left
     # out, so reduce.yaml counts only the letters filed. The rows are
-    # security_cusip's and security_isin's.
+    # security_cusip's and security_no_cusip's.
     cusip_class:
       each: .
       select:
@@ -486,7 +510,7 @@ read:
             else:
               const:
                 value: ''
-    isin_class:
+    no_cusip_class:
       each: .
       select:
         choose:
@@ -562,12 +586,12 @@ read:
                   condition:
                     equal:
                       left:
-                        member_value:
-                          lookup: isin
-                          key:
-                            text:
-                              path: HOLDING_ID
-                          on_many: 'null'
+                        coalesce:
+                          skip: "null"
+                          values:
+                          - member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+                          - member_value: {lookup: sedol, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+                          - member_value: {lookup: loanx, key: {text: {path: HOLDING_ID}}, on_many: "null"}
                       right:
                         value:
                           path: NO_SUCH_COLUMN
@@ -582,13 +606,13 @@ read:
                 value:
                   path: NO_SUCH_COLUMN
       columns:
-        isin:
-          member_value:
-            lookup: isin
-            key:
-              text:
-                path: HOLDING_ID
-            on_many: 'null'
+        no_cusip_key:
+          coalesce:
+            skip: "null"
+            values:
+            - member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+            - member_value: {lookup: sedol, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+            - member_value: {lookup: loanx, key: {text: {path: HOLDING_ID}}, on_many: "null"}
         share_class:
           choose:
             condition:
@@ -669,6 +693,9 @@ dataset_contracts:
       - invalid_cusip_checksum
       - invalid_isin
       - invalid_isin_checksum
+      - invalid_sedol
+      - invalid_sedol_checksum
+      - invalid_loanx
       - missing_record_identity
       adapter:
         reading:
@@ -850,6 +877,10 @@ bookkeeping:
             lookups:
               isin: {from: identifiers, table: isin, column: holding, value_column: isin,
                      max_input_bytes: 268435456, max_input_rows: 10000000}
+              sedol: {from: identifiers, table: sedol, column: holding, value_column: sedol,
+                      max_input_bytes: 268435456, max_input_rows: 10000000}
+              loanx: {from: identifiers, table: loanx, column: holding, value_column: loanx,
+                      max_input_bytes: 268435456, max_input_rows: 10000000}
               filed: {from: submissions, table: filed, column: accession_number, value_column: filed,
                      max_input_bytes: 67108864, max_input_rows: 1000000}
               umbrella: {run: {source: gleif, target: subfund-pairs, step: pairs}, table: subfund, column: fund,
@@ -922,6 +953,10 @@ bookkeeping:
             lookups:
               isin: {from: identifiers, table: isin, column: holding, value_column: isin,
                      max_input_bytes: 17179869184, max_input_rows: 100000000}
+              sedol: {from: identifiers, table: sedol, column: holding, value_column: sedol,
+                      max_input_bytes: 17179869184, max_input_rows: 100000000}
+              loanx: {from: identifiers, table: loanx, column: holding, value_column: loanx,
+                      max_input_bytes: 17179869184, max_input_rows: 100000000}
               series: {from: series, table: series, column: accession_number, value_column: series_id,
                        max_input_bytes: 17179869184, max_input_rows: 100000000}
               registrant: {from: registrants, table: filing, column: accession_number, value_column: cik,

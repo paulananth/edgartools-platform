@@ -21,6 +21,8 @@ read:
     max_records: 100000
   lookup_sets:
     isin: {max_values: 100000000, max_bytes: 17179869184, max_value_bytes: 16384, pairs: true}
+    sedol: {max_values: 100000000, max_bytes: 17179869184, max_value_bytes: 16384, pairs: true}
+    loanx: {max_values: 100000000, max_bytes: 17179869184, max_value_bytes: 16384, pairs: true}
     series: {max_values: 100000000, max_bytes: 17179869184, max_value_bytes: 16384, pairs: true}
     registrant: {max_values: 100000000, max_bytes: 17179869184, max_value_bytes: 16384, pairs: true}
     filed: {max_values: 100000000, max_bytes: 17179869184, max_value_bytes: 16384, pairs: true}
@@ -55,6 +57,11 @@ read:
         # One ISIN, else none (a holding listing two names neither).
         isin:
           member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+        # One SEDOL and one LoanX, else none: with no CUSIP and no ISIN they key the Security (ticket 190).
+        sedol:
+          member_value: {lookup: sedol, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+        loanx:
+          member_value: {lookup: loanx, key: {text: {path: HOLDING_ID}}, on_many: "null"}
         balance: {text: {path: BALANCE, default: "", null_if: [""]}}
         unit: {text: {path: UNIT, default: "", null_if: [""]}}
         currency_code: {text: {path: CURRENCY_CODE, default: "", null_if: [""]}}

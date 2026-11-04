@@ -21,29 +21,43 @@ read:
               period: {value: {path: period}}
               cusip:
                 choose:
-                  condition: {equal: {left: {join: {path: kind_sample, item_path: key_kind, separator: "", max_items: 1}}, right: {const: {value: isin}}}}
-                  then: {value: {path: NO_SUCH_FIELD}}
-                  else: {text: {path: key}}
+                  condition: {equal: {left: {join: {path: kind_sample, item_path: key_kind, separator: "", max_items: 1}}, right: {const: {value: cusip}}}}
+                  then: {text: {path: key}}
+                  else: {value: {path: NO_SUCH_FIELD}}
+              # An ISIN is the key of an ISIN-only holding, or every ISIN filed with a CUSIP (ticket 138);
+              # a SEDOL or a LoanX is the key of a holding with neither (ticket 190), else it joins the
+              # key's Security (ticket 125). A key is the one class its `key_kind` names.
               isin:
                 choose:
                   condition: {equal: {left: {join: {path: kind_sample, item_path: key_kind, separator: "", max_items: 1}}, right: {const: {value: isin}}}}
                   then: {text: {path: key}}
-                  else: {value: {path: isin}}
-              # The SEDOL and LoanX filed with the key join this Security (ticket 125).
-              sedol: {value: {path: sedol}}
-              loanx: {value: {path: loanx}}
+                  else:
+                    choose:
+                      condition: {equal: {left: {join: {path: kind_sample, item_path: key_kind, separator: "", max_items: 1}}, right: {const: {value: cusip}}}}
+                      then: {value: {path: isin}}
+                      else: {value: {path: NO_SUCH_FIELD}}
+              sedol:
+                choose:
+                  condition: {equal: {left: {join: {path: kind_sample, item_path: key_kind, separator: "", max_items: 1}}, right: {const: {value: sedol}}}}
+                  then: {text: {path: key}}
+                  else: {value: {path: sedol}}
+              loanx:
+                choose:
+                  condition: {equal: {left: {join: {path: kind_sample, item_path: key_kind, separator: "", max_items: 1}}, right: {const: {value: loanx}}}}
+                  then: {text: {path: key}}
+                  else: {value: {path: loanx}}
               name:
                 coalesce:
                   skip: "null"
                   values:
                   - {value: {path: name}}
-                  - {value: {path: isin_name}}
+                  - {value: {path: no_cusip_name}}
               title:
                 coalesce:
                   skip: "null"
                   values:
                   - {value: {path: title}}
-                  - {value: {path: isin_title}}
+                  - {value: {path: no_cusip_title}}
               # The class from the level whose letters `classes` reads
               # (ticket 130).
               class:
@@ -52,33 +66,33 @@ read:
                   then: {value: {path: class}}
                   else:
                     choose:
-                      condition: {test: {path: isin_classes, kind: present}}
-                      then: {value: {path: isin_class}}
+                      condition: {test: {path: no_cusip_classes, kind: present}}
+                      then: {value: {path: no_cusip_class}}
                       else: {value: {path: NO_SUCH_FIELD}}
               classes:
                 coalesce:
                   skip: "null"
                   values:
                   - {value: {path: classes}}
-                  - {value: {path: isin_classes}}
+                  - {value: {path: no_cusip_classes}}
               lei:
                 coalesce:
                   skip: "null"
                   values:
                   - {value: {path: lei}}
-                  - {value: {path: isin_lei}}
+                  - {value: {path: no_cusip_lei}}
               issuer:
                 coalesce:
                   skip: "null"
                   values:
                   - {value: {path: issuer}}
-                  - {value: {path: isin_issuer}}
+                  - {value: {path: no_cusip_issuer}}
               filed:
                 coalesce:
                   skip: "null"
                   values:
                   - {value: {path: filed}}
-                  - {value: {path: isin_filed}}
+                  - {value: {path: no_cusip_filed}}
               # The most-filed value of each fact (ticket 138).
               asset_category: {value: {path: asset_category}}
               issuer_type: {value: {path: issuer_type}}

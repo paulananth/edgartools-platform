@@ -90,7 +90,8 @@ def filed_pairs(store, root, raw) -> list[list[str]]:
 def issuers(store, root, raw, isin, period, umbrella=()):
     """The issuer source extract, each holding with its filing's date, else the quarter's."""
     return read(store, root / "issuers", "issuers.yaml", raw, period,
-                lookups={"isin": isin, "umbrella": list(umbrella), "filed": filed_pairs(store, root, raw)})
+                lookups={"isin": isin, "sedol": [], "loanx": [], "umbrella": list(umbrella),
+                                  "filed": filed_pairs(store, root, raw)})
 
 
 def prepared_records(root: Path, period: str, revision: int | None = None,
