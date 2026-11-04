@@ -912,3 +912,47 @@ def test_kinds_that_read_one_namespace_differently_are_refused():
         check_policy(body)
     person["identifiers"]["cik"] = agreed
     check_policy(body)
+
+
+# The exact-name family (ticket 01): a name finds a master, never creates one.
+EXACT_RULE = {"rule_id": "name-finds-master", "version": "v1", "family": "exact_name_binding", "source": "a.v1",
+              "holder_sources": ["b.v1"], "applies_to_verdict": "company", "emits": ["bind"], "key": "name_id@1",
+              "on_no_match": "wait", "on_several": "review"}
+EXACT_ENTRY = {"kind": "company", "family": "exact_name_binding", "rule_id": "name-finds-master", "rule_version": "v1",
+               "verdict": "bind", "activation": "exact_name",
+               "proof": {"names": 10, "attached": 6, "review": 1, "waiting": 3, "second_pass_changed_nothing": True,
+                         "approved_by": "t", "approved_at": "2026-11-04T00:00:00Z", "reason": "r"}}
+
+
+def exact_policy(**rule_changes) -> dict:
+    body = copy.deepcopy(policy_layers.with_rules_on(__import__("edgar_warehouse.rules.files", fromlist=["x"]).policy(), "company"))
+    body["kinds"]["company"]["rules"].append({**EXACT_RULE, **rule_changes})
+    return body
+
+
+def test_an_exact_name_rule_that_finds_and_never_creates_is_accepted():
+    body = exact_policy()
+    body["automatic_rules"].append(copy.deepcopy(EXACT_ENTRY))
+    check_policy(body)
+
+
+@pytest.mark.parametrize("change", [
+    {"on_no_match": "mint"}, {"on_several": "bind"}, {"holder_sources": []}, {"holder_sources": ["a.v1"]},
+    {"key": "name"}, {"when": [{"primitive": "identifier_match@1", "args": {"namespace": "lei"}}]},
+    {"emits": ["bind", "create"]},
+])
+def test_an_exact_name_rule_that_could_create_or_guess_is_refused(change):
+    with pytest.raises(Conflict):
+        check_policy(exact_policy(**change))
+
+
+@pytest.mark.parametrize("proof", [
+    {"attached": 0, "waiting": 9}, {"names": 11}, {"second_pass_changed_nothing": False}, {"approved_by": ""},
+])
+def test_an_exact_name_activation_without_its_limited_test_is_refused(proof):
+    body = exact_policy()
+    entry = copy.deepcopy(EXACT_ENTRY)
+    entry["proof"].update(proof)
+    body["automatic_rules"].append(entry)
+    with pytest.raises(Conflict):
+        check_policy(body)
