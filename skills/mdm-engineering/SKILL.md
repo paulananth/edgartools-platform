@@ -405,6 +405,23 @@ beside a checkout (`Path(__file__).parents[n] / "rules"`): the installed
 bundle ships `rules/` elsewhere, and the bundle test loads each such file
 from the installed bundle (ticket 48).
 
+### Learned on a lookup-only route (ticket 24, 2026-11-04)
+
+- **An installed-bundle test reads the committed rules.** `tests/engine/test_data_skill_bundle_postgres.py`
+  installs from the commit's HEAD, so uncommitted rules give a stale answer (its policy digest was the
+  old one). Commit first, then `uv sync --all-extras --group dev --reinstall-package edgartools-platform`,
+  then run it.
+- **A policy or kind change moves the whole-policy digest** pinned in a test fixture
+  (`tests/integration/fixtures/`, the mastering records file); the failing test prints the new value.
+- **A single-valued identifier that fails its shape refuses the whole record**, its other identifiers too (a list
+  of values sets only the bad value aside). Where a field is sometimes no identifier (a description
+  written in a symbol field), the source rule empties it, so the record stays.
+- **An Identifier Contract a binding rule uses needs a forward claim of at least 1** (the most
+  records one value may reach before a review of its own; measure it, a reused symbol was at most 3),
+  and the kind's source priority list names every source whose rule binds, even one that states no field.
+- **A target prepares one publication**: a second dataset from the same files is a second target
+  with a lighter reading of only the fields it needs.
+
 ### Independent installed qualification
 
 Install the committed runtime and native libraries outside the checkout. Check
