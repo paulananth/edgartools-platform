@@ -601,14 +601,50 @@ def _check_cascade_pass(rule_id: str, rule: dict, tests: list) -> None:
         raise Conflict(f"Cascade rule {rule_id} has invalid pass arguments")
 
 
+def check_exact_name_rule(kind: str, rule: dict, kinds: dict) -> None:
+    """An exact-name matching rule (ticket 01): a source's record joins the one master
+    that records of the holder sources hold under the same name id. It finds, so it
+    never creates (`wait`) and never guesses between masters (`review`)."""
+    rule_id = rule.get("rule_id")
+    if rule.get("applies_to_verdict") != kind:
+        raise Conflict(f"Exact-name rule {rule_id} applies to {rule.get('applies_to_verdict')}, but sits in kind {kind}")
+    if rule.get("emits") != ["bind"]:
+        raise Conflict(f"Exact-name rule {rule_id} must emit exactly bind")
+    if rule.get("on_no_match") != "wait" or rule.get("on_several") != "review":
+        raise Conflict(f"Exact-name rule {rule_id} never creates a master: on_no_match wait, on_several review")
+    holders = rule.get("holder_sources")
+    if (not rule.get("source") or not isinstance(holders, list) or not holders
+            or not all(isinstance(h, str) and h for h in holders) or rule["source"] in holders):
+        raise Conflict(f"Exact-name rule {rule_id} must name its source and the other sources whose records hold the masters")
+    if rule.get("key") != "name_id@1" or rule.get("when"):
+        raise Conflict(f"Exact-name rule {rule_id} rests on the name id (key: name_id@1) and no other test")
+
+
+def _check_exact_name(kind: str, block: dict, rule: dict, entry: dict) -> None:
+    """The limited test's counts, stated: a name is not an identifier, so there is no
+    contract to verify; what is shown is how the rule behaved on real names."""
+    proof = entry.get("proof") or {}
+    counts = ("names", "attached", "review", "waiting")
+    if (entry.get("verdict") != "bind"
+            or not all(type(proof.get(c)) is int and proof[c] >= 0 for c in counts)
+            or proof["names"] != proof["attached"] + proof["review"] + proof["waiting"]
+            or proof["attached"] < 1 or proof.get("second_pass_changed_nothing") is not True
+            or not all(proof.get(k) for k in ("approved_by", "approved_at", "reason"))):
+        raise Conflict(
+            f"Activation of {rule['rule_id']} needs its limited test: names = attached + review + "
+            "waiting (at least one attached), a second pass that changed nothing, and its approval")
+
+
 RULE_CHECKS = {
     "classification": _check_classification_rule,
     "binding": check_binding_rule,
     "name_binding": check_name_binding_rule,
+    "exact_name_binding": check_exact_name_rule,
 }
 # Which rule families each kind of activation may prove. Sets, so ticket 08's
 # measured (fuzzy) binding is one more member, not a reshaped table.
 ACTIVATIONS = {
     "measured": (frozenset({"classification", "name_binding"}), _check_measured),
     "deterministic": (frozenset({"binding"}), _check_deterministic),
+    "exact_name": (frozenset({"exact_name_binding"}), _check_exact_name),
 }

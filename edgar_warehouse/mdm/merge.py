@@ -17,7 +17,7 @@ from uuid import UUID
 
 from sqlalchemy.exc import DBAPIError
 
-from . import assessment, binding, correction, matching, relationships, withholding
+from . import assessment, binding, correction, exact_name, matching, relationships, withholding
 from . import scope as scoping
 from .activation import check_policy
 from .evidence import PROFILE_KINDS, instant, validate_assertion, validate_deferred
@@ -197,8 +197,16 @@ class MergeStage:
                 as_of=command["as_of"],
                 released=released,
             )
+            exact = exact_name.propose(
+                conn,
+                policy,
+                assertions=candidates,
+                decisions=decisions + proposed["decisions"] + named["decisions"],
+                as_of=command["as_of"],
+                released=released,
+            )
             for part in ("decisions", "reviews"):
-                proposed[part] += named[part]
+                proposed[part] += named[part] + exact[part]
             if generation is not None:
                 proposed["observed_generation"]=generation
             return proposed

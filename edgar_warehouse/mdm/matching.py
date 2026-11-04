@@ -21,6 +21,7 @@ from .names import REFERENCE_TABLES
 from .store import Conflict
 
 FAMILY = "name_binding"
+EXACT_NAME_FAMILY = "exact_name_binding"  # keyed by the name id both sides carry (ticket 01)
 
 
 def active_rules(policy: dict) -> list[tuple[str, dict]]:
@@ -65,11 +66,13 @@ def candidate_routes() -> dict[str, tuple]:
     from .store import canonical
 
     assert_current()
-    return {
+    routes = {
         canonical([profile, role]): path
         for profile in sorted(CATALOG["pair_comparisons"])
         for role, path in candidate_paths({"pair_comparison": profile}).items()
     }
+    routes[canonical([EXACT_NAME_FAMILY, "name_id"])] = ("cross_references", "name_id")
+    return routes
 
 
 def candidate_value(record: dict, path: tuple) -> str | None:

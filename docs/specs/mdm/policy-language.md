@@ -370,6 +370,13 @@ Its decision and measurement:
   source's record holds (`source`, `holder_source`, `on_no_match: wait`),
   must call `name_census_match` and a place test, and activates with a proof
   at its kind's `name_binding` bar.
+- An `exact_name_binding` rule (ticket 01) joins a record that carries only a name to the one
+  Company other sources' records hold under the same name id (`key: name_id@1`, a
+  cross-reference both sides map). It names its `source` and `holder_sources`, has no `when`,
+  `on_no_match: wait` (it finds, never creates) and `on_several: review` (`ambiguous_name_match`).
+  It activates with `activation: exact_name` and a `proof` of its limited test on real names:
+  `names` = `attached` + `review` + `waiting` (at least one attached), `second_pass_changed_nothing`,
+  and its approval. Module: `edgar_warehouse/mdm/exact_name.py`.
 - Person Tiers A–D as written:
   [ticket 02](../../../.scratch/person-consumer-contract/issues/02-decide-what-binds-a-person.md).
   Company/GLEIF binding as written:
