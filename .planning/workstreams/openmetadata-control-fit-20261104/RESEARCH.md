@@ -18,7 +18,13 @@ rule.
 
 The local API reports OpenMetadata 2.0.2. Following the catalog-only reset and
 refresh, the Rules plan, publisher readback and independent read-only check
-matched:
+matched. The unauthenticated local `/swagger.json` schema was also inspected
+against the running server: catalog `Pipeline` exposes CRUD, status read/write,
+metrics, trends and observability routes, but no run trigger. In contrast,
+`ingestionPipelines` exposes trigger, deploy and kill routes; Apps and governance
+workflow definitions also have their own trigger routes. Those routes execute
+their own workflow types and do not trigger the platform's catalog `Pipeline`
+or Bookkeeping targets.
 
 | Catalog measure | Current count |
 |---|---:|
@@ -53,7 +59,7 @@ MDM, RDM, Silver or Bookkeeping.
 | Requirement | Finding | Evidence and limit |
 |---|---|---|
 | Data catalog | **Fits as a projection.** | Rules publication, table/pipeline readback and the catalog-only rebuild succeeded. The configured Rules model remains authoritative. A catalog refresh does not execute the described pipelines. |
-| Data engineering control | **Partial and integration-specific; does not fit this platform as deployed.** | A catalog `Pipeline` holds tasks and lineage, with externally reported status; its API has no run trigger. OpenMetadata runs its own metadata and quality workflows through configured Airflow/Kubernetes runners. Current 2.0.x docs also say the dbt Cloud integration can execute models; dbt Core integration reads artifacts produced by a separate dbt run. This repository uses its Snowflake dbt project and has no dbt Cloud configuration. The local OpenMetadata instance has no ingestion runner configured. |
+| Data engineering control | **Partial and integration-specific; does not fit this platform as deployed.** | The live 2.0.2 schema exposes catalog `Pipeline` status, metrics, trends and observability, but no run trigger. Ingestion-pipeline triggers run metadata workflows. OpenMetadata runs its own metadata and quality workflows through configured Airflow/Kubernetes runners. Current 2.0.x docs also say the dbt Cloud integration can execute models; dbt Core integration reads artifacts produced by a separate dbt run. This repository uses its Snowflake dbt project and has no dbt Cloud configuration. The local OpenMetadata instance has no ingestion runner configured. |
 | Data operations control | **Does not fit without integration or replacement.** | The platform's source sequence executes through Bookkeeping workers. OpenMetadata has no connector or trigger for those run, merge, load, journal, retry and recovery operations. This is an inference from the configured execution path and the local API/runner inventory. |
 | Data quality | **Native feature, not currently runnable here.** | OpenMetadata documents no-code tests and quality workflows, but this instance has no real database connection or ingestion runner; its 52 cases have no results. Definition presence is not execution evidence. |
 | Data contracts | **Partial governance capability.** | A draft request validation was tested without creating a contract. Current official 2.0.x docs describe persisted validation and quality-test execution; that persisted path has not been tested on this 2.0.2 server. It currently has zero contracts. Security and SLA sections document expectations; they are not enforced by contract runs. |
@@ -92,6 +98,9 @@ review is completed.
 
 - Local version and catalog/API readback: OpenMetadata API at the local 2.0.2
   instance; evidence summarized above and in `TICKET.md`.
+- Local execution API schema: the running instance's `/swagger.json`; catalog
+  Pipeline has status and observability routes but no run trigger, while
+  ingestion, app and governance workflow types expose their own trigger routes.
 - Local runner configuration: [`infra/openmetadata/docker-compose.yml`](../../../infra/openmetadata/docker-compose.yml).
 - Local OpenMetadata capability and execution boundaries:
   [`skills/openmetadata/SKILL.md`](../../../skills/openmetadata/SKILL.md).
