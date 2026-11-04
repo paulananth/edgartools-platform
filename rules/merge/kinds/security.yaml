@@ -221,6 +221,45 @@ identifiers:
       unit: items
       warm_up_decisions: 10000
       max_per_10k: 5
+  # A SEDOL and a LoanX (ticket 125; operator, 2026-10-20: "SEDOL, CINS, LoanX
+  # (Recommended)"): the fund's own "other identifier" rows told apart by their
+  # label and shape. Each joins the Security its holding already keys by its CUSIP
+  # or ISIN; no matching rule reads them, so they carry no verification until one does
+  # (ticket 190 makes a holding with neither a CUSIP nor an ISIN create a Security).
+  # An issuer may hold one SEDOL for several listings, so no reverse limit.
+  sedol:
+    authority: SEDOL (London Stock Exchange), the Stock Exchange Daily Official List
+    sources:
+    - sec.nport.security.v2
+    # rules/identifiers/sedol.yaml (ticket 125): seven characters, the check digit
+    # verified, upper-cased.
+    normalizer: normalize_identifier@sedol-v1
+    claim:
+      forward: null
+      reverse: null
+    compatibility:
+      field: kind
+      predicate: kind_equal@1
+    tolerance:
+      unit: items
+      warm_up_decisions: 10000
+      max_per_10k: 5
+  loanx:
+    authority: LoanX, a loan-market data provider
+    sources:
+    - sec.nport.security.v2
+    # rules/identifiers/loanx.yaml (ticket 125): LX and six digits, upper-cased.
+    normalizer: normalize_identifier@loanx-v1
+    claim:
+      forward: null
+      reverse: null
+    compatibility:
+      field: kind
+      predicate: kind_equal@1
+    tolerance:
+      unit: items
+      warm_up_decisions: 10000
+      max_per_10k: 5
   # A listing's FIGI (ticket 138; operator, 2026-10-25): it matches like a
   # CUSIP or an ISIN, and only it shows two Securities are one. One Security
   # holds a FIGI for each listing, so no reverse limit. Verified on ticket

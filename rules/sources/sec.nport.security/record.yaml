@@ -29,6 +29,9 @@ read:
                   condition: {equal: {left: {join: {path: kind_sample, item_path: key_kind, separator: "", max_items: 1}}, right: {const: {value: isin}}}}
                   then: {text: {path: key}}
                   else: {value: {path: isin}}
+              # The SEDOL and LoanX filed with the key join this Security (ticket 125).
+              sedol: {value: {path: sedol}}
+              loanx: {value: {path: loanx}}
               name:
                 coalesce:
                   skip: "null"
