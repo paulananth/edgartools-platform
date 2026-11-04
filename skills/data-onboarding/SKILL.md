@@ -172,7 +172,10 @@ Every step says what differs for each target.
   MySQL and SQL Server Express use the same spec. When `silver register`
   refuses that dialect, data-operations reports the gap and does not
   hand-write `CREATE TABLE`.
-  2. The runtime (`SILVER_DATABASE_URL`, plus `MDM_DATABASE_URL` to read MDM
+  2. A target lands a table through a `silver.land` step (`requires` the reading
+     and the merge whose masters the rows link to; `input: {keys: {table, silver}}`;
+     the Change Journal's `journal.record` requires it), as a source's transaction rows do.
+     Otherwise the runtime (`SILVER_DATABASE_URL`, plus `MDM_DATABASE_URL` to read MDM
      ids) runs `edgar-warehouse silver land <table> <rows file>` with the
      part's rows as a flat CSV, Parquet or JSON Lines file. A rerun of the same
      delivery changes nothing; an unmastered record keeps its source key and an
@@ -932,7 +935,7 @@ Either way, write it in the log.
 | Preview (matches against a copy of MDM) | not built | A proving run on a disposable PostgreSQL 16 (**test**) | rules-skill ticket 04 |
 | Silver writer to a warehouse store | not built: the writer lands on PostgreSQL 16 only | Land on PostgreSQL 16 (**Two targets**) | a warehouse sink ticket (plan decision 36) |
 | Flat export of a nested part | not built | Land flat parts; record each nested part as a gap | a follow-up of profiling ticket 06 |
-| Silver output worker in a pipeline | not built | Run `silver land` by hand (**Two targets**) | a Bookkeeping worker ticket |
+| Silver output worker in a pipeline | built (ticket 169): a `silver.land` step lands a reading's table | Add the step after the merge that makes the master ids the rows link to (**Two targets**); `silver land` by hand only for a table whose source has no such step | none |
 
 ## Examples (this repo's sources)
 
