@@ -82,8 +82,11 @@ teardown.
 - Do not use the shorthand multi-column `FOR row IN (SELECT a, b, ...) DO` cursor form in this account —
   it fails with `Unsupported: Scalar subquery with multi-column SELECT clause`. Use an explicit
   `DECLARE ... CURSOR ... OPEN ... FOR i IN 1 TO <precomputed COUNT(*)> DO FETCH ... END FOR` (a "loop
-  until FETCH returns nothing" pattern hangs and needs `SYSTEM$CANCEL_QUERY`). Live in
-  `04_refresh_wrapper.sql`.
+  until FETCH returns nothing" pattern hangs and needs `SYSTEM$CANCEL_QUERY`). The manifest
+  procedures `REFRESH_AFTER_LOAD` and `PROCESS_RUN_MANIFEST_STREAM` have one definition, Terraform's
+  `native_pull` module (`infra/terraform/snowflake/modules/native_pull/sql/`); the stream processor is
+  JavaScript (a temp table, then a loop), so it uses no cursor. Edit them there, never as a second copy
+  in `infra/snowflake/sql/bootstrap/` (ticket 109 deleted the `04_refresh_wrapper.sql` copy).
 - `GRANT OWNERSHIP ... REVOKE CURRENT GRANTS` strips *all* outbound grants, not just the previous
   owner's — it once silently dropped the dashboard reader role's `SELECT` on all 20 gold tables. Use
   `COPY CURRENT GRANTS`, or additive `GRANT ... ON ALL/FUTURE TABLES`.

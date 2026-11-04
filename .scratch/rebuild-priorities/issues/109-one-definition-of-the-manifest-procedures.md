@@ -2,7 +2,7 @@
 
 Priority: 109, tier 4, housekeeping (numbered after the map was charted). Map: [Rebuild priorities](../map.md).
 
-Type: task. Status: open. Blocked by: 66 (one definition of the manifest task).
+Type: task. Status: resolved (2026-11-03 18:59 ET). Blocked by: 66 (one definition of the manifest task).
 
 ## Why
 
@@ -10,7 +10,7 @@ Found by the GoF review of ticket 66 (2026-10-18 12:44 ET). `REFRESH_AFTER_LOAD`
 
 ## Checklist
 
-- [ ] Find which body prod runs (`DESCRIBE PROCEDURE` on the prod gold schema: a read, needs the operator's permission) and why the two differ
-- [ ] Keep one definition (Terraform owns the task already); delete the other copy, and point CLAUDE.md's cursor rule and `08_loader_role.sql`'s comment at the one kept
-- [ ] PR, CI green, merged on green
-- [ ] Learning → skill
+- [ ] ~~Find which body prod runs (`DESCRIBE PROCEDURE` on prod)~~ not needed (2026-11-03 18:59 ET): no production Snowflake now (operator, 2026-11-03), and the repo answers it: Terraform creates both procedures and the task; no script runs `04_refresh_wrapper.sql`
+- [x] Keep one definition (2026-11-03 18:59 ET): Terraform's (`native_pull/sql/`) kept; `04_refresh_wrapper.sql` deleted; `08_loader_role.sql`'s comment and the `aws-snowflake-operations` skill rule point at the one kept (CLAUDE.md no longer holds the cursor rule); checked by `git grep` (no other reference to the file) and the genericity and guide-path lints
+- [x] PR, CI green, merged on green (2026-11-03 18:59 ET): this PR is the record, merged by the watcher on green CI
+- [x] Learning → skill (2026-11-03 18:59 ET): `skills/aws-snowflake-operations/SKILL.md`, "Snowflake rules learned from incidents", first bullet: the manifest procedures have one definition, in Terraform; never a second copy in bootstrap SQL
