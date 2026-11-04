@@ -1,7 +1,6 @@
 """Real PG16: a record with only a name joins the one Company holding that name (ticket 01).
 
-The exact-name family on invented records through the Merge Stage. The rule is added to a copy of
-the policy only (the real policy declares none yet):
+The exact-name family on invented records through the Merge Stage. The rule is the real policy's (iapd-adv-custodian-name, on):
 - a record carrying only a name id joins the one Company whose other-source record carries it;
 - it waits when no Company holds the name, and is joined when a holder arrives later;
 - it goes to review, and joins nothing, when two Companies hold the name;
@@ -22,21 +21,9 @@ from tests.mdm import policy_layers
 
 FILINGS, CUSTODIANS = "iapd.adv.filings.v1", "iapd.adv.custodians.v1"
 NAME_ONE, NAME_TWO, NAME_NONE = "a1" * 32, "b2" * 32, "c3" * 32  # invented name ids (64 hex)
-RULE = {"rule_id": "iapd-adv-custodian-name", "version": "2026-11-04.exact-name", "family": "exact_name_binding",
-        "source": CUSTODIANS, "holder_sources": [FILINGS], "applies_to_verdict": "company", "emits": ["bind"],
-        "key": "name_id@1", "on_no_match": "wait", "on_several": "review"}
-ENTRY = {"kind": "company", "family": "exact_name_binding", "rule_id": RULE["rule_id"], "rule_version": RULE["version"],
-         "verdict": "bind", "activation": "exact_name",
-         "proof": {"names": 3, "attached": 1, "review": 1, "waiting": 1, "second_pass_changed_nothing": True,
-                   "approved_by": "fixture", "approved_at": "2026-11-04T00:00:00Z", "reason": "fixture proof"}}
-
-
 def policy_body() -> dict:
-    body = policy_layers.with_rules_on(files.policy(), "company", "iapd-adv-crd")
-    body = copy.deepcopy(body)
-    body["kinds"]["company"]["rules"].append(copy.deepcopy(RULE))
-    body["automatic_rules"].append(copy.deepcopy(ENTRY))
-    return body
+    """The real policy: the rule is declared and on in it (ticket 01)."""
+    return copy.deepcopy(policy_layers.with_rules_on(files.policy(), "company", "iapd-adv-crd"))
 
 
 def adviser(crd: str, name_id: str) -> dict:

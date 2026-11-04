@@ -288,6 +288,25 @@ automatic_rules:
   rule_version: 2026-10-09.1
   verdict: bind
   activation: deterministic
+# iapd-adv-custodian-name: switched on with the operator's words "Complete and then run and switch on"
+# (Form ADV, 2026-11-04) after the limited test on the real June 2026 custodian names, local files,
+# counts only: 274 names, 33 attached to the one Company holding the name, 5 sent to review (several
+# Companies hold it), 236 waiting (none holds it), no Company created, a second pass changed nothing.
+- kind: company
+  family: exact_name_binding
+  rule_id: iapd-adv-custodian-name
+  rule_version: 2026-11-04.exact-name
+  verdict: bind
+  activation: exact_name
+  proof:
+    names: 274
+    attached: 33
+    review: 5
+    waiting: 236
+    second_pass_changed_nothing: true
+    approved_by: operator
+    approved_at: '2026-11-04T17:52:00-05:00'
+    reason: 'Complete and then run and switch on (Form ADV); exact name only (Agreed); limited test on the real June 2026 names'
 # openfigi-security-cusip, openfigi-isin-security-cusip, openfigi-security-isin
 # (version 2026-10-23.1, ticket 120, OpenFIGI first; operator, 2026-10-23:
 # "make the seurities run should process openfigi first", "agreed"): OpenFIGI's

@@ -818,7 +818,7 @@ class TestTheNameMatchingRules:
         assert company[:2] == [APPROVED_ACTIVATION, CIK_ACTIVATION]
         assert [e["rule_id"] for e in company[2:]] == [
             "sec-gleif-name-jurisdiction", "sec-gleif-name-postal", *policy_layers.FORM_ADV_RULES,
-            "nport-registrant-cik", "sec-gleif-name-city-or-postcode"]
+            "iapd-adv-custodian-name", "nport-registrant-cik", "sec-gleif-name-city-or-postcode"]
         check_policy(POLICY)
 
     def test_an_activation_needs_the_operators_approval(self):
