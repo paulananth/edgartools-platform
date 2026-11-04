@@ -140,6 +140,16 @@ def damm(value: str) -> bool:
     return interim == 0
 
 
+SEDOL_WEIGHTS = (1, 3, 1, 7, 3, 9, 1)
+
+
+def weighted_sum_1_3_1_7_3_9_1(value: str) -> bool:
+    """SEDOL's rule: seven characters (A-Z as 10-35), each times its weight; the sum is a multiple of 10."""
+    if len(value) != len(SEDOL_WEIGHTS) or not value[-1].isdigit() or not value.isalnum():
+        return False
+    return sum(int(ch, 36) * w for ch, w in zip(value.upper(), SEDOL_WEIGHTS)) % 10 == 0
+
+
 # family: (validator, chance pass rate for a random value of the right characters)
 FAMILIES = {
     "mod 97-10": (mod97_10, 1 / 97),
@@ -151,6 +161,7 @@ FAMILIES = {
     "luhn over letter digits": (luhn_letter_digits, 1 / 10),
     "luhn over letter values from the left": (luhn_letter_values_from_left, 1 / 10),
     "damm": (damm, 1 / 10),
+    "weighted sum 1 3 1 7 3 9 1 mod 10": (weighted_sum_1_3_1_7_3_9_1, 1 / 10),
 }
 CHECKED = 20_000  # distinct values tested per column, chosen with a fixed seed
 PASS, LIFT = 0.99, 5

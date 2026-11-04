@@ -1,0 +1,16 @@
+# LoanX identifier (LoanX, a loan-market data provider): "LX" and six digits, no check
+# digit. Ticket 125, from the 2026 Q2 N-PORT data set's "other identifier" rows labelled
+# LoanX: 5,579 rows; 5,253 have this shape and 326 are another length (276 are 14 characters
+# starting LX), which this shape sets aside, counted.
+# A change to this file is a new version: its normalizer gets a new name.
+identifier: loanx
+version: 1
+description: "The letters LX and six digits. Upper-cased."
+case: upper
+parts:
+  - length: 1
+    characters: [L]
+  - length: 1
+    characters: [X]
+  - length: 6
+    characters: [digits]

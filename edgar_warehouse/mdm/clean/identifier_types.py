@@ -67,6 +67,17 @@ def luhn_letter_digits(value: str) -> bool:
     return _luhn_digits("".join(str(VALUES[ch]) for ch in value))
 
 
+SEDOL_WEIGHTS = (1, 3, 1, 7, 3, 9, 1)
+
+
+def weighted_sum_1_3_1_7_3_9_1(value: str) -> bool:
+    """SEDOL's rule: seven characters (A-Z as 10-35); each times its weight 1 3 1 7 3 9 1;
+    the sum is a multiple of 10 (the last character, a digit, makes it so)."""
+    if len(value) != len(SEDOL_WEIGHTS) or not value[-1].isdigit():
+        return False
+    return sum(VALUES[ch] * w for ch, w in zip(value, SEDOL_WEIGHTS)) % 10 == 0
+
+
 def mod97_10(value: str) -> bool:
     """ISO 7064 mod 97-10: letters read as 10-35; the number mod 97 is 1."""
     return int("".join(str(VALUES[ch]) for ch in value)) % 97 == 1
@@ -123,6 +134,7 @@ FAMILIES: dict[str, Callable[[str], bool]] = {
     "luhn over letter digits": luhn_letter_digits,
     "luhn over letter values from the left": luhn_letter_values_from_left,
     "damm": damm,
+    "weighted sum 1 3 1 7 3 9 1 mod 10": weighted_sum_1_3_1_7_3_9_1,
 }
 _DIGITS, _LETTERS = frozenset(string.digits), frozenset(string.ascii_uppercase)
 # The characters each family reads; a declaration whose parts allow any other
@@ -137,6 +149,7 @@ READS = {
     "luhn over letter digits": _DIGITS | _LETTERS,
     "luhn over letter values from the left": _DIGITS | _LETTERS,
     "damm": _DIGITS,
+    "weighted sum 1 3 1 7 3 9 1 mod 10": _DIGITS | _LETTERS,
 }
 _CLASSES = {"digits": ("0-9", _DIGITS), "letters": ("A-Z", _LETTERS)}
 _KEYS = {"identifier", "version", "description", "parts", "case", "check_digit",
