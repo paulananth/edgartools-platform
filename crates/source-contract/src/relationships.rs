@@ -927,7 +927,8 @@ fn finish_relationships(
     let mut invalid = BTreeSet::new();
     for ((kind, _), group) in &grouped {
         let rules = command.rules.get(kind).cloned().unwrap_or_default();
-        if rules.is_one_parent() {
+        if rules.is_one_parent() || rules.is_one_target() {
+            let reason = if rules.is_one_parent() { "conflicting_accounting_parents" } else { "conflicting_targets" };
             for (index, link) in group.iter().enumerate() {
                 for other in &group[index + 1..] {
                     if link.source == other.source
@@ -944,7 +945,7 @@ fn finish_relationships(
                         ]);
                         add_review(
                             &mut reviews,
-                            "conflicting_accounting_parents",
+                            reason,
                             Object::from([
                                 ("edges".into(), values::write_value(&keys)?),
                                 ("entities".into(), values::write_value(&ends)?),

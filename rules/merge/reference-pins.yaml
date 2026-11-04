@@ -10,8 +10,8 @@
 # `relationships`.
 mdm-relationship-types:
   code_set: mdm-relationship-types
-  version: '2'
-  sha256: 0ef43fd1905cb62d323acebfdfb341702c78e96e4670952d7c9dbdb074662078
+  version: '3'
+  sha256: 4d9f696384fb3aa72aa0fa9b7dff6a3a22450d010488e6af580dca4658c94e70
 sec-place-codes:
   code_set: sec-place-codes
   version: '1'

@@ -271,6 +271,8 @@ moves pinned digests").
 A record a contract sets aside never reaches matching. It waits with an open
 review ("Held back, never dropped", below).
 
+**A Security has one issuer at a time** (relationship types version 3, ticket 24; operator, 2026-11-04). Two source records of one Security that name two issuers over overlapping periods set both ISSUED_BY links aside and open the review `conflicting_targets`; a changed issuer is two periods of history. This is the same answer inside one record (two issuers, no link).
+
 **N-PORT carries every ISIN filed with a CUSIP** (ticket 138 part B2; it
 replaces "Use FIGI to add pairs too", 2026-10-15, and its rules
 `figi-agree.yaml`, `figi-offers.yaml`, `figi-attach.yaml`, all deleted). MDM

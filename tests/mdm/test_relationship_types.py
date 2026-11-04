@@ -150,8 +150,8 @@ def test_version_2_of_the_code_set_adds_only_the_other_capacity():
     from edgar_warehouse.mdm.evidence import KINDS
     from edgar_warehouse.rules.source_engine import prepare_relationship_types
 
-    pin = files.reference_pin("mdm-relationship-types")
-    assert pin["version"] == "2"
+    pin = {**files.reference_pin("mdm-relationship-types"), "version": "2",
+           "sha256": "0ef43fd1905cb62d323acebfdfb341702c78e96e4670952d7c9dbdb074662078"}
     first = {**pin, "version": "1", "sha256": "9a0a3525e9427ab88405240a81b85be9d89a54c540b0c53770bdd269df7c4d33"}
     before = prepare_relationship_types(files.published_reference(first), sorted(KINDS))
     after = prepare_relationship_types(files.published_reference(pin), sorted(KINDS))
@@ -160,3 +160,18 @@ def test_version_2_of_the_code_set_adds_only_the_other_capacity():
     assert after["EMPLOYED_BY"]["capacities"] == [*before["EMPLOYED_BY"]["capacities"], "other"]
     assert {k: v for k, v in after["EMPLOYED_BY"].items() if k != "capacities"} == \
            {k: v for k, v in before["EMPLOYED_BY"].items() if k != "capacities"}
+
+
+def test_version_3_of_the_code_set_adds_only_one_issuer_to_issued_by():
+    """Ticket 24 (operator, 2026-11-04): a Security has one issuer at a time."""
+    from edgar_warehouse.mdm.evidence import KINDS
+    from edgar_warehouse.rules.source_engine import prepare_relationship_types
+
+    pin = files.reference_pin("mdm-relationship-types")
+    assert pin["version"] == "3"
+    second = {**pin, "version": "2", "sha256": "0ef43fd1905cb62d323acebfdfb341702c78e96e4670952d7c9dbdb074662078"}
+    before = prepare_relationship_types(files.published_reference(second), sorted(KINDS))
+    after = prepare_relationship_types(files.published_reference(pin), sorted(KINDS))
+    assert set(before) == set(after)
+    assert {n for n in after if after[n] != before[n]} == {"ISSUED_BY"}
+    assert after["ISSUED_BY"] == {**before["ISSUED_BY"], "one_target": True}
