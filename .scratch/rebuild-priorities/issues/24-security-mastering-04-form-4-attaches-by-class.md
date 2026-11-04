@@ -38,6 +38,6 @@ Priority: 24, tier 2, the recreation proof. Map: [Rebuild priorities](../map.md)
 - [ ] Nothing matching waits for review
 - [ ] `ownership_line`'s Security link through the new source record
 - [ ] Proving Run on a disposable PostgreSQL 16, counts per kind of evidence
-- [ ] Switch-on on the operator's words
+- [ ] Switch-on: standing approval given (operator, 2026-11-04 07:00 ET: "switch on for form 4 keep it standing approval for ticket 190 191"), so no question is asked; it is switched on after the limited test passes and its counts are recorded here
 - [ ] Three-axis review, PR, CI green, merge
 - [ ] Learning → skill (so far, 2026-10-23 20:33 ET: `skills/security-master/SKILL.md`, an SEC filer reaches its Securities only through GLEIF; `skills/data-platform/LOCAL-TESTING.md`, a restarted container's new port)

@@ -1,5 +1,7 @@
 # 190: A Security's key is any identifier class, not CUSIP or ISIN only
 
+Switch-on: standing approval (operator, 2026-11-04 07:00 ET: "switch on for form 4 keep it standing approval for ticket 190 191"): it is switched on once its limited test passes, with the counts recorded here and no question asked.
+
 Priority: 190. Map: [Rebuild priorities](../map.md). Opened 2026-11-04 01:44 ET, from [ticket 125](125-securities-and-funds-uniquely-identifiable.md) (operator, 2026-11-03: "yes do option 1 and open the follow-up ticket").
 
 Type: task. Status: approved to build (operator, 2026-11-04 06:46 ET: "approve 190 and 191"). Blocked by: [125](125-securities-and-funds-uniquely-identifiable.md) (its SEDOL and LoanX join slice, which this follows).
