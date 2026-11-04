@@ -30,7 +30,11 @@ read:
                     choose:
                       condition: {equal: {left: {join: {path: kind_sample, item_path: key_kind, separator: "", max_items: 1}}, right: {const: {value: loanx}}}}
                       then: {const: {value: other}}
-                      else: {const: {value: first}}
+                      else:
+                        choose:
+                          condition: {equal: {left: {join: {path: kind_sample, item_path: key_kind, separator: "", max_items: 1}}, right: {const: {value: figi}}}}
+                          then: {const: {value: other}}
+                          else: {const: {value: first}}
               right: {context: {name: batch}}
           then: {test: {path: key, kind: present}}
           else: {value: {path: NO_SUCH_FIELD}}
@@ -65,6 +69,12 @@ read:
                   condition: {equal: {left: {join: {path: kind_sample, item_path: key_kind, separator: "", max_items: 1}}, right: {const: {value: sedol}}}}
                   then: {text: {path: key}}
                   else: {value: {path: sedol}}
+              # A FIGI is only a lookup: the key of a holding with nothing else, never an identifier (ticket 139).
+              figi:
+                choose:
+                  condition: {equal: {left: {join: {path: kind_sample, item_path: key_kind, separator: "", max_items: 1}}, right: {const: {value: figi}}}}
+                  then: {text: {path: key}}
+                  else: {value: {path: NO_SUCH_FIELD}}
               loanx:
                 choose:
                   condition: {equal: {left: {join: {path: kind_sample, item_path: key_kind, separator: "", max_items: 1}}, right: {const: {value: loanx}}}}

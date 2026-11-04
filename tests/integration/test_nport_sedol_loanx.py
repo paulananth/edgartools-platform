@@ -20,6 +20,7 @@ from tests.integration import test_nport_link_start as cusip
 CUSIP, CUSIP_TWO = "ZZ0000013", "ZZ0000021"  # invented, check digits valid
 ISIN = "ZZ0000000016"  # invented, check digit valid
 SEDOL, SEDOL_TWO, LOANX = "C000008", "B000009", "LX000001"  # invented, SEDOL check digits valid
+FIGI_ONLY, FIGI_BESIDE = "BBGZ0000VS14", "BBGZ0000VS23"  # invented, check digits valid (ticket 139)
 SEDOL_ALONE, LOANX_ALONE = "D000007", "LX000002"  # on holdings with no CUSIP and no ISIN
 HOLDINGS = [["A-1", "1", "Example Corp", "", "Note", CUSIP],        # CUSIP and a SEDOL
             ["A-1", "2", "Example Corp", "", "Note", CUSIP],        # the same CUSIP, a second SEDOL
@@ -27,9 +28,11 @@ HOLDINGS = [["A-1", "1", "Example Corp", "", "Note", CUSIP],        # CUSIP and 
             ["A-1", "4", "Third Ltd", "", "Note", ""],              # no CUSIP: keyed by its ISIN, with a SEDOL
             ["A-1", "5", "Fourth Ltd", "", "Note", ""],             # no CUSIP, no ISIN: only a SEDOL
             ["A-1", "6", "Fourth Ltd", "", "Note", ""],             # the same SEDOL again: the same Security
-            ["A-1", "7", "Fifth Ltd", "", "Loan", ""]]              # no CUSIP, no ISIN: only a LoanX
+            ["A-1", "7", "Fifth Ltd", "", "Loan", ""],              # no CUSIP, no ISIN: only a LoanX
+            ["A-1", "8", "Sixth Ltd", "", "Note", ""]]              # no CUSIP, no ISIN: only a FIGI
 SEDOLS = [["1", SEDOL], ["2", SEDOL_TWO], ["4", SEDOL], ["5", SEDOL_ALONE], ["6", SEDOL_ALONE]]
 LOANXS = [["3", LOANX], ["7", LOANX_ALONE]]
+FIGIS = [["8", FIGI_ONLY], ["1", FIGI_BESIDE]]  # holding 1 files a FIGI beside its CUSIP: it never keys
 ISINS = [["4", ISIN]]
 
 
@@ -42,7 +45,7 @@ def prepared_records(root: Path, batch: str = "first") -> list[dict]:
         z.writestr("SUBMISSION.tsv", "ACCESSION_NUMBER\tFILING_DATE\nA-1\t05-JUN-2026\n")
     raw = store.put_bytes((root / "capture.zip").as_uri(), body.getvalue())
     holdings = cusip.read(store, root / "holdings", "source.yaml", raw, cusip.Q2,
-                          lookups={"isin": ISINS, "sedol": SEDOLS, "loanx": LOANXS})
+                          lookups={"isin": ISINS, "sedol": SEDOLS, "loanx": LOANXS, "figi": FIGIS})
     issuers = cusip.issuers(store, root, raw, ISINS, cusip.Q2)
     return cusip.security_records(store, root, holdings, issuers, batch_id="check-sedol-loanx", batch=batch)
 
@@ -61,7 +64,7 @@ def test_a_holding_with_no_cusip_and_no_isin_is_keyed_by_its_sedol_or_its_loanx_
     records = {r["provenance"]["record_key"]: r for r in other}
     # The CUSIP and ISIN keys are the first batch, the SEDOL and LoanX keys a second one (ticket 190).
     assert first == {CUSIP, CUSIP_TWO, ISIN}
-    assert set(records) == {SEDOL_ALONE, LOANX_ALONE} and len(other) == 2
+    assert set(records) == {SEDOL_ALONE, LOANX_ALONE, FIGI_ONLY} and len(other) == 3
     # Two holdings filing the same SEDOL are one Security, whose key is the one class it files.
     assert records[SEDOL_ALONE]["identifiers"] == {"sedol": SEDOL_ALONE}
     assert records[LOANX_ALONE]["identifiers"] == {"loanx": LOANX_ALONE}
@@ -74,3 +77,12 @@ def test_a_holding_with_a_cusip_or_an_isin_keeps_that_key_whatever_else_it_files
     assert records[ISIN]["identifiers"]["isin"] == ISIN and records[ISIN]["identifiers"]["sedol"] == [SEDOL]
     assert SEDOL not in records  # a SEDOL filed beside a CUSIP or an ISIN joins; it never keys
     assert records[CUSIP]["provenance"]["matching"]["key_class"] == "cusip"
+
+
+def test_a_holding_with_only_a_figi_is_a_find_only_record_never_an_identifier(tmp_path):
+    """Ticket 139: N-PORT does not issue FIGIs, so the FIGI is a cross-reference; a FIGI beside another key is not read."""
+    other = {r["provenance"]["record_key"]: r for r in prepared_records(tmp_path, "other")}
+    record = other[FIGI_ONLY]
+    assert record["cross_references"] == {"figi": FIGI_ONLY} and not record.get("identifiers")
+    assert record["provenance"]["matching"]["key_class"] == "figi"
+    assert FIGI_BESIDE not in other

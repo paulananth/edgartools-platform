@@ -156,6 +156,63 @@ read:
                 - {regex_replace: {pattern: '^(.{0,7}|.{9,}|[^L].*|L[^X].*|LX.*[^0-9].*)$', with: ''}}
                 null_if: [""]
             else: {value: {path: NO_SUCH_COLUMN}}
+    # The "other identifier" rows labelled as a FIGI (ticket 139; operator, 2026-11-04: "Yes, find only, in
+    # the second batch"): a FIGI N-PORT files, which finds the Security OpenFIGI gave it to and never creates
+    # one (N-PORT does not issue FIGIs). The fund's own "INTERNAL" or "USER DEFINED" values are its own
+    # identifiers, not a FIGI; a value not FIGI-shaped is not in the set (the check digit is the contract's).
+    figi:
+      each: .
+      select:
+        choose:
+          condition:
+            equal:
+              left:
+                choose:
+                  condition:
+                    equal:
+                      left:
+                        text:
+                          path: OTHER_IDENTIFIER_DESC
+                          default: ""
+                          transforms:
+                          - {case: upper}
+                          - {regex_replace: {pattern: '^(FIGI|BBGID|BLOOMBERG IDENTIFIER|ID_BB_GLOBAL)$', with: 'FIGI'}}
+                      right: {const: {value: FIGI}}
+                  then:
+                    text:
+                      path: OTHER_IDENTIFIER
+                      default: ""
+                      transforms:
+                      - {case: upper}
+                      - {regex_replace: {pattern: '^(.{0,11}|.{13,}|.*[^0-9A-Z].*|[^BCDFGHJKLMNPQRSTVWXYZ].*|.[^BCDFGHJKLMNPQRSTVWXYZ].*|..[^G].*|.{11}[^0-9])$', with: ''}}
+                      null_if: [""]
+                  else: {value: {path: NO_SUCH_COLUMN}}
+              right: {value: {path: NO_SUCH_COLUMN}}
+          then: {value: {path: NO_SUCH_COLUMN}}
+          else: {test: {path: HOLDING_ID, kind: present}}
+      columns:
+        holding: {text: {path: HOLDING_ID}}
+        figi:
+          choose:
+            condition:
+              equal:
+                left:
+                  text:
+                    path: OTHER_IDENTIFIER_DESC
+                    default: ""
+                    transforms:
+                    - {case: upper}
+                    - {regex_replace: {pattern: '^(FIGI|BBGID|BLOOMBERG IDENTIFIER|ID_BB_GLOBAL)$', with: 'FIGI'}}
+                right: {const: {value: FIGI}}
+            then:
+              text:
+                path: OTHER_IDENTIFIER
+                default: ""
+                transforms:
+                - {case: upper}
+                - {regex_replace: {pattern: '^(.{0,11}|.{13,}|.*[^0-9A-Z].*|[^BCDFGHJKLMNPQRSTVWXYZ].*|.[^BCDFGHJKLMNPQRSTVWXYZ].*|..[^G].*|.{11}[^0-9])$', with: ''}}
+                null_if: [""]
+            else: {value: {path: NO_SUCH_COLUMN}}
   stream:
     framing: delimited
     delimited: {format: tsv, encoding: utf-8}

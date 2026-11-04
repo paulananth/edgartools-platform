@@ -55,6 +55,11 @@ read:
       max_bytes: 268435456
       max_value_bytes: 64
       pairs: true
+    figi:
+      max_values: 10000000
+      max_bytes: 268435456
+      max_value_bytes: 64
+      pairs: true
   # The quarter's data set period (an instant with its zone), supplied by the
   # run: a column of the holdings for silver; it dates no publication in MDM
   # (operator, 2026-10-19: "if at all it should be captured in silver not on
@@ -229,6 +234,7 @@ read:
                       - member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}
                       - member_value: {lookup: sedol, key: {text: {path: HOLDING_ID}}, on_many: "null"}
                       - member_value: {lookup: loanx, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+                      - member_value: {lookup: figi, key: {text: {path: HOLDING_ID}}, on_many: "null"}
                   right:
                     value:
                       path: NO_SUCH_COLUMN
@@ -250,6 +256,7 @@ read:
             - member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}
             - member_value: {lookup: sedol, key: {text: {path: HOLDING_ID}}, on_many: "null"}
             - member_value: {lookup: loanx, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+            - member_value: {lookup: figi, key: {text: {path: HOLDING_ID}}, on_many: "null"}
         key:
           coalesce:
             skip: "null"
@@ -257,6 +264,7 @@ read:
             - member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}
             - member_value: {lookup: sedol, key: {text: {path: HOLDING_ID}}, on_many: "null"}
             - member_value: {lookup: loanx, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+            - member_value: {lookup: figi, key: {text: {path: HOLDING_ID}}, on_many: "null"}
         issuer_name:
           text:
             path: ISSUER_NAME
@@ -302,6 +310,13 @@ read:
                     right: {value: {path: NO_SUCH_COLUMN}}
                 then: {value: {path: NO_SUCH_COLUMN}}
                 else: {const: {value: loanx}}
+            - choose:
+                condition:
+                  equal:
+                    left: {member_value: {lookup: figi, key: {text: {path: HOLDING_ID}}, on_many: "null"}}
+                    right: {value: {path: NO_SUCH_COLUMN}}
+                then: {value: {path: NO_SUCH_COLUMN}}
+                else: {const: {value: figi}}
         period:
           context: {name: period}
     key_sedol:
@@ -592,6 +607,7 @@ read:
                           - member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}
                           - member_value: {lookup: sedol, key: {text: {path: HOLDING_ID}}, on_many: "null"}
                           - member_value: {lookup: loanx, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+                          - member_value: {lookup: figi, key: {text: {path: HOLDING_ID}}, on_many: "null"}
                       right:
                         value:
                           path: NO_SUCH_COLUMN
@@ -613,6 +629,7 @@ read:
             - member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}
             - member_value: {lookup: sedol, key: {text: {path: HOLDING_ID}}, on_many: "null"}
             - member_value: {lookup: loanx, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+            - member_value: {lookup: figi, key: {text: {path: HOLDING_ID}}, on_many: "null"}
         share_class:
           choose:
             condition:
@@ -696,6 +713,8 @@ dataset_contracts:
       - invalid_sedol
       - invalid_sedol_checksum
       - invalid_loanx
+      - invalid_figi
+      - invalid_figi_checksum
       - missing_record_identity
       adapter:
         reading:
@@ -769,6 +788,7 @@ dataset_contracts:
           - isin
           - sedol
           - loanx
+          - figi
           - issuer
           - filed
           - asset_category
@@ -800,6 +820,12 @@ dataset_contracts:
           isin: isin
           sedol: sedol
           loanx: loanx
+        # A FIGI filed with no CUSIP, ISIN, SEDOL or LoanX finds the Security OpenFIGI gave it to and is never
+        # that Security's: N-PORT does not issue FIGIs (ticket 139; Design 5, "Lookup only").
+        cross_references:
+          figi: figi
+        cross_reference_formats:
+          figi: figi
         # The Security is issued by the entity that holds its issuer's LEI
         # (ticket 22; operator, 2026-10-16: "By issuer LEI (Recommended)"): the
         # link names GLEIF's record of that LEI, and waits until that record is
@@ -866,6 +892,8 @@ bookkeeping:
                       max_input_bytes: 268435456, max_input_rows: 10000000}
               loanx: {from: identifiers, table: loanx, column: holding, value_column: loanx,
                       max_input_bytes: 268435456, max_input_rows: 10000000}
+              figi: {from: identifiers, table: figi, column: holding, value_column: figi,
+                      max_input_bytes: 268435456, max_input_rows: 10000000}
         - name: issuers
           operation: source.read
           requires: [identifiers, submissions]
@@ -882,6 +910,8 @@ bookkeeping:
               sedol: {from: identifiers, table: sedol, column: holding, value_column: sedol,
                       max_input_bytes: 268435456, max_input_rows: 10000000}
               loanx: {from: identifiers, table: loanx, column: holding, value_column: loanx,
+                      max_input_bytes: 268435456, max_input_rows: 10000000}
+              figi: {from: identifiers, table: figi, column: holding, value_column: figi,
                       max_input_bytes: 268435456, max_input_rows: 10000000}
               filed: {from: submissions, table: filed, column: accession_number, value_column: filed,
                      max_input_bytes: 67108864, max_input_rows: 1000000}
@@ -958,6 +988,8 @@ bookkeeping:
               sedol: {from: identifiers, table: sedol, column: holding, value_column: sedol,
                       max_input_bytes: 17179869184, max_input_rows: 100000000}
               loanx: {from: identifiers, table: loanx, column: holding, value_column: loanx,
+                      max_input_bytes: 17179869184, max_input_rows: 100000000}
+              figi: {from: identifiers, table: figi, column: holding, value_column: figi,
                       max_input_bytes: 17179869184, max_input_rows: 100000000}
               series: {from: series, table: series, column: accession_number, value_column: series_id,
                        max_input_bytes: 17179869184, max_input_rows: 100000000}
