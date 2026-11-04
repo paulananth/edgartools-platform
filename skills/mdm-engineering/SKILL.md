@@ -123,6 +123,7 @@ authoritative content before approval freezes it.
   stay under it.
 - **Never refuse work by size.** Cut the input into batches; that divides
   work and refuses nothing. A size cap that stops a run is a defect.
+- **Build the shared path once** ("Always build generic", `AGENTS.md`). A second case of the same thing (an identifier class, a source, a format) reuses the first's path through a list or a parameter; never copy its table, rule or step. The cost of a copy is the next case's cost.
 - **Remove a layer rather than tune it.** When a copy, a trigger chain or a
   table makes a step slow or hard to follow, prefer the design that deletes
   it over one that speeds it up. Adding an MDM field is data or policy, not a

@@ -97,6 +97,13 @@ Learned the hard way; each is a standing operator rule.
   is written by its own code (SQLAlchemy), not dbt.
 
 **Code and infrastructure**
+- **Build generic (operator, 2026-11-04: "Always build generic make it a rule"):** a
+  case that has a sibling (a second identifier class, source, kind or format)
+  is built once for all of them, as a list, a parameter or one shared table
+  the rules or code read, never as a copy per case. Adding the next case is a
+  line of configuration and one test. Where today's tool cannot express the
+  list (the rules language has no loop), say so and make the shared path
+  work for the other cases; do not copy.
 - **Integer widths (operator, 2026-10-16):** use database `BIGINT` and
   64-bit `long`/`i64` for integer fields and counters, including years,
   quarters and positions. Never choose 32-bit `INT`/`INTEGER` or narrower
