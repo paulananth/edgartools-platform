@@ -54,10 +54,10 @@ What does "process an S-1" deliver, and how is it captured? The decisions:
 - [x] The registration-fee table by filing year (2026-10-30 06:49 ET, 1,244 snapshots, counts only): 845 of 860 main documents filed 2001 to 2021 hold it; 2022 to 2026, 193 of 384 (it seems to move to a separate filing-fee exhibit)
 - [x] Decided by the operator (2026-10-30 06:49 ET): "Main doc only (Recommended)": shares offered, price range, ticker and exchange from the prospectus cover; the aggregate offering price from the fee table where the main document holds it, else empty; no fee exhibits requested
 - [ ] Capture: bronze, immutable and additive, each file with its receipt (9,646 requests; the time stated before it starts)
-- [ ] Profile (data-profiling skill): fields, keys, links and quality, as REPORT.md and findings.yaml
+- [x] Profile (data-profiling skill; 2026-11-04 18:17 ET, 100 s, the 732 filings from 2026 read through the HTML reading, none refused): 3 parts, `page` 732 (key accession), `blocks` 1,259,259, `rows` 729,992; every block and row points at its page. The profiler calls `page` a master; it is an event of a Company, so it lands as silver. Nothing is tagged: the terms are found by their words (exchange 664, ticker 639, shares offered 517, price range 24 of 732). Findings are local (`~/edgar-local-tmp/t149/profile`, draft, not approved); counts in `.scratch/onboarding/sec.registration/valuation-silver-design.md`
 - [ ] Onboard (data-onboarding skill): the source contract or reader, quality checks, links to Company and
   Security, Mapping Document and Data Catalog entry
 - [ ] A registered offering that has launched links to its actual listed ticker (operator, 2026-10-30 08:49 ET: "connect to actual ticker if already launched"): the ticker the company now trades under, from the Security master, beside the ticker the prospectus proposed
-- [ ] Silver table spec and landing through the silver writer
+- [ ] Silver table spec and landing through the silver writer: designed 2026-11-04 18:17 ET from Damodaran's valuation tools (operator's link) in `valuation-silver-design.md`: `registration_offering`, `registration_statement_line`, `registration_valuation_input`; the spec files and landing wait for the operator's word on the design. SEC download: none required; the filing-fee exhibit (513 of 732 main documents hold no fee table) is optional and not requested, Damodaran's datasets (cost of capital) are another provider, not requested
 - [ ] Tests, the operator's approval of the rules, switch-on
 - [ ] Learning → skill
