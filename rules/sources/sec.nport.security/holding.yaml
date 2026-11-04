@@ -23,6 +23,7 @@ read:
     isin: {max_values: 100000000, max_bytes: 17179869184, max_value_bytes: 16384, pairs: true}
     sedol: {max_values: 100000000, max_bytes: 17179869184, max_value_bytes: 16384, pairs: true}
     loanx: {max_values: 100000000, max_bytes: 17179869184, max_value_bytes: 16384, pairs: true}
+    figi: {max_values: 100000000, max_bytes: 17179869184, max_value_bytes: 16384, pairs: true}
     series: {max_values: 100000000, max_bytes: 17179869184, max_value_bytes: 16384, pairs: true}
     registrant: {max_values: 100000000, max_bytes: 17179869184, max_value_bytes: 16384, pairs: true}
     filed: {max_values: 100000000, max_bytes: 17179869184, max_value_bytes: 16384, pairs: true}
@@ -62,6 +63,9 @@ read:
           member_value: {lookup: sedol, key: {text: {path: HOLDING_ID}}, on_many: "null"}
         loanx:
           member_value: {lookup: loanx, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+        # One FIGI, else none: with no other key it finds a Security and never creates one (ticket 139).
+        figi:
+          member_value: {lookup: figi, key: {text: {path: HOLDING_ID}}, on_many: "null"}
         balance: {text: {path: BALANCE, default: "", null_if: [""]}}
         unit: {text: {path: UNIT, default: "", null_if: [""]}}
         currency_code: {text: {path: CURRENCY_CODE, default: "", null_if: [""]}}

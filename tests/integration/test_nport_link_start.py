@@ -61,7 +61,7 @@ def read(store, root, contract_file, raw, period, lookups=None):
     entry = {"input": raw, "context": context}
     if lookups is not None:
         if contract_file == "source.yaml":  # the holdings reading declares a SEDOL and a LoanX set too (ticket 125)
-            lookups = {"sedol": [], "loanx": [], **lookups}
+            lookups = {"sedol": [], "loanx": [], "figi": [], **lookups}
         entry["lookups"] = store.put(root.as_uri(), {"version": 1, "input": raw, "sets": lookups})
     return chain.read(store, root, body, [entry], 3 if lookups is not None else 2)
 
@@ -91,7 +91,7 @@ def filed_pairs(store, root, raw) -> list[list[str]]:
 def issuers(store, root, raw, isin, period, umbrella=()):
     """The issuer source extract, each holding with its filing's date, else the quarter's."""
     return read(store, root / "issuers", "issuers.yaml", raw, period,
-                lookups={"isin": isin, "sedol": [], "loanx": [], "umbrella": list(umbrella),
+                lookups={"isin": isin, "sedol": [], "loanx": [], "figi": [], "umbrella": list(umbrella),
                                   "filed": filed_pairs(store, root, raw)})
 
 

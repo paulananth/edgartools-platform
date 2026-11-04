@@ -159,6 +159,30 @@ rules:
   - primitive: identifier_cardinality@1
     args:
       namespace: loanx
+# A FIGI an N-PORT holding files with no other key finds the Security OpenFIGI gave it to (ticket 139;
+# operator, 2026-11-04: "Yes, find only, in the second batch"). N-PORT does not issue FIGIs, so the value is
+# never that Security's: the rule creates nothing and merges nothing, and a FIGI no Security holds waits.
+# Only a record keyed by it matches: a FIGI beside a CUSIP or an ISIN is not read.
+- rule_id: nport-security-figi
+  version: 2026-11-04.1
+  family: binding
+  source: sec.nport.security.v2
+  applies_to_verdict: security
+  emits:
+  - bind
+  on_no_match: wait
+  when:
+  - primitive: field_in_set@1
+    args:
+      field: provenance.matching.key_class
+      values:
+      - figi
+  - primitive: identifier_match@1
+    args:
+      namespace: figi
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: figi
 # OpenFIGI (ticket 138; operator, 2026-10-25: "there should be one processing
 # with all the identifier and this is the first load", "first lookup if not
 # exists then master"): one record per identifier asked, CUSIP or ISIN, with
