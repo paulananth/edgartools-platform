@@ -43,6 +43,119 @@ read:
             # the country, a letter last): blank, so it never enters the set.
             - {regex_replace: {pattern: '^(.*[^A-Z0-9].*|.{0,11}|.{13,}|.?[0-9].*|.*[A-Z])$', with: ''}}
             null_if: [""]
+    # The "other identifier" rows labelled as SEDOL or LoanX (ticket 125; operator,
+    # 2026-10-20: "SEDOL, CINS, LoanX (Recommended)"): the standard identifiers in the
+    # fund's own field, told apart by their label and their shape (rules/identifiers/
+    # sedol.yaml and loanx.yaml); a value not of that shape, or under another label,
+    # is not in the set. Each holding's value joins the Security the holding already
+    # keys (source.yaml).
+    sedol:
+      each: .
+      # The fund's own "INHOUSE SEDOL" is its own identifier, not a SEDOL (operator, 2026-10-20: "Not Securities").
+      select:
+        choose:
+          condition:
+            equal:
+              left:
+                choose:
+                  condition:
+                    equal:
+                      left:
+                        text:
+                          path: OTHER_IDENTIFIER_DESC
+                          default: ""
+                          transforms:
+                          - {case: upper}
+                          - {regex_replace: {pattern: '^SEDOL NUMBER$', with: 'SEDOL'}}
+                      right: {const: {value: SEDOL}}
+                  then:
+                    text:
+                      path: OTHER_IDENTIFIER
+                      default: ""
+                      transforms:
+                      - {case: upper}
+                      - {regex_replace: {pattern: '^(.{0,6}|.{8,}|.*[^0-9BCDFGHJKLMNPQRSTVWXYZ].*|.{6}[A-Z])$', with: ''}}
+                      null_if: [""]
+                  else: {value: {path: NO_SUCH_COLUMN}}
+              right: {value: {path: NO_SUCH_COLUMN}}
+          then: {value: {path: NO_SUCH_COLUMN}}
+          else: {test: {path: HOLDING_ID, kind: present}}
+      columns:
+        holding: {text: {path: HOLDING_ID}}
+        sedol:
+          choose:
+            condition:
+              equal:
+                left:
+                  text:
+                    path: OTHER_IDENTIFIER_DESC
+                    default: ""
+                    transforms:
+                    - {case: upper}
+                    - {regex_replace: {pattern: '^SEDOL NUMBER$', with: 'SEDOL'}}
+                right: {const: {value: SEDOL}}
+            then:
+              text:
+                path: OTHER_IDENTIFIER
+                default: ""
+                transforms:
+                - {case: upper}
+                - {regex_replace: {pattern: '^(.{0,6}|.{8,}|.*[^0-9BCDFGHJKLMNPQRSTVWXYZ].*|.{6}[A-Z])$', with: ''}}
+                null_if: [""]
+            else: {value: {path: NO_SUCH_COLUMN}}
+    loanx:
+      each: .
+      select:
+        choose:
+          condition:
+            equal:
+              left:
+                choose:
+                  condition:
+                    equal:
+                      left:
+                        text:
+                          path: OTHER_IDENTIFIER_DESC
+                          default: ""
+                          transforms:
+                          - {case: upper}
+                          - {regex_replace: {pattern: '^(LOANX ID|LOAN X ID)$', with: 'LOANX'}}
+                      right: {const: {value: LOANX}}
+                  then:
+                    text:
+                      path: OTHER_IDENTIFIER
+                      default: ""
+                      transforms:
+                      - {case: upper}
+                      - {regex_replace: {pattern: '^(.{0,7}|.{9,}|[^L].*|L[^X].*|LX.*[^0-9].*)$', with: ''}}
+                      null_if: [""]
+                  else: {value: {path: NO_SUCH_COLUMN}}
+              right: {value: {path: NO_SUCH_COLUMN}}
+          then: {value: {path: NO_SUCH_COLUMN}}
+          else: {test: {path: HOLDING_ID, kind: present}}
+      columns:
+        holding: {text: {path: HOLDING_ID}}
+        loanx:
+          choose:
+            condition:
+              equal:
+                left:
+                  text:
+                    path: OTHER_IDENTIFIER_DESC
+                    default: ""
+                    transforms:
+                    - {case: upper}
+                    - {regex_replace: {pattern: '^(LOANX ID|LOAN X ID)$', with: 'LOANX'}}
+                right: {const: {value: LOANX}}
+            then:
+              text:
+                path: OTHER_IDENTIFIER
+                default: ""
+                transforms:
+                - {case: upper}
+                - {regex_replace: {pattern: '^(.{0,7}|.{9,}|[^L].*|L[^X].*|LX.*[^0-9].*)$', with: ''}}
+                null_if: [""]
+            else: {value: {path: NO_SUCH_COLUMN}}
   stream:
     framing: delimited
     delimited: {format: tsv, encoding: utf-8}

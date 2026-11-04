@@ -25,6 +25,9 @@ combine:
     # record by its CUSIP first, then an ISIN, and adds an ISIN only when no
     # Security holds it.
     filed_isins: {source: securities, table: pairs, key: cusip, value: isin, mode: collect, order_by: [isin], distinct: true, skip_null_values: true, checks: {}, where: {}}
+    # Every SEDOL and LoanX filed with the Security's key, each once (ticket 125).
+    filed_sedols: {source: securities, table: sedols, key: key, value: sedol, mode: collect, order_by: [sedol], distinct: true, skip_null_values: true, checks: {}, where: {}}
+    filed_loanxs: {source: securities, table: loanxs, key: key, value: loanx, mode: collect, order_by: [loanx], distinct: true, skip_null_values: true, checks: {}, where: {}}
     # The issuer's LEI only when every holding of the CUSIP that states one
     # states the same (operator, 2026-10-16: "By issuer LEI (Recommended)");
     # `one` never chooses.
@@ -64,6 +67,8 @@ combine:
         class: {group: cusip_class, key: key, on_missing: skip, replace: false}
         classes: {group: cusip_classes, key: key, on_missing: skip, replace: false}
         isin: {group: filed_isins, key: key, on_missing: skip, replace: false}
+        sedol: {group: filed_sedols, key: key, on_missing: skip, replace: false}
+        loanx: {group: filed_loanxs, key: key, on_missing: skip, replace: false}
         issuer: {group: cusip_issuer, key: key, on_missing: skip, replace: false}
         filed: {group: cusip_filed, key: key, on_missing: skip, replace: false}
         isin_name: {group: isin_name, key: key, on_missing: skip, replace: false}

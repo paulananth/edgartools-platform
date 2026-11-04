@@ -45,6 +45,16 @@ read:
       max_bytes: 268435456
       max_value_bytes: 64
       pairs: true
+    sedol:
+      max_values: 10000000
+      max_bytes: 268435456
+      max_value_bytes: 64
+      pairs: true
+    loanx:
+      max_values: 10000000
+      max_bytes: 268435456
+      max_value_bytes: 64
+      pairs: true
   # The quarter's data set period (an instant with its zone), supplied by the
   # run: a column of the holdings for silver; it dates no publication in MDM
   # (operator, 2026-10-19: "if at all it should be captured in silver not on
@@ -270,6 +280,76 @@ read:
             value: isin
         period:
           context: {name: period}
+    key_sedol:
+      each: .
+      # A holding keyed by its usable CUSIP, else its ISIN, that also files one SEDOL
+      # (identifiers.yaml): the SEDOL joins that Security (ticket 125). A holding with
+      # no CUSIP or ISIN makes no row: keying a Security by a SEDOL alone is ticket 190's.
+      select:
+        choose:
+          condition:
+            equal:
+              left:
+                member_value: {lookup: sedol, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+              right: {value: {path: NO_SUCH_COLUMN}}
+          then: {value: {path: NO_SUCH_COLUMN}}
+          else:
+            choose:
+              condition:
+                equal:
+                  left:
+                    coalesce:
+                      skip: "null"
+                      values:
+                      - text: {path: ISSUER_CUSIP, default: "", transforms: [{case: upper}], null_if: ["", "000000000", "999999999"]}
+                      - member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+                  right: {value: {path: NO_SUCH_COLUMN}}
+              then: {value: {path: NO_SUCH_COLUMN}}
+              else: {test: {path: HOLDING_ID, kind: present}}
+      columns:
+        key:
+          coalesce:
+            skip: "null"
+            values:
+            - text: {path: ISSUER_CUSIP, default: "", transforms: [{case: upper}], null_if: ["", "000000000", "999999999"]}
+            - member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+        sedol:
+          member_value: {lookup: sedol, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+    key_loanx:
+      each: .
+      # A holding keyed by its usable CUSIP, else its ISIN, that also files one LOANX
+      # (identifiers.yaml): the LOANX joins that Security (ticket 125). A holding with
+      # no CUSIP or ISIN makes no row: keying a Security by a LOANX alone is ticket 190's.
+      select:
+        choose:
+          condition:
+            equal:
+              left:
+                member_value: {lookup: loanx, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+              right: {value: {path: NO_SUCH_COLUMN}}
+          then: {value: {path: NO_SUCH_COLUMN}}
+          else:
+            choose:
+              condition:
+                equal:
+                  left:
+                    coalesce:
+                      skip: "null"
+                      values:
+                      - text: {path: ISSUER_CUSIP, default: "", transforms: [{case: upper}], null_if: ["", "000000000", "999999999"]}
+                      - member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+                  right: {value: {path: NO_SUCH_COLUMN}}
+              then: {value: {path: NO_SUCH_COLUMN}}
+              else: {test: {path: HOLDING_ID, kind: present}}
+      columns:
+        key:
+          coalesce:
+            skip: "null"
+            values:
+            - text: {path: ISSUER_CUSIP, default: "", transforms: [{case: upper}], null_if: ["", "000000000", "999999999"]}
+            - member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+        loanx:
+          member_value: {lookup: loanx, key: {text: {path: HOLDING_ID}}, on_many: "null"}
     # The share class each equity holding's title names (ticket 130;
     # operator, 2026-10-22: "Approve the rule (Recommended)"): the letter
     # after CL, CLASS or CLS, from equity holdings (asset category EC) only,
@@ -658,6 +738,8 @@ dataset_contracts:
           - classes
           - lei
           - isin
+          - sedol
+          - loanx
           - issuer
           - filed
           - asset_category
@@ -676,12 +758,19 @@ dataset_contracts:
         # check digit is still held back with its own reason.
         record_key:
         - key
+        # The SEDOL and LoanX filed with the Security's key join it too (ticket 125;
+        # operator, 2026-10-20: "SEDOL, CINS, LoanX (Recommended)"); a Security keyed
+        # by one alone is ticket 190's.
         identifiers:
           cusip: cusip
           isin: isin
+          sedol: sedol
+          loanx: loanx
         identifier_formats:
           cusip: cusip
           isin: isin
+          sedol: sedol
+          loanx: loanx
         # The Security is issued by the entity that holds its issuer's LEI
         # (ticket 22; operator, 2026-10-16: "By issuer LEI (Recommended)"): the
         # link names GLEIF's record of that LEI, and waits until that record is
@@ -744,6 +833,10 @@ bookkeeping:
             lookups:
               isin: {from: identifiers, table: isin, column: holding, value_column: isin,
                      max_input_bytes: 268435456, max_input_rows: 10000000}
+              sedol: {from: identifiers, table: sedol, column: holding, value_column: sedol,
+                      max_input_bytes: 268435456, max_input_rows: 10000000}
+              loanx: {from: identifiers, table: loanx, column: holding, value_column: loanx,
+                      max_input_bytes: 268435456, max_input_rows: 10000000}
         - name: issuers
           operation: source.read
           requires: [identifiers, submissions]

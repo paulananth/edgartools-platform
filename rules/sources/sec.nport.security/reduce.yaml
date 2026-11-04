@@ -140,6 +140,23 @@ reduce:
       count: holdings
       sample: null
       sample_limit: 0
+    # Each SEDOL and LoanX filed with a Security's key (ticket 125).
+    sedols:
+      source: holdings
+      table: key_sedol
+      keys: [key, sedol]
+      mode: count
+      count: holdings
+      sample: null
+      sample_limit: 0
+    loanxs:
+      source: holdings
+      table: key_loanx
+      keys: [key, loanx]
+      mode: count
+      count: holdings
+      sample: null
+      sample_limit: 0
     isins:
       source: holdings
       table: security_isin
