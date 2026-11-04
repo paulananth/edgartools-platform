@@ -74,6 +74,11 @@ assets, and a product's domain still equals every asset's domain.
 A mastered package takes the source datasets that fill it as input ports.
 The fundamental-measures package takes the filed-figure table and the line-item
 table as input ports. The measure table is an asset, not an input port.
+When auditing `GET /dataProducts/{id}/assets`, compare `type=table` references
+to the configured table assets. The local 2.0.2 API also returned `testCase`
+references for some products; match those separately to configured quality
+cases, and do not count them as table assets. Their rendered UI presentation
+has not been verified.
 `rules catalog publish` also writes every configured check and every
 registered prepared-table check as a quality case, and every configured fix
 as a correction. A profile proposal is not a case. A case has a pass or fail only
@@ -350,10 +355,15 @@ reference list.
   it checks (source datasets and silver tables from their quality rules; a master
   kind table from its identifier limits: one case per `claim.forward` and
   `claim.reverse` of each identifier in `merge/kinds/<kind>.yaml`, none where the
-  limit is null), and a mapping is a column in the lineage of the
-  kind table (the Lineage tab, columns shown), not a column of the table page.
-  A code list's edge maps its `code` to each column that holds those codes. A
-  captured file feed's edge to its dataset stays table to table: a file has no columns.
+  limit is null). The approved Mapping Document placement is a Markdown custom
+  property on its pipeline, with relevant source, Silver and master tables
+  linking to that pipeline. Silver-only mappings come from registered
+  `silver-*.yaml` specs. The current main-branch plan, publisher and readback do
+  not implement this projection, so do not report complete Mapping Documents as
+  published. A field mapping shown in column lineage remains separate from the
+  integration specification. A code list's edge maps its `code` to each column
+  that holds those codes. A captured file feed's edge to its dataset stays table
+  to table: a file has no columns.
   A page with an empty Quality tab is a table with no configured check.
 
 - A profile has one native place, the table profile. `PUT /api/v1/tables/{id}/tableProfile`
@@ -383,6 +393,11 @@ Keep configuration, send and confirmation as three separate facts:
    independently and is read-only. A matching readback is required before
    calling the checked scope confirmed.
 
+The CLI writes one concise status line to stderr and structured JSON to stdout.
+For an interactive terminal, append `>/dev/null` to show only the status line;
+leave stdout available when an automation needs the JSON. A plan's JSON includes
+the full configured catalog and can be thousands of lines.
+
 Use **pending** for plan-only work, **partial** when a send may have occurred
 but confirmation is absent or an API request/readback reports failure or drift,
 **failed** when planning or configuration prevented a publish attempt, and
@@ -391,6 +406,9 @@ the relevant native readback matches.
 For failures, name the stage, give a short cause, and state the next action.
 Show the destination as scheme and host only. Never include user info, tokens,
 query strings, or raw response bodies in an operator report.
+Plan counts and confirmation apply only to the exact rules revision checked. After
+a rebase or rules change, rerun plan and check; a previously confirmed catalog can
+be stale against the newer configuration.
 
 The current CLI does not provide trustworthy per-object created-versus-updated
 counts; do not infer these from plan counts or a successful PUT. Mark them
@@ -404,10 +422,67 @@ edge, or all table annotations. Do not describe the entire catalog as confirmed
 from that check alone; read the missing objects through the native API and
 report any remaining gap as unverified until CLI coverage exists.
 
-The `shared` object is a glossary identity only, not a business domain, domain
-tag or domain assignment. Never create or assign a domain named `Shared`.
-Publishing catalog metadata documents configured work; it does not execute the
-described data pipelines or create run evidence.
+Do not create a shared glossary, a domain named `Shared`, or a `Shared` tag.
+
+## Pipeline execution boundary
+
+OpenMetadata's `Pipeline` and `ingestionPipeline` are different objects with
+different jobs:
+
+- A `Pipeline` describes a data workflow and its lineage. Its status API accepts
+  externally reported run status through `PUT /api/v1/pipelines/{fqn}/status`;
+  the API has no trigger for this object. A status record is run evidence only
+  when the actual runner reported it and its output was verified.
+- An `ingestionPipeline` runs a metadata connector through a configured
+  pipeline-service client. `POST /api/v1/services/ingestionPipelines/trigger/{id}`
+  triggers metadata ingestion. It does not start the platform's source capture,
+  Bookkeeping steps, MDM merge, RDM publication or Silver loads.
+- Execution support is integration-specific, not a generic property of a
+  catalog `Pipeline`. Current 2.0.x documentation says the dbt Cloud integration
+  can execute models directly and track executions; dbt Core integration reads
+  artifacts from storage that a separate dbt run produced. This is documented
+  behavior, not verified against the local 2.0.2 deployment. It does not execute
+  the platform's Bookkeeping targets or make arbitrary catalog pipelines
+  runnable. Verify the exact connector, account/job and run path before calling
+  a workflow controlled by OpenMetadata.
+- Other trigger routes are scoped to their own object: `/api/v1/apps/trigger/{name}`
+  runs an installed OpenMetadata Application, and
+  `/api/v1/governance/workflowDefinitions/name/{fqn}/trigger` starts a governance
+  workflow. Neither route makes a catalog `Pipeline` runnable.
+- OpenMetadata also has native Data Contracts. On the local 2.0.2 server,
+  `POST /api/v1/dataContracts/validate` validated a draft request against
+  existing entity metadata without creating a contract. This checks the request
+  and metadata; it does not run tests against stored rows. A persisted contract's
+  `POST /api/v1/dataContracts/{id}/validate` is a different operation: current
+  2.0.x documentation says it checks schema and semantics and, when quality
+  expectations are attached, triggers the contract's test-suite pipeline. That
+  behavior has not been exercised on this 2.0.2 instance. The
+  `DataContractValidationApplication` is installed and enabled locally with a
+  daily schedule, but there are no contracts to validate. The Rules catalog
+  currently has no Data Contracts.
+- A contract does not make every policy enforceable. The 2.0.x contract guide
+  says security, terms of use and SLA values document expectations; security and
+  SLA are not evaluated by a contract run. Do not present them as access control
+  or operational enforcement.
+
+Before calling OpenMetadata a plug-and-play execution or operations control
+plane, check the installed version's API schema for a trigger on the exact
+object, count configured ingestion pipelines and their statuses, and inspect
+the deployment for an enabled runner that is connected to the real workflow.
+Require readback of both run status and verified output. A `Pipeline` entity,
+task list, lineage edge, or successful catalog publish does not meet that bar.
+
+The local `infra/openmetadata/docker-compose.yml` has no ingestion runner and
+sets `PIPELINE_SERVICE_CLIENT_ENABLED` to false. Live API readback also finds no
+ingestion pipelines and no connection on the `CustomDatabase` service. The
+installed Data Contract Validation app reports `supportsIngestionRunner=false`;
+there are 52 configured quality cases but zero latest results. OpenMetadata's
+no-code test UI still needs a usable source connection and workflow executor;
+catalog cases alone are not run tests. In this deployment OpenMetadata is a
+catalog projection; Bookkeeping retains data-operation run ownership. Making
+OpenMetadata trigger and govern those operations requires an orchestrator or a
+control-plane integration and is not a no-build catalog configuration. Do not
+imply that changing catalog metadata changes the execution path.
 
 The native schema does not by itself prove a UI can render separate control
 lanes, expandable stage detail or shared-step navigation. Preserve control-link
@@ -420,6 +495,21 @@ Use native test definitions/cases when supported, retaining configured semantics
 and failure actions. An externally executed check is not a runnable native SQL
 test. The `Other` platform is available in the pinned definition schema; select
 the tested mapping rather than relabeling the existing execution engine.
+
+The Rules catalog currently publishes its configured checks and corrections as
+two custom test definitions on the `Other` platform. Their descriptions state
+that OpenMetadata does not execute them. The resulting cases are metadata only:
+adding a database connection or ingestion runner does not make these cases
+runnable. Before claiming native quality execution, map each supported rule to
+an executable OpenMetadata definition or connect an external executor that
+actually runs the rule, then read back real results. Do not relabel `Other` as a
+database platform to make the cases appear executable.
+
+Keep a correction distinct from a test. Do not publish a configured correction
+as an OpenMetadata test case unless it is itself an executable assertion;
+otherwise the Test Cases surface can imply that the correction runs or has a
+pass/fail result. Keep the correction in its owning Rules configuration and
+describe it as a planned action when projecting it as metadata.
 
 A result is `POST /api/v1/dataQuality/testCases/testCaseResults/{caseFQN}` with
 `timestamp`, `testCaseStatus` (`Success` or `Failed`), `testResultValue`,
@@ -466,6 +556,9 @@ receipt and any additional qualification in the task record, not this skill.
 - [Domains](https://docs.open-metadata.org/v2.0.x/how-to-guides/data-marketplace/domains)
 - [Data products](https://docs.open-metadata.org/v2.0.x/how-to-guides/data-marketplace/data-products)
 - [Classification](https://docs.open-metadata.org/v2.0.x/how-to-guides/data-governance/classification)
+- [Data Contracts: validation and enforcement limits](https://docs.open-metadata.org/v2.0.x/how-to-guides/data-contracts/spec)
+- [Ingestion execution options](https://docs.open-metadata.org/v2.0.x/deployment/ingestion)
+- [Data Quality](https://docs.open-metadata.org/v2.0.x/how-to-guides/data-quality-observability/quality)
 - [Versioned create schemas](https://github.com/open-metadata/OpenMetadata/tree/2.0.2-release/openmetadata-spec/src/main/resources/json/schema/api)
 - [Lineage schema](https://github.com/open-metadata/OpenMetadata/blob/2.0.2-release/openmetadata-spec/src/main/resources/json/schema/type/entityLineage.json)
 - [Column-tag readback implementation](https://github.com/open-metadata/OpenMetadata/blob/2.0.2-release/openmetadata-service/src/main/java/org/openmetadata/service/jdbi3/TableRepository.java)
@@ -484,9 +577,30 @@ users' containers and volumes. A cold start may take 10–20 minutes. The compos
 file accepts `CATALOG_SERVER_HEAP_OPTS` and `CATALOG_SEARCH_HEAP_OPTS`.
 
 A login token of the local account expires within the hour; a publish that
-answers 401 needs a new one (`POST /api/v1/users/login`, password base64).
-Supply `OPENMETADATA_URL` and `OPENMETADATA_TOKEN` from the private environment.
-Never print them. The URL passed to `catalog.connect` is the server root. That
+answers 401 needs a new one. Refresh it in the private terminal session, with
+shell tracing off. Enter the local account password only at the hidden prompt;
+the password is base64 encoded for the login API, and neither it nor the returned
+token is printed:
+
+```bash
+set +x
+set -euo pipefail
+export OPENMETADATA_URL=http://127.0.0.1:8585
+read -r -p 'OpenMetadata email: ' OM_LOGIN_EMAIL
+read -r -s -p 'OpenMetadata password: ' OM_LOGIN_PASSWORD
+printf '\n'
+OM_LOGIN_PASSWORD_B64=$(printf '%s' "$OM_LOGIN_PASSWORD" | base64 | tr -d '\n')
+OM_LOGIN_BODY=$(jq -cn --arg email "$OM_LOGIN_EMAIL" --arg password "$OM_LOGIN_PASSWORD_B64" \
+  '{email:$email,password:$password}')
+OPENMETADATA_TOKEN=$(printf '%s' "$OM_LOGIN_BODY" | curl -fsS \
+  -H 'Content-Type: application/json' -X POST \
+  --data-binary @- "$OPENMETADATA_URL/api/v1/users/login" | jq -er '.accessToken')
+export OPENMETADATA_TOKEN
+unset OM_LOGIN_EMAIL OM_LOGIN_PASSWORD OM_LOGIN_PASSWORD_B64 OM_LOGIN_BODY
+```
+
+Keep the variables in the private shell only. Never echo or save the token in
+the repository. The URL passed to `catalog.connect` is the server root; that
 function adds `/api/v1`.
 
 A whole-service reset deletes the owned pipeline service, then the owned
@@ -497,7 +611,41 @@ database service:
 2. `DELETE /api/v1/services/<type>/<returned-id>?recursive=true&hardDelete=true`.
 3. Repeat the GET and require 404.
 
-Domains, glossaries, and terms are global. Deleting the database service does
-not remove them. A volume wipe (`docker compose down -v` on that compose file
-only) is a from-scratch server, including those global objects. Do not wipe
-any other project's volumes.
+Domains, glossaries, and terms are global. Deleting a service does not remove
+them.
+
+## Catalog-only clean rebuild
+
+`rules catalog publish` reconciles the plan; it is not a delete-and-recreate
+reset. Use it alone for normal refreshes. For an explicitly requested clean
+rebuild, preserve the OpenMetadata PostgreSQL and search volumes, users,
+workflows, roles, and instance settings. Do not use `docker compose down -v`,
+drop the OpenMetadata database, or clear search storage for a catalog reset.
+
+Before deleting anything, read the current plan and list every API page for the
+owned services and global objects. Establish exact ownership by comparing each
+identity with the current plan and the publisher's ownership boundary. Stop if
+an object cannot be shown to be owned; global domains, glossaries, terms,
+products, and quality definitions can contain unrelated curation. Record the
+IDs and counts for the reviewed scope.
+
+Delete in dependency order: owned products, owned quality cases, owned custom
+quality definitions, owned pipeline service, owned database service, owned
+glossary terms, owned glossaries, owned domains, then owned custom tags. Remove
+products and cases before their referenced tables. Delete the pipeline service
+before the database service. For services, verify the exact service name and
+FQN first, delete by returned ID with `recursive=true&hardDelete=true`, then
+repeat the GET and require 404. For each other resource, use its native API and
+returned ID; use recursive deletion only when the owned children are in the
+reviewed scope. Keep built-in definitions, classifications, tags,
+relationships, workflows, and settings unless the plan explicitly owns them. If
+a delete fails or ownership becomes unclear, stop and account for remaining
+objects before continuing.
+
+Publish the current plan only after the reviewed scope is empty. Require the
+publish result's readback to match, run `rules catalog check` independently,
+and verify the exact domain and glossary inventories plus the absence of any
+forbidden shared object. A zero-removal publish after the rebuild is expected;
+it means the fresh catalog already matches the plan. Report deletion counts
+separately from publication counts. A catalog reset does not reset the
+OpenMetadata server or prove that metadata ingestion or data pipelines ran.

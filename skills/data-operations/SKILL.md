@@ -11,6 +11,9 @@ Operate existing sources repeatedly using their configured engines. Maintain the
 source's operational runbook and report verified progress with counts and reasons.
 This skill guides an invoked agent; it does not install a scheduler or stay running
 between invocations. AWS acquisition supplies completed deliveries independently.
+OpenMetadata's catalog `Pipeline` entries describe those workflows; they do not
+start or resume Bookkeeping runs. Use [the OpenMetadata execution boundary](../openmetadata/SKILL.md#pipeline-execution-boundary)
+when deciding whether an installed catalog can control operations.
 
 ## Start with live state
 
