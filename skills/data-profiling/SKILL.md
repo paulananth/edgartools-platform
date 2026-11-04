@@ -36,6 +36,38 @@ Operator, 2026-10-17. This is the rule the silver spec follows.
   `silver`. The tests stay in the findings. The run still writes the silver
   fields. It does not stop to ask which class the part is.
 
+## Every date, number and identifier has one written shape
+
+Standing rule (operator, 2026-11-04, after a date written `DD-MON-YYYY` was read
+into two different shapes by two mappings: "this should be a standing rule on
+the data profiling skill"), worked adaptively and lean against
+[the seven wastes](../data-platform/SKILL.md#the-seven-wastes)
+(operator, 2026-11-04: "use adaptive profiling and be intelligent").
+
+- **Start from what the profile already holds** (Motion, Over-processing). The
+  column profile records each field's shape counts; read them before touching
+  the files again. A field with one shape on every filled row is done.
+- **Widen only where the sample says so, and stop when it converges.** A
+  seeded sample first; read a field in full only when the sample shows two
+  shapes, a shape the mapping does not parse, or rows that fit none. One more
+  pass that adds no new shape ends that field.
+- **Check only the fields that feed a silver field, a key, a link or a
+  matching rule** (Over-production). Commentary and fields no step reads are
+  left alone.
+- **One answer per input field** (Inventory). Two mappings reading the same
+  input field share the result: profile the field once, and a test feeds both
+  mappings the same record and compares what they give.
+- **Report counts, never a value from the data:** the shapes seen, each
+  one's count, and the rows that fit none.
+- **Fix in the mapping:** one declared shape per field, converted once, to the
+  same calendar form wherever sources share a kind (a date is `YYYY-MM-DD`). A
+  row that fits none becomes none and is counted, never guessed.
+- A profiled number is typed `BIGINT` (integer), or exact `BIGDECIMAL` in code and
+  `NUMBER(precision, scale)` in a database (decimal), never a float; the profile
+  records the digits and decimal places that set the precision and scale.
+- **Carry the result forward** (Waiting, Defects): the shapes go in
+  `findings.yaml`; `compare` reports a field whose shape counts moved, and only that field is checked again.
+
 **Use the other skill when:**
 - the findings are approved and you are bringing a part in: use
   **data-onboarding** (it reads `findings.yaml`);

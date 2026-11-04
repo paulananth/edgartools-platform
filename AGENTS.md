@@ -104,6 +104,11 @@ Learned the hard way; each is a standing operator rule.
   that source precision. Check representability before publication; preserve
   and flag an out-of-range original for explicit handling instead of wrapping,
   truncating, or converting it through floating point.
+- **Number types (operator, 2026-11-04: "always use BIGINT and BIGDECIMAL and
+  NUMBER"):** an integer is `BIGINT`; a decimal or fraction is an exact
+  `BIGDECIMAL` in code and `NUMBER(precision, scale)` in a database, never
+  `FLOAT`, `DOUBLE` or `REAL`. A number's precision and scale come from the
+  profiled maximum digits and decimal places, with room for the widest value.
 - A "same calendar day" check names its timezone, the business process's:
   `America/New_York` (through `pytz`; `zoneinfo` needs a tz database the
   images do not install).
