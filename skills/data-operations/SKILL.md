@@ -139,6 +139,13 @@ rdm describe <code set>`: its authority and the evidence of its first version). 
 adds its entry in `WORDS` in the same change; a skill whose domain uses the set names its source (the
 skills of the domain carry a section "RDM code sets and their sources").
 
+A stopped local store starts again only from the checkout that owns it
+(`identity.json`, `owner`), and only when that checkout's baseline migration is
+the one the store was built with: `up` stops at "Installed migration checksum
+differs" otherwise, with the container running but its env files still naming
+the old port. Such a store is not upgraded in place; master into a fresh store
+instead of rebuilding one other tickets' data lives in (ticket 09, 2026-11-04).
+
 ## Qualify Silver storage
 
 Use retained applicable evidence and the normal installed caller on each selected
