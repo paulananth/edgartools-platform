@@ -14,5 +14,5 @@ the recreation proof's second agent hit this. Should the file load only when the
 
 - [x] A test imports the worker modules and every module a merge pins from a rules folder without the file (imports, not a full merge), and one names the file when the census is used: `tests/mdm/test_merge_worker_without_census_file.py`, failed before the fix, passes after (2026-11-01 17:31 ET)
 - [x] The file loads when the Name Census is used, not at import: `sec_reading()` cached in `name_census.py`; 233 census, rules and preparation tests pass (2026-11-01 17:31 ET)
-- [ ] PR, CI green, merged
+- [x] PR, CI green, merged: #1267 (the PR is the record; ticked 2026-11-04 04:42 ET)
 - [x] `Learning → skill`: none; a code fix, and `tests/mdm/test_merge_worker_without_census_file.py` holds it (2026-11-01 17:33 ET)

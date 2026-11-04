@@ -40,8 +40,8 @@ edgartools) reached the tests indirectly.
   join the `dev` group (test-only); the lock holds 52 packages; the parity tests 16
   passed, the engine tests 1,021 passed locally before
 - [x] PR, CI green, merge: #1202 merged 2026-10-28 09:35 ET, 21 checks
-- [ ] The dependency images rebuild on their next publish (the lock hash
-  changes); nothing to do before then
+- [ ] ~~The dependency images rebuild on their next publish (the lock hash
+  changes); nothing to do before then~~ deferred to the next image publish: it happens by itself then, and no step of this ticket waits on it
 - [x] Learning → skill (2026-10-28 08:55 ET): CLAUDE.md "Python libraries":
   declare only what the code imports; test-only libraries go in `dev`; find
   the import before adding a library

@@ -16,5 +16,5 @@ documents and bundles it would load?
 
 - [x] A test states the plan for an invented source: finishable runs, runs left as they are with their reason, a blocked run, the documents and bundles, and that no run is prepared, submitted or driven: 3 tests in `tests/unit/test_rules_loading.py`, red before `plan` existed (2026-11-01 17:48 ET)
 - [x] `load --plan` prints that plan and changes nothing: run read-only against `company-on`, it reports 0 finishable and 15 pinned runs, 7,714 documents in 16 bundles, exit 0 (2026-11-01 17:48 ET)
-- [ ] PR, CI green, merged
+- [x] PR, CI green, merged: #1270 (the PR is the record; ticked 2026-11-04 04:42 ET)
 - [x] `Learning → skill`: `data-operations`, "Load a capture": plan first with `--plan` (2026-11-01 17:48 ET)

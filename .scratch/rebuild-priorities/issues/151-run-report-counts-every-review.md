@@ -14,5 +14,5 @@ that reason? A steward reading the report cannot see those 37 today.
 
 - [x] A test states the expected counts with an `unresolved_endpoint` review present: the waiting-link scenario in `worker_publication_scenarios.py` asserts `waiting_links == {"unresolved_endpoint": 1}` and `open_reviews == {}`, then `{}` once the other end resolves; the installed `review_recovery` case passes on MySQL (2 tests, 7 min; 2026-11-01 17:47 ET)
 - [x] The report counts that reason: `inspection.counts` gains `waiting_links`, by reason. Cause: a link waiting for its other end is stored `open: False, waiting_for_end: True` by design (`merge.py`, "Wait quietly", 2026-10-02), so `open_reviews` never held it, and `waiting` means set-aside records. The link is no steward's review, so it has its own key (2026-11-01 17:50 ET)
-- [ ] PR, CI green, merged
+- [x] PR, CI green, merged: #1271 (the PR is the record; ticked 2026-11-04 04:42 ET)
 - [x] `Learning → skill`: none; the reason is in the code comment beside the new count (2026-11-01 17:50 ET)
