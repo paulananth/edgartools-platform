@@ -291,12 +291,18 @@ def without_real_names(policy: dict) -> dict:
     named as close as reality"; each name approved one by one): the
     relationship types under their sources' own names. Peeled, the types are
     the table profiling ticket 04 moved into the policy."""
-    from pathlib import Path
-
     from edgar_warehouse.rules import files
 
     body = _copy(policy)
-    table = files.load(Path(__file__).parent / "fixtures" / "relationship-types-v1.yaml")["types"]
+    # The earlier table is a version of its own RDM code set (ticket 188), read by its pinned version.
+    codes = files.published_reference({"code_set": "mdm-relationship-types-before-real-names", "version": "1",
+                                       "sha256": "10005f97e63d77318cf3959d03b631e60b3ab3458f91804e4205c31c1b30702b"})
+    table: dict = {}
+    for row in codes:
+        if row["parent_code"] is None:
+            table[row["code"]] = dict(row["properties"])
+        else:
+            table[row["parent_code"]].setdefault("capacities", []).append(row["code"].split(":", 1)[1])
     body["relationships"] = {"version": "relationship-types-v1", "types": table}
     return body
 
