@@ -4,7 +4,7 @@ Priority: 125 (operator, 2026-10-20 08:24 ET: "Securities and funds must be
 uniquely identifiable"). Map: [Rebuild priorities](../map.md). Rules in the
 `security-master` skill.
 
-Type: task. Status: in progress (2026-11-03 19:15 ET, Claude; part 1 done). Blocked by: ticket 120 (the one Securities target).
+Type: task. Status: resolved (2026-11-04 04:22 ET; the SEDOL and LoanX key moved to 190, the LEI on the series GLEIF names to 191). Blocked by: ticket 120 (the one Securities target).
 
 ## Measured (2026 Q2 N-PORT data set, captured; 2026-10-20)
 
@@ -54,7 +54,7 @@ GLEIF permission: operator, 2026-11-03, "agreed for ticket 125" (the Golden Copy
   - [x] (2026-11-03 20:46 ET) Measured on the 2026 Q2 data set: 729 of 14,416 filings name no series id, from 703 registrants; every one of the 729 carries a registrant LEI; 679 registrants file once, 24 file two or three times and 23 of those use one name for all (one fund), one uses several names; 702 of the 703 registrants file nothing that names a series. So the registrant is the fund for 702 registrants; one registrant files both kinds and needs its own look
   - [ ] ~~Key the Fund by the registrant's CIK for a filing with no series id, its LEI an identifier; a test run~~ not built: the Company is the fund (the part above); a second master keyed by the same CIK would duplicate it
 - [x] (2026-11-03 20:46 ET) The shared LEIs checked against the GLEIF Golden Copy (2026-09-11 16:00; the local capture, no download: its links pointed at the folder before ticket 73 renamed it, and are repointed). The 2026 Q2 data set has 15 LEIs on two or more series (not 16). GLEIF names one series for 12 of them (its legal name is that series' name); for 3 it names the adviser, the trust or the company (one of them on 27 series), not any series
-  - [ ] The matching rule keeps the LEI on the series GLEIF names, and keeps it as a filed value only on the others; the 3 LEIs GLEIF gives to the adviser, trust or company attach to no series; counts to the operator
+  - [ ] ~~The matching rule keeps the LEI on the series GLEIF names, and keeps it as a filed value only on the others; the 3 LEIs GLEIF gives to the adviser, trust or company attach to no series; counts to the operator~~ deferred to [191](191-the-lei-on-the-series-gleif-names.md): it needs a GLEIF input to the Fund source (a new GLEIF step, a run input and a name comparison), a build of its own
 - [x] (2026-11-03 20:46 ET) The one series with two LEIs: GLEIF gives one LEI the series' own fund name and the other a different fund's name, so the series keeps the first
-  - [ ] The matching rule keeps the LEI GLEIF names for the series and the other as a filed value
-- [ ] Learning → skill (`security-master`; a fund skill if one is made)
+  - [ ] ~~The matching rule keeps the LEI GLEIF names for the series and the other as a filed value~~ deferred to [191](191-the-lei-on-the-series-gleif-names.md): the same input
+- [x] Learning → skill: `skills/security-master/SKILL.md`, "Every Security uniquely identifiable" (a SEDOL and a LoanX join, CINS is not read, the Company is the fund for a series-less filing) 2026-11-04 04:22 ET

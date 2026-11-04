@@ -313,6 +313,13 @@ fund's own label never makes one. 2026 Q2 N-PORT, 5,347,869 holdings:
 | A ticker only | 59,409 (mostly futures, forwards, options) | no Security: a ticker is not unique |
 | The fund's own ID only | 909,030 (17%; loans 652,058, forwards, swaps) | **not a Security** (decided: "Not Securities (Recommended)"): a contract between two parties stays a holding under its fund |
 
+Live today (ticket 125): a SEDOL (seven characters, check digit) or a LoanX (LX and six digits),
+told apart by the "other identifier" label and shape, **joins** the Security its holding already
+keys by its CUSIP, else its ISIN; the label `CINS` is not read (1,316 of 1,327 such rows are CUSIPs
+under the wrong label). A Security keyed by one of them alone, with no CUSIP or ISIN, is not made
+yet (ticket 190). A fund that files without a series id is its registrant's Company, not a second
+master keyed by the same CIK (operator, 2026-11-03: "the company is the fund").
+
 ## Share classes
 
 - **A security's share class is a field, not a record** (operator,
