@@ -73,8 +73,9 @@ GRANT USAGE ON SCHEMA IDENTIFIER($gold_schema_qualified) TO ROLE IDENTIFIER($loa
 GRANT USAGE ON WAREHOUSE IDENTIFIER($refresh_warehouse_name) TO ROLE IDENTIFIER($loader_role_name);
 
 -- Object-creation privileges mirroring what a deployer role needs to run
--- 01_source_stage.sql / 02_refresh_status.sql / 03_source_load_wrapper.sql /
--- 04_refresh_wrapper.sql end to end with $deployer_role_name = EDGARTOOLS_PROD_LOADER.
+-- 01_source_stage.sql / 02_refresh_status.sql / 03_source_load_wrapper.sql end
+-- to end with $deployer_role_name = EDGARTOOLS_PROD_LOADER (REFRESH_AFTER_LOAD and
+-- PROCESS_RUN_MANIFEST_STREAM have one definition: Terraform's native_pull module).
 GRANT CREATE TABLE ON SCHEMA IDENTIFIER($source_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
 GRANT CREATE STAGE ON SCHEMA IDENTIFIER($source_schema_qualified) TO ROLE IDENTIFIER($loader_role_name);
 -- USAGE on every pre-existing, Terraform-owned (ACCOUNTADMIN) stage/file
