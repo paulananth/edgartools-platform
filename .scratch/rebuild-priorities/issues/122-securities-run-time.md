@@ -5,7 +5,7 @@ test run (operator, 2026-10-20: "why securities takes so long give me profile
 of time taken", then "convert this to a document that we can visit later for
 optimization").
 
-Type: task. Status: open (to revisit). Blocked by: none. Related:
+Type: task. Status: parked (2026-11-04 13:16 ET): the operator ruled no new measurement, "No, we have turned on all the sources"; revisit with the timings of the live runs (Bookkeeping's journal), not a test run. The local store holds no N-PORT Securities run to read today. Blocked by: none. Related:
 [121](121-another-runs-reading-over-time.md) (rechecking cost, the 256-unit list).
 
 ## The profile (2026-10-20, measured)
