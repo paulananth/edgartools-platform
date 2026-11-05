@@ -56,6 +56,8 @@ def found(name, *values):
 
 case = os.environ["READ_LOOKUP_CASE"]
 try:
+    if case != "rebuild":
+        detail_lookups.rebuild(owner)  # An index nobody built is not kept by a merge; the owner builds it once.
     if case == "keys":
         relist(("D1", "V1", "C1", "S1"), ("D2", None, "C2", "S1"), ("D3", "V1", "C3", None))
         assert found("venue", "V1", "S1") == found("code", "C1", "S1") == found("code", "C2", "S1") == [root]

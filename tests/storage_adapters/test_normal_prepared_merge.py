@@ -160,6 +160,8 @@ assert context["sources"]=={"invented.authority":["one"]}
 def searched(words):
     return Context(runtime).answer(Namespace(subject="invented-kind",key=None,search=words,limit=5,
         as_of=None,as_at=None,detail="full",page=None))["matches"]
+from edgar_warehouse.mdm import master_search as built_search
+built_search.rebuild(owner)  # An index nobody built is not kept by a merge; the owner builds it once, after a load.
 assert searched("root")[0]["entity_id"]==pointer["entity_id"]
 def counts():
     with runtime.connect() as conn:
