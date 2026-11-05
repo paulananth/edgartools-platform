@@ -39,6 +39,10 @@ none alone proves success or failure. A worker finishing is insufficient when
 verification or delivery remains pending. Counts and sanitized causes belong in
 the summary; records, credentials and raw logs stay private.
 
+If Bookkeeping cannot be reached, show “observation unavailable” and the last
+observation time. Preserve the last known run state and mark it stale. An
+observer connection failure does not establish that the load itself failed.
+
 ## What is available today
 
 Bookkeeping provides the authoritative run view:
