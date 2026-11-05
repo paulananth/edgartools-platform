@@ -429,6 +429,13 @@ Do not create a shared glossary, a domain named `Shared`, or a `Shared` tag.
 
 ## Pipeline execution boundary
 
+For a load-status integration, inspect the installed `PipelineStatus` schema.
+On 2.0.2 it provides `runId`, timestamps, `pipelineState`, step summaries and
+`metadata`. Keep the exact Bookkeeping state in metadata: `waiting` and `blocked`
+have no native state equivalent. Preserve full-width counts in metadata rather
+than narrowing them into the schema's 32-bit step counters. Require round-trip
+readback of the run identity, source state and counts before claiming fidelity.
+
 OpenMetadata's `Pipeline` and `ingestionPipeline` are different objects with
 different jobs:
 
