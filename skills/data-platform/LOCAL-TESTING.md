@@ -30,6 +30,23 @@ so it can be restored. This is local testing, not a production deployment.
   outside Docker volumes. Reports contain counts, never source values,
   credentials or database addresses.
 
+## The local test server
+
+One store holds every source's loads on a machine: the six databases above. It is the
+`local-test-server`, and its name is configuration, never built into a command: set
+`EDGARTOOLS_LOCAL_TEST_SERVER` to use another name; with it unset the name is `local-test-server`.
+The setup step (data-platform, "0. Setup", step 4) initializes it:
+
+```bash
+uv run --extra mdm python infra/scripts/local-test-stores.py up
+```
+
+`stop`, `status`, `backup` and `copy` name it the same way. Its folder, holding `worker.env`,
+`verifier.env` and `governance.env`, is what `edgar-warehouse load --stores` takes. A source is
+activated (its proven, approved rules version made the active one) in this store's Rules Database,
+and its loads write here. A second store is for a test that could disrupt this one (a deletion, a
+recovery, an experimental migration), named for what it tests.
+
 ## Containers
 
 The [data-platform skill](SKILL.md) starts the container. It selects a test
