@@ -18,7 +18,7 @@ scheduling a recurring load follow.
 ## What exists
 
 - `skills/data-operations/scripts/profile_load.py`: `progress` (units per step and state of the running runs, how long
-  they have run), `failures`, `steps` (time per step of a finished run), `sample` (what the database ran). Each is read-only and
+  they have run), `failures`, `quality`, `steps` (time per step of a finished run), `sample` (what the database ran). Each is read-only and
   prints counts, times and statement shapes, never a value from the data.
 - The `data-quality` and `pipeline-orchestration` skills exist; the OpenMetadata catalog belongs to Codex (ticket 181).
 - `data-operations` covers recurring loads.
@@ -28,7 +28,7 @@ scheduling a recurring load follow.
 - [x] Decide the first piece: load progress and timings (operator, 2026-11-05).
 - [x] `progress` view: units per step and state, share verified, run age; it also lists runs left `running` by a stopped load (11 on the local store). Test: `test_progress_groups_units_by_step_in_run_order_with_the_verified_share`; run on the local store, 2026-11-05 17:37 ET.
 - [x] Failures in a load: `profile_load.py failures` groups the units that hold an error by step, state and error shape, with counts. Test: `test_failures_group_units_by_step_state_and_error_shape_without_values`; run on the local store (2026-11-05 17:50 ET). The error text is what Bookkeeping holds, which is often only the exception class name: whether the engine should record its own message is a separate decision.
-- [ ] Which data quality checks run on every load and where their counts are shown (the `data-quality` skill).
+- [x] Data quality counts per load: every merge run already retains a `run_report` whose `checks` hold, per source, the records, the records set aside by a failed check, the newest age and the empty rate per field. `profile_load.py quality` lists them (counts and rates, no values). Test: `test_quality_rows_list_each_source_of_a_run_report_with_only_the_fields_that_have_empty_values`; run on the local store, where it showed one bundle setting aside 20,937 of 51,112 records (2026-11-05 18:10 ET).
 - [ ] How a skill schedules a recurring load (the schedule, the permission to fetch, the end condition).
 - [ ] Split into build tickets once decided.
 - [x] Learning → skill: `data-operations` "Measure a slow load with `scripts/profile_load.py`" now names `progress`.

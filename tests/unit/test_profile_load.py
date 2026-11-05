@@ -40,3 +40,12 @@ def test_failures_group_units_by_step_state_and_error_shape_without_values():
     assert tool.failure_table(rows) == [
         ("read", "waiting", "ValueError", 12), ("land", "waiting", "Blocked", 10),
         ("land", "pending", "No file S at N", 1)]
+
+
+def test_quality_rows_list_each_source_of_a_run_report_with_only_the_fields_that_have_empty_values():
+    report = ('{"checks": {"invented.feed.v1": {"records": 511, "set_aside": 7, "empty_rate": '
+              '{"name": 0.0, "region": 0.25}}}, "unresolved_reviews": 7, "end_to_end_complete": false}')
+    rows = tool.quality_rows([("0f0f0f0f-0000-4000-8000-000000000001", 1_793_900_000_000_000, report)])
+    assert rows == [{"run": "0f0f0f0f", "at": "2026-11-05 12:33", "source": "invented.feed.v1", "records": 511,
+                     "set_aside": 7, "reviews": 7, "complete": False, "empty": {"region": 0.25}}]
+    assert tool.quality_rows([("0f0f0f0f-0000-4000-8000-000000000001", 1_793_900_000_000_000, "{}")]) == []
