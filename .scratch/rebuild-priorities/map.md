@@ -149,6 +149,10 @@ Two tracks run side by side; the recreation proof runs last, on everything switc
 - [47: The measures](issues/47-company-financials-15-build-measures.md): `company_measure`, 40 measures a company and year (ratios, ROE/ROA/ROIC in two forms, CAGR over 1, 3, 5 and 10 years) by SQL over the line items; the statement format and country from the Company master; all 168,360 cohort measures equal the answer key (#1223)
 - [48: The cohort proof](issues/48-company-financials-16-cohort-proof.md): 368 filers through the installed bundle, once with the final checks: every filed line item equal to its fact, every measure's inputs stored, no null without a reason, the hand key 1,600 of 1,600; accepted 2026-10-30 (#1245)
 
+- [194: Production-style run of each source](issues/194-production-style-run-timings-and-optimization-plan.md): one OpenFIGI bundle takes 2,900 s and the merge is 58% of it, about 60 s a batch; cache size, re-parsing, compression and table size were measured and ruled out; the operator accepted the speed (#1430, #1431, #1436)
+- [195: Observability, data quality and scheduled jobs by skill](issues/195-observability-data-quality-and-scheduled-jobs-by-skill.md): the profile tool's `progress`, `failures`, `quality`, `steps` and `sample` views, and a "Schedule a recurring load" procedure in `data-operations` (#1431, #1436, #1437, #1438, #1439)
+- [196: A merge keeps no index that nobody built](issues/196-a-merge-keeps-no-index-nobody-built.md): the two search indexes are built once by the owner after a load, not rewritten in every batch; the merge speed did not change (#1433)
+
 ## Not yet specified
 
 - **Where gold stands in the rebuild.** Answered (operator, 2026-10-18 12:25 ET, "Close all, re-raise later (Recommended)"): tickets 49–62 are closed as written for the retired gold layer; product value is re-raised against silver and the context views.
