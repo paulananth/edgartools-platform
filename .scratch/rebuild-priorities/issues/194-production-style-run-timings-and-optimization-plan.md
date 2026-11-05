@@ -3,7 +3,7 @@
 Priority: 194. Map: [Rebuild priorities](../map.md). Opened 2026-11-05 02:34 ET (operator, 2026-11-05: "run each source as if we are running in
 production measure time and come up with a plan for optimization use locally stored data").
 
-Type: task. Status: in progress. Blocked by: none.
+Type: task. Status: resolved. Blocked by: none.
 
 ## Question
 
@@ -35,13 +35,13 @@ records 13.3 (5 s), main (the actual read) 7.0 (1.5 s), keys 3.3. The read is 3%
 
 ## Plan (each item with its evidence; none built yet)
 
-- [ ] The catalog is read again in every bundle (65 of 240 run-minutes, 27%): read a constant input once per run, not once per bundle
-- [ ] Every step costs 7 to 26 s whatever its work (claim, report, verify, recheck: ticket 122; PR 1424 fixed the other-run recheck only): measure one tiny step's claim, report and verify separately, then bound them
-- [ ] The merge is the long step of the master-record sources (sec.nport.fund 96%, registrant 85%): merge in sets of records, not one by one (ticket 122; the mdm-engineering skill makes the Merge Stage record by record a rule, so it changes only with the operator)
-- [ ] Bundles that share keys conflict at the merge (person: 68 of 149 bundles): run such sources one bundle at a time, or make the merge re-assess a stale prepared batch itself instead of failing; say per source which it is
-- [ ] Two database deadlocks in claims at 3 bundles at once (sec.company): find the lock order, then retry or fix it
-- [ ] The `processed` step (journal record, 11 s) is a write of one row per file set: batch it
-- [ ] The load is bound by the database more than by CPU (user time is 2x wall time at 3 bundles): measure the database's share before adding workers
+- [ ] ~~The catalog is read again in every bundle (65 of 240 run-minutes, 27%): read a constant input once per run, not once per bundle~~ deferred (no ticket): the operator accepted the measured speed, 60 s a batch (2026-11-05 17:36 ET: "Neither: accept 60 s a batch")
+- [ ] ~~Every step costs 7 to 26 s whatever its work (claim, report, verify, recheck: ticket 122; PR 1424 fixed the other-run recheck only): measure one tiny step's claim, report and verify separately, then bound them~~ deferred (no ticket): the operator accepted the measured speed, 60 s a batch (2026-11-05 17:36 ET: "Neither: accept 60 s a batch")
+- [ ] ~~The merge is the long step of the master-record sources (sec.nport.fund 96%, registrant 85%): merge in sets of records, not one by one (ticket 122; the mdm-engineering skill makes the Merge Stage record by record a rule, so it changes only with the operator)~~ deferred (no ticket): the operator accepted the measured speed, 60 s a batch (2026-11-05 17:36 ET: "Neither: accept 60 s a batch")
+- [ ] ~~Bundles that share keys conflict at the merge (person: 68 of 149 bundles): run such sources one bundle at a time, or make the merge re-assess a stale prepared batch itself instead of failing; say per source which it is~~ deferred (no ticket): the operator accepted the measured speed, 60 s a batch (2026-11-05 17:36 ET: "Neither: accept 60 s a batch")
+- [ ] ~~Two database deadlocks in claims at 3 bundles at once (sec.company): find the lock order, then retry or fix it~~ deferred (no ticket): the operator accepted the measured speed, 60 s a batch (2026-11-05 17:36 ET: "Neither: accept 60 s a batch")
+- [ ] ~~The `processed` step (journal record, 11 s) is a write of one row per file set: batch it~~ deferred (no ticket): the operator accepted the measured speed, 60 s a batch (2026-11-05 17:36 ET: "Neither: accept 60 s a batch")
+- [x] The database's share of a batch is measured: the profile tool's `sample` view gives apply 45%, preparation reads 15%, idle (Python) 40% (2026-11-05 17:36 ET)
 
 ## Where one OpenFIGI bundle goes (553 units, 51,200 records, 52 merge batches; measured 2026-11-05 06:46 ET)
 
@@ -60,7 +60,7 @@ The merge is 52 batches, one after another, about 30 s each (about 31 ms per rec
 - [x] Compression of the 26 MB batch value is not the cause: 105 ms (default), 20 ms (lz4), 43 ms (uncompressed) (2026-11-05 06:50 ET).
 - [x] **Root cause (measured 2026-11-05 06:58 ET): every batch probes the 6.2-million-row lookup table (4.3 GB, plus a 1.3 GB index) at random places, and the table is larger than the memory the database has.** A batch holds about 19,000 lookup entries; the function probes them in four statements (the stale-version check, the delete, the update, the insert). Joining 19,000 real keys against the table took 24.6 s the first time (disk reads) and 1.6 s the second (in memory). Lookup keys are SHA-256 hashes, so a batch touches pages all over the table and nothing is kept near the previous batch. The Docker VM has 4 GiB for every container; `shared_buffers` (128 MB or 1 GB) did not change the time because the operating system cache is the limit.
 - [x] `work_mem` of 256 MB did not give a clean answer: the one-worker run's first call was still running after 170 s (the join test above was confounded by a cold cache). Not shipped as a fix; the PR sets it only as a server default and says so.
-- [ ] Decision for the operator (all change a frozen storage protocol, `expected_protocol_fingerprints.json`): (a) fewer or smaller lookup entries per record (19 per record at about 700 bytes today); (b) keys that keep one record's entries near each other, so a batch touches a few pages; (c) a decoded copy of the batch's entries made once, so the four statements stop decoding 19,000 bodies each. Also: the merge fences and records every batch through Bookkeeping, which the operator rules out ("bookkeeping is for resuming a file").
+- [x] Decision for the operator: "Neither: accept 60 s a batch" (asked with a recommendation to keep a record's entries together; 2026-11-05 17:36 ET)
 - [x] A skill tool measures this, not a hand-written script: `skills/data-operations/scripts/profile_load.py` (`steps`, `sample`), tested on invented values.
 
 ## One-off scripts of this work, and where each belongs (operator, 2026-11-05: "list all one of scripts to tools if needed to the appropriate skills")
@@ -78,15 +78,15 @@ Kept outside git in `~/edgar-local-tmp/` and `/tmp`. A tool goes to a skill when
 | `/tmp/regsilver.py`, `/tmp/silvercount.py` | `silver register` and a row count | `silver register` exists; the count is one query; no tool |
 | about 45 other `/tmp/*.py` from tickets 01 to 191 | not read in this work | Not reviewed; one pass over them is a separate task |
 
-- [ ] Keep the owner checkout of a shared store at `origin/main` (a store migrated by newer code is refused by older code, and `up` then prints only `Blocked`); decide whether `up` should print an engine control error's own message (08:09 ET)
-- [ ] Review the 45 older `/tmp` scripts for tools worth a skill
+- [ ] ~~Keep the owner checkout of a shared store at `origin/main` (a store migrated by newer code is refused by older code, and `up` then prints only `Blocked`); decide whether `up` should print an engine control error's own message (08:09 ET)~~ deferred to 192: the store script's ticket (an owner checkout behind `origin/main` is refused by a store migrated by newer code)
+- [ ] ~~Review the 45 older `/tmp` scripts for tools worth a skill~~ deferred (no ticket): one pass over old scratch scripts is its own task
 
 ## What a first real load of a new source meets (belongs in "Built means ready to turn on")
 
-- [ ] The capture bridge: a source captured by `provider.capture` has no `receipts.jsonl`; the load needs one (written by hand for the registration pages)
-- [ ] The silver spec must be registered before landing (`silver register`, by hand today): do it inside the load or the activation
-- [ ] The reading's input bound belongs in the reading contract's `execution`, not the source's (PR 1429)
-- [ ] The run facts and files each target needs (sec.company: 4 facts and a Name Count) are not named in its rules
-- [ ] The migration owner and role names for a store's Rules database are not obvious (the store script knows them)
+- [ ] ~~The capture bridge: a source captured by `provider.capture` has no `receipts.jsonl`; the load needs one (written by hand for the registration pages)~~ deferred to 193: Built means ready to turn on
+- [ ] ~~The silver spec must be registered before landing (`silver register`, by hand today): do it inside the load or the activation~~ deferred to 193: Built means ready to turn on
+- [x] The reading's input bound belongs in the reading contract's `execution`: fixed in PR 1429 (2026-11-05 17:36 ET)
+- [ ] ~~The run facts and files each target needs (sec.company: 4 facts and a Name Count) are not named in its rules~~ deferred to 193: its first open part
+- [ ] ~~The migration owner and role names for a store's Rules database are not obvious (the store script knows them)~~ deferred to 192: the store script's ticket
 
-- [ ] Learning → skill
+- [x] Learning → skill: `data-operations` (measure a slow load with `profile_load.py`), `mdm-engineering` (a merge keeps an index only after the owner built it) — PRs 1431 and 1433 (2026-11-05 17:36 ET)
