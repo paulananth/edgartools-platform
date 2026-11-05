@@ -24,7 +24,8 @@ pipelines.
 - [x] Verify the execution boundary after publication: database and pipeline services have no connection config, ingestion-pipeline count is 0, and the latest-quality-results API returned HTTP 204 with no body (2026-11-04 21:48 ET).
 - [x] Refresh the no-build fit report with post-publish evidence, current 2.0.2 execution boundary, and the remaining no-runner/no-Bookkeeping-integration limits; UI review remains unverified (2026-11-04 21:48 ET).
 - [x] Run targeted publisher behavior tests: `tests/unit/test_rules_catalog.py` passed (45 tests in 43.59 seconds), covering publish rejection, partial write, remote drift and read-only confirmation (2026-11-04 21:22 ET).
-- [x] Run the required documentation genericity lint after the OpenMetadata skill and report updates: `tests/unit/test_profiling_genericity.py` passed (93 tests, 2026-11-04 21:52 ET).
+- [x] Exercise the concise terminal path: plan and independent check with JSON redirected to `/dev/null` each printed one status line; readback remained confirmed (2026-11-04 21:57 ET).
+- [x] Run the required documentation genericity lint after the OpenMetadata skill and report updates: `tests/unit/test_profiling_genericity.py` passed (93 tests, 2026-11-04 21:57 ET).
 - [ ] Visually verify the end-user OpenMetadata UI; blocked by repository instructions prohibiting browser/GUI interaction, and API evidence cannot prove visual clarity.
 - [ ] CI green on the updated PR head; keep the PR draft until publication evidence and CI are reviewed.
 - [x] Learning → skill: documented private environment-based token refresh with an administrator check, full-instance reset boundaries, and the limit of publisher readback in `skills/openmetadata/SKILL.md` (2026-11-04 21:48 ET).
