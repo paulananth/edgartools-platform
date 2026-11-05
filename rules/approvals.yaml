@@ -89,7 +89,7 @@ approvals:
   finalized: PR 1428
 - kind: source
   name: sec.registration
-  digest: 0fe0bf63354d49fc749a2fc5ecac0547959d88114e1bb4db324cd36110d17965
+  digest: 67e22b957df87835ac500941893c03eb7cad885992bcf301dbe24fed40a42aea
   by: Operator
   words: approved all rules
   at: '2026-11-04'

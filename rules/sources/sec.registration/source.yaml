@@ -19,7 +19,7 @@
 source: sec.registration
 bronze:
   family: sec.registration
-execution: {profile: source.read, workers: 1, max_artifacts: 512}
+execution: {profile: source.read, workers: 1, max_artifacts: 512, max_input_bytes: 134217728}
 acquisition:
   version: 1
   feeds:
@@ -64,7 +64,7 @@ bookkeeping:
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.output]
-          units: {slices: {bytes: 16777216}}
+          units: {slices: {bytes: 33554432}}
           input:
             contract: registration-page.yaml
             files: "*.capture.zip"
