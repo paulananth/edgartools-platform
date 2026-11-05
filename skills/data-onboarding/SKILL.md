@@ -249,7 +249,8 @@ else happens while building it, once:
 - the limited test passed while building it, and its counts are in the ticket. Once the rules are merged on
   `main` they are final: a store needs no test run and no proof to activate them (operator, 2026-11-04: "you
   dont need proof to activate once the rules are finalized");
-- the operator's words approve the exact version on that merge (`rules approve --finalized`, APPROVE.md);
+- the operator's words approve the exact version on that merge, kept in git in `rules/approvals.yaml`
+  (`rules approvals write`, APPROVE.md): `rules load` approves it in any store;
 - the run's inputs are named where the source declares them: each fact and file its target needs, how it is
   produced, and where its captured files are;
 - the order it needs (the sources and the merge rules before it) is declared in the source sequence;

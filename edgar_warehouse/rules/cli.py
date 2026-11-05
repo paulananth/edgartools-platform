@@ -63,6 +63,25 @@ def _test(args):
     return 0 if result["passed"] else 1
 
 
+def _approvals(args):
+    """The approvals kept in git (ticket 193): `check` names the documents with no approval at their digest,
+    `write` lists every document at its digest in the operator's words."""
+    from . import approvals
+
+    root = Path(args.root)
+    try:
+        if args.action == "check":
+            absent = approvals.missing(root)
+            print(json.dumps({"missing": [{"kind": k, "name": n, "digest": d} for k, n, d in absent]}, indent=2))
+            return 1 if absent else 0
+        entries = approvals.write(root, by=args.by, words=args.words, finalized=args.finalized, at=args.at)
+    except (ValueError, OSError) as error:
+        print(f"Approvals stopped: {error}", file=sys.stderr)
+        return 1
+    print(json.dumps({"approvals": len(entries), "file": str(root / approvals.FILE)}, indent=2))
+    return 0
+
+
 def _handle(args):
     from .db import Rules, get_engine, migrate
     if args.rules_command == "approve" and args.rule:
@@ -446,6 +465,17 @@ def register(subparsers):
     check.add_argument("--source", action="append", help="Only this source (repeatable); default every file")
     check.add_argument("--root", default=str(files.ROOT))
     check.set_defaults(handler=_check)
+    approvals = commands.add_parser("approvals", help="The operator's approvals kept in git beside the rules: "
+                                    "check which documents lack one, or write them in the operator's words")
+    approvals.add_argument("action", choices=["check", "write"])
+    approvals.add_argument("--root", default=str(files.ROOT))
+    approvals.add_argument("--by", help="write: who approved")
+    approvals.add_argument("--words", help="write: their exact words")
+    approvals.add_argument("--finalized", help="write: the merge on main that made the rules final")
+    approvals.add_argument("--at", help="write: when they said it (YYYY-MM-DD)")
+    approvals.set_defaults(handler=lambda args: (_approvals(args) if args.action == "check" or all(
+        (args.by, args.words, args.finalized, args.at)) else
+        (print("write needs --by, --words, --finalized and --at", file=sys.stderr) or 2)))
     pending = commands.add_parser("pending", help="Versions with a test run and no approval yet: evidence and changes")
     pending.set_defaults(handler=_handle)
     for operation in ("save", "status", "export", "record-proof", "approve", "activate", "run"):

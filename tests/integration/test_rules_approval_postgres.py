@@ -144,6 +144,24 @@ def test_rules_finalized_on_main_are_approved_and_activate_with_no_test_run(pg, 
         conn.execute(text("UPDATE rules.rule_version SET finalized_ref='other' WHERE name=:n"), {"n": name})
 
 
+def test_rules_load_approves_the_versions_the_approvals_file_lists(pg, populated, tmp_path):
+    """The approvals are in git (ticket 193): loading the rules approves a version whose digest is listed, on the
+    operator's words and the merge, and leaves an unlisted one a draft."""
+    import shutil
+
+    from edgar_warehouse.rules import approvals, files
+
+    for name in ("sec.thirteenf.filings", "sec.nport.registrant"):
+        shutil.copytree(files.ROOT / "sources" / name, tmp_path / "sources" / name)
+    listed = [item for item in approvals.current(tmp_path) if item[1] == "sec.thirteenf.filings"]
+    entries = [dict(zip(approvals.KEYS, (*item, "Operator", "approved all rules", "2026-11-04", "PR 1"))) for item in listed]
+    (tmp_path / approvals.FILE).write_text(approvals.HEADER + __import__("yaml").dump({"version": 1, "approvals": entries}))
+    saved = {r["name"]: r for r in pg["agent"].from_files(tmp_path, f"load-{uuid4().hex[:8]}")}
+    done, left = saved["sec.thirteenf.filings"], saved["sec.nport.registrant"]
+    assert (done["approved_by"], done["approved_words"], done["finalized_ref"]) == ("Operator", "approved all rules", "PR 1")
+    assert (left["approved_by"], left["status"]) == (None, "draft")
+
+
 def test_a_version_without_a_finalized_reference_still_needs_its_test_evidence(pg, populated):
     from edgar_warehouse.rules.acquisition_authority import finalized_holds
 

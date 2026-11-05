@@ -1,0 +1,117 @@
+# The operator's approvals of the rules (ticket 193): one line per rules document and digest. `rules load` approves
+# a saved version whose digest is listed here, in these words, on that merge, with no test run. A rules change
+# is a new digest and needs a new line (`edgar-warehouse rules approvals write`, then the operator's words).
+version: 1
+approvals:
+- kind: merge
+  name: platform
+  digest: dca917690fb9a43ba4e678501ed56eca6ba68c380dcb347b8835bc2c0c4e2c2f
+  by: Operator
+  words: approved all rules
+  at: '2026-11-04'
+  finalized: PR 1428
+- kind: pipeline
+  name: graph-publication
+  digest: ed3f36b01408246351ebce52c2f64eae6ab6fe3350532d36849b627f19950860
+  by: Operator
+  words: approved all rules
+  at: '2026-11-04'
+  finalized: PR 1428
+- kind: pipeline
+  name: sec.thirteenf.extract
+  digest: 3b6cd24f69cd663835c0b19d2d0d15b05d2633bc0307e5c84eb0328ef93516c4
+  by: Operator
+  words: approved all rules
+  at: '2026-11-04'
+  finalized: PR 1428
+- kind: source
+  name: gleif
+  digest: 9614a0c6f5087d6ecfbe9cd7e2e52eae7cad9ade1f0ec3cedacadf82a41f054f
+  by: Operator
+  words: approved all rules
+  at: '2026-11-04'
+  finalized: PR 1428
+- kind: source
+  name: iapd.adv
+  digest: 55c630965349aa11873fe4dd476a30eb31e63410873bf0865da077ec253bb1b7
+  by: Operator
+  words: approved all rules
+  at: '2026-11-04'
+  finalized: PR 1428
+- kind: source
+  name: openfigi
+  digest: 322c0409241dee435d4b8148e8eb65cdf0c14d11c124b6702a7568688a78afc8
+  by: Operator
+  words: approved all rules
+  at: '2026-11-04'
+  finalized: PR 1428
+- kind: source
+  name: sec.company
+  digest: a09aab61c20b1a00045959fce3f9fd36426af9ccb4b38f6c43813821fcd03ce6
+  by: Operator
+  words: approved all rules
+  at: '2026-11-04'
+  finalized: PR 1428
+- kind: source
+  name: sec.company-facts
+  digest: 2749248cfc53cd409637ab9c080a5566f849d4a46e232a0cf1eabb00ab990bfa
+  by: Operator
+  words: approved all rules
+  at: '2026-11-04'
+  finalized: PR 1428
+- kind: source
+  name: sec.nport.fund
+  digest: 623c93b06395dd3c6d8e2373c2561c027c7817c9f8e8a96d417acfd11c650c7d
+  by: Operator
+  words: approved all rules
+  at: '2026-11-04'
+  finalized: PR 1428
+- kind: source
+  name: sec.nport.registrant
+  digest: 4a619fcc29e049f0e700c383d73afbe1283cf1697a687d287000e6d747142eb4
+  by: Operator
+  words: approved all rules
+  at: '2026-11-04'
+  finalized: PR 1428
+- kind: source
+  name: sec.nport.security
+  digest: c6c8671ad5588153670b250d11d5e856dbdee28986b0d9f43a4d9a04267136ae
+  by: Operator
+  words: approved all rules
+  at: '2026-11-04'
+  finalized: PR 1428
+- kind: source
+  name: sec.ownership
+  digest: c38759444cb4c1d651a9e539960796931ff01667d2b4082e0c45f08bfae1aef1
+  by: Operator
+  words: approved all rules
+  at: '2026-11-04'
+  finalized: PR 1428
+- kind: source
+  name: sec.registration
+  digest: 2758942f75c852b03c028fd9e7f9f565014a99b270acf1f141fdf75373d1ca5b
+  by: Operator
+  words: approved all rules
+  at: '2026-11-04'
+  finalized: PR 1428
+- kind: source
+  name: sec.submissions.person
+  digest: c5c9f224a69466f453204c6519f94a8aa76f1a1dc2cec16e85cb23196d9ebe1d
+  by: Operator
+  words: approved all rules
+  at: '2026-11-04'
+  finalized: PR 1428
+- kind: source
+  name: sec.thirteenf.filings
+  digest: d6088013bb16fe6b485908cc2a5ff79dc198fcf6ff0f8a6a4d969bff0c186228
+  by: Operator
+  words: approved all rules
+  at: '2026-11-04'
+  finalized: PR 1428
+- kind: source
+  name: sec.thirteenf.securities
+  digest: 76dc33267ba96e7b022e0c9d320fdcbb79ca44d9217e405840fefa8b7dc5d0e8
+  by: Operator
+  words: approved all rules
+  at: '2026-11-04'
+  finalized: PR 1428

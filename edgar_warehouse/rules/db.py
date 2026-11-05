@@ -184,6 +184,8 @@ class Rules:
                 raise Blocked("Unknown Rules version")
             if finalized is not None and not finalized.strip():
                 raise Blocked("A finalized approval names the merge that made the rules final")
+            if finalized is not None and "finalized_ref" not in table.c:
+                raise Blocked("Finalized approval is PostgreSQL's; this Rules store keeps its proof rule")
             if finalized is None:
                 if row["proof"] is None:
                     raise Blocked("No approval without test evidence: record a test run first")
@@ -285,8 +287,12 @@ class Rules:
         files.LAYOUT[kind][1](json.loads(row["body"]), path)
 
     def from_files(self, root: Path, version: str) -> list[dict]:
-        """The same save lifecycle for every supported authoring document."""
-        return [self.save(kind, name, version, files.LAYOUT[kind][0](path)) for kind, name, path in files.documents(root)]
+        """The same save lifecycle for every supported authoring document, then the approvals the rules folder
+        lists in git (`approvals.yaml`) for the digests it saved."""
+        from . import approvals
+
+        saved = [self.save(kind, name, version, files.LAYOUT[kind][0](path)) for kind, name, path in files.documents(root)]
+        return approvals.apply(self, saved, root)
 
     def to_files(self, root: Path, version: str) -> list[dict]:
         table = storage.versions(self.engine.dialect.name)

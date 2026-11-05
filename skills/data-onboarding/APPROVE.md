@@ -25,6 +25,19 @@ edgar-warehouse rules activate --source <name> --version <v>
 The approval records the operator's words and the merge. It is for the exact version saved from `main`'s files.
 Rules not yet merged still need their test run.
 
+**The approvals are in git** (operator, 2026-11-04: "the rules must also be in git"). `rules/approvals.yaml` lists
+each rules document's digest with the operator's exact words, their name, the day and the merge. `rules load`
+approves every saved version whose digest is listed, so a new store needs nothing but git: load, then
+`rules activate`. A rules change is a new digest and gets its own line, written after the operator's words:
+
+```bash
+edgar-warehouse rules approvals check      # the documents with no approval at their digest
+edgar-warehouse rules approvals write --by <operator> --words "<their exact words>" \
+  --finalized "<the PR>" --at <YYYY-MM-DD>   # lists every document at its digest; lines already listed are kept
+```
+
+Never write a line in words the operator did not say.
+
 ## Approve a source version or a merge version
 
 1. **List what waits.**
