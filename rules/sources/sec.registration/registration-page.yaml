@@ -3,6 +3,7 @@ execution:
   profile: source.read
   workers: 1
   max_artifacts: 512
+  max_input_bytes: 134217728
 read:
   format: html
   container: zip
@@ -40,7 +41,7 @@ read:
         cik:
           context:
             name: cik
-        captured_on:
+        captured_at:
           context:
             name: captured_at
         title:
@@ -147,7 +148,7 @@ read:
         cik:
           context:
             name: cik
-        captured_on:
+        captured_at:
           context:
             name: captured_at
         table_number:
