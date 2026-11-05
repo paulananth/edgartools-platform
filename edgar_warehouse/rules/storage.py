@@ -22,6 +22,8 @@ def versions(dialect):
     columns = [Column(name, words) for name in ("kind", "name", "version", "body", "digest", "status",
         "created_by", "batch_hash", "approved_by", "approved_words", "approval_overrule",
         "approval_evidence", "approval_recorded_by")]
+    if dialect == "postgresql":  # the MySQL Rules schema keeps its proof rule (migration 007 is PostgreSQL's)
+        columns.append(Column("finalized_ref", words))
     columns += [Column(name, UTCDateTime()) for name in ("created_at", "proved_at", "approved_at", "activated_at", "retired_at")]
     columns += [Column(name, ExactJSON(none_as_null=True)) for name in ("proof", "clean_mdm")]
     table = Table("rule_version", MetaData(schema="rules" if dialect == "postgresql" else None), *columns)

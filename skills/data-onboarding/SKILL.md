@@ -240,6 +240,27 @@ A new data set runs **discover → plan-parts**, then each part runs
 **identify → profile → map → quality → metadata → test → approve →
 switch-on**. Set up the Rules Database first if it is not there (**init**).
 
+### Built means ready to turn on
+
+Operator, 2026-11-04: "when you build it you need all of this once proved it is just turn on and go".
+A source or domain is **finished when it can be turned on with one command and no preparation**. Everything
+else happens while building it, once:
+
+- the limited test passed while building it, and its counts are in the ticket. Once the rules are merged on
+  `main` they are final: a store needs no test run and no proof to activate them (operator, 2026-11-04: "you
+  dont need proof to activate once the rules are finalized");
+- the operator's words approve the exact version on that merge, kept in git in `rules/approvals.yaml`
+  (`rules approvals write`, APPROVE.md): `rules load` approves it in any store;
+- the run's inputs are named where the source declares them: each fact and file its target needs, how it is
+  produced, and where its captured files are;
+- the order it needs (the sources and the merge rules before it) is declared in the source sequence;
+- the merge rules it relies on are proved and approved the same way.
+
+Turning it on is then only: save the version from `main`'s files, approve it on its merge, activate it, load it. Finding a
+missing proof, input or capture at switch-on means the build was not finished: go back and finish it, and say
+what was missing in the ticket. A rules change makes a new version and a new proof only for what changed
+([Run each long step once](#modes-in-order)); an unchanged proof is carried forward.
+
 **Run each long step once per part** (operator, 2026-10-15: "Data onboarding
 should not run this many times"). One master part took about ten runs: five
 profiling runs, three test runs and two Proving Runs. Each repeat came
@@ -916,7 +937,9 @@ record their exact words.
 
 ### switch-on: activate, then hand the run to Bookkeeping
 
-Activate as in [APPROVE.md](APPROVE.md), "Switch on".
+Activate as in [APPROVE.md](APPROVE.md), "Switch on". A source built as above needs nothing before this
+step: if switching on needs a test, an input or a capture that does not exist yet, the build is not finished
+("Built means ready to turn on").
 
 Running it is the **bookkeeping** skill's **run** mode. It submits `rules run --target <target>`
 with an input manifest and its sha256. Run targets in their declared

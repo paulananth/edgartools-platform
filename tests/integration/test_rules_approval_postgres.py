@@ -120,6 +120,59 @@ def test_no_approval_without_test_evidence(pg, populated):
                           "WHERE name=:n"), {"n": name})
 
 
+def test_rules_finalized_on_main_are_approved_and_activate_with_no_test_run(pg, populated):
+    """Operator, 2026-11-04: "you dont need proof to activate once the rules are finalized" (asked: rules merged on
+    main). The operator's words on the merge are the approval; there is no test run and no proof."""
+    from edgar_warehouse.rules.acquisition_authority import finalized_holds
+
+    agent = pg["agent"]
+    saved = agent.save("pipeline", f"final-{uuid4().hex[:8]}", "1", pipeline())
+    name = saved["name"]
+    with pytest.raises(Blocked, match="names the merge"):
+        agent.approve("pipeline", name, "1", by="Operator", words="approved", finalized=" ")
+    with pytest.raises(Blocked, match="No approval without test evidence"):  # no merge named, no run: still refused
+        agent.approve("pipeline", name, "1", by="Operator", words="approved")
+    approved = agent.approve("pipeline", name, "1", by="Operator", words="Approved, final on main",
+                             finalized="merge 0123456")
+    assert (approved["status"], approved["approval_evidence"], approved["proof"]) == ("proven", "merge 0123456", None)
+    export = agent.envelope(agent.version("pipeline", name, "1"))
+    assert export["approval"]["finalized"] == "merge 0123456" and finalized_holds(export) and not proof_holds(export)
+    agent.activate("pipeline", name, "1")
+    assert row(pg, name)["status"] == "active"
+    # An approval is never changed, and a reference cannot be added later or left blank.
+    with pytest.raises(DBAPIError, match="set once"), agent.engine.begin() as conn:
+        conn.execute(text("UPDATE rules.rule_version SET finalized_ref='other' WHERE name=:n"), {"n": name})
+
+
+def test_rules_load_approves_the_versions_the_approvals_file_lists(pg, populated, tmp_path):
+    """The approvals are in git (ticket 193): loading the rules approves a version whose digest is listed, on the
+    operator's words and the merge, and leaves an unlisted one a draft."""
+    import shutil
+
+    from edgar_warehouse.rules import approvals, files
+
+    for name in ("sec.thirteenf.filings", "sec.nport.registrant"):
+        shutil.copytree(files.ROOT / "sources" / name, tmp_path / "sources" / name)
+    listed = [item for item in approvals.current(tmp_path) if item[1] == "sec.thirteenf.filings"]
+    entries = [dict(zip(approvals.KEYS, (*item, "Operator", "approved all rules", "2026-11-04", "PR 1"))) for item in listed]
+    (tmp_path / approvals.FILE).write_text(approvals.HEADER + __import__("yaml").dump({"version": 1, "approvals": entries}))
+    saved = {r["name"]: r for r in pg["agent"].from_files(tmp_path, f"load-{uuid4().hex[:8]}")}
+    done, left = saved["sec.thirteenf.filings"], saved["sec.nport.registrant"]
+    assert (done["approved_by"], done["approved_words"], done["finalized_ref"]) == ("Operator", "approved all rules", "PR 1")
+    assert (left["approved_by"], left["status"]) == (None, "draft")
+
+
+def test_a_version_without_a_finalized_reference_still_needs_its_test_evidence(pg, populated):
+    from edgar_warehouse.rules.acquisition_authority import finalized_holds
+
+    assert not finalized_holds({"digest": "x", "approval": {"digest": "x", "by": "Operator"}})
+    assert not finalized_holds({"digest": "x", "approval": None})
+    name = populated["draft"]["name"]
+    with pytest.raises(DBAPIError, match="not blank"), pg["agent"].engine.begin() as conn:
+        conn.execute(text("UPDATE rules.rule_version SET approved_by='Operator',approved_words='approved',"
+                          "finalized_ref='  ' WHERE name=:n"), {"n": name})
+
+
 def test_approval_by_saying_so_records_name_words_evidence_and_login(pg, populated):
     agent = pg["agent"]
     saved = agent.save("pipeline", f"pass-{uuid4().hex[:8]}", "1", pipeline())

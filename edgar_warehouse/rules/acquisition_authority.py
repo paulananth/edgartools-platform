@@ -139,8 +139,8 @@ def processing_authority(export: dict) -> dict:
     ):
         raise Blocked("A frozen proven Rules source envelope is required")
     proof, approval = export.get("proof") or {}, export.get("approval") or {}
-    if not proof_holds(export):
-        raise Blocked("Processing requires verified Rules proof")
+    if not (proof_holds(export) or finalized_holds(export)):
+        raise Blocked("Processing requires verified Rules proof or finalized rules")
     if (
         approval.get("digest") != export["digest"]
         or not approval.get("by")
@@ -207,6 +207,14 @@ def masters_nothing(kind: str, body: dict) -> bool:
     there is nothing to prove (operator, 2026-11-03: "There is nothing to prove in silver")."""
     targets = ((body.get("bookkeeping") or {}).get("targets") or {})
     return kind == "source" and "dataset_contracts" not in body and "acquisition" not in body and "mdm" not in targets
+
+
+def finalized_holds(export: dict) -> bool:
+    """Rules finalized on main: the operator approved this exact digest on the merge that made them final, so
+    no test run is needed (operator, 2026-11-04: "you dont need proof to activate once the rules are finalized")."""
+    approval = export.get("approval") or {}
+    return (approval.get("digest") == export.get("digest") and bool(approval.get("by"))
+            and bool(approval.get("finalized")))
 
 
 def proof_holds(export: dict) -> bool:

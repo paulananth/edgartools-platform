@@ -11,6 +11,33 @@ record-proof` (the skill's **test** mode). A version with no test run cannot
 be approved. The operator may overrule a *failing* run, never a *missing*
 one (operator, 2026-09-29).
 
+**Except rules finalized on main** (operator, 2026-11-04: "you dont need proof to activate once the rules are
+finalized"; asked: "Rules merged on main"). Rules whose change merged on `main` passed review and CI; the
+test run was done while building them. They are approved on that merge, with no test run in this store:
+
+```bash
+edgar-warehouse rules save --source <name> --version <v> rules/sources/<name>/source.yaml
+edgar-warehouse rules approve --source <name> --version <v> --by <operator> --words "<their exact words>" \
+  --finalized "<the merge: the PR number or commit>"
+edgar-warehouse rules activate --source <name> --version <v>
+```
+
+The approval records the operator's words and the merge. It is for the exact version saved from `main`'s files.
+Rules not yet merged still need their test run.
+
+**The approvals are in git** (operator, 2026-11-04: "the rules must also be in git"). `rules/approvals.yaml` lists
+each rules document's digest with the operator's exact words, their name, the day and the merge. `rules load`
+approves every saved version whose digest is listed, so a new store needs nothing but git: load, then
+`rules activate`. A rules change is a new digest and gets its own line, written after the operator's words:
+
+```bash
+edgar-warehouse rules approvals check      # the documents with no approval at their digest
+edgar-warehouse rules approvals write --by <operator> --words "<their exact words>" \
+  --finalized "<the PR>" --at <YYYY-MM-DD>   # lists every document at its digest; lines already listed are kept
+```
+
+Never write a line in words the operator did not say.
+
 ## Approve a source version or a merge version
 
 1. **List what waits.**
@@ -125,7 +152,7 @@ empty"), so create a fresh database and migrate that; the old one is the
 operator's to drop.
 
 - **Worked:** `rules status --source <name>` shows the version `active`.
-- **Refused:** there is no approval, or no proof. Go back one step.
+- **Refused:** there is no approval, or neither a proof nor a finalized merge. Go back one step.
 
 Switching on the pipes and switching on live data are apart (operator,
 2026-10-19). A source version proven on its test run over captured files and
