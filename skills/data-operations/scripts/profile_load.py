@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-"""Where did a load's time go? Two read-only views, for any source, with no knowledge of the source.
+"""How far is a load, and where did its time go? Read-only views, for any source, with no knowledge of the source.
 
+progress  Units per step and state of the running runs (or one run), and how long they have run
+          (BOOKKEEPING_DATABASE_URL).
 steps   Time per step of one Bookkeeping run, from its journal (BOOKKEEPING_DATABASE_URL).
 sample  What the database was running, once a second: statements ranked by seconds seen, so the
         dominating statement shows (PROFILE_DATABASE_URL, a login that may read pg_stat_activity).
@@ -24,6 +26,14 @@ STEPS = text("""
 LATEST = text("""
     SELECT run_id FROM bookkeeping.pipeline_run WHERE state = 'complete' AND expected_count = coalesce(CAST(:size AS BIGINT), expected_count)
     ORDER BY created_at DESC LIMIT 1""")
+PROGRESS = text("""
+    SELECT w.step, min(w.ordinal) AS position, w.state, count(*) AS units
+    FROM bookkeeping.work_item w JOIN bookkeeping.pipeline_run r USING (run_id)
+    WHERE CASE WHEN :run IS NULL THEN r.state = 'running' ELSE r.run_id = CAST(:run AS uuid) END
+    GROUP BY w.step, w.state""")
+RUNNING_SINCE = text("""
+    SELECT count(*), min(created_at), now() FROM bookkeeping.pipeline_run
+    WHERE CASE WHEN :run IS NULL THEN state = 'running' ELSE run_id = CAST(:run AS uuid) END""")
 ACTIVE = text("""
     SELECT datname, query FROM pg_stat_activity
     WHERE state = 'active' AND pid <> pg_backend_pid() AND datname IS NOT NULL""")
@@ -51,6 +61,33 @@ def step_table(rows) -> list[tuple[str, int, float]]:
         table.append((step, events, (last - (before if before is not None else first)).total_seconds()))
         before = max(before, last) if before is not None else last
     return table
+
+
+def progress_table(rows) -> list[tuple[str, int, dict, float]]:
+    """(step, units, units per state, share verified), in the order the steps run."""
+    steps: dict[str, dict] = {}
+    for step, position, state, units in rows:
+        entry = steps.setdefault(step, {"position": position, "states": {}})
+        entry["position"] = min(entry["position"], position)
+        entry["states"][state] = entry["states"].get(state, 0) + units
+    table = []
+    for step, entry in sorted(steps.items(), key=lambda item: (item[1]["position"], item[0])):
+        total = sum(entry["states"].values())
+        table.append((step, total, entry["states"], entry["states"].get("verified", 0) / total))
+    return table
+
+
+def progress(url: str, run: str | None) -> None:
+    engine = create_engine(url)
+    with engine.connect() as conn:
+        runs, since, now = conn.execute(RUNNING_SINCE, {"run": run}).one()
+        table = progress_table(conn.execute(PROGRESS, {"run": run}).all())
+    if not runs:
+        sys.exit("No running run found")
+    print(f"{runs} run(s), running for {(now - since).total_seconds() / 60:.0f} min")
+    for step, units, states, share in table:
+        detail = ", ".join(f"{state} {count}" for state, count in sorted(states.items()) if state != "verified")
+        print(f"{step:<14}{units:>7} units {100 * share:>6.1f}% verified   {detail}")
 
 
 def steps(url: str, run: str | None, size: int | None) -> None:
@@ -81,6 +118,8 @@ def sample(url: str, seconds: int, top: int) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="view", required=True)
+    zero = sub.add_parser("progress")
+    zero.add_argument("--run", help="a run id (default: every running run)")
     one = sub.add_parser("steps")
     one.add_argument("--run", help="a run id (default: the latest complete run)")
     one.add_argument("--size", type=int, help="with no run: the latest complete run of this many units")
@@ -88,7 +127,9 @@ def main() -> None:
     two.add_argument("--seconds", type=int, default=120)
     two.add_argument("--top", type=int, default=10)
     args = parser.parse_args()
-    if args.view == "steps":
+    if args.view == "progress":
+        progress(os.environ["BOOKKEEPING_DATABASE_URL"], args.run)
+    elif args.view == "steps":
         steps(os.environ["BOOKKEEPING_DATABASE_URL"], args.run, args.size)
     else:
         sample(os.environ["PROFILE_DATABASE_URL"], args.seconds, args.top)

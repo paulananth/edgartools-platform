@@ -24,3 +24,11 @@ def test_a_step_takes_the_time_between_its_first_and_last_event():
     at = lambda seconds: start + timedelta(seconds=seconds)
     rows = [("requests", 512, at(0), at(782)), ("prepare", 1, at(1100), at(1100)), ("merge", 1, at(2780), at(2780))]
     assert tool.step_table(rows) == [("requests", 512, 782.0), ("prepare", 1, 318.0), ("merge", 1, 1680.0)]
+
+
+def test_progress_groups_units_by_step_in_run_order_with_the_verified_share():
+    rows = [("merge", 9, "pending", 3), ("requests", 1, "verified", 6), ("requests", 1, "pending", 2),
+            ("requests", 1, "reported", 2), ("merge", 9, "verified", 1)]
+    assert tool.progress_table(rows) == [
+        ("requests", 10, {"verified": 6, "pending": 2, "reported": 2}, 0.6),
+        ("merge", 4, {"pending": 3, "verified": 1}, 0.25)]

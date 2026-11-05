@@ -382,6 +382,8 @@ Work it out from counts before starting:
   wakes make a run look slow, not stopped (a 6-minute test took 61, ticket
   138). Start a long run or test as `caffeinate -i <command>`.
 - **Measure a slow load with `scripts/profile_load.py`, never by hand**.
+  `progress` shows, for the running runs, the units in each state per step and how long they have run: the
+  answer to "how far is it", and it lists runs left `running` by a load that was stopped.
   `steps` gives each step's share of a finished run (needs `BOOKKEEPING_DATABASE_URL`, in `worker.env`);
   `sample` ranks what the database ran, once a second (needs `PROFILE_DATABASE_URL`, a login that reads
   `pg_stat_activity`). For a statement inside a function, set `shared_preload_libraries=auto_explain` with
