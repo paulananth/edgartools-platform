@@ -72,13 +72,13 @@ Kept outside git in `~/edgar-local-tmp/` and `/tmp`. A tool goes to a skill when
 | `prod-run/sample.sh` | sampled active statements once a second | **Now a skill tool**: `data-operations/scripts/profile_load.py sample` |
 | `prod-run/*.start/.end/.log` wrappers | timed one `load` per source, redacted the log | Not needed: `profile_load.py steps` reads the time from Bookkeeping |
 | `bench.sql`, `apply.sql` | timed one parse; dumped the apply function | One-off; the method (auto_explain with nested statements) is now one line in the data-operations skill |
-| the env-file port edit after a server restart | pointed four env files at the container's new port | **Gap in the skill**: `local-test-stores.py up` refused it from any worktree but the creating one. Fix: `up` rewrites the ports for the owner, or the container keeps a fixed port |
+| the env-file port edit after a server restart | pointed four env files at the container's new port | **My mistake, not a gap**: `skills/data-platform/LOCAL-TESTING.md` already says `up` from the owning worktree rewrites them and not to edit them by hand. The owner checkout was about 30 commits behind `main`, so its `up` stopped with a bare `Blocked` (the script prints only the exception class name) |
 | `t149/gen_contract.py`, `/tmp/gen_silver.py` | wrote the sec.registration rules and Mapping Document from a table of terms | Its output is in git. A generic "contract from a term table" belongs to data-onboarding; not built (one source so far) |
 | `t149/read_all.py`, `prove_read.py`, `terms.py`, `runid.py`, `time_frozen.py` | read the pages, counted terms, timed the frozen check | Covered by `source read` and data-profiling; no tool |
 | `/tmp/regsilver.py`, `/tmp/silvercount.py` | `silver register` and a row count | `silver register` exists; the count is one query; no tool |
 | about 45 other `/tmp/*.py` from tickets 01 to 191 | not read in this work | Not reviewed; one pass over them is a separate task |
 
-- [ ] The server port after a restart: `up` must work for the creating worktree's owner from any checkout, or hold a fixed port (add to ticket 192)
+- [ ] Keep the owner checkout of a shared store at `origin/main` (a store migrated by newer code is refused by older code, and `up` then prints only `Blocked`); decide whether `up` should print an engine control error's own message (08:09 ET)
 - [ ] Review the 45 older `/tmp` scripts for tools worth a skill
 
 ## What a first real load of a new source meets (belongs in "Built means ready to turn on")
