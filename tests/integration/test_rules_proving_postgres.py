@@ -68,9 +68,18 @@ def test_a_store_that_already_holds_records_is_refused(tmp_path, stores):
         run(tmp_path, stores, out=tmp_path / "again.json")
 
 
-def test_a_source_whose_section_states_no_plan_stops_the_test(tmp_path, stores):
+def test_a_source_whose_section_states_no_plan_stops_the_test(tmp_path, stores, monkeypatch):
+    from edgar_warehouse.rules import files
+
+    original = files.source
+
+    def without_plan(source, *args, **kwargs):  # every committed source states version 2 now (ticket 149)
+        document = original(source, *args, **kwargs)
+        return {**document, "bookkeeping": {**document["bookkeeping"], "version": 1}}
+
+    monkeypatch.setattr(proving.files, "source", without_plan)
     with pytest.raises(proving.TestRunError, match="must be version 2"):
-        run(tmp_path, stores, source="sec.registration", target="capture")
+        run(tmp_path, stores)
 
 
 def test_a_run_is_recorded_as_the_version_it_names(tmp_path, stores, databases, monkeypatch):

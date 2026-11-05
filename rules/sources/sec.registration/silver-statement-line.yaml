@@ -23,6 +23,12 @@ columns:
   definition: The registrant's CIK, by which its Company is found.
   source: capture metadata scope.cik
   sensitivity: none
+- name: captured_on
+  type: DATE
+  nullable: false
+  definition: 'The day the page was captured from the SEC archive (the first ten characters of the capture''s time): the row''s date in silver.'
+  source: capture metadata captured_at
+  sensitivity: none
 - name: table_number
   type: BIGINT
   nullable: false
@@ -158,7 +164,7 @@ links:
   mdm_id_column: registrant_mdm_id
 time:
   as_of: null
-  as_at: null
+  as_at: captured_on
   event_time: null
 partition: []
 load_mode: append

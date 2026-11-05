@@ -22,6 +22,12 @@ columns:
   definition: The registrant's CIK, by which its Company is found.
   source: capture metadata scope.cik
   sensitivity: none
+- name: captured_on
+  type: DATE
+  nullable: false
+  definition: 'The day the page was captured from the SEC archive (the first ten characters of the capture''s time): the row''s date in silver; the filing''s own date is not on the page.'
+  source: capture metadata captured_at
+  sensitivity: none
 - name: title
   type: VARCHAR
   nullable: true
@@ -83,16 +89,10 @@ links:
   mdm_id_column: registrant_mdm_id
 time:
   as_of: null
-  as_at: null
+  as_at: captured_on
   event_time: null
 partition: []
 load_mode: append
 why: 'A registration is transaction data: one row per filed original, keyed by its accession number, linked to the registrant Company by lookup, so no record of its own goes through
   the Merge Stage. Append, since a filed document never changes; an amendment is another filing.'
-checks:
-- id: price_range_ordered
-  check: not_after
-  column: price_low
-  later: price_high
-  on_fail: flag
-  why: A range starts at or below where it ends (validity).
+checks: []

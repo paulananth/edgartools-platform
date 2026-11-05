@@ -21,6 +21,11 @@ read:
       zip_json:
         member: metadata.json
         path: scope.cik
+    captured_at:
+      type: text
+      zip_json:
+        member: metadata.json
+        path: captured_at
   limits:
     max_bytes: 134217728
     max_member_bytes: 134217728
@@ -35,6 +40,9 @@ read:
         cik:
           context:
             name: cik
+        captured_on:
+          context:
+            name: captured_at
         title:
           text:
             path: title.$
@@ -139,6 +147,9 @@ read:
         cik:
           context:
             name: cik
+        captured_on:
+          context:
+            name: captured_at
         table_number:
           text:
             path: '@table'
