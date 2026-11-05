@@ -11,6 +11,20 @@ record-proof` (the skill's **test** mode). A version with no test run cannot
 be approved. The operator may overrule a *failing* run, never a *missing*
 one (operator, 2026-09-29).
 
+**Except rules finalized on main** (operator, 2026-11-04: "you dont need proof to activate once the rules are
+finalized"; asked: "Rules merged on main"). Rules whose change merged on `main` passed review and CI; the
+test run was done while building them. They are approved on that merge, with no test run in this store:
+
+```bash
+edgar-warehouse rules save --source <name> --version <v> rules/sources/<name>/source.yaml
+edgar-warehouse rules approve --source <name> --version <v> --by <operator> --words "<their exact words>" \
+  --finalized "<the merge: the PR number or commit>"
+edgar-warehouse rules activate --source <name> --version <v>
+```
+
+The approval records the operator's words and the merge. It is for the exact version saved from `main`'s files.
+Rules not yet merged still need their test run.
+
 ## Approve a source version or a merge version
 
 1. **List what waits.**
@@ -125,7 +139,7 @@ empty"), so create a fresh database and migrate that; the old one is the
 operator's to drop.
 
 - **Worked:** `rules status --source <name>` shows the version `active`.
-- **Refused:** there is no approval, or no proof. Go back one step.
+- **Refused:** there is no approval, or neither a proof nor a finalized merge. Go back one step.
 
 Switching on the pipes and switching on live data are apart (operator,
 2026-10-19). A source version proven on its test run over captured files and

@@ -100,10 +100,11 @@ def _handle(args):
             elif operation == "approve":
                 from edgar_warehouse.bookkeeping.clean.config import Blocked
 
-                if not args.version or not args.evidence:
-                    raise Blocked("Approval names the version and the evidence hash `rules pending` showed")
+                if not args.version or not (args.evidence or args.finalized):
+                    raise Blocked("Approval names the version and the evidence hash `rules pending` showed, "
+                                  "or --finalized with the merge that made the rules final")
                 row = rules.approve(kind, name, args.version, evidence=args.evidence, by=args.by,
-                                    words=args.words, overrule=args.overrule)
+                                    words=args.words, overrule=args.overrule, finalized=args.finalized)
                 result = {key: row[key] for key in ("kind", "name", "version", "status", "approved_by", "approved_at",
                                                     "approved_words", "approval_overrule", "approval_evidence")}
             elif operation == "record-proof":
@@ -465,6 +466,8 @@ def register(subparsers):
             command.add_argument("--words", required=True, help="Their exact words of approval")
             command.add_argument("--overrule", help="Their reason, when approving a failing test run")
             command.add_argument("--evidence", help="The evidence_hash `rules pending` showed for it")
+            command.add_argument("--finalized", help="The merge on main that made these rules final: approves "
+                                 "them with no test run (the operator's words are the approval)")
             command.add_argument("--rule", help="Switch one merge rule on, in the files, on its proof")
             command.add_argument("--root", default=str(files.ROOT), help="The rules folder (--rule only)")
             command.add_argument("--proof", help="An identifier matching rule's Proving Run report (--rule only)")

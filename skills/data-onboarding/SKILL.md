@@ -246,15 +246,16 @@ Operator, 2026-11-04: "when you build it you need all of this once proved it is 
 A source or domain is **finished when it can be turned on with one command and no preparation**. Everything
 else happens while building it, once:
 
-- the limited test passed, and its proof is kept with the source as counts only (evidence a new store can
-  record again, never a test to run again);
-- the approval of that exact version is recorded with the operator's words and that evidence;
+- the limited test passed while building it, and its counts are in the ticket. Once the rules are merged on
+  `main` they are final: a store needs no test run and no proof to activate them (operator, 2026-11-04: "you
+  dont need proof to activate once the rules are finalized");
+- the operator's words approve the exact version on that merge (`rules approve --finalized`, APPROVE.md);
 - the run's inputs are named where the source declares them: each fact and file its target needs, how it is
   produced, and where its captured files are;
 - the order it needs (the sources and the merge rules before it) is declared in the source sequence;
 - the merge rules it relies on are proved and approved the same way.
 
-Turning it on is then only: save the version, record its proof, approve it, activate it, load it. Finding a
+Turning it on is then only: save the version from `main`'s files, approve it on its merge, activate it, load it. Finding a
 missing proof, input or capture at switch-on means the build was not finished: go back and finish it, and say
 what was missing in the ticket. A rules change makes a new version and a new proof only for what changed
 ([Run each long step once](#modes-in-order)); an unchanged proof is carried forward.

@@ -25,7 +25,7 @@ from . import files, storage
 WAITING = "proof IS NOT NULL AND approved_by IS NULL AND status IN ('draft','proven')"
 # The evidence an approval rests on; the trigger stores the same expression.
 EVIDENCE_HASH = "encode(sha256(convert_to(proof::text,'UTF8')),'hex')"
-APPROVAL_COLUMNS = "approved_by,approved_at,approved_words,approval_overrule,approval_evidence,approval_recorded_by"
+APPROVAL_COLUMNS = "approved_by,approved_at,approved_words,approval_overrule,approval_evidence,approval_recorded_by,finalized_ref"
 
 
 def get_engine(url=None):
@@ -166,12 +166,15 @@ class Rules:
                  "evidence_hash": r["evidence_hash"],
                  "changes": version_changes(active.get((r["kind"], r["name"])), json.loads(r["body"]))} for r in waiting]
 
-    def approve(self, kind, name, version, *, evidence: str, by: str, words: str, overrule: str | None = None) -> dict:
+    def approve(self, kind, name, version, *, evidence: str | None = None, by: str, words: str, overrule: str | None = None,
+                finalized: str | None = None) -> dict:
         """Record the operator's approval, in their name and exact words, of the
         version and test run they were shown (`evidence`, the hash `pending`
         gave). A version or run recorded since is not what they read, so it is
         refused. No approval without test evidence; a failing run only with an
-        overrule reason."""
+        overrule reason. Rules finalized on main (`finalized`, the merge that
+        made them final) need no test run: the operator's words on that
+        reference are the approval (operator, 2026-11-04)."""
         table = storage.versions(self.engine.dialect.name)
         with storage.transaction(self.engine, kind, name) as conn:
             found = storage.rows(conn, select(table, storage.evidence(table, conn.dialect.name).label("evidence_hash")).where(
@@ -179,16 +182,19 @@ class Rules:
             row = found[0] if found else None
             if row is None:
                 raise Blocked("Unknown Rules version")
-            if row["proof"] is None:
-                raise Blocked("No approval without test evidence: record a test run first")
-            if row["evidence_hash"] != evidence:
-                raise Blocked("The test run differs from the one shown for approval: show it again first")
-            if row["proof"]["passed"] is False and not (overrule or "").strip():
-                raise Blocked("The test run failed: approving it needs an overrule reason")
+            if finalized is not None and not finalized.strip():
+                raise Blocked("A finalized approval names the merge that made the rules final")
+            if finalized is None:
+                if row["proof"] is None:
+                    raise Blocked("No approval without test evidence: record a test run first")
+                if row["evidence_hash"] != evidence:
+                    raise Blocked("The test run differs from the one shown for approval: show it again first")
+                if row["proof"]["passed"] is False and not (overrule or "").strip():
+                    raise Blocked("The test run failed: approving it needs an overrule reason")
             # Only an overruled failing run changes the status: it is what
             # makes that version proven. A passing one is proven already.
             values = {"approved_by": by, "approved_words": words, "approval_overrule": overrule or None,
-                      "approved_at": datetime.now(UTC)}
+                      "approved_at": datetime.now(UTC), **({"finalized_ref": finalized.strip()} if finalized else {})}
             if row["status"] == "draft": values["status"] = "proven"
             conn.execute(update(table).where(storage.identity(table, conn.dialect.name, kind, name, version)).values(**values))
             return self._version(conn, kind, name, version)
@@ -205,7 +211,7 @@ class Rules:
             one_to_one = masters_nothing(kind, body)
             if selected["status"] != "proven" and not (one_to_one and selected["status"] == "draft"):
                 raise Blocked("Only a proven version can activate")
-            if "acquisition" in body and "acquisition" in selected["proof"]:
+            if "acquisition" in body and "acquisition" in (selected["proof"] or {}):
                 from edgar_warehouse.rules.acquisition_authority import validation_proof
                 validation_proof(body, selected["proof"], artifacts=Artifacts())
             requires_handoff = kind == "merge" or (kind == "source" and "dataset_contracts" in body)
@@ -256,7 +262,8 @@ class Rules:
             # Approvals made on evidence carry their words and what they rest on.
             approval.update({key: row[column] for key, column in (
                 ("words", "approved_words"), ("overrule", "approval_overrule"),
-                ("evidence", "approval_evidence"), ("recorded_by", "approval_recorded_by")) if row.get(column)})
+                ("evidence", "approval_evidence"), ("recorded_by", "approval_recorded_by"),
+                ("finalized", "finalized_ref")) if row.get(column)})
         return {"kind": row["kind"], "name": row["name"], "version": row["version"], "digest": row["digest"],
                 "body": body, "status": row["status"], "proof": row["proof"], "approval": approval,
                 "registration": row["clean_mdm"]}

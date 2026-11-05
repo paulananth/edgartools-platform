@@ -10,7 +10,7 @@ from edgar_warehouse.control_contract import Blocked
 from edgar_warehouse.database_types import ExactJSON, UTCDateTime
 
 APPROVAL = ("approved_by", "approved_at", "approved_words", "approval_overrule",
-            "approval_evidence", "approval_recorded_by")
+            "approval_evidence", "approval_recorded_by", "finalized_ref")
 PROOF = ("status", "proof", "batch_hash", "clean_mdm")
 IDENTITY = ("kind", "name", "version", "body", "digest")
 
@@ -21,7 +21,7 @@ def versions(dialect):
     words = Text().with_variant(LONGTEXT(charset="utf8mb4", collation="utf8mb4_0900_bin"), "mysql")
     columns = [Column(name, words) for name in ("kind", "name", "version", "body", "digest", "status",
         "created_by", "batch_hash", "approved_by", "approved_words", "approval_overrule",
-        "approval_evidence", "approval_recorded_by")]
+        "approval_evidence", "approval_recorded_by", "finalized_ref")]
     columns += [Column(name, UTCDateTime()) for name in ("created_at", "proved_at", "approved_at", "activated_at", "retired_at")]
     columns += [Column(name, ExactJSON(none_as_null=True)) for name in ("proof", "clean_mdm")]
     table = Table("rule_version", MetaData(schema="rules" if dialect == "postgresql" else None), *columns)
