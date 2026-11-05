@@ -59,5 +59,10 @@ What does "process an S-1" deliver, and how is it captured? The decisions:
   Security, Mapping Document and Data Catalog entry
 - [ ] A registered offering that has launched links to its actual listed ticker (operator, 2026-10-30 08:49 ET: "connect to actual ticker if already launched"): the ticker the company now trades under, from the Security master, beside the ticker the prospectus proposed
 - [ ] Silver table spec and landing through the silver writer: designed 2026-11-04 18:17 ET from Damodaran's valuation tools (operator's link) in `valuation-silver-design.md`: `registration_offering`, `registration_statement_line`, `registration_valuation_input`; the spec files and landing wait for the operator's word on the design. SEC download: none required; the filing-fee exhibit (513 of 732 main documents hold no fee table) is optional and not requested, Damodaran's datasets (cost of capital) are another provider, not requested
+- [x] Operator ruling (2026-11-04 20:05 ET: "write it in rust why python?"): the ingestion is built in the Rust engine as generic primitives, not as a Python custom step; slices, each its own PR
+  - [ ] Slice 1, the HTML reader tells a table what is above it: each row carries `@above`, `@above2`, `@above3` (the three nearest text blocks, each cut to its last 300 bytes), so a statement's title and its unit ("in thousands") reach its rows; Rust test `a_row_names_the_three_blocks_just_above_its_table_nearest_first`; its Python reading test and the READING.md line follow with the engine rebuild
+  - [ ] Slice 2, a text operation that takes a pattern's capture group (empty when none), and a way to keep the first matching block of a filing: the cover's price, shares, ticker, exchange
+  - [ ] Slice 3, the statement lines: rows whose label is in the reviewed label map, with the table's header cells for the periods
+  - [ ] Slice 4, the three silver specs, the landing target in Bookkeeping, tests on invented pages, then the 732 real filings (counts against the design note); switch-on waits for the operator's word
 - [ ] Tests, the operator's approval of the rules, switch-on
 - [ ] Learning → skill
