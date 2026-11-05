@@ -28,4 +28,8 @@ pipelines.
 - [x] Run the required documentation genericity lint after the OpenMetadata skill and report updates: `tests/unit/test_profiling_genericity.py` passed (93 tests, 2026-11-04 21:57 ET).
 - [ ] Visually verify the end-user OpenMetadata UI; blocked by repository instructions prohibiting browser/GUI interaction, and API evidence cannot prove visual clarity.
 - [ ] CI green on the updated PR head; keep the PR draft until publication evidence and CI are reviewed.
-- [x] Learning → skill: documented private environment-based token refresh with an administrator check, full-instance reset boundaries, and the limit of publisher readback in `skills/openmetadata/SKILL.md` (2026-11-04 21:48 ET).
+- [x] Add a short operator reference covering catalog meaning and one summary per load; checked Bookkeeping status fields and CLI help, plus documentation checks (96 passed, 2026-11-05 06:21 ET).
+- [x] Reconcile the 13 catalog differences exposed by rebase: publish completed 489 writes; publisher and independent check confirmed 0 differences. Current plan has 68 assets, 22 pipelines and 135 lineage edges; this confirms the CLI's declared scope (2026-11-05 06:22 ET).
+- [x] Inspect a real load through the private runtime: bounded inventory returned 20 runs; sampled run was running with 414 pending and 139 reported units, 11 checkpoints and 0 pending deliveries. Only 5 items were requested; aggregate counts cover the run (2026-11-05 06:22 ET).
+- [ ] Connect and verify observability for every load in OpenMetadata. No reporter is installed; the guide specifies required evidence without claiming implementation.
+- [x] Learning → skill: documented private token refresh and readback limits; added `skills/openmetadata/references/OPERATORS.md` for catalog interpretation and per-load evidence, linked from the OpenMetadata skill (2026-11-05 06:21 ET).

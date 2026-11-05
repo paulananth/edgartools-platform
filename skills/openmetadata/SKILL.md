@@ -5,6 +5,9 @@ description: Write and read this platform's catalog on OpenMetadata. Use before 
 
 # OpenMetadata
 
+For an operator explanation or per-load observability review, start with
+[Reading the catalog and each load](references/OPERATORS.md).
+
 This is the only place for OpenMetadata implementation. Business meaning, the
 subject domains, the glossary words, and what a relationship type is stay in
 the data-catalog skill. This skill says how that meaning is stored on

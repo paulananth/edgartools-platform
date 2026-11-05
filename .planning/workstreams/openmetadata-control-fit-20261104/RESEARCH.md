@@ -1,5 +1,13 @@
 # OpenMetadata no-build control-plane fit
 
+Latest rebase check (2026-11-05 06:22 ET): the current plan has 68 assets,
+22 pipelines and 135 lineage edges. Reconciliation completed 489 write requests;
+publisher and independent CLI readback both matched with zero differences in
+their declared scope. The detailed native API inventory below is the earlier
+2026-11-04 snapshot. Per-load observability remains unconnected to OpenMetadata;
+the [operator reference](../../../skills/openmetadata/references/OPERATORS.md)
+explains available Bookkeeping evidence and the missing reporter.
+
 ## Question and decision
 
 Can the installed OpenMetadata deployment control the Rules catalog, data
