@@ -9,7 +9,7 @@ pub(crate) fn validate(read: &Value) -> Result<(), String> {
             let name = name.as_str().filter(|s| !s.is_empty() && s.len() <= 64 && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
                 .ok_or("context names use at most 64 letters, digits or underscores")?;
             let args = spec.as_mapping().ok_or(format!("context {name} must declare its type"))?;
-            if args.keys().any(|k| !matches!(k.as_str(), Some("type" | "nullable" | "max_bytes" | "sgml_header"))) {
+            if args.keys().any(|k| !matches!(k.as_str(), Some("type" | "nullable" | "max_bytes" | "sgml_header" | "zip_json"))) {
                 return Err(format!("context {name} has an unknown argument"));
             }
             if let Some(line) = spec.get("sgml_header") {
@@ -17,6 +17,16 @@ pub(crate) fn validate(read: &Value) -> Result<(), String> {
                 if setting(read, "container") != Some("sgml") || setting(spec, "type") != Some("text")
                     || !line.as_str().is_some_and(|l| !l.is_empty() && l.len() <= 128 && !l.contains(':')) {
                     return Err(format!("context {name} sgml_header names a header line (text, without its colon) of an SGML container"));
+                }
+            }
+            if let Some(source) = spec.get("zip_json") {
+                // Filled from a JSON member of the ZIP the page came in (a capture's metadata), never by the caller.
+                let member = setting(source, "member").filter(|m| !m.is_empty() && m.len() <= 128);
+                let path = setting(source, "path").filter(|p| !p.is_empty() && p.len() <= 128
+                    && p.split('.').all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')));
+                if setting(read, "container") != Some("zip") || setting(spec, "type") != Some("text")
+                    || source.as_mapping().is_none_or(|m| m.len() != 2) || member.is_none() || path.is_none() {
+                    return Err(format!("context {name} zip_json names a member and a dotted path of a zip container (text)"));
                 }
             }
             if !matches!(setting(spec, "type"), Some("text" | "integer" | "boolean")) {
@@ -81,13 +91,49 @@ pub(crate) fn from_header(read: &Value) -> Vec<(String, String)> {
         .collect()
 }
 
-/// The caller's facts: every declared field but those a header fills.
+/// The context fields a ZIP's JSON member fills: (field, member, dotted path).
+pub(crate) fn from_zip(read: &Value) -> Vec<(String, String, String)> {
+    read.get("context").and_then(Value::as_mapping).into_iter().flatten()
+        .filter_map(|(name, spec)| {
+            let source = spec.get("zip_json")?;
+            Some((name.as_str()?.to_string(), setting(source, "member")?.to_string(), setting(source, "path")?.to_string()))
+        })
+        .collect()
+}
+
+/// The caller's facts: every declared field but those a header or a zip member fills.
 pub(crate) fn check(read: &Value, values: &Row) -> Result<(), Rejected> {
     let filled = from_header(read);
-    if filled.iter().any(|(name, _)| values.contains_key(name)) {
-        return Err(Rejected::new("invalid_context", "a header field is filled from the submission, not by the caller"));
+    let zipped = from_zip(read);
+    if filled.iter().any(|(name, _)| values.contains_key(name)) || zipped.iter().any(|(name, _, _)| values.contains_key(name)) {
+        return Err(Rejected::new("invalid_context", "a header or zip field is filled from the submission, not by the caller"));
     }
-    typed(read, values, filled.len())
+    typed(read, values, filled.len() + zipped.len())
+}
+
+/// The caller's facts with the fields a ZIP's JSON member fills, each from the text at its dotted path.
+/// A member that is missing, not JSON, or lacks the path, or a value that is not text of at most 4096
+/// bytes, is the archive's fault (`zip_json`), not the caller's.
+pub(crate) fn fill_from_zip(read: &Value, context: &Row, bytes: &[u8], max_member_bytes: u64) -> Result<Row, Rejected> {
+    let mut filled = context.clone();
+    for (name, member, path) in from_zip(read) {
+        let raw = crate::formats::zip_member(bytes, max_member_bytes.min(1 << 20), Some(&member))?;
+        let mut node: serde_json::Value = serde_json::from_slice(&raw)
+            .map_err(|e| Rejected::new("zip_json", format!("{member} is not JSON: {e}")))?;
+        for part in path.split('.') {
+            node = match node {
+                serde_json::Value::Object(mut map) => map.remove(part).unwrap_or(serde_json::Value::Null),
+                _ => serde_json::Value::Null,
+            };
+        }
+        let serde_json::Value::String(text) = node else {
+            return Err(Rejected::new("zip_json", format!("{member} holds no text at {path}")));
+        };
+        if text.len() > 4096 { return Err(Rejected::new("zip_json", format!("{member} {path} is over 4096 bytes"))); }
+        filled.insert(name, Val::Str(text));
+    }
+    typed(read, &filled, from_header(read).len())?;
+    Ok(filled)
 }
 
 /// The caller's facts with the fields an SGML header fills, each from the

@@ -1,0 +1,98 @@
+# The silver table of registration offerings (ticket 149): one row per original S-1 or F-1 main document
+# captured from 2026 on, with the terms its cover states. `edgar-warehouse silver register` reads this spec.
+# Rows are the `offering` table of registration-page.yaml. Rulings: operator, 2026-10-29 ("S-1 + F-1
+# originals, main doc (Recommended)"; "IPO pipeline + offering terms (Recommended)"), 2026-10-30 ("Main doc
+# only (Recommended)": a term the main document does not state is empty, no fee exhibit is requested),
+# 2026-11-04 ("write it in rust": the terms are found by the engine's text operations). A term the cover does
+# not state is empty, never zero. Numbers land as exact decimals or whole numbers from the text as filed.
+# The Company is found by its CIK; the company's name and facts are the Company's, in MDM (ticket 143).
+table: registration_offering
+definition: The offering terms one S-1 or F-1 cover states, linked to the registrant Company by CIK.
+grain: one row per accession number
+columns:
+- name: accession_number
+  type: VARCHAR
+  nullable: false
+  definition: The filing's accession number.
+  source: capture metadata scope.accession
+  sensitivity: none
+- name: cik
+  type: VARCHAR
+  nullable: false
+  definition: The registrant's CIK, by which its Company is found.
+  source: capture metadata scope.cik
+  sensitivity: none
+- name: captured_on
+  type: DATE
+  nullable: false
+  definition: 'The day the page was captured from the SEC archive (the first ten characters of the capture''s time): the row''s date in silver; the filing''s own date is not on the page.'
+  source: capture metadata captured_at
+  sensitivity: none
+- name: title
+  type: VARCHAR
+  nullable: true
+  definition: The page's title, when it has one.
+  source: title
+  sensitivity: none
+- name: shares_offered
+  type: BIGINT
+  nullable: true
+  definition: 'The number of shares, ADSs or units the cover offers: the first count the cover names before ''shares'', ''ordinary shares'', ''American depositary shares'', ''ADSs''
+    or ''units''.'
+  source: cover text
+  sensitivity: none
+- name: price_low
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: The low end of the price range per share, from 'between $X and $Y'.
+  source: cover text
+  sensitivity: none
+- name: price_high
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: The high end of the price range per share.
+  source: cover text
+  sensitivity: none
+- name: price_fixed
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: A fixed offering price per share, from 'offering price ... $X per'.
+  source: cover text
+  sensitivity: none
+- name: over_allotment_shares
+  type: BIGINT
+  nullable: true
+  definition: The shares the underwriters may buy in addition, from 'option to purchase up to N additional shares'.
+  source: cover text
+  sensitivity: none
+- name: ticker
+  type: VARCHAR
+  nullable: true
+  definition: The symbol the cover proposes (not the symbol the company trades under now, which is the Security's).
+  source: cover text
+  sensitivity: none
+- name: exchange
+  type: VARCHAR
+  nullable: true
+  definition: The exchange the cover names, as written (Nasdaq Capital Market, New York Stock Exchange, ...).
+  source: cover text
+  sensitivity: none
+key:
+- accession_number
+links:
+- columns:
+  - cik
+  kind: company
+  source_code: sec.company.v1
+  to_part: registrant
+  source_key: cik
+  mdm_id_column: registrant_mdm_id
+time:
+  as_of: null
+  as_at: captured_on
+  event_time: null
+partition: []
+load_mode: append
+why: 'A registration is transaction data: one row per filed original, keyed by its accession number, linked to the registrant Company by lookup, so no record of its own goes through
+  the Merge Stage. Append, since a filed document never changes; an amendment is another filing.'
+checks: []
