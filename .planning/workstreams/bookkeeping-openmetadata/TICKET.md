@@ -23,7 +23,8 @@ current behavioral evidence; unsupported or unverified needs remain open.
   trace field provenance, locate a usable consumption path and responsible owner.
 - [ ] KISS: each stakeholder can answer their core questions from a concise
   summary with supporting evidence available on demand. Visual usability remains
-  unverified while repository instructions prohibit browser/GUI review.
+  unverified: the operator authorized UI assessment, but the review browser
+  reaches sign-in and the existing-session browser host is unavailable.
 
 ## Implementation checklist
 
@@ -42,6 +43,10 @@ current behavioral evidence; unsupported or unverified needs remain open.
   pagination, outage/retry, readback, collisions, precision, redaction and
   control independence (2026-11-05 07:07 ET).
 - [ ] Verify real-engine regression tests in CI, including MySQL and SQL Server.
+- [x] Correct equal-timestamp discovery after CI exposed duplicate/missing runs:
+  the cursor now follows the existing ascending UUID tie order. The unchanged
+  regression failed before the fix; it and the typed observation/read test passed
+  on disposable PostgreSQL (2 passed, 2026-11-05 17:38 ET).
 - [x] Document tool, state mapping, snapshot freshness, single-reporter ownership
   and missing row/quality result evidence in `skills/bookkeeping/OBSERVABILITY.md`
   (2026-11-05 07:07 ET).
@@ -63,6 +68,15 @@ migration or control write. The control CLI remains domain-independent; local
 architecture tests actively block application/domain imports. The reporter
 emits safe cause codes and excludes raw receipts, logs and credential values.
 Selected-engine behavior beyond PostgreSQL remains a CI gate, not a local claim.
+
+CI run 42025023690 failed the unchanged equal-timestamp cursor regression on
+PostgreSQL, MySQL and SQL Server: three results included a duplicate and missed
+one expected identity. The predicate used `<` while the UUID tie order was
+ascending. The one-character `>` correction preserves that order and fixes the
+PostgreSQL reproduction. No test expectation was changed. The branch was
+rebased onto current main at 2026-11-05 17:38 ET; range-diff confirmed the original
+reporter commit was unchanged by the rebase. All three CI engines must pass on
+the corrected head.
 
 ## Review: Spec
 

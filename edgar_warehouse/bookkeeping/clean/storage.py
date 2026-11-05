@@ -270,7 +270,7 @@ def runs(engine, limit, *, state=None, before=None):
         anchor = table.alias("anchor")
         moment = select(anchor.c.created_at).where(anchor.c.run_id == before).scalar_subquery()
         statement = statement.where((table.c.created_at < moment) |
-                                    ((table.c.created_at == moment) & (table.c.run_id < before)))
+                                    ((table.c.created_at == moment) & (table.c.run_id > before)))
     statement = statement.order_by(table.c.created_at.desc(), table.c.run_id).limit(limit)
     with engine.connect() as conn:
         return rows(conn, statement)
