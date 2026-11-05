@@ -73,7 +73,7 @@ descriptor says it does not support an ingestion runner. There are 19 governance
 workflow definitions. Neither count establishes a runner for source capture,
 MDM, RDM, Silver or Bookkeeping.
 
-## Post-reset recheck (2026-11-04 evening)
+## Post-reset baseline before publish (2026-11-04 evening)
 
 The local instance was fully reset and redeployed from the repository's compose
 file. PostgreSQL, Elasticsearch and the OpenMetadata server are healthy on
@@ -89,29 +89,51 @@ check` found 216 differences, returned `partial`, and exited 1; its report says
 pipelines and table lineage, not every configured domain, glossary, product,
 quality object or lineage family.
 
-The configured token can read inventory but has no catalog write role. The
-first `rules catalog publish` request was rejected with HTTP 403 before any
-write completed. No catalog metadata has been sent since the reset. A
-write-capable token and successful publisher plus independent readback remain
-pending in the sync workstream and [PR #1418](https://github.com/paulaananth/edgartools-platform/pull/1418).
+The first configured token could read inventory but had no catalog write role.
+The first `rules catalog publish` request was rejected with HTTP 403 before any
+write completed. This was the pre-publish baseline; the successful administrator
+login and subsequent verification are recorded below.
 
-The fresh 2.0.2 schema still separates catalog `Pipeline` metadata from
-executable ingestion workflows: catalog pipelines have no run trigger, while
-ingestion pipelines have a distinct trigger route. The compose stack contains
-no ingestion runner, and a current repository scan finds no OpenMetadata
-references in Bookkeeping or worker modules. This confirms the existing no-go
-for controlling the platform's data operations without an integration or a
-change to its execution path. Visual UI clarity remains unverified because the
-current repository instructions prohibit browser and GUI interaction.
+## Post-publish verification (2026-11-04 21:43 ET)
+
+The skill login flow created a local administrator access token in the current
+process; API readback confirmed `isAdmin=true`. The token was not printed or
+saved. At 21:43 ET, `rules catalog publish --root rules` issued 480 write
+requests and returned `confirmed`: publisher readback matched, with 0 removals.
+The result does not report created/updated counts
+(`created_updated_counts: unavailable`). The independent read-only
+`rules catalog check --root rules` returned `confirmed`, found 0 differences,
+and exited 0.
+
+At 21:48 ET, independent native API inventory matched the configured catalog: 8 domains,
+8 glossaries, 22 terms, 1 database service, 1 pipeline service, 3 products,
+66 tables, 21 pipelines, 2 configured test definitions (plus 25 built-ins),
+and 55 test cases. There is no domain, glossary or tag named `Shared`. Domain
+names and types, glossary names and domain assignments, term FQNs, and all 18
+table-domain memberships match the plan. Product memberships match exactly: 13
+table assets and 10 input ports across the 3 products. Readback confirmed 22
+glossary relations, 51 domain-to-table edges and 31 pipeline-to-table edges;
+the publisher and independent check confirmed all 30 table-lineage edges. All
+134 planned lineage edges are accounted for. No quality-results file was
+supplied; these metadata test cases do not execute the Rules checks or fixes.
+
+This confirms catalog publication and configured lineage, not execution of the
+described pipelines. The fresh 2.0.2 schema still separates catalog `Pipeline`
+metadata from runnable ingestion workflows. The compose stack contains no
+ingestion runner, and a repository scan finds no OpenMetadata references in
+Bookkeeping or worker modules. OpenMetadata therefore cannot control this
+platform's data operations without an integration or a change to its execution
+path. Visual UI clarity remains unverified because repository instructions
+prohibit browser and GUI interaction.
 
 ## Fit by requirement
 
 | Requirement | Finding | Evidence and limit |
 |---|---|---|
-| Data catalog | **Fits as a projection; current publication is unconfirmed.** | An earlier 2026-11-04 snapshot had a successful catalog publication and readback. The later full-instance reset removed that catalog. Since reset, the current token's publish attempt was rejected before any write (HTTP 403); current read-only check reports 216 differences and `publish: not_run`. The Rules plan has 8 domains, 8 glossaries, 22 terms, 66 assets, 55 quality cases, 3 products and 21 pipelines; the fresh API inventory has zero domain objects and no `Shared` domain. Automated readback does not compare all object families. Rules remains the source of truth; catalog refresh does not execute described pipelines. |
+| Data catalog | **Fits as a projection; current publish is confirmed.** | Publisher readback and independent check both matched. Native API comparisons also matched exact domains/types, glossaries/domain links, term FQNs, 18 table-domain memberships, all product assets/input ports and every lineage family (30 table, 31 pipeline, 51 domain, 22 glossary edges). No `Shared` domain, glossary or tag exists. The publisher does not report created/updated counts, and Rules remains the source of truth; catalog refresh does not execute described pipelines. |
 | Data engineering control | **Partial and integration-specific; does not fit this platform as deployed.** | The live 2.0.2 schema exposes catalog `Pipeline` status, metrics, trends and observability, but no run trigger. Ingestion-pipeline triggers run metadata workflows. OpenMetadata runs its own metadata and quality workflows through configured Airflow/Kubernetes runners. Current 2.0.x docs also say the dbt Cloud integration can execute models; dbt Core integration reads artifacts produced by a separate dbt run. This repository uses its Snowflake dbt project and has no dbt Cloud configuration. The local OpenMetadata instance has no ingestion runner configured. |
 | Data operations control | **Does not fit without integration or replacement.** | The platform's source sequence executes through Bookkeeping workers. A repository scan finds OpenMetadata references only in the Rules catalog adapter/CLI, with none in the Bookkeeping or worker packages. OpenMetadata has no existing handoff into those run, merge, load, journal, retry and recovery operations. This is supported by the configured execution path, the code scan and the local API/runner inventory. |
-| Data quality | **Native feature exists, but the current 55 Rules cases are not executable by OpenMetadata.** | The current plan has 50 checks and 5 fixes and uses two custom `Other` test definitions whose descriptions explicitly say OpenMetadata does not execute them. The fresh instance has no database service, ingestion runner, cases or latest results. A connection alone is insufficient: each rule needs a supported executable definition or an external executor that runs it and publishes results. |
+| Data quality | **Native feature exists, but these Rules cases are metadata, not runnable checks.** | The current plan and API inventory contain 55 cases (50 checks, 5 fixes) and 2 configured `Other` definitions; their descriptions say OpenMetadata does not execute them. The latest-results API returned HTTP 204 with no result body, and publication supplied no results file. The `CustomDatabase` service has no connection config and the local deployment has no ingestion runner. A supported executable definition or external executor is required to run checks and publish results. |
 | Data contracts | **Partial governance capability.** | A draft request validation was tested without creating a contract. Current official 2.0.x docs describe persisted validation and quality-test execution; that persisted path has not been tested on this 2.0.2 server. It currently has zero contracts. Security and SLA sections document expectations; they are not enforced by contract runs. |
 | No custom build | **Fails for the full objective.** | Some supported workflows can be configured without a custom connector, including OpenMetadata metadata/quality workflows and the documented dbt Cloud integration. They require their supported runner, service connection, artifacts or existing dbt Cloud jobs. None provides a no-build trigger for this platform's Bookkeeping operations. Controlling those operations requires an integration or moving the execution path to a supported orchestrator. |
 | Clear, uncluttered end-user experience | **Unverified.** | Repository instructions prohibit browser automation and GUI interaction. API counts and CLI summaries do not prove that the local UI is visually clear. The plan command emits a concise status to stderr and a large structured plan to stdout; terminal users can redirect stdout to a file, but the rendered end-user experience has not been reviewed. |
@@ -147,9 +169,9 @@ review is completed.
 ## Sources
 
 - Local version and catalog/API readback: OpenMetadata API at the local 2.0.2
-  instance. The fresh post-reset inventory and write-permission failure are
-  summarized in `.planning/workstreams/openmetadata-sync-20261104/TICKET.md`;
-  publish and post-publish readback remain pending.
+  instance. Post-reset baseline, confirmed publication, independent readback,
+  full object-family comparisons and the remaining control/UI limits are
+  recorded in `.planning/workstreams/openmetadata-sync-20261104/TICKET.md`.
 - Local execution API schema: the running instance's `/swagger.json`; catalog
   Pipeline has status and observability routes but no run trigger, while
   ingestion, app and governance workflow types expose their own trigger routes.

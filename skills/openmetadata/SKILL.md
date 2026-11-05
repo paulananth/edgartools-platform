@@ -577,31 +577,36 @@ users' containers and volumes. A cold start may take 10–20 minutes. The compos
 file accepts `CATALOG_SERVER_HEAP_OPTS` and `CATALOG_SEARCH_HEAP_OPTS`.
 
 A login token of the local account expires within the hour; a publish that
-answers 401 needs a new one. Refresh it in the private terminal session, with
-shell tracing off. Enter the local account password only at the hidden prompt;
-the password is base64 encoded for the login API, and neither it nor the returned
-token is printed:
+answers 401 needs a new one. Load `OPENMETADATA_LOGIN_EMAIL` and
+`OPENMETADATA_PASSWORD` privately into the shell environment. Never put either
+value in chat, the repository, command arguments, or shell history. The login
+API expects the password base64 encoded. This flow keeps the password and new
+token out of terminal output and verifies that the logged-in account is an
+administrator before catalog publication:
 
 ```bash
 set +x
 set -euo pipefail
-export OPENMETADATA_URL=http://127.0.0.1:8585
-read -r -p 'OpenMetadata email: ' OM_LOGIN_EMAIL
-read -r -s -p 'OpenMetadata password: ' OM_LOGIN_PASSWORD
-printf '\n'
-OM_LOGIN_PASSWORD_B64=$(printf '%s' "$OM_LOGIN_PASSWORD" | base64 | tr -d '\n')
-OM_LOGIN_BODY=$(jq -cn --arg email "$OM_LOGIN_EMAIL" --arg password "$OM_LOGIN_PASSWORD_B64" \
+export OPENMETADATA_URL=${OPENMETADATA_URL:-http://127.0.0.1:8585}
+: "${OPENMETADATA_LOGIN_EMAIL:?Load OPENMETADATA_LOGIN_EMAIL privately first}"
+: "${OPENMETADATA_PASSWORD:?Load OPENMETADATA_PASSWORD privately first}"
+OM_LOGIN_PASSWORD_B64=$(printf '%s' "$OPENMETADATA_PASSWORD" | base64 | tr -d '\n')
+OM_LOGIN_BODY=$(jq -cn --arg email "$OPENMETADATA_LOGIN_EMAIL" --arg password "$OM_LOGIN_PASSWORD_B64" \
   '{email:$email,password:$password}')
 OPENMETADATA_TOKEN=$(printf '%s' "$OM_LOGIN_BODY" | curl -fsS \
   -H 'Content-Type: application/json' -X POST \
   --data-binary @- "$OPENMETADATA_URL/api/v1/users/login" | jq -er '.accessToken')
 export OPENMETADATA_TOKEN
-unset OM_LOGIN_EMAIL OM_LOGIN_PASSWORD OM_LOGIN_PASSWORD_B64 OM_LOGIN_BODY
+unset OM_LOGIN_PASSWORD_B64 OM_LOGIN_BODY OPENMETADATA_PASSWORD
+printf 'header = "Authorization: Bearer %s"\n' "$OPENMETADATA_TOKEN" | \
+  curl -fsS --config - \
+  "$OPENMETADATA_URL/api/v1/users/loggedInUser?fields=isAdmin" | jq -e '.isAdmin == true' >/dev/null
 ```
 
 Keep the variables in the private shell only. Never echo or save the token in
-the repository. The URL passed to `catalog.connect` is the server root; that
-function adds `/api/v1`.
+the repository. If the final administrator check fails, do not publish; load
+credentials for an account with catalog write permissions. The URL passed to
+`catalog.connect` is the server root; that function adds `/api/v1`.
 
 A whole-service reset deletes the owned pipeline service, then the owned
 database service:
