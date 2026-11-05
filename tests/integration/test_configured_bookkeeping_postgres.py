@@ -23,6 +23,7 @@ from edgar_warehouse.bookkeeping.clean.database import grant_profile, migrate
 from edgar_warehouse.bookkeeping.clean.destinations import guard, migrate_guard
 from edgar_warehouse.change_journal import ChangeJournal, JournalConflict
 from edgar_warehouse.change_journal.database import migrate as migrate_journal
+from edgar_warehouse.bookkeeping.clean import storage
 from edgar_warehouse.bookkeeping.clean.engine import CONTENTION, Bookkeeping
 from edgar_warehouse.rules.db import Rules, migrate as migrate_rules
 from edgar_warehouse.workers import copy
@@ -569,6 +570,21 @@ def test_a_slot_reads_another_runs_verified_unit(databases, tmp_path):
     assert state["run"]["state"] == "complete"
     (document,) = gathered
     assert book.artifacts.json(document)["one"] == {k: receipt[k] for k in ("uri", "sha256")}
+
+
+def test_a_fill_checks_each_other_run_once_however_many_of_its_units_it_names(databases, tmp_path, monkeypatch):
+    """Ticket 122: 480 answer units of 8 runs cost 480 rechecks (73 s a claim); a run is checked once a fill."""
+    earlier, done, selector = earlier_run(databases, tmp_path)
+    book, rid, _, _, _ = fan_in_submission(
+        databases, tmp_path / "later", first={"run": done, "step": "a_transform", "key": "parsed1"}, declared=selector)
+    item = storage.work(book.engine, rid, step="b_gather", key="all")[0]
+    context = book._context(item)
+    checked = []
+    original = Bookkeeping._frozen
+    monkeypatch.setattr(Bookkeeping, "_frozen", lambda self, run_id: checked.append(run_id) or original(self, run_id))
+    slots = {f"u{n}": {"run": done, "step": "a_transform", "key": f"parsed{n}"} for n in range(3)}
+    filled = book._compose(item, {"document": {name: {"slot": name} for name in slots}, "slots": slots}, context, False, {})
+    assert filled["uri"] and checked == [done]  # three units of one run, one check
 
 
 @pytest.mark.parametrize("case", ["unknown_run", "not_verified", "not_complete", "corrupt", "undeclared",
