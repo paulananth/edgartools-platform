@@ -308,8 +308,8 @@ masters needs its rebuild before readers accept it.
 coverage row is not built, at any generation: the merge writes nothing for it
 and readers refuse it. Load first, then run the owner rebuild once in bulk;
 from then on each merge keeps it. Maintaining an index inside every batch of an
-initial load writes most of a store's lookup entries and keeps the lookup table
-larger than memory, which makes every batch probe it from disk.
+initial load writes most of a store's lookup entries for data that nothing reads
+until the load ends.
 
 ## Migrations
 
