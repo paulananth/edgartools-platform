@@ -304,6 +304,13 @@ never a copy of the coverage or rebuild. A changed engine catalog reaches a
 store only through the owner's `mdm migrate`, and a new lookup over stored
 masters needs its rebuild before readers accept it.
 
+**A merge keeps an index only after the owner has built it.** An index with no
+coverage row is not built, at any generation: the merge writes nothing for it
+and readers refuse it. Load first, then run the owner rebuild once in bulk;
+from then on each merge keeps it. Maintaining an index inside every batch of an
+initial load writes most of a store's lookup entries and keeps the lookup table
+larger than memory, which makes every batch probe it from disk.
+
 ## Migrations
 
 - A schema change is a new migration file, added at the end of the

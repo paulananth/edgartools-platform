@@ -74,6 +74,16 @@ def gap(name):
 
 case = os.environ["READ_SEARCH_CASE"]
 try:
+    if case == "unbuilt":
+        rename("Z Snow")  # A merge keeps no index nobody built: search says so until the owner builds it once.
+        with pytest.raises(ContextError, match="complete index"):
+            names("snow")
+        assert master_search.rebuild(owner)["ready"] is True
+        assert found("snow") == [root]
+        rename("Z Snowy")  # From then on a merge keeps it.
+        assert found("snowy") == [root]
+    if case not in ("rebuild", "legacy_gap", "unbuilt"):
+        master_search.rebuild(owner)  # An index nobody built is not kept by a merge; the owner builds it once.
     if case == "words":
         rename("A The Snow x-y a.b@c/d 雪 %_")
         for words in ("A", "THE", '"The Snow"', "the -missing", "missing OR snow", "x-y", "x", "a.b@c/d", "雪"):

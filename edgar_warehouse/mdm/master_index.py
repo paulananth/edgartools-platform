@@ -35,7 +35,10 @@ def state(adapter, conn, index, generation):
     key = state_key(index)
     row = adapter.read([key], lookup=True, connection=conn).get(key)
     if row is None:
-        return {"config": index.pin, "generation": 0, "ready": generation == 0, "cursor": None}
+        # An index nobody has built is not maintained by a merge: it would add every record's name fragments
+        # (about 18 of 19 lookup entries a record) to each batch, and search refuses to answer until the owner
+        # builds it anyway. The owner pass (`rebuild`) builds it once, in bulk, and from then on a merge keeps it.
+        return {"config": index.pin, "generation": 0, "ready": False, "cursor": None}
     body = RecordReader._body(row)
     if (set(body) != {"config", "generation", "ready", "cursor"} or body["config"] != index.pin
             or type(body["generation"]) is not int or body["generation"] < 0
