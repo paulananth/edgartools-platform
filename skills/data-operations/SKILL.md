@@ -455,8 +455,32 @@ there.
 
 For a monitoring request, check every 30 minutes and exit on completion,
 blockage, cancellation or the deadline. A quiet interval sends no message.
-At expiry retain resumable state and report the next action. Scheduling a
-future invocation is separate deployment work.
+At expiry retain resumable state and report the next action.
+
+### Schedule a recurring load
+
+A schedule repeats steps 1 to 6 above; it adds no step of its own.
+
+- **What may be scheduled.** A `load` of files that are already captured. A
+  scheduled run never starts acquisition and never makes a provider request. A
+  schedule that would fetch is a different job: it needs the operator's
+  permission for that request, recorded in the schedule itself with the words
+  and the time.
+- **Where it runs.** On the machine that holds the store, because the load
+  needs the store's connection files. The agent runtime's scheduler can run a
+  session-bound interval there; a hosted routine reaches only a hosted store.
+- **What one scheduled run does.** Read `profile_load.py progress` first. An open
+  run is resumed by `edgar-warehouse load` and is never submitted again beside
+  it; runs left `running` by a stopped load are reported, not reused. Then load,
+  and report with `progress`, `failures` and `quality`: counts and times, no
+  values.
+- **How it ends.** Every schedule carries a deadline and an exit for each
+  outcome: complete, blocked, cancelled, deadline. A quiet interval sends no
+  message; a failure or a finished bundle does. At the deadline it keeps the run
+  resumable and reports the next action.
+- **Who owns it.** The schedule names the source, the capture folder, the store,
+  the interval and the deadline in its own prompt, so the next agent can read,
+  change or stop it without asking.
 
 ## Durable owners
 

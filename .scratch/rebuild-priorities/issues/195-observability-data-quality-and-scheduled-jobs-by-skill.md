@@ -3,7 +3,7 @@
 Priority: 195. Map: [Rebuild priorities](../map.md). Opened 2026-11-05 06:35 ET (operator, 2026-11-05: "need to build
 observability and data quality also be able to schedule jobs using skills").
 
-Type: task. Status: in progress. Blocked by: none (ticket 194 is resolved; the operator accepted the measured speed).
+Type: task. Status: resolved. Blocked by: none (ticket 194 is resolved; the operator accepted the measured speed).
 
 ## Question
 
@@ -29,6 +29,6 @@ scheduling a recurring load follow.
 - [x] `progress` view: units per step and state, share verified, run age; it also lists runs left `running` by a stopped load (11 on the local store). Test: `test_progress_groups_units_by_step_in_run_order_with_the_verified_share`; run on the local store, 2026-11-05 17:37 ET.
 - [x] Failures in a load: `profile_load.py failures` groups the units that hold an error by step, state and error shape, with counts. Test: `test_failures_group_units_by_step_state_and_error_shape_without_values`; run on the local store (2026-11-05 17:50 ET). The error text is what Bookkeeping holds, which is often only the exception class name: whether the engine should record its own message is a separate decision.
 - [x] Data quality counts per load: every merge run already retains a `run_report` whose `checks` hold, per source, the records, the records set aside by a failed check, the newest age and the empty rate per field. `profile_load.py quality` lists them (counts and rates, no values). Test: `test_quality_rows_list_each_source_of_a_run_report_with_only_the_fields_that_have_empty_values`; run on the local store, where it showed one bundle setting aside 20,937 of 51,112 records (2026-11-05 18:10 ET).
-- [ ] How a skill schedules a recurring load (the schedule, the permission to fetch, the end condition).
-- [ ] Split into build tickets once decided.
+- [x] How a skill schedules a recurring load: `data-operations` "Schedule a recurring load" fixes what may be scheduled (a load of captured files, never a provider request without the operator's permission recorded in the schedule), where it runs (the machine that holds the store), what one run does (progress, resume, load, report) and how it ends (a deadline and an exit for every outcome). It repeats the recurring-loop steps and adds none (2026-11-05 18:26 ET).
+- [x] Split into build tickets: none needed. Progress, failures and quality are built (PRs 1436, 1437, 1438); scheduling is a skill procedure that reuses `load` and the three views (2026-11-05 18:26 ET).
 - [x] Learning → skill: `data-operations` "Measure a slow load with `scripts/profile_load.py`" now names `progress`.
