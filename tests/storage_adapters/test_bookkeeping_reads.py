@@ -99,6 +99,13 @@ def test_real_typed_reads_preserve_uuid_json_values_and_bounded_status(control_t
     state = book.status(rid, limit=1)
     assert len(state["items"]) == 1
     assert state["counts"] == {"pending": 1, "reported": 1, "verified": 1}
+    observed = book.observation(rid)
+    assert observed["state"] == "running"
+    assert observed["expected_units"] == 3
+    assert observed["pending_deliveries"] == 0
+    assert {row["unit_state"]: row["units"] for row in observed["steps"]} == {
+        "pending": 1, "reported": 1, "verified": 1}
+    assert "unit_key" not in str(observed) and "receipt" not in str(observed)
     assert any(row["run_id"] == rid for row in book.runs(state="running"))
     assert storage.reported(runtime, rid, [], 10) == []
     assert storage.reported(runtime, rid, ["read"], 1)[0]["unit_key"] == "b"
@@ -106,6 +113,20 @@ def test_real_typed_reads_preserve_uuid_json_values_and_bounded_status(control_t
     # Reads use the restricted role; granting a read boundary gives no write authority.
     with pytest.raises(DBAPIError), runtime.begin() as conn:
         conn.execute(models["pipeline_run"].update().where(models["pipeline_run"].c.run_id == rid).values(state="complete"))
+
+
+def test_run_cursor_covers_equal_timestamps_without_duplicates(control_tables):
+    owner, runtime, models = control_tables
+    at = datetime(2090, 1, 1, tzinfo=UTC)
+    expected = {add_run(owner, models, at=at)[0] for _ in range(3)}
+    book = Bookkeeping(runtime)
+    page = book.runs(limit=2)
+    assert len(page) == 2
+    following = book.runs(limit=2, before=page[-1]["run_id"])
+    found = [row["run_id"] for row in page + following if row["run_id"] in expected]
+    assert len(found) == 3 and set(found) == expected
+    with pytest.raises(Blocked, match='Unknown run'):
+        book.runs(limit=2, before=str(uuid4()))
 
 
 def test_real_available_work_observes_server_clock_and_live_attempt(control_tables):

@@ -259,16 +259,63 @@ def pending_events(engine, run_id, limit):
         return rows(conn, statement)
 
 
-def runs(engine, limit, *, state=None):
+def runs(engine, limit, *, state=None, before=None):
     table = tables(engine.dialect.name)["pipeline_run"]
     statement = select(*(table.c[key] for key in
         ("run_id", "state", "created_at", "completed_at", "expected_count", "summary")),
         *(json_text(engine, table.c.submission, key).label(key) for key in ("kind", "name", "target")))
     if state is not None:
         statement = statement.where(table.c.state == state)
+    if before is not None:
+        anchor = table.alias("anchor")
+        moment = select(anchor.c.created_at).where(anchor.c.run_id == before).scalar_subquery()
+        statement = statement.where((table.c.created_at < moment) |
+                                    ((table.c.created_at == moment) & (table.c.run_id < before)))
     statement = statement.order_by(table.c.created_at.desc(), table.c.run_id).limit(limit)
     with engine.connect() as conn:
         return rows(conn, statement)
+
+
+def observation(engine, run_id):
+    """One statement reads run state and complete step aggregates together.
+
+    Never return record keys, artifact locations, credentials or raw errors.
+    Subqueries aggregate before joining so JSON columns need no GROUP BY.
+    """
+    named = tables(engine.dialect.name)
+    run, work, outbox = (named[key] for key in ("pipeline_run", "work_item", "journal_outbox"))
+    units = select(work.c.run_id, work.c.step, work.c.state.label("unit_state"),
+                   count(engine).label("units"), func.sum(work.c.attempts).label("attempts"),
+                   func.sum(case((work.c.error.is_not(None), literal(1, BigInteger())),
+                                 else_=literal(0, BigInteger()))).label("errors")).where(
+                       work.c.run_id == run_id).group_by(work.c.run_id, work.c.step, work.c.state).subquery()
+    pending = select(count(engine)).select_from(outbox).where(
+        outbox.c.run_id == run_id, outbox.c.delivered_at.is_(None)).scalar_subquery()
+    statement = select(run.c.run_id, run.c.submission, run.c.state, run.c.created_at,
+                       run.c.completed_at, run.c.expected_count, run.c.compacted_at,
+                       run.c.checks, units.c.step, units.c.unit_state, units.c.units,
+                       units.c.attempts, units.c.errors, pending.label("pending_deliveries")).select_from(
+                           run.outerjoin(units, run.c.run_id == units.c.run_id)).where(run.c.run_id == run_id)
+    with engine.connect() as conn:
+        observed = rows(conn, statement)
+    if not observed:
+        raise ValueError("Unknown Bookkeeping run")
+    first = observed[0]
+    submission = first["submission"]
+    return {
+        "run_id": str(first["run_id"]), "kind": submission["kind"],
+        "name": submission["name"], "target": submission["target"],
+        "state": first["state"], "created_at": first["created_at"],
+        "completed_at": first["completed_at"], "expected_units": first["expected_count"],
+        "compacted": first["compacted_at"] is not None,
+        "declared_steps": sorted((submission.get("profiles") or {}).keys()),
+        "checks": {key: value for key, value in (first["checks"] or {}).items()
+                   if isinstance(value, bool) and not any(word in key.lower() for word in
+                       ("password", "secret", "token", "key", "dsn", "url"))},
+        "pending_deliveries": first["pending_deliveries"],
+        "steps": [{key: row[key] for key in ("step", "unit_state", "units", "attempts", "errors")}
+                  for row in observed if row["step"] is not None],
+    }
 
 
 def capture_runs_statement(engine, *, kind, source, target):

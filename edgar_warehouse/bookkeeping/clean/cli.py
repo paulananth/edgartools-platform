@@ -53,7 +53,9 @@ def _handle(args):
         book = configured_bookkeeping()
         try:
             if operation == "runs":
-                result = book.runs(limit=args.limit, state=args.state)
+                result = book.runs(limit=args.limit, state=args.state, before=args.before)
+            elif operation == "observation":
+                result = book.observation(args.run_id)
             elif operation == "status":
                 result = book.status(args.run_id, limit=args.limit, step=args.step)
             elif operation == "checks":
@@ -107,8 +109,9 @@ def register(subparsers):
     listing = commands.add_parser("runs", help="Find runs after a lost submission acknowledgement")
     listing.add_argument("--state", choices=("running", "waiting", "blocked", "complete"))
     listing.add_argument("--limit", type=int, default=100)
+    listing.add_argument("--before", help="Continue before this run from the previous page")
     listing.set_defaults(handler=_handle)
-    for name in ("status", "checks", "leases", "resume", "finalize"):
+    for name in ("status", "observation", "checks", "leases", "resume", "finalize"):
         command = commands.add_parser(name)
         command.add_argument("run_id")
         command.add_argument("--limit", type=int, default=100)

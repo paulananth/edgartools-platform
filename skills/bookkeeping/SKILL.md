@@ -287,6 +287,9 @@ run request and independently qualified.
 
 ## Status mode
 
+For per-load reporting and readback in OpenMetadata, use the separate
+platform [load observation tool](OBSERVABILITY.md).
+
 ```bash
 edgar-warehouse bookkeeping runs --limit 20
 edgar-warehouse bookkeeping status <run-id> --limit 100

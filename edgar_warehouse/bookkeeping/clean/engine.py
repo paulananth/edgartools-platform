@@ -589,11 +589,17 @@ class Bookkeeping:
             raise ValueError("status limit must be 1..1000")
         return {"run": self._run(run_id), **storage.status(self.engine, run_id, limit, step)}
 
-    def runs(self, *, limit: int = 100, state: str | None = None) -> list[dict]:
+    def observation(self, run_id: str) -> dict:
+        """Sanitized, consistent evidence for external observers; never writes."""
+        return storage.observation(self.engine, run_id)
+
+    def runs(self, *, limit: int = 100, state: str | None = None, before: str | None = None) -> list[dict]:
         """Bounded discovery after a lost submission acknowledgement."""
         if not 1 <= limit <= 1000 or state not in (None, "running", "waiting", "blocked", "complete"):
             raise ValueError("Run listing requires a valid state and limit in 1..1000")
-        return storage.runs(self.engine, limit, state=state)
+        if before is not None:
+            self._run(before)  # An unknown cursor must not silently end discovery.
+        return storage.runs(self.engine, limit, state=state, before=before)
 
     def verified_units(self, *, source: str, target: str, step: str, kind: str = "source") -> list[dict]:
         """Ticket 120: the verified units of `step` in the complete runs of `source`'s `target`, each

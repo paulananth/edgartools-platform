@@ -111,6 +111,7 @@ def build_parser() -> argparse.ArgumentParser:
     from edgar_warehouse.rules.cli import register as register_rules
     from edgar_warehouse.rules.loading import register as register_load
     from edgar_warehouse.application.plan_cli import register as register_plan
+    from edgar_warehouse.application.load_observer import register as register_observer
     from edgar_warehouse.workers.cli import arguments as worker_arguments
 
     register_mdm_subparser(subparsers)
@@ -120,6 +121,7 @@ def build_parser() -> argparse.ArgumentParser:
     register_journal(subparsers)
     worker_arguments(subparsers.add_parser("workers", help="Run a worker or a verifier for one profile and run"))
     register_plan(subparsers)
+    register_observer(subparsers)
     register_context(subparsers)
     register_rdm(subparsers)
     register_silver(subparsers)
