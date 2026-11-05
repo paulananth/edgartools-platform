@@ -41,7 +41,7 @@ read:
         cik:
           context:
             name: cik
-        captured_on:
+        captured_at:
           context:
             name: captured_at
         title:
@@ -148,7 +148,7 @@ read:
         cik:
           context:
             name: cik
-        captured_on:
+        captured_at:
           context:
             name: captured_at
         table_number:

@@ -45,7 +45,7 @@ def read(page: str = PAGE):
 def test_the_cover_terms_are_found_and_the_snapshot_names_the_filing():
     (offering,) = read()["offering"]
     assert (offering["accession_number"], offering["cik"]) == ("0000000000-26-000001", "0000000001")
-    assert offering["captured_on"] == "2026-10-30T11:27:18.747439+00:00"  # the silver column is a DATE: its first ten characters
+    assert offering["captured_at"] == "2026-10-30T11:27:18.747439+00:00"  # the moment the snapshot was taken
     assert (offering["shares_offered"], offering["price_low"], offering["price_high"]) == ("2500000", "14.00", "16.00")
     assert (offering["ticker"], offering["exchange"], offering["over_allotment_shares"]) == ("INVT", "Nasdaq Capital Market", "375000")
     assert offering["price_fixed"] is None  # a range, not a fixed price
