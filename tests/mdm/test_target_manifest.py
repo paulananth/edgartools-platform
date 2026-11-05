@@ -127,9 +127,12 @@ def test_the_declared_slices_cut_the_read_units(tmp_path, monkeypatch):
     assert [u["keys"]["unit"] for u in steps["read"]] == [s["key"] for s in steps["records"][0]["input"]["compose"]["slots"]["read"]]
 
 
-def test_a_source_whose_section_states_no_plan_is_refused(tmp_path):
-    with pytest.raises(ValueError, match="must be version 2"):  # SEC registration states no plan yet
-        write_manifest(target="capture", **options(tmp_path, source="sec.registration"))
+def test_a_source_whose_section_states_no_plan_is_refused(tmp_path, monkeypatch):
+    body = files.source(SOURCE)
+    body["bookkeeping"]["version"] = 1  # every committed source states version 2 now (ticket 149)
+    monkeypatch.setattr(files, "source", lambda name, root=None: body)
+    with pytest.raises(ValueError, match="must be version 2"):
+        write_manifest(target="mastering", **options(tmp_path))
 
 
 def test_an_edit_to_a_declared_contract_is_a_new_consumer(tmp_path, monkeypatch):

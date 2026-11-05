@@ -128,7 +128,7 @@ pub struct Reading {
 }
 
 const FORMATS: [&str; 6] = ["xml", "json", "jsonl", "csv", "tsv", "html"];
-const PRIMITIVES: [&str; 26] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object", "coalesce", "choose", "test", "equal", "overlap", "join", "member", "member_value", "project", "recover", "transform", "sequence", "concat", "pluck"];
+const PRIMITIVES: [&str; 28] = ["found", "first_found", "ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object", "coalesce", "choose", "test", "equal", "overlap", "join", "member", "member_value", "project", "recover", "transform", "sequence", "concat", "pluck"];
 const CHECKS: [&str; 7] = ["required", "in_set", "in_lookup", "absent", "count", "before", "lei"];
 
 struct Limits {
@@ -197,7 +197,7 @@ impl Engine {
         fn collect(expr: &Value, recipes: &mut Vec<text_transform::Recipe>,
                    unique: &mut std::collections::HashMap<Value, usize>,
                    indices: &mut std::collections::HashMap<usize, usize>) -> Result<(), Rejected> {
-            if let Some(transforms) = expr.get("text").or_else(|| expr.get("transform")).and_then(|args| args.get("transforms")) {
+            if let Some(transforms) = expr.get("text").or_else(|| expr.get("transform")).or_else(|| expr.get("found")).or_else(|| expr.get("first_found")).and_then(|args| args.get("transforms")) {
                 let index = if let Some(index) = unique.get(transforms) { *index } else {
                     let mut operations = 0;
                     let mut regexes = 0;
@@ -206,8 +206,8 @@ impl Engine {
                         operations += count;
                         regexes += regex_count;
                     }
-                    if unique.len() >= 128 || operations > 1024 || regexes > 32 {
-                        return Err(contract_error("text transforms contract exceeds 128 recipes, 1024 operations or 32 regexes"));
+                    if unique.len() >= 128 || operations > 1024 || regexes > 128 {
+                        return Err(contract_error("text transforms contract exceeds 128 recipes, 1024 operations or 128 regexes"));
                     }
                     let index = recipes.len();
                     recipes.push(text_transform::Recipe::compile(transforms).map_err(contract_error)?);
@@ -253,7 +253,11 @@ impl Engine {
             return Err(Rejected::new("limit_exceeded", format!("the artifact is over {} bytes", self.limits.max_bytes)));
         }
         let (member, filled) = match setting(&self.read, "container") {
-            Some("zip") => (formats::zip_member(bytes, self.limits.max_member_bytes, setting(&self.read, "member"))?, None),
+            Some("zip") => {
+                let member = formats::zip_member(bytes, self.limits.max_member_bytes, setting(&self.read, "member"))?;
+                let zipped = !context::from_zip(&self.read).is_empty();
+                (member, if zipped { Some(context::fill_from_zip(&self.read, context, bytes, self.limits.max_member_bytes)?) } else { None })
+            }
             Some("sgml") => {
                 let (xml, header) = formats::sgml_document(bytes, self.limits.max_member_bytes, setting(&self.read, "member"))?;
                 (xml, Some(context::fill_from_header(&self.read, context, &header)?))
@@ -740,6 +744,17 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
             }
             for (_, input) in inputs.into_iter().flatten() {
                 validate_expr(input, steps)?;
+            }
+        }
+        "found" | "first_found" => {
+            let map = args.as_mapping().ok_or(format!("{name} takes a mapping"))?;
+            let allowed: &[&str] = if name == "found" { &["path", "from", "transforms"] } else { &["path", "from", "transforms", "within"] };
+            if map.keys().any(|k| !k.as_str().is_some_and(|k| allowed.contains(&k))) { return Err(format!("{name} has an unknown argument")); }
+            if args.get("from").is_some_and(|v| !matches!(v.as_str(), Some("document" | "item"))) { return Err(format!("{name} from is document or item")); }
+            check_path(setting(args, "path").ok_or(format!("{name} names no path"))?)?;
+            if args.get("transforms").and_then(Value::as_sequence).is_none() { return Err(format!("{name} requires transforms")); }
+            if args.get("within").is_some_and(|v| !v.as_u64().is_some_and(|n| (1..=10_000).contains(&n))) {
+                return Err("first_found within is 1 to 10000".into());
             }
         }
         "text" => {
@@ -1333,6 +1348,34 @@ fn eval(engine: &Engine, context: &Row, lookups: &Lookups, document: &El, item: 
             lookup_sets::member_value(lookups, setting(args,"lookup").unwrap(), &key, setting(args,"on_many").unwrap())
         }
         "ordinal" => Ok(Val::Int(ordinal)),
+        // Whether the text at a path, run through the transforms, is not empty.
+        "found" => {
+            let recipe = engine.text_recipe(&args["transforms"]);
+            Ok(Val::Bool(match text_at(scope(document, item, args), args)? {
+                Some(text) => !recipe.apply(text.trim().to_string())?.is_empty(),
+                None => false,
+            }))
+        }
+        // The first nonempty result of the transforms over the texts at a path, in order (at most `within`
+        // of them): one value from many blocks of a page.
+        "first_found" => {
+            let recipe = engine.text_recipe(&args["transforms"]);
+            let within = args.get("within").and_then(Value::as_u64).unwrap_or(10_000) as usize;
+            let start = scope(document, item, args);
+            let path = setting(args, "path").unwrap_or_default();
+            let found = lookup(start, path)?;
+            let texts: Vec<&str> = match &found {
+                Found::List(rows) => rows.iter().filter_map(|el| el.text.as_deref()).collect(),
+                Found::El(el) => el.text.as_deref().into_iter().collect(),
+                Found::Text(text, _, _) => vec![text.as_str()],
+                Found::Missing => Vec::new(),
+            };
+            for text in texts.into_iter().take(within) {
+                let result = recipe.apply(text.trim().to_string())?;
+                if !result.is_empty() { return Ok(Val::Str(result)); }
+            }
+            Ok(Val::Null)
+        }
         "test" => predicate::read(if setting(args, "from") == Some("document") { document } else { item }, args),
         "context" => Ok(context.get(setting(args, "name").unwrap()).unwrap().clone()),
         "const" => Ok(yaml_val(args.get("value"))),

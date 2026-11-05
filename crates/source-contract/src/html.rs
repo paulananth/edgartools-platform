@@ -243,6 +243,17 @@ pub fn html(bytes: &[u8], max_records: usize) -> Result<El, Rejected> {
     // The blocks just above a table say what it is (a statement's title, its unit): each row carries the
     // three nearest, `@above` the nearest.
     let mut above: Vec<String> = Vec::new();
+    // And the first two rows of its table, whose cells (joined by " | ") hold the column headings.
+    let mut heads: std::collections::HashMap<usize, [String; 2]> = std::collections::HashMap::new();
+    for record in &walk.records {
+        if let Some((table, number @ 1..=2)) = record.table {
+            let cells: Vec<&str> = record.texts.iter().map(String::as_str).filter(|cell| !cell.is_empty()).collect();
+            heads.entry(table).or_default()[number - 1] = tail(&cells.join(" | "), MAX_ABOVE);
+        }
+    }
+    // The text above a table is the text since the table before it: a unit stated for one statement never
+    // reaches the next one.
+    let mut shown: (usize, Vec<String>) = (0, Vec::new());
     for record in walk.records {
         match record.table {
             None => {
@@ -255,9 +266,21 @@ pub fn html(bytes: &[u8], max_records: usize) -> Result<El, Rejected> {
             }
             Some((table, number)) => {
                 let mut row = element(String::new(), &[("at", record.place), ("table", table), ("row", number)]);
-                for (name, text) in ["above", "above2", "above3"].iter().zip(above.iter().rev()) {
+                if shown.0 != table {
+                    shown = (table, std::mem::take(&mut above));
+                }
+                for (name, text) in ["above", "above2", "above3"].iter().zip(shown.1.iter().rev()) {
                     row.attrs.insert(format!("@{name}"), text.clone());
                 }
+                for (name, text) in ["head", "head2"].iter().zip(heads.get(&table).into_iter().flatten()) {
+                    if !text.is_empty() {
+                        row.attrs.insert(format!("@{name}"), text.clone());
+                    }
+                }
+                // All the row's filled cells in one text, " | " between them, so a number can be found by
+                // its place among the cells whatever symbol cells sit between.
+                let filled: Vec<&str> = record.texts.iter().map(String::as_str).filter(|cell| !cell.is_empty()).collect();
+                row.attrs.insert("@cells".into(), filled.join(" | "));
                 row.text = None;
                 for (position, cell) in record.texts.into_iter().enumerate() {
                     row.add_child(format!("c{}", position + 1), El { text: Some(cell), ..El::default() });
@@ -335,7 +358,11 @@ mod tests {
         let rows = all(&document, "row");
         let named = |row: &El| ["@above", "@above2", "@above3"].map(|k| row.attrs.get(k).cloned().unwrap_or_default());
         assert_eq!(named(rows[0]), ["(in thousands)", "BALANCE SHEETS", "Invented Co."]);
-        assert_eq!(named(rows[1]), ["after", "(in thousands)", "BALANCE SHEETS"]);
+        assert_eq!(named(rows[1]), ["after", "", ""]); // only the text since the table before it
+        assert_eq!(rows[0].attrs["@cells"], "Total assets | 5");
+        // The table's first two rows say its column headings, on every row of the table.
+        let heads = [rows[0].attrs.get("@head"), rows[0].attrs.get("@head2")];
+        assert_eq!(heads, [Some(&"Total assets | 5".to_string()), None]);
         let long = format!("<p>{}</p><table><tr><td>x</td></tr></table>", "é".repeat(400));
         let cut = html(long.as_bytes(), 100).unwrap();
         let above = &all(&cut, "row")[0].attrs["@above"];

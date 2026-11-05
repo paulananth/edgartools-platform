@@ -69,9 +69,9 @@ sources:
     target: silver
     requires: []
     after: [sec.company, sec.thirteenf.securities]
-  # Registration statements (ticket 149): captured first; the reading, and the
-  # links to the Company by CIK, come with onboarding.
+  # Registration statements (ticket 149): captured by the `capture` target, then read and landed in
+  # silver by `silver`, linked to the Company by CIK.
   sec.registration:
-    target: null
+    target: silver
     requires: []
     after: [sec.company]

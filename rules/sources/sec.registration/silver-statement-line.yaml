@@ -1,0 +1,173 @@
+# The silver table of the statement lines a registration page shows (ticket 149): one row per table row
+# whose label is one of the line items a valuation needs (revenue, operating income, net income, cash, total
+# assets and liabilities, debt, leases, research and development, tax, capital spending, share-based pay,
+# weighted shares). Rows are the `statement_line` table of registration-page.yaml. Values are as filed:
+# digits without commas, the brackets of a negative figure as `value_negative`, up to four number cells of the
+# row in column order, and the table's own first two rows (`head`) and the text above it (`above`) say which
+# period and unit each column is. The statement and the scale come from the text above the table and are empty
+# when it says neither. This is the input of a valuation model (operator, 2026-11-04: Damodaran's valuation
+# tools): the reviewed label list is `registration-page.yaml`'s `line_item`. No master field (ticket 143).
+table: registration_statement_line
+definition: One valuation line item of one table of a registration page, with up to four of its numbers and their years, as filed.
+grain: one row per accession number, table and row
+columns:
+- name: accession_number
+  type: VARCHAR
+  nullable: false
+  definition: The filing's accession number.
+  source: capture metadata scope.accession
+  sensitivity: none
+- name: cik
+  type: VARCHAR
+  nullable: false
+  definition: The registrant's CIK, by which its Company is found.
+  source: capture metadata scope.cik
+  sensitivity: none
+- name: captured_on
+  type: DATE
+  nullable: false
+  definition: 'The day the page was captured from the SEC archive (the first ten characters of the capture''s time): the row''s date in silver.'
+  source: capture metadata captured_at
+  sensitivity: none
+- name: table_number
+  type: BIGINT
+  nullable: false
+  definition: The table's number in the page.
+  source: page order
+  sensitivity: none
+- name: row_number
+  type: BIGINT
+  nullable: false
+  definition: The row's number in its table.
+  source: page order
+  sensitivity: none
+- name: label
+  type: VARCHAR
+  nullable: false
+  definition: The row's label as filed.
+  source: first cell
+  sensitivity: none
+- name: line_item
+  type: VARCHAR
+  nullable: false
+  definition: The standard line item the label names (revenue, cost_of_revenue, gross_profit, research_and_development, operating_income, net_income, income_tax, depreciation_amortization,
+    stock_based_compensation, capital_expenditure, cash, total_assets, total_liabilities, total_equity, total_debt, lease_liabilities, weighted_average_shares).
+  source: registration-page.yaml
+  sensitivity: none
+- name: statement
+  type: VARCHAR
+  nullable: true
+  definition: balance_sheet, income_statement or cash_flow, when the text above the table says so; empty otherwise.
+  source: text above the table
+  sensitivity: none
+- name: scale
+  type: VARCHAR
+  nullable: true
+  definition: thousands, millions or billions, when the text above the table says so; empty means as stated (units).
+  source: text above the table
+  sensitivity: none
+- name: value1
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: The row's number cell 1 in column order, as filed, without commas and brackets.
+  source: row cells
+  sensitivity: none
+- name: value1_negative
+  type: BOOLEAN
+  nullable: true
+  definition: Whether cell 1 was in brackets (a negative figure).
+  source: row cells
+  sensitivity: none
+- name: year1
+  type: BIGINT
+  nullable: true
+  definition: The 1th year named by the table's heading rows, in column order.
+  source: table heading rows
+  sensitivity: none
+- name: value2
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: The row's number cell 2 in column order, as filed, without commas and brackets.
+  source: row cells
+  sensitivity: none
+- name: value2_negative
+  type: BOOLEAN
+  nullable: true
+  definition: Whether cell 2 was in brackets (a negative figure).
+  source: row cells
+  sensitivity: none
+- name: year2
+  type: BIGINT
+  nullable: true
+  definition: The 2th year named by the table's heading rows, in column order.
+  source: table heading rows
+  sensitivity: none
+- name: value3
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: The row's number cell 3 in column order, as filed, without commas and brackets.
+  source: row cells
+  sensitivity: none
+- name: value3_negative
+  type: BOOLEAN
+  nullable: true
+  definition: Whether cell 3 was in brackets (a negative figure).
+  source: row cells
+  sensitivity: none
+- name: year3
+  type: BIGINT
+  nullable: true
+  definition: The 3th year named by the table's heading rows, in column order.
+  source: table heading rows
+  sensitivity: none
+- name: value4
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: The row's number cell 4 in column order, as filed, without commas and brackets.
+  source: row cells
+  sensitivity: none
+- name: value4_negative
+  type: BOOLEAN
+  nullable: true
+  definition: Whether cell 4 was in brackets (a negative figure).
+  source: row cells
+  sensitivity: none
+- name: year4
+  type: BIGINT
+  nullable: true
+  definition: The 4th year named by the table's heading rows, in column order.
+  source: table heading rows
+  sensitivity: none
+- name: above
+  type: VARCHAR
+  nullable: true
+  definition: The text block just above the table, cut to its last 300 bytes.
+  source: text above the table
+  sensitivity: none
+- name: head
+  type: VARCHAR
+  nullable: true
+  definition: The table's first row, its filled cells joined by ' | ', cut to 300 bytes.
+  source: table heading rows
+  sensitivity: none
+key:
+- accession_number
+- table_number
+- row_number
+links:
+- columns:
+  - cik
+  kind: company
+  source_code: sec.company.v1
+  to_part: registrant
+  source_key: cik
+  mdm_id_column: registrant_mdm_id
+time:
+  as_of: null
+  as_at: captured_on
+  event_time: null
+partition: []
+load_mode: append
+why: 'A statement line is a fact of a filed document: transaction data keyed by its place in the page, linked to the registrant Company by lookup. Append, since a filed document never
+  changes.'
+checks: []
