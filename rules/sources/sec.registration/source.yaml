@@ -64,7 +64,7 @@ bookkeeping:
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.output]
-          units: {slices: {bytes: 33554432}}
+          units: {slices: {bytes: 16777216}}
           input:
             contract: registration-page.yaml
             files: "*.capture.zip"
