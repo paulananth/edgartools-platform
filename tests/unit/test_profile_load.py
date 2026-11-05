@@ -32,3 +32,11 @@ def test_progress_groups_units_by_step_in_run_order_with_the_verified_share():
     assert tool.progress_table(rows) == [
         ("requests", 10, {"verified": 6, "pending": 2, "reported": 2}, 0.6),
         ("merge", 4, {"pending": 3, "verified": 1}, 0.25)]
+
+
+def test_failures_group_units_by_step_state_and_error_shape_without_values():
+    rows = [("read", "waiting", "ValueError", 12), ("land", "waiting", "Blocked", 8),
+            ("land", "waiting", "Blocked", 2), ("land", "pending", "No file 'invented.zip' at 12", 1)]
+    assert tool.failure_table(rows) == [
+        ("read", "waiting", "ValueError", 12), ("land", "waiting", "Blocked", 10),
+        ("land", "pending", "No file S at N", 1)]
