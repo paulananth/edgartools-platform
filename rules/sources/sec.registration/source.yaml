@@ -19,7 +19,7 @@
 source: sec.registration
 bronze:
   family: sec.registration
-execution: {profile: source.read, workers: 1, max_artifacts: 512, max_input_bytes: 134217728}
+execution: {profile: source.read, workers: 1, max_artifacts: 512}
 acquisition:
   version: 1
   feeds:
