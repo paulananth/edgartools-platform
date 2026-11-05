@@ -12,6 +12,9 @@ use crate::Rejected;
 
 /// Text transformations take at most 1 MiB, so no block may be larger.
 const MAX_BLOCK: usize = 1024 * 1024;
+/// A row names the text blocks just above its table, at most this many, each cut to its last bytes.
+const ABOVE: usize = 3;
+const MAX_ABOVE: usize = 300;
 
 const BLOCKS: &[&str] = &[
     "address", "article", "aside", "blockquote", "body", "br", "caption", "center", "dd", "div", "dl", "dt",
@@ -198,6 +201,15 @@ fn is_plain(body: &Handle) -> bool {
     !body.children.borrow().iter().any(|child| matches!(child.data, NodeData::Element { .. }))
 }
 
+/// The last `max` bytes of a text, cut at a character.
+fn tail(text: &str, max: usize) -> String {
+    let mut start = text.len().saturating_sub(max);
+    while !text.is_char_boundary(start) {
+        start += 1;
+    }
+    text[start..].to_owned()
+}
+
 fn element(text: String, attrs: &[(&str, usize)]) -> El {
     let mut el = El { text: Some(text), ..El::default() };
     for (name, value) in attrs {
@@ -228,14 +240,24 @@ pub fn html(bytes: &[u8], max_records: usize) -> Result<El, Rejected> {
         }
     }
     walk.records.sort_by_key(|record| record.place);
+    // The blocks just above a table say what it is (a statement's title, its unit): each row carries the
+    // three nearest, `@above` the nearest.
+    let mut above: Vec<String> = Vec::new();
     for record in walk.records {
         match record.table {
             None => {
                 let text = record.texts.into_iter().next().unwrap_or_default();
+                above.push(tail(&text, MAX_ABOVE));
+                if above.len() > ABOVE {
+                    above.remove(0);
+                }
                 document.add_child("block".into(), element(text, &[("at", record.place)]));
             }
             Some((table, number)) => {
                 let mut row = element(String::new(), &[("at", record.place), ("table", table), ("row", number)]);
+                for (name, text) in ["above", "above2", "above3"].iter().zip(above.iter().rev()) {
+                    row.attrs.insert(format!("@{name}"), text.clone());
+                }
                 row.text = None;
                 for (position, cell) in record.texts.into_iter().enumerate() {
                     row.add_child(format!("c{}", position + 1), El { text: Some(cell), ..El::default() });
@@ -302,6 +324,22 @@ mod tests {
             ("2".into(), "1".into(), vec!["inner".into()]),
         ]);
         assert_eq!(order(&el), ["Before", "The fees", "Title", "Common stock", "", "inner", "After"]);
+    }
+
+    #[test]
+    fn a_row_names_the_three_blocks_just_above_its_table_nearest_first() {
+        let page = b"<p>far</p><p>Invented Co.</p><p>BALANCE SHEETS</p><p>(in thousands)</p>\
+            <table><tr><td>Total assets</td><td>5</td></tr></table><p>after</p>\
+            <table><tr><td>Other</td><td>6</td></tr></table>";
+        let document = html(page, 100).unwrap();
+        let rows = all(&document, "row");
+        let named = |row: &El| ["@above", "@above2", "@above3"].map(|k| row.attrs.get(k).cloned().unwrap_or_default());
+        assert_eq!(named(rows[0]), ["(in thousands)", "BALANCE SHEETS", "Invented Co."]);
+        assert_eq!(named(rows[1]), ["after", "(in thousands)", "BALANCE SHEETS"]);
+        let long = format!("<p>{}</p><table><tr><td>x</td></tr></table>", "é".repeat(400));
+        let cut = html(long.as_bytes(), 100).unwrap();
+        let above = &all(&cut, "row")[0].attrs["@above"];
+        assert!(above.len() <= MAX_ABOVE && above.chars().all(|c| c == 'é'));
     }
 
     #[test]
