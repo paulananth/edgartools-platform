@@ -93,3 +93,16 @@ def test_invalid_store_selection_is_refused(tmp_path, selection):
     local.private_write(stores.folder("one") / "identity.json", json.dumps({**identity, "stores": selection}))
     with pytest.raises(ValueError, match="selection is invalid"):
         stores.stores("one")
+
+
+def test_the_store_name_comes_from_the_argument_then_the_configuration_then_one_default():
+    assert local.server_name("mine", {local.SERVER_ENV: "configured"}) == "mine"
+    assert local.server_name(None, {local.SERVER_ENV: "configured"}) == "configured"
+    assert local.server_name(None, {}) == local.DEFAULT_SERVER == "local-test-server"
+    assert local.server_name(None, {local.SERVER_ENV: ""}) == "local-test-server"
+
+
+def test_no_other_store_name_is_built_into_the_script():
+    names = [line for line in PATH.read_text().splitlines()
+             if "company-on" in line or "source-by-source" in line]
+    assert names == []

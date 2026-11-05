@@ -235,6 +235,18 @@ checks and points to the repository lifecycle script.
    rules folder in use, and which stores answer (`not set` is fine for a store
    the task does not use).
 
+6. **Local test server.** For loads on a machine, initialize the one local store
+   all sources load into: the `local-test-server`. Its name is configuration
+   (`EDGARTOOLS_LOCAL_TEST_SERVER`, default `local-test-server`), never typed into
+   a command or a rules file:
+
+   ```bash
+   uv run --extra mdm python infra/scripts/local-test-stores.py up
+   ```
+
+   It prints the store's state and the env file's path, never a login. The folder
+   beside that file is what `load --stores` takes ([Local testing](LOCAL-TESTING.md#the-local-test-server)).
+
 ## 2. Parse
 
 A feed is parsed by the `source.read` worker: the configured engine reads

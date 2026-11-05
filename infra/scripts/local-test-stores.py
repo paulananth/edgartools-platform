@@ -434,13 +434,23 @@ class LocalStores:
                 self.docker("stop", "--time", "5", container)
 
 
+SERVER_ENV = "EDGARTOOLS_LOCAL_TEST_SERVER"
+DEFAULT_SERVER = "local-test-server"
+
+
+def server_name(argument: str | None, environ=os.environ) -> str:
+    """The store a command works on: the name given, else the one the machine's configuration names
+    (`EDGARTOOLS_LOCAL_TEST_SERVER`), else `local-test-server`. No other name is built in (ticket 192)."""
+    return argument or environ.get(SERVER_ENV) or DEFAULT_SERVER
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path.home() / ".local/share/edgartools/local-tests")
     sub = parser.add_subparsers(dest="command", required=True)
     for command in ("up", "stop", "status", "backup", "copy"):
         part = sub.add_parser(command)
-        part.add_argument("name")
+        part.add_argument("name", nargs="?", help=f"The store (default: ${SERVER_ENV}, else {DEFAULT_SERVER})")
         if command == "up":
             part.add_argument("--no-silver", action="store_true", help="Leave silver out (a core-only isolated test)")
         if command == "copy":
@@ -448,6 +458,7 @@ def main():
         if command == "backup":
             part.add_argument("--baseline", action="store_true", help="Check a restore, then use this baseline for future copies")
     args = parser.parse_args()
+    args.name = server_name(args.name)
     stores = LocalStores(args.root, Path.cwd())
     try:
         with stores.locked(args.name):
