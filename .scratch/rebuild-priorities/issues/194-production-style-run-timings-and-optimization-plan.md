@@ -43,6 +43,23 @@ records 13.3 (5 s), main (the actual read) 7.0 (1.5 s), keys 3.3. The read is 3%
 - [ ] The `processed` step (journal record, 11 s) is a write of one row per file set: batch it
 - [ ] The load is bound by the database more than by CPU (user time is 2x wall time at 3 bundles): measure the database's share before adding workers
 
+## Where one OpenFIGI bundle goes (553 units, 51,200 records, 52 merge batches; measured 2026-11-05 06:46 ET)
+
+| Step | Seconds | Share |
+|---|---|---|
+| requests | 782 | 27% |
+| the short steps (answers to processed), 1 to 3 chained events each | 370 | 13% |
+| **merge** | **1,690** | **58%** |
+
+The merge is 52 batches, one after another, about 30 s each (about 31 ms per record). Each batch is one SQL call
+(`mdm_store_apply`), so the database is the cost, not the code around it.
+
+- [x] Cache size is not the cause: 128 MB to 1 GB of cache left a batch at 30 to 33 s (checked on the batch counter and the sampled call lengths, 2026-11-05 06:30 ET). Not shipped.
+- [x] Re-parsing is not the main cause: the function parses the 29 MB batch document 109 times, but one parse costs 45 ms (about 3.5 s of the 30 s). Changing it would change a frozen storage protocol (`expected_protocol_fingerprints.json`), so it is not worth it.
+- [x] The statements spill to temporary files: the logged plans show `temp read=10158 written=12648` buffers on a statement of 2 s, because `work_mem` is the default 4 MB (`auto_explain` with nested statements, 2026-11-05 06:36 ET).
+- [ ] `work_mem` of 256 MB shortens a batch: result in the next line once measured.
+- [x] A skill tool measures this, not a hand-written script: `skills/data-operations/scripts/profile_load.py` (`steps`, `sample`), tested on invented values.
+
 ## What a first real load of a new source meets (belongs in "Built means ready to turn on")
 
 - [ ] The capture bridge: a source captured by `provider.capture` has no `receipts.jsonl`; the load needs one (written by hand for the registration pages)

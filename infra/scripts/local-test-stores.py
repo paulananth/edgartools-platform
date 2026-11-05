@@ -43,6 +43,9 @@ def owner_login(store: str) -> str:
 EXTRA_LOGINS = ("bookkeeping_verifier", "mdm_verifier", "mdm_governance", "rules_governance")
 IMAGE = "postgres:16-alpine"
 LABEL = "org.edgartools.local-tests.owner"
+# Server settings for a full load (ticket 194): the default 4 MB of work memory sends each merge statement's
+# working set to temporary files. A store made earlier keeps its settings: `ALTER SYSTEM SET work_mem` and reload.
+SERVER_SETTINGS = ("-c", "work_mem=256MB")
 
 
 def private_write(path: Path, value: str) -> None:
@@ -170,7 +173,8 @@ class LocalStores:
             private_write(env, "POSTGRES_PASSWORD=" + identity["password"] + "\n")
             self.docker("run", "-d", "--name", container, "--label", f"{LABEL}={self.owner}",
                         "--restart", "unless-stopped", "--env-file", str(env),
-                        "-p", "127.0.0.1::5432", "-v", f"{volume}:/var/lib/postgresql/data", IMAGE)
+                        "-p", "127.0.0.1::5432", "-v", f"{volume}:/var/lib/postgresql/data", IMAGE,
+                        *SERVER_SETTINGS)
         elif not found["State"]["Running"]:
             self.docker("start", container)
         deadline = time.monotonic() + 30
