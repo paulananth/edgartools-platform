@@ -384,6 +384,8 @@ Work it out from counts before starting:
 - **Measure a slow load with `scripts/profile_load.py`, never by hand**.
   `progress` shows, for the running runs, the units in each state per step and how long they have run: the
   answer to "how far is it", and it lists runs left `running` by a load that was stopped.
+  `quality` lists the data quality counts each merge run retained (records, records set aside by a failed check,
+  open reviews, fields with empty values; needs `MDM_DATABASE_URL`).
   `failures` groups the units that hold an error by step, state and error shape, with counts: read it before
   opening the load log.
   `steps` gives each step's share of a finished run (needs `BOOKKEEPING_DATABASE_URL`, in `worker.env`);
