@@ -381,6 +381,12 @@ Work it out from counts before starting:
   every test container and the shared server freeze, and brief Power Nap
   wakes make a run look slow, not stopped (a 6-minute test took 61, ticket
   138). Start a long run or test as `caffeinate -i <command>`.
+- **Measure a slow load with `scripts/profile_load.py`, never by hand**.
+  `steps` gives each step's share of a finished run (needs `BOOKKEEPING_DATABASE_URL`, in `worker.env`);
+  `sample` ranks what the database ran, once a second (needs `PROFILE_DATABASE_URL`, a login that reads
+  `pg_stat_activity`). For a statement inside a function, set `shared_preload_libraries=auto_explain` with
+  `auto_explain.log_nested_statements=on` and read the server log. The first answer is the step; the second,
+  the statement.
 - **Read a failed call's database error**, the `(psycopg2.errors.X)` line,
   not SQLAlchemy's last line, which is only a link.
 - **A target that reads another target's runs** (`{run: {source, target,

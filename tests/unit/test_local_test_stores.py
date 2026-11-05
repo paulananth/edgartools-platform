@@ -106,3 +106,17 @@ def test_no_other_store_name_is_built_into_the_script():
     names = [line for line in PATH.read_text().splitlines()
              if "company-on" in line or "source-by-source" in line]
     assert names == []
+
+
+def test_a_new_server_starts_with_the_load_settings(tmp_path, monkeypatch):
+    stores = local.LocalStores(tmp_path, tmp_path)
+    calls = []
+    monkeypatch.setattr(stores, "resource", lambda *a: None)
+    monkeypatch.setattr(stores, "docker", lambda *a: calls.append(a))
+    monkeypatch.setattr(stores, "engine", lambda *a: (_ for _ in ()).throw(RuntimeError("stop after docker run")))
+    monkeypatch.setattr(local.time, "monotonic", iter([0, 99]).__next__)
+    with pytest.raises(RuntimeError):
+        stores.start("settings")
+    run = next(call for call in calls if call[0] == "run")
+    assert run[-len(local.SERVER_SETTINGS):] == local.SERVER_SETTINGS
+    assert "work_mem=256MB" in run
