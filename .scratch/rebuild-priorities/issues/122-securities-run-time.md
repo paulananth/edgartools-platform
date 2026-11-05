@@ -83,10 +83,7 @@ profiled.
 ## Ideas to test (none decided)
 
 - [x] Measure the split between work and Bookkeeping's checks (2026-10-20 07:55 ET): sampled over pass 2's last steps, above; checks are 48 of 74 minutes, `finalize` 16
-- [ ] Recheck another run's units once per run, not on every claim, report,
-      verify and finalize (ticket 121, "Rechecking cost"); measured cost about
-      10 min a step over the ten steps that read OpenFIGI's answers, plus
-      `finalize`'s 16 min: roughly 1.5 to 2 hours of the run
+- [x] Recheck another run's units once per run (operator, 2026-11-04 19:55 ET: "optimizeit first", before the OpenFIGI reload of ticket 153). Measured read-only on `company-on` (counts only): one frozen-run check of a 553-unit run takes 0.17 s and of a 9,538-unit run 1.4 s, so the 480 answer units of 8 runs cost 480 checks, about 82 s, which is the 73 s a claim measured on 2026-10-20. Fixed: a composed fill checks each other run once (`Bookkeeping._receipt` and `_compose`, `others`); GoF consult: option (a), a per-fill memo like `seen`, not a cache on the instance (a run's stored rows change on each claim). Test `test_a_fill_checks_each_other_run_once_however_many_of_its_units_it_names`: three units of one run were checked three times before, once now. Not yet measured on a whole Securities run; the report (`report`, `verify`, `finalize`) paths still check the run's own chain
 - [ ] Split the quarter into several units at the reading steps (`holdings`,
       `issuers`), so parallel workers share the work
 - [ ] Merge in sets of records rather than one by one, within the

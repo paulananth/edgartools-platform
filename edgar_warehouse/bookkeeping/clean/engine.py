@@ -248,16 +248,22 @@ class Bookkeeping:
         run, config, manifest, _ = self._frozen(str(item["run_id"]))
         return {"run": run, "config": config, "manifest": manifest}
 
-    def _receipt(self, item: dict, dependency: dict, context: dict) -> dict:
+    def _receipt(self, item: dict, dependency: dict, context: dict, others: dict | None = None) -> dict:
         """One prerequisite unit's verified output, after reverifying its chain. A unit of another run
-        (ticket 120) is reverified against that run's own frozen configuration."""
+        (ticket 120) is reverified against that run's own frozen configuration. `others` holds each other
+        run's checked context once per fill (ticket 122): a complete run is final, so 480 units of 8 runs
+        check 8 runs, not 480 times (measured: 0.17 s a check, 73 s a claim)."""
         found = storage.work(self.engine, dependency.get("run", str(item["run_id"])),
                              step=dependency["step"], key=dependency["key"], states=["verified"])
         if not found:
             raise Blocked("Prerequisite input lacks verified completion")
         if "run" in dependency:
             declared = self._other_runs_declared(item, context)
-            context = self._context(found[0])
+            run_id = str(found[0]["run_id"])
+            others = {} if others is None else others
+            if run_id not in others:
+                others[run_id] = self._context(found[0])
+            context = others[run_id]
             other = context["run"]
             submission = other["submission"]
             if other["state"] != "complete" or other["compacted_at"] is not None:
@@ -281,13 +287,16 @@ class Bookkeeping:
         return {(submission["kind"], v["run"]["source"], v["run"]["target"], v["run"]["step"])
                 for v in [*shape.get("readings", {}).values(), *shape.get("lookups", {}).values()] if "run" in v}
 
-    def _compose(self, item: dict, body: dict, context: dict, store: bool, seen: dict) -> dict:
+    def _compose(self, item: dict, body: dict, context: dict, store: bool, seen: dict,
+                 others: dict | None = None) -> dict:
         """Fill a composed document's slots with verified receipts; the same receipts give the same bytes.
-        `seen` holds each unit's receipt once per fill: a unit named in several slots is verified once."""
+        `seen` holds each unit's receipt once per fill: a unit named in several slots is verified once.
+        `others` holds each other run's checked context once per fill."""
+        others = {} if others is None else others
         def receipt(dependency):
             unit = (dependency.get("run"), dependency["step"], dependency["key"])
             if unit not in seen:
-                seen[unit] = self._receipt(item, dependency, context)
+                seen[unit] = self._receipt(item, dependency, context, others)
             return seen[unit]
 
         filled = {}
@@ -295,7 +304,7 @@ class Bookkeeping:
             if isinstance(value, list):
                 filled[name] = [receipt(dependency) for dependency in value]
             elif set(value) == {"compose"}:
-                filled[name] = self._compose(item, value["compose"], context, store, seen)
+                filled[name] = self._compose(item, value["compose"], context, store, seen, others)
             else:
                 filled[name] = receipt(value)
 
