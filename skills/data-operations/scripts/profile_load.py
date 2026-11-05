@@ -3,6 +3,8 @@
 
 progress  Units per step and state of the running runs (or one run), and how long they have run
           (BOOKKEEPING_DATABASE_URL).
+failures  Units that hold an error, grouped by step, state and error shape, with counts
+          (BOOKKEEPING_DATABASE_URL).
 steps   Time per step of one Bookkeeping run, from its journal (BOOKKEEPING_DATABASE_URL).
 sample  What the database was running, once a second: statements ranked by seconds seen, so the
         dominating statement shows (PROFILE_DATABASE_URL, a login that may read pg_stat_activity).
@@ -34,6 +36,12 @@ PROGRESS = text("""
 RUNNING_SINCE = text("""
     SELECT count(*), min(created_at), now() FROM bookkeeping.pipeline_run
     WHERE CASE WHEN :run IS NULL THEN state = 'running' ELSE run_id = CAST(:run AS uuid) END""")
+FAILURES = text("""
+    SELECT w.step, w.state, w.error, count(*) AS units
+    FROM bookkeeping.work_item w JOIN bookkeeping.pipeline_run r USING (run_id)
+    WHERE w.error IS NOT NULL
+      AND CASE WHEN :run IS NULL THEN r.state = 'running' ELSE r.run_id = CAST(:run AS uuid) END
+    GROUP BY w.step, w.state, w.error""")
 ACTIVE = text("""
     SELECT datname, query FROM pg_stat_activity
     WHERE state = 'active' AND pid <> pg_backend_pid() AND datname IS NOT NULL""")
@@ -75,6 +83,25 @@ def progress_table(rows) -> list[tuple[str, int, dict, float]]:
         total = sum(entry["states"].values())
         table.append((step, total, entry["states"], entry["states"].get("verified", 0) / total))
     return table
+
+
+def failure_table(rows) -> list[tuple[str, str, str, int]]:
+    """(step, state, error shape, units), the most units first. The error text is reduced to its shape."""
+    counts: Counter = Counter()
+    for step, state, error, units in rows:
+        counts[(step, state, shape(error))] += units
+    return [(step, state, error, units) for (step, state, error), units in
+            sorted(counts.items(), key=lambda item: (-item[1], item[0]))]
+
+
+def failures(url: str, run: str | None) -> None:
+    engine = create_engine(url)
+    with engine.connect() as conn:
+        table = failure_table(conn.execute(FAILURES, {"run": run}).all())
+    if not table:
+        print("No unit holds an error")
+    for step, state, error, units in table:
+        print(f"{units:>6} units  {step:<22}{state:<10}{error}")
 
 
 def progress(url: str, run: str | None) -> None:
@@ -120,6 +147,8 @@ def main() -> None:
     sub = parser.add_subparsers(dest="view", required=True)
     zero = sub.add_parser("progress")
     zero.add_argument("--run", help="a run id (default: every running run)")
+    bad = sub.add_parser("failures")
+    bad.add_argument("--run", help="a run id (default: every running run)")
     one = sub.add_parser("steps")
     one.add_argument("--run", help="a run id (default: the latest complete run)")
     one.add_argument("--size", type=int, help="with no run: the latest complete run of this many units")
@@ -129,6 +158,8 @@ def main() -> None:
     args = parser.parse_args()
     if args.view == "progress":
         progress(os.environ["BOOKKEEPING_DATABASE_URL"], args.run)
+    elif args.view == "failures":
+        failures(os.environ["BOOKKEEPING_DATABASE_URL"], args.run)
     elif args.view == "steps":
         steps(os.environ["BOOKKEEPING_DATABASE_URL"], args.run, args.size)
     else:
