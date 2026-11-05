@@ -93,7 +93,7 @@ approvals:
   by: Operator
   words: approved all rules
   at: '2026-11-04'
-  finalized: PR (this change)
+  finalized: PR 1429
 - kind: source
   name: sec.submissions.person
   digest: c5c9f224a69466f453204c6519f94a8aa76f1a1dc2cec16e85cb23196d9ebe1d
