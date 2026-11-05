@@ -252,7 +252,11 @@ def test_two_way_rules_migration_preserves_all_document_digests(databases, tmp_p
     version = "roundtrip-" + uuid4().hex
     rows = databases.rules.from_files(files.ROOT, version)
     assert {r["kind"] for r in rows} == {"source", "merge", "pipeline"}
-    assert all(r["status"] == "draft" and r["approved_by"] is None for r in rows)
+    # The approvals are in git (ticket 193): loading approves every version whose digest `rules/approvals.yaml` lists.
+    from edgar_warehouse.rules import approvals
+
+    assert approvals.missing() == []  # a rules change comes with its approval line
+    assert all(r["status"] == "proven" and r["approved_by"] and r["proof"] is None for r in rows)
     exported = databases.rules.to_files(tmp_path, version)
     assert {r["digest"] for r in rows} == {r["digest"] for r in exported}
     assert digest(files.policy(tmp_path)) == digest(files.policy())
