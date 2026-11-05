@@ -12,10 +12,14 @@
 # both from the submissions index; one unit per accession number (a filing listed
 # under two co-registrants is asked once). The bound is the transport's 128 MiB
 # ceiling: the index gives the whole filing's size, not the main document's.
-# No dataset yet: the reading and its Dataset Contract come with onboarding.
+# The pages are read by registration-page.yaml (the engine's HTML reading with text operations: no custom
+# code, operator, 2026-11-04: "write it in rust why python?") into two silver tables, the offering terms
+# the cover states and the statement lines a valuation needs (operator, 2026-11-04: Damodaran's valuation
+# tools). Nothing goes to MDM: a row finds its Company by CIK. Ticket 149.
 source: sec.registration
 bronze:
   family: sec.registration
+execution: {profile: source.read, workers: 1, max_artifacts: 512}
 acquisition:
   version: 1
   feeds:
@@ -38,7 +42,7 @@ acquisition:
       url_prefixes:
       - https://www.sec.gov/Archives/edgar/data/
 bookkeeping:
-  version: 1
+  version: 2
   targets:
     capture:
       lease_seconds: 300
@@ -50,4 +54,38 @@ bookkeeping:
           key: "{accession_number}"
           leases: ["provider:sec", "output:{destination}"]
           checks: [input.hash, output.receipt, capture.verified]
+      checks: [manifest.hash, work.accounting, journal.delivered]
+    # The captured pages, read and landed in silver (the Company is mastered by sec.company, which runs first).
+    silver:
+      steps:
+        - name: read
+          operation: source.read
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {slices: {bytes: 33554432}}
+          input:
+            contract: registration-page.yaml
+            files: "*.capture.zip"
+        - name: land_offering
+          operation: silver.land
+          requires: [read]
+          key: "{unit}"
+          leases: ["silver:{silver}"]
+          checks: [input.hash, output.receipt, silver.landed]
+          input: {keys: {table: offering, silver: registration_offering}}
+        - name: land_statement_line
+          operation: silver.land
+          requires: [read]
+          key: "{unit}"
+          leases: ["silver:{silver}"]
+          checks: [input.hash, output.receipt, silver.landed]
+          input: {keys: {table: statement_line, silver: registration_statement_line}}
+        - name: processed
+          operation: journal.record
+          requires: [land_offering, land_statement_line]
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, journal.recorded]
       checks: [manifest.hash, work.accounting, journal.delivered]

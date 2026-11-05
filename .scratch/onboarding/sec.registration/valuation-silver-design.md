@@ -75,3 +75,15 @@ The listed ticker comes from the Security master by the issuer, beside `ticker_p
   ruling was "Main doc only"). Recommendation: do not ask; the aggregate price is shares offered times the
   price, and only 24 filings state a range anyway.
 - His datasets (betas, risk premium) are a different provider: ask separately, as reference data.
+
+## As built (2026-11-04)
+
+- Two silver tables, not three: `registration_offering` and `registration_statement_line`. The separate
+  `registration_valuation_input` is dropped: the statement line's `line_item` (17 line items) is the input of a
+  valuation, so no derived table is built.
+- Read by the engine alone (Rust): `registration-page.yaml`, no custom code. All 732 filings from 2026 read, none
+  refused. Cover terms: exchange 678, ticker 645, shares offered 598, fixed price 159, price range 31, over-allotment
+  10. Statement lines: 27,415, of which 25,776 carry a number; income statement 8,268, balance sheet 5,623, cash
+  flow 2,284.
+- Not measured: how often a value is the wrong column (a percent-of-revenue column can sit beside the amounts;
+  the table's heading text, `head`, tells them apart).

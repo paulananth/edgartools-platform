@@ -16,6 +16,7 @@ enum Operation {
     Trim,
     Replace(String, String),
     RegexReplace(Regex, String),
+    RegexExtract(Regex, usize),
     Pad(String, String),
     RemovePrefix(String),
     Lines(Recipe),
@@ -29,13 +30,13 @@ pub(crate) fn cost(value: &Value) -> (usize, usize) {
     let mut result = (0, 0);
     for op in value.as_sequence().into_iter().flatten() {
         result.0 += 1;
-        result.1 += usize::from(op.get("regex_replace").is_some());
+        result.1 += usize::from(op.get("regex_replace").is_some() || op.get("regex_extract").is_some());
         if let Some(inner) = op.get("lines") {
             // Nested lines are rejected by compile. Inspect one bounded level
             // here rather than recursively visiting malformed recipes.
             if let Some(ops) = inner.as_sequence() {
                 result.0 += ops.len();
-                result.1 += ops.iter().filter(|op| op.get("regex_replace").is_some()).count();
+                result.1 += ops.iter().filter(|op| op.get("regex_replace").is_some() || op.get("regex_extract").is_some()).count();
             }
         }
     }
@@ -94,6 +95,17 @@ impl Recipe {
                     let regex = RegexBuilder::new(&pattern).size_limit(MAX_TEXT).dfa_size_limit(MAX_TEXT)
                         .nest_limit(32).build().map_err(|e| format!("text transform regex: {e}"))?;
                     Operation::RegexReplace(regex, replacement)
+                }
+                Some("regex_extract") => {
+                    let map = args.as_mapping().filter(|m| m.len() == 2)
+                        .ok_or("regex_extract requires exactly pattern and group")?;
+                    let pattern = text(map.get(Value::String("pattern".into())).ok_or("regex_extract requires a pattern")?)?;
+                    let group = map.get(Value::String("group".into())).and_then(Value::as_u64)
+                        .filter(|group| *group <= 32).ok_or("regex_extract group is a capture number from 0 to 32")? as usize;
+                    let regex = RegexBuilder::new(&pattern).size_limit(MAX_TEXT).dfa_size_limit(MAX_TEXT)
+                        .nest_limit(32).build().map_err(|e| format!("text transform regex: {e}"))?;
+                    if group >= regex.captures_len() { return Err("regex_extract group is not in the pattern".into()); }
+                    Operation::RegexExtract(regex, group)
                 }
                 Some("pad") => { let (left, right) = pair(args, "left", "right")?; Operation::Pad(left, right) }
                 Some("remove_prefix") => Operation::RemovePrefix(text(args)?),
@@ -177,6 +189,14 @@ impl Recipe {
                     }
                     bounded_push(&mut out, &value[cursor..])?;
                     out
+                }
+                // The first match's capture group, or nothing: a text with no match becomes empty, so
+                // a column can be null when the pattern is absent.
+                Operation::RegexExtract(regex, group) => {
+                    if value.len() + 1 > MAX_SEARCH_BYTES {
+                        return Err(Rejected::new("text_transform_work_limit", "regex extraction exceeds 8388608 search-window bytes"));
+                    }
+                    regex.captures(&value).and_then(|found| found.get(*group)).map_or(String::new(), |m| m.as_str().to_owned())
                 }
                 Operation::Tokens(replacements) => {
                     let mut out = String::new();

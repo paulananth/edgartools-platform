@@ -1,0 +1,732 @@
+source: sec.registration
+execution:
+  profile: source.read
+  workers: 1
+  max_artifacts: 512
+read:
+  format: html
+  container: zip
+  member: payload
+  encoding:
+  - utf-8
+  - windows-1252
+  context:
+    accession_number:
+      type: text
+      zip_json:
+        member: metadata.json
+        path: scope.accession
+    cik:
+      type: text
+      zip_json:
+        member: metadata.json
+        path: scope.cik
+  limits:
+    max_bytes: 134217728
+    max_member_bytes: 134217728
+    max_records: 5000000
+  tables:
+    offering:
+      each: .
+      columns:
+        accession_number:
+          context:
+            name: accession_number
+        cik:
+          context:
+            name: cik
+        title:
+          text:
+            path: title.$
+            from: document
+            null_if:
+            - ''
+        shares_offered:
+          first_found:
+            path: block
+            from: document
+            within: 120
+            transforms:
+            - regex_extract:
+                pattern: '(?i)\b([0-9][0-9,]{4,}) (?:class [a-z] )?(?:shares|ordinary shares|american depositary shares|ads|units)\b'
+                group: 1
+            - regex_replace:
+                pattern: ','
+                with: ''
+        price_low:
+          first_found:
+            path: block
+            from: document
+            within: 200
+            transforms:
+            - regex_extract:
+                pattern: '(?i)between \$\s?([0-9]+(?:\.[0-9]+)?) and \$\s?[0-9]'
+                group: 1
+            - regex_replace:
+                pattern: ','
+                with: ''
+        price_high:
+          first_found:
+            path: block
+            from: document
+            within: 200
+            transforms:
+            - regex_extract:
+                pattern: '(?i)between \$\s?[0-9]+(?:\.[0-9]+)? and \$\s?([0-9]+(?:\.[0-9]+)?)'
+                group: 1
+            - regex_replace:
+                pattern: ','
+                with: ''
+        price_fixed:
+          first_found:
+            path: block
+            from: document
+            within: 200
+            transforms:
+            - regex_extract:
+                pattern: '(?i)(?:initial public offering price|offering price)[^.]{0,60}?\$\s?([0-9]+(?:\.[0-9]+)?) per'
+                group: 1
+            - regex_replace:
+                pattern: ','
+                with: ''
+        over_allotment_shares:
+          first_found:
+            path: block
+            from: document
+            within: 200
+            transforms:
+            - regex_extract:
+                pattern: '(?i)(?:option|right) to purchase up to ([0-9][0-9,]*) (?:additional )?(?:class [a-z] )?(?:shares|ordinary shares|ads|american depositary shares)'
+                group: 1
+            - regex_replace:
+                pattern: ','
+                with: ''
+        ticker:
+          first_found:
+            path: block
+            from: document
+            within: 200
+            transforms:
+            - regex_extract:
+                pattern: "(?i)(?:under|symbol)[^.]{0,40}?(?:symbol|ticker)[^.]{0,12}?[\u201C\\\"']\\s?([A-Z]{1,5})\\b"
+                group: 1
+        exchange:
+          first_found:
+            path: block
+            from: document
+            within: 200
+            transforms:
+            - regex_extract:
+                pattern: (?i)(nasdaq global select market|nasdaq global market|nasdaq capital market|nyse american|new york stock exchange|nyse|nasdaq)
+                group: 1
+    statement_line:
+      each: row
+      select:
+        found:
+          path: c1.$
+          transforms:
+          - regex_extract:
+              pattern: "(?i)^(?:(?:total )?(?:net )?(?:revenues?|sales)(?:, net)?|(?:total )?cost of (?:revenues?|sales|goods sold)|gross (?:profit|margin)|research and development(?: expenses?)?|(?:(?:loss|income|\\\
+                (loss\\) income|income \\(loss\\)) from operations|operating (?:loss|income|\\(loss\\) income|income \\(loss\\)))|net (?:loss|income|\\(loss\\) income|income \\(loss\\))|(?:provision for|benefit\
+                \ from|\\(benefit from\\) provision for|provision for \\(benefit from\\)) income taxes?|income tax (?:expense|provision|benefit)|depreciation and amortization|(?:stock|share)-based compensation(?:\
+                \ expense)?|(?:purchases? of|acquisitions? of) property(?:, plant)? and equipment|cash and cash equivalents|total assets|total liabilities|total (?:stockholders|shareholders)['\u2019]? (?:equity|deficit|\\\
+                (deficit\\) equity|equity \\(deficit\\))|(?:long-term debt|notes payable|borrowings|total debt)(?:, net.*)?|(?:operating )?lease liabilit(?:y|ies)(?:, .*)?|weighted[- ]average .*shares.*)$"
+              group: 0
+      columns:
+        accession_number:
+          context:
+            name: accession_number
+        cik:
+          context:
+            name: cik
+        table_number:
+          text:
+            path: '@table'
+            null_if:
+            - ''
+        row_number:
+          text:
+            path: '@row'
+            null_if:
+            - ''
+        label:
+          text:
+            path: c1.$
+            trim: true
+            null_if:
+            - ''
+        line_item:
+          coalesce:
+            skip: 'null'
+            values:
+            - coalesce:
+                skip: 'null'
+                values:
+                - choose:
+                    condition:
+                      found:
+                        path: c1.$
+                        transforms:
+                        - regex_extract:
+                            pattern: '(?i)^(?:total )?(?:net )?(?:revenues?|sales)(?:, net)?$'
+                            group: 0
+                    then:
+                      const:
+                        value: revenue
+                    else:
+                      const:
+                        value: null
+                - choose:
+                    condition:
+                      found:
+                        path: c1.$
+                        transforms:
+                        - regex_extract:
+                            pattern: '(?i)^(?:total )?cost of (?:revenues?|sales|goods sold)$'
+                            group: 0
+                    then:
+                      const:
+                        value: cost_of_revenue
+                    else:
+                      const:
+                        value: null
+                - choose:
+                    condition:
+                      found:
+                        path: c1.$
+                        transforms:
+                        - regex_extract:
+                            pattern: '(?i)^gross (?:profit|margin)$'
+                            group: 0
+                    then:
+                      const:
+                        value: gross_profit
+                    else:
+                      const:
+                        value: null
+                - choose:
+                    condition:
+                      found:
+                        path: c1.$
+                        transforms:
+                        - regex_extract:
+                            pattern: '(?i)^research and development(?: expenses?)?$'
+                            group: 0
+                    then:
+                      const:
+                        value: research_and_development
+                    else:
+                      const:
+                        value: null
+                - choose:
+                    condition:
+                      found:
+                        path: c1.$
+                        transforms:
+                        - regex_extract:
+                            pattern: '(?i)^(?:(?:loss|income|\(loss\) income|income \(loss\)) from operations|operating (?:loss|income|\(loss\) income|income \(loss\)))$'
+                            group: 0
+                    then:
+                      const:
+                        value: operating_income
+                    else:
+                      const:
+                        value: null
+                - choose:
+                    condition:
+                      found:
+                        path: c1.$
+                        transforms:
+                        - regex_extract:
+                            pattern: '(?i)^net (?:loss|income|\(loss\) income|income \(loss\))$'
+                            group: 0
+                    then:
+                      const:
+                        value: net_income
+                    else:
+                      const:
+                        value: null
+                - choose:
+                    condition:
+                      found:
+                        path: c1.$
+                        transforms:
+                        - regex_extract:
+                            pattern: '(?i)^(?:provision for|benefit from|\(benefit from\) provision for|provision for \(benefit from\)) income taxes?$|^income tax (?:expense|provision|benefit)$'
+                            group: 0
+                    then:
+                      const:
+                        value: income_tax
+                    else:
+                      const:
+                        value: null
+                - choose:
+                    condition:
+                      found:
+                        path: c1.$
+                        transforms:
+                        - regex_extract:
+                            pattern: (?i)^depreciation and amortization$
+                            group: 0
+                    then:
+                      const:
+                        value: depreciation_amortization
+                    else:
+                      const:
+                        value: null
+            - coalesce:
+                skip: 'null'
+                values:
+                - choose:
+                    condition:
+                      found:
+                        path: c1.$
+                        transforms:
+                        - regex_extract:
+                            pattern: '(?i)^(?:stock|share)-based compensation(?: expense)?$'
+                            group: 0
+                    then:
+                      const:
+                        value: stock_based_compensation
+                    else:
+                      const:
+                        value: null
+                - choose:
+                    condition:
+                      found:
+                        path: c1.$
+                        transforms:
+                        - regex_extract:
+                            pattern: '(?i)^(?:purchases? of|acquisitions? of) property(?:, plant)? and equipment$'
+                            group: 0
+                    then:
+                      const:
+                        value: capital_expenditure
+                    else:
+                      const:
+                        value: null
+                - choose:
+                    condition:
+                      found:
+                        path: c1.$
+                        transforms:
+                        - regex_extract:
+                            pattern: (?i)^cash and cash equivalents$
+                            group: 0
+                    then:
+                      const:
+                        value: cash
+                    else:
+                      const:
+                        value: null
+                - choose:
+                    condition:
+                      found:
+                        path: c1.$
+                        transforms:
+                        - regex_extract:
+                            pattern: (?i)^total assets$
+                            group: 0
+                    then:
+                      const:
+                        value: total_assets
+                    else:
+                      const:
+                        value: null
+                - choose:
+                    condition:
+                      found:
+                        path: c1.$
+                        transforms:
+                        - regex_extract:
+                            pattern: (?i)^total liabilities$
+                            group: 0
+                    then:
+                      const:
+                        value: total_liabilities
+                    else:
+                      const:
+                        value: null
+                - choose:
+                    condition:
+                      found:
+                        path: c1.$
+                        transforms:
+                        - regex_extract:
+                            pattern: "(?i)^total (?:stockholders|shareholders)['\u2019]? (?:equity|deficit|\\(deficit\\) equity|equity \\(deficit\\))$"
+                            group: 0
+                    then:
+                      const:
+                        value: total_equity
+                    else:
+                      const:
+                        value: null
+                - choose:
+                    condition:
+                      found:
+                        path: c1.$
+                        transforms:
+                        - regex_extract:
+                            pattern: '(?i)^(?:long-term debt|notes payable|borrowings|total debt)(?:, net.*)?$'
+                            group: 0
+                    then:
+                      const:
+                        value: total_debt
+                    else:
+                      const:
+                        value: null
+                - choose:
+                    condition:
+                      found:
+                        path: c1.$
+                        transforms:
+                        - regex_extract:
+                            pattern: '(?i)^(?:operating )?lease liabilit(?:y|ies)(?:, .*)?$'
+                            group: 0
+                    then:
+                      const:
+                        value: lease_liabilities
+                    else:
+                      const:
+                        value: null
+            - coalesce:
+                skip: 'null'
+                values:
+                - choose:
+                    condition:
+                      found:
+                        path: c1.$
+                        transforms:
+                        - regex_extract:
+                            pattern: (?i)^weighted[- ]average .*shares.*$
+                            group: 0
+                    then:
+                      const:
+                        value: weighted_average_shares
+                    else:
+                      const:
+                        value: null
+        statement:
+          coalesce:
+            skip: 'null'
+            values:
+            - choose:
+                condition:
+                  found:
+                    path: '@above'
+                    transforms:
+                    - regex_extract:
+                        pattern: (?i)balance sheets?|financial condition|financial position
+                        group: 0
+                then:
+                  const:
+                    value: balance_sheet
+                else:
+                  const:
+                    value: null
+            - choose:
+                condition:
+                  found:
+                    path: '@above'
+                    transforms:
+                    - regex_extract:
+                        pattern: '(?i)statements? of (?:operations|income|comprehensive|loss|earnings)|results of operations'
+                        group: 0
+                then:
+                  const:
+                    value: income_statement
+                else:
+                  const:
+                    value: null
+            - choose:
+                condition:
+                  found:
+                    path: '@above'
+                    transforms:
+                    - regex_extract:
+                        pattern: (?i)cash flows?
+                        group: 0
+                then:
+                  const:
+                    value: cash_flow
+                else:
+                  const:
+                    value: null
+            - choose:
+                condition:
+                  found:
+                    path: '@above2'
+                    transforms:
+                    - regex_extract:
+                        pattern: (?i)balance sheets?|financial condition|financial position
+                        group: 0
+                then:
+                  const:
+                    value: balance_sheet
+                else:
+                  const:
+                    value: null
+            - choose:
+                condition:
+                  found:
+                    path: '@above2'
+                    transforms:
+                    - regex_extract:
+                        pattern: '(?i)statements? of (?:operations|income|comprehensive|loss|earnings)|results of operations'
+                        group: 0
+                then:
+                  const:
+                    value: income_statement
+                else:
+                  const:
+                    value: null
+            - choose:
+                condition:
+                  found:
+                    path: '@above2'
+                    transforms:
+                    - regex_extract:
+                        pattern: (?i)cash flows?
+                        group: 0
+                then:
+                  const:
+                    value: cash_flow
+                else:
+                  const:
+                    value: null
+            - choose:
+                condition:
+                  found:
+                    path: '@above3'
+                    transforms:
+                    - regex_extract:
+                        pattern: (?i)balance sheets?|financial condition|financial position
+                        group: 0
+                then:
+                  const:
+                    value: balance_sheet
+                else:
+                  const:
+                    value: null
+            - choose:
+                condition:
+                  found:
+                    path: '@above3'
+                    transforms:
+                    - regex_extract:
+                        pattern: '(?i)statements? of (?:operations|income|comprehensive|loss|earnings)|results of operations'
+                        group: 0
+                then:
+                  const:
+                    value: income_statement
+                else:
+                  const:
+                    value: null
+            - choose:
+                condition:
+                  found:
+                    path: '@above3'
+                    transforms:
+                    - regex_extract:
+                        pattern: (?i)cash flows?
+                        group: 0
+                then:
+                  const:
+                    value: cash_flow
+                else:
+                  const:
+                    value: null
+        scale:
+          coalesce:
+            skip: 'null'
+            values:
+            - text:
+                path: '@above'
+                null_if:
+                - ''
+                transforms:
+                - regex_extract:
+                    pattern: '(?i)\bin (thousands|millions|billions)\b'
+                    group: 1
+            - text:
+                path: '@above2'
+                null_if:
+                - ''
+                transforms:
+                - regex_extract:
+                    pattern: '(?i)\bin (thousands|millions|billions)\b'
+                    group: 1
+            - text:
+                path: '@above3'
+                null_if:
+                - ''
+                transforms:
+                - regex_extract:
+                    pattern: '(?i)\bin (thousands|millions|billions)\b'
+                    group: 1
+        value1:
+          text:
+            path: '@cells'
+            null_if:
+            - ''
+            transforms:
+            - regex_extract:
+                pattern: '(?i)^[^|]*\|(?:[^|]*\|)*?\s*\$?\s*(\(?)([0-9][0-9,]*(?:\.[0-9]+)?)\)?\s*(?:\||$)'
+                group: 2
+            - regex_replace:
+                pattern: ','
+                with: ''
+        value1_negative:
+          found:
+            path: '@cells'
+            transforms:
+            - regex_extract:
+                pattern: '(?i)^[^|]*\|(?:[^|]*\|)*?\s*\$?\s*(\(?)([0-9][0-9,]*(?:\.[0-9]+)?)\)?\s*(?:\||$)'
+                group: 1
+        value2:
+          text:
+            path: '@cells'
+            null_if:
+            - ''
+            transforms:
+            - regex_extract:
+                pattern: '(?i)^[^|]*\|(?:[^|]*\|)*?\s*\$?\s*\(?[0-9][0-9,]*(?:\.[0-9]+)?\)?\s*\|(?:[^|]*\|)*?\s*\$?\s*(\(?)([0-9][0-9,]*(?:\.[0-9]+)?)\)?\s*(?:\||$)'
+                group: 2
+            - regex_replace:
+                pattern: ','
+                with: ''
+        value2_negative:
+          found:
+            path: '@cells'
+            transforms:
+            - regex_extract:
+                pattern: '(?i)^[^|]*\|(?:[^|]*\|)*?\s*\$?\s*\(?[0-9][0-9,]*(?:\.[0-9]+)?\)?\s*\|(?:[^|]*\|)*?\s*\$?\s*(\(?)([0-9][0-9,]*(?:\.[0-9]+)?)\)?\s*(?:\||$)'
+                group: 1
+        value3:
+          text:
+            path: '@cells'
+            null_if:
+            - ''
+            transforms:
+            - regex_extract:
+                pattern: '(?i)^[^|]*\|(?:[^|]*\|)*?\s*\$?\s*\(?[0-9][0-9,]*(?:\.[0-9]+)?\)?\s*\|(?:[^|]*\|)*?\s*\$?\s*\(?[0-9][0-9,]*(?:\.[0-9]+)?\)?\s*\|(?:[^|]*\|)*?\s*\$?\s*(\(?)([0-9][0-9,]*(?:\.[0-9]+)?)\)?\s*(?:\||$)'
+                group: 2
+            - regex_replace:
+                pattern: ','
+                with: ''
+        value3_negative:
+          found:
+            path: '@cells'
+            transforms:
+            - regex_extract:
+                pattern: '(?i)^[^|]*\|(?:[^|]*\|)*?\s*\$?\s*\(?[0-9][0-9,]*(?:\.[0-9]+)?\)?\s*\|(?:[^|]*\|)*?\s*\$?\s*\(?[0-9][0-9,]*(?:\.[0-9]+)?\)?\s*\|(?:[^|]*\|)*?\s*\$?\s*(\(?)([0-9][0-9,]*(?:\.[0-9]+)?)\)?\s*(?:\||$)'
+                group: 1
+        value4:
+          text:
+            path: '@cells'
+            null_if:
+            - ''
+            transforms:
+            - regex_extract:
+                pattern: '(?i)^[^|]*\|(?:[^|]*\|)*?\s*\$?\s*\(?[0-9][0-9,]*(?:\.[0-9]+)?\)?\s*\|(?:[^|]*\|)*?\s*\$?\s*\(?[0-9][0-9,]*(?:\.[0-9]+)?\)?\s*\|(?:[^|]*\|)*?\s*\$?\s*\(?[0-9][0-9,]*(?:\.[0-9]+)?\)?\s*\|(?:[^|]*\|)*?\s*\$?\s*(\(?)([0-9][0-9,]*(?:\.[0-9]+)?)\)?\s*(?:\||$)'
+                group: 2
+            - regex_replace:
+                pattern: ','
+                with: ''
+        value4_negative:
+          found:
+            path: '@cells'
+            transforms:
+            - regex_extract:
+                pattern: '(?i)^[^|]*\|(?:[^|]*\|)*?\s*\$?\s*\(?[0-9][0-9,]*(?:\.[0-9]+)?\)?\s*\|(?:[^|]*\|)*?\s*\$?\s*\(?[0-9][0-9,]*(?:\.[0-9]+)?\)?\s*\|(?:[^|]*\|)*?\s*\$?\s*\(?[0-9][0-9,]*(?:\.[0-9]+)?\)?\s*\|(?:[^|]*\|)*?\s*\$?\s*(\(?)([0-9][0-9,]*(?:\.[0-9]+)?)\)?\s*(?:\||$)'
+                group: 1
+        year1:
+          coalesce:
+            skip: 'null'
+            values:
+            - text:
+                path: '@head2'
+                null_if:
+                - ''
+                transforms:
+                - regex_extract:
+                    pattern: '^(?:.*?\b((?:19|20)[0-9][0-9])\b){1}'
+                    group: 1
+            - text:
+                path: '@head'
+                null_if:
+                - ''
+                transforms:
+                - regex_extract:
+                    pattern: '^(?:.*?\b((?:19|20)[0-9][0-9])\b){1}'
+                    group: 1
+        year2:
+          coalesce:
+            skip: 'null'
+            values:
+            - text:
+                path: '@head2'
+                null_if:
+                - ''
+                transforms:
+                - regex_extract:
+                    pattern: '^(?:.*?\b((?:19|20)[0-9][0-9])\b){2}'
+                    group: 1
+            - text:
+                path: '@head'
+                null_if:
+                - ''
+                transforms:
+                - regex_extract:
+                    pattern: '^(?:.*?\b((?:19|20)[0-9][0-9])\b){2}'
+                    group: 1
+        year3:
+          coalesce:
+            skip: 'null'
+            values:
+            - text:
+                path: '@head2'
+                null_if:
+                - ''
+                transforms:
+                - regex_extract:
+                    pattern: '^(?:.*?\b((?:19|20)[0-9][0-9])\b){3}'
+                    group: 1
+            - text:
+                path: '@head'
+                null_if:
+                - ''
+                transforms:
+                - regex_extract:
+                    pattern: '^(?:.*?\b((?:19|20)[0-9][0-9])\b){3}'
+                    group: 1
+        year4:
+          coalesce:
+            skip: 'null'
+            values:
+            - text:
+                path: '@head2'
+                null_if:
+                - ''
+                transforms:
+                - regex_extract:
+                    pattern: '^(?:.*?\b((?:19|20)[0-9][0-9])\b){4}'
+                    group: 1
+            - text:
+                path: '@head'
+                null_if:
+                - ''
+                transforms:
+                - regex_extract:
+                    pattern: '^(?:.*?\b((?:19|20)[0-9][0-9])\b){4}'
+                    group: 1
+        above:
+          text:
+            path: '@above'
+            null_if:
+            - ''
+        head:
+          text:
+            path: '@head'
+            null_if:
+            - ''

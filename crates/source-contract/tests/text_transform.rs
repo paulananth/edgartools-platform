@@ -44,9 +44,9 @@ fn repeated_regex_searches_refuse_before_quadratic_scan_cost() {
 }
 #[test]
 fn aggregate_regex_compilation_is_bounded_before_more_recipes_are_allocated() {
-    let columns=(0..33).map(|n| format!("v{n}: {{text: {{path: name, transforms: [{{regex_replace: {{pattern: 'x{n}', with: ''}}}}]}}}}" )).collect::<Vec<_>>().join(",");
+    let columns=(0..129).map(|n| format!("v{n}: {{text: {{path: name, transforms: [{{regex_replace: {{pattern: 'x{n}', with: ''}}}}]}}}}" )).collect::<Vec<_>>().join(",");
     let yaml=format!("read: {{format: json, tables: {{rows: {{each: '.', columns: {{{columns}}}}}}}}}");
-    assert!(Engine::from_yaml(&yaml,Steps::new()).err().unwrap().detail.contains("32 regexes"));
+    assert!(Engine::from_yaml(&yaml,Steps::new()).err().unwrap().detail.contains("128 regexes"));
 }
 #[test]
 fn literal_data_that_looks_like_a_transform_is_never_compiled() {
