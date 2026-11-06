@@ -85,16 +85,8 @@ def _pieces(envelope: dict, manifest: dict, artifacts) -> tuple[dict, dict]:
     return {"version": 1, "contract": manifest["contract"], "artifacts": refs}, inline
 
 
-def _documents(envelope: dict, artifacts, *, publish: bool = False):
-    if set(envelope["checks"]) != {"source.output"}:
-        raise ValueError("source.read verifies source.output only")
-    manifest, inline = artifacts.json(envelope["input"]), {}
-    if isinstance(manifest, dict) and manifest.get("version") == 4:
-        manifest, inline = _pieces(envelope, manifest, artifacts)
-    if (set(manifest) != {"version", "contract", "artifacts"}
-            or type(manifest["version"]) is not int or manifest["version"] not in (1, 2, 3)):
-        raise ValueError("Source input names version 1, 2 or 3, contract and artifacts")
-    contract = files.loads(artifacts.verified(manifest["contract"], max_bytes=1024**2).decode("utf-8"))
+def execution_of(contract) -> dict:
+    """The contract's execution block, refused when the worker cannot read with it."""
     execution = contract.get("execution")
     required = {"profile", "workers", "max_artifacts"}
     if (not isinstance(execution, dict) or not required <= set(execution)
@@ -109,6 +101,20 @@ def _documents(envelope: dict, artifacts, *, publish: bool = False):
     read = contract.get("read")
     if "max_input_bytes" in execution and isinstance(read, dict) and "stream" in read:
         raise ValueError('Streamed framing declares its own physical input bounds')
+    return execution
+
+
+def _documents(envelope: dict, artifacts, *, publish: bool = False):
+    if set(envelope["checks"]) != {"source.output"}:
+        raise ValueError("source.read verifies source.output only")
+    manifest, inline = artifacts.json(envelope["input"]), {}
+    if isinstance(manifest, dict) and manifest.get("version") == 4:
+        manifest, inline = _pieces(envelope, manifest, artifacts)
+    if (set(manifest) != {"version", "contract", "artifacts"}
+            or type(manifest["version"]) is not int or manifest["version"] not in (1, 2, 3)):
+        raise ValueError("Source input names version 1, 2 or 3, contract and artifacts")
+    contract = files.loads(artifacts.verified(manifest["contract"], max_bytes=1024**2).decode("utf-8"))
+    execution = execution_of(contract)
     inputs = manifest["artifacts"]
     if not isinstance(inputs, list) or not 1 <= len(inputs) <= execution["max_artifacts"]:
         raise ValueError("Source input exceeds the contract's bounded artifact count")
@@ -232,7 +238,7 @@ def _derived_context(bound, artifacts):
     return selected
 
 
-def _limits(contract, execution) -> tuple[int, int]:
+def limits(contract, execution) -> tuple[int, int]:
     """The contract's per-file byte and record limits, within the step's bounds."""
     max_bytes = contract["read"].get("limits", {}).get("max_bytes", 32 * 1024**2)
     max_records = contract["read"].get("limits", {}).get("max_records")
@@ -264,7 +270,7 @@ def _output(envelope: dict, artifacts, documents=None, sink=None) -> bytes:
     read = contract.get("read")
     parquet = isinstance(read, dict) and read.get("format") == "parquet"
     engine = source_engine.SourceEngine(source_parquet.engine_contract(contract) if parquet else contract)
-    max_bytes, _ = _limits(contract, execution)
+    max_bytes, _ = limits(contract, execution)
     names = list(read["tables"])
 
     def read_one(entry):
@@ -350,7 +356,7 @@ def confirm(envelope: dict, artifacts) -> tuple[dict, list]:
     read = contract.get("read")
     if isinstance(read, dict) and "stream" in read:
         raise Redo("a streamed source extract has its own output shape")
-    _limits(contract, execution)  # the contract's limits, as the work checks them
+    limits(contract, execution)  # the contract's limits, as the work checks them
     body = artifact_store.json_value(artifacts.verified(envelope["candidate"], max_bytes=source_readings.INDEX_BYTES))
     if isinstance(body, dict) and body.get("version") == 2:
         raise Redo("a source extract written in pieces is checked by redoing it")
