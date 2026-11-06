@@ -149,6 +149,7 @@ def _restore_company_identity(value):
                 "sec.company": "sec.submissions.company",
                 "company-2026-10-31.sec-company-source-identity":
                     "company-2026-10-25.one-value-per-identifier",
+                "normalize_identifier@sec-cik-v2": "normalize_identifier@sec-cik-v1",
                 **RENAMED_BY_TICKET_178}.get(value, value)
     return value
 
