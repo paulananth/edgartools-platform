@@ -55,6 +55,46 @@ So the engine's matching costs roughly 15 to 55% more here, mostly in the id loo
 
 **Set-aside records** go through one plain table: 152,557 of 152,557 equal the engine's reviews in id, source, reason and blocking flag, at a median 0.135 ms a record.
 
+## Item 4: delivery to readers, on the prototype
+
+Nobody reads what is stored for delivery today.
+
+| Measured on the shared store | Result |
+|---|---|
+| Outbox rows | 7,524 for `journal`, `export` and `graph`, all `verified = 0` |
+| Payload bytes held | 10.6 GB (2.1 GB on disk) |
+| MDM events in the Change Journal | 0 of 177,813; the rest are `file.processed` and `work.verified` |
+| Load steps that run `mdm.publish` | 0 in `rules/` |
+| Batch and proposal tables | 18.5 GB, against 1.0 GB of current masters |
+
+Real readers pull: silver through `MdmIds`, others through `consumer.py` pages at a fixed generation. So the prototype stores no payload. Each master keeps the file that last changed it, and a reader asks what changed after its checkpoint.
+
+| Test on Company | Result |
+|---|---|
+| Read after 6 of 15 files, then after the rest | The reader's copy equals 8,361 of 8,361 masters |
+| Every file delivered again | 0 masters reported changed |
+| A crash mid-run | The reader never saw the rolled-back file |
+| Masters against the engine | 67,034 of 67,034 fields |
+
+Search stays an owner build after a load (ticket 196), reading current masters, so it adds nothing to a merge. Its name index took 0.11 ms a master on 8,361 masters. The lookups the engine writes per record are not all compared here. MySQL is not run for this item.
+
+Decision for the operator: `required_consumers` in `rules/merge/policy.yaml` still asks for all three payloads, and `docs/` still describes `mdm publish` to Snowflake and the graph. The rebuild stops writing them only on the operator's word.
+
+## Item 5: database-side safety, on the prototype
+
+One lock row per kind (`SELECT ... FOR UPDATE`), held for a whole file, replaces leases and fences on both engines. The file's row sits in the same transaction, and the store is read again under the lock, so a writer works from current state. If a writer dies, the database rolls back and frees the lock.
+
+| Test on Company | PostgreSQL | MySQL |
+|---|---|---|
+| Two writers at once, opposite order | 67,034 of 67,034 fields; no identifier on two masters | The same |
+| `kill -9` mid-run, then resume | The same; no file half done | The same |
+| Runtime login: read, write masters, add a decision | Allowed | Allowed |
+| Runtime login: delete or change a decision, drop a table, add a column | Refused | Refused |
+
+Items 2 to 4 also ran on MySQL on the final version: withheld, the 11 merges, the exclusion and the reader. Serial writing per kind loses parallel bundles of one kind; at this speed that costs less than the conflicts it removes. Company on the final version took 37.0 s while a load ran, against 22.9 to 29.2 s before the lock, so the lock's cost is not yet separated from the load's. This is proof on a prototype, not the skill's full engine qualification.
+
+While these tests ran, OpenFIGI bundle 15 stopped on `expired_destination_authority`, the fault this design has no lease to hit.
+
 ## Side research: OpenMetadata as the steward tool
 
 Operator, 2026-11-06: "can openmedatate can be a steward tool to review and merge". From its public documentation, not tried here. It has Tasks and reviewer approvals, documented for glossary terms and asset metadata, and custom properties on existing types. No master record merge was found, and a feature request says user-defined entities are unsupported. So it can show work to a steward, but the merge stays in MDM. Parked (operator, 2026-11-06: "park the openmetadata now"). Not built: OpenMetadata work belongs to Codex.
@@ -66,12 +106,16 @@ Operator, 2026-11-06: "can openmedatate can be a steward tool to review and merg
 - [x] Withheld values on the prototype, by the engine's matching (2026-11-06 11:03 ET).
 - [ ] Withheld values on real `sec.nport.security` records.
 - [x] Records set aside by classification on the prototype, 152,557 of 152,557 (2026-11-06 11:03 ET).
-- [ ] Delivery to readers: the journal, export and graph consumers, and search lookups.
-- [ ] Database-side safety: leases and freshness, proved equal before the old routines go.
+- [x] Delivery to readers on the prototype: a reader pulls what changed after its checkpoint; no payload is stored (2026-11-06 11:29 ET).
+- [ ] Operator's decision: stop writing the `journal`, `export` and `graph` payloads, given that none is read.
+- [ ] `consumer.py` and `MdmIds` on the new tables, and the rest of the per-record lookups.
+- [x] Database-side safety on the prototype: one lock per kind, a real kill, two writers, a restricted login, on both engines (2026-11-06 11:29 ET).
+- [ ] Database-side safety in production code, through the storage adapter, proved equal before the old routines go.
+- [ ] The thin slice: one source from load to reader, in the repo, on both engines.
 - [x] Rule which rules allow a merge from the rule itself: the engine's matching does (2026-11-06 11:03 ET).
 - [ ] Survivor by `published_at` then id, as replay does.
 - [ ] Bookkeeping per file, not per batch; the `processed` step; what the step around the silver writer costs.
-- [ ] Person and Fund on MySQL.
+- [ ] Person and Fund on MySQL; OpenFIGI at full size on the final version.
 - [ ] The rebuilt path on every source, compared with the engine; the old path deleted.
 - [ ] Parts from ticket 197: the catalog read in every bundle; the cost of a step whatever its work; bundles that share keys; deadlocks in claims; the batch document stored and compared many times; a resumed run stepping over retained batches; why a stored bundle is loaded again.
 - [ ] Learning → skill.
