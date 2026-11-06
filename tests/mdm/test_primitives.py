@@ -87,6 +87,11 @@ class TestNormalizers:
             normalizer("normalize_identifier@sec-cik-v1", DOC)("0000320193") == "320193"
         )
 
+    def test_a_cik_keeps_its_leading_zeros(self):
+        assert (
+            normalizer("normalize_identifier@sec-cik-v2", DOC)("0000320193") == "0000320193"
+        )
+
     def test_an_lei_is_upper_cased_and_stripped(self):
         assert (
             normalizer("normalize_identifier@lei-v1", DOC)("hwupkr0mpou8fgxbt394")

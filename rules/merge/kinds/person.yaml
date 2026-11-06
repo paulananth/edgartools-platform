@@ -439,7 +439,7 @@ identifiers:
     sources:
     - sec.submissions.person.v1
     - sec.ownership.reporting_owner.v1
-    normalizer: normalize_identifier@sec-cik-v1
+    normalizer: normalize_identifier@sec-cik-v2
     claim:
       forward: 1
       # One value per master (ticket 138): what the engine has always enforced
