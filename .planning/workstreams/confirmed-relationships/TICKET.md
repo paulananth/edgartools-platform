@@ -28,7 +28,9 @@ The operator then included Fund Series and requested the rule in the skills.
 - [x] Repeat the full three-subject repair: zero further removals, matching
   native readback and unchanged unrelated graph metadata
   (2026-11-05 21:49 ET).
-- [ ] Publish the skill correction and operational record in a PR.
+- [x] Publish the skill correction and operational record in PR
+  https://github.com/paulananth/edgartools-platform/pull/1448, ready for review
+  (2026-11-05 21:50 ET). CI remains required before merge.
 - [ ] Correct the publisher's runtime projection before another normal
   publication. The current configuration-only plan still emits permitted
   domain/type and glossary/type edges; this documentation change does not

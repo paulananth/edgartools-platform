@@ -281,7 +281,9 @@ unsupported edges; do not change business definitions in the live catalog.
 A second write of mention edges or endpoint domain links is how overstatement
 comes back. A relationship type that no file under `rules/sources/` names gets
 "(planned: no rule reads this type yet and no link is loaded)" in its asset
-description and no term. Each data product carries the identity term of its
+description and no term. This configuration-derived suffix does not prove
+that no link is loaded; verify that claim against the authoritative store.
+Each data product carries the identity term of its
 domain, `Suggested`. The store of a table is its native Certification, not a custom
 tag (operator, 2026-11-02: "rdm = Gold, MDM = Gold, Silver = Silver"). `check`
 reports a table whose class tag or certification is missing.
