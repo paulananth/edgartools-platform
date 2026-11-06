@@ -313,6 +313,8 @@ from then on each merge keeps it. Maintaining an index inside every batch of an
 initial load writes most of a store's lookup entries for data that nothing reads
 until the load ends.
 
+**Page by keyset with two range reads, never an `OR`.** `a=%s and b>%s`, then `a>%s`, each ordered and limited, use the index; `a>%s or (a=%s and b>%s)` can scan. Standard SQL does both, so the portable form is the fast one. Time one page on the real store before a build runs over all of them.
+
 ## Migrations
 
 - A schema change is a new migration file, added at the end of the
@@ -381,6 +383,7 @@ Name the claim in one sentence, then take the smallest cohort that can falsify i
 | The change | The proof |
 |---|---|
 | A proof on a large delivery | [A sample chosen by kind](../data-profiling/SKILL.md#choose-a-proof-sample-by-kind): the batches richest in each rare case and one ordinary batch |
+| A stage that changes what readers see, on top of its own proof | Trace one well-known entity end to end: every source that names it, its masters, its silver rows and links, and each reader's answer. Keep the questions as a script that runs again. A bulk comparison checks that two paths agree, and agreement hides what both get wrong; a traced entity shows a stripped identifier, an empty name or a missing link at once |
 | A rebuilt merge path | Replay real stored records and compare with the stored masters: members, identifiers, each field's value, winner and conflicts. Pick whole masters, so none is cut in two, and run batches of the real size as well as one record a batch: each size hides faults the other shows. |
 | Any code, a migration, a rules or data file | The affected tests, locally, and CI (`AGENTS.md`, "Tests and CI"). A source's rules file is also read by tests that never name the source, through a shared helper (ticket 183: two tests reached a source through another test's helper and only CI found them). Before the first push of a change to a source's rules, run the whole test folder CI runs for it once (`tests/integration` takes 12 minutes) rather than the files whose names match |
 | A rule upstream of MDM (a source extract, a combine step) | Compare the changed step's output over a capture, and the combined output on one bundle. Equal combined bytes mean everything downstream is unchanged |

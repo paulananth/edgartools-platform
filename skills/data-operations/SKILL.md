@@ -244,6 +244,9 @@ edgar-warehouse load \
 - **A target that lands silver registers its tables itself**, before it submits
   anything, as the migration login in the stores folder's `connection.env`
   (the same spec again changes nothing). Do not register by hand first.
+- **Look on the machine before asking to capture.** Reading retained files needs no provider request, so search
+  every place below before asking for one. Say which you found: a cohort proves a path, never a delivery's totals.
+- **The engine reads no gzip.** A folder of `.gz` files stops as "malformed": unzip a copy, then write its receipts.
 - **A capture left by `provider.capture` has no `receipts.jsonl`.** Run
   `scripts/capture_receipts.py <capture folder>` once: it writes one receipt per
   file and never replaces a receipts file.
@@ -289,6 +292,18 @@ counts.
 **Stopping is safe.** A deadline, a closed laptop or a failed unit leaves
 the run resumable. Run the same command again. It finishes the open run
 first and never loads a document twice.
+
+### Examples: where retained files are
+
+Under `~/.local/share/edgartools/mdm/`, `captures/` holds whole deliveries and `proving/` holds cohorts:
+
+| Feed | Folder |
+|---|---|
+| Company facts | `proving/company-facts/` |
+| ADV | `proving/p07/inputs/warehouse/bronze/reference/iapd_adv_bulk/` |
+| 13F and ownership, by CIK | `proving/p07/inputs/warehouse/bronze/filings/sec/` |
+
+`~/edgar-local-tmp/` holds working copies from earlier tests.
 
 ### When it stops
 
@@ -378,6 +393,9 @@ Work it out from counts before starting:
   reads another run's output rechecks that run on every claim and report,
   which can outlast the default 120 s lease ("Stale lease"). The target sets
   `lease_seconds` and `heartbeat_seconds`.
+- **A long run shows its progress.** Sample any run over ten minutes in its first two minutes with
+  `scripts/dev/run_sample.py`. Send its output to a file, unpiped: a `| tail` hides a slow page until the run ends. A
+  build with no progress line gets one before it starts.
 - **Check every 30 minutes, not in a tight loop** (operator, 2026-10-24).
   A check that finds nothing changed sends no message. Report a failure, a
   finished bundle or the end.
