@@ -1,7 +1,7 @@
 """CLI subcommand: `edgar-warehouse mdm ...`, MDM only.
 
 Commands: migrate, check-connectivity, counts,
-prepare-capture, name-count, force-publish, rebuild-name-index, rebuild-detail-lookup and convert-native. The legacy MDM commands and their tables are
+prepare-capture, name-count, force-publish, rebuild, rebuild-name-index, rebuild-detail-lookup and convert-native. The legacy MDM commands and their tables are
 deleted (platform validation slice 2a).
 """
 from __future__ import annotations
@@ -71,6 +71,11 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     force.add_argument("--step", default="graph-publication", help="The publish target's step name")
     force.set_defaults(handler=_logged_handler("force-publish", _command("force_publish")))
 
+    replay = mdm_sub.add_parser("rebuild", help="Replay every stored record into the mastering tables; a stopped replay "
+                                "runs again and skips what is done")
+    replay.add_argument("--policy-digest", required=True, help="The registered merge rules to replay under")
+    replay.add_argument("--check", action="store_true", help="Compare the mastering tables with the old masters, counts only")
+    replay.set_defaults(handler=_logged_handler("rebuild", _command("rebuild")))
     rebuild = mdm_sub.add_parser("rebuild-name-index", help="Owner-only resumable name-index rebuild")
     rebuild.add_argument("--limit", type=int, help="Stop after this many masters; retain resumable progress")
     rebuild.add_argument("--page-size", type=int, default=200, help="Masters per owner transaction (1 to 1000)")

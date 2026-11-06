@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import text
@@ -151,6 +152,28 @@ def rebuild_name_index(args) -> int:
     try:
         report = rebuild(engine, limit=args.limit, page_size=args.page_size, restart=args.restart)
     finally:
+        engine.dispose()
+    print(json.dumps(report, sort_keys=True))
+    return 0
+
+
+def rebuild(args) -> int:
+    from functools import cache
+
+    from edgar_warehouse.mastering import rebuild as mastering
+    from edgar_warehouse.mastering.store import open_store
+    from edgar_warehouse.workers.mastering_merge import _quiet, _settings
+
+    engine = engine_from_env("MDM_DATABASE_URL", restricted=True)
+    db = open_store(engine)
+    manifest = {"policy_digest": args.policy_digest, "as_of": datetime.now(timezone.utc).isoformat()}
+    settings_of = cache(lambda kind: _settings(engine, manifest, kind))
+    try:
+        report = mastering.compare(engine, db) if args.check else mastering.replay(
+            db, settings_of, mastering.stored(engine, "source-reading"), mastering.stored(engine, "deferred-record"),
+            lambda chunk: _quiet(engine, chunk))
+    finally:
+        db.close()
         engine.dispose()
     print(json.dumps(report, sort_keys=True))
     return 0

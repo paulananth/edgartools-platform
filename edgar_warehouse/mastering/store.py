@@ -144,14 +144,17 @@ class Store:
             held[entity].add(value)
         return held
 
-    def save_records(self) -> None:
-        self.cursor.execute(f"insert {self.ignore} into mastering_record(assertion_id,subject,entity_id,bound_id,source_code,lei,body) "
-                            "select s.assertion_id,s.subject,null,null,s.source_code,s.lei,s.body from mastering_stage s" + self.conflict_nothing)
-
-    def bind_records(self, bound: dict) -> None:
+    def save_records(self, bound: dict) -> None:
+        """The file's records with their masters, in one write. Older rows of the same subjects follow."""
         self.cursor.execute("delete from mastering_stage_bound")
         self.bulk("mastering_stage_bound", ("subject", "entity_id"), list(bound.items()))
-        self.cursor.execute(self.bind_sql)
+        self.cursor.execute(f"insert {self.ignore} into mastering_record(assertion_id,subject,entity_id,bound_id,source_code,lei,body) "
+                            "select s.assertion_id,s.subject,b.entity_id,b.entity_id,s.source_code,s.lei,s.body from mastering_stage s "
+                            "left join mastering_stage_bound b on b.subject=s.subject" + self.conflict_nothing)
+        older = self.rows("select r.assertion_id,b.entity_id from mastering_stage_bound b join mastering_record r "
+                          "on r.subject=b.subject where r.entity_id is null or r.entity_id<>b.entity_id")
+        self.cursor.executemany("update mastering_record set bound_id=coalesce(bound_id,%s),entity_id=%s where assertion_id=%s",
+                                [(entity, entity, assertion) for assertion, entity in older])
 
     def add_decision(self, body: dict, left, right) -> None:
         self.insert("mastering_decision", ("decision_id", "operation", "left_id", "right_id", "body"),
@@ -215,6 +218,18 @@ class Store:
                          "(changed_file=%s and entity_id>%s) order by changed_file,entity_id limit %s",
                          [since, since, after, limit])
 
+    def master_bodies(self, entities) -> dict:
+        found = {}
+        for block in blocks(entities):
+            found.update((e, json.loads(b)) for e, b in self.rows(
+                f"select entity_id,body from mastering_master where entity_id in ({marks(block)})", block))
+        return found
+
+    def totals(self) -> dict:
+        masters = self.rows("select count(distinct entity_id) from mastering_record where entity_id is not null")[0][0]
+        waiting = self.rows("select count(*) from mastering_review where reason=%s and open_review=1", ["binding_required"])[0][0]
+        return {"masters": masters, "waiting": waiting, "set_aside": self.rows("select count(*) from mastering_deferred")[0][0]}
+
     def master_ids(self, subjects) -> dict:
         return self.bound(subjects)
 
@@ -225,8 +240,6 @@ class Postgres(Store):
     master_upsert = (" on conflict(entity_id) do update set body=excluded.body,changed_file=excluded.changed_file "
                      "where mastering_master.body<>excluded.body")
     review_upsert = " on conflict(subject,reason) do update set assertion_id=excluded.assertion_id,open_review=1"
-    bind_sql = ("update mastering_record r set entity_id=b.entity_id,bound_id=coalesce(r.bound_id,b.entity_id) "
-                "from mastering_stage_bound b where r.subject=b.subject")
 
     def create_lock(self) -> None:
         self.cursor.execute("insert into mastering_lock(name) values (%s) on conflict do nothing", [LOCK])
@@ -244,8 +257,6 @@ class MySQL(Store):
     master_upsert = (" as new on duplicate key update changed_file="
                      "if(mastering_master.body=new.body,mastering_master.changed_file,new.changed_file),body=new.body")
     review_upsert = " as new on duplicate key update assertion_id=new.assertion_id,open_review=1"
-    bind_sql = ("update mastering_record r join mastering_stage_bound b on r.subject=b.subject "
-                "set r.bound_id=coalesce(r.bound_id,b.entity_id),r.entity_id=b.entity_id")
 
     def create_lock(self) -> None:
         self.cursor.execute("insert ignore into mastering_lock(name) values (%s)", [LOCK])
