@@ -574,6 +574,23 @@ receipt and any additional qualification in the task record, not this skill.
 
 ## Local server
 
+### Exclude bundled demo lineage
+
+Operator policy excludes vendor demonstration lineage from this platform's
+OpenMetadata catalog. The local compose file enforces it with an empty seed
+resource mounted before the release jars.
+Keep that override on rebuilds and upgrades; recheck its resource path and
+classpath precedence against the running version. Delete only edges proven
+to match the bundled examples, through native APIs, and read them back after
+a server restart. Preserve real assets, relationships and database volumes.
+Never restore these examples to populate a graph.
+
+Problem: deleting demo edges alone lets them return at startup. Root cause:
+the pinned release unconditionally seeds missing edges, even when endpoint
+objects are soft-deleted. Fix: retain the empty configuration override and
+verify zero demo edges after restart. Lesson: deletion is complete only when
+the producer of unwanted metadata is also suppressed.
+
 Use the existing Docker context and the named volumes in
 `infra/openmetadata/docker-compose.yml`:
 
