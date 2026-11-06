@@ -8,7 +8,8 @@ description: Write and read this platform's catalog on OpenMetadata. Use before 
 This is the only place for OpenMetadata implementation. Business meaning, the
 subject domains, the glossary words, and what a relationship type is stay in
 the data-catalog skill. This skill says how that meaning is stored on
-OpenMetadata 2.0.2, and `rules catalog publish` is the only write.
+OpenMetadata 2.0.2. Normal publication uses `rules catalog publish`; scoped
+repair of unsupported metadata relationships follows the procedure below.
 
 The page at `/lineage` is the service view. It draws a line only when lineage
 crosses from one service to another. Edges between tables in the same database
@@ -97,11 +98,10 @@ do not invent a type.
   `mdm.relationships`. Its description is the code's definition, and it states
   the `from` ends, the `to` ends, and the capacities. The rules catalog plan
   already writes that description. Keep it.
-- A type that no file under `rules/sources/` reads, and no loaded link uses,
-  stays an asset, because the pinned list is the source, and its description
-  ends "(planned: no rule reads this type yet and no link is loaded)". It has
-  no glossary term and no Relations Graph edge until a rule reads it (operator,
-  2026-11-01).
+- Keep a type definition as vocabulary even when it has no confirmed links.
+  A rule reading that type does not make a relationship real. Apply
+  data-catalog's **Confirm relationships before showing them** before adding
+  any domain or glossary relationship edge.
 - A child code is a capacity of its parent type. It is not another asset, not
   another domain, and not another relationship.
 - The type is one asset. Do not place that asset on every endpoint domain.
@@ -116,20 +116,31 @@ do not invent a type.
   again beside the type. Lineage is the data flow: a feed to the dataset that
   reads it, a dataset to the kind whose fields it fills, and a code set to the
   prepared table that uses it.
-- Draw each type on the glossary Relations Graph as one typed edge from
-  the identity term of the type's `from` end to that type's glossary
-  term. The edge is the type (`issuedBy`, display name `Issued by`). Do
-  not draw the `to` ends: those identities already star every type they
-  belong to, so the graph walks through the type and paints every other
-  subject's types onto this one. Register each type first with
-  `PUT /system/settings` `glossaryTermRelationSettings`, keeping every
-  system type. The API name is the pinned code in camelCase
-  (`ISSUED_BY` → `issuedBy`); underscores are rejected. A reported
-  position that is silver, not a mastered type, is the glossary term for
-  that position, linked from the instrument identity as `heldBy`. Do not
-  add a relation from a definition mention. A glossary term for a type
-  uses the code's definition and is associated only with that type's
-  table.
+- Do not draw identity-to-type edges from a type's permitted `from` or `to`
+  kinds. Those are possible relationships. A glossary term for a type uses
+  the code's definition and is associated only with the type's table.
+  Transaction rows remain transaction data; do not turn their master links
+  into inferred mastered relationships.
+
+### Repair unsupported relationship edges
+
+First complete the authoritative-store check in data-catalog. Inventory the
+selected domain and glossary graphs through the native API. Match each edge
+to the exact retained relationship evidence, not just a compatible type.
+Keep a private before-state of the catalog-owned edges selected for removal.
+
+For an operator-authorized repair, use the native lineage or glossary relation
+DELETE endpoint for each exact unsupported, catalog-owned edge. Preserve type
+definitions, masters, source records, unrelated curation and other domains.
+Do not recursively delete objects. Read both graphs back and verify the
+unsupported edges are absent and unrelated metadata is preserved. A repeated
+repair must find no further removals. If ownership or evidence is uncertain,
+leave the edge unconfirmed and report it.
+
+Inspect the current publisher before running it again. A publisher that emits
+domain-to-type edges or glossary identity-to-type edges from permitted kinds
+still lacks confirmed-relationship projection. Do not rerun that publication
+path until corrected and tested: a skill update alone is not a runtime guard.
 
 Place each profiled code set in `rdm.code_sets` and keep a proposed set labeled
 proposed. A profiled identifier kind that is not a declared domain is not a new
@@ -245,34 +256,28 @@ a rules file still has its glossary. A proposed table is not a kind table.
 
 A domain has no `relationsGraph` endpoint. Its graph is lineage. Read it with
 `GET /api/v1/lineage/domain/name/{domain}?upstreamDepth=1&downstreamDepth=1`.
-Add one edge from the domain to the relationship-type table, for each end of
-that type:
-
-`PUT /api/v1/lineage/domain/name/{domain}/table/name/{typeFqn}`
-
-with `{"description": "<type>: <definition>", "source": "Manual"}`. The node
-on the graph is the type. Do not add an edge from domain to domain. One edge
-per domain pair is overwritten by the next type, so the type disappears.
-`rules catalog publish` writes these edges.
+The current publisher's domain-to-type edges describe permitted endpoint kinds.
+They do not prove any relationship. Do not add them. Use the confirmed evidence
+gate and scoped repair above; retain type definitions as vocabulary.
 
 The glossary Relations Graph is a different API,
 `GET /glossaryTerms/{id}/relationsGraph`. A domain glossary's Relations Graph
 page starts at that domain's identity term.
 A term that mentions another term is not a relation. Do not add an edge
 from a definition, a display name, or an Avoid line.
-`rules catalog publish` registers the types, then writes
-`POST /glossaryTerms/{id}/relations` with
-`{"relationType": "<issuedBy>", "term": {"id": "<type-term-id>", "type":
-"glossaryTerm"}}` from the `from` end's identity term to each type that
-names that end. Duplicate POST is idempotent. Remove a leftover `relatedTo`
-or any other pair the plan does not name with
+The current publisher also derives identity-to-type edges from permitted kinds;
+these are not real relationships. Do not run that path as confirmation. For a
+scoped repair, remove only the exact catalog-owned unsupported pair with
 `DELETE /glossaryTerms/{id}/relations/{toTermId}?relationType=<that type>`.
+Preserve unrelated curation; absence from a configuration-only plan is not
+enough to delete another person's link.
 The separate RDF glossary graph stays unused unless that service is enabled.
 
 `rules catalog publish` applies the built-in certification and the `data_class`
 tags below. It leaves each term's status to the server unless `--draft-terms` is given
 (operator, 2026-11-02: "stop forcing Draft on the local catalog"). It writes the terms, tags and
-descriptions this section names; edit none of them in the live catalog by hand.
+descriptions this section names. Use the scoped relationship repair above for
+unsupported edges; do not change business definitions in the live catalog.
 A second write of mention edges or endpoint domain links is how overstatement
 comes back. A relationship type that no file under `rules/sources/` names gets
 "(planned: no rule reads this type yet and no link is loaded)" in its asset
