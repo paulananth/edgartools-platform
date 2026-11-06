@@ -216,8 +216,9 @@ def _derive(step: dict, run: _Run, units: dict) -> list[dict]:
     if len(step["requires"]) != 1 or set(shape) != {"build", "silver", "reads"}:
         raise ValueError(f"Step {step['name']}: a derivation follows one step and names its keys: "
                          "build, silver (the table it writes) and reads (the table it reads)")
+    links = {"policy": run.policy, "as_of": run.publication["as_of"]} if shape["build"] == "links" else {}
     return [read_units.unit(f"{run.root}/{step['name']}.json", {"unit": step["name"], **shape},
-                            run.store.put(run.inputs, {"version": 1, **shape}))]
+                            run.store.put(run.inputs, {"version": 1, **shape, **links}))]
 
 
 # Each operation's units, from the step, the run and the units of the steps before it.

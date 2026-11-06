@@ -218,6 +218,10 @@ class Store:
                          "(changed_file=%s and entity_id>%s) order by changed_file,entity_id limit %s",
                          [since, since, after, limit])
 
+    def linked_records(self) -> list[dict]:
+        return [json.loads(body) for (body,) in self.rows(
+            "select body from mastering_record where body like %s", ['%"relationships":[{%'])]
+
     def master_bodies(self, entities) -> dict:
         found = {}
         for block in blocks(entities):
