@@ -151,11 +151,10 @@ class Store:
         self.cursor.execute(f"insert {self.ignore} into mastering_record(assertion_id,subject,entity_id,bound_id,source_code,lei,body) "
                             "select s.assertion_id,s.subject,b.entity_id,b.entity_id,s.source_code,s.lei,s.body from mastering_stage s "
                             "left join mastering_stage_bound b on b.subject=s.subject" + self.conflict_nothing)
-        self.cursor.execute("update mastering_record set entity_id=(select b.entity_id from mastering_stage_bound b "
-                            "where b.subject=mastering_record.subject),bound_id=coalesce(bound_id,(select b.entity_id "
-                            "from mastering_stage_bound b where b.subject=mastering_record.subject)) where exists("
-                            "select 1 from mastering_stage_bound b where b.subject=mastering_record.subject and "
-                            "(mastering_record.entity_id is null or mastering_record.entity_id<>b.entity_id))")
+        older = self.rows("select r.assertion_id,b.entity_id from mastering_stage_bound b join mastering_record r "
+                          "on r.subject=b.subject where r.entity_id is null or r.entity_id<>b.entity_id")
+        self.cursor.executemany("update mastering_record set bound_id=coalesce(bound_id,%s),entity_id=%s where assertion_id=%s",
+                                [(entity, entity, assertion) for assertion, entity in older])
 
     def add_decision(self, body: dict, left, right) -> None:
         self.insert("mastering_decision", ("decision_id", "operation", "left_id", "right_id", "body"),
