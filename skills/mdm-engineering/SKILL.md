@@ -213,6 +213,8 @@ scope instead of inventing a mapping or silently omitting the check.
 
 ## The Merge Stage: each batch costs only what its records touch
 
+**A batch replays at the time of its write.** A bundle's `as_of` is fixed when it starts, and bundles overlap, so a stored decision can carry a later time than the batch reading it. Replay sees every stored decision, and `as_of` is left to what a source states: a reading's effective date and field freshness. A replay that drops a stored bind writes that master with no members.
+
 **Match first.** The batch's records are matched outside the save: each
 identifier is looked up through its index; a record joins the master it
 names, or a new master is proposed. Name rules follow, only where no

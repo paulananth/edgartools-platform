@@ -19,7 +19,7 @@ from edgar_warehouse.mdm.evidence import (
     instant,
 )
 from edgar_warehouse.mdm.merge import MergeStage
-from edgar_warehouse.mdm.record_reads import RecordReader
+from edgar_warehouse.mdm.record_reads import RecordReader, for_connection
 from edgar_warehouse.mdm.store import (
     Conflict,
     Store,
@@ -265,7 +265,7 @@ def identity(record, at=AT):
     return value, bind
 
 
-def save(incoming=(), allocated=(), journal=()):
+def save(incoming=(), allocated=(), journal=(), as_of=AS_OF):
     global sequence, pointers, publications
     sequence += 1
     MergeStage(Store(runtime)).apply(
@@ -275,7 +275,7 @@ def save(incoming=(), allocated=(), journal=()):
         consumer="invented-seed",
         expected_checkpoint=sequence - 1,
         checkpoint=sequence,
-        as_of=AS_OF,
+        as_of=as_of,
         assertions=list(incoming),
         identities=list(allocated),
         decisions=list(journal),
@@ -289,8 +289,22 @@ def propose(items=(), journal=(), at=AS_OF):
     )
 
 
+def stored_master(entity):
+    with runtime.connect() as connection:
+        return for_connection(connection).masters({entity})[entity]
+
+
 try:
     holder = record("one")
+    if case == "older_clock":
+        delivered = record("one", effective_at="2025-06-01T00:00:00+00:00")
+        master, bind = identity(delivered)
+        save([delivered], [master], [bind])
+        before = stored_master(master["entity_id"])
+        assert before["subjects"] == [delivered["subject"]]
+        save([delivered], as_of="2025-12-31T23:00:00+00:00")
+        assert stored_master(master["entity_id"]) == before
+        raise SystemExit(0)
     if case == "cusip_first":
         first, second = (
             record("one", identifiers={NAMESPACE: "170"}),
