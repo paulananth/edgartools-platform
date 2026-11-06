@@ -10,7 +10,7 @@ from uuid import uuid4
 
 import pytest
 
-from edgar_warehouse.mastering import links, merge, rebuild, store as stores
+from edgar_warehouse.mastering import links, lookups, merge, reads, rebuild, store as stores
 from edgar_warehouse.mdm.evidence import assertion, decision, subject_key
 from edgar_warehouse.mdm.identifier_types import TYPES
 from edgar_warehouse.mdm.name_count import VERSION as NAME_COUNT_VERSION
@@ -164,6 +164,74 @@ def test_a_reader_stays_in_step_by_asking_what_changed(database_factory):
             copy[entity] = body
         db.commit()
         assert copy == dict(db.rows("select entity_id,body from mastering_master"))
+
+
+def test_a_reader_finds_a_master_by_source_key_by_identifier_and_after_a_merge(database_factory):
+    with opened(database_factory) as db:
+        a, b = figi("00TSTY01"), figi("00TSTY02")
+        merge.merge_file(db, COMPANY, [record(SEC, "0000000017", cik="0000000017")])
+        merge.merge_file(db, SECURITY, [record(FIGI, "a", "security", figi=a)])
+        merge.merge_file(db, SECURITY, [record(FIGI, "b", "security", figi=b)])
+        ids = reads.master_ids(db, FIGI, {"a", "b", "never loaded"})
+        assert set(ids) == {"a", "b"}
+        merge.merge_file(db, SECURITY, [record(FIGI, "c", "security", figi=[a, b])])
+        after = reads.master_ids(db, FIGI, {"a", "b", "c"})
+        assert len(set(after.values())) == 1
+        kept = after["a"]
+        assert {reads.master(db, id_)["entity_id"] for id_ in ids.values()} == {kept}
+        with pytest.raises(KeyError):
+            reads.master(db, "00000000-0000-0000-0000-000000000000")
+        lookups.build(db)
+        assert reads.carriers(db, POLICY, "security", "figi", a) == {kept: "identifier"}
+        company = reads.master_ids(db, SEC, {"0000000017"})["0000000017"]
+        assert reads.carriers(db, POLICY, "company", "cik", "0000000017") == {company: "identifier"}
+        assert reads.carriers(db, POLICY, "security", "cik", "0000000017") == {}
+
+
+def test_lookups_find_names_details_and_cross_references_and_a_rebuild_changes_nothing(database_factory):
+    with opened(database_factory) as db:
+        one, two, three = figi("00TSTZ01"), figi("00TSTZ02"), figi("00TSTZ03")
+        listing = {"key": one, "ticker": "INVT", "mic": "XINV", "exchange": "IV", "description": "INVENTED"}
+
+        def security(key, value, name, **extra):
+            return assertion(source_code=FIGI, record_key=key, publication_key="invented", revision=1, effective_at=None,
+                             kind="security", fields={"name": name}, identifiers={"figi": value}, **extra)
+
+        merge.merge_file(db, COMPANY, [record(SEC, "1", fields={"name": "INVENTED ANVIL WORKS"}, cik="0000000021"),
+                                       record(SEC, "2", fields={"name": "INVENTED BELLOWS"}, cik="0000000022")])
+        merge.merge_file(db, SECURITY, [security("a", one, "INVENTED", details={"listings": [listing]}),
+                                        security("b", two, "INVENTED", details={"listings": [{**listing, "key": two}]}),
+                                        security("c", three, "OTHER", cross_references={"share_class_figi": "BBG000000001"})])
+        with pytest.raises(lookups.NotBuilt):
+            lookups.search(db, "company", "anvil", 5)
+        assert lookups.build(db)["masters"] == 5
+        anvil = lookups.search(db, "company", "anvil", 5)
+        assert [row["name"] for row in anvil] == ["INVENTED ANVIL WORKS"]
+        assert [row["name"] for row in lookups.search(db, "company", "-anvil", 5)] == ["INVENTED BELLOWS"]
+        assert lookups.search(db, "person", "anvil", 5) == []
+        held = reads.master_ids(db, FIGI, {"a", "b", "c"})
+        assert {row["entity_id"] for row in lookups.holders_of_detail(db, "mic", ["XINV", "INVT"])} == {held["a"], held["b"]}
+        assert reads.carriers(db, POLICY, None, "share_class_figi", "BBG000000001") == {held["c"]: "cross_reference"}
+        rows = sorted(db.rows("select token,entity_id from mastering_lookup"))
+        assert lookups.build(db)["masters"] == 0
+        assert sorted(db.rows("select token,entity_id from mastering_lookup")) == rows
+        merge.merge_file(db, COMPANY, [record(SEC, "3", fields={"name": "INVENTED CRUCIBLE"}, cik="0000000023")])
+        with pytest.raises(lookups.NotBuilt):
+            lookups.search(db, "company", "anvil", 5)
+        assert lookups.build(db)["masters"] == 1
+        assert [row["name"] for row in lookups.search(db, "company", "crucible", 5)] == ["INVENTED CRUCIBLE"]
+
+
+def test_a_merged_away_master_leaves_the_lookups(database_factory):
+    with opened(database_factory) as db:
+        a, b = figi("00TSTW01"), figi("00TSTW02")
+        merge.merge_file(db, SECURITY, [record(FIGI, "a", "security", figi=a)])
+        merge.merge_file(db, SECURITY, [record(FIGI, "b", "security", figi=b)])
+        lookups.build(db)
+        assert len(lookups.search(db, "security", "invented", 5)) == 2
+        merge.merge_file(db, SECURITY, [record(FIGI, "c", "security", figi=[a, b])])
+        lookups.build(db)
+        assert len(lookups.search(db, "security", "invented", 5)) == 1
 
 
 def test_the_runtime_login_cannot_erase_a_decision_or_change_a_table(database_factory):

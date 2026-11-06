@@ -10,7 +10,7 @@ from pathlib import Path
 BLOCK = 2000
 LOCK = "merge"
 WRITTEN = ("master", "file", "identifier", "record", "name_key", "review", "withheld", "deferred",
-           "stage", "stage_key", "stage_bound")
+           "stage", "stage_key", "stage_bound", "lookup", "lookup_progress")
 
 
 def marks(items) -> str:
@@ -228,6 +228,39 @@ class Store:
             found.update((e, json.loads(b)) for e, b in self.rows(
                 f"select entity_id,body from mastering_master where entity_id in ({marks(block)})", block))
         return found
+
+    def cross_referenced(self, entities) -> list[tuple]:
+        """Each master's member records that carry a cross-reference: (master id, record body)."""
+        found = []
+        for block in blocks(entities):
+            found += self.rows("select entity_id,body from mastering_record where body like %s "
+                               f"and entity_id in ({marks(block)})", ['%"cross_references":{"%', *block])
+        return found
+
+    def lookup_progress(self, pin: str) -> tuple:
+        """Where the lookups built under `pin` have reached: (changed file, last master id)."""
+        found = self.rows("select changed_file,entity_id from mastering_lookup_progress where pin=%s", [pin])
+        return found[0] if found else (-1, "")
+
+    def save_lookups(self, pin: str, entities: list, rows: list, reached: tuple) -> None:
+        for block in blocks(entities):
+            self.cursor.execute(f"delete from mastering_lookup where entity_id in ({marks(block)})", block)
+        self.bulk("mastering_lookup", ("token", "entity_id"), rows)
+        self.cursor.execute("delete from mastering_lookup_progress where pin=%s", [pin])
+        self.cursor.execute("insert into mastering_lookup_progress(pin,changed_file,entity_id) values (%s,%s,%s)",
+                            [pin, *reached])
+
+    def holding_all(self, tokens: list) -> list[str]:
+        """The masters holding every token."""
+        tokens = sorted(set(tokens))
+        return [row[0] for row in self.rows(
+            f"select entity_id from mastering_lookup where token in ({marks(tokens)}) "
+            "group by entity_id having count(*)=%s order by entity_id", [*tokens, len(tokens)])]
+
+    def identifier_holders(self, namespace: str, values) -> list[str]:
+        return [row[0] for row in self.rows(
+            f"select distinct entity_id from mastering_identifier where namespace=%s and value in ({marks(values)})",
+            [namespace, *values])]
 
     def totals(self) -> dict:
         masters = self.rows("select count(distinct entity_id) from mastering_record where entity_id is not null")[0][0]
