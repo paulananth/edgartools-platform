@@ -82,7 +82,7 @@ Decision for the operator: `required_consumers` in `rules/merge/policy.yaml` sti
 
 ## Item 5: database-side safety, on the prototype
 
-One lock row per kind (`SELECT ... FOR UPDATE`), held for a whole file, replaces leases and fences on both engines. The file's row sits in the same transaction, and the store is read again under the lock, so a writer works from current state. If a writer dies, the database rolls back and frees the lock.
+One lock row (`SELECT ... FOR UPDATE`), held for a whole file, replaces leases and fences on both engines. The file's row sits in the same transaction, and the store is read again under the lock, so a writer works from current state. If a writer dies, the database rolls back and frees the lock.
 
 | Test on Company | PostgreSQL | MySQL |
 |---|---|---|
@@ -127,13 +127,14 @@ N-PORT Security by kind: all 421 batches were scored in 155 s without merging, a
 - [x] Stage 2: the `mastering.merge` worker on a real load's prepared manifest: 1,947 of 1,947 `sec.nport.registrant` records, each master with the engine's CIK and its record's fields, verified, 4.4 s against 59.3 s for the old merge step of that load (2026-11-06 12:10 ET).
 - [ ] Point the Rules Database at `mastering.merge`, source by source: a load runs the approved version there, not `rules/` on disk.
 - [x] Stage 3: `mdm rebuild`, every record replayed and compared: 431,028 masters match, and 4,797 of 4,797 for the records the old load stored late (2026-11-06 15:43 ET).
+- [x] Review of stages 1 to 3 on Standards, Spec and GoF: two integer columns made BIGINT, a merge writes identifiers once, `compare` holds no transaction, `master_ids` deleted, the lock tested with two writers. The lock is one row for all kinds, not one a kind, since the changed-file number readers pull by runs across kinds; the prototype lines here describe one a kind. Without the lock the new test gives 400 masters for 200 (2026-11-06 15:47 ET).
 - [ ] Stage 4: readers moved; relationships with the silver write.
 - [ ] Stage 5: the old path deleted.
 - [x] Withheld values on the prototype, by the engine's matching (2026-11-06 11:03 ET).
 - [x] Withheld values on real `sec.nport.security` records: 23 ISIN values withheld across 10 chosen batches, and no identifier on two masters; the 5 batches of the old load gave identical masters (2026-11-06 15:43 ET).
 - [x] Records set aside by classification on the prototype, 152,557 of 152,557 (2026-11-06 11:03 ET).
 - [x] Delivery to readers on the prototype: a reader pulls what changed after its checkpoint; no payload is stored (2026-11-06 11:29 ET).
-- [ ] Operator's decision: stop writing the `journal`, `export` and `graph` payloads, given that none is read.
+- [x] Operator's decision: stop writing the `journal`, `export` and `graph` payloads, given that none is read. Operator, 2026-11-06 11:36 ET, to "May I stop writing the three delivery payloads?": "1 yes".
 - [ ] `consumer.py` and `MdmIds` on the new tables, and the rest of the per-record lookups.
 - [x] Database-side safety on the prototype: one lock per kind, a real kill, two writers, a restricted login, on both engines (2026-11-06 11:29 ET).
 - [ ] Database-side safety in production code, through the storage adapter, proved equal before the old routines go.

@@ -230,9 +230,6 @@ class Store:
         waiting = self.rows("select count(*) from mastering_review where reason=%s and open_review=1", ["binding_required"])[0][0]
         return {"masters": masters, "waiting": waiting, "set_aside": self.rows("select count(*) from mastering_deferred")[0][0]}
 
-    def master_ids(self, subjects) -> dict:
-        return self.bound(subjects)
-
 
 class Postgres(Store):
     dialect = "postgresql"
