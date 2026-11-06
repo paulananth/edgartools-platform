@@ -620,11 +620,10 @@ users' containers and volumes. A cold start may take 10–20 minutes. The compos
 file accepts `CATALOG_SERVER_HEAP_OPTS` and `CATALOG_SEARCH_HEAP_OPTS`.
 Keep the configured heap values when reinitializing an existing instance.
 Direct compose startup is only the server-start stage, not completed platform
-initialization. For an already running server, the exclusion alone is:
-
-```bash
-uv run --no-project python skills/openmetadata/scripts/initialize.py
-```
+initialization. Rerun `bash infra/openmetadata/init.sh` to apply the idempotent
+exclusion and readback to an already running server.
+Keep the helper behind this repository entrypoint; directly invoking a helper
+inside the skill directory is checkout-only and fails the installed-skill doctor.
 
 The tool reads `OPENMETADATA_TOKEN`, or `OPENMETADATA_LOGIN_EMAIL` with
 `OPENMETADATA_LOGIN_PASSWORD` (also accepts `OPENMETADATA_PASSWORD`), privately.

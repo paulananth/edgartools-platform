@@ -37,12 +37,16 @@ Real source, pipeline, domain and business relationships are outside this remova
   readback pass (2026-11-06 11:33 ET).
 - [x] Publish ready follow-up PR #1462 at head `63e8b67d`; PR #1453 merged at
   lineage-only scope (2026-11-06 11:36 ET).
-- [ ] Wait for CI on the final head and automatic merge; watcher has a
-  135-minute deadline and checks every 30 minutes.
+- [x] Diagnose the failed installed-skill doctor tests: they flagged the
+  documented direct helper path as checkout-only. Keep initialization behind
+  `infra/openmetadata/init.sh`; the doctor now reports no unresolved commands
+  and the 99 genericity/path checks pass (2026-11-06 12:25 ET).
+- [ ] Wait for green CI on the corrected head and automatic merge; watcher has
+  a 135-minute deadline and checks every 30 minutes.
 - [x] Learning → skill: `skills/openmetadata/SKILL.md` now records the
   initialization command, exact service/child exclusion, readback and restart
   procedure, including the 2.0.2 collection-versus-item tombstone readback
-  behavior; 99 file-only checks pass (2026-11-06 11:55 ET).
+  behavior and the installed-skill portability rule (2026-11-06 12:25 ET).
 
 ## GoF consult
 
