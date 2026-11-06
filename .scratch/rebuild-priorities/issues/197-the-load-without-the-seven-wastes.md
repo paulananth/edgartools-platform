@@ -39,7 +39,7 @@ seconds even at 3 ms a record. The floor on this machine is measured below rathe
 
 - [x] Stop the reload to measure alone: bundle 11's batches were all `changed=0`, so nothing was lost; it resumes (2026-11-05 21:24 ET).
 - [x] Baseline of one new-master batch on a quiet copy (table above, 2026-11-05 21:37 ET).
-- [x] The routine parses its input once: protocol 7 (`SQL.json`); the frozen fingerprints of protocols 1 to 6 are unchanged and the real migration upgraded the copy from 6 to 7 with its data in place (5 runs, table above; storage tests 80 passed, one expectation updated, 2026-11-05 21:56 ET).
+- [x] The routine parses its input once: protocol 7 (`SQL.json`); the frozen fingerprints of protocols 1 to 6 are unchanged and the real migration upgraded the copy from 6 to 7 with its data in place (5 runs, table above; storage tests 76 passed, one expectation updated, 2026-11-05 21:56 ET).
 - [ ] Prototype the operator's three operations on the copy (operator, 2026-11-05: "looks to me there are too many operation 1) extract 2) load batch to merge stage 3) merge create id"): bulk load to a stage table, then one set-based merge that makes the IDs. This replaces most of the parts below if it holds.
 - [ ] Don't store or compare the batch document more times than recovery needs (batch, proposal, three consumers).
 - [ ] Python preparation: the batch document is built and hashed more than once.
