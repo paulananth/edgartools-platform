@@ -113,12 +113,15 @@ Dropped, since nothing uses them (operator, 2026-11-06: "why do i even need ... 
 
 Stage 1 result: 9 tests pass on PostgreSQL and on MySQL, and the package on all 14,024 real Company records gives 67,034 of 67,034 fields in 35.8 s. A zero-padded identifier in a test exposed a bug every real replay had hidden: lookups used the raw form, where the store keeps the normal form, and would have made a duplicate master.
 
+Stage 2 note: a load reads the approved rule version in the Rules Database, so a private copy of `rules/` is ignored. The first try ran the old merge and looked green; only reading the new tables showed it. The worker was then run on that load's real manifest, and the rule switch waits for stage 4. Each load check must read what was stored, not the run's state.
+
 ## Checklist
 
 - [x] Reviews and steward actions on the prototype: waiting reviews, exclusions, overrides, revokes and reversals, on PostgreSQL and MySQL (2026-11-06 10:32 ET).
 - [ ] ~~Chained reversals and quarantine~~ deferred to none: dropped, nothing uses them.
 - [x] Stage 1: `edgar_warehouse/mastering/`, 9 tests on both engines (2026-11-06 11:48 ET).
-- [ ] Stage 2: one real load through the package.
+- [x] Stage 2: the `mastering.merge` worker on a real load's prepared manifest: 1,947 of 1,947 `sec.nport.registrant` records, each master with the engine's CIK and its record's fields, verified, 4.4 s against 59.3 s for the old merge step of that load (2026-11-06 12:10 ET).
+- [ ] Point the Rules Database at `mastering.merge`, source by source: a load runs the approved version there, not `rules/` on disk.
 - [ ] Stage 3: `mdm rebuild`, every record replayed and compared.
 - [ ] Stage 4: readers moved; relationships with the silver write.
 - [ ] Stage 5: the old path deleted.

@@ -61,6 +61,12 @@ class Store:
     def file_done(self, key: str) -> bool:
         return bool(self.rows("select 1 from mastering_file where file_key=%s", [key]))
 
+    def done_files(self, keys) -> dict:
+        found = {}
+        for block in blocks(keys):
+            found.update(self.rows(f"select file_key,records from mastering_file where file_key in ({marks(block)})", block))
+        return found
+
     def finish_file(self, key: str, records: int) -> None:
         self.cursor.execute("insert into mastering_file(file_key,records) values (%s,%s)", [key, records])
 
