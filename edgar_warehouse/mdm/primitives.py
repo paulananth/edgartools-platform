@@ -63,6 +63,7 @@ def _conformed(text: Any) -> str:
 NORMALIZERS: dict[str, Callable[[Any], str]] = {
     "normalize_text@edgar-conformed-v1": _conformed,
     "normalize_identifier@sec-cik-v1": partial(prepare_matching_value, "normalize_identifier@sec-cik-v1"),
+    "normalize_identifier@sec-cik-v2": partial(prepare_matching_value, "normalize_identifier@sec-cik-v2"),
     "normalize_identifier@crd-v1": partial(prepare_matching_value, "normalize_identifier@crd-v1"),
     "normalize_identifier@lei-v1": partial(prepare_matching_value, "normalize_identifier@lei-v1"),
     # Ticket 08: a name with its legal form kept, for the SEC-to-GLEIF

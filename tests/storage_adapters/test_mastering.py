@@ -72,6 +72,14 @@ def test_records_join_or_create_a_master_and_a_later_file_reuses_the_id(database
         assert db.bound([later["subject"]])[later["subject"]] == db.bound([other["subject"]])[other["subject"]]
 
 
+def test_a_cik_is_stored_as_the_source_gave_it(database_factory):
+    with opened(database_factory) as db:
+        merge.merge_file(db, COMPANY, [record(SEC, "0000000017", cik="0000000017")])
+        assert db.rows("select value from mastering_identifier where namespace='cik'") == [("0000000017",)]
+        merge.merge_file(db, COMPANY, [record(SEC, "0000000017", cik="0000000017")], again=True)
+        assert len(live(db)) == 1
+
+
 def test_identical_records_again_change_no_master(database_factory):
     with opened(database_factory) as db:
         batch = [record(SEC, "1", cik="0000000017")]

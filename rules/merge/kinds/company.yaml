@@ -626,7 +626,7 @@ identifiers:
     sources:
     - sec.company.v1
     - sec.nport.registrant.v1
-    normalizer: normalize_identifier@sec-cik-v1
+    normalizer: normalize_identifier@sec-cik-v2
     claim:
       forward: 1
       # One value per master (ticket 138): what the engine has always enforced

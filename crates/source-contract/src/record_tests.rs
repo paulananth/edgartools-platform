@@ -61,7 +61,9 @@ pub(crate) fn normalize_value(
         "normalize_text@edgar-conformed-v1" => Ok(matching_values::prepare_conformed_name(&text)),
         "normalize_text@legal-form-kept-v1" => Ok(matching_values::prepare_name(&text, false)),
         "normalize_text@sec-legal-form-kept-v1" => Ok(matching_values::prepare_name(&text, true)),
-        "normalize_identifier@sec-cik-v1" | "normalize_identifier@crd-v1" => {
+        "normalize_identifier@sec-cik-v1"
+        | "normalize_identifier@sec-cik-v2"
+        | "normalize_identifier@crd-v1" => {
             let text: String = text
                 .chars()
                 .filter(|ch| get_general_category(*ch) == GeneralCategory::DecimalNumber)
