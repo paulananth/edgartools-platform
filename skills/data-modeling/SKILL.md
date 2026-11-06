@@ -45,9 +45,11 @@ Read these before deciding, and use their words:
   Gold and Silver certification of a store is that projection, not a class decision.
   A domain relationship is one type in `mdm-relationship-types`. The catalog
   keeps that type as one asset. It does not place the type on each endpoint.
-  The glossary Relations Graph links the identity term of the type's
-  `from` end to that type term, with the type as the edge. A mention is
-  not a relation.
+  Permitted endpoint kinds are vocabulary, not real relationships. Before
+  showing a link, follow data-catalog's **Confirm relationships before showing
+  them**. Distinguish mastered links, source-reported associations and
+  transaction references; an empty relationship table does not erase facts in
+  the other layers. A definition mention or permitted pair is not confirmation.
 - `edgar_warehouse/mdm/evidence.py`: `KINDS` (the master kinds) and
   `PROFILE_KINDS` (a profile and the kinds it may hang on).
 - `rules/merge/kinds/<kind>.yaml`, `identifiers`: the kind's Identifier

@@ -47,13 +47,13 @@ name is not semantic enrichment.
 | Business terms | Definitions and asset/column associations derived from the model and contracts; actual review status recorded |
 | Datasets and fields | Clear business names, definitions, grain, provenance, master links and system-of-record boundaries |
 | Pipelines | Every source and standalone target, its purpose, declared tasks, operations and dependencies; definitions do not imply enabled execution |
-| Relationships | Pinned types, capacities, endpoint kinds and declared source lineage |
+| Relationships | Type definitions stay vocabulary; show actual links only after data-catalog's confirmed-relationship evidence check |
 | Data quality | Named native test cases for configured checks, preserving semantics and failure action; corrections and proposals remain distinct |
 | Mapping Documents | Keep complete source, kind, pipeline and relationship documents with steward Notes. OpenMetadata completion requires the full document on its pipeline and links from relevant tables; the current publisher does not yet publish or verify that projection |
 | Ownership | Existing authorized business owners where specified; otherwise an explicit unassigned responsibility, never the ingestion bot as a fabricated business owner |
 | Data product | Three named packages: the mastered legal entity, the mastered instrument, and fundamental measures. Each takes that subject's domain. The test is in `skills/data-catalog/references/MODEL.md` |
 | Classification | Data class from the data-modeling skill, and the built-in certification that marks the store: Gold on the master and reference stores, Silver on the prepared store. A proposed prepared-store table is Silver and has no data class. A source dataset has no certification and no data class |
-| Domain relationship | One pinned relationship type from `mdm-relationship-types`. One asset, not one link per endpoint. A capacity stays on its type. Not a lineage edge. The glossary Relations Graph is identity-term to type-term, with the type as the edge. Storage is the openmetadata skill |
+| Domain relationship | A verified fact, labeled as mastered, reported by its source or a transaction reference, with direction, provenance and known period. Permitted endpoint kinds are not links. Evidence is the data-catalog skill; storage is the openmetadata skill |
 
 Include registered Silver/RDM metadata. Label profiling proposals as proposed;
 never present them as existing registered tables or approved code sets. Do not
@@ -76,13 +76,11 @@ native object, semantic association or readback is absent, record a demonstrated
 capability gap and route it to implementation. `rules catalog publish` writes
 the subject domains, the glossaries, and the Gold and Silver certifications.
 It writes native quality cases for configured checks and corrections for
-configured fixes. It does not write a profile proposal as a case. It writes
-a typed edge from the identity term of each type's `from` end to
-that type, so the glossary Relations Graph shows the type on the edge
-without walking every other subject's types through a shared type node. It
-does not write an edge from a definition mention. Read those links back. A
-green publish that omits them is a publisher gap, not a finished catalog.
-OpenMetadata storage is the openmetadata skill.
+configured fixes. It does not write a profile proposal as a case. Its current
+configuration-derived identity-to-type and domain-to-type graph edges describe
+possibilities, not confirmed links. Do not publish those edges. Follow the
+data-catalog skill's evidence check and the openmetadata skill's repair and
+capability gate. A green metadata readback does not establish real relationships.
 
 ## Quality definitions are not execution results
 
