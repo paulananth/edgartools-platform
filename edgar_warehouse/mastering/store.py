@@ -144,14 +144,18 @@ class Store:
             held[entity].add(value)
         return held
 
-    def save_records(self) -> None:
-        self.cursor.execute(f"insert {self.ignore} into mastering_record(assertion_id,subject,entity_id,bound_id,source_code,lei,body) "
-                            "select s.assertion_id,s.subject,null,null,s.source_code,s.lei,s.body from mastering_stage s" + self.conflict_nothing)
-
-    def bind_records(self, bound: dict) -> None:
+    def save_records(self, bound: dict) -> None:
+        """The file's records with their masters, in one write. Older rows of the same subjects follow."""
         self.cursor.execute("delete from mastering_stage_bound")
         self.bulk("mastering_stage_bound", ("subject", "entity_id"), list(bound.items()))
-        self.cursor.execute(self.bind_sql)
+        self.cursor.execute(f"insert {self.ignore} into mastering_record(assertion_id,subject,entity_id,bound_id,source_code,lei,body) "
+                            "select s.assertion_id,s.subject,b.entity_id,b.entity_id,s.source_code,s.lei,s.body from mastering_stage s "
+                            "left join mastering_stage_bound b on b.subject=s.subject" + self.conflict_nothing)
+        self.cursor.execute("update mastering_record set entity_id=(select b.entity_id from mastering_stage_bound b "
+                            "where b.subject=mastering_record.subject),bound_id=coalesce(bound_id,(select b.entity_id "
+                            "from mastering_stage_bound b where b.subject=mastering_record.subject)) where exists("
+                            "select 1 from mastering_stage_bound b where b.subject=mastering_record.subject and "
+                            "(mastering_record.entity_id is null or mastering_record.entity_id<>b.entity_id))")
 
     def add_decision(self, body: dict, left, right) -> None:
         self.insert("mastering_decision", ("decision_id", "operation", "left_id", "right_id", "body"),
@@ -237,8 +241,6 @@ class Postgres(Store):
     master_upsert = (" on conflict(entity_id) do update set body=excluded.body,changed_file=excluded.changed_file "
                      "where mastering_master.body<>excluded.body")
     review_upsert = " on conflict(subject,reason) do update set assertion_id=excluded.assertion_id,open_review=1"
-    bind_sql = ("update mastering_record r set entity_id=b.entity_id,bound_id=coalesce(r.bound_id,b.entity_id) "
-                "from mastering_stage_bound b where r.subject=b.subject")
 
     def create_lock(self) -> None:
         self.cursor.execute("insert into mastering_lock(name) values (%s) on conflict do nothing", [LOCK])
@@ -256,8 +258,6 @@ class MySQL(Store):
     master_upsert = (" as new on duplicate key update changed_file="
                      "if(mastering_master.body=new.body,mastering_master.changed_file,new.changed_file),body=new.body")
     review_upsert = " as new on duplicate key update assertion_id=new.assertion_id,open_review=1"
-    bind_sql = ("update mastering_record r join mastering_stage_bound b on r.subject=b.subject "
-                "set r.bound_id=coalesce(r.bound_id,b.entity_id),r.entity_id=b.entity_id")
 
     def create_lock(self) -> None:
         self.cursor.execute("insert ignore into mastering_lock(name) values (%s)", [LOCK])

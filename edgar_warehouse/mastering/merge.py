@@ -91,10 +91,8 @@ def _merge(store, settings: Settings, records: list[dict], key: str, again: bool
     store.open_reviews(WAITING, [(r["subject"], r["assertion_id"]) for r in records
                                  if r["source_code"] in waits and r["subject"] not in bound])
     store.close_reviews(WAITING, sorted(named))
-    store.save_records()
     held = {s: bound[s] for s in subjects if s in bound} | named
-    if held:
-        store.bind_records(held)
+    store.save_records(held)
     touched = set(held.values()) | survivors
     if touched:
         _write_masters(store, settings, sorted(touched), file_no, counts)
