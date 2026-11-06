@@ -64,6 +64,7 @@ Source = "https://github.com/paulananth/edgartools-platform"
 [tool.hatch.build]
 include = [
   "edgar_warehouse/**/*.py",
+  "edgar_warehouse/mastering/schema/*.sql",
   "edgar_warehouse/mdm/migrations/*.sql",
   "edgar_warehouse/bookkeeping/clean/migrations/*.sql",
   "edgar_warehouse/rules/migrations/*.sql",

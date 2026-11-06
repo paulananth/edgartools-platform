@@ -295,6 +295,8 @@ print(json.dumps({{"shipped": shipped, "modules": modules, "absent": absent, "ru
             "edgar_warehouse.rdm.storage", "edgar_warehouse.rdm.mysql_migration",
             "edgar_warehouse.mdm.schema"} <= set(found["modules"])
     assert any(p.endswith("bundle_data/skills/data-onboarding/SKILL.md") for p in found["shipped"])
+    assert any(p.endswith("mastering/schema/postgresql.sql") for p in found["shipped"])
+    assert any(p.endswith("mastering/schema/mysql.sql") for p in found["shipped"])
     assert any(p.endswith("mdm/migrations/024_configured_kinds.sql") for p in found["shipped"])
     assert any(p.endswith("mdm/migrations/025_kind_descriptions.sql") for p in found["shipped"])
 

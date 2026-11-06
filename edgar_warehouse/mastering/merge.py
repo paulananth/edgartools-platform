@@ -49,15 +49,25 @@ def name_keys(record: dict) -> list[tuple]:
             if isinstance(value, str) and value]
 
 
-def merge_file(store, settings: Settings, records: list[dict], *, again: bool = False) -> dict:
+def set_aside(store, records: list[dict], quiet: dict) -> None:
+    """Records no rule may master: kept with their review, blocking unless the source says otherwise."""
+    store.add_deferred([(r["deferred_id"], r["source_code"], r["reason"],
+                         0 if r["reason"] in quiet.get(r["source_code"], ()) else 1, json.dumps(r)) for r in records])
+
+
+def merge_file(store, settings: Settings, records: list[dict], *, again: bool = False,
+               deferred: list[dict] = (), quiet: dict | None = None) -> dict:
     """Merge one file, or nothing if it is done. `again` delivers a finished file a second time."""
-    key = file_key(records)
+    key = file_key([*records, *({"assertion_id": r["deferred_id"]} for r in deferred)])
     try:
         store.take_lock()
         if store.file_done(key) and not again:
             store.commit()
             return {"file": key, "skipped": True}
-        counts = _merge(store, settings, records, key, again)
+        set_aside(store, list(deferred), quiet or {})
+        counts = _merge(store, settings, records, key, again) if records else {"records": 0}
+        if not records:
+            store.finish_file(key, 0)
         store.commit()
         return {"file": key, "skipped": False, **counts}
     except BaseException:

@@ -49,6 +49,7 @@ bypass-selection = true
 "../../edgar_warehouse/snowflake_settings.py" = "edgar_warehouse/snowflake_settings.py"
 "../../edgar_warehouse/application" = "edgar_warehouse/application"
 "../../edgar_warehouse/financials" = "edgar_warehouse/financials"
+"../../edgar_warehouse/mastering" = "edgar_warehouse/mastering"
 "../../edgar_warehouse/mdm" = "edgar_warehouse/mdm"
 "../../edgar_warehouse/rdm" = "edgar_warehouse/rdm"
 "../../edgar_warehouse/silver_writer" = "edgar_warehouse/silver_writer"
