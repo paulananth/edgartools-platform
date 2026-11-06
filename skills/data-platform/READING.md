@@ -522,6 +522,8 @@ Operations are single-key mappings:
 - `case: upper`: native Unicode uppercase.
 - `trim: true`: strip Unicode whitespace and Python's ASCII U+001C–U+001F separators.
 - `replace: {from: "&", to: " AND "}`: literal non-overlapping replacement.
+- `regex_extract: {pattern: "...", group: 1}`: the text of one capture group, empty when the pattern does not
+  match (see **An HTML page**).
 - `regex_replace: {pattern: "[^A-Z0-9]+", with: " "}`: Rust regex replacement;
   replacement text is literal, including `$`. Lookaround and backreferences are refused.
   To keep one token of a text (a code after a marker word), replace in steps
@@ -1639,3 +1641,21 @@ read:
 first record over it. A block over 1 MiB refuses the page (`limit_exceeded`),
 since a text transformation takes at most 1 MiB. `read.encoding` works as
 for CSV.
+
+A page is read by its words, since nothing in it is tagged. What the reader gives a contract:
+
+- A row also carries what is above and in its table: `@above`, `@above2`, `@above3` (the three nearest text
+  blocks above the table, nearest first, each cut to its last 300 bytes), `@head` and `@head2` (the table's
+  first two rows, cells joined by ` | `, so the column headings reach every row) and `@cells` (the row's
+  filled cells in one text, joined by ` | `). A statement's title and its unit
+  ("in thousands") reach its rows through these.
+- `regex_extract: {pattern: "between \\$([0-9.]+) and", group: 1}` is a text operation that keeps one capture
+  group (group 0 is the whole match); a text the pattern does not match gives empty, and a group the pattern
+  lacks is refused when the contract loads. A contract holds at most 128 regexes.
+- `first_found: {path: block, from: document, within: 20, transforms: [...]}` is a column that takes the first
+  nonempty result of its transforms over the texts at the path, in page order, looking at most at `within`
+  of them (1 to 10,000). A term the page does not state is empty, never zero.
+- `found: {path: c1.$, transforms: [...]}` is true when its transforms leave a nonempty result; as a table's
+  `select` it keeps only the rows whose label matches.
+- A `context` field of a zip snapshot can be filled from the snapshot's own JSON member, never by the caller:
+  `{type: text, zip_json: {member: metadata.json, path: scope.document_id}}`.
