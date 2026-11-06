@@ -5,11 +5,11 @@ version: 1
 approvals:
 - kind: merge
   name: platform
-  digest: dca917690fb9a43ba4e678501ed56eca6ba68c380dcb347b8835bc2c0c4e2c2f
+  digest: 227f88d17f11bd05a31161df6fe82cf075c9bdf1a2a2e70738bf0c1055915916
   by: Operator
-  words: approved all rules
-  at: '2026-11-04'
-  finalized: PR 1428
+  words: Approved the rules always
+  at: '2026-11-06'
+  finalized: PR 1473
 - kind: pipeline
   name: graph-publication
   digest: ed3f36b01408246351ebce52c2f64eae6ab6fe3350532d36849b627f19950860
