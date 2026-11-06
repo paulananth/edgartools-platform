@@ -1,7 +1,11 @@
 """Mastering on each engine, under the real rules, with invented records."""
 
 import json
+import re
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from pathlib import Path
+from threading import Barrier
 from uuid import uuid4
 
 import pytest
@@ -226,3 +230,39 @@ def test_each_kind_of_difference_between_two_masters_is_named():
     for change, seen in (({"value": "B"}, "value:name"), ({"winner": {"source_code": "t"}}, "winner:name"),
                          ({"conflicts": []}, "conflicts:name")):
         assert rebuild.differences(old, {**old, "fields": {"name": {**field, **change}}}) == [seen]
+
+
+def test_two_writers_on_the_same_identifiers_leave_one_master_each(database_factory):
+    with database_factory() as (owner, runtime, role):
+        if owner.dialect.name == "mssql":
+            pytest.skip("Mastering runs on PostgreSQL and MySQL")
+        stores.install(owner, runtime_role=role)
+        files_of = [[record(SEC, f"{side}{n}", cik=str(n + 1)) for n in range(200)] for side in ("left", "right")]
+        files_of[1].reverse()
+        start = Barrier(2)
+
+        def write(records):
+            db = open_store(runtime)
+            try:
+                start.wait()
+                return merge.merge_file(db, COMPANY, records)
+            finally:
+                db.close()
+
+        with ThreadPoolExecutor(2) as pool:
+            done = list(pool.map(write, files_of))
+        assert [item["skipped"] for item in done] == [False, False]
+        db = open_store(runtime)
+        try:
+            assert db.rows("select count(*) from (select namespace,value from mastering_identifier "
+                           "group by namespace,value having count(*)>1) doubled")[0][0] == 0
+            assert len(live(db)) == 200
+            assert all(len(body["subjects"]) == 2 for body in live(db).values())
+        finally:
+            db.close()
+
+
+@pytest.mark.parametrize("engine", ["postgresql", "mysql"])
+def test_every_integer_column_is_bigint(engine):
+    schema = (Path(stores.__file__).parent / "schema" / f"{engine}.sql").read_text()
+    assert not re.findall(r"\b(?:tiny|small|medium)?int(?:eger)?\b", schema)

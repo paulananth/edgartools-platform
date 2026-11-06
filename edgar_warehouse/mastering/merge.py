@@ -131,8 +131,6 @@ def _match_identifiers(store, settings: Settings, records, bound: dict, counts: 
         "suspended": [], "newest": {kind: None for kind in plan["kinds"]},
         "new_ids": [str(uuid4()) for _ in plan["applicable"]], "refused": [], "as_of": settings.as_of,
         "consolidations": store.decisions_about(sorted(reached)) if reached else []})
-    store.add_identifiers(sorted({(m["namespace"], normal.get((m["namespace"], m["raw"]), m["raw"]), m["entity_id"])
-                                  for m in made["mints"]}))
     moved, survivors = {}, set()
 
     def live(entity):
@@ -157,6 +155,8 @@ def _match_identifiers(store, settings: Settings, records, bound: dict, counts: 
             survivors.discard(gone)
             survivors.add(keep)
             counts["merges"] += 1
+    store.add_identifiers(sorted({(m["namespace"], normal.get((m["namespace"], m["raw"]), m["raw"]), live(m["entity_id"]))
+                                  for m in made["mints"]}))
     for subject, entity in list(bound.items()):
         bound[subject] = live(entity)
     for decision in made["decisions"]:

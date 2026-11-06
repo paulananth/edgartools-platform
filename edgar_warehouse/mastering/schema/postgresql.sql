@@ -9,11 +9,11 @@ create index if not exists mastering_record_subject on mastering_record(subject)
 create index if not exists mastering_record_lei on mastering_record(lei);
 create table if not exists mastering_name_key(role varchar(16) not null, lei varchar(32) not null, subject varchar(255) not null, primary key(role, lei, subject));
 create index if not exists mastering_name_key_subject on mastering_name_key(subject);
-create table if not exists mastering_review(subject varchar(255) not null, reason varchar(64) not null, assertion_id varchar(128), open_review smallint not null, primary key(subject, reason));
+create table if not exists mastering_review(subject varchar(255) not null, reason varchar(64) not null, assertion_id varchar(128), open_review bigint not null, primary key(subject, reason));
 create table if not exists mastering_decision(decision_id char(64) primary key, operation varchar(16) not null, left_id varchar(255), right_id varchar(255), body text not null);
 create index if not exists mastering_decision_left on mastering_decision(operation, left_id);
 create table if not exists mastering_withheld(subject varchar(255) not null, namespace varchar(32) not null, raw varchar(128) not null, primary key(subject, namespace, raw));
-create table if not exists mastering_deferred(deferred_id varchar(128) primary key, source_code varchar(64) not null, reason varchar(64) not null, blocking smallint not null, body text not null);
+create table if not exists mastering_deferred(deferred_id varchar(128) primary key, source_code varchar(64) not null, reason varchar(64) not null, blocking bigint not null, body text not null);
 create table if not exists mastering_lock(name varchar(32) primary key);
 create table if not exists mastering_stage(assertion_id varchar(128), subject varchar(255), source_code varchar(64), lei varchar(32), body text);
 create table if not exists mastering_stage_key(namespace varchar(32), value varchar(128));

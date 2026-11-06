@@ -105,6 +105,7 @@ def compare(engine, store) -> dict:
             found = differences(body, bodies[entity])
             held["same"] += not found
             differing.update(found)
+        store.commit()
     waiting = sum(1 for body in stored(engine, "review")
                   if body.get("open") and not body.get("retired") and body.get("reason") == WAITING)
     set_aside = sum(1 for _ in stored(engine, "deferred-record"))
