@@ -9,4 +9,27 @@ read:
     registrant:
       each: tables.registrant
       columns:
-        record: {value: {path: .}}
+        record:
+          object:
+            fields:
+              cik: {value: {path: cik}}
+              latest: {value: {path: latest}}
+              first: {value: {path: first}}
+              filed_at:
+                choose:
+                  condition: {test: {path: latest.filed, kind: truthy}}
+                  then:
+                    concat:
+                    - text: {path: latest.filed, transforms: [{regex_replace: {pattern: ' ', with: '-'}}]}
+                    - const: {value: 'T00:00:00+00:00'}
+                  else: {const: {value: null}}
+              profile_start:
+                choose:
+                  condition: {test: {path: first.filed, kind: truthy}}
+                  then:
+                    concat:
+                    - text: {path: first.filed, transforms: [{regex_replace: {pattern: ' ', with: '-'}}]}
+                    - const: {value: 'T00:00:00+00:00'}
+                  else: {const: {value: null}}
+              date_basis: {const: {value: observed}}
+              date_is_provisional: {const: {value: true}}

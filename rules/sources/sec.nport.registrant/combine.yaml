@@ -8,6 +8,7 @@ execution:
 combine:
   max_rows: 1000000
   groups:
+    first_filing: {source: filings, table: filing, key: cik, value: ., mode: first, order_by: [filed, accession_number], distinct: false, skip_null_values: true, checks: {}, where: {}}
     latest_filing: {source: filings, table: filing, key: cik, value: ., mode: last, order_by: [filed, accession_number], distinct: false, skip_null_values: true, checks: {}, where: {}}
   tables:
     registrant:
@@ -16,4 +17,5 @@ combine:
       checks: {}
       where: {}
       joins:
+        first: {group: first_filing, key: cik, on_missing: error, replace: false}
         latest: {group: latest_filing, key: cik, on_missing: error, replace: false}

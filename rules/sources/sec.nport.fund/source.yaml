@@ -4,10 +4,10 @@
 # series over 14,416 filings). Rulings it rests on (operator):
 # - "Series id and LEI join (Recommended)" (2026-10-14): the Fund is kind
 #   fund_structure, joined by its SEC series id and its LEI.
-# - "Funds now, link later (Recommended)" (2026-10-16): IS_SUBFUND_OF waits
-#   until a source states when a series began (a profile needs a fixed start
-#   date and none is stated); the registrant's CIK stays on each Fund, lookup
-#   only.
+# - Operator, 2026-11-06: "make it valid with the file date until we fix
+#   the data quality reflect this in open metadata". This supersedes the
+#   link deferral: use the filing observation, with an explicit quality flag,
+#   while the true start remains unknown.
 # The run, in order: sec.nport.registrant's readings give two pair sets,
 # `filed` (filing to its date, submissions.yaml) and `registrant` (filing to
 # its registrant's CIK, its `filing` table); this reading streams
@@ -189,11 +189,13 @@ dataset_contracts:
       schema_version: sec-nport-fund-v1
       record_key: the fund series' SEC series id; one record per series over the quarter, from its latest filing
       publication_key: the quarter's N-PORT data set file and the reduction and combine contracts
-      effective_time: unknown; the filing date of the latest filing is kept, not the series' own time
+      effective_time: the latest filing date as an observation, not the series inception
       semantics: patch
       completeness: the fund series of one quarter's N-PORT filings; no retirement by absence
       nonblocking_deferred_reasons:
       - missing_record_identity
+      - missing_provisional_file_date
+      - invalid_time
       adapter:
         reading:
           source: sec.nport.fund
@@ -208,6 +210,8 @@ dataset_contracts:
                   path: .
                   kind: object
               reason: Mapped input must be an object
+            - test: {test: {path: filed_at, kind: truthy}}
+              reason: missing_provisional_file_date
             tables:
               mapped:
                 each: .
@@ -218,22 +222,28 @@ dataset_contracts:
                         name: {value: {path: latest.name, type: text, null_if_blank: true}}
                   matching:
                     object:
-                      fields: {}
+                      fields:
+                        relationship_start_date_basis: {value: {path: date_basis, type: text}}
           input_fields:
           - series_id
           - lei
           - latest
-        version: sec-nport-fund-v1
+          - filed_at
+          - date_basis
+          - date_is_provisional
+          - authoritative_start
+        version: sec-nport-fund-2026-11-06.provisional-file-date
         retain_deferred: true
         source_record_provenance: true
         kind: fund_structure
+        effective_at: filed_at
         record_key:
         - series_id
         record_key_format: sec_series_id
         # The series id and the series LEI each join the one Fund holding
         # them, or create it (operator, 2026-10-14). The registrant's CIK is
-        # lookup only until IS_SUBFUND_OF can be mapped (operator,
-        # 2026-10-16: "Funds now, link later").
+        # lookup only for identity; it also resolves the approved relationship
+        # to the already mastered N-PORT registrant, without merging identities.
         # The LEI joins only when it is the one LEI its series files and no
         # other series files it in the quarter (combine.yaml, `lei`): 15 LEIs
         # are filed for two series and 1 series files two LEIs (2026q2). Every
@@ -250,3 +260,24 @@ dataset_contracts:
         cross_reference_formats:
           nport_registrant_cik: sec_cik
           nport_series_lei: lei
+        profiles:
+        - role: fund
+          authority: SEC EDGAR
+          registration: series_id
+          valid_from: filed_at
+          fields:
+            source_start_date_basis: date_basis
+            source_start_date_is_provisional: date_is_provisional
+        relationships:
+        - type: IS_SUBFUND_OF
+          target_key: [latest.cik]
+          target_source: sec.nport.registrant.v1
+          # No stated inception: the existing engine uses effective_at and
+          # records valid_from_basis=observed. A real stated date may replace it.
+          valid_from: authoritative_start
+          time_format: instant
+          scope: SEC N-PORT fund series
+          ends: {reason: missing_record_identity}
+          properties:
+            source_start_date_basis: date_basis
+            source_start_date_is_provisional: date_is_provisional

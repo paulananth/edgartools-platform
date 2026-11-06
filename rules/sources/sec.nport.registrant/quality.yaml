@@ -1,0 +1,11 @@
+version: nport-registration-2026-11-06.provisional-file-date
+quality:
+  sec.nport.registrant.v1:
+    fixes: []
+    checks:
+    - id: fund_registration_start_is_authoritative
+      test: in_set@1
+      value: matching.registration_start_date_basis
+      args: {values: [stated]}
+      on_fail: flag
+      why: The true registration inception is unknown. The first retained filing supplies a provisional observation; this flag does not block the registration or its links.
