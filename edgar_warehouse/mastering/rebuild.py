@@ -17,14 +17,21 @@ FILE = 1000
 
 
 def stored(engine, kind: str):
-    """Every stored body of one kind, in key order on one snapshot."""
-    from edgar_warehouse.mdm.inspection import _pages
+    """Every stored body of one kind in key order. Each page has its own read: one read held for the
+    whole replay would keep every row the merge deletes from being cleaned away."""
     from edgar_warehouse.mdm.record_reads import RecordReader, for_connection
 
     immutable = kind in ("source-reading", "deferred-record")
-    with engine.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
-        for page in _pages(for_connection(conn).adapter, conn, kind, immutable=immutable):
-            yield from (RecordReader._body(row) for _, row in page)
+    after = ""
+    while True:
+        with engine.connect() as conn:
+            api = for_connection(conn).adapter
+            keys = api.record_keys(kind, after=after, limit=500, connection=conn, immutable=immutable, lookup=False)
+            found = api.read([(kind, key) for key in keys], connection=conn, immutable=immutable, lookup=False)
+        if not keys:
+            return
+        yield from (RecordReader._body(found[kind, key]) for key in keys)
+        after = keys[-1]
 
 
 def files_of(records, size: int = FILE):
