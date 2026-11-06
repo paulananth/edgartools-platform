@@ -9,4 +9,20 @@ read:
     fund:
       each: tables.fund
       columns:
-        record: {value: {path: .}}
+        record:
+          object:
+            fields:
+              series_id: {value: {path: series_id}}
+              lei: {value: {path: lei}}
+              latest: {value: {path: latest}}
+              filed_at:
+                choose:
+                  condition: {test: {path: latest.filed, kind: truthy}}
+                  then:
+                    concat:
+                    - text: {path: latest.filed, transforms: [{regex_replace: {pattern: ' ', with: '-'}}]}
+                    - const: {value: 'T00:00:00+00:00'}
+                  else: {const: {value: null}}
+              authoritative_start: {const: {value: null}}
+              date_basis: {const: {value: observed}}
+              date_is_provisional: {const: {value: true}}

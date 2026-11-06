@@ -12,6 +12,12 @@ The data: the SEC's Form N-PORT quarterly data set for 2026q2, one zip downloade
 
 ## Checklist
 
+Later ruling, 2026-11-06: "make it valid with the file date until we fix the
+data quality reflect this in open metadata" supersedes the series/registrant
+link deferral recorded below. Use an observed filing-date start with a quality
+flag, not a stated inception. Current work and readback evidence belong in
+`.planning/workstreams/nport-file-date/TICKET.md`.
+
 - [x] The capture: `2026q2_nport.zip`, one request, 440,699,889 bytes, sha256 `077cc836…`, 32 members (30 TSV tables, a metadata file, a readme), 1.55 GB unpacked 2026-10-14 17:37 ET
 - [x] discover: data-profiling over every table; the operator's answers; approved findings (13F 2026-10-14 20:54 ET; N-PORT 2026-10-15 06:29 ET)
 - [x] plan-parts: one onboarding per part, in dependency order: N-PORT Security, registrant Company, Fund, HOLDS (onboarding log) 2026-10-15 06:29 ET

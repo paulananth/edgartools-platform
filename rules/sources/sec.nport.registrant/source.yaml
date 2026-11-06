@@ -157,11 +157,13 @@ dataset_contracts:
       schema_version: sec-nport-registrant-v1
       record_key: the registrant's CIK; one record per CIK over the quarter, from its latest filing
       publication_key: the quarter's N-PORT data set file and the reduction and combine contracts
-      effective_time: unknown; the filing date of the latest filing is kept, not the registrant's own time
+      effective_time: the latest filing date as an observation, not incorporation or registration inception
       semantics: patch
       completeness: the registrants of one quarter's N-PORT filings; no retirement by absence
       nonblocking_deferred_reasons:
       - missing_record_identity
+      - missing_provisional_file_date
+      - invalid_time
       adapter:
         reading:
           source: sec.nport.registrant
@@ -176,6 +178,10 @@ dataset_contracts:
                   path: .
                   kind: object
               reason: Mapped input must be an object
+            - test: {test: {path: filed_at, kind: truthy}}
+              reason: missing_provisional_file_date
+            - test: {test: {path: profile_start, kind: truthy}}
+              reason: missing_provisional_file_date
             tables:
               mapped:
                 each: .
@@ -197,14 +203,21 @@ dataset_contracts:
                             null_if_empty: true
                   matching:
                     object:
-                      fields: {}
+                      fields:
+                        registration_start_date_basis: {value: {path: date_basis, type: text}}
           input_fields:
           - cik
           - latest
-        version: sec-nport-registrant-v1
+          - first
+          - filed_at
+          - profile_start
+          - date_basis
+          - date_is_provisional
+        version: sec-nport-registrant-2026-11-06.provisional-file-date
         retain_deferred: true
         source_record_provenance: true
         kind: company
+        effective_at: filed_at
         record_key:
         - cik
         record_key_format: sec_cik
@@ -220,3 +233,13 @@ dataset_contracts:
         cross_references:
           sec_file_number: latest.file_number
           nport_lei: latest.lei
+        # N-PORT establishes the registrant's fund role. Its earliest retained
+        # filing is a provisional observation, not the true registration start.
+        profiles:
+        - role: fund
+          authority: SEC EDGAR
+          registration: cik
+          valid_from: profile_start
+          fields:
+            source_start_date_basis: date_basis
+            source_start_date_is_provisional: date_is_provisional

@@ -1,0 +1,13 @@
+version: nport-subfund-2026-11-06.provisional-file-date
+quality:
+  sec.nport.fund.v1:
+    fixes: []
+    checks:
+    # Approved provisional filing observation: flag the missing authoritative
+    # inception date, while permitting the relationship to be mastered.
+    - id: subfund_start_is_authoritative
+      test: in_set@1
+      value: matching.relationship_start_date_basis
+      args: {values: [stated]}
+      on_fail: flag
+      why: The true relationship inception is unknown. The operator permits a valid observed filing-date start until remediation; this flag does not block the link.

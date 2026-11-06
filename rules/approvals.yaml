@@ -61,18 +61,18 @@ approvals:
   finalized: PR 1428
 - kind: source
   name: sec.nport.fund
-  digest: 623c93b06395dd3c6d8e2373c2561c027c7817c9f8e8a96d417acfd11c650c7d
+  digest: dc9584c02b20f46a792283840f27186e36c07077fa551e242bc0ab3e470fc888
   by: Operator
-  words: approved all rules
-  at: '2026-11-04'
-  finalized: PR 1428
+  words: make it valid with the file date until we fix the data quality reflect this in open metadata
+  at: 2026-11-06 07:33 ET
+  finalized: PR 1454
 - kind: source
   name: sec.nport.registrant
-  digest: 4a619fcc29e049f0e700c383d73afbe1283cf1697a687d287000e6d747142eb4
+  digest: a546b88753bac2b762f636146ac6aa9d3e015cfe2937972ffe83bd6145d47055
   by: Operator
-  words: approved all rules
-  at: '2026-11-04'
-  finalized: PR 1428
+  words: make it valid with the file date until we fix the data quality reflect this in open metadata
+  at: 2026-11-06 07:33 ET
+  finalized: PR 1454
 - kind: source
   name: sec.nport.security
   digest: c6c8671ad5588153670b250d11d5e856dbdee28986b0d9f43a4d9a04267136ae
