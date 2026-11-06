@@ -99,10 +99,29 @@ While these tests ran, OpenFIGI bundle 15 stopped on `expired_destination_author
 
 Operator, 2026-11-06: "can openmedatate can be a steward tool to review and merge". From its public documentation, not tried here. It has Tasks and reviewer approvals, documented for glossary terms and asset metadata, and custom properties on existing types. No master record merge was found, and a feature request says user-defined entities are unsupported. So it can show work to a steward, but the merge stays in MDM. Parked (operator, 2026-11-06: "park the openmetadata now"). Not built: OpenMetadata work belongs to Codex.
 
+## The move to production
+
+Operator, 2026-11-06: "yes" to replay and replace. There is no live system to protect and every record and decision is stored, so the new path is built beside the old one, replayed, compared and switched, with no flag and no dual running.
+
+1. `edgar_warehouse/mastering/`: the prototype as a reviewed package with matrix tests.
+2. One real load: `load` merges N-PORT registrant through it.
+3. `mdm rebuild`: replay every stored record and compare with the old masters.
+4. Readers move: `MdmIds`, `consumer.py`, `steward split`, the search build, and relationships with the silver write.
+5. Delete the old path.
+
+Dropped, since nothing uses them (operator, 2026-11-06: "why do i even need ... isnt it not over engineering"): the history table, quarantine, chained reversals and a full engine qualification. The same tests on PostgreSQL and MySQL stay, in the CI jobs that exist. A feature stays only if a reader, a command or a stored record uses it. The `journal`, `export` and `graph` payloads stop (operator: "1 yes").
+
+Stage 1 result: 9 tests pass on PostgreSQL and on MySQL, and the package on all 14,024 real Company records gives 67,034 of 67,034 fields in 35.8 s. A zero-padded identifier in a test exposed a bug every real replay had hidden: lookups used the raw form, where the store keeps the normal form, and would have made a duplicate master.
+
 ## Checklist
 
 - [x] Reviews and steward actions on the prototype: waiting reviews, exclusions, overrides, revokes and reversals, on PostgreSQL and MySQL (2026-11-06 10:32 ET).
-- [ ] The same in production code, with chained reversals, quarantine and master-conflict reviews.
+- [ ] ~~Chained reversals and quarantine~~ deferred to none: dropped, nothing uses them.
+- [x] Stage 1: `edgar_warehouse/mastering/`, 9 tests on both engines (2026-11-06 11:48 ET).
+- [ ] Stage 2: one real load through the package.
+- [ ] Stage 3: `mdm rebuild`, every record replayed and compared.
+- [ ] Stage 4: readers moved; relationships with the silver write.
+- [ ] Stage 5: the old path deleted.
 - [x] Withheld values on the prototype, by the engine's matching (2026-11-06 11:03 ET).
 - [ ] Withheld values on real `sec.nport.security` records.
 - [x] Records set aside by classification on the prototype, 152,557 of 152,557 (2026-11-06 11:03 ET).
