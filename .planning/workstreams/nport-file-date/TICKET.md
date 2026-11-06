@@ -28,9 +28,12 @@ relationship/registration inception remains unknown.
   domain/glossary; unrelated metadata preserved (2026-11-06 07:30 ET).
 - [x] Review Standards, Spec and GoF: no implementation findings. Historical
   issue 30 answer labeled superseded (2026-11-06 06:52 ET).
-- [ ] Publish and verify the final PR head; record source approvals in Git
-  against that PR's reference (effective on merge). Live activation used
-  captured-data proof, independently of the finalized-on-main shortcut.
+- [x] Publish ready PR #1454 and record both exact source approvals in Git
+  against that PR (effective on merge). All current rules have listed approval;
+  seven approval tests pass, and the rebased source/date/history/approval suite
+  passes 32 tests (2026-11-06 07:34 ET). CI/merge are recorded on the PR.
+  Live activation used captured-data proof, independently of the
+  finalized-on-main shortcut.
 - [x] Learning → skill: data-quality's Approved provisional dates, merged
   PR #1450, documents observed validity with an open authoritative-start defect
   (2026-11-06 06:52 ET).

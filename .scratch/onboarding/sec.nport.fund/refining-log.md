@@ -58,3 +58,8 @@ current main changes only unrelated issue notes and the provisional-date skill;
 range-diff confirms the source implementation is identical. The two activated
 source digests still match the committed files. Actual source records and
 private evidence remain outside this public repository.
+
+Ready PR #1454 carries the two source approval entries at their exact digests
+and the operator's exact words. The finalization reference takes effect when
+that PR merges; live activation had already used captured-data proof. All
+current rules have a listed approval; the seven approval tests pass.
