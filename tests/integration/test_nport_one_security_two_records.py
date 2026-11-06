@@ -59,7 +59,7 @@ def test_the_records_of_one_security_give_it_one_link_starting_at_the_earliest_f
     link.apply(stage, policy, "q2", made, 3)
     securities = [v for v in core.documents(database, "entity").values() if v["kind"] == "security" and v.get("status") != "alias"]
     assert len(securities) == 1
-    assert link.starts(database) == [(link.MAY28, "stated")]
+    assert link.starts(database) == [(link.MAY28, "observed")]
 
 
 def test_records_of_one_security_naming_two_issuers_give_it_no_link_and_a_review(database, tmp_path):

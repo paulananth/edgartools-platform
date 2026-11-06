@@ -616,7 +616,8 @@ def _link(scope: dict, spec: dict) -> dict | None:
         "properties": {name: value(scope, path) for name, path in spec.get("properties", {}).items()},
     }
     if "capacity" not in spec:
-        return {**link, "valid_from": _time(value(scope, spec["valid_from"]), spec)}
+        basis = {"valid_from_basis": spec["date_basis"]} if "date_basis" in spec else {}
+        return {**link, "valid_from": _time(value(scope, spec["valid_from"]), spec), **basis}
     # A link in a capacity (a Person's: director, officer, ten-percent owner) is
     # a dated sighting that the Merge Stage folds into periods
     # (relationships.fold_sightings): the capacity held, or dropped, on the
