@@ -48,12 +48,12 @@ def test_populated_worker_upgrade(interrupt,database_factory,storage_api):
                 five.replay(request.batch,lease,observer="invented-interrupted")
             assert frame() == before
         migrate(owner,application_role=role,prepared=True)
-        six = storage_api.Adapter(runtime,prefix="mdm_store",protocol=6)
-        assert six.generation() == 1 and frame() == before
+        current = storage_api.Adapter(runtime,prefix="mdm_store",protocol=7)
+        assert current.generation() == 1 and frame() == before
         with runtime.connect() as conn:
-            count, rows = waiting(six,conn)
+            count, rows = waiting(current,conn)
             assert count == 201 and len(rows) == 100
-        assert six.replay(request.batch,lease,observer="invented-after-upgrade")["duplicate"]
+        assert current.replay(request.batch,lease,observer="invented-after-upgrade")["duplicate"]
         assert frame() == before
         stale = replace(request,batch="invented-old-writer",expected_generation=1,
                         expected_checkpoint=1,checkpoint=2,objects=())

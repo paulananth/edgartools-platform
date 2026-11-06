@@ -131,7 +131,7 @@ record=assertion(source_code="invented.authority",record_key="one",publication_k
 command={"batch_id":"invented-installed-save","run_id":str(uuid4()),"policy_digest":pin,
     "consumer":"invented-proof","expected_checkpoint":0,"checkpoint":1,
     "as_of":"2026-03-01T00:00:00Z","assertions":[record]}
-api=storage_adapter().Adapter(runtime,prefix="mdm_store",protocol=6)
+api=storage_adapter().Adapter(runtime,prefix="mdm_store",protocol=7)
 assert stage.apply(**{**command,"preview":True})["preview"] and api.generation()==0
 assessment=stage.assess(**command,automatic=stage.propose(**command))
 producer=str(uuid4())

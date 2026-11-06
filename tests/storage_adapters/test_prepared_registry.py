@@ -101,7 +101,7 @@ def test_prepared_owner_registry(case, database_factory, storage_api, monkeypatc
             assert result.returncode == 0, "prepared owner migration CLI failed"
             assert json.loads(result.stdout)["prepared_storage"] == 7
         policy, policy_key, first, second = seed(owner)
-        api = storage_api.Adapter(runtime, prefix="mdm_store", protocol=6)
+        api = storage_api.Adapter(runtime, prefix="mdm_store", protocol=7)
         pins = {
             "catalog": digest(catalog.CATALOG),
             "policy": policy_key,

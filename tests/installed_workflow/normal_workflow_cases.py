@@ -172,7 +172,7 @@ elif case.startswith("upgrade"):
             MergeStage(Store(runtime)).apply(**g["command"])
         assert frame(names) == before
     migrate(owner,application_role=os.environ["READ_RUNTIME_ROLE"],prepared=True)
-    api = module.Adapter(runtime,prefix="mdm_store",protocol=6)
+    api = module.Adapter(runtime,prefix="mdm_store",protocol=7)
     assert frame(names) == before and api.generation() == generation
     with runtime.connect() as conn:
         count, rows = waiting(api,conn)
