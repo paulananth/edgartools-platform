@@ -1,0 +1,13 @@
+create table if not exists mastering_master(entity_id char(36) primary key, changed_file bigint not null default 0, body longtext not null, created_at datetime(6) not null default current_timestamp(6), index mastering_master_changed(changed_file, entity_id)) collate utf8mb4_bin;
+create table if not exists mastering_file(file_key char(64) primary key, records bigint not null) collate utf8mb4_bin;
+create table if not exists mastering_identifier(namespace varchar(32) not null, value varchar(128) not null, entity_id char(36) not null, primary key(namespace, value), index mastering_identifier_entity(entity_id)) collate utf8mb4_bin;
+create table if not exists mastering_record(assertion_id varchar(128) primary key, subject varchar(255) not null, entity_id char(36), bound_id char(36), source_code varchar(64) not null, lei varchar(32), body longtext not null, index mastering_record_entity(entity_id), index mastering_record_subject(subject), index mastering_record_lei(lei)) collate utf8mb4_bin;
+create table if not exists mastering_name_key(role varchar(16) not null, lei varchar(32) not null, subject varchar(255) not null, primary key(role, lei, subject), index mastering_name_key_subject(subject)) collate utf8mb4_bin;
+create table if not exists mastering_review(subject varchar(255) not null, reason varchar(64) not null, assertion_id varchar(128), open_review smallint not null, primary key(subject, reason)) collate utf8mb4_bin;
+create table if not exists mastering_decision(decision_id char(64) primary key, operation varchar(16) not null, left_id varchar(255), right_id varchar(255), body longtext not null, index mastering_decision_left(operation, left_id)) collate utf8mb4_bin;
+create table if not exists mastering_withheld(subject varchar(255) not null, namespace varchar(32) not null, raw varchar(128) not null, primary key(subject, namespace, raw)) collate utf8mb4_bin;
+create table if not exists mastering_deferred(deferred_id varchar(128) primary key, source_code varchar(64) not null, reason varchar(64) not null, blocking smallint not null, body longtext not null) collate utf8mb4_bin;
+create table if not exists mastering_lock(name varchar(32) primary key) collate utf8mb4_bin;
+create table if not exists mastering_stage(assertion_id varchar(128), subject varchar(255), source_code varchar(64), lei varchar(32), body longtext, index mastering_stage_subject(subject), index mastering_stage_lei(lei)) collate utf8mb4_bin;
+create table if not exists mastering_stage_key(namespace varchar(32), value varchar(128), index mastering_stage_key_value(namespace, value)) collate utf8mb4_bin;
+create table if not exists mastering_stage_bound(subject varchar(255), entity_id char(36), index mastering_stage_bound_subject(subject)) collate utf8mb4_bin;
