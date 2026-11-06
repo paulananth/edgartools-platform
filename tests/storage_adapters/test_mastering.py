@@ -10,8 +10,8 @@ from uuid import uuid4
 
 import pytest
 
-from edgar_warehouse.mastering import merge, rebuild, store as stores
-from edgar_warehouse.mdm.evidence import assertion, decision
+from edgar_warehouse.mastering import links, merge, rebuild, store as stores
+from edgar_warehouse.mdm.evidence import assertion, decision, subject_key
 from edgar_warehouse.mdm.identifier_types import TYPES
 from edgar_warehouse.mdm.name_count import VERSION as NAME_COUNT_VERSION
 from edgar_warehouse.rules import files
@@ -274,3 +274,29 @@ def test_two_writers_on_the_same_identifiers_leave_one_master_each(database_fact
 def test_every_integer_column_is_bigint(engine):
     schema = (Path(stores.__file__).parent / "schema" / f"{engine}.sql").read_text()
     assert not re.findall(r"\b(?:tiny|small|medium)?int(?:eger)?\b", schema)
+
+
+def test_a_link_waits_for_its_other_end_and_keeps_its_earliest_start(database_factory):
+    custodian = "iapd.adv.custodians.v1"
+    issuer = subject_key(custodian, "issuer")
+
+    def filed(on, revision):
+        link = {"type": "ISSUED_BY", "target_subject": issuer, "scope": "invented", "valid_from": on, "valid_to": None,
+                "valid_from_basis": "observed", "properties": {}}
+        return assertion(source_code=NPORT, record_key="share", publication_key="invented", revision=revision,
+                         effective_at=None, kind="security", fields={"name": "INVENTED SHARE"},
+                         identifiers={"cusip": "037833100"}, relationships=[link])
+
+    with opened(database_factory) as db:
+        merge.merge_file(db, SECURITY, [filed("2026-03-01T00:00:00+00:00", 1)])
+        edges, waiting = links.calculate(db, POLICY, AS_OF, {})
+        assert edges == [] and waiting == {"unresolved_endpoint": 1}
+        merge.merge_file(db, COMPANY, [record(custodian, "issuer", lei="529900T8BM49AURSDO55")])
+        edges, waiting = links.calculate(db, POLICY, AS_OF, {})
+        assert not waiting
+        (row,) = links.rows_of(edges)
+        assert (row["relationship_type"], row["valid_from_basis"]) == ("ISSUED_BY", "observed")
+        assert {row["source_master_id"], row["target_master_id"]} == set(live(db))
+        merge.merge_file(db, SECURITY, [filed("2026-06-01T00:00:00+00:00", 2)])
+        later, _ = links.calculate(db, POLICY, AS_OF, links.stored_of([row]))
+        assert [r["valid_from"] for r in links.rows_of(later)] == [row["valid_from"]]

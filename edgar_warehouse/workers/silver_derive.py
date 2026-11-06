@@ -4,7 +4,8 @@ The unit's input names the build (`input.keys.build`):
 
 - `line_items`: `company_line_item` from `company_fact` (`financials.line_items`);
 - `measures`: `company_measure` from `company_line_item` (`financials.measures`),
-  each company's statement format read from its Company master.
+  each company's statement format read from its Company master;
+- `links`: `relationship` from the records MDM stores (`mastering.links`).
 
 Each build rebuilds its whole table: both tables are snapshots, and the writer
 removes any row a delivery lacks, so a delivery of some companies would remove
@@ -22,8 +23,8 @@ import json
 from edgar_warehouse.workers.silver_land import engines
 
 CHECK = "silver.derived"
-BUILDS = {"line_items": "company_line_item", "measures": "company_measure"}  # build -> the table it writes
-SOURCES = {"line_items": "company_fact", "measures": "company_line_item"}  # build -> the table it reads
+BUILDS = {"line_items": "company_line_item", "measures": "company_measure", "links": "relationship"}  # build -> the table it writes
+SOURCES = {"line_items": "company_fact", "measures": "company_line_item", "links": "mastering_record"}  # build -> what it reads
 
 
 def _build(envelope: dict) -> str:
@@ -42,6 +43,8 @@ def _floor(silver, build: str, rows: int) -> None:
     """A build over a source that holds rows gives rows, and only for companies the source holds."""
     from sqlalchemy import text
 
+    if build == "links":  # its input is in MDM, and having no link is a real answer
+        return
     source, table = SOURCES[build], BUILDS[build]
     with silver.connect() as conn:
         read = conn.execute(text(f'select count(*) from silver."{source}"')).scalar()
@@ -66,6 +69,29 @@ def _receipt(silver, sink, build: str) -> bytes:
                        "keys_sha256": digest}, sort_keys=True, separators=(",", ":")).encode()
 
 
+def _links(silver, mdm, sink, envelope: dict, artifacts) -> None:
+    from sqlalchemy import text
+
+    from edgar_warehouse.database_connections import storage_adapter
+    from edgar_warehouse.mastering import links
+    from edgar_warehouse.mastering.store import open_store
+    from edgar_warehouse.silver_writer.writer import land
+
+    shape = json.loads(artifacts.verified(envelope["input"], max_bytes=64 * 1024))
+    with mdm.connect() as conn:
+        policy = storage_adapter().registered_policy(conn, shape["policy"])
+    if policy is None:
+        raise ValueError("The run's policy is not registered")
+    with silver.connect() as conn:
+        last = [dict(row._mapping) for row in conn.execute(text('select * from silver."relationship"'))]
+    db = open_store(mdm)
+    try:
+        edges, _ = links.calculate(db, policy, shape["as_of"], links.stored_of(last))
+    finally:
+        db.close()
+    land(sink, "relationship", links.rows_of(edges))
+
+
 def execute(envelope: dict, artifacts) -> dict:
     from edgar_warehouse.financials import line_items, measures
     from edgar_warehouse.silver_writer.relational import DatabaseSink
@@ -79,7 +105,9 @@ def execute(envelope: dict, artifacts) -> dict:
         if mdm is None:  # both tables link to the Company masters
             raise ValueError("silver.derive reads each company's master: set MDM_DATABASE_URL")
         sink = DatabaseSink(silver)
-        if build == "line_items":
+        if build == "links":
+            _links(silver, mdm, sink, envelope, artifacts)
+        elif build == "line_items":
             line_items.build(silver, sink, MdmIds(mdm))
         else:
             measures.build(silver, sink, MdmIds(mdm), lambda keys: measures.from_company(mdm, keys))

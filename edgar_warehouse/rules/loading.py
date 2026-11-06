@@ -81,13 +81,14 @@ def target_of(source: str, target: str) -> dict:
 
 
 def silver_specs(source: str, reading: dict, target: str) -> list[Path]:
-    """The spec file of each silver table the target lands: `silver-*.yaml` beside the source's rules whose
-    `table` is the table a `silver.land` step names."""
+    """The spec file of each silver table the target writes: `silver-*.yaml` beside the source's rules, or in
+    `rules/silver` when several sources share the table, whose `table` a silver step names."""
     steps = reading["bookkeeping"]["targets"][target]["steps"]
     wanted = [((step.get("input") or {}).get("keys") or {}).get("silver") for step in steps
-              if step.get("operation") == "silver.land"]
+              if step.get("operation") in ("silver.land", "silver.derive")]
     held = {}
-    for path in sorted((files.ROOT / "sources" / source).glob("silver-*.yaml")):
+    for path in [*sorted((files.ROOT / "sources" / source).glob("silver-*.yaml")),
+                 *sorted((files.ROOT / "silver").glob("silver-*.yaml"))]:
         held[(files.load(path) or {}).get("table")] = path
     missing = sorted(table for table in wanted if table and table not in held)
     if missing:
@@ -108,7 +109,7 @@ class Loader:
         self.runtimes: dict[str, str] = {}
         env = self.env = duties(stores)
         lands = [step["name"] for step in self.reading["bookkeeping"]["targets"][target]["steps"]
-                 if step.get("operation") == "silver.land"]
+                 if step.get("operation") in ("silver.land", "silver.derive")]
         bare = [duty for duty in ("worker", "verifier") if lands and not env[duty].get("SILVER_DATABASE_URL")]
         if bare:
             raise RunStopped(f"{source} {target} lands silver (steps {', '.join(lands)}) but the {' and '.join(bare)} "

@@ -132,3 +132,52 @@ def test_a_snapshot_delivery_of_some_companies_removes_the_others(silver_store):
     with silver_store.connect() as conn:
         left = conn.execute(text("SELECT count(DISTINCT company_key) FROM silver.company_line_item")).scalar()
     assert whole > 1 and left == 1
+
+
+def test_links_land_as_one_row_a_period_and_a_second_run_keeps_them(postgres, monkeypatch):
+    from edgar_warehouse.mastering import links, store as stores
+
+    admin, _ = postgres
+    edge = {"relationship_id": "invented", "type": "ISSUED_BY", "scope": "invented", "source_id": "a", "target_id": "b",
+            "evidence": [{"assertion_id": "c"}], "periods": [{"valid_from": "2026-03-01T00:00:00+00:00",
+                                                              "valid_from_basis": "observed", "valid_to": None,
+                                                              "properties": {}}]}
+    seen = []
+
+    def calculate(db, policy, as_of, stored):
+        seen.append(stored)
+        return [edge], {}
+
+    with silver_database(admin) as (owner, runtime):
+        silver.migrate(owner, runtime_role=RUNTIME)
+        silver.register(owner, spec_file(files.ROOT / "silver" / "silver-relationship.yaml", None), runtime_role=RUNTIME)
+        monkeypatch.setattr(silver_derive, "engines", lambda: (runtime, MasterPolicy()))
+        monkeypatch.setattr(runtime, "dispose", lambda: None)
+        monkeypatch.setattr(links, "calculate", calculate)
+        monkeypatch.setattr(stores, "open_store", lambda engine: Master2())
+        monkeypatch.setattr("edgar_warehouse.database_connections.storage_adapter", lambda: Policies())
+        store = Artifacts()
+        store.written["memory://in.json"] = json.dumps({"policy": "invented", "as_of": "2026-11-06T00:00:00+00:00"}).encode()
+        store.verified = lambda ref, **_: store.written[ref["uri"]]
+        done = envelope("links")
+        out = silver_derive.execute(done, store)
+        silver_derive.execute(done, store)
+        assert json.loads(store.written[out["uri"]])["rows"] == 1
+        assert seen[0] == {} and seen[1]["invented"]["periods"][0]["valid_from_basis"] == "observed"
+
+
+class Policies:
+    def registered_policy(self, conn, digest):
+        return {"relationships": {}}
+
+
+class MasterPolicy(Master):
+    def connect(self):
+        from contextlib import nullcontext
+
+        return nullcontext(None)
+
+
+class Master2:
+    def close(self):
+        pass
