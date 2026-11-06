@@ -35,4 +35,26 @@ qualification was repeated with the extension built from this checkout.
 
 The two tested Rules versions were saved, their captured-data proofs recorded,
 approved with the operator's exact words and activated through the normal
-Rules handoff. The controlled replay and final native readback remain required.
+Rules handoff. Both controlled replays completed: 2.6 minutes for registrants,
+43.3 minutes for funds. Governed current readings and mastered links confirmed
+12,937 valid IS_SUBFUND_OF relationships to 1,245 Company registrants. Every
+relationship period starts at its captured filing observation, has observed
+basis and retains the provisional marker. All 12,937 series readings and all
+1,947 registrant readings retain their expected quality flag and identity
+fields. The normal repeat selected zero new documents for both sources.
+
+Native OpenMetadata readback confirms one typed Fund Series → Fund Company
+edge, qualified descriptions on both terms, the relationship asset and both
+source assets, and two externally executed quality results: 12,937 of 12,937
+series and 1,947 of 1,947 registrants flagged for unknown authoritative start.
+Those failed checks leave the approved provisional relationships valid. No
+Shared domain or glossary exists. This was a scoped API update preserving
+unrelated metadata; the broader unsupported-edge publisher defect remains
+tracked separately in issue #1447. Readback compares decoded description text
+because the native sanitizer encodes the equals sign as an HTML entity.
+
+The captured-data load and native readback used code at 29ff6dd1. Rebase onto
+current main changes only unrelated issue notes and the provisional-date skill;
+range-diff confirms the source implementation is identical. The two activated
+source digests still match the committed files. Actual source records and
+private evidence remain outside this public repository.
