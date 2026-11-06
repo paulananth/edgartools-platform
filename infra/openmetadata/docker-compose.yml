@@ -5,7 +5,7 @@
 # publish` writes the catalog. Only the server's port reaches the host, on
 # 127.0.0.1, so it clashes with no local Postgres.
 #
-#   docker compose -f infra/openmetadata/docker-compose.yml up -d
+#   bash infra/openmetadata/init.sh
 #   open http://localhost:8585   (admin@open-metadata.org / admin)
 name: edgartools-catalog
 

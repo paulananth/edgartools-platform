@@ -591,16 +591,37 @@ objects are soft-deleted. Fix: retain the empty configuration override and
 verify zero demo edges after restart. Lesson: deletion is complete only when
 the producer of unwanted metadata is also suppressed.
 
-Use the existing Docker context and the named volumes in
-`infra/openmetadata/docker-compose.yml`:
+Initialization also excludes the two vendor AI demo services and their sample
+children through the native API. The skill's `scripts/initialize.py` inventories
+the children by service, checks that the inventory is complete, soft-deletes
+each child and parent, and requires native readback to confirm active absence
+and retained deleted markers. Keep those markers: the vendor's asset seeder
+checks deleted objects too, so hard deletion would let the examples return.
+Repeating initialization is safe. Preserve unrelated services.
+
+Use the existing Docker context, private login/token environment variables
+described below, and the named volumes. The initialization command starts the
+server, waits for health, then requires the demo-service exclusion to pass:
 
 ```bash
-docker compose -f infra/openmetadata/docker-compose.yml up -d
+bash infra/openmetadata/init.sh
 ```
 
 Check Docker first. If it is unreachable, report that blocker. Preserve other
 users' containers and volumes. A cold start may take 10–20 minutes. The compose
 file accepts `CATALOG_SERVER_HEAP_OPTS` and `CATALOG_SEARCH_HEAP_OPTS`.
+Keep the configured heap values when reinitializing an existing instance.
+Direct compose startup is only the server-start stage, not completed platform
+initialization. For an already running server, the exclusion alone is:
+
+```bash
+uv run --no-project python skills/openmetadata/scripts/initialize.py
+```
+
+The tool reads `OPENMETADATA_TOKEN`, or `OPENMETADATA_LOGIN_EMAIL` with
+`OPENMETADATA_LOGIN_PASSWORD` (also accepts `OPENMETADATA_PASSWORD`), privately.
+It refreshes the token through native login when login credentials are present.
+Its result is counts only; a failed exclusion exits nonzero.
 
 A login token of the local account expires within the hour; a publish that
 answers 401 needs a new one. Refresh it in the private terminal session, with
