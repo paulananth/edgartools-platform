@@ -33,19 +33,43 @@ No steward decision means one extra indexed read a batch: Company took 24.0 to 2
 
 Not covered: chained merges reversed in dependency order, quarantine, reviews from a master conflict (none in the store), and `override_source_disagreement` is counted but not stored.
 
+## Items 2 and 3, on the prototype
+
+**Matching is the engine's own.** Withheld values live in `plan_record_matches` and `link_matching_records`, so the prototype now calls those two Rust functions around plain lookups, and its own grouping and per-source merge list are gone. The rule decides conflicts, merges and exclusions, and a linking record binds as the engine binds it. `group_batch_records` from ticket 197 has no caller left and is deleted.
+
+| Check | Result |
+|---|---|
+| A CUSIP and ISIN on two Securities, invented records under the real `nport-security-cusip` rule | Binds by the CUSIP; the ISIN stays withheld and with its own master; delivered again, no change |
+| Company | 67,034 of 67,034 fields, 3,258 of 3,258 name matches, 458 of 458 open reviews |
+| 50,000 whole Security masters | 50,000 same members, 199,760 of 199,760 fields |
+| The 11 stored merges | 11 of 11, 44 of 44 fields |
+| Exclude 1 of 11 pairs | 10 merges, 1 kept apart with an `excluded_consolidation` review |
+| The engine's merges reversed by the prototype, against Rust replay | 22 of 22 masters |
+
+| 99,070 Security records, back to back, a load also running | Run 1 | Run 2 |
+|---|---|---|
+| Own grouping | 166.1 s | 190.3 s |
+| The engine's matching | 189.7 s | 298.5 s |
+
+So the engine's matching costs roughly 15 to 55% more here, mostly in the id lookup; the spread is too wide to say more until the machine is quiet. It is kept because one rule in one place is worth it. No record in the store has a withheld value, so a real case waits for `sec.nport.security`. Steward cases on these functions ran on PostgreSQL only.
+
+**Set-aside records** go through one plain table: 152,557 of 152,557 equal the engine's reviews in id, source, reason and blocking flag, at a median 0.135 ms a record.
+
 ## Side research: OpenMetadata as the steward tool
 
-Operator, 2026-11-06: "can openmedatate can be a steward tool to review and merge". From its public documentation, not tried here. It has Tasks and reviewer approvals, documented for glossary terms and asset metadata, and custom properties on existing types. No master record merge was found, and a feature request says user-defined entities are unsupported. So it can show work to a steward, but the merge stays in MDM. Not built: OpenMetadata work belongs to Codex.
+Operator, 2026-11-06: "can openmedatate can be a steward tool to review and merge". From its public documentation, not tried here. It has Tasks and reviewer approvals, documented for glossary terms and asset metadata, and custom properties on existing types. No master record merge was found, and a feature request says user-defined entities are unsupported. So it can show work to a steward, but the merge stays in MDM. Parked (operator, 2026-11-06: "park the openmetadata now"). Not built: OpenMetadata work belongs to Codex.
 
 ## Checklist
 
 - [x] Reviews and steward actions on the prototype: waiting reviews, exclusions, overrides, revokes and reversals, on PostgreSQL and MySQL (2026-11-06 10:32 ET).
 - [ ] The same in production code, with chained reversals, quarantine and master-conflict reviews.
-- [ ] Withheld values: `on_conflict: first`.
-- [ ] Records set aside by classification.
+- [x] Withheld values on the prototype, by the engine's matching (2026-11-06 11:03 ET).
+- [ ] Withheld values on real `sec.nport.security` records.
+- [x] Records set aside by classification on the prototype, 152,557 of 152,557 (2026-11-06 11:03 ET).
 - [ ] Delivery to readers: the journal, export and graph consumers, and search lookups.
 - [ ] Database-side safety: leases and freshness, proved equal before the old routines go.
-- [ ] Rule which rules allow a merge from the rule itself, not by source; survivor by `published_at` then id.
+- [x] Rule which rules allow a merge from the rule itself: the engine's matching does (2026-11-06 11:03 ET).
+- [ ] Survivor by `published_at` then id, as replay does.
 - [ ] Bookkeeping per file, not per batch; the `processed` step; what the step around the silver writer costs.
 - [ ] Person and Fund on MySQL.
 - [ ] The rebuilt path on every source, compared with the engine; the old path deleted.
