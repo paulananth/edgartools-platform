@@ -152,6 +152,8 @@ Two tracks run side by side; the recreation proof runs last, on everything switc
 - [194: Production-style run of each source](issues/194-production-style-run-timings-and-optimization-plan.md): one OpenFIGI bundle takes 2,900 s and the merge is 58% of it, about 60 s a batch; cache size, re-parsing, compression and table size were measured and ruled out; the operator accepted the speed (#1430, #1431, #1436)
 - [195: Observability, data quality and scheduled jobs by skill](issues/195-observability-data-quality-and-scheduled-jobs-by-skill.md): the profile tool's `progress`, `failures`, `quality`, `steps` and `sample` views, and a "Schedule a recurring load" procedure in `data-operations` (#1431, #1436, #1437, #1438, #1439)
 - [196: A merge keeps no index that nobody built](issues/196-a-merge-keeps-no-index-nobody-built.md): the two search indexes are built once by the owner after a load, not rewritten in every batch; the merge speed did not change (#1433)
+- [192: The local test server is one store, its name configuration](issues/192-the-local-test-server-is-one-configured-store.md): `local-test-server`, its name `EDGARTOOLS_LOCAL_TEST_SERVER`, created by the data-platform skill; `up` warns when its checkout is behind `origin/main` and shows an engine refusal's reason
+- [193: A built source is ready to turn on](issues/193-built-means-ready-to-turn-on.md): approvals in git (`rules/approvals.yaml`), no proof to activate finalized rules; a load registers its silver tables, `capture_receipts.py` gives a `provider.capture` folder its receipts, `run_inputs.py` lists each source's run inputs (#1428, #1441, #1442)
 
 ## Not yet specified
 

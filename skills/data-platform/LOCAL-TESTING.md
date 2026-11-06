@@ -75,7 +75,10 @@ A copy's container may publish a new port after Docker restarts; its private
 environment files keep the old one, and a connection is refused. `up` from the
 worktree that owns the copy rewrites them. Another worktree does not, while
 that checkout exists. When the owner checkout is gone, `up` from the current
-checkout adopts the copy and rewrites the files. Do not write a client, and
+checkout adopts the copy and rewrites the files. Keep the owning checkout at
+`origin/main`: a store migrated by newer code is refused by older code. `up`
+prints how many commits its checkout is behind the last fetched `origin/main`,
+and prints a `Blocked` refusal with its reason. Do not write a client, and
 do not edit the files by hand. A read-only check may connect at the
 container's published port in memory (`docker port <container>`), printing
 no address.
