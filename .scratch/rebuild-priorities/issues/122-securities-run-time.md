@@ -5,7 +5,7 @@ test run (operator, 2026-10-20: "why securities takes so long give me profile
 of time taken", then "convert this to a document that we can visit later for
 optimization").
 
-Type: task. Status: parked (2026-11-04 13:16 ET): the operator ruled no new measurement, "No, we have turned on all the sources"; revisit with the timings of the live runs (Bookkeeping's journal), not a test run. The local store holds no N-PORT Securities run to read today. Blocked by: none. Related:
+Type: task. Status: resolved (2026-11-05 20:17 ET): the revisit condition (the timings of the live runs) was met by ticket 194, and the operator accepted the speed. Blocked by: none. Related:
 [121](121-another-runs-reading-over-time.md) (rechecking cost, the 256-unit list).
 
 ## The profile (2026-10-20, measured)
@@ -84,10 +84,7 @@ profiled.
 
 - [x] Measure the split between work and Bookkeeping's checks (2026-10-20 07:55 ET): sampled over pass 2's last steps, above; checks are 48 of 74 minutes, `finalize` 16
 - [x] Recheck another run's units once per run (operator, 2026-11-04 19:55 ET: "optimizeit first", before the OpenFIGI reload of ticket 153). Measured read-only on `company-on` (counts only): one frozen-run check of a 553-unit run takes 0.17 s and of a 9,538-unit run 1.4 s, so the 480 answer units of 8 runs cost 480 checks, about 82 s, which is the 73 s a claim measured on 2026-10-20. Fixed: a composed fill checks each other run once (`Bookkeeping._receipt` and `_compose`, `others`); GoF consult: option (a), a per-fill memo like `seen`, not a cache on the instance (a run's stored rows change on each claim). Test `test_a_fill_checks_each_other_run_once_however_many_of_its_units_it_names`: three units of one run were checked three times before, once now. Not yet measured on a whole Securities run; the report (`report`, `verify`, `finalize`) paths still check the run's own chain
-- [ ] Split the quarter into several units at the reading steps (`holdings`,
-      `issuers`), so parallel workers share the work
-- [ ] Merge in sets of records rather than one by one, within the
-      `mdm-engineering` skill's rules (the Merge Stage record by record is a
-      rule today: change it only with the operator)
+- [ ] ~~Split the quarter into several units at the reading steps (`holdings`, `issuers`), so parallel workers share the work~~ deferred (no ticket): the live runs' timings were taken (ticket 194: a bundle's merge is 58% of its time, about 60 s a batch) and the operator accepted the speed ("Neither: accept 60 s a batch", 2026-11-05 20:17 ET). The `sec.nport.security` run itself was not timed
+- [ ] ~~Merge in sets of records rather than one by one~~ deferred (no ticket): the operator was offered the faster options in ticket 194 and chose to accept the speed (2026-11-05 20:17 ET); the Merge Stage stays record by record
 - [x] Find what the 16 minutes after `processed` are (2026-10-20 07:55 ET): `bookkeeping finalize`, sampled
-- [ ] Learning → skill
+- [x] Learning → skill: `data-operations` "Measure a slow load with `scripts/profile_load.py`" (`progress`, `failures`, `quality`, `steps`, `sample`) is how the next run is read (2026-11-05 20:17 ET)
