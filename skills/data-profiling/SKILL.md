@@ -74,6 +74,20 @@ the data profiling skill"), worked adaptively and lean against
 - a feed is live and a new delivery arrived: run **compare** here, then use
   **refining-rules**.
 
+## Choose a proof sample by kind
+
+Any proof on a large delivery starts from the smallest set that could prove the claim wrong, and a
+full run needs a named reason: the data itself is the deliverable, or it is the last check before
+something is deleted. Pick the sample by kind, since a random share misses the rare records that
+break things. A random sample only estimates a rate.
+
+1. Name the claim, and the kinds of record that behave differently under it, rarest first: records
+   reaching two masters, value clashes, name matches, waiting and set-aside records, new masters.
+2. Score every file or batch read-only, counting each kind. Scoring reads and merges nothing, so a
+   full pass is usually seconds a batch and is what makes the choice reliable.
+3. Take the batch richest in each kind, a rare kind whole, and one ordinary batch.
+4. Say which kinds had no records, so the report names what the sample cannot prove.
+
 ## Hard stops
 
 | Never | Instead |
