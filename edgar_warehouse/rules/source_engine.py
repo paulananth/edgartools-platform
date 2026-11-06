@@ -357,6 +357,12 @@ def prepare_record_history(command: Mapping) -> tuple[list[dict], list[dict]]:
     return evidence, indexes
 
 
+def group_batch_records(records: list) -> dict[str, str]:
+    """Each record with its group's lowest record, from `[[record, [key, ...]], ...]`."""
+    return json.loads(source_contract.group_batch_records(
+        json.dumps(records, ensure_ascii=False, separators=(",", ":"), allow_nan=False)))
+
+
 def plan_affected_records(command: Mapping) -> dict:
     """Let Rust request the indexed records that make affected identities whole."""
     return json.loads(source_contract.plan_affected_records(

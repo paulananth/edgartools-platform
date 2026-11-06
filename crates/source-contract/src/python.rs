@@ -294,6 +294,7 @@ fn source_contract(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compare_record_pairs, m)?)?;
     m.add_function(wrap_pyfunction!(prepare_record_history, m)?)?;
     m.add_function(wrap_pyfunction!(plan_affected_records, m)?)?;
+    m.add_function(wrap_pyfunction!(group_batch_records, m)?)?;
     m.add_function(wrap_pyfunction!(prepare_record_lookups, m)?)?;
     m.add_function(wrap_pyfunction!(prepare_scope_lookups, m)?)?;
     m.add_function(wrap_pyfunction!(resolve_record_bindings, m)?)?;
@@ -547,6 +548,11 @@ fn compare_record_pairs(py: Python<'_>, command: &str) -> PyResult<String> {
 #[pyfunction]
 fn prepare_record_history(py: Python<'_>, command: &str) -> PyResult<String> {
     py.allow_threads(|| crate::record_history::prepare_record_history(command)).map_err(PyValueError::new_err)
+}
+
+#[pyfunction]
+fn group_batch_records(py: Python<'_>, records: &str) -> PyResult<String> {
+    py.allow_threads(|| crate::batch_groups::group_batch_records(records)).map_err(PyValueError::new_err)
 }
 
 #[pyfunction]
