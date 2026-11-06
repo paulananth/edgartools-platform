@@ -799,7 +799,8 @@ dataset_contracts:
           - derivative_category
         # v3 (ticket 138): a CUSIP's record carries every ISIN filed with it.
         # v4 (ticket 138): and the six facts its holdings file most.
-        version: sec-nport-security-v4
+        # v5 (ticket 199): an ISSUED_BY start is observed, not stated.
+        version: sec-nport-security-v5
         retain_deferred: true
         source_record_provenance: true
         kind: security
@@ -841,6 +842,8 @@ dataset_contracts:
           # filing date or quarter date or inception date"), and a link that
           # exists keeps its start (ISSUED_BY `keeps_start`).
           valid_from: filed.0.filed
+          # The first filing that shows the link, not a start any source states.
+          date_basis: observed
           time_format: date
           scope: SEC N-PORT issuer
 bookkeeping:

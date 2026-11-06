@@ -80,7 +80,7 @@ def test_an_isin_only_security_links_to_its_one_issuer(database, tmp_path):
                if body["type"] == "ISSUED_BY"]
     (only,) = periods
     # ONE's holdings were filed 5 June and 28 May: the link starts at the earlier (ticket 113).
-    assert [(p["valid_from"], p["valid_from_basis"]) for p in only] == [(cusip.MAY28, "stated")]
+    assert [(p["valid_from"], p["valid_from_basis"]) for p in only] == [(cusip.MAY28, "observed")]
 
 
 def test_an_isin_counts_a_fund_series_as_its_umbrella_trust(tmp_path):

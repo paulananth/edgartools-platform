@@ -175,7 +175,7 @@ def test_an_issued_by_link_starts_at_its_earliest_filing(database, tmp_path):
     apply(stage, policy, "q2", q2, 3)
     reviews = [body["reason"] for body in core.documents(database, "review").values() if body.get("open")]
     assert "unknown_relationship_start" not in reviews
-    assert starts(database) == [(MAY28, "stated")]
+    assert starts(database) == [(MAY28, "observed")]
 
 
 def test_a_later_quarter_keeps_the_start(database, tmp_path):
@@ -184,7 +184,7 @@ def test_a_later_quarter_keeps_the_start(database, tmp_path):
     stage, policy = mastered_issuer(database)
     apply(stage, policy, "q2", q2, 3)
     apply(stage, policy, "q3", q3, 4)
-    assert starts(database) == [(MAY28, "stated")]
+    assert starts(database) == [(MAY28, "observed")]
 
 
 def test_a_backfilled_earlier_quarter_moves_the_start_back(database, tmp_path):
@@ -192,16 +192,16 @@ def test_a_backfilled_earlier_quarter_moves_the_start_back(database, tmp_path):
     q2 = prepared_records(tmp_path / "q2", Q2, revision=20263)
     stage, policy = mastered_issuer(database)
     apply(stage, policy, "q3", q3, 3)
-    assert starts(database) == [(AUG14, "stated")]
+    assert starts(database) == [(AUG14, "observed")]
     apply(stage, policy, "q2", q2, 4)
-    assert starts(database) == [(MAY28, "stated")]
+    assert starts(database) == [(MAY28, "observed")]
 
 
 def test_a_holding_with_no_filing_date_starts_at_the_quarter(database, tmp_path):
     q2 = prepared_records(tmp_path / "q2", Q2, filings={})
     stage, policy = mastered_issuer(database)
     apply(stage, policy, "q2", q2, 3)
-    assert starts(database) == [(Q2, "stated")]
+    assert starts(database) == [(Q2, "observed")]
 
 
 def test_a_filing_date_of_another_shape_is_none(tmp_path):
