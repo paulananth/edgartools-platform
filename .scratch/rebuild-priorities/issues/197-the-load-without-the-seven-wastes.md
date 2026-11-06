@@ -96,6 +96,36 @@ The three runs took 83.6, 46.8 and 36.0 s, so 3.0 to 6.9 ms a record, with the m
 
 Left out, so these times are a lower bound: relationships, history, review records, decision evidence, quarantine, withheld values, steward overrides, merging two masters, search lookups, delivery to silver, restart. Today's merge is about 45 ms a record on OpenFIGI; the engine's Company merge rate alone is not measured (the GLEIF run took 27 min, most of it not split from reading 3.4M records).
 
+## Every kind on both engines (2026-11-06)
+
+The prototype replays every stored record of the sources below. Matching and field winners run in the shared Rust; the database code sits in one small layer with one plain schema per engine, and no merge code differs between them. It stays local scratch, `~/edgar-local-tmp/company-proto/` (`merge3.py`, `store.py`).
+
+| Source | Records | Merge before | After, PostgreSQL | ms a record before | ms a record after |
+|---|---|---|---|---|---|
+| `openfigi.security.v3` | 722,984 | 783.1 min | 14.9 min | 65 | 1.24 |
+| `sec.company.v1` | 6,414 | 30.6 min | 13.9 s | 286 (a) | 2.17 |
+| `gleif.level1.v1` | 3,716 | 12.2 min | 5.1 s | 197 | 1.38 |
+| `sec.nport.registrant.v1` | 3,894 | 5.3 min | 3.8 s | 82 | 0.98 |
+| `sec.nport.fund.v1` | 25,874 | 67.5 min | 15.2 s | 157 | 0.59 |
+| `sec.submissions.person.v1` | 31,097 | 98.6 min (b) | 17.0 s | 190 (b) | 0.55 |
+| Total | 793,979 | about 16.6 hours | about 15.8 min | | |
+
+"Before" sums Bookkeeping's merge step over each source's complete runs, which can overlap when bundles run at once. (a) It also covers records set aside by classification, which the prototype does not handle. (b) Wall time of the whole run, with retries, since the summed merge step (3,790 min) overlaps. Earlier runs were on protocol 6.
+
+| Kind | Masters | PostgreSQL | MySQL |
+|---|---|---|---|
+| security | 376,357 | 376,357 same members, 1,502,676 of 1,502,676 fields, 11 of 11 merges | The same |
+| company | 8,361 | 67,034 of 67,034 fields, 3,258 of 3,258 name matches | The same |
+| person | 31,097 | 31,097 same members, 31,097 of 31,097 fields | Not run |
+| fund_structure | 12,937 | 12,937 same members, 12,937 of 12,937 fields | Not run |
+
+| Engine | OpenFIGI | ms a record | First to last quarter of the run | Company | A merge |
+|---|---|---|---|---|---|
+| PostgreSQL | 895 s | 1.24 | 0.96 to 1.53 | 22.9 s | median 142 ms |
+| MySQL | 1,856 s | 2.57 | 1.23 to 3.34 | 48.0 s | median 231 ms |
+
+MySQL's time is mostly writes (masters 632 s, records 383 s), since it loads by multi-row `INSERT` where PostgreSQL has `COPY`. Time grows with the store on both engines, faster on MySQL. A simulated crash resumed to the same 67,034 fields on MySQL too. The prototype also found the engine's erased masters (ticket 198) and two bugs of its own, each caught only by the larger run.
+
 ## Corrections to earlier findings
 
 - Ticket 194 said re-parsing was not the main cause, from one parse costing 45 ms on a 29 MB document. That figure was about 8
@@ -117,7 +147,8 @@ Left out, so these times are a lower bound: relationships, history, review recor
 - [x] Restart by file: one row in the file's own transaction, 0.77 ms a file; the record-to-master map moved from memory to the store. Three crashes before a commit resumed to 67,034 of 67,034 fields, a crash before any merge resumed to 11 of 11 merges, and all 15 files delivered again left the masters byte for byte the same. The crashes were simulated by stopping before the commit (2026-11-06 08:04 ET).
 - [ ] Prototype scope (operator, 2026-11-06: "add only", "relationship is nothing to do with mastering"): history, review records, decision evidence, quarantine, withheld values, steward overrides and search lookups stay out. Merge exclusions and steward reversals are left out with them, so a real build must decide how they fit.
 - [ ] Build relationships after mastering, from the list each stored record already carries, so no source is read twice (operator, 2026-11-06: "the only reason relationship was pushed in to mastering to eliminate 7 wastes of reprocessing"; "relationship is once mastering and silver completes or it can happen after mastering along with silver write"). Claude's recommendation: with the silver write, one pass over the changed records.
-- [ ] Test the prototype with Security and on MySQL; the merge logic stays in Rust and Python, with one plain store access behind the adapter.
+- [x] Test the prototype with every kind and on MySQL: every Security and Company master equal on both engines, Person and Fund on PostgreSQL (2026-11-06 09:25 ET).
+- [ ] Operator's decision: rebuild mastering on the three operations.
 - [ ] Measure the engine's Company merge rate alone, on the same 12,077 records, on a quiet machine.
 - [x] Group inside a batch in Rust at the load step, one pass, in place of the recursive SQL: `group_batch_records`, 6 Rust tests and 1 Python test. Three runs of 14,024 Company records took 28.6, 23.3 and 24.0 s (1.7 to 2.0 ms a record, load average 9 to 26), and all 67,034 fields, 8,361 masters and 3,258 name matches equal the engine (2026-11-06 07:34 ET).
 - [ ] Load `sec.nport.security` and `gleif` with the current engine for a true answer, then extend the comparison to them, with the name rules, field values and relationships.
