@@ -42,7 +42,7 @@ class Recorded:
 
     def __init__(self, open_runs=(), processed=(), versions=None, pinned=None):
         self.calls, self.open, self.processed, self.submitted = [], list(open_runs), set(processed), 0
-        self.revisions = []
+        self.revisions, self.registered = [], []
         self.deadline = float("inf")
         self.versions, self.pinned = versions or {}, pinned or {}
 
@@ -50,6 +50,9 @@ class Recorded:
         self.calls.append(args[:2])
         if args[:2] == ("mdm", "prepare-capture"):
             self.revisions.append(args[args.index("--revision") + 1])
+        if args[:2] == ("silver", "register"):
+            self.registered.append(args)
+            return "{}"
         if args[:2] == ("workers", "describe"):
             return json.dumps({"profile": args[2], "runtime": "this-checkout"})
         if args[:2] == ("rules", "status"):
@@ -369,3 +372,68 @@ def test_a_target_that_lands_silver_stops_at_once_when_an_env_file_has_no_silver
     for duty in ("worker", "verifier"):
         (tmp_path / f"{duty}.env").write_text("export BOOKKEEPING_MANIFEST_ROOT=file://%s/m\nexport SILVER_DATABASE_URL=x\n" % tmp_path)
     assert loading.Loader(source="example", target="by_letter", stores=tmp_path, workers=1, minutes=1, say=lambda line: None)
+
+
+LANDS = {"execution": {"max_artifacts": 2}, "bookkeeping": {"targets": {"by_letter": {"steps": [
+    {"name": "read", "operation": "source.read", "input": {"files": "letters/*"}},
+    {"name": "land", "operation": "silver.land", "input": {"keys": {"table": "letter", "silver": "invented_letters"}}}]}}}}
+
+
+def landing_loader(tmp_path, monkeypatch, *, spec=True, migration=True):
+    rules = tmp_path / "rules"
+    (rules / "sources" / "example").mkdir(parents=True)
+    if spec:
+        (rules / "sources" / "example" / "silver-letters.yaml").write_text("table: invented_letters\n")
+    monkeypatch.setattr(loading.files, "ROOT", rules)
+    monkeypatch.setattr(loading.files, "source", lambda name: LANDS)
+    monkeypatch.setattr(loading.files, "load", lambda path: {"table": "invented_letters"})
+    for duty in driving.DUTIES:
+        login = "export SILVER_DATABASE_URL=postgresql://invented_runtime:x@localhost/silver\n"
+        (tmp_path / f"{duty}.env").write_text("export BOOKKEEPING_MANIFEST_ROOT=file://%s/m\n" % tmp_path + login)
+    if migration:
+        (tmp_path / "connection.env").write_text("export SILVER_MIGRATION_DATABASE_URL=postgresql://owner:x@localhost/silver\n")
+    commands = Recorded(processed={"letters/a.json"})
+    found = loading.Loader(source="example", target="by_letter", stores=tmp_path, workers=1, minutes=1,
+                           say=lambda line: None)
+    found.commands = commands
+    return found, commands
+
+
+def test_a_load_registers_the_silver_tables_its_target_lands_before_it_submits_anything(tmp_path, monkeypatch):
+    found, commands = landing_loader(tmp_path, monkeypatch)
+    folder = capture(tmp_path / "c", "letters/a.json")
+
+    result = found.load(capture=folder, capture_run="capture-1", as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
+
+    assert result["silver_registered"] == ["silver-letters.yaml"]
+    assert [call[:2] for call in commands.registered] == [("silver", "register")]
+    assert commands.registered[0][3:] == ("--runtime-role", "invented_runtime")
+    assert commands.calls[0] == ("silver", "register")
+
+
+def test_a_silver_table_with_no_spec_beside_the_rules_stops_the_load_before_any_command(tmp_path, monkeypatch):
+    found, commands = landing_loader(tmp_path, monkeypatch, spec=False)
+
+    with pytest.raises(loading.RunStopped, match="invented_letters .*no silver-\\*.yaml spec"):
+        found.load(capture=capture(tmp_path / "c", "letters/a.json"), capture_run="c", as_of="2026-10-25T00:00:00Z",
+                   facts=[], run_files=[])
+    assert commands.calls == []
+
+
+def test_a_stores_folder_without_the_migration_login_stops_a_load_that_lands_silver(tmp_path, monkeypatch):
+    found, commands = landing_loader(tmp_path, monkeypatch, migration=False)
+
+    with pytest.raises(loading.RunStopped, match="no connection.env"):
+        found.load(capture=capture(tmp_path / "c", "letters/a.json"), capture_run="c", as_of="2026-10-25T00:00:00Z",
+                   facts=[], run_files=[])
+    assert commands.calls == []
+
+
+def test_a_target_that_lands_no_silver_registers_nothing(tmp_path, monkeypatch):
+    commands = Recorded(processed={"letters/a.json"})
+    found = loader(tmp_path, monkeypatch, commands)
+
+    result = found.load(capture=capture(tmp_path / "c", "letters/a.json"), capture_run="c",
+                        as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
+
+    assert result["silver_registered"] == [] and commands.registered == []
