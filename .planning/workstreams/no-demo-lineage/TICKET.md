@@ -20,7 +20,9 @@ Real source, pipeline, domain and business relationships are outside this remova
 - [x] Review Standards, Spec and GoF: no implementation findings; clarify the
   skill's local enforcement scope. All 98 genericity/path checks and compose
   validation pass (2026-11-06 07:20 ET).
-- [ ] Publish a ready PR and verify its final head.
+- [x] Publish ready PR #1453; final configuration passes compose validation
+  and 98 file-only checks, with native restart proof above
+  (2026-11-06 07:31 ET). CI and merge are recorded on the PR.
 - [x] Learning → skill: openmetadata's Exclude bundled demo lineage records
   the unconditional seeding cause, override and required restart readback
   (2026-11-06 07:20 ET).
