@@ -119,6 +119,12 @@ Stage 3 result: the mastering tables hold the same masters as the old path. The 
 
 N-PORT Security by kind: all 421 batches were scored in 155 s without merging, and 5 were chosen for the rare cases (records reaching two masters, new masters, set-aside records, one ordinary batch). 4,534 records stored of 4,534, 466 of 466 set aside, 21 withheld ISIN values, 13.1 s, and a second run changed nothing. The rest of that load is not merged. The old load stopped at 15:11 ET after 3 h 16 min on `A rule's proposal no longer holds; re-assess`; its cause was not investigated, since that path is being replaced.
 
+Relationships, checked against the captured 2026q2 N-PORT zip outside the pipeline (operator, 2026-11-06: "apply 7 wastes to relationships are they real and provable"). IS_SUBFUND_OF: 12,937 of 12,937 series and registrants are filed together. ISSUED_BY: 630 of 630 checkable CUSIP and LEI pairs are filed together; 2,216 more wait for a GLEIF record not loaded here. All 13,442 old links name one stored record that states them, and none is calculated. Of 794 claims whose CUSIP shows two values in the file, 790 are one LEI and an `N/A` the rule ignores, and 4 have two real LEIs and are waiting records. The 5 Security masters with two claims name one issuer each.
+
+Links are a `relationship` silver table, one row a period, from a `silver.derive` build that follows the ruling that they run with or after the silver write. There is no MDM link table and no new operation. Stored records rebuilt 13,442 of 13,442 old links with equal periods, evidence and last-seen dates; the other 97 come from sample batches the old load never reached. On the shared store the build gave 13,539 rows in 19.0 s, verified, and a second run gave the same receipt. Rows show ISSUED_BY as `stated` until N-PORT Security is read under `sec-nport-security-v5`.
+
+`--as-at` leaves with the history table. It was a real command, so "nothing uses them" was too strong for this one, and the operator decided it on that footing (2026-11-06, after its purpose was explained: "agreed no need"). `--as-of` stays for links, where it reads the stated periods; on one master it read a past generation, so that form leaves too and now refuses with a clear message. An audit of a past answer now means a replay of stored records under the same rule version.
+
 ## Checklist
 
 - [x] Reviews and steward actions on the prototype: waiting reviews, exclusions, overrides, revokes and reversals, on PostgreSQL and MySQL (2026-11-06 10:32 ET).

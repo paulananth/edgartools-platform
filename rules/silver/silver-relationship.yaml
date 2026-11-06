@@ -1,0 +1,85 @@
+# The relationships between masters, one row per dated period (ticket 199). A silver.derive step
+# calculates them after mastering from the records MDM stores (edgar_warehouse/mastering/links.py).
+table: relationship
+definition: "One dated period of a relationship between two masters, with the stored records that state it."
+grain: "one row per relationship and period start"
+columns:
+- name: relationship_id
+  type: VARCHAR
+  nullable: false
+  definition: "The link's id: a digest of its type, its two masters and its scope."
+  source: "links.py"
+  sensitivity: none
+- name: relationship_type
+  type: VARCHAR
+  nullable: false
+  definition: "The link's type in the mdm-relationship-types code set."
+  source: "the source rule's relationship type"
+  sensitivity: none
+- name: scope
+  type: VARCHAR
+  nullable: false
+  definition: "What the link covers, as the source rule names it."
+  source: "the source rule's scope"
+  sensitivity: none
+- name: source_master_id
+  type: VARCHAR
+  nullable: false
+  definition: "The master the link starts at."
+  source: "mastering_record"
+  sensitivity: none
+- name: target_master_id
+  type: VARCHAR
+  nullable: false
+  definition: "The master the link ends at."
+  source: "mastering_record"
+  sensitivity: none
+- name: valid_from
+  type: VARCHAR
+  nullable: false
+  definition: "When this period starts, as an ISO 8601 instant."
+  source: "the source record"
+  sensitivity: none
+- name: valid_from_basis
+  type: VARCHAR
+  nullable: false
+  definition: "stated when a filing states the start, observed when it only shows the link."
+  source: "the source rule"
+  sensitivity: none
+- name: valid_to
+  type: VARCHAR
+  nullable: true
+  definition: "When this period ends, empty while it holds."
+  source: "the source record"
+  sensitivity: none
+- name: valid_to_basis
+  type: VARCHAR
+  nullable: true
+  definition: "stated or observed, empty while the period holds."
+  source: "the source rule"
+  sensitivity: none
+- name: properties
+  type: JSON
+  nullable: false
+  definition: "The dated details the source rule keeps with the period."
+  source: "the source record"
+  sensitivity: none
+- name: evidence
+  type: JSON
+  nullable: false
+  definition: "The assertion id of each stored record that states the link."
+  source: "mastering_record"
+  sensitivity: none
+key:
+- relationship_id
+- valid_from
+links: []
+time:
+  as_of: valid_from
+  as_at: loaded_at
+  event_time: null
+partition:
+- relationship_type
+load_mode: snapshot
+why: >-
+  Links are calculated in full after each load, so a snapshot removes any link the records no longer state.
