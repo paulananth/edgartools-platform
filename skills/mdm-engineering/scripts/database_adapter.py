@@ -560,7 +560,7 @@ class Adapter:
         with engine.connect() as conn:
             self.schema = inspect(conn).default_schema_name
         self.prefix = prefix
-        if type(protocol) is not int or protocol not in (1, 2, 3, 4, 5, 6):
+        if type(protocol) is not int or protocol not in (1, 2, 3, 4, 5, 6, 7):
             raise AdapterError("Unsupported storage protocol")
         if protocol >= 4 and engine.dialect.name == "mssql":
             raise AdapterError("Destination authority is not yet qualified for SQL Server")
@@ -2095,7 +2095,7 @@ def migrate(
     engine, *, runtime_role: str, runtime_host="%", prefix="skill_merge", protocol=1,
     runtime_execute=True, defer_ready=False,
 ) -> dict:
-    if type(protocol) is not int or protocol not in (1, 2, 3, 4, 5, 6):
+    if type(protocol) is not int or protocol not in (1, 2, 3, 4, 5, 6, 7):
         raise AdapterError("Unsupported storage protocol")
     if type(defer_ready) is not bool or defer_ready and (protocol < 5 or runtime_execute):
         raise AdapterError("Deferred activation requires governed storage without runtime execution")

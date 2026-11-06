@@ -26,10 +26,19 @@ class SQL:
     def wire(self):
         return "@p_wire" if self.name == "mssql" else "p_wire"
 
+    def json(self, source):
+        """A PostgreSQL routine's parsed wire or intent. From protocol 7 each is parsed once a call:
+        a batch's text is tens of megabytes, and a cast at each use took three quarters of the call."""
+        if self.protocol >= 7 and source == self.wire:
+            return self.v("wire_json")
+        if self.protocol >= 7 and source == self.v("intent"):
+            return self.v("intent_json")
+        return f"{source}::jsonb"
+
     def field(self, name, source=None):
         source = source or self.wire
         if self.name == "postgresql":
-            return f"({source}::jsonb->>'{name}')"
+            return f"({self.json(source)}->>'{name}')"
         if self.name == "mysql":
             return f"JSON_UNQUOTE(JSON_EXTRACT({source},'$.{name}'))"
         # OPENJSON preserves long scalars; JSON_VALUE has a scalar size limit.
@@ -75,11 +84,10 @@ class SQL:
         )
 
     def assign(self, name, expression):
-        return (
-            f"{self.v(name)} := {expression};"
-            if self.name == "postgresql"
-            else f"SET {self.v(name)} = {expression};"
-        )
+        if self.name != "postgresql":
+            return f"SET {self.v(name)} = {expression};"
+        parsed = f"\n{self.json(self.v(name))} := {self.v(name)}::jsonb;" if name == "intent" and self.protocol >= 7 else ""
+        return f"{self.v(name)} := {expression};{parsed}"
 
     def if_(self, condition, body):
         if self.name == "mssql":
@@ -143,7 +151,7 @@ class SQL:
             names += ("prefix", "suffix")
         if self.name == "postgresql":
             scalar = lambda n: f"(j.value->>'{n}')"
-            origin = f"jsonb_array_elements({source}::jsonb->'{path}') AS j(value)"
+            origin = f"jsonb_array_elements({self.json(source)}->'{path}') AS j(value)"
         elif self.name == "mysql":
             specs = [f"{n}_hex LONGTEXT PATH '$.{n}' ERROR ON ERROR" for n in names]
             if expected:
@@ -202,12 +210,17 @@ class SQL:
     def wrap(self, prefix, operation, body, variables, returns):
         quote = self.dialect.identifier_preparer.quote
         name = f"{quote(self.schema)}.{quote(prefix + '_' + operation)}"
+        parse = ""
+        if self.name == "postgresql" and self.protocol >= 7:
+            parse = f"{self.v('wire_json')} := {self.wire}::jsonb;\n"
+            variables = {**variables, "wire_json": "json", **({"intent_json": "json"} if "intent" in variables else {})}
         body = (
             self.guard(
                 f"NOT EXISTS(SELECT 1 FROM {self.names['migration']} m WHERE m.version={self.protocol} AND m.complete=1)",
                 "storage_not_initialized",
             )
             + "\n"
+            + parse
             + body
         )
         types = {
@@ -218,6 +231,7 @@ class SQL:
             else "text",
             "key": "VARCHAR(64)",
             "int": "BIGINT",
+            "json": "jsonb",
             "bytes": "VARBINARY(MAX)"
             if self.name == "mssql"
             else "LONGBLOB"
@@ -278,9 +292,9 @@ def authority_checks(d):
     """Destination-local monotonic fences, outside immutable business intent."""
     names = ("resource", "run", "attempt")
     if d.name == "postgresql":
-        present = f"{d.wire}::jsonb ? 'authority'"
-        kind = f"jsonb_typeof({d.wire}::jsonb->'authority')"
-        origin = f"jsonb_array_elements(COALESCE({d.wire}::jsonb->'authority','[]'::jsonb)) j(value)"
+        present = f"{d.json(d.wire)} ? 'authority'"
+        kind = f"jsonb_typeof({d.json(d.wire)}->'authority')"
+        origin = f"jsonb_array_elements(COALESCE({d.json(d.wire)}->'authority','[]'::jsonb)) j(value)"
         scalar = lambda name: f"(j.value->>'{name}')"
         array_kind = "array"
     else:
@@ -565,7 +579,7 @@ def capabilities(dialect, tables, prefix, *, protocol=1):
         d.lock(),
     ]
     if protocol >= 4:
-        flag_kind = (f"jsonb_typeof({v('intent')}::jsonb->'publish_inputs')" if d.name == "postgresql"
+        flag_kind = (f"jsonb_typeof({d.json(v('intent'))}->'publish_inputs')" if d.name == "postgresql"
                      else f"JSON_TYPE(JSON_EXTRACT({v('intent')},'$.publish_inputs'))")
         boolean_kind = "boolean" if d.name == "postgresql" else "BOOLEAN"
         lines.append(d.guard(f"{f('version')}='4' AND (COALESCE({flag_kind},'')<>'{boolean_kind}' OR {f('publish_inputs')}<>'true')", "invalid_input_publication"))

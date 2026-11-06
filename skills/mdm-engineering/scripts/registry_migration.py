@@ -253,7 +253,7 @@ def migrate(engine, *, runtime_role, configuration, kinds, runtime_host="%", pre
         raise api.AdapterError(
             "Native registry installation is qualified for MySQL only"
         )
-    if type(prepared_protocol) is not int or prepared_protocol not in (5, 6) or type(runtime_execute) is not bool:
+    if type(prepared_protocol) is not int or prepared_protocol not in (5, 6, 7) or type(runtime_execute) is not bool:
         raise api.AdapterError("Invalid prepared protocol or runtime grant selection")
     if type(prepared) is not bool:
         raise api.AdapterError("Prepared store selection must be a boolean")

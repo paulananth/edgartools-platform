@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 from .store import Conflict, canonical, digest, storage_adapter
 
 PREFIX = "mdm_store"
-PROTOCOL = 6
+PROTOCOL = 7
 
 
 def installed(conn):

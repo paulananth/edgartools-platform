@@ -380,6 +380,10 @@ stable through write/read cycles. Verify collation and ordering where they
 affect key equality. Select representations through measured contract parity,
 including numeric and temporal boundaries; a driver default is not evidence.
 
+A routine holds a request's text in a variable, so a cast at each use parses the whole text again, and a large request makes
+that the routine's main cost. From protocol 7 a PostgreSQL routine parses its wire and its intent once (`SQL.json`). Time a
+routine's short statements too: a log of slow statements cannot show a cost made of many steps each under its threshold.
+
 ## GoF review
 
 Before recommending a structural change, use `gof-refactor-reviewer` on the

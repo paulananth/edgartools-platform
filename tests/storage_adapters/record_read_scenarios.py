@@ -319,7 +319,7 @@ try:
         )
         with runtime.connect() as conn:
             reader = RecordReader(
-                api.Adapter(runtime, prefix="mdm_store", protocol=6),
+                api.Adapter(runtime, prefix="mdm_store", protocol=7),
                 connection=conn,
                 routes=matching.candidate_routes(),
             )
@@ -366,7 +366,7 @@ try:
         # The newer master is merged into the older; the record binds to them.
         with runtime.connect() as conn:
             reader = RecordReader(
-                api.Adapter(runtime, prefix="mdm_store", protocol=6),
+                api.Adapter(runtime, prefix="mdm_store", protocol=7),
                 connection=conn,
                 routes=matching.candidate_routes(),
             )
@@ -460,7 +460,7 @@ try:
         result = stage.apply(**command)
         assert result["generation"] == sequence + 1
         assert stage.apply(**{**command, "run_id": str(uuid4())})["duplicate"]
-        normal = api.Adapter(runtime, prefix="mdm_store", protocol=6)
+        normal = api.Adapter(runtime, prefix="mdm_store", protocol=7)
         reader = RecordReader(normal, routes=matching.candidate_routes())
         subject = (
             other_target["subject"] if case == "name_held_value" else other["subject"]
@@ -627,7 +627,7 @@ try:
             stage = MergeStage(Store(runtime, read_only=True))
             with runtime.connect() as connection:
                 transport = RecordReader(
-                    api.Adapter(runtime, prefix="mdm_store", protocol=6),
+                    api.Adapter(runtime, prefix="mdm_store", protocol=7),
                     connection=connection,
                     routes=matching.candidate_routes(),
                 )
@@ -666,7 +666,7 @@ try:
             assert bool(before) == (case != "prepare_new_identity")
             with runtime.connect() as connection:
                 generation = api.Adapter(
-                    runtime, prefix="mdm_store", protocol=6
+                    runtime, prefix="mdm_store", protocol=7
                 ).generation(connection=connection)
             assert generation == 1  # Preparation commits no business effects.
         elif case == "write_gate":
@@ -755,7 +755,7 @@ try:
             if case == "no_identity_stale":
                 incoming = [holder]
                 command["assertions"] = incoming
-            normal = api.Adapter(runtime, prefix="mdm_store", protocol=6)
+            normal = api.Adapter(runtime, prefix="mdm_store", protocol=7)
 
             def counts():
                 with runtime.connect() as conn:

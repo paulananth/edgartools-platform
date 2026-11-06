@@ -46,7 +46,7 @@ for database in (owner,jowner):
                 conn.exec_driver_sql(f"GRANT SELECT ON ALL TABLES IN SCHEMA {quote(schema)} TO {quote(reader_role)}")
         else:
             conn.execute(text(f"GRANT SELECT ON {quote(database.url.database)}.* TO '{reader_role}'@'%'"))
-api = storage_adapter().Adapter(runtime,prefix="mdm_store",protocol=6)
+api = storage_adapter().Adapter(runtime,prefix="mdm_store",protocol=7)
 primary,secondary = SPEC["sources"]
 rule = {"rule_id":"invented-bind","version":"1","family":"binding",
     "applies_to_verdict":SPEC["kind"],"emits":["bind"],"on_no_match":"mint","source":primary,
@@ -75,7 +75,7 @@ manifest = {"contract_version":2,"policy_digest":pin,"as_of":"2026-03-01T00:00:0
 reference = artifacts.put_bytes((folder/"manifest.json").as_uri(),json.dumps(manifest).encode())
 SQL = importlib.import_module(api.__class__.__module__.rpartition(".")[0]+".adapter_sql").SQL
 with runtime.connect() as conn:
-    epoch = int(conn.scalar(text("SELECT "+SQL(runtime.dialect,api.tables,protocol=6).now)))
+    epoch = int(conn.scalar(text("SELECT "+SQL(runtime.dialect,api.tables,protocol=7).now)))
 expires = (datetime(1970,1,1,tzinfo=UTC)+timedelta(microseconds=epoch+180000000)).isoformat()
 proof = [{"resource":"invented-installed-worker","token":1,"run_id":str(uuid4()),
           "attempt":str(uuid4()),"expires_at":expires}]
@@ -154,7 +154,7 @@ assert api.generation() == 2 and coordinator.reconcile(run_id)["end_to_end_compl
 journal = ChangeJournal(get_engine(os.environ["READ_JOURNAL_VERIFIER_URL"]))
 assert len(journal.list()) == 2
 # The verifier reads receipts but cannot retain even execution metadata.
-reader = storage_adapter().Adapter(engine_from_env("READ_VERIFIER_URL"),prefix="mdm_store",protocol=6)
+reader = storage_adapter().Adapter(engine_from_env("READ_VERIFIER_URL"),prefix="mdm_store",protocol=7)
 try:
     reader.retain_metadata("invented","forbidden",{})
 except storage_adapter().AdapterError:

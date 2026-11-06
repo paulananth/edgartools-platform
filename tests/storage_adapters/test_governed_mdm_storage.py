@@ -208,7 +208,7 @@ def test_normal_governed_storage(case, database, storage_api, monkeypatch):
             if mysql:
                 # Normal owner installation now admits governed work. Registry
                 # writes above remain forbidden to that same worker.
-                api = storage_api.Adapter(runtime, prefix="mdm_store", protocol=6)
+                api = storage_api.Adapter(runtime, prefix="mdm_store", protocol=7)
                 lease = api.claim("qualified-normal-merge", "writer")
                 assert lease.scope == "qualified-normal-merge" and lease.fence >= 1
         elif case == "immutable":
@@ -287,7 +287,7 @@ def test_normal_governed_storage(case, database, storage_api, monkeypatch):
             from tests.storage_adapters.test_prepared_effects import batch
 
             from edgar_warehouse.mdm.store import digest as content_digest
-            adapter = storage_api.Adapter(owner, prefix="mdm_store", protocol=6)
+            adapter = storage_api.Adapter(owner, prefix="mdm_store", protocol=7)
             request = batch(storage_api, governed=True, workflow=True, indexes=(),
                 pins={"policy": digest, "catalog": content_digest(catalog.CATALOG)})
             lease = adapter.claim(request.scope, "owner-fixture")
