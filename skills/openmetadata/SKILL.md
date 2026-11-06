@@ -599,6 +599,14 @@ and retained deleted markers. Keep those markers: the vendor's asset seeder
 checks deleted objects too, so hard deletion would let the examples return.
 Repeating initialization is safe. Preserve unrelated services.
 
+Problem: on the pinned 2.0.2 local server, listing LLM models with
+`include=all` returns HTTP 404, while reading a model by ID with
+`include=all` returns its tombstone. Root cause: collection and item reads
+have different deleted-entity behavior in this release. Fix: inventory active
+children by service, require complete pagination, verify each soft-deleted ID
+with `include=all`, then re-list active children. Lesson: qualify deleted-state
+readback for each endpoint shape instead of assuming list and item reads match.
+
 Use the existing Docker context, private login/token environment variables
 described below, and the named volumes. The initialization command starts the
 server, waits for health, then requires the demo-service exclusion to pass:

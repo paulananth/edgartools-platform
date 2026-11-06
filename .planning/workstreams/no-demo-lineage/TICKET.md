@@ -41,7 +41,8 @@ Real source, pipeline, domain and business relationships are outside this remova
   135-minute deadline and checks every 30 minutes.
 - [x] Learning → skill: `skills/openmetadata/SKILL.md` now records the
   initialization command, exact service/child exclusion, readback and restart
-  procedure (2026-11-06 11:33 ET).
+  procedure, including the 2.0.2 collection-versus-item tombstone readback
+  behavior; 99 file-only checks pass (2026-11-06 11:55 ET).
 
 ## GoF consult
 
