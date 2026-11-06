@@ -33,26 +33,34 @@ class RunStopped(ValueError):
     """A run that cannot start or did not complete, with the reason."""
 
 
+def exports(path: Path) -> dict[str, str | None]:
+    """One env file, line by line: a key the file unsets is None, so no login leaks in from the caller's shell."""
+    values = {}
+    for number, line in enumerate(path.read_text().splitlines(), 1):
+        try:
+            parts = shlex.split(line)
+            if parts and parts[0] == "unset":
+                values.update(dict.fromkeys(parts[1:]))
+            elif parts and parts[0] == "export":
+                key, _, value = parts[1].partition("=")
+                values[key] = value
+        except (ValueError, IndexError):
+            raise RunStopped(f"{path} line {number} is not an export or unset line") from None
+    return values
+
+
 def duties(stores: Path) -> dict[str, dict[str, str | None]]:
-    """Each duty's connection settings, from the local stores' private env files, line by
-    line: a key the file unsets is None, so no login leaks in from the caller's shell."""
+    """Each duty's connection settings, from the local stores' private env files. The migration login
+    (`connection.env`, the stores' owners) is there too when the file is: only schema work, such as creating
+    a silver table, runs as it."""
     found = {}
     for duty in DUTIES:
         path = stores / f"{duty}.env"
         if not path.is_file():
             raise RunStopped(f"{path} is missing: start the stores with infra/scripts/local-test-stores.py up <name>")
-        values = {}
-        for number, line in enumerate(path.read_text().splitlines(), 1):
-            try:
-                parts = shlex.split(line)
-                if parts and parts[0] == "unset":
-                    values.update(dict.fromkeys(parts[1:]))
-                elif parts and parts[0] == "export":
-                    key, _, value = parts[1].partition("=")
-                    values[key] = value
-            except (ValueError, IndexError):
-                raise RunStopped(f"{path} line {number} is not an export or unset line") from None
-        found[duty] = values
+        found[duty] = exports(path)
+    if (stores / "connection.env").is_file():
+        found["migration"] = exports(stores / "connection.env")
     return found
 
 

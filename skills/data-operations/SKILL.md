@@ -240,7 +240,13 @@ edgar-warehouse load \
   them). Each step runs under its own duty's login. Nothing is printed from
   those files.
 - Add `--fact name=value` and `--file name=path` for each input the target's
-  `run` declares.
+  `run` declares; `scripts/run_inputs.py <source>` in the data-onboarding skill lists them.
+- **A target that lands silver registers its tables itself**, before it submits
+  anything, as the migration login in the stores folder's `connection.env`
+  (the same spec again changes nothing). Do not register by hand first.
+- **A capture left by `provider.capture` has no `receipts.jsonl`.** Run
+  `scripts/capture_receipts.py <capture folder>` once: it writes one receipt per
+  file and never replaces a receipts file.
 - **A reload whose inputs changed needs `--revision N`** (default 0, the
   first publication). A changed input (a new Name Count, say) changes a record under the
   same revision, and the Stage refuses it ("Source native revision has

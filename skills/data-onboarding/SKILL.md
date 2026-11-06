@@ -169,6 +169,12 @@ Every step says what differs for each target.
   `edgar-warehouse silver register rules/sources/<source>/silver-<table>.yaml --runtime-role <runtime login>`
   for the table (or `register <findings.yaml> --part <part>`). A changed
   spec is refused for a registered table: register it as a new table.
+  `edgar-warehouse load` does this itself before it submits anything: for each
+  `silver.land` step it registers the `silver-*.yaml` beside the source's rules
+  whose `table` the step names, as the stores' migration login (`connection.env`),
+  for the silver runtime login. It changes nothing for a table already registered
+  with the same spec, so a source with a spec beside its rules needs no
+  preparation by hand.
   MySQL and SQL Server Express use the same spec. When `silver register`
   refuses that dialect, data-operations reports the gap and does not
   hand-write `CREATE TABLE`.

@@ -27,6 +27,8 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
+from sqlalchemy.engine import make_url
+
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.mdm import raw_capture
 
@@ -78,6 +80,22 @@ def target_of(source: str, target: str) -> dict:
     return reading
 
 
+def silver_specs(source: str, reading: dict, target: str) -> list[Path]:
+    """The spec file of each silver table the target lands: `silver-*.yaml` beside the source's rules whose
+    `table` is the table a `silver.land` step names."""
+    steps = reading["bookkeeping"]["targets"][target]["steps"]
+    wanted = [((step.get("input") or {}).get("keys") or {}).get("silver") for step in steps
+              if step.get("operation") == "silver.land"]
+    held = {}
+    for path in sorted((files.ROOT / "sources" / source).glob("silver-*.yaml")):
+        held[(files.load(path) or {}).get("table")] = path
+    missing = sorted(table for table in wanted if table and table not in held)
+    if missing:
+        raise RunStopped(f"{source} {target} lands silver table(s) {', '.join(missing)} with no silver-*.yaml spec "
+                         f"in rules/sources/{source}")
+    return [held[table] for table in dict.fromkeys(wanted) if table]
+
+
 class Loader:
     """One source's target over one capture, on the stores one environment folder names."""
 
@@ -88,7 +106,7 @@ class Loader:
         self.source, self.target, self.say, self.at_a_time = source, target, say, at_a_time
         self.reading = target_of(source, target)
         self.runtimes: dict[str, str] = {}
-        env = duties(stores)
+        env = self.env = duties(stores)
         lands = [step["name"] for step in self.reading["bookkeeping"]["targets"][target]["steps"]
                  if step.get("operation") == "silver.land"]
         bare = [duty for duty in ("worker", "verifier") if lands and not env[duty].get("SILVER_DATABASE_URL")]
@@ -98,6 +116,22 @@ class Loader:
         self.root = manifest_root(env) / "load" / source / target
         self.commands = Commands(env, (self.root / "reports").as_uri(), deadline=time.monotonic() + minutes * 60,
                                  log=stores / "load-errors.log", workers=workers)
+
+    def register_silver(self) -> list[str]:
+        """Create each silver table this target lands, before anything is submitted. Registering is idempotent
+        (the same spec changes nothing; a changed spec for a registered table is refused), so every load does it
+        and no one prepares a store by hand. It runs as the stores' migration login, for the silver runtime role."""
+        specs = silver_specs(self.source, self.reading, self.target)
+        if not specs:
+            return []
+        if "migration" not in self.env:
+            raise RunStopped(f"{self.source} {self.target} lands silver but the stores folder has no connection.env "
+                             f"(the migration login that creates a silver table)")
+        role = make_url(self.env["worker"]["SILVER_DATABASE_URL"]).username
+        for spec in specs:
+            self.commands("migration", "silver", "register", str(spec), "--runtime-role", role)
+            self.say(f"Silver table of {spec.name} is registered")
+        return [spec.name for spec in specs]
 
     def mine(self, state: str) -> list[dict]:
         listed = json.loads(self.commands("worker", "bookkeeping", "runs", "--state", state, "--limit", "1000"))
@@ -215,6 +249,7 @@ class Loader:
     def load(self, *, capture: Path, capture_run: str, as_of: str, facts: list[str], run_files: list[str],
              revision: int = 0) -> dict:
         result = {"source": self.source, "target": self.target, "finished_open_runs": [], "bundles": []}
+        result["silver_registered"] = self.register_silver()
         unfinished, result["left_as_they_are"] = self.open_runs()
         for run_id, why in result["left_as_they_are"].items():
             self.say(f"Run {run_id} is left as it is: {why}")

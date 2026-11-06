@@ -51,7 +51,14 @@ bookkeeping:
     # Company preparation and mastering of one bundle, planned by the generic `load` command
     # (ticket 177): the bundle's documents are the main submissions documents and the exchange
     # ticker catalog; the Name Count is a run file read once per bundle, narrowed to the bundle's
-    # names and CIKs. The run takes the approved capture runs and the observation time as facts.
+    # names and CIKs. The run takes the approved capture runs and the observation time as facts:
+    #   capture_run: the run id of the approved company submissions capture; each record carries it as its
+    #     sync run and the combine step binds it as the approved company capture run.
+    #   catalog_run: the run id of the approved exchange ticker catalog capture, bound the same way.
+    #   observed_at: the observation time (an ISO instant), stamped on each record as its last synced time.
+    #   load_mode: how the pages were loaded, stamped on each page receipt.
+    #   name_count: the Name Count file, built from the same capture by `edgar-warehouse mdm name-count`
+    #     and given with `--file name_count=<path>`; the load refuses one that counted another capture.
     mastering:
       run:
         facts: [capture_run, catalog_run, observed_at, load_mode]
