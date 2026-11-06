@@ -115,6 +115,10 @@ Stage 1 result: 9 tests pass on PostgreSQL and on MySQL, and the package on all 
 
 Stage 2 note: a load reads the approved rule version in the Rules Database, so a private copy of `rules/` is ignored. The first try ran the old merge and looked green; only reading the new tables showed it. The worker was then run on that load's real manifest, and the rule switch waits for stage 4. Each load check must read what was stored, not the run's state.
 
+Stage 3 result: the mastering tables hold the same masters as the old path. The replay took 806,480 stored records; the N-PORT Security load kept writing 4,807 more while the comparison ran, which made its first counts differ (290 members, 186 with no master, 168 only new). Set beside those 4,807 records, 431,028 old masters match on members, identifiers and values, the other 4,797 hold those records, and all 435,044 new masters map to an old one. The 4,807 records, 5 of the 421 prepared batches, then went through the worker: 4,797 of 4,797 masters identical on members, identifiers, values, winners and conflicts, 781 new masters, 193 of 193 records set aside, 12.2 s. Waiting records are 458 on both sides. Set-aside records match on every replayed source. No identifier sits on two masters.
+
+N-PORT Security by kind: all 421 batches were scored in 155 s without merging, and 5 were chosen for the rare cases (records reaching two masters, new masters, set-aside records, one ordinary batch). 4,534 records stored of 4,534, 466 of 466 set aside, 21 withheld ISIN values, 13.1 s, and a second run changed nothing. The rest of that load is not merged. The old load stopped at 15:11 ET after 3 h 16 min on `A rule's proposal no longer holds; re-assess`; its cause was not investigated, since that path is being replaced.
+
 ## Checklist
 
 - [x] Reviews and steward actions on the prototype: waiting reviews, exclusions, overrides, revokes and reversals, on PostgreSQL and MySQL (2026-11-06 10:32 ET).
@@ -122,11 +126,11 @@ Stage 2 note: a load reads the approved rule version in the Rules Database, so a
 - [x] Stage 1: `edgar_warehouse/mastering/`, 9 tests on both engines (2026-11-06 11:48 ET).
 - [x] Stage 2: the `mastering.merge` worker on a real load's prepared manifest: 1,947 of 1,947 `sec.nport.registrant` records, each master with the engine's CIK and its record's fields, verified, 4.4 s against 59.3 s for the old merge step of that load (2026-11-06 12:10 ET).
 - [ ] Point the Rules Database at `mastering.merge`, source by source: a load runs the approved version there, not `rules/` on disk.
-- [ ] Stage 3: `mdm rebuild`, every record replayed and compared.
+- [x] Stage 3: `mdm rebuild`, every record replayed and compared: 431,028 masters match, and 4,797 of 4,797 for the records the old load stored late (2026-11-06 15:43 ET).
 - [ ] Stage 4: readers moved; relationships with the silver write.
 - [ ] Stage 5: the old path deleted.
 - [x] Withheld values on the prototype, by the engine's matching (2026-11-06 11:03 ET).
-- [ ] Withheld values on real `sec.nport.security` records.
+- [x] Withheld values on real `sec.nport.security` records: 23 ISIN values withheld across 10 chosen batches, and no identifier on two masters; the 5 batches of the old load gave identical masters (2026-11-06 15:43 ET).
 - [x] Records set aside by classification on the prototype, 152,557 of 152,557 (2026-11-06 11:03 ET).
 - [x] Delivery to readers on the prototype: a reader pulls what changed after its checkpoint; no payload is stored (2026-11-06 11:29 ET).
 - [ ] Operator's decision: stop writing the `journal`, `export` and `graph` payloads, given that none is read.
