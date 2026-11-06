@@ -238,6 +238,22 @@ def test_concurrent_claim_and_cross_run_takeover_preserve_fencing(control, tmp_p
         book.heartbeat(original)
 
 
+def test_a_claim_that_loses_every_retry_reports_not_claimed(control, tmp_path, monkeypatch):
+    from sqlalchemy.exc import DBAPIError
+    _, _, _, book, _ = control
+    run_id, _, _ = submission(book, tmp_path, count=1, body=config())
+    refused = type("Refused", (Exception,), {"pgcode": "55P03"})(3572)
+    called = []
+
+    def contended(operation, **params):
+        called.append(operation)
+        raise DBAPIError("call", {}, refused)
+
+    monkeypatch.setattr(book, "_transition", contended)
+    assert book.claim(run_id, "s0", "0", sleep=lambda _: None) is None
+    assert called[-1] == "wait_work"
+
+
 def test_mysql_expiry_during_completion_rolls_back_every_effect(control, tmp_path):
     from sqlalchemy.exc import DBAPIError
     from edgar_warehouse.workers import copy

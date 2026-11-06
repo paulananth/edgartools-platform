@@ -213,8 +213,13 @@ class Bookkeeping:
                     raise
                 if n + 1 < retry["attempts"]:
                     sleep(random.uniform(0, min(retry["cap_ms"], retry["base_ms"] * 2 ** n)) / 1000)
-        self._transition("wait_work",
-                   r=run_id, s=step_name, k=key, m=CONTENTION)
+        try:
+            self._transition("wait_work",
+                       r=run_id, s=step_name, k=key, m=CONTENTION)
+        except DBAPIError as exc:
+            # The note is a courtesy: whoever holds the work writes its state.
+            if not lifecycle.contention(self.engine, exc):
+                raise
         return None
 
     def heartbeat(self, claim: Claim) -> Claim:
