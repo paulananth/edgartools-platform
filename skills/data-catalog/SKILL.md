@@ -45,21 +45,31 @@ type is not lineage to that type. The
 
 ### Confirm relationships before showing them
 
-Show only real, confirmed relationships, never possible relationships. First
-read the authoritative MDM store selected by the private runtime environment;
-verify which storage contract is installed rather than querying a legacy copy.
-For each link, verify its retained source and target masters, exact type and
-direction, committed provenance and applicable business dates. Exclude retired,
-rejected, waiting or unresolved links. Label historical relationships with
-their period; do not present them as current.
+Show only real, confirmed relationships, never possible relationships. Check
+each relevant evidence layer in the selected environment: mastered links,
+retained source assertions and landed transaction references. Verify the
+installed storage contract rather than querying a legacy copy. An empty MDM
+relationship table does not prove that source-reported associations or
+transaction connections are absent.
+
+For a mastered link, verify retained endpoint masters, exact type and direction,
+committed provenance and applicable business dates. For a source-reported
+association, validate the immutable reading, its current source binding and
+the referenced master's resolution through the normal lookup. Label it as
+reported by the source; do not promote it to an active mastered link or invent
+a start date. For a transaction connection, verify the landed row's references,
+source evidence and reporting period; keep it transaction data. A configured
+table is not a landed row. Retired, rejected, waiting or unresolved candidates
+are not confirmed mastered links. Label historical facts with their period.
 
 A type's allowed endpoint kinds, a source mapping, a definition mention or an
 implemented worker is not confirmation. Do not expand permitted kinds into
 every possible pair. Keep definitions separately as vocabulary, without
 drawing them as real links on domain or glossary relationship graphs.
 
-Report counts, evidence time and scope. Zero verified links means show none;
-an unavailable or incomplete store means unknown, not zero. Keep record values
+Report counts, evidence time, layer and scope. Zero verified facts across the
+relevant layers means show none; an unavailable or incomplete layer means
+unknown, not zero. Keep record values
 and private evidence references out of public artifacts. Before publication,
 compare every proposed relationship with this evidence. If the publisher
 derives links from permitted types alone, report that capability gap and do

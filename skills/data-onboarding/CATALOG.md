@@ -53,7 +53,7 @@ name is not semantic enrichment.
 | Ownership | Existing authorized business owners where specified; otherwise an explicit unassigned responsibility, never the ingestion bot as a fabricated business owner |
 | Data product | Three named packages: the mastered legal entity, the mastered instrument, and fundamental measures. Each takes that subject's domain. The test is in `skills/data-catalog/references/MODEL.md` |
 | Classification | Data class from the data-modeling skill, and the built-in certification that marks the store: Gold on the master and reference stores, Silver on the prepared store. A proposed prepared-store table is Silver and has no data class. A source dataset has no certification and no data class |
-| Domain relationship | A verified retained link with its exact direction, provenance and period. Permitted endpoint kinds are not links. Type definitions and capacities stay vocabulary. Evidence is the data-catalog skill; storage is the openmetadata skill |
+| Domain relationship | A verified fact, labeled as mastered, reported by its source or a transaction reference, with direction, provenance and known period. Permitted endpoint kinds are not links. Evidence is the data-catalog skill; storage is the openmetadata skill |
 
 Include registered Silver/RDM metadata. Label profiling proposals as proposed;
 never present them as existing registered tables or approved code sets. Do not

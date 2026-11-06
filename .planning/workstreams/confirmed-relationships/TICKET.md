@@ -31,11 +31,29 @@ The operator then included Fund Series and requested the rule in the skills.
 - [x] Publish the skill correction and operational record in PR
   https://github.com/paulananth/edgartools-platform/pull/1448, ready for review
   (2026-11-05 21:50 ET). CI remains required before merge.
+- [x] Correct the overly narrow Fund conclusion after investigating the local
+  N-PORT store: normal retained-reading and canonical master lookups verified
+  12,937 reported series/registrant pairs resolving to 1,245 Company masters,
+  zero unresolved. These are source-reported associations, not active mastered
+  `IS_SUBFUND_OF` links; the existing start-date ruling remains in force
+  (2026-11-05 22:16 ET).
+- [x] Verify the selected local PostgreSQL 16 container is running and its
+  port matches the private MDM connection. N-PORT fund and registrant runs are
+  complete; no N-PORT Security run or physical `nport_holding` table exists in
+  this environment. Holdings cannot be claimed as landed here
+  (2026-11-05 22:16 ET).
+- [x] Reproduce a second publisher defect on invented input: a comment-only
+  reference to a deferred type makes `_codes_read` report that type as read.
+  A text mention is therefore not execution evidence (2026-11-05 22:16 ET).
 - [ ] Correct the publisher's runtime projection before another normal
   publication. The current configuration-only plan still emits permitted
   domain/type and glossary/type edges; this documentation change does not
   implement a runtime guard or a confirmed-record projection. Tracked in
   https://github.com/paulananth/edgartools-platform/issues/1447.
+- [ ] Project the verified reported series/registrant associations separately
+  from active mastered links, and preserve the transaction nature of holdings.
+  The first scoped repair removed possible-type edges, but did not supply this
+  missing projection. Included in issue 1447.
 - [x] Learning → skill: `skills/data-catalog/SKILL.md`, "Confirm relationships
   before showing them", owns the evidence method. The destination skill
   carries scoped repair and the publisher capability boundary
@@ -50,9 +68,11 @@ the vocabulary and distinguish absent evidence from unknown evidence.
 ## Review: Spec
 
 The operator's latest ruling replaces the earlier instruction to draw possible
-relationships. Zero confirmed links means no relationship edges for the three
-audited subjects. Fund master records are not themselves evidence of links.
-Normal publication remains a documented capability gap.
+relationships. The initial inference that no mastered records meant no real
+Fund connections was too broad. Retained N-PORT readings establish reported
+series/registrant associations, even while the mastered link is deferred.
+The skills now require all applicable evidence layers and honest labels.
+Normal publication and the reported-association projection remain capability gaps.
 
 ## Review: GoF
 

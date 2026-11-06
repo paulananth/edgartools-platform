@@ -47,8 +47,9 @@ Read these before deciding, and use their words:
   keeps that type as one asset. It does not place the type on each endpoint.
   Permitted endpoint kinds are vocabulary, not real relationships. Before
   showing a link, follow data-catalog's **Confirm relationships before showing
-  them**: verify retained masters, direction, provenance and business dates.
-  A definition mention or permitted pair is not confirmation.
+  them**. Distinguish mastered links, source-reported associations and
+  transaction references; an empty relationship table does not erase facts in
+  the other layers. A definition mention or permitted pair is not confirmation.
 - `edgar_warehouse/mdm/evidence.py`: `KINDS` (the master kinds) and
   `PROFILE_KINDS` (a profile and the kinds it may hang on).
 - `rules/merge/kinds/<kind>.yaml`, `identifiers`: the kind's Identifier

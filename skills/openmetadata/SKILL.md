@@ -124,9 +124,11 @@ do not invent a type.
 
 ### Repair unsupported relationship edges
 
-First complete the authoritative-store check in data-catalog. Inventory the
+First check all applicable evidence layers in data-catalog; an empty mastered
+relationship table alone is insufficient. Inventory the
 selected domain and glossary graphs through the native API. Match each edge
-to the exact retained relationship evidence, not just a compatible type.
+to verified mastered, source-reported or transaction evidence, with its meaning
+and qualification clearly stated, not just a compatible type.
 Keep a private before-state of the catalog-owned edges selected for removal.
 
 For an operator-authorized repair, use the native lineage or glossary relation
