@@ -155,6 +155,7 @@ Two tracks run side by side; the recreation proof runs last, on everything switc
 - [192: The local test server is one store, its name configuration](issues/192-the-local-test-server-is-one-configured-store.md): `local-test-server`, its name `EDGARTOOLS_LOCAL_TEST_SERVER`, created by the data-platform skill; `up` warns when its checkout is behind `origin/main` and shows an engine refusal's reason
 - [193: A built source is ready to turn on](issues/193-built-means-ready-to-turn-on.md): approvals in git (`rules/approvals.yaml`), no proof to activate finalized rules; a load registers its silver tables, `capture_receipts.py` gives a `provider.capture` folder its receipts, `run_inputs.py` lists each source's run inputs (#1428, #1441, #1442)
 - [149: S-1 and F-1 registration statements](issues/149-s1-registration-statements.md): 732 filings from 2026 captured and read by the engine's HTML reader into two silver tables (732 offerings, 27,415 statement lines); the rules are approved in git and active; the listed-ticker link and quality checks are deferred (#1230, #1233, #1425, #1426, #1429)
+- [122: Make the Securities run faster](issues/122-securities-run-time.md): the other-run recheck is read once per fill (#1424); the live runs' timings (ticket 194) show the merge as the long step and the operator accepted the speed, so splitting the quarter and merging in sets are deferred
 
 ## Not yet specified
 
