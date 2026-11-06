@@ -14,17 +14,15 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from .evidence import instant
 from .store import identifier_values
 
 Withheld = dict[str, set[tuple[str, str]]]
 
 
-def withheld_by(decisions, as_of: str | None = None) -> Withheld:
+def withheld_by(decisions) -> Withheld:
     """The values each record's live bind withholds, among `decisions` (by
-    id, once each) made by `as_of`."""
-    by_id = {d["decision_id"]: d for d in decisions
-             if as_of is None or instant(d["at"]) <= instant(as_of)}
+    id, once each)."""
+    by_id = {d["decision_id"]: d for d in decisions}
     revoked = {d["target"] for d in by_id.values() if d["operation"] == "revoke"}
     found: Withheld = defaultdict(set)
     for d in by_id.values():
@@ -34,7 +32,7 @@ def withheld_by(decisions, as_of: str | None = None) -> Withheld:
     return dict(found)
 
 
-def withheld(conn, subjects, decisions=(), as_of: str | None = None) -> Withheld:
+def withheld(conn, subjects, decisions=()) -> Withheld:
     """`withheld_by` over the stored binds and revocations of `subjects` and
     this batch's `decisions`: one indexed read per subject on either store."""
 
@@ -43,7 +41,7 @@ def withheld(conn, subjects, decisions=(), as_of: str | None = None) -> Withheld
     if subjects:
         stored = [d for d in conn.related_decisions(subjects)
                   if d["operation"] in ("bind", "revoke") and d.get("subject") in subjects]
-    return withheld_by([*stored, *decisions], as_of)
+    return withheld_by([*stored, *decisions])
 
 
 def given(kept_back: Withheld, subject: str | None, namespace: str, raw) -> list[str]:

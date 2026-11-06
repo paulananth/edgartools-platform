@@ -201,7 +201,7 @@ def propose(
             "bound_entities": {subject: merged.get(entity, entity) for subject, entity in held.items()},
             # What each bound record's bind withholds, stored or in this batch (part A2b).
             "withheld": {subject: [{"namespace": n, "raw": r} for n, r in sorted(values)]
-                         for subject, values in withheld(conn, held, decisions, as_of).items()},
+                         for subject, values in withheld(conn, held, decisions).items()},
             "released": sorted(released),
             "normalizers": {kind.normalizer_name: kind.upper for kind in TYPES.values()},
         })
