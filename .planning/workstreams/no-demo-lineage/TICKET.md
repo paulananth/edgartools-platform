@@ -35,8 +35,10 @@ Real source, pipeline, domain and business relationships are outside this remova
 - [x] Final Standards, Spec and GoF review found no remaining issue; 13 focused
   tests, 99 file-only checks, compose validation and the post-restart native
   readback pass (2026-11-06 11:33 ET).
-- [ ] Publish this follow-up on a fresh ready PR; PR #1453 merged at
-  lineage-only scope. Wait for current-head CI and merge.
+- [x] Publish ready follow-up PR #1462 at head `63e8b67d`; PR #1453 merged at
+  lineage-only scope (2026-11-06 11:36 ET).
+- [ ] Wait for CI on the final head and automatic merge; watcher has a
+  135-minute deadline and checks every 30 minutes.
 - [x] Learning → skill: `skills/openmetadata/SKILL.md` now records the
   initialization command, exact service/child exclusion, readback and restart
   procedure (2026-11-06 11:33 ET).
