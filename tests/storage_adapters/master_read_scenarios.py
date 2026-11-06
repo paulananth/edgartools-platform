@@ -225,7 +225,7 @@ try:
         os.environ["MDM_DATABASE_URL"] = os.environ["READ_RUNTIME_URL"]
         os.environ["MDM_APPLICATION_ROLE"] = os.environ["READ_RUNTIME_ROLE"]
         for command, expected in (("counts", {"entity": 1}),
-                                  ("check-connectivity", {"sql": True, "migrations": 6})):
+                                  ("check-connectivity", {"sql": True, "migrations": 7})):
             output = io.StringIO()
             with redirect_stdout(output):
                 assert main(["mdm", command]) == 0

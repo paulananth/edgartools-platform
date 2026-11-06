@@ -1,0 +1,134 @@
+# 197: The complete load without the seven wastes, and a merge in milliseconds
+
+Priority: 197. Map: [Rebuild priorities](../map.md). Opened 2026-11-05 21:44 ET (operator, 2026-11-05: "make the merge happen
+within milliseconds", then "optimize using 7 wastes the complete job").
+
+Type: task. Status: open. Blocked by: none. Reverses the operator's "accept 60 s a batch" recorded in tickets 194 and 196: the six
+plan items of ticket 194 deferred on that ruling are live again and are listed here.
+
+## Question
+
+Which work in a load adds no value, measured, and what does a merge cost once it is gone?
+
+"Milliseconds" is read as per record, with the batch time beside it: a batch is 1,000 records in one transaction, so one batch is
+seconds even at 3 ms a record. The floor on this machine is measured below rather than assumed.
+
+## Method
+
+- Every number comes from `mdm_bench`, a copy of the MDM database in the same server (`CREATE DATABASE ... TEMPLATE`, 144 s), with
+  no load running. A protocol change is an experimental migration, so it stays off the shared store until it is proved.
+- A benchmark batch is one real batch of 1,000 OpenFIGI records with new identifiers, so it makes 1,000 new masters: 3,000 evidence
+  entries, 1,000 objects, about 10,000 lookup entries, a 48 MB batch document. The copy of the records stays on this machine.
+
+## Measured
+
+| Step | Batch | Apply call | Other database | Python |
+|---|---|---|---|---|
+| Baseline, protocol 6 (2 runs) | 57.4 to 65.4 s | 41.7 to 45.4 s | 5.1 to 6.5 s | 10.6 to 13.5 s |
+| The routine parses its input once, protocol 7, by the real migration (5 runs) | median 33.3 s (24.0 to 38.4) | median 15.4 s (9.1 to 20.0) | median 7.1 s | median 10.7 s |
+
+On the real load the gain was smaller. A real batch went from a median of 53.9 s to about 45 s, about 15% (`mdm_store_apply` 27 s to
+about 11 s, read statements 9 s to about 13 s, Python 24 s to about 20 s; 150 samples over about 4.5 batches). Reads and Python run
+longer on the live load than on the quiet copy (about 7 s and 10 s). The cause of that difference is not known; the three operations
+remove that work, so it is not being pursued.
+
+## The operator's design (2026-11-05)
+
+"looks to me there are too many operation 1) extract 2) load batch to merge stage 3) merge create id"; "current mastering is a over
+enginiered piece of crap simplifyit"; "mastering should either create new id or merge with an existing id using lookups"; "merge
+matching on matching rules should not create new id it should re use already created and matched id"; "make sure you run a complete
+entitty and all sources and test it sec, gelief and other sources".
+
+So a merge looks up each record's identifiers: one master found merges into it, none makes one id, and records of one batch that
+match each other share one id. Two different masters found goes to a steward and makes no id.
+
+| Three operations, prototype on the copy | Records | Extract | Load | Merge | Batch |
+|---|---|---|---|---|---|
+| Lookup only, ignored matches inside a batch (invalid for the rule above) | 1,000 new (5 runs) | 625 ms | 90 ms | 1,086 ms | 1.8 s |
+| Matches inside a batch share one id, by recursive SQL | 1,000 new (5 runs) | 643 ms | 103 ms | median 3,333 ms | median 4.1 s |
+| Same, onto existing ids | 1,000 changed (3 runs) | 615 ms | 103 ms | median 2,435 ms | median 3.1 s |
+
+Comparison with logging off: protocol 7, 3 runs, median 21.1 s (20.8 to 31.6). The prototype leaves out relationships, field winners
+across sources, name matching, history and sending changes to silver, so these figures are a floor.
+
+### Grouping by lookups alone, against the masters the engine made
+
+All stored readings, grouped by the matching identifiers of each kind (`cik`; `sec_series_id`, `lei`; `cusip`, `isin`, `figi`):
+
+| Kind | Sources | Masters | Same records in the same master |
+|---|---|---|---|
+| company | `sec.company`, `sec.nport.registrant` | 8,361 | 8,361 |
+| person | `sec.submissions.person` | 31,097 | 31,097 |
+| fund_structure | `sec.nport.fund` | 12,937 | 12,937 |
+| security | `openfigi` | 374,083 | 374,083 |
+
+580,718 readings, 5 s in plain Python, once the 4 `merge` decisions (all `openfigi-security-figi`) are applied to the engine's side.
+This compares membership only, not field values or relationships, and ignores batch order. Not covered yet: `gleif` with the name
+rules, `sec.nport.security`; and with no captured files, `sec.ownership`, `sec.thirteenf.*`, `iapd.adv`.
+
+## Company through the three operations (2026-11-06)
+
+Operator, 2026-11-06: "add field winners and name matching to the prototype", "list code current process and 3-step prototype to see how 3 step improves", "make sure when building use 7 wastes guideline".
+
+The prototype replays all 12,077 stored Company records (`sec.company.v1` 6,414, `sec.nport.registrant.v1` 1,947, `gleif.level1.v1` 3,716) in batches of 1,000 on the benchmark database. It writes no field rule of its own: names go through the real `compare_record_pairs`, and masters through the real `prepare_current_records` and `prepare_master_records`, with the store's own policy. Name matching is a lookup, since each SEC record already carries the result of its Name Count pass. It is local scratch, not committed: `~/edgar-local-tmp/company-proto/`.
+
+| Check against the engine's masters | Result |
+|---|---|
+| Records bound by the engine and missed by the prototype | 0 of 11,547 |
+| Name matches with the same rule | 3,186 of 3,186 |
+| Masters with the same members | 8,289 of 8,361; the other 72 are masters the engine emptied (ticket 198) |
+| Fields the same in value, winner and conflicts | 65,727 of 65,969; the other 242 are in 50 more emptied masters |
+| Records bound only by the prototype | 72, all GLEIF, all onto emptied masters |
+| Source order reversed | 8,361 of 8,361 groups the same |
+
+| Step | Median ms a record (3 runs) |
+|---|---|
+| Load to the stage | 0.30 |
+| Identifier lookup | 0.05 |
+| Name lookup | 0.04, but about 13 s in total in the batches holding GLEIF records |
+| Save records | 0.32 |
+| Read members | 0.19 |
+| Field winners | 0.61 |
+| Write masters | 0.29 |
+| Whole batch | 2.4 |
+
+The three runs took 83.6, 46.8 and 36.0 s, so 3.0 to 6.9 ms a record, with the machine busy (load average 7 to 8, another session running). These figures omit extract. The first 25.3 s run is void: it missed a holder arriving in the same batch.
+
+Left out, so these times are a lower bound: relationships, history, review records, decision evidence, quarantine, withheld values, steward overrides, merging two masters, search lookups, delivery to silver, restart. Today's merge is about 45 ms a record on OpenFIGI; the engine's Company merge rate alone is not measured (the GLEIF run took 27 min, most of it not split from reading 3.4M records).
+
+## Corrections to earlier findings
+
+- Ticket 194 said re-parsing was not the main cause, from one parse costing 45 ms on a 29 MB document. That figure was about 8
+  times too low: a parse of the 48 MB document is about 110 ms, and the routine does it 109 times. Parsing was three quarters of
+  the call.
+- Tickets 194 and 196 blamed reading pages of a table larger than memory. Across a whole call, reads took 1.8 s and writes 0.3 s
+  (`track_io_timing`). The page-read theory is wrong for the apply call.
+
+## Checklist
+
+- [x] Stop the reload to measure alone: bundle 11's batches were all `changed=0`, so nothing was lost; it resumes (2026-11-05 21:24 ET).
+- [x] Baseline of one new-master batch on a quiet copy (table above, 2026-11-05 21:37 ET).
+- [x] The routine parses its input once: protocol 7 (`SQL.json`); the frozen fingerprints of protocols 1 to 6 are unchanged and the real migration upgraded the copy from 6 to 7 with its data in place (5 runs, table above; storage tests 76 passed, one expectation updated, 2026-11-05 21:56 ET).
+- [x] Prototype the three operations on the copy; 6 reuse tests on invented records pass (tables above, 2026-11-05 22:01 ET).
+- [x] Group all stored readings by lookups alone and compare with the engine: 426,478 of 426,478 masters match (2026-11-05 22:10 ET).
+- [x] Company through the three operations with field winners and name matching, compared with the engine: 0 records missed, 3,186 of 3,186 name matches with the same rule, order reversed gives the same groups (2026-11-06 06:52 ET).
+- [ ] Add what the prototype leaves out, one at a time, and measure each: relationships first.
+- [ ] Measure the engine's Company merge rate alone, on the same 12,077 records, on a quiet machine.
+- [ ] Group inside a batch in Rust at the load step, one pass, in place of the recursive SQL.
+- [ ] Load `sec.nport.security` and `gleif` with the current engine for a true answer, then extend the comparison to them, with the name rules, field values and relationships.
+- [ ] Operator's decision: permission to capture `sec.ownership`, `sec.thirteenf.*` and `iapd.adv`; without it their rules stay unproved.
+- [ ] Rebuild mastering on the three operations; delete what they replace.
+- [ ] Don't store or compare the batch document more times than recovery needs (batch, proposal, three consumers).
+- [ ] Python preparation: the batch document is built and hashed more than once.
+- [ ] The other 180 statements, 6.9 s: what each read is for.
+- [ ] Measure the floor: the same rows inserted with nothing around them.
+- [ ] The merge rate of a resumed run: a retained batch costs 2.6 s to step over.
+- [ ] Why bundle 11 was loaded again though its records were stored (45 batches of `changed=0`, about 20 s each).
+- [ ] Ticket 194's plan, live again: the catalog read in every bundle (27% of `sec.company` run time).
+- [ ] Ticket 194's plan, live again: the 7 to 26 s every step costs whatever its work.
+- [ ] Ticket 194's plan, live again: bundles that share keys conflict at the merge (68 of 149 for `sec.submissions.person`).
+- [ ] Ticket 194's plan, live again: two database deadlocks in claims at 3 bundles at once.
+- [ ] Ticket 194's plan, live again: the `processed` step, 11 s for one row per file set.
+- [x] Migrate `local-test-server` to protocol 7 from `main` and resume ticket 153's reload (migration ledger 7 of 7 complete, 2026-11-05 22:44 ET).
+- [x] Learning → skill, part 1: `mdm-engineering` `references/storage-adapters.md`: a generated routine parses its wire once.
+- [ ] Learning → skill, the rest.

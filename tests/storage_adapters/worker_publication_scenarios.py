@@ -14,7 +14,7 @@ from edgar_warehouse.mdm.store import Store, Conflict, storage_adapter
 from tests.storage_adapters.test_destination_authority import proof
 
 runtime = g["runtime"]
-api = storage_adapter().Adapter(runtime, prefix="mdm_store", protocol=6)
+api = storage_adapter().Adapter(runtime, prefix="mdm_store", protocol=7)
 current = proof(api)
 authority = SimpleNamespace(current=lambda:SimpleNamespace(proof=current))
 stage = MergeStage(Store(runtime, lease_authority=authority))

@@ -33,7 +33,7 @@ def test_owner_routine_retirement(case, database_factory, configured_root, stora
         with monkeypatch.context() as before:
             before.setattr(retirement, "retire", lambda engine: None)
             migrate(owner, application_role=role, prepared=True)
-        api = storage_api.Adapter(runtime, prefix="mdm_store", protocol=6)
+        api = storage_api.Adapter(runtime, prefix="mdm_store", protocol=7)
         pins = {"catalog": digest(catalog.CATALOG)}
         b = batch(storage_api, governed=True, workflow=True, pins=pins, indexes=(),
                   objects=(storage_api.Effect("invented-kind", "one", {"value": 1}),))
