@@ -76,6 +76,10 @@ services:
     image: docker.getcollate.io/openmetadata/server:2.0.2
     restart: unless-stopped
     environment: *server-env
+    volumes:
+      # The release puts its working directory before jars on the classpath.
+      # Override its bundled example edges so startup cannot restore them.
+      - ./no-ai-demo-lineage.json:/opt/openmetadata/json/data/aiGovernance/lineage/ai_governance_lineage.json:ro
     ports:
       - "127.0.0.1:8585:8585"
     depends_on:
