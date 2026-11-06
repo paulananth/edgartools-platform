@@ -14,9 +14,10 @@
 #
 # It also fails on an ET stamp later than the clock in what this branch adds under
 # .scratch/ (scripts/dev/future_stamps.py): a guessed stamp, not a read one. It also fails a changed ticket
-# marked resolved with an open part (scripts/dev/open_parts.py).
+# marked resolved with an open part (scripts/dev/open_parts.py). When this branch changes rules/, it also
+# runs `rules approvals check`: a rules document with no approval line otherwise fails only in CI.
 #
-# Exit 0: no overlap. Exit 1: each overlapping file and who holds it, or a future stamp.
+# Exit 0: no overlap. Exit 1: each overlapping file and who holds it, a future stamp or a missing approval.
 # Usage: bash scripts/dev/overlap_guard.sh  [--base origin/main]
 set -euo pipefail
 
@@ -51,6 +52,16 @@ dirty_files() {
 if [[ ! -s "$tmp/mine" ]]; then
   echo "overlap_guard: this branch changes no files"
   exit 0
+fi
+
+if grep -q '^rules/' "$tmp/mine"; then
+  python="${TEST_PYTHON:-.venv/bin/python}"
+  if [[ -x "$python" ]]; then
+    PYTHONPATH=. "$python" -c 'from edgar_warehouse.cli import main; raise SystemExit(main())' rules approvals check >/dev/null \
+      || { echo "overlap_guard: STOP. A changed rules document has no approval line (rules approvals write)."; exit 1; }
+  else
+    echo "overlap_guard: rules changed, approvals not checked: no $python (set TEST_PYTHON)" >&2
+  fi
 fi
 
 : > "$tmp/theirs"   # lines: <file>\t<holder>
