@@ -252,7 +252,9 @@ else happens while building it, once:
 - the operator's words approve the exact version on that merge, kept in git in `rules/approvals.yaml`
   (`rules approvals write`, APPROVE.md): `rules load` approves it in any store;
 - the run's inputs are named where the source declares them: each fact and file its target needs, how it is
-  produced, and where its captured files are;
+  produced, and where its captured files are. Write how each is produced in a comment directly above the
+  target; `scripts/run_inputs.py [source]` prints every target's facts and files with those comments, and for
+  an input with none, the comment lines that mention it, or says that none does;
 - the order it needs (the sources and the merge rules before it) is declared in the source sequence;
 - the merge rules it relies on are proved and approved the same way.
 
