@@ -147,7 +147,7 @@ A stopped local store starts again only from the checkout that owns it
 the one the store was built with: `up` stops at "Installed migration checksum
 differs" otherwise, with the container running but its env files still naming
 the old port. Such a store is not upgraded in place; master into a fresh store
-instead of rebuilding one other tickets' data lives in (ticket 09, 2026-11-04).
+instead of rebuilding one other tickets' data lives in.
 
 ## Qualify Silver storage
 
@@ -251,7 +251,7 @@ edgar-warehouse load \
   first publication). A changed input (a new Name Count, say) changes a record under the
   same revision, and the Stage refuses it ("Source native revision has
   contradictory publications"): pass a revision higher than the last load's
-  (ticket 09, 2026-11-04: the bundles all stopped at merge until it was raised).
+  (the bundles all stopped at merge until it was raised).
 - **A source's Bookkeeping section must be version 2.** `load` cannot plan a
   version 1 section: every bundle stops at `mdm prepare-capture` with "must be
   version 2" before any run is submitted. Check
@@ -261,8 +261,8 @@ edgar-warehouse load \
   starting a load. It changes nothing and prints which open runs `load` would
   finish, which it would leave and why (a run pinned to old worker code is
   left, and its documents load again in a new run), a blocked run that would
-  stop it, and the documents and bundles. Ticket 150 spent an hour on a load
-  whose 14 open runs the plan shows as pinned in one call.
+  stop it, and the documents and bundles. One load spent an hour on 14 open runs
+  that the plan shows as pinned in one call.
 
 What it does, in order:
 
@@ -294,7 +294,7 @@ first and never loads a document twice.
 
 | You see | It means | Do this |
 | --- | --- | --- |
-| `workers work <operation> ... failed with status 1; its message is in <log>` | A worker or verifier could not finish a unit. | Read that log (`load-errors.log` in the stores folder), fix the cause, and run the same command again. The unit is tried again first. A transient database error (a deadlock, a closed connection) clears on that retry. A retry that fails the same way ("Artifact hash mismatch": an earlier run left a different file at the output path) cannot be resumed: `load` names that run, leaves it as it is and loads its documents again in a new run from the Change Journal. Give each load its own `--as-of` (the default is now), because the output folder is named by it and a reused one collides with an earlier run's files (ticket 185). |
+| `workers work <operation> ... failed with status 1; its message is in <log>` | A worker or verifier could not finish a unit. | Read that log (`load-errors.log` in the stores folder), fix the cause, and run the same command again. The unit is tried again first. A transient database error (a deadlock, a closed connection) clears on that retry. A retry that fails the same way ("Artifact hash mismatch": an earlier run left a different file at the output path) cannot be resumed: `load` names that run, leaves it as it is and loads its documents again in a new run from the Change Journal. Give each load its own `--as-of` (the default is now), because the output folder is named by it and a reused one collides with an earlier run's files. |
 | `step <s>: unit <u> failed (<error>)` | A unit failed and is still failing. | Run `bookkeeping status <run> --step <s>` to see its error, fix the cause, and run the same command again. |
 | `Run <id> of <source> <target> is blocked` | Bookkeeping stopped that run, frozen under the active rules version, on corrupt or missing evidence. `load` will not submit its documents again. | Read `bookkeeping status <id>` and recover it ([recovery](../bookkeeping/RECOVERY.md)), then run the same command again. |
 | `did not finish before the deadline` | `--minutes` ran out. | Run the same command again, or give a longer `--minutes`. |
@@ -339,12 +339,12 @@ Work it out from counts before starting:
    Expect each bundle to run slower when the cores are shared. A target that
    reads another target's runs waits for that target. If the total does not
    fit the window, say so and do not start. Never drop files to make it fit.
-   Measured 2026-11-03 (ticket 177): one source's bundle of 511 filers and the shared reference file ran 1.1 to 1.2
+   Measured 2026-11-03: one source's bundle of 511 filers and the shared reference file ran 1.1 to 1.2
    minutes with `--workers 4` (a 600 s window finished 5 of 150 bundles, the driver's peak memory 0.57 GB, about
    0.85 cores busy), so 150 bundles one at a time take about 3 hours; time the first bundle of every source the same way.
    Keep the machine for the load: the same load stopped on three bundles (a deadlock, a closed connection, a failed read) while
    several hundred integration tests ran on the same Docker, and finished 2 h 23 min instead of about 2 h 10; a stopped
-   bundle is resumed by running the same command again (ticket 177).
+   bundle is resumed by running the same command again.
 5. **Memory and shared masters, not only cores.** Bundles of one target
    that merge into the same masters collide: measured 2026-10-29, one source's
    load with 4 bundles at once on an 8 GB machine (Docker's VM 4 GB), 10 of 16
@@ -352,7 +352,7 @@ Work it out from counts before starting:
    memory (status -9). Even one at a time, 6 of its 15 merges were
    killed for memory and one took 39 minutes. Run such merges one bundle at
    a time, and measure one merge's peak memory against the free memory
-   before choosing `--bundles` (ticket 150).
+   before choosing `--bundles`.
 
    **Problem:** merges that had saved all 52 batches still died, with no
    receipt (9 of them). **Root cause:** after the saves, the receipt, the
@@ -369,7 +369,7 @@ Work it out from counts before starting:
 - **Finish open runs with `load`, never by hand.** `load` finishes what is
   open, verifies each step and runs the later ones. Driving `workers work`
   and `workers verify` yourself skips the later steps, and a bare `--reports`
-  path (it needs a `file://` address) marks the unit `waiting` (ticket 150).
+  path (it needs a `file://` address) marks the unit `waiting`.
 
 - **Leave worker code alone** (`edgar_warehouse/workers/*`). A run pins its
   worker runtime and stops on a change ("Pinned worker runtime changed;
