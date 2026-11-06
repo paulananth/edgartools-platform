@@ -3,7 +3,7 @@
 Priority: 197. Map: [Rebuild priorities](../map.md). Opened 2026-11-05 21:44 ET (operator, 2026-11-05: "make the merge happen
 within milliseconds", then "optimize using 7 wastes the complete job").
 
-Type: task. Status: open. Blocked by: none. Reverses the operator's "accept 60 s a batch" recorded in tickets 194 and 196: the six
+Type: task. Status: resolved. Blocked by: none. Reverses the operator's "accept 60 s a batch" recorded in tickets 194 and 196: the six
 plan items of ticket 194 deferred on that ruling are live again and are listed here.
 
 ## Question
@@ -126,6 +126,8 @@ The prototype replays every stored record of the sources below. Matching and fie
 
 MySQL's time is mostly writes (masters 632 s, records 383 s), since it loads by multi-row `INSERT` where PostgreSQL has `COPY`. Time grows with the store on both engines, faster on MySQL. A simulated crash resumed to the same 67,034 fields on MySQL too. The prototype also found the engine's erased masters (ticket 198) and two bugs of its own, each caught only by the larger run.
 
+The machine's sleep log shows no sleep during any prototype run, the first `sec.company` and `sec.submissions.person` runs, or the GLEIF run. It slept 101 min across the first OpenFIGI window, so that run's 783.1 min of merge may hold up to 101 min of sleep: 682 to 783 min, or 57 to 65 ms a record, 46 to 52 times the prototype. "All OpenFIGI" here means the 722,984 records stored, without bundle 15.
+
 ## Corrections to earlier findings
 
 - Ticket 194 said re-parsing was not the main cause, from one parse costing 45 ms on a 29 MB document. That figure was about 8
@@ -145,26 +147,26 @@ MySQL's time is mostly writes (masters 632 s, records 383 s), since it loads by 
 - [x] Silver delivery measured with the real `land()` on a disposable copy, 27,415 `registration_statement_line` rows, batches of 1,000, three runs each: today's id lookup 0.25 to 0.27 ms a row, the merge's own lookup 0.20 to 0.21 ms, ids agree on 340 of 340 masters. A writer-only run was no faster (0.26 to 0.42 ms), so the id lookup is not a measurable cost. `sec.company`, `gleif` and `sec.nport.registrant` land no silver. The cost of the step around the writer is not measured (2026-11-06 07:38 ET).
 - [x] Merging two masters: the records of all 11 stored merges, 44 records, one per batch: 11 of 11 merged, 11 aliases, 44 of 44 fields and 11 of 11 members equal the engine; order reversed and a second pass give the same groups; with no merge allowed, 11 go to review and none merge. About 1.4 ms a merge, on small tables. Survivors match on 6 of 11; 10 of 11 pairs tie on `published_at`, so the random id decides (2026-11-06 08:04 ET).
 - [x] Restart by file: one row in the file's own transaction, 0.77 ms a file; the record-to-master map moved from memory to the store. Three crashes before a commit resumed to 67,034 of 67,034 fields, a crash before any merge resumed to 11 of 11 merges, and all 15 files delivered again left the masters byte for byte the same. The crashes were simulated by stopping before the commit (2026-11-06 08:04 ET).
-- [ ] Prototype scope (operator, 2026-11-06: "add only", "relationship is nothing to do with mastering"): history, review records, decision evidence, quarantine, withheld values, steward overrides and search lookups stay out. Merge exclusions and steward reversals are left out with them, so a real build must decide how they fit.
-- [ ] Build relationships after mastering, from the list each stored record already carries, so no source is read twice (operator, 2026-11-06: "the only reason relationship was pushed in to mastering to eliminate 7 wastes of reprocessing"; "relationship is once mastering and silver completes or it can happen after mastering along with silver write"). Claude's recommendation: with the silver write, one pass over the changed records.
+- [ ] ~~Prototype scope (operator, 2026-11-06: "add only", "relationship is nothing to do with mastering"): history, review records, decision evidence, quarantine, withheld values, steward overrides and search lookups stay out. Merge exclusions and steward reversals are left out with them, so a real build must decide how they fit.~~ deferred to 199: part of the rebuild.
+- [ ] ~~Build relationships after mastering, from the list each stored record already carries, so no source is read twice (operator, 2026-11-06: "the only reason relationship was pushed in to mastering to eliminate 7 wastes of reprocessing"; "relationship is once mastering and silver completes or it can happen after mastering along with silver write"). Claude's recommendation: with the silver write, one pass over the changed records.~~ deferred to 199: part of the rebuild.
 - [x] Test the prototype with every kind and on MySQL: every Security and Company master equal on both engines, Person and Fund on PostgreSQL (2026-11-06 09:25 ET).
-- [ ] Operator's decision: rebuild mastering on the three operations.
-- [ ] Measure the engine's Company merge rate alone, on the same 12,077 records, on a quiet machine.
+- [x] Operator's decision: rebuild mastering on the three operations, in stages (operator, 2026-11-06 10:18 ET: "yes open the rebuild ticket and start"). Ticket 199.
+- [ ] ~~Measure the engine's Company merge rate alone, on the same 12,077 records, on a quiet machine.~~ deferred to 199: part of the rebuild.
 - [x] Group inside a batch in Rust at the load step, one pass, in place of the recursive SQL: `group_batch_records`, 6 Rust tests and 1 Python test. Three runs of 14,024 Company records took 28.6, 23.3 and 24.0 s (1.7 to 2.0 ms a record, load average 9 to 26), and all 67,034 fields, 8,361 masters and 3,258 name matches equal the engine (2026-11-06 07:34 ET).
-- [ ] Load `sec.nport.security` and `gleif` with the current engine for a true answer, then extend the comparison to them, with the name rules, field values and relationships.
-- [ ] Operator's decision: permission to capture `sec.ownership`, `sec.thirteenf.*` and `iapd.adv`; without it their rules stay unproved.
-- [ ] Rebuild mastering on the three operations; delete what they replace.
-- [ ] Don't store or compare the batch document more times than recovery needs (batch, proposal, three consumers).
-- [ ] Python preparation: the batch document is built and hashed more than once.
-- [ ] The other 180 statements, 6.9 s: what each read is for.
-- [ ] Measure the floor: the same rows inserted with nothing around them.
-- [ ] The merge rate of a resumed run: a retained batch costs 2.6 s to step over.
-- [ ] Why bundle 11 was loaded again though its records were stored (45 batches of `changed=0`, about 20 s each).
-- [ ] Ticket 194's plan, live again: the catalog read in every bundle (27% of `sec.company` run time).
-- [ ] Ticket 194's plan, live again: the 7 to 26 s every step costs whatever its work.
-- [ ] Ticket 194's plan, live again: bundles that share keys conflict at the merge (68 of 149 for `sec.submissions.person`).
-- [ ] Ticket 194's plan, live again: two database deadlocks in claims at 3 bundles at once.
-- [ ] Ticket 194's plan, live again: the `processed` step, 11 s for one row per file set.
+- [ ] ~~Load `sec.nport.security` and `gleif` with the current engine for a true answer, then extend the comparison to them, with the name rules, field values and relationships.~~ deferred to 199: part of the rebuild.
+- [ ] ~~Operator's decision: permission to capture `sec.ownership`, `sec.thirteenf.*` and `iapd.adv`; without it their rules stay unproved.~~ deferred to 199: needs the operator's permission for that request, and belongs with the rebuild's source proofs.
+- [ ] ~~Rebuild mastering on the three operations; delete what they replace.~~ deferred to 199: part of the rebuild.
+- [ ] ~~Don't store or compare the batch document more times than recovery needs (batch, proposal, three consumers).~~ deferred to 199: part of the rebuild.
+- [ ] ~~Python preparation: the batch document is built and hashed more than once.~~ deferred to 199: part of the rebuild.
+- [ ] ~~The other 180 statements, 6.9 s: what each read is for.~~ deferred to 199: part of the rebuild.
+- [ ] ~~Measure the floor: the same rows inserted with nothing around them.~~ deferred to 199: part of the rebuild.
+- [ ] ~~The merge rate of a resumed run: a retained batch costs 2.6 s to step over.~~ deferred to 199: part of the rebuild.
+- [ ] ~~Why bundle 11 was loaded again though its records were stored (45 batches of `changed=0`, about 20 s each).~~ deferred to 199: part of the rebuild.
+- [ ] ~~Ticket 194's plan, live again: the catalog read in every bundle (27% of `sec.company` run time).~~ deferred to 199: part of the rebuild.
+- [ ] ~~Ticket 194's plan, live again: the 7 to 26 s every step costs whatever its work.~~ deferred to 199: part of the rebuild.
+- [ ] ~~Ticket 194's plan, live again: bundles that share keys conflict at the merge (68 of 149 for `sec.submissions.person`).~~ deferred to 199: part of the rebuild.
+- [ ] ~~Ticket 194's plan, live again: two database deadlocks in claims at 3 bundles at once.~~ deferred to 199: part of the rebuild.
+- [ ] ~~Ticket 194's plan, live again: the `processed` step, 11 s for one row per file set.~~ deferred to 199: part of the rebuild.
 - [x] Migrate `local-test-server` to protocol 7 from `main` and resume ticket 153's reload (migration ledger 7 of 7 complete, 2026-11-05 22:44 ET).
 - [x] Learning → skill, part 1: `mdm-engineering` `references/storage-adapters.md`: a generated routine parses its wire once.
-- [ ] Learning → skill, the rest.
+- [x] Learning → skill: `mdm-engineering`, "Choose the cheapest proof": a merge prototype is proved on real batch sizes and whole masters (2026-11-06 10:18 ET).
