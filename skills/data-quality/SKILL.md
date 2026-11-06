@@ -52,6 +52,22 @@ log it for a ticket.
 | Print a raw personal value | Examples and marked rows of a personal column are masked to their shape |
 | Write `quality` inside `source.yaml` | `quality.yaml` holds it; the loader refuses it in `source.yaml` |
 
+### Approved provisional dates
+
+When the operator permits a file date while a true business start is unknown,
+keep the true start unknown. Name the exact source date field, preserve its
+provenance and use an **observed** start in the existing temporal model. Check
+required endpoint registrations cover that interval. Never substitute today's
+date for a missing or invalid source date.
+
+Flag the missing authoritative start with a nonblocking check; the approved
+provisional link remains valid. This flags the missing business fact, not an
+incorrectly supplied file date. Measure its coverage and failures on the
+retained scope and publish the genuine results and the provisional policy in
+the catalog. A successful load does not clear this defect. When authoritative
+evidence arrives, replace the observed fallback under the correction workflow,
+update affected registration periods and retain the earlier evidence.
+
 ## Setup
 
 The helper runs where the platform is installed, because it uses the

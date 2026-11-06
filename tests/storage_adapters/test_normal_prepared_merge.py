@@ -13,7 +13,7 @@ from tests.mdm.test_configured_pair_comparison import configured_root  # noqa: F
 from tests.support.relationship_types import pinned_types
 
 
-CASES = ["scope", "rollback"]
+CASES = ["scope", "rollback", "older_clock"]
 # Other merge cases run through the independently installed workflow matrix.
 KINDS = ["invented-kind", "invented-other-kind"]
 if os.environ.get("SKILL_ADAPTER_TEST_ENGINE") == "mssql":

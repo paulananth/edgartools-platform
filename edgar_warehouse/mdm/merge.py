@@ -474,7 +474,7 @@ class MergeStage:
             ):
                 raise Conflict("Binding evidence does not describe its subject")
         correction.check_lifts(all_d, decisions, policy_digest)
-        state = replay(list(all_ids.values()), list(all_d.values()), as_of)
+        state = replay(list(all_ids.values()), list(all_d.values()), _written_at(as_of, all_d.values()))
         if any(i["entity_id"] not in state.bindings.values() for i in identities):
             raise Conflict("New identities require an accepted source binding")
         claims = current_claims(
@@ -490,7 +490,7 @@ class MergeStage:
                 "decisions": decisions, "as_of": as_of, "policy_digest": policy_digest,
                 # What each record's live bind withholds, stored or in this batch (part A2b).
                 "withheld": {subject: [{"namespace": n, "raw": r} for n, r in sorted(values)]
-                             for subject, values in withholding.withheld_by(all_d.values(), as_of).items()},
+                             for subject, values in withholding.withheld_by(all_d.values()).items()},
                 "profile_kinds": {role: sorted(kinds) for role, kinds in PROFILE_KINDS.items()},
             })
         except ValueError as error:
@@ -621,6 +621,11 @@ class MergeStage:
             "scope": scope, "state": state, "readings": evidence,
             "old": old, "stored": stored, "projected": projected,
         }
+
+
+def _written_at(as_of: str, decisions) -> str:
+    """A bundle's `as_of` is fixed when it starts; this write comes after every stored decision."""
+    return max((as_of, *(d["at"] for d in decisions)), key=instant)
 
 
 def _check_hashes(decisions: list[dict]) -> None:
