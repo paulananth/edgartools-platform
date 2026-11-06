@@ -50,6 +50,7 @@ pub mod record_matches;
 pub mod record_pairs;
 pub mod record_history;
 pub mod affected_records;
+pub mod batch_groups;
 pub mod record_lookups;
 pub mod postgres_jsonb;
 #[cfg(feature = "python")]

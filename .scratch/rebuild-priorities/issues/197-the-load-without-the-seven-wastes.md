@@ -112,9 +112,11 @@ Left out, so these times are a lower bound: relationships, history, review recor
 - [x] Prototype the three operations on the copy; 6 reuse tests on invented records pass (tables above, 2026-11-05 22:01 ET).
 - [x] Group all stored readings by lookups alone and compare with the engine: 426,478 of 426,478 masters match (2026-11-05 22:10 ET).
 - [x] Company through the three operations with field winners and name matching, compared with the engine: 0 records missed, 3,186 of 3,186 name matches with the same rule, order reversed gives the same groups (2026-11-06 06:52 ET).
-- [ ] Add what the prototype leaves out, one at a time, and measure each: relationships first.
+- [ ] Add to the prototype, one at a time, and measure each: silver delivery, then merging two masters, then restart (operator, 2026-11-06: "add only", "relationship is nothing to do with mastering"). History, review records, decision evidence, quarantine, withheld values, steward overrides and search lookups stay out.
+- [ ] Build relationships after mastering, from the list each stored record already carries, so no source is read twice (operator, 2026-11-06: "the only reason relationship was pushed in to mastering to eliminate 7 wastes of reprocessing"; "relationship is once mastering and silver completes or it can happen after mastering along with silver write"). Claude's recommendation: with the silver write, one pass over the changed records.
+- [ ] Test the prototype with Security and on MySQL; the merge logic stays in Rust and Python, with one plain store access behind the adapter.
 - [ ] Measure the engine's Company merge rate alone, on the same 12,077 records, on a quiet machine.
-- [ ] Group inside a batch in Rust at the load step, one pass, in place of the recursive SQL.
+- [x] Group inside a batch in Rust at the load step, one pass, in place of the recursive SQL: `group_batch_records`, 6 Rust tests and 1 Python test. Three runs of 14,024 Company records took 28.6, 23.3 and 24.0 s (1.7 to 2.0 ms a record, load average 9 to 26), and all 67,034 fields, 8,361 masters and 3,258 name matches equal the engine (2026-11-06 07:34 ET).
 - [ ] Load `sec.nport.security` and `gleif` with the current engine for a true answer, then extend the comparison to them, with the name rules, field values and relationships.
 - [ ] Operator's decision: permission to capture `sec.ownership`, `sec.thirteenf.*` and `iapd.adv`; without it their rules stay unproved.
 - [ ] Rebuild mastering on the three operations; delete what they replace.
