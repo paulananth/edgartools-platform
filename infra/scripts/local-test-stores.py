@@ -17,6 +17,7 @@ import re
 import secrets
 import shlex
 import subprocess
+import sys
 import time
 from uuid import uuid4
 
@@ -442,6 +443,24 @@ SERVER_ENV = "EDGARTOOLS_LOCAL_TEST_SERVER"
 DEFAULT_SERVER = "local-test-server"
 
 
+def commits_behind(folder: Path) -> int | None:
+    """How many commits `origin/main` (as last fetched) has that this checkout lacks; None when git cannot say."""
+    try:
+        done = subprocess.run(["git", "-C", str(folder), "rev-list", "--count", "HEAD..origin/main"],
+                              capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return int(done.stdout) if done.returncode == 0 and done.stdout.strip().isdigit() else None
+
+
+def error_text(exc: Exception) -> str:
+    """What to print for a failure. A driver or subprocess message may hold source data or a credential, so only
+    its class is shown; this script's own errors and the engine's control refusal (`Blocked`) are their own text."""
+    if type(exc).__name__ == "Blocked":
+        return f"Blocked: {exc}"
+    return str(exc) if type(exc) in (ValueError, RuntimeError) else type(exc).__name__
+
+
 def server_name(argument: str | None, environ=os.environ) -> str:
     """The store a command works on: the name given, else the one the machine's configuration names
     (`EDGARTOOLS_LOCAL_TEST_SERVER`), else `local-test-server`. No other name is built in (ticket 192)."""
@@ -463,6 +482,10 @@ def main():
             part.add_argument("--baseline", action="store_true", help="Check a restore, then use this baseline for future copies")
     args = parser.parse_args()
     args.name = server_name(args.name)
+    behind = commits_behind(Path.cwd())
+    if behind:
+        print(f"This checkout is {behind} commit(s) behind origin/main: a store migrated by newer code is refused "
+              "by older code. Update it first.", file=sys.stderr)
     stores = LocalStores(args.root, Path.cwd())
     try:
         with stores.locked(args.name):
@@ -483,7 +506,7 @@ def main():
             print(json.dumps({"name": args.name, "state": found["State"]["Status"] if found else "missing", "stores": len(stores.stores(args.name)), "env_file": str(stores.folder(args.name) / "connection.env")}))
     except Exception as exc:
         # Driver/subprocess exception messages may hold source data or credentials.
-        message = str(exc) if type(exc) in (ValueError, RuntimeError) else type(exc).__name__
+        message = error_text(exc)
         parser.exit(1, message + "\n")
 
 

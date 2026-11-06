@@ -120,3 +120,37 @@ def test_a_new_server_starts_with_the_load_settings(tmp_path, monkeypatch):
     run = next(call for call in calls if call[0] == "run")
     assert run[-len(local.SERVER_SETTINGS):] == local.SERVER_SETTINGS
     assert "work_mem=256MB" in run
+
+
+def _git(folder, *args):
+    import subprocess
+    return subprocess.run(["git", "-C", str(folder), "-c", "user.name=t", "-c", "user.email=t@example.invalid", *args],
+                          capture_output=True, text=True, check=True).stdout.strip()
+
+
+def test_a_checkout_behind_origin_main_says_by_how_many_commits(tmp_path):
+    _git(tmp_path, "init", "-q")
+    for name in ("one", "two", "three"):
+        (tmp_path / name).write_text(name)
+        _git(tmp_path, "add", name)
+        _git(tmp_path, "commit", "-q", "-m", name)
+    newest = _git(tmp_path, "rev-parse", "HEAD")
+    _git(tmp_path, "update-ref", "refs/remotes/origin/main", newest)
+    assert local.commits_behind(tmp_path) == 0
+
+    _git(tmp_path, "reset", "-q", "--hard", "HEAD~2")
+    assert local.commits_behind(tmp_path) == 2
+
+
+def test_a_folder_git_cannot_describe_has_no_commit_count(tmp_path):
+    assert local.commits_behind(tmp_path) is None
+
+
+def test_a_failure_shows_its_text_only_when_the_text_is_this_scripts_own_or_the_engines_refusal():
+    class Blocked(ValueError):
+        pass
+
+    assert local.error_text(ValueError("Environment is stopped")) == "Environment is stopped"
+    assert local.error_text(RuntimeError("did not become ready")) == "did not become ready"
+    assert local.error_text(Blocked("Migration 7 is newer than this code")) == "Blocked: Migration 7 is newer than this code"
+    assert local.error_text(KeyError("password=invented")) == "KeyError"
