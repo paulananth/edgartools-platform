@@ -591,16 +591,44 @@ objects are soft-deleted. Fix: retain the empty configuration override and
 verify zero demo edges after restart. Lesson: deletion is complete only when
 the producer of unwanted metadata is also suppressed.
 
-Use the existing Docker context and the named volumes in
-`infra/openmetadata/docker-compose.yml`:
+Initialization also excludes the two vendor AI demo services and their sample
+children through the native API. The skill's `scripts/initialize.py` inventories
+the children by service, checks that the inventory is complete, soft-deletes
+each child and parent, and requires native readback to confirm active absence
+and retained deleted markers. Keep those markers: the vendor's asset seeder
+checks deleted objects too, so hard deletion would let the examples return.
+Repeating initialization is safe. Preserve unrelated services.
+
+Problem: on the pinned 2.0.2 local server, listing LLM models with
+`include=all` returns HTTP 404, while reading a model by ID with
+`include=all` returns its tombstone. Root cause: collection and item reads
+have different deleted-entity behavior in this release. Fix: inventory active
+children by service, require complete pagination, verify each soft-deleted ID
+with `include=all`, then re-list active children. Lesson: qualify deleted-state
+readback for each endpoint shape instead of assuming list and item reads match.
+
+Use the existing Docker context, private login/token environment variables
+described below, and the named volumes. The initialization command starts the
+server, waits for health, then requires the demo-service exclusion to pass:
 
 ```bash
-docker compose -f infra/openmetadata/docker-compose.yml up -d
+bash infra/openmetadata/init.sh
 ```
 
 Check Docker first. If it is unreachable, report that blocker. Preserve other
 users' containers and volumes. A cold start may take 10–20 minutes. The compose
 file accepts `CATALOG_SERVER_HEAP_OPTS` and `CATALOG_SEARCH_HEAP_OPTS`.
+Keep the configured heap values when reinitializing an existing instance.
+Direct compose startup is only the server-start stage, not completed platform
+initialization. Rerun `bash infra/openmetadata/init.sh` to apply the idempotent
+exclusion and readback to an already running server.
+Keep the helper behind this repository entrypoint; directly invoking a helper
+inside the skill directory is checkout-only and fails the installed-skill doctor.
+
+The tool reads `OPENMETADATA_TOKEN`, or `OPENMETADATA_LOGIN_EMAIL` with
+`OPENMETADATA_LOGIN_PASSWORD` (also accepts `OPENMETADATA_PASSWORD`), privately.
+It refreshes the token through native login when login credentials are present.
+Its result is counts only; a failed exclusion exits nonzero.
 
 A login token of the local account expires within the hour; a publish that
 answers 401 needs a new one. Refresh it in the private terminal session, with
