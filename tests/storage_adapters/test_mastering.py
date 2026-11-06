@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 
-from edgar_warehouse.mastering import merge, store as stores
+from edgar_warehouse.mastering import merge, rebuild, store as stores
 from edgar_warehouse.mdm.evidence import assertion, decision
 from edgar_warehouse.mdm.identifier_types import TYPES
 from edgar_warehouse.mdm.name_count import VERSION as NAME_COUNT_VERSION
@@ -202,3 +202,27 @@ def test_a_name_match_joins_the_master_in_either_order_and_closes_the_wait(datab
         assert sorted(master["subjects"]) == sorted([holder["subject"], candidate["subject"]])
         assert master["identifiers"]["lei"] == [LEI]
         assert db.rows("select count(*) from mastering_review where open_review=1") == [(0,)]
+
+
+def test_a_replay_masters_every_source_and_a_second_run_changes_nothing(database_factory):
+    filer = record(SEC, "filer", cik="0000000123")
+    twin = record(GLEIF, "twin", cik="0000000123", fields={"name": "INVENTED TWIN"})
+    fund = record(FIGI, "fund", kind="security", figi=figi("00000000"))
+    with opened(database_factory) as db:
+        first = rebuild.replay(db, {"company": COMPANY, "security": SECURITY, "": COMPANY}.get, [filer, fund, twin])
+        before = masters(db)
+        again = rebuild.replay(db, {"company": COMPANY, "security": SECURITY, "": COMPANY}.get, [filer, fund, twin])
+        assert (first["merged"], again["skipped"], again.get("merged", 0)) == (3, 3, 0)
+        assert masters(db) == before
+
+
+def test_each_kind_of_difference_between_two_masters_is_named():
+    field = {"value": "A", "winner": {"source_code": "s", "assertion_id": "a"}, "conflicts": [{"source_code": "t"}]}
+    old = {"subjects": ["x"], "identifiers": {"cik": ["1"]}, "fields": {"name": field}}
+    assert rebuild.differences(old, old) == []
+    assert rebuild.differences(old, {**old, "subjects": ["y"]}) == ["members"]
+    assert rebuild.differences(old, {**old, "identifiers": {}}) == ["identifiers"]
+    assert rebuild.differences(old, {**old, "fields": {}}) == ["absent:name"]
+    for change, seen in (({"value": "B"}, "value:name"), ({"winner": {"source_code": "t"}}, "winner:name"),
+                         ({"conflicts": []}, "conflicts:name")):
+        assert rebuild.differences(old, {**old, "fields": {"name": {**field, **change}}}) == [seen]

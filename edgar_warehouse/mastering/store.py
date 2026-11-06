@@ -215,6 +215,18 @@ class Store:
                          "(changed_file=%s and entity_id>%s) order by changed_file,entity_id limit %s",
                          [since, since, after, limit])
 
+    def master_bodies(self, entities) -> dict:
+        found = {}
+        for block in blocks(entities):
+            found.update((e, json.loads(b)) for e, b in self.rows(
+                f"select entity_id,body from mastering_master where entity_id in ({marks(block)})", block))
+        return found
+
+    def totals(self) -> dict:
+        masters = self.rows("select count(distinct entity_id) from mastering_record where entity_id is not null")[0][0]
+        waiting = self.rows("select count(*) from mastering_review where reason=%s and open_review=1", ["binding_required"])[0][0]
+        return {"masters": masters, "waiting": waiting, "set_aside": self.rows("select count(*) from mastering_deferred")[0][0]}
+
     def master_ids(self, subjects) -> dict:
         return self.bound(subjects)
 
