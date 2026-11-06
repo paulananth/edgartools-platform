@@ -248,7 +248,7 @@ from edgar_warehouse.cli import main
 os.environ["MDM_DATABASE_URL"]=os.environ["READ_RUNTIME_URL"]
 os.environ["MDM_APPLICATION_ROLE"]=os.environ["READ_RUNTIME_ROLE"]
 for arguments,expected in [(["mdm","counts"],{"entity":2,"relationship":1}),
-    (["mdm","check-connectivity"],{"sql":True,"migrations":6})]:
+    (["mdm","check-connectivity"],{"sql":True,"migrations":7})]:
     output=io.StringIO()
     with redirect_stdout(output):
         status=main(arguments)
