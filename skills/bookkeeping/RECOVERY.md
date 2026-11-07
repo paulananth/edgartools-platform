@@ -11,6 +11,15 @@ Read bounded status and leases first. See the
 [specification](SPEC.md) for authority and
 storage semantics; use live CLI help when an option differs.
 
+## Enable a new receipt format
+
+Keep a new versioned receipt format disabled until its recovery path is ready.
+Name the recovery owner, document how an interrupted run resumes from that
+format, measure a resume with a disposable run, and set a maximum recovery
+time. Enable it only after the measured resume completes within that maximum.
+Record the owner, procedure, measurement and maximum with the validation
+evidence. Parsing receipts or passing unit tests does not prove resume works.
+
 Resolve the requested source/feed again and compare its dataset/member set
 with the run's frozen manifest. A matching source name alone does not identify
 the same feed. Preserve the original Rules digest when recovering a run;
