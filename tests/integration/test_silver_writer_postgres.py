@@ -24,7 +24,8 @@ from sqlalchemy.exc import DBAPIError
 from edgar_warehouse.control_contract import Blocked
 from edgar_warehouse.silver_writer import database as silver
 from edgar_warehouse.silver_writer.sink import PostgresSink
-from edgar_warehouse.silver_writer.writer import MdmIds, land, refresh_ids
+from edgar_warehouse.silver_writer.writer import land, refresh_ids
+from tests.support.old_master_ids import OldIds as MdmIds
 from tests.integration import test_entity_context_postgres as entity_context
 from tests.integration import test_mdm_postgres as core
 from tests.support import pg16

@@ -136,7 +136,7 @@ bookkeeping:
             keys: {table: submissions, record_column: record, dataset: sec.submissions.person.v1}
             readings: {read: {all: read}}
         - name: merge
-          operation: mdm.merge
+          operation: mastering.merge
           requires: [records]
           key: "{batch_id}"
           leases: ["mdm:consumer:{consumer}"]

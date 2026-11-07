@@ -26,32 +26,32 @@ approvals:
   finalized: PR 1428
 - kind: source
   name: gleif
-  digest: 9614a0c6f5087d6ecfbe9cd7e2e52eae7cad9ade1f0ec3cedacadf82a41f054f
+  digest: 701a2cd0abc15af4ceddefc2306b44b2676c81325795437eb26658d54d203213
   by: Operator
-  words: approved all rules
-  at: '2026-11-04'
-  finalized: PR 1428
+  words: Approved the rules always
+  at: '2026-11-06'
+  finalized: PR 1481
 - kind: source
   name: iapd.adv
-  digest: 55c630965349aa11873fe4dd476a30eb31e63410873bf0865da077ec253bb1b7
+  digest: bbe3bf9e66fd75cc620d1a2f9cc3e63a3370ecccf3b440ee41d3444a1cb912a7
   by: Operator
-  words: approved all rules
-  at: '2026-11-04'
-  finalized: PR 1428
+  words: Approved the rules always
+  at: '2026-11-06'
+  finalized: PR 1481
 - kind: source
   name: openfigi
-  digest: 322c0409241dee435d4b8148e8eb65cdf0c14d11c124b6702a7568688a78afc8
+  digest: 0d7919f6a5e2d65da3c6c9fcf38bb69c2a7ee512255ba25f30a15f5587392f01
   by: Operator
-  words: approved all rules
-  at: '2026-11-04'
-  finalized: PR 1428
+  words: Approved the rules always
+  at: '2026-11-06'
+  finalized: PR 1481
 - kind: source
   name: sec.company
-  digest: a09aab61c20b1a00045959fce3f9fd36426af9ccb4b38f6c43813821fcd03ce6
+  digest: 0abbc5e40bfe9bacccc3ae3db981e17093679520c73ad7d1b2293e186c72bcfa
   by: Operator
-  words: approved all rules
-  at: '2026-11-04'
-  finalized: PR 1428
+  words: Approved the rules always
+  at: '2026-11-06'
+  finalized: PR 1481
 - kind: source
   name: sec.company-facts
   digest: 2749248cfc53cd409637ab9c080a5566f849d4a46e232a0cf1eabb00ab990bfa
@@ -61,32 +61,32 @@ approvals:
   finalized: PR 1428
 - kind: source
   name: sec.nport.fund
-  digest: dc9584c02b20f46a792283840f27186e36c07077fa551e242bc0ab3e470fc888
-  by: Operator
-  words: make it valid with the file date until we fix the data quality reflect this in open metadata
-  at: 2026-11-06 07:33 ET
-  finalized: PR 1454
-- kind: source
-  name: sec.nport.registrant
-  digest: a546b88753bac2b762f636146ac6aa9d3e015cfe2937972ffe83bd6145d47055
-  by: Operator
-  words: make it valid with the file date until we fix the data quality reflect this in open metadata
-  at: 2026-11-06 07:33 ET
-  finalized: PR 1454
-- kind: source
-  name: sec.nport.security
-  digest: a9463846d48127fdf5d480ce7d932062ca7b93c437974a33640e7fe11f264813
+  digest: bcd94939029f660cbd61de4d4954f2c0795936398bde6e36a0f014a753c48d2c
   by: Operator
   words: Approved the rules always
   at: '2026-11-06'
-  finalized: PR 1471
+  finalized: PR 1481
+- kind: source
+  name: sec.nport.registrant
+  digest: 0c670cb627cc24024a7ea8b66a605cc597bd56cabba76d588a5e9ce13c4b2eee
+  by: Operator
+  words: Approved the rules always
+  at: '2026-11-06'
+  finalized: PR 1481
+- kind: source
+  name: sec.nport.security
+  digest: 611615033556629d9149c26f3a2e048a3571881e0b24b656133a61a4c4afcfe6
+  by: Operator
+  words: Approved the rules always
+  at: '2026-11-06'
+  finalized: PR 1481
 - kind: source
   name: sec.ownership
-  digest: c38759444cb4c1d651a9e539960796931ff01667d2b4082e0c45f08bfae1aef1
+  digest: 6d5056f4f656b7633ad82f6c35e6c5dcd0c0b9514c49b1beb72f14fca7c77e3d
   by: Operator
-  words: approved all rules
-  at: '2026-11-04'
-  finalized: PR 1428
+  words: Approved the rules always
+  at: '2026-11-06'
+  finalized: PR 1481
 - kind: source
   name: sec.registration
   digest: 37e556f28d20058e27480856b0ab9bd3f88393dec0d62b961ef93d604bb9218c
@@ -96,11 +96,11 @@ approvals:
   finalized: PR 1429
 - kind: source
   name: sec.submissions.person
-  digest: c5c9f224a69466f453204c6519f94a8aa76f1a1dc2cec16e85cb23196d9ebe1d
+  digest: 1f9484734d7af93cc16af3d8ca66839aa2d7761de23064d17f175a671f115b66
   by: Operator
-  words: approved all rules
-  at: '2026-11-04'
-  finalized: PR 1428
+  words: Approved the rules always
+  at: '2026-11-06'
+  finalized: PR 1481
 - kind: source
   name: sec.thirteenf.filings
   digest: d6088013bb16fe6b485908cc2a5ff79dc198fcf6ff0f8a6a4d969bff0c186228
@@ -110,8 +110,8 @@ approvals:
   finalized: PR 1428
 - kind: source
   name: sec.thirteenf.securities
-  digest: 76dc33267ba96e7b022e0c9d320fdcbb79ca44d9217e405840fefa8b7dc5d0e8
+  digest: f8b47caa71e7956907d38bdda8015a8d4ce2246a810ec4d00950a1dad05e1cc4
   by: Operator
-  words: approved all rules
-  at: '2026-11-04'
-  finalized: PR 1428
+  words: Approved the rules always
+  at: '2026-11-06'
+  finalized: PR 1481

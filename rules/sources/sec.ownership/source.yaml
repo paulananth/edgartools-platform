@@ -46,7 +46,7 @@ bookkeeping:
             keys: {table: owner_record, record_column: record, dataset: sec.ownership.reporting_owner.v1}
             readings: {read: {all: read}}
         - name: merge
-          operation: mdm.merge
+          operation: mastering.merge
           requires: [prepare]
           key: "{batch_id}"
           leases: ["mdm:consumer:{consumer}"]
@@ -118,7 +118,7 @@ bookkeeping:
             keys: {table: security_record, record_column: record, dataset: sec.ownership.security.v1}
             readings: {read: {all: read_security}}
         - name: merge_security
-          operation: mdm.merge
+          operation: mastering.merge
           requires: [prepare_security]
           key: "{batch_id}"
           leases: ["mdm:consumer:{consumer}"]

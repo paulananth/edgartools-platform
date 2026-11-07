@@ -13,7 +13,7 @@ from edgar_warehouse.mdm.evidence import decision
 from edgar_warehouse.mdm.merge import MergeStage
 from edgar_warehouse.mdm.record_reads import RecordReader
 from edgar_warehouse.mdm.store import Conflict, Store
-from edgar_warehouse.silver_writer.writer import MdmIds
+from tests.support.old_master_ids import OldIds as MdmIds
 
 runtime = g["runtime"]
 kind, secondary = g["KIND"], g["SECONDARY"]

@@ -248,7 +248,8 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
         # A real silver row retains its looked-up MDM id and an exact BIGINT.
         from edgar_warehouse.silver_writer import database as silver
         from edgar_warehouse.silver_writer.sink import PostgresSink
-        from edgar_warehouse.silver_writer.writer import MdmIds, land
+        from edgar_warehouse.silver_writer.writer import land
+        from tests.support.old_master_ids import OldIds as MdmIds
         from tests.unit.test_silver_writer import a_spec
         owner = first.engine(one, "silver")
         @event.listens_for(owner, "connect")
