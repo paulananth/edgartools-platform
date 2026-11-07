@@ -24,8 +24,8 @@ from sqlalchemy.exc import DBAPIError
 from edgar_warehouse.control_contract import Blocked
 from edgar_warehouse.silver_writer import database as silver
 from edgar_warehouse.silver_writer.sink import PostgresSink
-from edgar_warehouse.silver_writer.writer import land, refresh_ids
-from tests.support.old_master_ids import OldIds as MdmIds
+from edgar_warehouse.silver_writer.writer import MdmIds, land, refresh_ids
+from tests.support import masters
 from tests.integration import test_entity_context_postgres as entity_context
 from tests.integration import test_mdm_postgres as core
 from tests.support import pg16
@@ -93,7 +93,7 @@ def silver_database(admin):
 def stores(postgres, database):
     """A migrated silver database beside a real MDM database holding mastered records a, b and c."""
     admin, _ = postgres
-    mastered = entity_context.load_group(database)
+    mastered = masters.seed(database.application, [member("a"), member("b"), member("c")])
     with silver_database(admin) as (owner, runtime):
         with pytest.raises(Blocked, match="not initialized"):
             silver.migrate(owner, runtime_role=RUNTIME, existing_only=True)
@@ -102,8 +102,17 @@ def stores(postgres, database):
         yield owner, runtime, MdmIds(database.application), mastered
 
 
+MEMBERS = "openfigi.security.v3"
+
+
+def member(key: str, *figis: str) -> dict:
+    """A master by its FIGI, or a record whose FIGIs reach several."""
+    return core.source(key=key, source_code=MEMBERS, kind="security", fields={"name_of_issuer": f"INVENTED {key}"},
+                       identifiers={"figi": list(figis) or [masters.figi(f"00TSTX{ord(key) - 90:02d}")]})
+
+
 def visit_spec(**more):
-    link = {"columns": ["member_id"], "kind": "company", "source_code": "fixture.primary", "to_part": "member",
+    link = {"columns": ["member_id"], "kind": "security", "source_code": MEMBERS, "to_part": "member",
             "source_key": "member_id", "mdm_id_column": "member_id_mdm_id", "inclusion": 1.0}
     return a_spec(links=[link], **more)
 
@@ -149,7 +158,7 @@ def test_a_spec_becomes_a_table_with_comments_and_a_changed_spec_is_refused(stor
     assert types == {"visit_id": "bigint", "member_id": "text", "amount": "numeric", "visited_on": "date",
                      "tags": "jsonb", "member_id_mdm_id": "text", "loaded_at": "timestamp with time zone"}
     assert comments == 0  # every column says what it holds
-    assert context["links"] == [{"columns": ["member_id"], "kind": "company", "source_code": "fixture.primary",
+    assert context["links"] == [{"columns": ["member_id"], "kind": "security", "source_code": MEMBERS,
                                  "source_key": "member_id", "mdm_id_column": "member_id_mdm_id", "inclusion": 1.0}]
     assert context["key"] == ["visit_id"] and context["load_mode"] == "append"
 
@@ -171,12 +180,10 @@ def test_append_lands_typed_rows_with_mdm_ids_reruns_unchanged_and_refuses_a_cha
         land(sink, "visit", visits((2, "amount", "4")), ids)
     assert table(runtime) == rows  # nothing written
     # Mastering z later: the next landing fills its id and changes nothing else.
-    z = entity_context.company("z")
-    identity, binding = core.identity_and_binding(z, published_at="2026-01-02T00:00:00+00:00")
-    core.apply(database, 2, assertions=[z], identities=[identity], decisions=[binding])
+    z = masters.seed(database.application, [member("z")])["z"]
     filled = land(sink, "visit", visits(), ids)
     assert (filled["inserted"], filled["changed"], filled["mdm_ids_updated"]) == (0, 0, 1)
-    assert table(runtime)[3]["member_id_mdm_id"] == identity["entity_id"]
+    assert str(table(runtime)[3]["member_id_mdm_id"]) == z
     # Migrating again over the populated schema installs nothing and keeps the runtime's rights.
     assert silver.migrate(owner, runtime_role=RUNTIME, existing_only=True)
     assert land(sink, "visit", visits(), ids)["inserted"] == 0
@@ -223,31 +230,23 @@ def test_refresh_fills_ids_of_rows_already_landed_and_follows_a_merge(stores, da
     sink = PostgresSink(runtime)
     land(sink, "visit", visits(), ids)
     # z is mastered after its row landed; the row is never delivered again.
-    z = entity_context.company("z")
-    identity, binding = core.identity_and_binding(z, published_at="2026-01-02T00:00:00+00:00")
-    core.apply(database, 2, assertions=[z], identities=[identity], decisions=[binding])
+    z = masters.seed(database.application, [member("z")])["z"]
     assert refresh_ids(sink, "visit", ids)["rows_updated"] == {"member_id_mdm_id": 1}
-    assert table(runtime)[3]["member_id_mdm_id"] == identity["entity_id"]
+    assert str(table(runtime)[3]["member_id_mdm_id"]) == z
     assert refresh_ids(sink, "visit", ids)["rows_updated"] == {"member_id_mdm_id": 0}
-    # p and q (no identifiers, so nothing refuses the merge) land apart, then are merged:
-    # both rows then point at the survivor.
-    p_, q_ = (core.source(key, fields={"name": f"Company {key}"}, identifiers={}) for key in ("p", "q"))
-    pairs = [core.identity_and_binding(r, published_at="2026-01-03T00:00:00+00:00") for r in (p_, q_)]
-    core.apply(database, 3, assertions=[p_, q_], identities=[i for i, _ in pairs], decisions=[d for _, d in pairs])
-    left, right = (i["entity_id"] for i, _ in pairs)
+    # p and q land apart, then a record holding both FIGIs merges them: both rows then point at the survivor.
+    p_, q_ = member("p"), member("q")
+    found = masters.seed(database.application, [p_])
+    found |= masters.seed(database.application, [q_])
+    left, right = found["p"], found["q"]
     more = [{"visit_id": 4, "member_id": "p"}, {"visit_id": 5, "member_id": "q"}]
     land(sink, "visit", more, ids)
-    assert table(runtime)[4]["member_id_mdm_id"] == left and table(runtime)[5]["member_id_mdm_id"] == right
+    assert str(table(runtime)[4]["member_id_mdm_id"]) == left and str(table(runtime)[5]["member_id_mdm_id"]) == right
     loaded = {k: r["loaded_at"] for k, r in table(runtime).items()}
-    core.apply(database, 4, decisions=[core.decision(
-        "merge", actor="steward", reason="same company", at="2026-01-04T00:00:00+00:00", left=left, right=right)])
-    canonical = {key: body["canonical_id"] for key, body in core.documents(database, "entity").items()
-                 if key in {left, right}}
-    survivor = canonical[left] or left
-    assert survivor == (canonical[right] or right)
+    survivor = masters.seed(database.application, [member("r", *p_["identifiers"]["figi"], *q_["identifiers"]["figi"])])["r"]
     assert refresh_ids(sink, "visit", ids)["rows_updated"] == {"member_id_mdm_id": 1}
     rows = table(runtime)
-    assert rows[4]["member_id_mdm_id"] == rows[5]["member_id_mdm_id"] == survivor
+    assert str(rows[4]["member_id_mdm_id"]) == str(rows[5]["member_id_mdm_id"]) == survivor
     assert rows[1]["member_id_mdm_id"] == mastered["a"]  # unmerged rows keep their id
     assert {k: r["loaded_at"] for k, r in rows.items()} == loaded  # an id is not a delivered value
 
