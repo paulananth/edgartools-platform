@@ -15,20 +15,17 @@ import copy
 
 from sqlalchemy import text
 
-from edgar_warehouse.mdm.merge import MergeStage
-from edgar_warehouse.mdm.store import Store, register_policy
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine
 from edgar_warehouse.silver_writer import database as silver
 from edgar_warehouse.silver_writer import spec as silver_spec
 from edgar_warehouse.silver_writer.cli import spec_file
 from edgar_warehouse.silver_writer.sink import PostgresSink
-from edgar_warehouse.silver_writer.writer import land
-from tests.support.old_master_ids import OldIds as MdmIds
+from edgar_warehouse.silver_writer.writer import MdmIds, land
+from tests.support import masters
 from tests.engine.test_ownership_readings import ACCESSION, FILED, filing
 from tests.engine.test_sgml_container import document, submission
 from tests.integration import test_mdm_postgres as core
-from tests.integration import test_nport_link_start as nport
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
 
 FOLDER = files.ROOT / "sources" / "sec.ownership"
@@ -63,14 +60,10 @@ def test_a_joint_filings_lines_land_once_and_each_owner_finds_its_master(databas
     owners = tables["reporting_owner"]
     assert (len(lines), len(owners)) == (2, 2)
     person_key = next(o["owner_record_key"] for o in owners if o["rpt_owner_cik"] == HOLDER)
-    for code in (PERSON, COMPANY):  # fixture masters stand in for each contract's records
-        core.register_reading(database, code, core.contract_body())
-    with database.admin.begin() as conn:
-        policy = register_policy(conn, copy.deepcopy(files.policy()))
-    nport.apply(MergeStage(Store(database.application)), policy, "masters", [
+    entity = masters.seed(database.application, [  # fixture masters stand in for each contract's records
         core.source(key=person_key, source_code=PERSON, kind="person", fields={}, identifiers={"cik": HOLDER}),
         core.source(key=ISSUER, source_code=COMPANY, kind="company", fields={}, identifiers={"cik": ISSUER}),
-        core.source(key=FUND, source_code=COMPANY, kind="company", fields={}, identifiers={"cik": FUND})], 1)
+        core.source(key=FUND, source_code=COMPANY, kind="company", fields={}, identifiers={"cik": FUND})])
     with silver_database(database.admin) as (owner, runtime):
         silver.migrate(owner, runtime_role=RUNTIME)
         sink, ids = PostgresSink(runtime), MdmIds(database.application)
@@ -83,7 +76,6 @@ def test_a_joint_filings_lines_land_once_and_each_owner_finds_its_master(databas
         with runtime.connect() as conn:
             landed = list(conn.execute(text("SELECT * FROM silver.insider_position ORDER BY line_table")).mappings())
             found = {r["rpt_owner_cik"]: r for r in conn.execute(text("SELECT * FROM silver.insider_reporting_owner")).mappings()}
-        entity = core.bindings(database)
 
     # Each line once, with its issuer, the date it holds at and the filing's date.
     assert [(r["line_table"], str(r["as_of"]), str(r["filed"]), str(r["issuer_mdm_id"])) for r in landed] == [

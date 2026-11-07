@@ -13,18 +13,15 @@ from decimal import Decimal
 from sqlalchemy import text
 
 from edgar_warehouse.control_contract import Blocked
-from edgar_warehouse.mdm.merge import MergeStage
-from edgar_warehouse.mdm.store import Store, register_policy
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.source_engine import SourceEngine, SourceRejected
 from edgar_warehouse.silver_writer import database as silver
 from edgar_warehouse.silver_writer import spec as silver_spec
 from edgar_warehouse.silver_writer.cli import spec_file
 from edgar_warehouse.silver_writer.sink import PostgresSink
-from edgar_warehouse.silver_writer.writer import land
-from tests.support.old_master_ids import OldIds as MdmIds
+from edgar_warehouse.silver_writer.writer import MdmIds, land
 from tests.integration import test_mdm_postgres as core
-from tests.integration import test_nport_link_start as cusip
+from tests.support import masters
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
 
 FOLDER = files.ROOT / "sources" / "sec.company-facts"
@@ -71,13 +68,9 @@ def test_the_rows_fit_the_silver_spec():
 
 
 def test_facts_land_exact_once_and_find_their_company(database):
-    core.register_reading(database, COMPANY, core.contract_body())
-    with database.admin.begin() as conn:
-        policy = register_policy(conn, copy.deepcopy(files.policy()))
-    cusip.apply(MergeStage(Store(database.application)), policy, "masters", [
+    company = masters.seed(database.application, [
         core.source(key="0000000042", source_code=COMPANY, kind="company", fields={},
-                    identifiers={"cik": "0000000042"})], 1)
-    company = core.bindings(database, COMPANY)["0000000042"]
+                    identifiers={"cik": "0000000042"})])["0000000042"]
     landed_rows = rows()
     with silver_database(database.admin) as (owner, runtime):
         silver.migrate(owner, runtime_role=RUNTIME)

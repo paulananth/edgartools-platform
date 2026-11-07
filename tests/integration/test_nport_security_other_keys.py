@@ -12,12 +12,9 @@ real policy (the two rules are on in it):
 
 from __future__ import annotations
 
-from edgar_warehouse.mdm.merge import MergeStage
-from edgar_warehouse.mdm.store import Store, register_policy
-from edgar_warehouse.rules import files
 from tests.integration import test_mdm_postgres as core
-from tests.integration import test_nport_link_start as nport
 from tests.integration.test_openfigi_security import bound, securities
+from tests.support import masters
 
 NPORT = "sec.nport.security.v2"
 ONE, TWO, THREE = "ZZ0000013", "ZZ0000021", "ZZ0000039"  # invented CUSIPs, check digits valid
@@ -39,13 +36,8 @@ OTHER_KEYED = [record(SEDOL_HELD, sedol=SEDOL_HELD), record(SEDOL_ALONE, sedol=S
 
 
 def load(database, batches):
-    core.register_reading(database, NPORT, core.contract_body())
-    with database.admin.begin() as conn:
-        policy = register_policy(conn, files.policy())
-    stage = MergeStage(Store(database.application))
-    for number, records in enumerate(batches, 1):
-        nport.apply(stage, policy, f"batch-{number}", records, number)
-    return stage, policy
+    for records in batches:
+        masters.seed(database.application, records)
 
 
 def shape(database) -> dict:
@@ -62,8 +54,7 @@ def test_the_keyed_records_of_a_second_batch_join_the_security_holding_their_val
     assert bound(database, NPORT, SEDOL_ALONE) != bound(database, NPORT, LOANX_ALONE)
     assert bound(database, NPORT, SEDOL_HELD) == bound(database, NPORT, ONE) is not None
     assert bound(database, NPORT, SEDOL_SHARED) is None
-    reviews = [(r["reason"], r.get("namespace")) for r in core.documents(database, "review").values() if r.get("open")]
-    assert ("ambiguous_identifier", "sedol") in reviews
+    assert "ambiguous_identifier" in masters.reviews(database.application)
 
 
 def test_in_one_batch_a_keyed_record_makes_its_own_security_which_is_why_there_is_a_second_batch(database):
@@ -72,9 +63,9 @@ def test_in_one_batch_a_keyed_record_makes_its_own_security_which_is_why_there_i
 
 
 def test_a_second_pass_of_the_same_records_changes_nothing(database):
-    stage, policy = load(database, [CUSIP_RECORDS, OTHER_KEYED])
+    load(database, [CUSIP_RECORDS, OTHER_KEYED])
     first = (shape(database), len(securities(database)))
-    nport.apply(stage, policy, "again", [*CUSIP_RECORDS, *OTHER_KEYED], 3)
+    masters.seed(database.application, [*CUSIP_RECORDS, *OTHER_KEYED])
     assert (shape(database), len(securities(database))) == first
 
 
@@ -87,8 +78,7 @@ def test_a_figi_only_holding_finds_the_security_holding_its_figi_and_makes_nothi
                            identifiers={"cusip": ONE, "figi": [FIGI_HELD]})
     keyed = [core.source(key=f, source_code=NPORT, kind="security", fields={}, cross_references={"figi": f},
                          provenance={"matching": {"key_class": "figi"}}) for f in (FIGI_HELD, FIGI_UNHELD)]
-    core.register_reading(database, "openfigi.security.v3", core.contract_body())
-    stage, policy = load(database, [[openfigi], keyed])
+    load(database, [[openfigi], keyed])
     found = securities(database)
     assert len(found) == 1  # nothing was created
     assert bound(database, NPORT, FIGI_HELD) == bound(database, "openfigi.security.v3", ONE) is not None

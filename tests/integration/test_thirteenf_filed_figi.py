@@ -6,13 +6,8 @@ Invented values only."""
 
 from __future__ import annotations
 
-from edgar_warehouse.mdm.merge import MergeStage
-from edgar_warehouse.mdm.store import Store, register_policy
-from edgar_warehouse.rules import files
-from tests.integration import test_nport_link_start as nport
 from tests.integration import test_openfigi_security as openfigi
-from tests.integration.test_security_share_class import THIRTEENF, thirteenf_records
-from tests.support.rules_authority import register_dataset
+from tests.integration.test_security_share_class import thirteenf_records
 
 # Invented CUSIPs, check digits valid; invented FIGIs.
 PLAIN, OPTION, MIXED, WORDED = "ZZ0000906", "ZZ0000914", "ZZ0000922", "ZZ0000930"
@@ -45,13 +40,7 @@ def test_a_cusip_filed_only_on_option_rows_creates_its_own_security(database, tm
     held = openfigi.figis(openfigi.EQUITY)[0]
     thirteenf = thirteenf_records(tmp_path / "13f", row(OPTION, held, "Call") + row(PLAIN, held))
     answers, _ = openfigi.prepared_records(tmp_path / "openfigi", ("cusip",))
-    with database.admin.begin() as conn:
-        for name, code in ((THIRTEENF, openfigi.THIRTEENF), ("openfigi", openfigi.CODE)):
-            register_dataset(conn, code, database.registry, files.mdm_contract(name, code))
-        policy = register_policy(conn, openfigi.policy_body())
-    stage = MergeStage(Store(database.application))
-    nport.apply(stage, policy, "openfigi", answers, 1)
-    nport.apply(stage, policy, "13f", thirteenf, 2)
+    openfigi.load(database, [answers, thirteenf])
     equity = openfigi.bound(database, openfigi.CODE, openfigi.EQUITY)
     assert openfigi.bound(database, openfigi.THIRTEENF, PLAIN) == equity
     own = openfigi.bound(database, openfigi.THIRTEENF, OPTION)

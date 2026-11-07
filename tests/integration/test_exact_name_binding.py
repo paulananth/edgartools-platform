@@ -11,13 +11,11 @@ from __future__ import annotations
 
 import copy
 
-from edgar_warehouse.mdm.merge import MergeStage
-from edgar_warehouse.mdm.store import Store, register_policy
 from edgar_warehouse.rules import files
 from tests.integration import test_mdm_postgres as core
-from tests.integration import test_nport_link_start as nport
 from tests.integration.test_openfigi_security import bound
 from tests.mdm import policy_layers
+from tests.support import masters
 
 FILINGS, CUSTODIANS = "iapd.adv.filings.v1", "iapd.adv.custodians.v1"
 NAME_ONE, NAME_TWO, NAME_NONE = "a1" * 32, "b2" * 32, "c3" * 32  # invented name ids (64 hex)
@@ -36,18 +34,15 @@ def custodian(key: str, name_id: str) -> dict:
 
 
 def companies(database) -> int:
-    return len([v for v in core.documents(database, "entity").values() if v["kind"] == "company" and v.get("status") != "alias"])
+    return len([v for v in masters.bodies(database.application).values()
+                if v["kind"] == "company" and v.get("status") != "alias"])
 
 
 def load(database, batches):
-    for code in (FILINGS, CUSTODIANS):
-        core.register_reading(database, code, core.contract_body())
-    with database.admin.begin() as conn:
-        policy = register_policy(conn, policy_body())
-    stage = MergeStage(Store(database.application))
-    for number, records in enumerate(batches, 1):
-        nport.apply(stage, policy, f"batch-{number}", records, number)
-    return stage, policy
+    policy = policy_body()
+    for records in batches:
+        masters.seed(database.application, records, policy)
+    return policy
 
 
 def test_a_name_held_by_one_company_attaches_the_record_and_makes_no_company(database):
@@ -68,13 +63,13 @@ def test_a_name_held_by_two_companies_goes_to_review_and_joins_neither(database)
     load(database, [[adviser("900001", NAME_ONE), adviser("900002", NAME_ONE)], [custodian("name:ONE", NAME_ONE)]])
     assert companies(database) == 2
     assert bound(database, CUSTODIANS, "name:ONE") is None
-    assert "ambiguous_name_match" in [r["reason"] for r in core.documents(database, "review").values() if r.get("open")]
+    assert "ambiguous_name_match" in masters.reviews(database.application)
 
 
 def test_a_second_pass_of_the_same_records_changes_nothing(database):
     first = [adviser("900001", NAME_ONE)]
     second = [custodian("name:ONE", NAME_ONE), custodian("name:NONE", NAME_NONE)]
-    stage, policy = load(database, [first, second])
+    policy = load(database, [first, second])
     before = (companies(database), bound(database, CUSTODIANS, "name:ONE"), bound(database, CUSTODIANS, "name:NONE"))
-    nport.apply(stage, policy, "again", [*first, *second], 3)
+    masters.seed(database.application, [*first, *second], policy)
     assert (companies(database), bound(database, CUSTODIANS, "name:ONE"), bound(database, CUSTODIANS, "name:NONE")) == before

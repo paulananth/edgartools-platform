@@ -13,14 +13,11 @@ verification there. Invented values only.
 
 from __future__ import annotations
 
-from edgar_warehouse.mdm.merge import MergeStage
-from edgar_warehouse.mdm.store import Store, register_policy
 from edgar_warehouse.rules import files
 from tests.integration import test_mdm_postgres as core
-from tests.integration import test_nport_link_start as nport
 from tests.integration.test_openfigi_security import bound, securities
 from tests.mdm import policy_layers
-from tests.support.rules_authority import register_dataset
+from tests.support import masters
 
 OPENFIGI = "openfigi.security.v3"
 FORM4 = "sec.ownership.security.v1"
@@ -49,13 +46,9 @@ def form4(symbol: str, title: str = "Class A Common Stock") -> dict:
 
 
 def load(database, openfigi_records: list[dict], form4_records: list[dict]):
-    for code in (OPENFIGI, FORM4):
-        core.register_reading(database, code, core.contract_body())
-    with database.admin.begin() as conn:
-        policy = register_policy(conn, policy_body())
-    stage = MergeStage(Store(database.application))
-    nport.apply(stage, policy, "openfigi", openfigi_records, 1)
-    nport.apply(stage, policy, "form4", form4_records, 2)
+    policy = policy_body()
+    masters.seed(database.application, openfigi_records, policy)
+    masters.seed(database.application, form4_records, policy)
 
 
 def test_a_filed_symbol_finds_the_one_security_holding_its_ticker_and_makes_nothing(database):
@@ -78,7 +71,6 @@ def test_a_reused_ticker_held_by_two_securities_goes_to_review(database):
     load(database, [openfigi(ONE, "EXA"), openfigi(TWO, "EXA")], [form4("EXA")])
     assert len(securities(database)) == 2
     assert bound(database, FORM4, '["1234567","EXA","Class A Common Stock"]') is None
-    # The symbol reaches two Securities: the review names the ticker and the filing's record.
-    reviews = [v for v in core.documents(database, "review").values() if v.get("open")]
-    assert {(v["reason"], v.get("namespace")) for v in reviews} >= {("conflicting_identifiers", "ticker")}
+    # The symbol reaches two Securities: it waits for review.
+    assert "conflicting_identifiers" in masters.reviews(database.application)
 

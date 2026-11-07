@@ -8,6 +8,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from uuid import uuid4
 
+from edgar_warehouse.mdm.activation import activated
 from edgar_warehouse.mdm import matching
 from edgar_warehouse.mdm.evidence import PROFILE_KINDS
 from edgar_warehouse.mdm.identifier_types import TYPES
@@ -21,6 +22,7 @@ from edgar_warehouse.rules.source_engine import (
 NORMALIZERS = {kind.normalizer_name: kind.upper for kind in TYPES.values()}
 KINDS = {role: sorted(kinds) for role, kinds in PROFILE_KINDS.items()}
 WAITING = "binding_required"
+EXACT = "exact"
 
 
 @dataclass(frozen=True)
@@ -39,13 +41,17 @@ def first(value):
     return value[0] if isinstance(value, list) else value
 
 
+def name_id(record: dict) -> str | None:
+    return first((record.get("cross_references") or {}).get("name_id"))
+
+
 def name_keys(record: dict) -> list[tuple]:
     """The LEIs the record's Name Count pass found, so a name match is a lookup."""
     found = ((record.get("provenance") or {}).get("matching") or {}).get("name_count") or {}
     cascade = (found.get("cascade") or {}).get("lei")
     entries = found.get("leis") or []
     named = entries[0][0] if entries and entries[0] else None
-    return [(role, value, record["subject"]) for role, value in (("cascade", cascade), ("name_count", named))
+    return [(role, value, record["subject"]) for role, value in (("cascade", cascade), ("name_count", named), (EXACT, name_id(record)))
             if isinstance(value, str) and value]
 
 
@@ -86,6 +92,9 @@ def _merge(store, settings: Settings, records: list[dict], key: str, again: bool
     survivors = _match_identifiers(store, settings, records, bound, counts, file_no)
     named = _match_names(store, settings, records, bound, counts)
     bound.update(named)
+    exact = _match_exact_names(store, settings, records, bound, counts)
+    bound.update(exact)
+    named |= exact
     rules = _rules(settings)
     waits = {rule["source"] for rule in rules if rule.get("on_no_match") == "wait"}
     store.open_reviews(WAITING, [(r["subject"], r["assertion_id"]) for r in records
@@ -113,11 +122,10 @@ def _match_identifiers(store, settings: Settings, records, bound: dict, counts: 
         "normalizers": NORMALIZERS})
     if not plan["applicable"]:
         return set()
-    wanted, normal = defaultdict(set), {}
+    wanted = defaultdict(set)
     for items in plan["applicable"].values():
         for item in items:
             wanted[item["namespace"]].add(item["value"])
-            normal[(item["namespace"], item["raw"])] = item["value"]
     found = defaultdict(dict)
     for namespace, value, entity in store.holders(wanted):
         found[(namespace, value)][entity] = settings.kind
@@ -155,8 +163,6 @@ def _match_identifiers(store, settings: Settings, records, bound: dict, counts: 
             survivors.discard(gone)
             survivors.add(keep)
             counts["merges"] += 1
-    store.add_identifiers(sorted({(m["namespace"], normal.get((m["namespace"], m["raw"]), m["raw"]), live(m["entity_id"]))
-                                  for m in made["mints"]}))
     for subject, entity in list(bound.items()):
         bound[subject] = live(entity)
     for decision in made["decisions"]:
@@ -173,8 +179,6 @@ def _match_identifiers(store, settings: Settings, records, bound: dict, counts: 
 def _match_names(store, settings: Settings, records, bound: dict, counts: Counter) -> dict:
     named, values = {}, {}
     for rule in _rules(settings):
-        if rule.get("family") != matching.FAMILY:
-            continue
         cascade = any(test["primitive"] == matching.cascade.TEST for test in rule["when"])
         holders = sorted(r["subject"] for r in records if r["source_code"] == rule["holder_source"])
         pairs = [(json.loads(c), json.loads(h)) for c, h in store.name_pairs(
@@ -207,6 +211,34 @@ def _match_names(store, settings: Settings, records, bound: dict, counts: Counte
     return named
 
 
+def _match_exact_names(store, settings: Settings, records, bound: dict, counts: Counter) -> dict:
+    """A waiting record joins the one master holding its name id; several send it to review. It never creates."""
+    rules = [rule for rule in settings.policy["kinds"][settings.kind].get("rules") or []
+             if rule.get("family") == matching.EXACT_NAME_FAMILY and activated(settings.policy, settings.kind, rule, "bind")]
+    here = {r["subject"]: r for r in records if name_id(r)}
+    if not rules or not here:
+        return {}
+    members = {(name_id(r), r["subject"], r["source_code"], None) for r in here.values()}
+    members.update(store.named(EXACT, sorted({name_id(r) for r in here.values()})))
+    named = {}
+    for rule in rules:
+        holding, waiting = defaultdict(set), {}
+        for value, subject, source, entity in members:
+            entity = entity or bound.get(subject)
+            if entity and source in rule["holder_sources"]:
+                holding[value].add(entity)
+            elif not entity and source == rule["source"]:
+                waiting[subject] = value
+        for subject, value in waiting.items():
+            found = holding[value]
+            if len(found) == 1:
+                named[subject] = next(iter(found))
+            elif found:
+                counts["ambiguous_name_match"] += 1
+                store.open_reviews("ambiguous_name_match", [(subject, (here.get(subject) or {}).get("assertion_id"))])
+    return named
+
+
 def _write_masters(store, settings: Settings, entities: list, file_no: int, counts: Counter) -> None:
     records = [json.loads(body) for body in store.member_bodies(entities)]
     bindings = store.members_bound(entities)
@@ -221,3 +253,5 @@ def _write_masters(store, settings: Settings, entities: list, file_no: int, coun
     for review in reviews:
         counts[str(review.get("reason"))] += 1
     store.write_masters([(e, json.dumps(body)) for e, body in masters.items()], file_no)
+    store.add_identifiers(sorted({(namespace, value, e) for e, body in masters.items()
+                                  for namespace, values in body["identifiers"].items() for value in values}))

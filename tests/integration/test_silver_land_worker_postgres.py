@@ -10,19 +10,11 @@ import json
 import pytest
 from sqlalchemy import text
 
-from edgar_warehouse.rules import files
 from edgar_warehouse.silver_writer import database as silver
 from edgar_warehouse.silver_writer.cli import spec_file
 from edgar_warehouse.workers import silver_land
 from tests.integration.test_company_fact_silver import FOLDER, rows
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
-
-
-@pytest.fixture(autouse=True)
-def seeded_through_the_old_merge(monkeypatch):
-    from tests.support.old_master_ids import OldIds
-
-    monkeypatch.setattr("edgar_warehouse.silver_writer.writer.MdmIds", OldIds)
 
 
 class Artifacts:
@@ -92,8 +84,7 @@ def test_other_units_rows_cannot_hide_a_missing_key(landed, database):
     """Another unit's filer lands too, so silver holds more rows than this unit's reading; one of
     this unit's own rows is then gone. A count of the table would pass; the unit's own keys do not."""
     from edgar_warehouse.silver_writer.relational import DatabaseSink
-    from edgar_warehouse.silver_writer.writer import land
-    from tests.support.old_master_ids import OldIds as MdmIds
+    from edgar_warehouse.silver_writer.writer import MdmIds, land
 
     store = Artifacts()
     out = silver_land.execute(envelope(), store)
