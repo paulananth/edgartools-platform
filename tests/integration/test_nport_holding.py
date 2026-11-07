@@ -1,8 +1,8 @@
 """N-PORT holdings for silver, each a lookup row (ticket 79).
 
 The real chain on invented holdings: holding.yaml (with each filing's series,
-registrant, date and as-of date), holding-combine.yaml (pieces only, ticket 138) and
-holding-rows.yaml. Each row's `security_key` must be a record key the Security
+registrant, date and as-of date), and
+Each row's `security_key` must be a record key the Security
 contract makes from the same holdings (test_nport_isin_link's chain), so the
 silver writer finds its Security by lookup; the holder is the fund series, or
 the registrant for a filing naming none. Invented values only.
@@ -76,12 +76,8 @@ def holding_rows(root: Path) -> list[dict]:
     holdings = cusip.read(store, root / "holding", "holding.yaml", raw, cusip.Q2, lookups={
         "isin": isin.PAIRS, "sedol": [], "loanx": [], "figi": [], "series": pairs, "registrant": REGISTRANTS,
         "filed": cusip.filed_pairs(store, root, raw), "as_of": reported_pairs(store, root, raw)})
-    combined = cusip.combine(store, root / "combine", "holding-combine.yaml", {"holdings": holdings})
-    pieces = [store.put(root.as_uri(), {"tables": a["tables"]}) for a in store.json(combined)["artifacts"]]
-    reading = chain.read(store, root / "rows", files.load(FOLDER / "holding-rows.yaml"), [
-        {"input": p, "context": store.put(root.as_uri(), {"version": 1, "input": p, "values": {}})}
-        for p in pieces], 2)
-    return [row for artifact in store.json(reading)["artifacts"] for row in artifact["tables"]["holding"]]
+    return [row for artifact in store.json(holdings)["artifacts"] for part in artifact.get("partitions", [])
+            for row in store.json(part["receipt"])["tables"]["holding"]]
 
 
 def test_each_holding_names_the_security_record_its_holdings_make(tmp_path):
@@ -122,7 +118,7 @@ def test_each_holding_carries_the_date_its_filing_reports_at(tmp_path):
 
 def test_the_rows_fit_the_silver_spec():
     spec = silver_spec.check(files.load(FOLDER / "silver-holding.yaml"))
-    rows_contract = files.load(FOLDER / "holding-rows.yaml")
+    rows_contract = files.load(FOLDER / "holding.yaml")
     assert set(rows_contract["read"]["tables"]["holding"]["columns"]) == {c["name"] for c in spec["columns"]}
 
 
@@ -205,7 +201,7 @@ def test_the_mastering_target_lands_the_holdings_after_the_securities_merge():
     """The holdings reach silver through the target's own `silver.land` step (ticket 79), after the merge."""
     steps = {s["name"]: s for s in files.source("sec.nport.security")["bookkeeping"]["targets"]["mastering"]["steps"]}
     land = steps["land_holding"]
-    assert land["operation"] == "silver.land" and land["requires"] == ["holding_rows", "merge"]
+    assert land["operation"] == "silver.land" and land["requires"] == ["holding", "merge"]
     assert land["input"]["keys"] == {"table": "holding", "silver": spec_file(FOLDER / "silver-holding.yaml", None)["table"]}
     assert steps["links"]["requires"] == ["land_holding"]
     assert steps["processed"]["requires"] == ["links"]  # the Change Journal records only what landed
@@ -250,3 +246,13 @@ def test_the_land_step_lands_every_holding_once_and_its_verifier_confirms(databa
             assert conn.scalar(text("SELECT count(*) FROM silver.nport_holding")) == len(rows)
         candidate = {"uri": out["uri"], "sha256": "invented"}
         assert silver_land.verify({**envelope, "candidate": candidate}, store) == ({"silver.landed": True}, [])
+
+
+def test_a_landing_holds_one_piece_of_a_reading_at_a_time(monkeypatch):
+    from edgar_warehouse.workers import silver_land, source_readings
+
+    pieces = [{"tables": {"holding": [{"holding_id": str(n)}]}, "deferred": []} for n in range(3)]
+    monkeypatch.setattr(source_readings, "_index", lambda *a: ({"version": 2}, 0))
+    monkeypatch.setattr(source_readings, "_partition_chunks", lambda *a, **k: (
+        (0, piece, 0, None) for piece in pieces))
+    assert list(silver_land._artifacts({"input": {}}, None)) == pieces
