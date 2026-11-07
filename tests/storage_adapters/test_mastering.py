@@ -92,6 +92,19 @@ def test_identical_records_again_change_no_master(database_factory):
         assert db.changes(checkpoint) == []
 
 
+def test_every_identifier_a_master_holds_can_be_found_and_two_masters_may_hold_one(database_factory):
+    """A SEDOL or a ticker no rule keys on is still held; merging two masters holding one value keeps it once."""
+    with opened(database_factory) as db:
+        a, b = figi("00TSTX03"), figi("00TSTX04")
+        merge.merge_file(db, SECURITY, [record(FIGI, "a", "security", figi=a, ticker="EXA", sedol="B000009")])
+        merge.merge_file(db, SECURITY, [record(FIGI, "b", "security", figi=b, ticker="EXA")])
+        assert len(db.identifier_holders("ticker", ["EXA"])) == 2
+        assert len(db.identifier_holders("sedol", ["B000009"])) == 1
+        merge.merge_file(db, SECURITY, [record(FIGI, "c", "security", figi=[a, b])])
+        assert len(live(db)) == 1
+        assert db.identifier_holders("ticker", ["EXA"]) == list(live(db))
+
+
 def test_an_identifier_reaching_two_masters_merges_them_and_a_split_returns_them(database_factory):
     with opened(database_factory) as db:
         a, b = figi("00TSTX01"), figi("00TSTX02")

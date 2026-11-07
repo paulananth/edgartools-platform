@@ -20,29 +20,19 @@ FIGI contract given a fixture verification there. Invented values only.
 
 from __future__ import annotations
 
-import copy
 import hashlib
 import json
 from pathlib import Path
 
 import pytest
-from sqlalchemy import text
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.mdm.merge import MergeStage
-from edgar_warehouse.mdm.store import Store, register_policy
 from edgar_warehouse.rules import files
-from edgar_warehouse.silver_writer import database as silver
-from edgar_warehouse.silver_writer.cli import spec_file
-from edgar_warehouse.silver_writer.sink import PostgresSink
-from edgar_warehouse.silver_writer.writer import land
-from tests.support.old_master_ids import OldIds as MdmIds
+from edgar_warehouse.silver_writer.writer import MdmIds
+from tests.support import masters
 from tests.integration import test_mdm_postgres as core
 from tests.mdm import policy_layers
-from tests.integration import test_nport_link_start as nport
-from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
 from tests.support import source_chain as chain
-from tests.support.rules_authority import register_dataset
 
 FOLDER = files.ROOT / "sources" / "openfigi"
 CODE = "openfigi.security.v3"
@@ -254,34 +244,29 @@ def test_an_isin_answer_carries_its_isin_and_every_listing_figi(tmp_path):
 
 def bound(database, source_code: str, key: str) -> str | None:
     """The Security a staged record is bound to, through its survivor."""
-    return core.bindings(database, source_code).get(key)
+    return MdmIds(database.application)(source_code, "security", {key}).get(key)
 
 
 def securities(database) -> dict:
-    return {k: v for k, v in core.documents(database, "entity").items()
+    return {k: v for k, v in masters.bodies(database.application).items()
             if v["kind"] == "security" and v.get("status") != "alias"}
 
 
-def load(database, batches: list[tuple[str, list[dict]]], *registered: str):
-    core.register_reading(database, THIRTEENF, core.contract_body())
-    core.register_reading(database, NPORT_ISIN, core.contract_body())
-    with database.admin.begin() as conn:
-        register_dataset(conn, CODE, database.registry, files.mdm_contract("openfigi", CODE))
-        policy = register_policy(conn, policy_body())
-    stage = MergeStage(Store(database.application))
-    for number, (name, records) in enumerate(batches, 1):
-        nport.apply(stage, policy, name, records, number)
-    return stage, policy
+def load(database, batches: list[list[dict]]) -> dict:
+    policy = policy_body()
+    for records in batches:
+        masters.seed(database.application, records, policy)
+    return policy
 
 
 def test_a_record_joins_the_security_holding_its_cusip_or_creates_it(database, tmp_path):
     """A CUSIP answer joins the Security holding its CUSIP (13F's here), or creates one."""
     records, _ = prepared_records(tmp_path, ("cusip",))
     load(database, [
-        ("13f", [core.source(key=cusip, source_code=THIRTEENF, kind="security",
-                             fields={"name_of_issuer": "Example Corp.", "title_of_class": "COM"},
-                             identifiers={"cusip": cusip}) for cusip in (EQUITY, BOND)]),
-        ("openfigi", records)])
+        [core.source(key=cusip, source_code=THIRTEENF, kind="security",
+                     fields={"name_of_issuer": "Example Corp.", "title_of_class": "COM"},
+                     identifiers={"cusip": cusip}) for cusip in (EQUITY, BOND)],
+        records])
     # EQUITY and BOND joined 13F's; UNHELD, SOLE, DOUBLE and BROKEN each created one.
     assert len(securities(database)) == 6
     for cusip in (EQUITY, BOND):
@@ -292,12 +277,8 @@ def test_a_record_joins_the_security_holding_its_cusip_or_creates_it(database, t
         "EXAMPLE CORP", "COM")
     # The Security holds its CUSIP and every listing FIGI (no reverse limit).
     assert joined["status"] == "accepted" and joined["identifiers"] == {"cusip": [EQUITY], "figi": figis(EQUITY), "ticker": ["EXA"]}
-    from edgar_warehouse.mdm.record_reads import for_connection
-    with database.application.connect() as conn:
-        reader = for_connection(conn)
-        subjects = reader.subjects([reader.group("cross_reference_records", "composite_figi", "BBGZ0000VS14")])
-        (reading,) = reader.readings(subjects).values()
-    assert reading["record_key"] == EQUITY
+    assert masters.cross_referencing(database.application, "composite_figi", "BBGZ0000VS14") == [
+        bound(database, CODE, EQUITY)]
 
 
 def test_a_filed_figi_finds_its_security_and_never_becomes_one_of_its_identifiers(database, tmp_path):
@@ -309,11 +290,11 @@ def test_a_filed_figi_finds_its_security_and_never_becomes_one_of_its_identifier
     unheld_figi = next(f"BBG00TSTXX9{d}" for d in "0123456789" if TYPES["figi"].refusal(f"BBG00TSTXX9{d}")[1] is None)
     records, _ = prepared_records(tmp_path, ("cusip",))
     load(database, [
-        ("openfigi", records),
-        ("13f", [core.source(key=cusip, source_code=THIRTEENF, kind="security",
-                             fields={"name_of_issuer": "Example Corp.", "title_of_class": "COM"},
-                             identifiers={"cusip": cusip}, cross_references={"figi": filed})
-                 for cusip, filed in (("ZZ0000211", figis(EQUITY)[0]), ("ZZ0000229", unheld_figi))])])
+        records,
+        [core.source(key=cusip, source_code=THIRTEENF, kind="security",
+                     fields={"name_of_issuer": "Example Corp.", "title_of_class": "COM"},
+                     identifiers={"cusip": cusip}, cross_references={"figi": filed})
+         for cusip, filed in (("ZZ0000211", figis(EQUITY)[0]), ("ZZ0000229", unheld_figi))]])
     found = securities(database)[bound(database, THIRTEENF, "ZZ0000211")]
     assert bound(database, THIRTEENF, "ZZ0000211") == bound(database, CODE, EQUITY)
     assert found["identifiers"] == {"cusip": sorted([EQUITY, "ZZ0000211"]), "figi": figis(EQUITY), "ticker": ["EXA"]}
@@ -327,9 +308,9 @@ def test_a_held_cusip_stays_on_its_security_whatever_figi_is_filed_with_it(datab
     Security's; nothing merges and nothing waits for review."""
     records, _ = prepared_records(tmp_path, ("cusip",))
     load(database, [
-        ("openfigi", records),
-        ("13f", [core.source(key=BOND, source_code=THIRTEENF, kind="security", fields={"title_of_class": "NOTE"},
-                             identifiers={"cusip": BOND}, cross_references={"figi": figis(EQUITY)[0]})])])
+        records,
+        [core.source(key=BOND, source_code=THIRTEENF, kind="security", fields={"title_of_class": "NOTE"},
+                     identifiers={"cusip": BOND}, cross_references={"figi": figis(EQUITY)[0]})]])
     held = securities(database)[bound(database, THIRTEENF, BOND)]
     assert bound(database, THIRTEENF, BOND) == bound(database, CODE, BOND) != bound(database, CODE, EQUITY)
     assert held["status"] == "accepted" and held["identifiers"]["cusip"] == [BOND]
@@ -357,7 +338,7 @@ def test_openfigi_answers_in_either_order_make_the_same_securities(database, tmp
     isins = [r for r in records if r["identifiers"].get("isin")]
     cusips = [r for r in records if r["identifiers"].get("cusip")]
     first, second = (isins, cusips) if order == "isin_first" else (cusips, isins)
-    stage, policy = load(database, [("openfigi-1", first), ("openfigi-2", second)])
+    policy = load(database, [first, second])
     assert grouping(database, records) == sorted([
         sorted([EQUITY, SHARED]), sorted([SOLE, DOUBLE, TWICE]),
         [BOND], [UNHELD], [BROKEN], [ISIN], [HOME]])
@@ -369,24 +350,24 @@ def test_openfigi_answers_in_either_order_make_the_same_securities(database, tmp
     merged = securities(database)[bound(database, CODE, TWICE)]
     assert merged["identifiers"] == {"cusip": sorted([SOLE, DOUBLE]), "isin": [TWICE],
                                      "figi": sorted({*figis(SOLE), *figis(DOUBLE)}), "ticker": ["EXD"]}
-    assert not [v for v in core.documents(database, "review").values() if v.get("open")]
+    assert not masters.reviews(database.application)
     if order == "cusip_first":
         # The merged-away Security points at its survivor, the one created first.
-        entities = core.documents(database, "entity")
+        entities = masters.bodies(database.application)
         aliases = [e for e in entities.values() if e["kind"] == "security" and e.get("status") == "alias"]
         assert [a["canonical_id"] for a in aliases] == [merged["entity_id"]]
-    nport.apply(stage, policy, "nport", [core.source(key=EQUITY, source_code=NPORT_ISIN, kind="security",
-                                                     fields={"name_of_issuer": "EXAMPLE CORP"},
-                                                     identifiers={"cusip": EQUITY, "isin": SHARED})], 3)
+    masters.seed(database.application, [core.source(key=EQUITY, source_code=NPORT_ISIN, kind="security",
+                                                    fields={"name_of_issuer": "EXAMPLE CORP"},
+                                                    identifiers={"cusip": EQUITY, "isin": SHARED})], policy)
     assert bound(database, NPORT_ISIN, EQUITY) == equity and len(securities(database)) == 7
 
 
 def test_an_isin_record_joins_the_security_holding_its_isin(database, tmp_path):
     records, _ = prepared_records(tmp_path, ("isin",))
     load(database, [
-        ("nport", [core.source(key=ISIN, source_code=NPORT_ISIN, kind="security",
-                               fields={"name_of_issuer": "EXAMPLE CORP"}, identifiers={"isin": ISIN})]),
-        ("openfigi", [r for r in records if r["provenance"]["record_key"] == ISIN])])
+        [core.source(key=ISIN, source_code=NPORT_ISIN, kind="security",
+                     fields={"name_of_issuer": "EXAMPLE CORP"}, identifiers={"isin": ISIN})],
+        [r for r in records if r["provenance"]["record_key"] == ISIN]])
     assert bound(database, CODE, ISIN) == bound(database, NPORT_ISIN, ISIN) is not None
     assert len(securities(database)) == 1
 

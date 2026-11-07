@@ -13,17 +13,14 @@ import copy
 
 from sqlalchemy import text
 
-from edgar_warehouse.mdm.merge import MergeStage
-from edgar_warehouse.mdm.store import Store, register_policy
 from edgar_warehouse.rules import files
 from edgar_warehouse.silver_writer import database as silver
 from edgar_warehouse.silver_writer import spec as silver_spec
 from edgar_warehouse.silver_writer.cli import spec_file
 from edgar_warehouse.silver_writer.sink import PostgresSink
-from edgar_warehouse.silver_writer.writer import land
-from tests.support.old_master_ids import OldIds as MdmIds
+from edgar_warehouse.silver_writer.writer import MdmIds, land
+from tests.support import masters
 from tests.integration import test_mdm_postgres as core
-from tests.integration import test_nport_link_start as nport
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
 
 FOLDER = files.ROOT / "sources" / "iapd.adv"
@@ -42,14 +39,10 @@ def test_the_reading_columns_are_the_specs():
 
 
 def test_a_custody_row_lands_once_with_both_companies_and_its_amount(database):
-    for code in (FILINGS, CUSTODIANS):
-        core.register_reading(database, code, core.contract_body())
-    with database.admin.begin() as conn:
-        policy = register_policy(conn, copy.deepcopy(files.policy()))
-    nport.apply(MergeStage(Store(database.application)), policy, "masters", [
+    masters.seed(database.application, [
         core.source(key="F1", source_code=FILINGS, kind="company", fields={}, identifiers={"crd": "999001"}),
         core.source(key="bd:8-00001", source_code=CUSTODIANS, kind="company", fields={}, identifiers={"bd_number": "8-00001"}),
-        core.source(key="name:EXAMPLE TRUST CO", source_code=CUSTODIANS, kind="company", fields={}, identifiers={})], 1)  # no identifier: it binds to nothing
+        core.source(key="name:EXAMPLE TRUST CO", source_code=CUSTODIANS, kind="company", fields={}, identifiers={})])  # no identifier: it binds to nothing
     with silver_database(database.admin) as (owner, runtime):
         silver.migrate(owner, runtime_role=RUNTIME)
         spec = spec_file(FOLDER / "silver-custody.yaml", None)

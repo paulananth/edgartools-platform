@@ -77,7 +77,7 @@ class Store:
         self.cursor.execute("delete from mastering_stage")
         self.bulk("mastering_stage", ("assertion_id", "subject", "source_code", "lei", "body"), records)
         if name_keys:
-            self.insert("mastering_name_key", ("role", "lei", "subject"), name_keys)
+            self.insert("mastering_name_key", ("role", "value", "subject"), name_keys)
 
     def holders(self, wanted: dict) -> list[tuple]:
         """Who holds each wanted identifier, by a plain join to the stage."""
@@ -114,8 +114,19 @@ class Store:
                                             "order by created_at,entity_id", list(entities))]
 
     def repoint(self, keep: str, gone: str) -> None:
-        for table in ("mastering_identifier", "mastering_record"):
-            self.cursor.execute(f"update {table} set entity_id=%s where entity_id=%s", [keep, gone])
+        held = self.rows("select namespace,value from mastering_identifier where entity_id=%s", [gone])
+        self.cursor.execute("delete from mastering_identifier where entity_id=%s", [gone])
+        self.add_identifiers([(namespace, value, keep) for namespace, value in held])
+        self.cursor.execute("update mastering_record set entity_id=%s where entity_id=%s", [keep, gone])
+
+    def named(self, role: str, values: list) -> list[tuple]:
+        """(value, subject, source, master) of the stored records under each name key."""
+        found = []
+        for block in blocks(values):
+            found += self.rows("select k.value,r.subject,r.source_code,r.entity_id from mastering_name_key k "
+                               f"join mastering_record r on r.subject=k.subject where k.role=%s and k.value in ({marks(block)})",
+                               [role, *block])
+        return found
 
     def split(self, keep: str, gone: str) -> list[tuple]:
         """A merged-away master's records return to it: a record keeps the master it was first bound to."""
@@ -128,11 +139,11 @@ class Store:
         found = []
         if holders:
             found += self.rows("select c.body,h.body from mastering_stage h join mastering_name_key k on k.role=%s and k.subject=h.subject "
-                               "join mastering_record c on c.lei=k.lei and c.entity_id is null "
+                               "join mastering_record c on c.lei=k.value and c.entity_id is null "
                                f"where h.source_code=%s and c.source_code=%s and h.subject in ({marks(holders)})",
                                [role, holder_source, source, *holders])
         for table in ("mastering_stage", "mastering_record"):
-            found += self.rows("select c.body,h.body from mastering_stage c join mastering_name_key k on k.role=%s and k.lei=c.lei "
+            found += self.rows("select c.body,h.body from mastering_stage c join mastering_name_key k on k.role=%s and k.value=c.lei "
                                f"join {table} h on h.subject=k.subject and h.source_code=%s where c.source_code=%s",
                                [role, holder_source, source])
         return list(set(found))
