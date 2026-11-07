@@ -7,6 +7,7 @@ master_search:
   - name
   - legal_name
   - display_name
+  - name_of_issuer
   position_weight: 0.1
 # A lookup from a detail row's key to every current master holding it (ticket
 # 138, the Listing; operator, 2026-10-26: "Listing table is inside mdm primary

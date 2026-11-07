@@ -217,6 +217,8 @@ def test_lookups_find_names_details_and_cross_references_and_a_rebuild_changes_n
         assert [row["name"] for row in anvil] == ["INVENTED ANVIL WORKS"]
         assert [row["name"] for row in lookups.search(db, "company", "-anvil", 5)] == ["INVENTED BELLOWS"]
         assert lookups.search(db, "person", "anvil", 5) == []
+        assert [row["name"] for row in lookups.search(db, "company", "nvil wo", 5)] == ["INVENTED ANVIL WORKS"]
+        assert lookups.search(db, "company", "%_", 5) == []
         held = reads.master_ids(db, FIGI, {"a", "b", "c"})
         assert {row["entity_id"] for row in lookups.holders_of_detail(db, "mic", ["XINV", "INVT"])} == {held["a"], held["b"]}
         assert reads.carriers(db, POLICY, None, "share_class_figi", "BBG000000001") == {held["c"]: "cross_reference"}

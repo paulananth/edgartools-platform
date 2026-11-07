@@ -10,6 +10,8 @@ import json
 from collections import Counter
 from types import SimpleNamespace
 
+from sqlalchemy import text
+
 from edgar_warehouse.mdm import relationships
 from edgar_warehouse.mdm.survivorship import current_claims
 
@@ -43,9 +45,34 @@ def rows_of(edges: list[dict]) -> list[dict]:
              "source_master_id": edge["source_id"], "target_master_id": edge["target_id"],
              "valid_from": period["valid_from"], "valid_from_basis": period["valid_from_basis"],
              "valid_to": period.get("valid_to"), "valid_to_basis": period.get("valid_to_basis"),
+             "capacity": edge.get("capacity"), "derived": bool(edge.get("derived")), "last_seen": edge.get("last_seen"),
+             "ended_by": period.get("ended_by"), "path": period.get("path"),
              "properties": period.get("properties") or {},
              "evidence": sorted(item["assertion_id"] for item in edge["evidence"])}
             for edge in edges for period in edge["periods"]]
+
+
+def around(silver, ids: list[str], relationship_type: str = "") -> list[dict]:
+    """The links touching these masters, each with all its periods."""
+    names = {f"id{number}": entity for number, entity in enumerate(ids)}
+    marks = ",".join(f":{name}" for name in names)
+    wanted = f"(source_master_id in ({marks}) or target_master_id in ({marks}))"
+    if relationship_type:
+        wanted += " and relationship_type=:relationship_type"
+        names["relationship_type"] = relationship_type
+    links: dict = {}
+    for row in silver.execute(text(f"select * from silver.relationship where {wanted}"), names).mappings():
+        link = links.setdefault(row["relationship_id"], {
+            "relationship_id": row["relationship_id"], "type": row["relationship_type"], "scope": row["scope"],
+            "source_id": row["source_master_id"], "target_id": row["target_master_id"], "capacity": row["capacity"],
+            "derived": row["derived"], "last_seen": row["last_seen"], "evidence": _json(row["evidence"]), "periods": []})
+        link["periods"].append({key: row[key] for key in ("valid_from", "valid_from_basis", "valid_to", "ended_by")}
+                               | {"path": _json(row["path"])})
+    return [links[key] for key in sorted(links)]
+
+
+def _json(value):
+    return json.loads(value) if isinstance(value, str) else value
 
 
 def stored_of(rows) -> dict:

@@ -5,7 +5,6 @@ import os
 import runpy
 import subprocess
 import sys
-from argparse import Namespace
 from contextlib import redirect_stdout
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -21,10 +20,10 @@ s = runpy.run_module("tests.storage_adapters.master_id_scenarios")
 g = s["g"]
 
 from edgar_warehouse.cli import main
-from edgar_warehouse.context import Context, ContextError
 from edgar_warehouse.mdm import master_index, master_search
 from edgar_warehouse.mdm.evidence import decision
 from edgar_warehouse.mdm.record_reads import RecordReader
+from edgar_warehouse.mdm.prepared_registry import require_installed
 from edgar_warehouse.mdm.store import Conflict
 from edgar_warehouse.rules import files
 from tests.storage_adapters.test_prepared_effects import assert_index_lookup
@@ -42,8 +41,8 @@ def rename(name, **fields):
 
 
 def names(words, *, limit=20, subject=None):
-    return Context(runtime).answer(Namespace(subject=subject or kind, key=None, search=words,
-        limit=limit, as_of=None, as_at=None, detail="full", page=None))["matches"]
+    with runtime.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
+        return master_search.search(require_installed(conn), conn, subject or kind, words, limit)
 
 
 def found(words):
@@ -68,7 +67,7 @@ def durable_counts():
 def gap(name):
     with patch.object(master_search, "normal_changes", return_value=[]):
         rename(name)
-    with pytest.raises(ContextError, match="complete index"):
+    with pytest.raises(Conflict, match="complete index"):
         names(name)
 
 
@@ -76,7 +75,7 @@ case = os.environ["READ_SEARCH_CASE"]
 try:
     if case == "unbuilt":
         rename("Z Snow")  # A merge keeps no index nobody built: search says so until the owner builds it once.
-        with pytest.raises(ContextError, match="complete index"):
+        with pytest.raises(Conflict, match="complete index"):
             names("snow")
         assert master_search.rebuild(owner)["ready"] is True
         assert found("snow") == [root]
@@ -128,16 +127,10 @@ try:
         s["apply"](decisions=[decision("reverse", actor="fixture", reason="invented search reversal",
             at="2026-02-02T00:00:00Z", target=merged["decision_id"])])
         assert found("other") == [second]
-        os.environ["MDM_DATABASE_URL"] = os.environ["READ_RUNTIME_URL"]
-        os.environ["MDM_APPLICATION_ROLE"] = os.environ["READ_RUNTIME_ROLE"]
-        output = io.StringIO()
-        with redirect_stdout(output):
-            assert main(["context", kind, "--search", "OTHER"]) == 0
-        assert json.loads(output.getvalue())["matches"][0]["entity_id"] == second
     if case == "legacy_gap":
         gap("OVERTAKEN")
         rename("LATEST")
-        with pytest.raises(ContextError, match="complete index"):
+        with pytest.raises(Conflict, match="complete index"):
             names("latest")
         before, generation = durable_counts(), api.generation()
         with pytest.raises(DBAPIError):
@@ -155,7 +148,7 @@ try:
         before, generation = durable_counts(), api.generation()
         first = master_search.rebuild(owner, limit=1)
         assert first == {"generation": generation, "processed": 1, "ready": False}
-        with pytest.raises(ContextError, match="complete index"):
+        with pytest.raises(Conflict, match="complete index"):
             names("rebuilt")
         with owner.connect() as conn:
             checkpoint = master_index.state(api, conn, master_search.index_for(master_search.configuration()), generation)
@@ -298,28 +291,27 @@ try:
             names("preferred")
         code = '''
 import os
-from argparse import Namespace
 from uuid import uuid4
 import pytest
 from sqlalchemy import func,select
-from edgar_warehouse.context import Context,ContextError
 from edgar_warehouse.database_connections import engine_from_env
 from edgar_warehouse.mdm import master_index, master_search
 from edgar_warehouse.mdm.merge import MergeStage
-from edgar_warehouse.mdm.store import Store,migrate,storage_adapter
+from edgar_warehouse.mdm.prepared_registry import require_installed
+from edgar_warehouse.mdm.store import Conflict,Store,migrate,storage_adapter
 owner,runtime=engine_from_env("READ_OWNER_URL"),engine_from_env("READ_RUNTIME_URL")
 try:
     migrate(owner,application_role=os.environ["READ_RUNTIME_ROLE"],prepared=True)
     api=storage_adapter().Adapter(runtime,prefix="mdm_store",protocol=7)
     def names(words):
-        return Context(runtime).answer(Namespace(subject=KIND,key=None,search=words,limit=20,
-            as_of=None,as_at=None,detail="full",page=None))["matches"]
+        with runtime.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
+            return master_search.search(require_installed(conn),conn,KIND,words,20)
     def counts():
         with runtime.connect() as conn:
             return {name:conn.scalar(select(func.count()).select_from(api.tables[name]))
                 for name in ("batch","current","history","evidence","checkpoint","outbox")}
     assert api.generation()==GENERATION and counts()==COUNTS
-    with pytest.raises(ContextError,match="complete index"):
+    with pytest.raises(Conflict,match="complete index"):
         names("preferred")
     assert master_search.rebuild(owner,limit=1)=={"generation":GENERATION,"processed":1,"ready":True}
     assert counts()==COUNTS and api.generation()==GENERATION

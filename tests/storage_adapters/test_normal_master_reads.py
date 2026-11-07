@@ -11,14 +11,12 @@ from edgar_warehouse.rules import files
 from tests.mdm.test_configured_pair_comparison import configured_root  # noqa: F401
 
 
-@pytest.mark.parametrize("case", ["unknown", "forced_publication", "context_search_gap", "one_request"])
+@pytest.mark.parametrize("case", ["unknown", "forced_publication", "one_request"])
 @pytest.mark.parametrize("kind", ["invented-kind", "invented-other-kind"])
 def test_normal_master_reads(case, kind, database_factory, configured_root):
     if os.environ.get("SKILL_ADAPTER_TEST_ENGINE") == "mssql":
         pytest.skip("SQL Server full normal workflow is deferred")
     body = files.load(configured_root / "mastering/engine-v1.yaml")
-    if case == "context_search_gap":
-        body.pop("master_search", None)
     if kind not in body["kinds"]:
         body["kinds"].append(kind)
     for declared in ("invented-kind", kind):
@@ -34,7 +32,7 @@ def test_normal_master_reads(case, kind, database_factory, configured_root):
         result = subprocess.run([sys.executable, "-m", "tests.storage_adapters.master_read_scenarios"],
             env={**os.environ, "EDGAR_RULES_ROOT": str(configured_root), "READ_PREPARED": "1",
                  "READ_KIND": kind, "READ_CONSUMER_CASE": case, "READ_RUNTIME_ROLE": role,
-                 "READ_BASE_CASE": "details" if case == "details" else "links" if case in ("context_links", "context_relationships") else "join",
+                 "READ_BASE_CASE": "details" if case == "details" else "join",
                  "READ_OWNER_URL": owner.url.render_as_string(hide_password=False),
                  "READ_RUNTIME_URL": runtime.url.render_as_string(hide_password=False)},
             capture_output=True, text=True, timeout=90)
