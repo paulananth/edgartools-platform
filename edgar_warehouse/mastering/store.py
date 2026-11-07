@@ -211,12 +211,11 @@ class Store:
 
     def changes(self, since: int, after: str = "", limit: int = 1000) -> list[tuple]:
         """One page of what changed after a reader's checkpoint: (file, master id, body)."""
-        if not after:
-            return self.rows("select changed_file,entity_id,body from mastering_master where changed_file>%s "
-                             "order by changed_file,entity_id limit %s", [since, limit])
-        return self.rows("select changed_file,entity_id,body from mastering_master where changed_file>%s or "
-                         "(changed_file=%s and entity_id>%s) order by changed_file,entity_id limit %s",
-                         [since, since, after, limit])
+        page = "select changed_file,entity_id,body from mastering_master where {} order by changed_file,entity_id limit %s"
+        rows = self.rows(page.format("changed_file=%s and entity_id>%s"), [since, after, limit]) if after else []
+        if len(rows) < limit:
+            rows += self.rows(page.format("changed_file>%s"), [since, limit - len(rows)])
+        return rows
 
     def linked_records(self) -> list[dict]:
         return [json.loads(body) for (body,) in self.rows(
@@ -250,12 +249,29 @@ class Store:
         self.cursor.execute("insert into mastering_lookup_progress(pin,changed_file,entity_id) values (%s,%s,%s)",
                             [pin, *reached])
 
+    def masters_containing(self, text: str, limit: int) -> list:
+        """Masters whose stored text holds this, up to the limit."""
+        like = text.replace("|", "||").replace("%", "|%").replace("_", "|_")
+        return self.rows("select entity_id,body from mastering_master where lower(body) like %s escape '|' limit %s",
+                         [f"%{like}%", limit])
+
     def holding_all(self, tokens: list) -> list[str]:
         """The masters holding every token."""
         tokens = sorted(set(tokens))
         return [row[0] for row in self.rows(
             f"select entity_id from mastering_lookup where token in ({marks(tokens)}) "
             "group by entity_id having count(*)=%s order by entity_id", [*tokens, len(tokens)])]
+
+    def records_named(self, assertions) -> dict:
+        """Each named record's source and key: {assertion id: (source code, record key)}."""
+        found = {}
+        for block in blocks(assertions):
+            found.update((assertion, (source, json.loads(body)["record_key"])) for assertion, source, body in self.rows(
+                f"select assertion_id,source_code,body from mastering_record where assertion_id in ({marks(block)})", block))
+        return found
+
+    def master_file(self, entity: str) -> int:
+        return self.rows("select changed_file from mastering_master where entity_id=%s", [entity])[0][0]
 
     def identifier_holders(self, namespace: str, values) -> list[str]:
         return [row[0] for row in self.rows(

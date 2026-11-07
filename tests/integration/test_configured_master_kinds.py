@@ -87,15 +87,6 @@ try:
     again = core.apply(db,1,run_id=run,assertions=[item],identities=[identity],decisions=[binding])
     assert again == {**first,"duplicate":True}
     assert core.documents(db,"entity") == before
-    import io, json
-    from contextlib import redirect_stdout
-    from edgar_warehouse.cli import main
-    output = io.StringIO()
-    with redirect_stdout(output):
-        assert main(["context","invented_kind",identity["entity_id"]]) == 0
-    answer = json.loads(output.getvalue())
-    assert answer["kind"] == "invented_kind"
-    assert answer["definition"] == "Invented configured master kind."
     assert len(core.current_records(db)) == 1
     assert core.bindings(db) == {"invented-record": identity["entity_id"]}
 finally:

@@ -40,3 +40,15 @@ def carriers(store, policy: dict, kind: str | None, namespace: str, value: str) 
     found = found or {entity: "cross_reference" for entity in lookups.cross_referencing(store, namespace, value)}
     bodies = store.master_bodies(found)
     return {entity: how for entity, how in found.items() if kind is None or bodies[entity]["kind"] == kind}
+
+
+def splits_of(store, entity: str) -> list[dict]:
+    """The splits a master came out of: each merge of it with another master that was later reversed.
+    Each is also a Match Exclusion of the pair."""
+    decisions = store.decisions_about([entity])
+    reversed_by = {d["target"]: d for d in decisions if d["operation"] == "reverse"}
+    found = [{"merge": d["decision_id"], "split_from": d["right"] if d["left"] == entity else d["left"],
+              "by": reversed_by[d["decision_id"]]["actor"], "reason": reversed_by[d["decision_id"]]["reason"],
+              "at": reversed_by[d["decision_id"]]["at"], "excluded": True}
+             for d in decisions if d["operation"] == "merge" and d["decision_id"] in reversed_by]
+    return sorted(found, key=lambda item: (item["at"], item["merge"]))

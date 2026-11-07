@@ -58,6 +58,36 @@ columns:
   definition: "stated or observed, empty while the period holds."
   source: "the source rule"
   sensitivity: none
+- name: capacity
+  type: VARCHAR
+  nullable: true
+  definition: "The role a filing states for this link, such as officer or director; empty when it states none."
+  source: "the source rule"
+  sensitivity: none
+- name: derived
+  type: BOOLEAN
+  nullable: false
+  definition: "True when the link is calculated from other links, not stated by a record."
+  source: "links.py"
+  sensitivity: none
+- name: last_seen
+  type: VARCHAR
+  nullable: true
+  definition: "The latest time a record showed this link, as an ISO 8601 instant."
+  source: "the source record"
+  sensitivity: none
+- name: ended_by
+  type: VARCHAR
+  nullable: true
+  definition: "The succession that ended this period."
+  source: "the source record"
+  sensitivity: none
+- name: path
+  type: JSON
+  nullable: true
+  definition: "The chain of links a calculated link walked."
+  source: "links.py"
+  sensitivity: none
 - name: properties
   type: JSON
   nullable: false

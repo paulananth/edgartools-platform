@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -152,6 +153,21 @@ def rebuild_name_index(args) -> int:
     try:
         report = rebuild(engine, limit=args.limit, page_size=args.page_size, restart=args.restart)
     finally:
+        engine.dispose()
+    print(json.dumps(report, sort_keys=True))
+    return 0
+
+
+def build_lookups(args) -> int:
+    from edgar_warehouse.mastering import lookups
+    from edgar_warehouse.mastering.store import open_store
+
+    engine = engine_from_env("MDM_DATABASE_URL", restricted=True)
+    db = open_store(engine)
+    try:
+        report = lookups.build(db, lambda built: print(json.dumps({"masters": built}), file=sys.stderr, flush=True))
+    finally:
+        db.close()
         engine.dispose()
     print(json.dumps(report, sort_keys=True))
     return 0

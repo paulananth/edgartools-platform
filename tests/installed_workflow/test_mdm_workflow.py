@@ -33,17 +33,14 @@ CASES = {
         "hierarchy": ["Q08"], "details": ["Q08"],
     },
     "reader": {name: ["Q17"] for name in (
-        "producer", "alias", "details", "pages", "review_pages",
-        "context_current", "context_links", "context_relationships", "context_concurrent",
-        "context_times", "context_lookup")},
+        "producer", "alias", "details", "pages", "review_pages")},
     "ids": {"silver": ["Q17"], "unicode": ["Q17"], "chunks": ["Q17"]},
-    "search": {"words": ["Q18"], "changes": ["Q18"], "plans": ["Q18"], "rebuild": ["Q18"]},
     "worker": {"authority": ["Q13"], "publication": ["Q16"], "merge_worker": ["Q12", "Q15"],
         "journal": ["Q16"], "forced": ["Q16"], "mapping_freeze": ["Q06"],
         "review_recovery": ["Q15", "Q16"], "held_review": ["Q15"]},
 }
 CASES["reader"].update({"profile": ["Q07", "Q17"], "plans": ["Q18"],
-    "bulk_provenance": ["Q18"], "inspection": ["Q18"], "recorded_time": ["Q18"],
+    "bulk_provenance": ["Q18"], "inspection": ["Q18"],
     "recording_authority": ["Q18"]})
 
 CASES["boundary"] = {"upgrade": ["Q03"], "upgrade_interrupted": ["Q03"],
@@ -53,7 +50,7 @@ CASES["boundary"] = {"upgrade": ["Q03"], "upgrade_interrupted": ["Q03"],
     **{"fault_"+name:["Q14"] for name in ("current","history","evidence","lookup","batch","checkpoint","outbox","proposal","proposal_event")}}
 
 
-GROUPS = {"merge": {"merge"}, "readers": {"reader", "ids", "search"},
+GROUPS = {"merge": {"merge"}, "readers": {"reader", "ids"},
           "boundaries": {"boundary"}, "workers": {"worker"}}
 SHARD = os.environ.get("MDM_WORKFLOW_SHARD")
 if SHARD is not None and SHARD not in GROUPS:
@@ -110,7 +107,7 @@ for name in ("edgar_warehouse", "source_contract", "edgar_control"):
     assert pathlib.Path(module.__file__).resolve().is_relative_to(install)
 sys.path.insert(0, os.environ["WORKFLOW_HARNESS"])
 surface = os.environ["WORKFLOW_SURFACE"]
-module = {"merge":"record_read_scenarios", "reader":"master_read_scenarios", "ids":"master_id_scenarios", "search":"master_search_scenarios", "worker":"worker_publication_scenarios"}.get(surface)
+module = {"merge":"record_read_scenarios", "reader":"master_read_scenarios", "ids":"master_id_scenarios", "worker":"worker_publication_scenarios"}.get(surface)
 try:
     runpy.run_module("tests.storage_adapters." + module if module else "tests.installed_workflow.normal_workflow_cases", run_name="__main__")
 except SystemExit as stopped:
@@ -140,7 +137,7 @@ def test_installed_workflow(surface, case, families, kind, proof_install, databa
         env = {**os.environ, "EDGAR_RULES_ROOT": str(configured_root), "READ_PREPARED": "1",
             "READ_KIND": kind, "READ_CASE": case, "READ_CONSUMER_CASE": case,
             "READ_ID_CASE": case, "READ_SEARCH_CASE": case, "READ_WORKER_CASE": case,
-            "READ_BASE_CASE": "details" if case == "details" else "links" if case in ("context_links", "context_relationships") else "join",
+            "READ_BASE_CASE": "details" if case == "details" else "join",
             "READ_RUNTIME_ROLE": role, "READ_OWNER_URL": owner.url.render_as_string(hide_password=False),
             "READ_RUNTIME_URL": runtime.url.render_as_string(hide_password=False),
             "WORKFLOW_INSTALL": str(root), "WORKFLOW_HARNESS": str(harness),

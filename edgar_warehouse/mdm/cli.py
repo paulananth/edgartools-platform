@@ -76,6 +76,9 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     replay.add_argument("--policy-digest", required=True, help="The registered merge rules to replay under")
     replay.add_argument("--check", action="store_true", help="Compare the mastering tables with the old masters, counts only")
     replay.set_defaults(handler=_logged_handler("rebuild", _command("rebuild")))
+    lookups = mdm_sub.add_parser("build-lookups", help="Bring the name, detail and cross-reference lookups "
+                                 "up to the last load; a stopped build resumes")
+    lookups.set_defaults(handler=_logged_handler("build-lookups", _command("build_lookups")))
     rebuild = mdm_sub.add_parser("rebuild-name-index", help="Owner-only resumable name-index rebuild")
     rebuild.add_argument("--limit", type=int, help="Stop after this many masters; retain resumable progress")
     rebuild.add_argument("--page-size", type=int, default=200, help="Masters per owner transaction (1 to 1000)")

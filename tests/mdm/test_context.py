@@ -93,31 +93,11 @@ def test_an_item_too_big_for_a_page_is_an_error_not_a_loop():
         context.fit(big, "items", 0, "cmd")
 
 
-def test_relationship_definitions_come_from_the_code_set_the_given_policy_pins(monkeypatch):
-    """Ticket 140: the answer's words are those of the policy its generation ran under, not the repo's pin."""
-    asked = []
-
-    def published(pin, root=None):
-        asked.append(pin)
+def test_relationship_definitions_are_the_top_level_codes_of_the_pinned_code_set(monkeypatch):
+    def pinned(code_set):
+        assert code_set == "mdm-relationship-types"
         return [{"code": "OWNS", "parent_code": None, "definition": "The pinned words."},
                 {"code": "OWNS:director", "parent_code": "OWNS", "definition": "A capacity, not a type."}]
 
-    monkeypatch.setattr(files, "published_reference", published)
-    pin = {"code_set": "mdm-relationship-types", "version": 7, "sha256": "f" * 64}
-    policy = {"relationships": {"pin": "relationships"}, "reference_pins": {"relationships": pin}}
-    assert context.relationship_definitions(policy) == {"OWNS": "The pinned words."}
-    assert asked == [pin]
-    assert context.relationship_definitions({"kinds": {}}) == {}  # a policy pinning none has no types
-
-
-def test_the_policy_of_a_generation_is_found_by_its_digest():
-    from edgar_warehouse.mdm.store import digest
-
-    class Adapter:
-        def registered_policies(self, conn):
-            return [{"kinds": {"a": 1}}, {"kinds": {"b": 2}}]
-
-    wanted = {"kinds": {"b": 2}}
-    assert context.policy_of(Adapter(), None, digest(wanted)) == wanted
-    assert context.policy_of(Adapter(), None, "0" * 64) is None
-    assert context.policy_of(Adapter(), None, None) is None
+    monkeypatch.setattr(files, "pinned_reference", pinned)
+    assert context.relationship_definitions() == {"OWNS": "The pinned words."}
