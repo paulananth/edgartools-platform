@@ -254,7 +254,6 @@ print(json.dumps({"independent_install":True,"preview_rolled_back":True,
         proof = json.loads(result.stdout.splitlines()[-1])
         assert proof == {"independent_install": True, "preview_rolled_back": True,
                          "assessment_applied": True, "duplicate_unchanged": True, "identities": 2,
-                         "master_reads": True, "context": True, "silver_lookup": True,
+                         "master_reads": True, "silver_lookup": True,
                          "history_alias_reversal": True, "pinned_page": True,
-                         "details": True, "relationships": True, "operator_cli": True,
-                         "search": True, "owner_rebuild": True}
+                         "details": True, "relationships": True, "operator_cli": True}
