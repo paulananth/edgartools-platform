@@ -135,6 +135,16 @@ Links are a `relationship` silver table, one row a period, from a `silver.derive
 - [x] Stage 3: `mdm rebuild`, every record replayed and compared: 431,028 masters match, and 4,797 of 4,797 for the records the old load stored late (2026-11-06 15:43 ET).
 - [x] Review of stages 1 to 3 on Standards, Spec and GoF: two integer columns made BIGINT, a merge writes identifiers once, `compare` holds no transaction, `master_ids` deleted, the lock tested with two writers. The lock is one row for all kinds, not one a kind, since the changed-file number readers pull by runs across kinds; the prototype lines here describe one a kind. Without the lock the new test gives 400 masters for 200 (2026-11-06 15:47 ET).
 - [ ] Stage 4: readers moved; relationships with the silver write.
+- [x] Stage 4, facts rule: `facts.yaml` has its `execution` block, and a test passes every `source.read` contract through the worker's own check, PR 1475 (2026-11-06 18:30 ET).
+- [x] Stage 4, retro checks: the guard runs `rules approvals check` when rules change, PR 1476; three skill rules, PR 1477 (2026-11-06 18:37 ET).
+- [x] Stage 4, `context` on the mastering tables, PR 1478: 12 Apple questions, 7 the same as the old answers, 5 better, 0 worse (2026-11-06 20:07 ET).
+- [x] Operator's ruling: name fragments are not stored. "use 7 wastes", to dropping them: 82% of lookup rows on the page measured; a search with no whole word scans the masters. The build fell from a projected 100 minutes to 6 on the local store, PR 1478 (2026-11-06 20:07 ET).
+- [x] Operator's ruling: tests of code nothing calls are retired, not moved. "decommision un used tests use 7 wastes": the old search and detail scenarios, PR 1478 lists each claim and where it went (2026-11-06 20:07 ET).
+- [ ] Operator's ruling: a security is mastered only when a filing names it, and that is configurable. "agree with you recomendation but make it configurable". OpenFIGI adds to a master and creates none; 80% of security masters today are mortgage and municipal lines from it. Measure the count first; replay OpenFIGI under the rule.
+- [ ] Stage 4, unit A: `MdmIds` and `from_company` on the mastering tables; Apple's financial rows on its new master.
+- [ ] Stage 4, unit B: every source's merge step on `mastering.merge`, CIK v2 in the same rule version, links with the silver step, `required_consumers` gone. No load runs before this version is active.
+- [ ] Stage 4, unit C: the remaining N-PORT Security batches on the new path, then links; Apple's first `ISSUED_BY`.
+- [ ] Stage 4, then: 13F, ownership and ADV from the existing files; the Apple chain from adviser to holding to AAPL.
 - [ ] Stage 5: the old path deleted.
 - [x] Withheld values on the prototype, by the engine's matching (2026-11-06 11:03 ET).
 - [x] Withheld values on real `sec.nport.security` records: 23 ISIN values withheld across 10 chosen batches, and no identifier on two masters; the 5 batches of the old load gave identical masters (2026-11-06 15:43 ET).
