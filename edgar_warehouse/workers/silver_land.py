@@ -30,9 +30,9 @@ INPUT_ROWS = 100_000_000
 
 
 def _artifacts(envelope: dict, artifacts):
-    """Each artifact of the unit's reading, whole, in order; the byte and row budgets are spent across all of them."""
+    """Each piece of the unit's reading, in order; the byte and row budgets are spent across all of them."""
     consumed = rows = 0
-    for artifact, used in source_readings.iter_artifacts(
+    for artifact, used in source_readings.iter_pieces(
             envelope["input"], artifacts, max_bytes=INPUT_BYTES - consumed, max_rows=INPUT_ROWS - rows,
             allow_lookup_receipts=True):
         rows += sum(len(t) for t in artifact["tables"].values() if isinstance(t, list))

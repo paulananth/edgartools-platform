@@ -407,6 +407,17 @@ def iter_artifacts(ref, artifacts, *, max_bytes, max_rows, allow_lookup_receipts
     yield from _whole(body, artifacts, size=size, max_bytes=max_bytes, max_rows=max_rows)
 
 
+def iter_pieces(ref, artifacts, *, max_bytes, max_rows, allow_lookup_receipts=False):
+    """Yield (piece, cumulative bytes): each stored piece of a reading, so memory holds one piece."""
+    body, size = _index(ref, artifacts, max_bytes, allow_lookup_receipts)
+    if body["version"] == 1:
+        yield from iter_artifacts(ref, artifacts, max_bytes=max_bytes, max_rows=max_rows,
+                                  allow_lookup_receipts=allow_lookup_receipts)
+        return
+    for _, chunk, size, _ in _partition_chunks(body, artifacts, size=size, max_bytes=max_bytes, max_rows=max_rows):
+        yield chunk, size
+
+
 def load(ref, artifacts, *, max_bytes, max_rows, allow_lookup_receipts=False):
     """Return normalized version-1 tables and total authenticated bytes read."""
     body, size = _index(ref, artifacts, max_bytes, allow_lookup_receipts)

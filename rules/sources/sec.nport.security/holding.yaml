@@ -1,4 +1,4 @@
-# Each N-PORT holding as filed, for silver (ticket 79; finding q5, operator
+# Each N-PORT holding as filed: the rows silver lands (ticket 79; finding q5, operator
 # 2026-10-15: "Silver + MDM link (Recommended)"; 2026-10-22: "Why do you need
 # to merge it it's just a lookup"). A holding is a lookup row, not an MDM
 # record: the silver writer fills the Fund's, the registrant Company's and the
@@ -47,25 +47,24 @@ read:
           member_value: {lookup: series, key: {text: {path: ACCESSION_NUMBER}}, on_many: error}
         registrant_cik:
           member_value: {lookup: registrant, key: {text: {path: ACCESSION_NUMBER}}, on_many: error}
-        # The CUSIP as source.yaml reads it: a placeholder is no CUSIP.
-        cusip:
-          text:
-            path: ISSUER_CUSIP
-            default: ""
-            transforms:
-            - case: upper
-            null_if: ["", "000000000", "999999999"]
-        # One ISIN, else none (a holding listing two names neither).
-        isin:
-          member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}
-        # One SEDOL and one LoanX, else none: with no CUSIP and no ISIN they key the Security (ticket 190).
-        sedol:
-          member_value: {lookup: sedol, key: {text: {path: HOLDING_ID}}, on_many: "null"}
-        loanx:
-          member_value: {lookup: loanx, key: {text: {path: HOLDING_ID}}, on_many: "null"}
-        # One FIGI, else none: with no other key it finds a Security and never creates one (ticket 139).
-        figi:
-          member_value: {lookup: figi, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+        # The record key of the Security this holding is (source.yaml, record.yaml): its CUSIP, else its
+        # one ISIN, SEDOL, LoanX or FIGI (ticket 138: no fold by FIGI; MDM finds the one Security for either).
+        # A holding with none of these has no Security and an empty key. A placeholder is no CUSIP, and a
+        # holding listing two of a kind names neither (ticket 190; ticket 139 for FIGI, which never creates one).
+        security_key:
+          coalesce:
+            skip: "null"
+            values:
+            - text:
+                path: ISSUER_CUSIP
+                default: ""
+                transforms:
+                - case: upper
+                null_if: ["", "000000000", "999999999"]
+            - member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+            - member_value: {lookup: sedol, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+            - member_value: {lookup: loanx, key: {text: {path: HOLDING_ID}}, on_many: "null"}
+            - member_value: {lookup: figi, key: {text: {path: HOLDING_ID}}, on_many: "null"}
         balance: {text: {path: BALANCE, default: "", null_if: [""]}}
         unit: {text: {path: UNIT, default: "", null_if: [""]}}
         currency_code: {text: {path: CURRENCY_CODE, default: "", null_if: [""]}}
