@@ -140,10 +140,16 @@ Links are a `relationship` silver table, one row a period, from a `silver.derive
 - [x] Stage 4, `context` on the mastering tables, PR 1478: 12 Apple questions, 7 the same as the old answers, 5 better, 0 worse (2026-11-06 20:07 ET).
 - [x] Operator's ruling: name fragments are not stored. "use 7 wastes", to dropping them: 82% of lookup rows on the page measured; a search with no whole word scans the masters. The build fell from a projected 100 minutes to 6 on the local store, PR 1478 (2026-11-06 20:07 ET).
 - [x] Operator's ruling: tests of code nothing calls are retired, not moved. "decommision un used tests use 7 wastes": the old search and detail scenarios, PR 1478 lists each claim and where it went (2026-11-06 20:07 ET).
-- [ ] Operator's ruling: a security is mastered only when a filing names it, and that is configurable. "agree with you recomendation but make it configurable". OpenFIGI adds to a master and creates none; 80% of security masters today are mortgage and municipal lines from it. Measure the count first; replay OpenFIGI under the rule.
-- [ ] Stage 4, unit A: `MdmIds` and `from_company` on the mastering tables; Apple's financial rows on its new master.
-- [ ] Stage 4, unit B: every source's merge step on `mastering.merge`, CIK v2 in the same rule version, links with the silver step, `required_consumers` gone. No load runs before this version is active.
-- [ ] Stage 4, unit C: the remaining N-PORT Security batches on the new path, then links; Apple's first `ISSUED_BY`.
+- [ ] Measured 2026-11-06: of 393,674 Securities, only 164 come from OpenFIGI alone, so the setting removes few; N-PORT names the rest. Operator's ruling: a security is mastered only when a filing names it, and that is configurable. "agree with you recomendation but make it configurable". OpenFIGI adds to a master and creates none; 80% of security masters today are mortgage and municipal lines from it. Measure the count first; replay OpenFIGI under the rule.
+- [x] Stage 4, unit A: `MdmIds` and `from_company` on the mastering tables; Apple's financial rows on its new master. Done 2026-11-06 23:30 ET: PR 1481; Apple's 25,135 facts, 437 line items and 760 measures sit on its new master, 0 on the old id.
+- [x] Stage 4, unit B: every source's merge step on `mastering.merge`, CIK v2 in the same rule version, links with the silver step, `required_consumers` gone. No load runs before this version is active. Done 2026-11-06 23:30 ET: PR 1481; `rules test` passes, and the rule version is active on all 13 sources and merge/platform.
+- [x] Stage 4, unit C: the remaining N-PORT Security batches on the new path, then links; Apple's first `ISSUED_BY`. Done 2026-11-06 23:30 ET: 421 batches merged in 18 min and verified; 55,320 links built (42,383 `ISSUED_BY`, 12,937 `IS_SUBFUND_OF`) in 7 min; AAPL has its `ISSUED_BY` to Apple, and 57 securities name Apple as issuer.
+- [x] Rule tests on the new merge. Done 2026-11-06 23:30 ET: PRs 1485 and 1486. 13 test files moved; 2 stay on the bridge because they test the old engine, and leave in stage 5. Moving them found two gaps, fixed in 1485: only identifiers a rule minted could be found (153,031 tickers, SEDOLs and LoanX ids added to the local store), and the exact-name rule never ran.
+- [x] Links at full size. Done 2026-11-06 23:30 ET: PR 1487. `add_review` was quadratic; the build ran 30 min unfinished, and takes 7 min with a set.
+- [ ] N-PORT holdings in silver: 0 of 5,347,869 rows. All four figures reach 12 decimals against `DECIMAL(38,10)`. Waits on the operator: "10 is fine" means cut, round, or keep 12.
+- [ ] 198,808 reported links have no other end yet (`unresolved_endpoint`): measure why before stage 5.
+- [ ] Steward revoke: the new merge has none, and PR 1485 removed its test. Waits on the operator: is it needed?
+- [ ] Close the stale runs `bfe91575` and `61f32231`, after the holdings land.
 - [ ] Stage 4, then: 13F, ownership and ADV from the existing files; the Apple chain from adviser to holding to AAPL.
 - [ ] Stage 5: the old path deleted.
 - [x] Withheld values on the prototype, by the engine's matching (2026-11-06 11:03 ET).
