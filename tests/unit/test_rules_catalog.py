@@ -85,6 +85,7 @@ def test_each_feed_that_captures_the_family_gives_lineage(tmp_path: Path):
 
 def test_the_same_rules_give_the_same_catalog_and_a_change_shows(tmp_path: Path):
     assert catalog.plan() == catalog.plan()
+    assert "Shared" not in {domain["name"] for domain in catalog.plan()["domains"]}
     root = tmp_path / "rules"
     shutil.copytree(files.ROOT, root)
     path = root / "sources" / "sec.company" / "source.yaml"
@@ -123,9 +124,12 @@ class _Server:
             if path.startswith("/glossaryTerms/"):
                 self.draft.add(path.removeprefix("/glossaryTerms/"))
         if method == "POST" and path.startswith("/dataQuality/testCases/testCaseResults/"):
-            self.results[unquote(path.removeprefix("/dataQuality/testCases/testCaseResults/"))] = body
-        if method == "GET" and path.startswith("/dataQuality/testCases/name/"):
-            return {"testCaseResult": self.results.get(unquote(path.removeprefix("/dataQuality/testCases/name/")))}
+            name = unquote(path.removeprefix("/dataQuality/testCases/testCaseResults/"))
+            self.results.setdefault(name, []).append(body)
+        if method == "GET" and path.startswith("/dataQuality/testCases/testCaseResults/"):
+            name = unquote(path.removeprefix("/dataQuality/testCases/testCaseResults/"))
+            timestamp = (params or {}).get("startTs")
+            return {"data": [row for row in self.results.get(name, []) if row["timestamp"] == timestamp]}
         if method == "GET" and path == "/system/settings":
             return {"data": [{"config_type": "assetCertificationSettings", "config_value": {"validityPeriod": "P30D"}}]}
         if method == "GET" and path.startswith("/tables/name/") and (params or {}).get("fields") == "certification":
@@ -752,12 +756,13 @@ def test_publish_sends_each_recorded_result_to_its_case_and_check_reads_it_back(
     server = _Server(plan)
     results = _results_file()
     catalog.publish(plan, server, results=results)
-    (fqn_, sent), = server.results.items()
+    (fqn_, sent_rows), = server.results.items()
+    sent, = sent_rows
     assert fqn_.endswith('.company_fact.form."company_fact.one_form_per_filing"')
     assert sent["testCaseStatus"] == "Failed" and sent["failedRows"] == 3 and sent["passedRows"] == 37
     assert sent["timestamp"] == 1793620800000
     assert not [d for d in catalog.verify(plan, server, results=results)["differences"] if "result" in d]
-    server.results[fqn_] = {**sent, "testCaseStatus": "Success"}
+    server.results[fqn_][0] = {**sent, "testCaseStatus": "Success"}
     assert any("result changed, publish again" in d for d in catalog.verify(plan, server, results=results)["differences"])
 
 
@@ -780,9 +785,40 @@ def test_check_says_when_the_row_counts_of_a_result_differ():
     server = _Server(plan)
     results = _results_file()
     catalog.publish(plan, server, results=results)
-    key, sent = next(iter(server.results.items()))
-    server.results[key] = {**sent, "failedRows": 0, "passedRows": 40}
+    key, sent_rows = next(iter(server.results.items()))
+    server.results[key][0] = {**sent_rows[0], "failedRows": 0, "passedRows": 40}
     assert any("result changed" in d for d in catalog.verify(plan, server, results=results)["differences"])
+
+
+def test_publish_preserves_and_verifies_every_run_result_and_is_idempotent():
+    plan = catalog.plan()
+    server = _Server(plan)
+    one = _results_file()["company_fact.one_form_per_filing"]
+    two = {**one, "at": "2026-11-02T12:00:00.001+00:00",
+           "correlation": "Bookkeeping run run-a, step silver, unit abc123, attempt 1"}
+    results = {"company_fact.one_form_per_filing": [one, two]}
+
+    sent = catalog.publish(plan, server, results=results)
+    first_count = sum(len(rows) for rows in server.results.values())
+    replay = catalog.publish(plan, server, results=results)
+
+    assert sent["quality_results_sent"] == 2
+    assert replay["quality_results_sent"] == 0
+    assert sum(len(rows) for rows in server.results.values()) == first_count == 2
+    rows = next(iter(server.results.values()))
+    assert "unit abc123" in rows[1]["result"]
+    differences = catalog.verify(plan, server, results=results)["differences"]
+    assert not [difference for difference in differences if "result" in difference]
+
+
+def test_publish_refuses_conflicting_result_at_same_history_timestamp():
+    plan = catalog.plan()
+    server = _Server(plan)
+    results = _results_file()
+    catalog.publish(plan, server, results=results)
+    changed = {**results["company_fact.one_form_per_filing"], "rows_failed": 4}
+    with pytest.raises(catalog.CatalogError, match="different result"):
+        catalog.publish(plan, server, results={"company_fact.one_form_per_filing": changed})
 
 
 def test_the_catalog_command_reads_the_results_file_it_is_given(tmp_path):
@@ -793,3 +829,34 @@ def test_the_catalog_command_reads_the_results_file_it_is_given(tmp_path):
                                                      "rows_checked": 40})
     assert rules_cli._results(Namespace(results=path))["company_fact.one_form_per_filing"]["rows_failed"] == 3
     assert rules_cli._results(Namespace(results=None)) == {}
+
+
+def test_catalog_results_can_come_directly_from_admitted_bookkeeping_evidence(monkeypatch):
+    from edgar_warehouse.bookkeeping.clean import cli as bookkeeping_cli
+    from edgar_warehouse.bookkeeping.clean import quality
+
+    class Bookkeeping:
+        closed = False
+
+        def close(self):
+            self.closed = True
+
+    book = Bookkeeping()
+    monkeypatch.setattr(bookkeeping_cli, "configured_bookkeeping", lambda: book)
+    monkeypatch.setattr(quality, "aggregate", lambda _book, run_id: {
+        "status": "passed", "units_unknown": 0, "results": [{
+            "run_id": run_id, "step": "silver", "work_unit_ref": "unit-ref",
+            "attempt": "attempt-ref", "table": "company_fact", "check": "one_form_per_filing",
+            "kind": "unique", "failure_action": "flag", "observed_at": "2026-11-06T12:00:00Z",
+            "rows_checked": 40, "rows_failed": 0, "status": "passed"}]})
+
+    rows = rules_cli._results(Namespace(results=None, bookkeeping_run="run-a"))
+
+    assert book.closed
+    assert rows["company_fact.one_form_per_filing"][0]["correlation"] == (
+        "Bookkeeping run run-a, step silver, unit unit-ref, attempt attempt-ref")
+
+
+def test_catalog_results_arguments_are_mutually_exclusive():
+    with pytest.raises(ValueError, match="either --results or --bookkeeping-run"):
+        rules_cli._results(Namespace(results=Path("results.json"), bookkeeping_run="run-a"))

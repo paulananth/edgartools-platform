@@ -410,6 +410,18 @@ Work it out from counts before starting:
   answer to "how far is it", and it lists runs left `running` by a load that was stopped.
   `quality` lists the data quality counts each merge run retained (records, records set aside by a failed check,
   open reviews, fields with empty values; needs `MDM_DATABASE_URL`).
+  For a completed run whose frozen steps requested version-2 silver quality evidence,
+  `edgar-warehouse rules catalog publish --bookkeeping-run <run-id>` sends only
+  verified per-unit outcomes with stable run, step and opaque unit references,
+  then requires exact timestamped OpenMetadata readback. Use
+  `edgar-warehouse rules catalog check --bookkeeping-run <run-id>` for a
+  read-only confirmation later. An incomplete run remains unknown and cannot
+  publish. Keep `SILVER_QUALITY_EVIDENCE_V2` unset until a named recovery owner,
+  documented resume procedure, disposable measured resume and operator-set
+  maximum recovery time are recorded; enable it only when the measurement is
+  within that maximum and the frozen run requests version-2 evidence. Catalog
+  entries describe the load and its checks; OpenMetadata does not run or resume
+  the pipeline.
   `failures` groups the units that hold an error by step, state and error shape, with counts: read it before
   opening the load log.
   `steps` gives each step's share of a finished run (needs `BOOKKEEPING_DATABASE_URL`, in `worker.env`);

@@ -1019,6 +1019,34 @@ def test_a_lease_lapsing_while_the_verifier_runs_refuses_the_late_admission(data
     assert book.status(rid)["counts"] == {"verified": 1}
 
 
+def test_attempt_superseded_after_admission_precheck_is_refused_atomically(databases, tmp_path, monkeypatch):
+    """The SQL finish transition rechecks the live attempt after Python's precheck."""
+    from edgar_warehouse.bookkeeping.clean import lifecycle
+
+    book, rid, _, _ = submit(databases, tmp_path, count=1)
+    old_envelope = book.envelope(book.claim(rid, "s0", "0"))
+    candidate = copy.execute(old_envelope, book.artifacts)
+    book.report(old_envelope, candidate, RUNTIME)
+    stale = verification_for(book, rid, "s0", "0")
+    report = verification_report(book, stale, copy)
+    original_complete = lifecycle.complete
+    replacement = {}
+
+    def supersede_then_finish(engine, operation, params, runtime):
+        expire(databases, book._claim_of(stale))
+        replacement["claim"] = book.claim(rid, "s0", "0")
+        return original_complete(engine, operation, params, runtime)
+
+    monkeypatch.setattr(lifecycle, "complete", supersede_then_finish)
+    with pytest.raises(DBAPIError, match="Stale attempt"):
+        book.verifier.admit(stale, report)
+
+    state = book.status(rid)
+    assert state["counts"] == {"running": 1}
+    assert state["items"][0]["attempt"] == replacement["claim"].attempt
+    assert state["items"][0]["state"] == "running"
+
+
 def test_a_verifier_runtime_is_pinned_for_the_run(databases, tmp_path):
     from edgar_warehouse.workers.control import report_document
     book, rid, _, _ = submit(databases, tmp_path, count=2)

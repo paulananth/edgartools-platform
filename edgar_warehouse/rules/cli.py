@@ -219,6 +219,18 @@ def _results(args) -> dict:
     from edgar_warehouse.silver_writer import results
 
     path = getattr(args, "results", None)
+    run_id = getattr(args, "bookkeeping_run", None)
+    if path and run_id:
+        raise ValueError("Use either --results or --bookkeeping-run, not both")
+    if run_id:
+        from edgar_warehouse.bookkeeping.clean.cli import configured_bookkeeping
+        from edgar_warehouse.bookkeeping.clean.quality import aggregate, catalog_results
+
+        bookkeeping = configured_bookkeeping()
+        try:
+            return catalog_results(aggregate(bookkeeping, run_id))
+        finally:
+            bookkeeping.close()
     return results.load(path) if path else {}
 
 
@@ -265,7 +277,23 @@ def _catalog(args):
     """Plan, reconcile and read back the catalog with stage-specific outcomes."""
     from . import catalog
 
-    results = _results(args)
+    try:
+        results = {} if args.action == "plan" else _results(args)
+    except (ValueError, KeyError, OSError) as error:
+        report = {"ok": False, "status": "failed", "failed_stage": "quality_evidence",
+                  "cause": "Bookkeeping quality evidence is incomplete or invalid",
+                  "next_action": "Complete and verify the Bookkeeping run, then retry with --bookkeeping-run."}
+        report["summary"] = f"FAILED: quality evidence unavailable ({type(error).__name__}); complete and verify the Bookkeeping run."
+        return _catalog_output(report)
+    except Exception as error:
+        from sqlalchemy.exc import SQLAlchemyError
+        if not isinstance(error, SQLAlchemyError):
+            raise
+        report = {"ok": False, "status": "failed", "failed_stage": "quality_evidence",
+                  "cause": "Bookkeeping could not be read",
+                  "next_action": "Check BOOKKEEPING_DATABASE_URL access, then retry with --bookkeeping-run."}
+        report["summary"] = "FAILED: cannot read Bookkeeping quality evidence. Check Bookkeeping access and retry."
+        return _catalog_output(report)
     try:
         plan = catalog.plan(Path(args.root))
     except (catalog.CatalogError, ValueError) as error:
@@ -334,7 +362,8 @@ def _catalog(args):
                   "next_action": None if result["ok"] else
                       "Review readback differences, then rerun `rules catalog publish` and `check`."}
         report["summary"] = (f"CONFIRMED: readback from {endpoint} matches its checked scope; "
-                             f"{_catalog_counts_text(counts)}." if result["ok"] else
+                             f"{_catalog_counts_text(counts)}; "
+                             f"{result.get('quality_results_confirmed', 0)} per-load quality result(s) confirmed." if result["ok"] else
                              f"PARTIAL: readback from {endpoint} found {len(result['differences'])} difference(s). "
                              "Review the differences and reconcile the catalog.")
         return _catalog_output(report)
@@ -380,6 +409,7 @@ def _catalog(args):
     report = {"ok": verified["ok"], "status": "confirmed" if verified["ok"] else "partial",
               "endpoint": endpoint, "plan": {"status": "ready", "counts": counts},
               "publish": {"status": "sent", "completed_write_requests": completed_writes,
+                          "quality_results_sent": sent.get("quality_results_sent", 0),
                           "created": None, "updated": None,
                           "created_updated_counts": "unavailable", "removed": sent["removed"],
                           "removed_counts_status": "available",
@@ -393,6 +423,7 @@ def _catalog(args):
     if verified["ok"]:
         report["summary"] = (f"CONFIRMED: publish and checked readback scope matched at {endpoint}; "
                              f"{_catalog_counts_text(counts)}. Removed {_catalog_removed_text(sent['removed'])}; "
+                             f"{verified.get('quality_results_confirmed', 0)} per-load quality result(s) confirmed; "
                              "created/updated counts unavailable.")
     else:
         report["failed_stage"] = "readback"
@@ -437,8 +468,9 @@ def register(subparsers):
                          help="plan: preview; publish: reconcile OpenMetadata; check: read back metadata and lineage")
     catalog.add_argument("--root", default=str(files.ROOT))
     catalog.add_argument("--results", type=Path,
-                         help="publish, check: the quality results file a silver load wrote "
-                              "(QUALITY_RESULTS_FILE); each result is sent to, and read back from, its case")
+                         help="publish, check: legacy silver quality results JSON file")
+    catalog.add_argument("--bookkeeping-run",
+                         help="publish, check: use this completed run's verified per-unit quality receipts")
     catalog.add_argument("--draft-terms", action="store_true",
                          help="publish: set every glossary term to Draft (a steward approves it); "
                               "by default the server's own status is left alone")
