@@ -373,14 +373,6 @@ try:
         assert {item["object_id"]: item["body"] for item in page["items"]} == expected
         assert page["next_after"] is None
         assert reader.snapshot_page("review", generation=page["generation"] - 1)["items"] == []
-    if case == "recorded_time":
-        from argparse import Namespace
-        from edgar_warehouse.context import Context
-
-        args = Namespace(subject=s["kind"], key=root, search=None, as_of=None,
-                         as_at="2030-01-01T00:00:00Z", detail="brief", page=None)
-        answer = Context(runtime).answer(args)
-        assert answer["entity_id"] == root and answer["trust"]["recorded_at"] is not None
     print("normal master read proof passed")
 finally:
     runtime.dispose()

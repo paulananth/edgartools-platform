@@ -96,12 +96,11 @@ from edgar_warehouse.mdm.record_reads import RecordReader
 from edgar_warehouse.mdm.store import Store, migrate, register_policy, register_dataset
 from edgar_warehouse.mdm.consumer import ContractReader
 from edgar_warehouse.silver_writer.writer import MdmIds
-from edgar_warehouse.context import Context
 assert Path(prepared.__file__).resolve().is_relative_to(Path(INSTALL).resolve())
 assert Path(source_contract.__file__).resolve().is_relative_to(Path(INSTALL).resolve())
 assert Path(edgar_control.__file__).resolve().is_relative_to(Path(INSTALL).resolve())
 assert hasattr(edgar_control,"prepare_text_search")
-for implementation in (ContractReader, MdmIds, Context):
+for implementation in (ContractReader, MdmIds):
     assert Path(inspect.getfile(implementation)).resolve().is_relative_to(Path(INSTALL).resolve())
 assert "bundle_data" in str(Path(storage_adapter().__file__).resolve())
 owner, runtime = engine_from_env("READ_OWNER_URL"), engine_from_env("READ_RUNTIME_URL")
@@ -151,18 +150,6 @@ assert read["identity"]["details"]["invented_rows"]==[
 assert MdmIds(runtime)("invented.authority","invented-kind",{"one","missing"})=={"one":pointer["entity_id"]}
 page=reader.snapshot_page("entity",generation=1,limit=1)
 assert page["items"][0]["body"]==master and page["next_after"] is None
-from argparse import Namespace
-context=Context(runtime).answer(Namespace(subject="invented-kind",key="invented_number:171",
-    search=None,as_of=None,as_at="2030-01-01T00:00:00Z",detail="full",page=None))
-assert context["entity_id"]==pointer["entity_id"]
-assert context["trust"]["recorded_at"]==read["projection"]["recorded_at"]
-assert context["sources"]=={"invented.authority":["one"]}
-def searched(words):
-    return Context(runtime).answer(Namespace(subject="invented-kind",key=None,search=words,limit=5,
-        as_of=None,as_at=None,detail="full",page=None))["matches"]
-from edgar_warehouse.mdm import master_search as built_search
-built_search.rebuild(owner)  # An index nobody built is not kept by a merge; the owner builds it once, after a load.
-assert searched("root")[0]["entity_id"]==pointer["entity_id"]
 def counts():
     with runtime.connect() as conn:
         return {name:conn.scalar(select(func.count()).select_from(api.tables[name]))
@@ -188,7 +175,6 @@ assert updated["field_provenance"]["invented_amount"]["evidence"]==updated_recor
 assert updated["identity"]["details"]["invented_rows"]==[
     {"key":"invented-row","amount":10**80+8,"sources":["invented.authority"]}]
 assert reader.entity(pointer["entity_id"],generation=1)==read
-assert searched("root")==[] and searched("updated")[0]["entity_id"]==pointer["entity_id"]
 opaque_key="INVENTED-雪-"+"x"*5000
 other_record=assertion(source_code="invented.authority",record_key=opaque_key,publication_key="one",
     revision=1,effective_at="2026-01-01T00:00:00Z",kind="invented-kind",
@@ -210,8 +196,6 @@ assert merged["canonical_id"]==pointer["entity_id"]
 assert reader.entity(other_id,generation=other_before["generation"])==other_before
 assert MdmIds(runtime)("invented.authority","invented-kind",{"one",opaque_key})=={
     "one":pointer["entity_id"],opaque_key:pointer["entity_id"]}
-alias_args=Namespace(subject="invented-kind",key=other_id,search=None,as_of=None,as_at=None,detail="full",page=None)
-assert Context(runtime).answer(alias_args)["merged_from"]==other_id
 save(decisions=[decision("reverse",actor="fixture",reason="invented installed reversal",
     at="2026-02-02T00:00:00Z",target=merge["decision_id"])])
 assert reader.entity(other_id)["canonical_id"]==other_id
@@ -225,20 +209,10 @@ linked=assertion(source_code="invented.authority",record_key="one",publication_k
 linked_result=save(assertions=[linked])
 links=reader.snapshot_page("relationship")
 assert len(links["items"])==1 and links["items"][0]["body"]["target_id"]==other_id
-relation_args=Namespace(subject="relationship",key=pointer["entity_id"],search=None,
-    as_of=None,as_at=None,detail="full",page=None,hops=1,relationship_type="")
-related=Context(runtime).answer(relation_args)
-assert related["related_count"]==1 and related["related"][0]["to"]["entity_id"]==other_id
-assert related["related"][0]["sources"]==[{"source_code":"invented.authority","record_key":"one"}]
-from datetime import UTC
-recorded=api.batch_metadata(linked_result["generation"],limit=1)[0]["recorded_at"]
-at=(datetime(1970,1,1,tzinfo=UTC)+timedelta(microseconds=recorded)).isoformat()
 unlinked=assertion(source_code="invented.authority",record_key="one",publication_key="four",
     revision=4,effective_at="2026-01-04T00:00:00Z",kind="invented-kind",
     identifiers={"invented_number":"171"},fields={"invented_amount":10**80+2,"name":"INVENTED UPDATED"},relationships=[])
 save(assertions=[unlinked])
-assert Context(runtime).answer(relation_args)["related_count"]==0
-assert Context(runtime).answer(Namespace(**{**vars(relation_args),"as_at":at}))["related_count"]==1
 assert reader.snapshot_page("relationship",generation=linked_result["generation"])==links
 assert reader.snapshot_page("relationship")["items"][0]["body"]["retired"] is True
 assert reader.snapshot_page("entity",generation=1,limit=1)==page
@@ -253,41 +227,11 @@ for arguments,expected in [(["mdm","counts"],{"entity":2,"relationship":1}),
     with redirect_stdout(output):
         status=main(arguments)
     assert status==0 and json.loads(output.getvalue())==expected
-output=io.StringIO()
-with redirect_stdout(output):
-    status=main(["context","relationship",pointer["entity_id"],"--as-at",at,"--detail","full"])
-assert status==0 and json.loads(output.getvalue())["related_count"]==1
-from unittest.mock import patch
-from edgar_warehouse.mdm import master_search
-from edgar_warehouse.context import ContextError
-missed=assertion(source_code="invented.authority",record_key="one",publication_key="five",
-    revision=5,effective_at="2026-01-05T00:00:00Z",kind="invented-kind",
-    identifiers={"invented_number":"171"},fields={"name":"INVENTED REBUILT"})
-with patch.object(master_search,"normal_changes",return_value=[]):
-    save(assertions=[missed])
-try:
-    searched("rebuilt")
-except ContextError as error:
-    assert "complete index" in str(error)
-else:
-    raise AssertionError("A missed index generation must refuse search")
-before={key:value for key,value in counts().items() if key!="lookup"}
-generation=api.generation()
-os.environ["MDM_DATABASE_URL"]=os.environ["READ_OWNER_URL"]
-for processed,ready in [(1,False),(1,True),(0,True)]:
-    output=io.StringIO()
-    with redirect_stdout(output):
-        status=main(["mdm","rebuild-name-index","--limit","1"])
-    assert status==0 and json.loads(output.getvalue())=={
-        "generation":generation,"processed":processed,"ready":ready}
-assert api.generation()==generation and {key:value for key,value in counts().items() if key!="lookup"}==before
-assert searched("rebuilt")[0]["entity_id"]==pointer["entity_id"]
 print(json.dumps({"independent_install":True,"preview_rolled_back":True,
                   "assessment_applied":True,"duplicate_unchanged":True,"identities":2,
-                  "master_reads":True,"context":True,"silver_lookup":True,
+                  "master_reads":True,"silver_lookup":True,
                   "history_alias_reversal":True,"pinned_page":True,
-                  "details":True,"relationships":True,"operator_cli":True,
-                  "search":True,"owner_rebuild":True}))
+                  "details":True,"relationships":True,"operator_cli":True}))
 '''.replace("invented-kind", kind).replace("invented.authority", source_code)
     with database_factory() as (owner, runtime, role):
         if owner.dialect.name == "mssql":

@@ -217,6 +217,10 @@ class Store:
             rows += self.rows(page.format("changed_file>%s"), [since, limit - len(rows)])
         return rows
 
+    def linked_records(self) -> list[dict]:
+        return [json.loads(body) for (body,) in self.rows(
+            "select body from mastering_record where body like %s", ['%"relationships":[{%'])]
+
     def master_bodies(self, entities) -> dict:
         found = {}
         for block in blocks(entities):
