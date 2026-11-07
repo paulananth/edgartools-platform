@@ -196,5 +196,5 @@ def test_the_symbol_reading_shares_the_ownership_readings_root_and_limits():
 def test_a_security_record_is_one_filing_so_later_filings_of_a_symbol_can_load_apart():
     """Bundles load apart. Without the filing in its key, a symbol filed again reaches the merge as a
     second publication of one revision, and the merge refuses it."""
-    contract = files.mdm_contract("sec.ownership", "sec.ownership.security.v1")
+    contract = files.mdm_contract("sec.ownership", "sec.ownership.security.v2")
     assert contract["adapter"]["record_key"] == ["accession_number", "issuer_cik", "symbol"]
