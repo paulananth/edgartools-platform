@@ -20,9 +20,6 @@ dependencies = ["edgartools-control-core",
     "PyMySQL[rsa]>=1.1,<2",
     "PyYAML>=6.0.2",
     "openpyxl>=3.1",
-    "lxml>=5.3",
-    "ijson>=3.3,<4",
-    "fsspec>=2023.1.0",
     # Generic source.read Parquet framing and the independent Name Count boundary.
     "pyarrow>=17.0.0",
     # Bounded configured provider.capture transport; no edgartools dependency.
@@ -30,7 +27,7 @@ dependencies = ["edgartools-control-core",
 ]
 
 [project.optional-dependencies]
-s3 = ["boto3>=1.34", "s3fs>=2023.1.0"]
+s3 = ["boto3>=1.34"]
 
 [project.scripts]
 edgar-warehouse = "edgar_warehouse.cli:main"
