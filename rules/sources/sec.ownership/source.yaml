@@ -140,7 +140,7 @@ dataset_contracts:
       provider: SEC
       family: filing_artifact
       schema_version: sec-ownership-security-v1
-      record_key: one security an issuer names on one filing (the issuer CIK, the trading symbol it files)
+      record_key: one security an issuer names on one filing (the accession number, the issuer CIK, the trading symbol it files)
       publication_key: the filing's accession number
       effective_time: the filing's period of report
       semantics: patch
@@ -173,6 +173,7 @@ dataset_contracts:
         source_record_provenance: true
         kind: security
         record_key:
+        - accession_number
         - issuer_cik
         - symbol
         cross_references:
