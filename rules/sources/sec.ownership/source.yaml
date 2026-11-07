@@ -115,7 +115,7 @@ bookkeeping:
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, mdm.prepared]
           input:
-            keys: {table: security_record, record_column: record, dataset: sec.ownership.security.v1}
+            keys: {table: security_record, record_column: record, dataset: sec.ownership.security.v2}
             readings: {read: {all: read_security}}
         - name: merge_security
           operation: mastering.merge
@@ -135,11 +135,11 @@ dataset_contracts:
   # route only"): one record per filing, with the issuer CIK and the trading symbol. It files the
   # symbol as a cross-reference, lookup only: it finds the Security OpenFIGI gave that ticker
   # to, is never its identifier, and creates nothing (the matching rule waits on a miss).
-  sec.ownership.security.v1:
+  sec.ownership.security.v2:
     contract:
       provider: SEC
       family: filing_artifact
-      schema_version: sec-ownership-security-v1
+      schema_version: sec-ownership-security-v2
       record_key: one security an issuer names on one filing (the accession number, the issuer CIK, the trading symbol it files)
       publication_key: the filing's accession number
       effective_time: the filing's period of report
@@ -168,7 +168,7 @@ dataset_contracts:
                   matching:
                     object:
                       fields: {}
-        version: sec-ownership-security-v1
+        version: sec-ownership-security-v2
         retain_deferred: true
         source_record_provenance: true
         kind: security

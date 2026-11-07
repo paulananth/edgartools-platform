@@ -404,7 +404,7 @@ automatic_rules:
 - kind: security
   family: binding
   rule_id: form4-security-ticker
-  rule_version: 2026-11-04.symbol-finds-the-security
+  rule_version: 2026-11-07.one-record-per-filing
   verdict: bind
   activation: deterministic
 # nport-security-sedol and nport-security-loanx (ticket 190): a holding with neither a CUSIP nor an ISIN

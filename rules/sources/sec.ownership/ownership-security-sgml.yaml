@@ -1,5 +1,5 @@
 # The issuer and trading symbol of a Form 3, 4 or 5 inside the SEC's SGML submission file
-# (ticket 24), for the Dataset Contract sec.ownership.security.v1: one row per filing, read apart
+# (ticket 24), for the Dataset Contract sec.ownership.security.v2: one row per filing, read apart
 # from the lines because a target prepares one publication and this one needs two fields. The
 # symbol keeps letters and digits (a class ticker is written BRK/B, BRK-B or BRK.B) and a filed
 # "NONE" or "N/A" is no symbol. The root, the accession number and the limits are

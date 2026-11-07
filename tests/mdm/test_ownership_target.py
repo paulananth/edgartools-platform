@@ -81,7 +81,7 @@ def test_the_security_symbols_target_reads_the_symbol_then_prepares_and_merges_i
     assert set(steps) == {"read_security", "prepare_security", "merge_security", "processed_security"}
     (read,) = steps["read_security"]
     assert steps["prepare_security"][0]["keys"]["table"] == "security_record"
-    assert steps["prepare_security"][0]["keys"]["dataset"] == "sec.ownership.security.v1"
+    assert steps["prepare_security"][0]["keys"]["dataset"] == "sec.ownership.security.v2"
     recorded_files = Artifacts().json(steps["processed_security"][0]["input"])["files"]
     assert [f["key"] for f in recorded_files] == [key(1), key(2)]
     assert read["keys"]["unit"]

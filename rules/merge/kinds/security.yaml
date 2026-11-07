@@ -23,7 +23,7 @@ defaults:
   - sec.thirteenf.securities.v1
   - sec.nport.security.v2
   # Last, and it states no field: the Form 4 symbol only finds a Security (ticket 24).
-  - sec.ownership.security.v1
+  - sec.ownership.security.v2
   allow_unknown_effective: true
 rules:
 # Tier A: the issued CUSIP. A record joins the one Security that holds its
@@ -248,9 +248,9 @@ rules:
 # never that Security's: the rule creates nothing, merges nothing, waits when no Security holds
 # the ticker and sends several Securities (a reused ticker) to review. It needs OpenFIGI first.
 - rule_id: form4-security-ticker
-  version: 2026-11-04.symbol-finds-the-security
+  version: 2026-11-07.one-record-per-filing
   family: binding
-  source: sec.ownership.security.v1
+  source: sec.ownership.security.v2
   applies_to_verdict: security
   emits:
   - bind
