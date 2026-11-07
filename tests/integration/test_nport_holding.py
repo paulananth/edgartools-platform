@@ -10,7 +10,6 @@ the registrant for a filing naming none. Invented values only.
 
 from __future__ import annotations
 
-import pytest
 
 import copy
 import io
@@ -20,27 +19,18 @@ from pathlib import Path
 from sqlalchemy import text
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.mdm.merge import MergeStage
-from edgar_warehouse.mdm.store import Store, register_policy
 from edgar_warehouse.rules import files
 from edgar_warehouse.silver_writer import database as silver
 from edgar_warehouse.silver_writer import spec as silver_spec
 from edgar_warehouse.silver_writer.cli import spec_file
 from edgar_warehouse.silver_writer.sink import PostgresSink
-from edgar_warehouse.silver_writer.writer import land
-from tests.support.old_master_ids import OldIds as MdmIds
+from edgar_warehouse.silver_writer.writer import MdmIds, land
+from tests.support import masters
 from tests.integration import test_mdm_postgres as core
 from tests.integration import test_nport_isin_link as isin
 from tests.integration import test_nport_link_start as cusip
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
-from tests.support import source_chain as chain
 
-
-@pytest.fixture(autouse=True)
-def seeded_through_the_old_merge(monkeypatch):
-    from tests.support.old_master_ids import OldIds
-
-    monkeypatch.setattr("edgar_warehouse.silver_writer.writer.MdmIds", OldIds)
 
 FOLDER = cusip.FOLDER
 # A-1's series filed lower-case; A-2's "N/A" is no series: the registrant's own.
@@ -126,20 +116,14 @@ SECURITY, FUND, REGISTRANT = "sec.nport.security.v2", "sec.nport.fund.v1", "sec.
 
 
 def bound(database, source_code: str, key: str) -> str | None:
-    return core.bindings(database, source_code).get(key)
+    return MdmIds(database.application)(source_code, None, {key}).get(key)
 
 
 def test_each_row_lands_with_its_holder_and_security_found_by_lookup(database, tmp_path):
     """The silver writer finds each MDM id by the row's keys, among the records each
     link's Dataset Contract staged; no holding record goes through the Merge Stage."""
     rows = holding_rows(tmp_path / "rows")
-    for code in (SECURITY, FUND, REGISTRANT):  # fixture masters stand in for each contract's records
-        core.register_reading(database, code, core.contract_body())
-    with database.admin.begin() as conn:
-        # N-PORT's ISIN rule waits for its switch-on (ticket 138); on here, for the test only.
-        policy = register_policy(conn, cusip.policy_body())
-    stage = MergeStage(Store(database.application))
-    cusip.apply(stage, policy, "masters", [
+    masters.seed(database.application, [  # fixture masters stand in for each contract's records
         # The CUSIP's record carries ONE, filed with it; ONE's own record joins it by ONE.
         core.source(key=isin.CUSIP, source_code=SECURITY, kind="security", fields={},
                     identifiers={"cusip": isin.CUSIP, "isin": [isin.ONE]}),
@@ -148,7 +132,8 @@ def test_each_row_lands_with_its_holder_and_security_found_by_lookup(database, t
         core.source(key="S000000001", source_code=FUND, kind="fund_structure", fields={},
                     identifiers={"sec_series_id": "S000000001"}),
         core.source(key="0000000001", source_code=REGISTRANT, kind="company", fields={},
-                    identifiers={"cik": "0000000001"})], 1)
+                    identifiers={"cik": "0000000001"})],
+                 cusip.policy_body())  # N-PORT's ISIN rule waits for its switch-on (ticket 138); on here, for the test only.
     with silver_database(database.admin) as (owner, runtime):
         silver.migrate(owner, runtime_role=RUNTIME)
         spec = spec_file(FOLDER / "silver-holding.yaml", None)
@@ -179,12 +164,8 @@ def test_each_row_lands_with_its_holder_and_security_found_by_lookup(database, t
 
 def test_a_link_pointed_at_another_dataset_contract_finds_nothing(database, tmp_path):
     rows = [r for r in holding_rows(tmp_path / "rows") if r["holding_id"] == "9"]
-    core.register_reading(database, SECURITY, core.contract_body())
-    with database.admin.begin() as conn:
-        policy = register_policy(conn, copy.deepcopy(files.policy()))
-    cusip.apply(MergeStage(Store(database.application)), policy, "masters", [
-        core.source(key=isin.CUSIP, source_code=SECURITY, kind="security", fields={},
-                    identifiers={"cusip": isin.CUSIP})], 1)
+    masters.seed(database.application, [core.source(key=isin.CUSIP, source_code=SECURITY, kind="security", fields={},
+                                                    identifiers={"cusip": isin.CUSIP})])
     spec = files.load(FOLDER / "silver-holding.yaml")
     for link in spec["links"]:
         if link["kind"] == "security":

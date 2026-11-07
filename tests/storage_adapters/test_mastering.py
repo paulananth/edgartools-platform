@@ -6,16 +6,15 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
 from threading import Barrier
-from uuid import uuid4
 
 import pytest
 
 from edgar_warehouse.mastering import links, lookups, merge, reads, rebuild, store as stores
 from edgar_warehouse.mdm.evidence import assertion, decision, subject_key
-from edgar_warehouse.mdm.identifier_types import TYPES
 from edgar_warehouse.mdm.name_count import VERSION as NAME_COUNT_VERSION
 from edgar_warehouse.rules import files
 from edgar_warehouse.mastering.store import open_store
+from tests.support.masters import figi
 
 AS_OF = "2026-11-06T12:00:00+00:00"
 POLICY = files.policy()
@@ -23,13 +22,6 @@ COMPANY = merge.Settings(POLICY, "invented-digest", "company", AS_OF)
 SECURITY = merge.Settings(POLICY, "invented-digest", "security", AS_OF)
 SEC, FIGI, GLEIF = "sec.company.v1", "openfigi.security.v3", "gleif.level1.v1"
 NPORT = next(r for r in POLICY["kinds"]["security"]["rules"] if r["rule_id"] == "nport-security-cusip")["source"]
-
-
-def figi(stem: str) -> str:
-    for digit in "0123456789":
-        if TYPES["figi"].refusal(f"BBG{stem}{digit}")[1] is None:
-            return f"BBG{stem}{digit}"
-    raise AssertionError(stem)
 
 
 def record(source, key, kind="company", fields=None, **identifiers):

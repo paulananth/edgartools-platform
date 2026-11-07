@@ -216,7 +216,7 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
                 runtime.dispose()
         # Invented MDM records use the existing Merge Stage fixture; do not touch a baseline.
         from tests.integration import test_mdm_postgres as mdm
-        from tests.integration.test_entity_context_postgres import load_group
+        from tests.support import masters
         owner = first.engine(one, "mdm")
         @event.listens_for(owner, "connect")
         def owner_role(connection, _):
@@ -225,17 +225,8 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
             connection.commit()
         app = first.engine(one, "mdm", "mdm_runtime")
         try:
-            from tests.support.rules_authority import register_dataset
-            version = str(uuid4())
-            with owner.begin() as conn:
-                policy = mdm.register_policy(conn, {"version": 1, "required_consumers": ["export", "graph"],
-                    "automatic_rules": [], "fields": {"company": {"name": {"sources": ["fixture.primary", "fixture.secondary"]}}}})
-                for code in ("fixture.primary", "fixture.secondary"):
-                    register_dataset(conn, code, version, {"provider": "test", "family": "fixture",
-                        "publication_families": ["golden_copy", "opencorporates"], "schema_version": "1",
-                        "record_key": "key", "publication_key": "version", "effective_time": "effective_at", "semantics": "patch"})
-            database = mdm.Database(owner, app, policy, version)
-            ids = load_group(database)
+            ids = masters.seed(app, [mdm.source(key=key, source_code="sec.company.v1", kind="company", fields={},
+                                                identifiers={"cik": cik}) for key, cik in (("a", "0000000001"), ("b", "0000000002"))])
         finally:
             owner.dispose()
             app.dispose()
@@ -248,8 +239,7 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
         # A real silver row retains its looked-up MDM id and an exact BIGINT.
         from edgar_warehouse.silver_writer import database as silver
         from edgar_warehouse.silver_writer.sink import PostgresSink
-        from edgar_warehouse.silver_writer.writer import land
-        from tests.support.old_master_ids import OldIds as MdmIds
+        from edgar_warehouse.silver_writer.writer import MdmIds, land
         from tests.unit.test_silver_writer import a_spec
         owner = first.engine(one, "silver")
         @event.listens_for(owner, "connect")
@@ -258,7 +248,7 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
                 cur.execute("SET ROLE silver_owner")
             connection.commit()
         runtime = first.engine(one, "silver", "silver_runtime")
-        table = a_spec(links=[{"columns": ["member_id"], "kind": "company", "source_code": "fixture.primary",
+        table = a_spec(links=[{"columns": ["member_id"], "kind": "company", "source_code": "sec.company.v1",
                               "source_key": "member_id", "mdm_id_column": "member_id_mdm_id", "inclusion": 1.0}])
         mdm_reader = first.engine(one, "mdm", "mdm_runtime")
         try:
@@ -267,7 +257,7 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
             assert result["mdm_keys_found"] == 1
             with runtime.connect() as conn:
                 row = conn.execute(text("SELECT visit_id, member_id_mdm_id FROM silver.visit")).one()
-                assert row == (2**53 + 1, ids['b'])
+                assert (row[0], str(row[1])) == (2**53 + 1, ids['b'])
         finally:
             owner.dispose()
             runtime.dispose()
@@ -275,9 +265,7 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
         expected = first.contents(one)
         reader = first.engine(one, "mdm", "mdm_runtime")
         try:
-            with reader.connect() as conn:
-                from edgar_warehouse.mdm.inspection import counts
-                assert sum(counts(reader)["masters"].values()) == 3
+            assert len(masters.bodies(reader)) == 2
         finally:
             reader.dispose()
         assert expected['silver.silver.visit']['rows'] == 1
@@ -332,7 +320,7 @@ def test_two_agents_keep_their_data_and_restore_all_six_stores(tmp_path):
         mdm_reader = second.engine(restored, "mdm", "mdm_runtime")
         try:
             with runtime.connect() as conn:
-                assert conn.execute(text("SELECT visit_id,member_id_mdm_id FROM silver.visit")).one() == (2**53 + 1, ids['b'])
+                assert [(v, str(m)) for v, m in conn.execute(text("SELECT visit_id,member_id_mdm_id FROM silver.visit"))] == [(2**53 + 1, ids['b'])]
             result = land(PostgresSink(runtime), "visit", [{"visit_id": 2**53 + 2, "member_id": "b", "amount": "2.50", "visited_on": None, "tags": None}], MdmIds(mdm_reader))
             assert result["inserted"] == 1 and result["mdm_keys_found"] == 1
             with runtime.begin() as conn:

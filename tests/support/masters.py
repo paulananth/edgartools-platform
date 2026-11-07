@@ -8,10 +8,19 @@ from contextlib import contextmanager
 
 from edgar_warehouse.mastering import lookups, merge
 from edgar_warehouse.mastering.store import open_store
+from edgar_warehouse.mdm.identifier_types import TYPES
 from edgar_warehouse.rules import files
 from edgar_warehouse.silver_writer.writer import MdmIds
 
 AS_OF = "2026-11-06T12:00:00+00:00"
+
+
+def figi(stem: str) -> str:
+    """An invented FIGI with a valid check digit."""
+    for digit in "0123456789":
+        if TYPES["figi"].refusal(f"BBG{stem}{digit}")[1] is None:
+            return f"BBG{stem}{digit}"
+    raise AssertionError(stem)
 
 
 @contextmanager
