@@ -1068,10 +1068,17 @@ def _case_fqn(case: dict) -> str:
 def _result_body(result: dict) -> dict:
     """A silver load's report of one check, as the server's test case result."""
     checked, failed = result["rows_checked"], result["rows_failed"]
-    if not 0 <= failed <= checked:
+    if (type(checked) is not int or type(failed) is not int or not 0 <= failed <= checked <= 2**63 - 1
+            or result.get("on_fail") not in ("flag", "exception")):
         raise CatalogError(f"The result of {result.get('table')}.{result.get('check')} fails {failed} of {checked} rows")
+    correlation = result.get("correlation")
+    if correlation is not None and (not isinstance(correlation, str) or len(correlation) > 512):
+        raise CatalogError("The quality result has an invalid load reference")
+    detail = f"{failed} of {checked} rows failed ({result['on_fail']})."
+    if correlation:
+        detail += f" Load: {correlation}."
     return {"timestamp": _millis(result["at"]), "testCaseStatus": "Failed" if failed else "Success",
-            "result": f"{failed} of {checked} rows failed ({result['on_fail']}).",
+            "result": detail,
             "passedRows": checked - failed, "failedRows": failed,
             "testResultValue": [{"name": "rowsChecked", "value": str(checked)},
                                 {"name": "rowsFailed", "value": str(failed)}]}
@@ -1082,12 +1089,81 @@ def _millis(instant: str) -> int:
     return int((parsed if parsed.tzinfo else parsed.replace(tzinfo=datetime.timezone.utc)).timestamp() * 1000)
 
 
-def _publish_results(plan: dict, call: Call, results: dict) -> None:
+def _result_rows(results: dict) -> dict[str, list[dict]]:
+    if not isinstance(results, dict):
+        raise CatalogError("Quality results must be a map of catalog case names to results")
+    rows = {}
+    for name, result in results.items():
+        values = result if isinstance(result, list) else [result]
+        if not isinstance(name, str) or not values or any(not isinstance(value, dict) for value in values):
+            raise CatalogError("Quality results contain an invalid case name or result list")
+        try:
+            timestamps = [_result_body(value)["timestamp"] for value in values]
+        except (KeyError, TypeError) as error:
+            raise CatalogError("Quality results have a missing or invalid field") from error
+        if len(timestamps) != len(set(timestamps)):
+            raise CatalogError("Quality results repeat a case timestamp")
+        rows[name] = values
+    return rows
+
+
+def _result_history(call: Call, case: dict, result: dict) -> list[dict]:
+    timestamp = _millis(result["at"])
+    answer = call("GET", "/dataQuality/testCases/testCaseResults/" + escape(_case_fqn(case), safe=""),
+                  params={"startTs": timestamp, "endTs": timestamp}) or {}
+    return [row for row in answer.get("data") or [] if row.get("timestamp") == timestamp]
+
+
+def _same_result(actual: dict, expected: dict) -> bool:
+    fields = ("timestamp", "testCaseStatus", "result", "passedRows", "failedRows", "testResultValue")
+    return tuple(actual.get(field) for field in fields) == tuple(expected.get(field) for field in fields)
+
+
+def _publish_results(plan: dict, call: Call, results: dict) -> int:
+    cases = {case["name"]: case for case in plan.get("quality_cases") or []}
+    result_rows = _result_rows(results)
+    unknown = set(result_rows) - set(cases)
+    if unknown:
+        raise CatalogError("Quality results have no planned catalog case")
+    sent = 0
     for case in plan.get("quality_cases") or []:
-        result = results.get(case["name"])
-        if result:
-            call("POST", "/dataQuality/testCases/testCaseResults/" + escape(_case_fqn(case), safe=""),
-                 _result_body(result))
+        for result in result_rows.get(case["name"], []):
+            wanted = _result_body(result)
+            held = _result_history(call, case, result)
+            if held:
+                if len(held) == 1 and _same_result(held[0], wanted):
+                    continue  # replay of the identical run result is idempotent
+                if len(held) != 1:
+                    raise CatalogError("OpenMetadata has duplicate quality results at the planned timestamp")
+                path = ("/dataQuality/testCases/testCaseResults/" + escape(_case_fqn(case), safe="")
+                        + f"/{wanted['timestamp']}")
+                call("PATCH", path, [
+                    {"op": "add", "path": f"/{field}", "value": wanted[field]}
+                    for field in ("testCaseStatus", "result", "passedRows", "failedRows", "testResultValue")
+                ])
+                sent += 1
+                corrected = _result_history(call, case, result)
+                if len(corrected) != 1 or not _same_result(corrected[0], wanted):
+                    raise CatalogError("quality result readback mismatch after one permitted correction")
+                continue
+            path = "/dataQuality/testCases/testCaseResults/" + escape(_case_fqn(case), safe="")
+            call("POST", path, wanted)
+            sent += 1
+            posted = _result_history(call, case, result)
+            if len(posted) == 1 and _same_result(posted[0], wanted):
+                continue
+            if len(posted) != 1:
+                raise CatalogError("quality result readback mismatch after send; cannot safely resend")
+            correction_path = path + f"/{wanted['timestamp']}"
+            call("PATCH", correction_path, [
+                {"op": "add", "path": f"/{field}", "value": wanted[field]}
+                for field in ("testCaseStatus", "result", "passedRows", "failedRows", "testResultValue")
+            ])
+            sent += 1
+            corrected = _result_history(call, case, result)
+            if len(corrected) != 1 or not _same_result(corrected[0], wanted):
+                raise CatalogError("quality result readback mismatch after one permitted correction")
+    return sent
 
 
 def _publish_classifications(plan: dict, call: Call) -> None:
@@ -1241,6 +1317,10 @@ def publish(plan: dict, call: Call, draft_terms: bool = False, results: dict | N
     """Make the catalog equal to `plan`: create or update everything it names,
     then delete, inside its own service only, the tables, schemas and lineage
     it no longer names. Publishing the same plan again changes nothing."""
+    requested_results = _result_rows(results or {})
+    planned_cases = {case["name"] for case in plan.get("quality_cases") or []}
+    if set(requested_results) - planned_cases:
+        raise CatalogError("Quality results have no planned catalog case")
     _upsert(call, "/services/databaseServices", plan["service"])
     _publish_vocabulary(plan, call)
     for database in plan["databases"]:
@@ -1274,7 +1354,7 @@ def publish(plan: dict, call: Call, draft_terms: bool = False, results: dict | N
         expected = _case_fqn(case)
         if answer.get("fullyQualifiedName") != expected:
             raise CatalogError(f"The server named quality case {expected} {answer.get('fullyQualifiedName')}")
-    _publish_results(plan, call, results or {})
+    quality_results_sent = _publish_results(plan, call, results or {})
     _publish_marks(plan, call, ids)
     _drop_invented_domain_edges(plan, call)
     for product in plan.get("products") or []:
@@ -1351,7 +1431,7 @@ def publish(plan: dict, call: Call, draft_terms: bool = False, results: dict | N
     if draft_terms:
         _draft_terms(plan, call)
     return {"service": service, "tables": len(plan["tables"]), "lineage": len(plan["lineage"]),
-            "pipelines": len(pipeline_ids), "removed": removed}
+            "pipelines": len(pipeline_ids), "quality_results_sent": quality_results_sent, "removed": removed}
 
 
 def verify(plan: dict, call: Call, results: dict | None = None) -> dict:
@@ -1435,16 +1515,23 @@ def verify(plan: dict, call: Call, results: dict | None = None) -> dict:
         if ((held.get("certification") or {}).get("tagLabel") or {}).get("tagFQN") != mark["tag"]:
             differences.append(mark["table"] + ": not certified " + mark["tag"])
     cases = {case["name"]: case for case in plan.get("quality_cases") or []}
-    for name, result in sorted((results or {}).items()):
+    result_rows = _result_rows(results or {})
+    quality_results_confirmed = 0
+    for name, entries in sorted(result_rows.items()):
         case = cases.get(name)
         if not case:
+            differences.append(name + ": quality result has no planned catalog case")
             continue
         where = _case_fqn(case)
-        held = ((call("GET", "/dataQuality/testCases/name/" + escape(where, safe=""),
-                      params={"fields": "testCaseResult"}) or {}).get("testCaseResult")) or {}
-        wanted = _result_body(result)
-        keys = ("timestamp", "testCaseStatus", "passedRows", "failedRows")
-        if tuple(held.get(key) for key in keys) != tuple(wanted[key] for key in keys):
-            differences.append(where + ": result changed, publish again")
+        for result in entries:
+            held = _result_history(call, case, result)
+            wanted = _result_body(result)
+            if len(held) != 1 or not _same_result(held[0], wanted):
+                differences.append(where + ": result changed, publish again")
+            else:
+                quality_results_confirmed += 1
     return {"ok": not differences, "tables": len(plan["tables"]),
-            "pipelines": len(plan.get("pipelines") or []), "differences": differences}
+            "pipelines": len(plan.get("pipelines") or []),
+            "quality_results_expected": sum(map(len, result_rows.values())),
+            "quality_results_confirmed": quality_results_confirmed,
+            "differences": differences}

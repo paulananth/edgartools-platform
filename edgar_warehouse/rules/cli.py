@@ -219,7 +219,24 @@ def _results(args) -> dict:
     from edgar_warehouse.silver_writer import results
 
     path = getattr(args, "results", None)
+    run_id = getattr(args, "bookkeeping_run", None)
+    if path and run_id:
+        raise ValueError("Use either --results or --bookkeeping-run, not both")
+    if run_id:
+        from edgar_warehouse.bookkeeping.clean.quality import catalog_results
+        return catalog_results(_bookkeeping_quality(run_id))
     return results.load(path) if path else {}
+
+
+def _bookkeeping_quality(run_id: str) -> dict:
+    from edgar_warehouse.bookkeeping.clean.cli import configured_bookkeeping
+    from edgar_warehouse.bookkeeping.clean.quality import aggregate
+
+    bookkeeping = configured_bookkeeping()
+    try:
+        return aggregate(bookkeeping, run_id)
+    finally:
+        bookkeeping.close()
 
 
 def _catalog_cause(error, catalog) -> str:
@@ -227,6 +244,10 @@ def _catalog_cause(error, catalog) -> str:
     if not isinstance(error, catalog.CatalogError):
         return type(error).__name__
     message = str(error)
+    if "quality result readback mismatch after send" in message:
+        return "OpenMetadata quality result readback mismatch after send"
+    if "quality result readback mismatch" in message:
+        return "OpenMetadata quality result readback mismatch after bounded correction"
     status = re.search(r"\bHTTP (\d{3})\b", message)
     if status:
         return f"OpenMetadata returned HTTP {status.group(1)}"
@@ -265,7 +286,6 @@ def _catalog(args):
     """Plan, reconcile and read back the catalog with stage-specific outcomes."""
     from . import catalog
 
-    results = _results(args)
     try:
         plan = catalog.plan(Path(args.root))
     except (catalog.CatalogError, ValueError) as error:
@@ -280,6 +300,52 @@ def _catalog(args):
         print(f"PENDING: catalog plan only; {_catalog_counts_text(counts)}. Nothing was sent.", file=sys.stderr)
         print(json.dumps(plan, indent=2, sort_keys=True))
         return 0
+
+    quality_summary = None
+    try:
+        if getattr(args, "bookkeeping_run", None):
+            quality_summary = _bookkeeping_quality(args.bookkeeping_run)
+            if quality_summary.get("status") == "unknown":
+                report = {"ok": False, "status": "pending", "failed_stage": "quality_evidence",
+                          "plan": {"status": "ready", "counts": counts},
+                          "publish": {"status": "not_run"}, "readback": {"status": "not_run"},
+                          "quality": quality_summary,
+                          "cause": "Bookkeeping quality evidence is unknown or incomplete",
+                          "next_action": "Finish or reconcile the Bookkeeping run, then retry publication."}
+                if not quality_summary.get("run_complete"):
+                    report["summary"] = (f"PENDING: Bookkeeping run {args.bookkeeping_run} is not complete; "
+                                         f"{quality_summary['units_verified']}/{quality_summary['units_expected']} "
+                                         f"units verified and {quality_summary['units_unknown']} unknown. "
+                                         "Complete run verification before publishing.")
+                else:
+                    report["summary"] = (f"PENDING: Bookkeeping run {args.bookkeeping_run} has "
+                                         f"{quality_summary['units_unknown']} unknown unit(s); "
+                                         "complete verification before publishing.")
+                return _catalog_output(report)
+            from edgar_warehouse.bookkeeping.clean.quality import catalog_results
+            results = catalog_results(quality_summary)
+        else:
+            results = _results(args)
+    except (ValueError, KeyError, OSError) as error:
+        report = {"ok": False, "status": "failed", "failed_stage": "quality_evidence",
+                  "plan": {"status": "ready", "counts": counts},
+                  "publish": {"status": "not_run"}, "readback": {"status": "not_run"},
+                  "cause": "Bookkeeping quality evidence is incomplete or invalid",
+                  "next_action": "Complete and verify the Bookkeeping run, then retry with --bookkeeping-run."}
+        report["summary"] = (f"FAILED: quality evidence unavailable ({type(error).__name__}); "
+                             "complete and verify the Bookkeeping run.")
+        return _catalog_output(report)
+    except Exception as error:
+        from sqlalchemy.exc import SQLAlchemyError
+        if not isinstance(error, SQLAlchemyError):
+            raise
+        report = {"ok": False, "status": "failed", "failed_stage": "quality_evidence",
+                  "plan": {"status": "ready", "counts": counts},
+                  "publish": {"status": "not_run"}, "readback": {"status": "not_run"},
+                  "cause": "Bookkeeping could not be read",
+                  "next_action": "Check BOOKKEEPING_DATABASE_URL access, then retry with --bookkeeping-run."}
+        report["summary"] = "FAILED: cannot read Bookkeeping quality evidence. Check Bookkeeping access and retry."
+        return _catalog_output(report)
 
     url, token = os.environ.get("OPENMETADATA_URL"), os.environ.get("OPENMETADATA_TOKEN")
     endpoint = catalog.endpoint_identity(url)
@@ -326,6 +392,7 @@ def _catalog(args):
             return _catalog_output(report)
         report = {"ok": result["ok"], "status": "confirmed" if result["ok"] else "partial",
                   "endpoint": endpoint, "plan": {"status": "ready", "counts": counts},
+                  **({"quality": quality_summary} if quality_summary else {}),
                   "publish": {"status": "not_run"},
                   "readback": {"status": "matched" if result["ok"] else "drift",
                                **result,
@@ -334,7 +401,8 @@ def _catalog(args):
                   "next_action": None if result["ok"] else
                       "Review readback differences, then rerun `rules catalog publish` and `check`."}
         report["summary"] = (f"CONFIRMED: readback from {endpoint} matches its checked scope; "
-                             f"{_catalog_counts_text(counts)}." if result["ok"] else
+                             f"{_catalog_counts_text(counts)}; "
+                             f"{result.get('quality_results_confirmed', 0)} per-load quality result(s) confirmed." if result["ok"] else
                              f"PARTIAL: readback from {endpoint} found {len(result['differences'])} difference(s). "
                              "Review the differences and reconcile the catalog.")
         return _catalog_output(report)
@@ -344,18 +412,27 @@ def _catalog(args):
     except catalog.CatalogError as error:
         cause = _catalog_cause(error, catalog)
         rejected = re.search(r"HTTP 4\d\d\b", cause) is not None and completed_writes == 0
+        quality_readback_failed = "quality result readback mismatch" in cause
         status = "failed" if rejected else "partial"
-        report = {"ok": False, "status": status, "failed_stage": "publish", "endpoint": endpoint,
+        failed_stage = "readback" if quality_readback_failed else "publish"
+        report = {"ok": False, "status": status, "failed_stage": failed_stage, "endpoint": endpoint,
                   "plan": {"status": "ready", "counts": counts},
                   "publish": {"status": "failed" if rejected else "partial", "completed_write_requests": completed_writes,
                               "created": None, "updated": None,
                               "created_updated_counts": "unavailable", "removed": None,
                               "removed_counts_status": "unavailable"},
-                  "readback": {"status": "not_run"}, "cause": cause,
-                  "next_action": ("Correct the rejected request or bot permissions, then retry publication."
+                  "readback": {"status": "failed" if quality_readback_failed else "not_run",
+                               **({"ok": False} if quality_readback_failed else {})}, "cause": cause,
+                  "next_action": ("Inspect the exact quality-result timestamp with the read-only `rules catalog check`; "
+                                  "do not resend until the held result is understood."
+                                  if quality_readback_failed else
+                                  "Correct the rejected request or bot permissions, then retry publication."
                                   if rejected else
                                   "Run the read-only `rules catalog check` before retrying publication.")}
-        report["summary"] = (f"FAILED: publish to {endpoint} was rejected: {cause}. Correct the request and retry."
+        report["summary"] = (f"PARTIAL: quality result readback from {endpoint} did not confirm the one permitted "
+                              f"correction: {cause}. Inspect with read-only check before retrying."
+                              if quality_readback_failed else
+                              f"FAILED: publish to {endpoint} was rejected: {cause}. Correct the request and retry."
                               if rejected else
                               f"PARTIAL: publish to {endpoint} stopped after {completed_writes} confirmed write "
                               f"request(s): {cause}. Check readback before retrying.")
@@ -379,7 +456,9 @@ def _catalog(args):
 
     report = {"ok": verified["ok"], "status": "confirmed" if verified["ok"] else "partial",
               "endpoint": endpoint, "plan": {"status": "ready", "counts": counts},
+              **({"quality": quality_summary} if quality_summary else {}),
               "publish": {"status": "sent", "completed_write_requests": completed_writes,
+                          "quality_results_sent": sent.get("quality_results_sent", 0),
                           "created": None, "updated": None,
                           "created_updated_counts": "unavailable", "removed": sent["removed"],
                           "removed_counts_status": "available",
@@ -393,6 +472,7 @@ def _catalog(args):
     if verified["ok"]:
         report["summary"] = (f"CONFIRMED: publish and checked readback scope matched at {endpoint}; "
                              f"{_catalog_counts_text(counts)}. Removed {_catalog_removed_text(sent['removed'])}; "
+                             f"{verified.get('quality_results_confirmed', 0)} per-load quality result(s) confirmed; "
                              "created/updated counts unavailable.")
     else:
         report["failed_stage"] = "readback"
@@ -437,8 +517,9 @@ def register(subparsers):
                          help="plan: preview; publish: reconcile OpenMetadata; check: read back metadata and lineage")
     catalog.add_argument("--root", default=str(files.ROOT))
     catalog.add_argument("--results", type=Path,
-                         help="publish, check: the quality results file a silver load wrote "
-                              "(QUALITY_RESULTS_FILE); each result is sent to, and read back from, its case")
+                         help="publish, check: legacy silver quality results JSON file")
+    catalog.add_argument("--bookkeeping-run",
+                         help="publish, check: use this completed run's verified per-unit quality receipts")
     catalog.add_argument("--draft-terms", action="store_true",
                          help="publish: set every glossary term to Draft (a steward approves it); "
                               "by default the server's own status is left alone")

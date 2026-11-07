@@ -254,6 +254,25 @@ def test_a_load_given_a_results_file_keeps_each_check_s_report(tmp_path, monkeyp
     assert set(results.load(other)) == set(kept)
 
 
+def test_bookkeeping_land_can_keep_quality_evidence_out_of_the_mutable_results_file(tmp_path, monkeypatch):
+    from edgar_warehouse.silver_writer import writer as silver_writer
+    from edgar_warehouse.silver_writer import results
+
+    sink = FakeSink(a_spec(checks=CHECKS))
+    delivered = [{"visit_id": 1}]
+    monkeypatch.setattr(silver_writer.checks, "run", lambda _spec, rows: (rows, {
+        "rows_checked": 1, "rows_flagged": 1, "rows_refused": 0,
+        "checks": {"member_shape": {"on_fail": "flag", "rows_failed": 0},
+                   "one_member_per_day": {"on_fail": "flag", "rows_failed": 0},
+                   "known_member": {"on_fail": "exception", "rows_failed": 0}}}))
+    path = tmp_path / "latest-results.json"
+    monkeypatch.setenv(results.ENVIRONMENT, str(path))
+
+    writer.land(sink, "visit", delivered, lambda *a: {}, record_quality_results=False)
+
+    assert not path.exists()
+
+
 def test_in_set_reads_a_bigint_column_with_whole_number_values():
     from edgar_warehouse.silver_writer import checks
 
