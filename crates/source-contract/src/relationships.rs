@@ -5,7 +5,7 @@ use crate::record_values::{self as values, Document, Object};
 use indexmap::IndexMap;
 use crate::relationship_types::{self, TypeRules, UltimateParent};
 use serde::Deserialize;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 const FIRST_TIME: i64 = -62_135_596_800_000_000;
 const LAST_TIME: i64 = 253_402_300_799_999_999;
@@ -88,14 +88,21 @@ fn default_text(body: &Object, field: &str, default: &str) -> Result<String, Str
 fn add_review(reviews: &mut Vec<Object>, reason: &str, context: Object) -> Result<(), String> {
     let mut body = Object::from([("reason".into(), values::write_value(&reason)?)]);
     body.extend(context);
-    let raw = values::write_value(&body)?;
-    for prior in reviews.iter() {
-        if values::values_match(&raw, &values::write_value(prior)?)? {
-            return Ok(());
-        }
-    }
     reviews.push(body);
     Ok(())
+}
+
+/// One of each review, first seen first. A set: one run can raise hundreds of thousands.
+fn distinct_reviews(reviews: Vec<Object>) -> Result<Vec<Object>, String> {
+    let mut seen = HashSet::with_capacity(reviews.len());
+    let mut kept = Vec::new();
+    for review in reviews {
+        let sorted: BTreeMap<_, _> = review.iter().map(|(key, value)| (key, value.get())).collect();
+        if seen.insert(values::write_value(&sorted)?.get().to_owned()) {
+            kept.push(review);
+        }
+    }
+    Ok(kept)
 }
 
 fn keep_earlier_start(
@@ -1087,6 +1094,34 @@ fn finish_relationships(
     }
     ordered.sort_by(|a, b| a.0.cmp(&b.0));
     let result: Vec<_> = ordered.into_iter().map(|(_, body)| body).collect();
-    serde_json::to_string(&(result, reviews))
+    serde_json::to_string(&(result, distinct_reviews(reviews)?))
         .map_err(|_| "Relationships cannot be serialized".into())
+}
+
+#[cfg(test)]
+mod review_tests {
+    use super::*;
+
+    fn review(pairs: &[(&str, &str)]) -> Object {
+        pairs.iter().map(|(key, value)| ((*key).into(), values::write_value(value).unwrap())).collect()
+    }
+
+    #[test]
+    fn a_review_raised_twice_is_kept_once_in_first_seen_order_whatever_its_key_order() {
+        let first = review(&[("reason", "a"), ("subject", "x")]);
+        let again = review(&[("subject", "x"), ("reason", "a")]);
+        let other = review(&[("reason", "b"), ("subject", "x")]);
+        let kept = distinct_reviews(vec![other.clone(), first.clone(), again]).unwrap();
+        assert_eq!(kept.len(), 2);
+        assert_eq!(kept[0].get("reason").unwrap().get(), other.get("reason").unwrap().get());
+        assert_eq!(kept[1].get("reason").unwrap().get(), first.get("reason").unwrap().get());
+    }
+
+    #[test]
+    fn three_hundred_thousand_reviews_take_a_moment_not_hours() {
+        let many: Vec<Object> = (0..300_000).map(|n| review(&[("reason", "a"), ("subject", &n.to_string())])).collect();
+        let start = std::time::Instant::now();
+        assert_eq!(distinct_reviews(many).unwrap().len(), 300_000);
+        assert!(start.elapsed().as_secs() < 20);
+    }
 }
