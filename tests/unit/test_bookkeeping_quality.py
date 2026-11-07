@@ -32,7 +32,7 @@ class Bookkeeping:
         return self.run, self.config, {}, self.expected
 
     def _verify_completed(self, _run_id, _config):
-        return None
+        raise AssertionError("quality reporting must not mutate the Bookkeeping run")
 
 
 def row(unit, attempt, uri):
@@ -41,7 +41,7 @@ def row(unit, attempt, uri):
 
 
 def receipt(unit, attempt, failed):
-    return {"version": 2, "quality": {"run_id": "run-a", "step": "land", "work_unit": unit,
+    return {"version": 2, "quality": {"run_id": "run-a", "step": "land",
             "work_unit_ref": quality.work_unit_reference("run-a", "land", unit, attempt),
             "attempt": attempt, "table": "sample_table", "observed_at": "2026-11-06T12:00:00+00:00",
             "checks": {"valid_category": {"kind": "in_set", "failure_action": "flag",
@@ -87,9 +87,12 @@ def test_incomplete_run_keeps_all_expected_units_unknown(storage_work):
 
     assert result["status"] == "unknown"
     assert result["units_expected"] == 2
-    assert result["units_verified"] == 0
-    assert result["units_unknown"] == 2
-    assert result["results"] == []
+    assert result["run_complete"] is False
+    assert result["units_verified"] == 1
+    assert result["units_unknown"] == 1
+    assert len(result["results"]) == 1
+    assert result["results"][0]["work_unit_ref"] == quality.work_unit_reference(
+        "run-a", "land", "unit-a", "attempt-a")
     assert "unit-a" not in json.dumps(result)
 
 

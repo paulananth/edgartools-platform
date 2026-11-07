@@ -1133,9 +1133,36 @@ def _publish_results(plan: dict, call: Call, results: dict) -> int:
             if held:
                 if len(held) == 1 and _same_result(held[0], wanted):
                     continue  # replay of the identical run result is idempotent
-                raise CatalogError(f"OpenMetadata already holds a different result at {wanted['timestamp']}")
-            call("POST", "/dataQuality/testCases/testCaseResults/" + escape(_case_fqn(case), safe=""), wanted)
+                if len(held) != 1:
+                    raise CatalogError("OpenMetadata has duplicate quality results at the planned timestamp")
+                path = ("/dataQuality/testCases/testCaseResults/" + escape(_case_fqn(case), safe="")
+                        + f"/{wanted['timestamp']}")
+                call("PATCH", path, [
+                    {"op": "add", "path": f"/{field}", "value": wanted[field]}
+                    for field in ("testCaseStatus", "result", "passedRows", "failedRows", "testResultValue")
+                ])
+                sent += 1
+                corrected = _result_history(call, case, result)
+                if len(corrected) != 1 or not _same_result(corrected[0], wanted):
+                    raise CatalogError("quality result readback mismatch after one permitted correction")
+                continue
+            path = "/dataQuality/testCases/testCaseResults/" + escape(_case_fqn(case), safe="")
+            call("POST", path, wanted)
             sent += 1
+            posted = _result_history(call, case, result)
+            if len(posted) == 1 and _same_result(posted[0], wanted):
+                continue
+            if len(posted) != 1:
+                raise CatalogError("quality result readback mismatch after send; cannot safely resend")
+            correction_path = path + f"/{wanted['timestamp']}"
+            call("PATCH", correction_path, [
+                {"op": "add", "path": f"/{field}", "value": wanted[field]}
+                for field in ("testCaseStatus", "result", "passedRows", "failedRows", "testResultValue")
+            ])
+            sent += 1
+            corrected = _result_history(call, case, result)
+            if len(corrected) != 1 or not _same_result(corrected[0], wanted):
+                raise CatalogError("quality result readback mismatch after one permitted correction")
     return sent
 
 

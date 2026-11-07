@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from . import storage
 from .config import Blocked
@@ -38,17 +38,13 @@ def aggregate(bookkeeping, run_id: str) -> dict:
     work = storage.work(bookkeeping.engine, run_id, ordered=True)
     by_identity = {(item["step"], item["unit_key"]): item for item in work if item["step"] in steps}
     complete_run = run.get("state") == "complete"
-    if complete_run:
-        # Recheck the same immutable receipt/verifier evidence Bookkeeping uses
-        # before treating a completion as a quality result.
-        bookkeeping._verify_completed(run_id, config)
 
     unknown_units = []
     results = []
     totals = {}
     for step, unit_key in sorted(expected):
         item = by_identity.get((step, unit_key))
-        if not complete_run or item is None or item["state"] != "verified" or not item.get("receipt"):
+        if item is None or item["state"] != "verified" or not item.get("receipt"):
             attempt = str(item["attempt"]) if item and item.get("attempt") else ""
             unknown_units.append({"step": step, "work_unit_ref": work_unit_reference(run_id, step, unit_key, attempt)})
             continue
@@ -100,11 +96,14 @@ def aggregate(bookkeeping, run_id: str) -> dict:
 
     check_totals = []
     for total in totals.values():
-        total["status"] = "unknown" if unknown_units else ("failed" if total["rows_failed"] else "passed")
+        total["status"] = "unknown" if unknown_units or not complete_run else (
+            "failed" if total["rows_failed"] else "passed")
         check_totals.append(total)
-    status = "unknown" if unknown_units or not check_totals else (
+    status = "unknown" if unknown_units or not complete_run or not check_totals else (
         "failed" if any(item["rows_failed"] for item in check_totals) else "passed")
-    return {"status": status, "run_id": run_id, "units_expected": len(expected),
+    return {"status": status, "run_id": run_id, "run_complete": complete_run,
+            "reason": "Bookkeeping run is not complete" if not complete_run else None,
+            "units_expected": len(expected),
             "units_verified": len(expected) - len(unknown_units), "units_unknown": len(unknown_units),
             "unknown_units": unknown_units, "results": results, "checks": check_totals}
 

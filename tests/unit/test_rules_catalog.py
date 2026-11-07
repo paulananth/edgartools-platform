@@ -115,6 +115,14 @@ class _Server:
             self.table_delete_params.append(params)
         if method == "PATCH":
             self.patches.append((path, body))
+            if path.startswith("/dataQuality/testCases/testCaseResults/") and not getattr(
+                    self, "ignore_quality_patch", False):
+                case_path, timestamp = path.removeprefix(
+                    "/dataQuality/testCases/testCaseResults/").rsplit("/", 1)
+                name = unquote(case_path)
+                row = next(row for row in self.results[name] if row["timestamp"] == int(timestamp))
+                for op in body:
+                    row[op["path"].removeprefix("/")] = op["value"]
             for op in body if isinstance(body, list) else []:
                 if path.startswith("/tables/") and op.get("path") == "/certification":
                     self.certified_by_id = getattr(self, "certified_by_id", {})
@@ -811,14 +819,36 @@ def test_publish_preserves_and_verifies_every_run_result_and_is_idempotent():
     assert not [difference for difference in differences if "result" in difference]
 
 
-def test_publish_refuses_conflicting_result_at_same_history_timestamp():
+def test_publish_corrects_conflicting_result_once_and_reads_it_back():
     plan = catalog.plan()
     server = _Server(plan)
     results = _results_file()
     catalog.publish(plan, server, results=results)
     changed = {**results["company_fact.one_form_per_filing"], "rows_failed": 4}
-    with pytest.raises(catalog.CatalogError, match="different result"):
-        catalog.publish(plan, server, results={"company_fact.one_form_per_filing": changed})
+    corrected = catalog.publish(plan, server, results={"company_fact.one_form_per_filing": changed})
+    assert corrected["quality_results_sent"] == 1
+    assert len([path for path, _ in server.patches if path.startswith(
+        "/dataQuality/testCases/testCaseResults/")]) == 1
+    key, rows = next(iter(server.results.items()))
+    assert rows[0]["failedRows"] == 4 and rows[0]["passedRows"] == 36
+    assert not [difference for difference in catalog.verify(
+        plan, server, results={"company_fact.one_form_per_filing": changed})["differences"]
+                if "result" in difference]
+
+
+def test_publish_stops_after_one_quality_result_correction():
+    plan = catalog.plan()
+    server = _Server(plan)
+    results = _results_file()
+    catalog.publish(plan, server, results=results)
+    key, rows = next(iter(server.results.items()))
+    rows[0] = {**rows[0], "failedRows": 0, "passedRows": rows[0]["passedRows"] + rows[0]["failedRows"]}
+    server.ignore_quality_patch = True
+    changed = {"company_fact.one_form_per_filing": results["company_fact.one_form_per_filing"]}
+    with pytest.raises(catalog.CatalogError, match="after one permitted correction"):
+        catalog.publish(plan, server, results=changed)
+    assert len([path for path, _ in server.patches if path.startswith(
+        "/dataQuality/testCases/testCaseResults/")]) == 1
 
 
 def test_the_catalog_command_reads_the_results_file_it_is_given(tmp_path):
@@ -860,3 +890,30 @@ def test_catalog_results_can_come_directly_from_admitted_bookkeeping_evidence(mo
 def test_catalog_results_arguments_are_mutually_exclusive():
     with pytest.raises(ValueError, match="either --results or --bookkeeping-run"):
         rules_cli._results(Namespace(results=Path("results.json"), bookkeeping_run="run-a"))
+
+
+def test_catalog_cause_preserves_safe_quality_readback_stage():
+    error = catalog.CatalogError("quality result readback mismatch after one permitted correction")
+
+    assert rules_cli._catalog_cause(error, catalog) == (
+        "OpenMetadata quality result readback mismatch after bounded correction")
+
+
+def test_incomplete_bookkeeping_run_is_reported_pending_without_catalog_writes(capsys, monkeypatch):
+    monkeypatch.setattr(rules_cli, "_bookkeeping_quality", lambda _run_id: {
+        "status": "unknown", "run_id": "run-a", "run_complete": False,
+        "units_expected": 2, "units_verified": 1, "units_unknown": 1,
+        "unknown_units": [{"step": "silver", "work_unit_ref": "opaque-unknown"}],
+        "results": [{"run_id": "run-a", "step": "silver", "work_unit_ref": "opaque-known",
+                     "status": "passed"}]})
+    monkeypatch.setattr(catalog, "connect", lambda *_args: pytest.fail("unknown evidence cannot contact OpenMetadata"))
+
+    code = rules_cli._catalog(Namespace(action="publish", root="rules", draft_terms=False,
+                                        results=None, bookkeeping_run="run-a"))
+
+    assert code == 1
+    report = json.loads(capsys.readouterr().out)
+    assert report["status"] == "pending"
+    assert report["failed_stage"] == "quality_evidence"
+    assert report["quality"]["units_verified"] == 1
+    assert report["quality"]["unknown_units"] == [{"step": "silver", "work_unit_ref": "opaque-unknown"}]
