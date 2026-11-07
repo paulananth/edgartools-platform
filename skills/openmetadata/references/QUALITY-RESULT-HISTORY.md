@@ -5,6 +5,13 @@ the history key. Read back the exact timestamp with `startTs` and `endTs` set to
 it, then compare status, checked and failed counts, and result detail. A
 successful HTTP response alone does not confirm publication.
 
+OpenMetadata history timestamps have millisecond precision. When multiple
+work units for one case share the same observed millisecond, assign deterministic
+adjacent millisecond history keys so each load remains distinct. Preserve each
+receipt's original observation time in the result detail; the API timestamp is
+the unique history key, not a replacement for that observation time. Read back
+each exact assigned key before reporting confirmation.
+
 Treat an identical result at the same timestamp as an idempotent replay.
 Duplicate or mismatching history is an error to resolve, not a reason to POST
 again blindly. On OpenMetadata 2.0.2, a timestamp-specific `PATCH` can correct

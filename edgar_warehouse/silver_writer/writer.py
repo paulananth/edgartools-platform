@@ -48,7 +48,8 @@ class MdmIds:
             store.close()
 
 
-def land(sink: Sink, table: str, records: Iterable[dict], ids=None, results: Path | None = None) -> dict:
+def land(sink: Sink, table: str, records: Iterable[dict], ids=None, results: Path | None = None, *,
+         record_quality_results: bool = True) -> dict:
     """Write records into a registered table: fields are the spec's columns (a
     field the spec does not name is refused), and each link's MDM id is looked up.
     `mdm_keys_found` counts the distinct source keys MDM knows, over all links."""
@@ -61,7 +62,7 @@ def land(sink: Sink, table: str, records: Iterable[dict], ids=None, results: Pat
             raise Blocked(f"Record {number} holds fields silver.{table} does not name: {sorted(unknown)}")
         rows.append(record)
     rows, quality = checks.run(spec, rows)
-    results = results or os.environ.get(quality_results.ENVIRONMENT)
+    results = (results or os.environ.get(quality_results.ENVIRONMENT)) if record_quality_results else None
     if quality and results:
         quality_results.record(Path(results), table, quality)
     links = spec["links"] or []
