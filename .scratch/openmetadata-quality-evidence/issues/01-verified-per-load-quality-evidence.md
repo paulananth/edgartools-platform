@@ -16,7 +16,7 @@ Origin: GitHub issue #1434 and the approved plan in the issue-1434 plan worktree
 - [x] Confirm API history stores the exact synthetic load reference and confirm no `Shared` domain exists. Verified through the local OpenMetadata API; synthetic result was deleted, and the domain query returned false (2026-11-06 19:30 ET).
 - [ ] Observe in the shipped OpenMetadata UI that operators can find historical per-load results and distinguish confirmed, pending and failed publication. Repository policy prohibits agent UI automation; operator observation remains required.
 - [ ] Update Bookkeeping and OpenMetadata skill guidance after their overlapping draft PRs #1432 and #1418 merge. Data-operations skill updated here; overlap guard passes for the current branch.
-- [ ] Run code review, resolve findings, commit and publish a draft PR. Mark ready only after remaining acceptance and integration gates pass.
+- [x] Run code review, resolve the misleading incomplete-run summary finding, commit the work and publish draft PR [#1479](https://github.com/paulananth/edgartools-platform/pull/1479). Keep draft until remaining acceptance and integration gates pass.
 - [ ] Learning → skill: keep the per-load operator flow and recovery-gate lesson in the appropriate shared skills; record the final line changed after remaining skill ownership is released.
 
 ## Next action
