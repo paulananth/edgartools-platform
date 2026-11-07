@@ -136,10 +136,11 @@ Learned the hard way; each is a standing operator rule.
 
 ## Tooling Rules
 
-- Never use computer-use tools, browser automation or GUI interactions on this
-  project (operator, 2026-10-30). Use service APIs and CLI tools, including for
-  OpenMetadata publication, inspection, deletion and reset. Report a precise
-  missing API/CLI capability instead of falling back to a UI.
+- OpenMetadata UI is permitted only for login and personal access token
+  creation, using Playwright when the operator requests the UI or API/CLI
+  cannot complete that operation. Restrict interaction to the configured
+  instance and keep credentials and tokens out of output. Verify through
+  API/CLI when available; all other project workflows remain API/CLI-only.
 
 - Use the GitHub CLI (`gh`) for GitHub pull requests, issues, reviews and CI operations.
 - Before GitHub work, check `command -v gh`, `gh --version` and `gh auth status --hostname github.com`. Diagnose and repair executable, PATH, authentication or network failures. Report the exact failing command and error if `gh` remains blocked before using a fallback; attribute a failure to the sandbox only when the error establishes that cause.
