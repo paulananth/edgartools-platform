@@ -93,6 +93,21 @@ def migrate(
     application_host: str = "%",
     prepared: bool = True,
 ) -> dict:
+    """The stores' tables, then the mastering tables every merge writes."""
+    result = _migrate(engine, application_role=application_role, application_host=application_host, prepared=prepared)
+    from edgar_warehouse.mastering import store as mastering
+
+    mastering.install(engine, runtime_role=application_role)
+    return result
+
+
+def _migrate(
+    engine: Engine,
+    *,
+    application_role: str,
+    application_host: str = "%",
+    prepared: bool = True,
+) -> dict:
     """Explicit isolated migration with checksum validation.
 
     Role provisioning stays outside this function; deployments provide the

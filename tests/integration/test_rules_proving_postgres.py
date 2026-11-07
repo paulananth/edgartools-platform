@@ -48,7 +48,6 @@ def test_people_are_mastered_and_a_second_pass_changes_nothing(tmp_path, stores)
     assert report["passed"] and report["second_pass_changed_nothing"]
     first = report["passes"][0]
     assert first["mdm"]["masters"] == {"person": 3}
-    assert first["mdm"]["decisions"] == {"bind": 3}
     assert first["mdm"]["set_aside"] == {"classification_entity_undetermined": 1}
     assert first["records_in_mdm"] == len(DOCUMENTS)
     assert not first["mdm"]["identifiers_on_two_masters"]

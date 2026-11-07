@@ -10,6 +10,8 @@ the registrant for a filing naming none. Invented values only.
 
 from __future__ import annotations
 
+import pytest
+
 import copy
 import io
 import zipfile
@@ -32,6 +34,13 @@ from tests.integration import test_nport_isin_link as isin
 from tests.integration import test_nport_link_start as cusip
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
 from tests.support import source_chain as chain
+
+
+@pytest.fixture(autouse=True)
+def seeded_through_the_old_merge(monkeypatch):
+    from tests.support.old_master_ids import OldIds
+
+    monkeypatch.setattr("edgar_warehouse.silver_writer.writer.MdmIds", OldIds)
 
 FOLDER = cusip.FOLDER
 # A-1's series filed lower-case; A-2's "N/A" is no series: the registrant's own.
@@ -198,7 +207,8 @@ def test_the_mastering_target_lands_the_holdings_after_the_securities_merge():
     land = steps["land_holding"]
     assert land["operation"] == "silver.land" and land["requires"] == ["holding_rows", "merge"]
     assert land["input"]["keys"] == {"table": "holding", "silver": spec_file(FOLDER / "silver-holding.yaml", None)["table"]}
-    assert steps["processed"]["requires"] == ["land_holding"]  # the Change Journal records only what landed
+    assert steps["links"]["requires"] == ["land_holding"]
+    assert steps["processed"]["requires"] == ["links"]  # the Change Journal records only what landed
 
 
 def test_the_land_step_lands_every_holding_once_and_its_verifier_confirms(database, tmp_path, monkeypatch):

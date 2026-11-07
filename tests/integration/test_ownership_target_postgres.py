@@ -102,7 +102,7 @@ def test_no_landing_is_claimable_before_the_merge_and_each_then_lands_its_rows(d
         return silver_land.execute(envelope, artifacts)
 
     workers = {"source.read": source_read, "mdm.prepare": mdm_prepare,
-               "mdm.merge": SimpleNamespace(execute=merge, verify=lambda e, a: ({n: True for n in e["checks"]}, [])),
+               "mastering.merge": SimpleNamespace(execute=merge, verify=lambda e, a: ({n: True for n in e["checks"]}, [])),
                "silver.land": SimpleNamespace(execute=land, verify=silver_land.verify)}
     for profile in workers:
         grant_profile(databases.admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")

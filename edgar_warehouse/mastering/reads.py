@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+from collections import Counter, defaultdict
+
 from edgar_warehouse.mdm.evidence import subject_key
 from edgar_warehouse.mdm.primitives import prepare_matching_value
 
@@ -52,3 +56,24 @@ def splits_of(store, entity: str) -> list[dict]:
               "at": reversed_by[d["decision_id"]]["at"], "excluded": True}
              for d in decisions if d["operation"] == "merge" and d["decision_id"] in reversed_by]
     return sorted(found, key=lambda item: (item["at"], item["merge"]))
+
+
+def counts(store) -> dict:
+    """What a store holds, in counts and one digest: `rules test` compares two passes with it."""
+    masters, holders, digest = Counter(), defaultdict(set), hashlib.sha256()
+    for entity, text in store.rows("select entity_id,body from mastering_master order by entity_id"):
+        digest.update(f"{entity}:{text}\n".encode())
+        body = json.loads(text)
+        if body["canonical_id"] == entity:
+            masters[body["kind"]] += 1
+            for namespace, values in body.get("identifiers", {}).items():
+                for value in values:
+                    holders[namespace, value].add(entity)
+    grouped = {part: dict(store.rows(statement)) for part, statement in (
+        ("stage_records", "select source_code,count(*) from mastering_record group by source_code"),
+        ("set_aside", "select reason,count(*) from mastering_deferred group by reason"),
+        ("open_reviews", "select reason,count(*) from mastering_review where open_review=1 group by reason"),
+        ("decisions", "select operation,count(*) from mastering_decision group by operation"))}
+    on_two = Counter(namespace for (namespace, _), owners in holders.items() if len(owners) > 1)
+    return {"masters": dict(masters), **grouped, "identifiers_on_two_masters": dict(on_two),
+            "current_records_sha256": digest.hexdigest()}

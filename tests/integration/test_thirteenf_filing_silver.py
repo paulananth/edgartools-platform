@@ -2,6 +2,7 @@
 PG16: read (one unit a submissions list), then one landing a unit. Invented lists; every value is invented."""
 import hashlib
 import json
+import pytest
 from copy import deepcopy
 from types import SimpleNamespace
 from uuid import uuid4
@@ -20,6 +21,13 @@ from tests.integration.test_mdm_merge_worker_postgres import mdm  # noqa: F401
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
 from tests.support.bookkeeping_protocol import drive
 from tests.support.memory_journal import MemoryJournal
+
+
+@pytest.fixture(autouse=True)
+def seeded_through_the_old_merge(monkeypatch):
+    from tests.support.old_master_ids import OldIds
+
+    monkeypatch.setattr("edgar_warehouse.silver_writer.writer.MdmIds", OldIds)
 
 SOURCE = "sec.thirteenf.filings"
 FOLDER = files.ROOT / "sources" / SOURCE

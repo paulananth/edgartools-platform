@@ -60,16 +60,17 @@ def sandbox_authority(source: str, code: str, contract: dict, capture_sha256: st
             "approval": {"digest": content, "by": "rules-test sandbox", "at": "1970-01-01T00:00:00Z"}}
 
 
-def _records_md5(engine) -> str:
-    """The governed current-record byte digest; historical SQL hashes remain historical."""
-    return counts(engine)["current_records_md5"]
-
-
 def counts(engine) -> dict:
-    """Count the governed store on one snapshot, through its indexed record pages."""
-    from edgar_warehouse.mdm.inspection import counts as inspect_counts
+    """What the store holds, as `mdm` keeps it."""
+    from edgar_warehouse.mastering import reads
+    from edgar_warehouse.mastering.store import open_store
 
-    return inspect_counts(engine)
+    store = open_store(engine)
+    try:
+        return reads.counts(store)
+    finally:
+        store.rollback()
+        store.close()
 
 
 def quality(folder: Path, mdm) -> dict:

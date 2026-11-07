@@ -18,6 +18,13 @@ from tests.integration.test_company_fact_silver import FOLDER, rows
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
 
 
+@pytest.fixture(autouse=True)
+def seeded_through_the_old_merge(monkeypatch):
+    from tests.support.old_master_ids import OldIds
+
+    monkeypatch.setattr("edgar_warehouse.silver_writer.writer.MdmIds", OldIds)
+
+
 class Artifacts:
     """What the worker asks of the artifact store: the verified receipt, and writing one."""
 
