@@ -97,6 +97,11 @@ AWS acquisition supplies completed deliveries separately. To install, enable
 and run one source, then clear a finished test, follow
 [Install and enable one source](../data-operations/SKILL.md#install-and-enable-one-source).
 
+For an incident diagnosis or a gap in operational telemetry, use
+[production-support](../production-support/SKILL.md). It diagnoses from
+Bookkeeping, Change Journal and destination evidence; it does not add an
+alerting integration or replace the normal run verifier.
+
 | Step | Mode | Detail in |
 |---|---|---|
 | Start | Explain current state and complete the remaining steps | [Completion guide](COMPLETION.md) |

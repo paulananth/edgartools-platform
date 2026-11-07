@@ -1,6 +1,6 @@
 ---
 name: production-support
-description: Diagnose pipeline failures and resource inefficiency from job status, CPU, memory and logs. Use for incident RCA, scheduled operational reviews and cost/performance recommendations with mandatory architecture and security consultation.
+description: Diagnose pipeline failures, observability gaps and resource inefficiency from run status, telemetry and logs. Use for incident RCA, bounded operational reviews and cost/performance recommendations with mandatory architecture and security consultation.
 ---
 
 # Production support
@@ -37,6 +37,12 @@ Collect only evidence needed to distinguish causes:
   processed, throughput, I/O, throttling and relevant database waits.
 - Bounded log windows correlated to the same run/task and timestamps; deployment,
   rules and input changes; verifier results and receipt references.
+
+For data-pipeline correctness, use Bookkeeping's verified unit states, Change
+Journal receipts and destination read-back as evidence. Host metrics and task
+success show execution or liveness; they do not prove source completeness,
+record acceptance or published correctness. Correlate every count and duration
+to the same run, step and input scope before comparing it.
 
 Separate observation from inference. Missing memory metrics do not prove spare
 capacity; high CPU does not prove the CPU is the bottleneck. Keep raw logs/data
