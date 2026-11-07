@@ -312,6 +312,9 @@ class LocalStores:
                 quote = mdm.dialect.identifier_preparer.quote
                 for table in adapter.tables.values():
                     conn.exec_driver_sql(f"GRANT SELECT ON {quote(table.schema)}.{quote(table.name)} TO mdm_verifier,mdm_governance")
+                from edgar_warehouse.mastering.store import WRITTEN
+                read = ",".join(f"mastering_{name}" for name in (*WRITTEN, "decision"))
+                conn.exec_driver_sql(f"GRANT SELECT ON {read} TO mdm_verifier,mdm_governance")
             grant(mdm, "mdm_governance")
 
         finally:

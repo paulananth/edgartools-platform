@@ -109,15 +109,18 @@ def filers(companies: dict[str, tuple[str | None, str | None]]) -> dict[str, tup
 def from_company(mdm_engine, keys: set[str]) -> dict[str, tuple[str | None, str | None]]:
     """Each company's SIC and place of incorporation, read from its Company master;
     a key with no master is left out."""
-    from edgar_warehouse.mdm.consumer import ContractReader
-    from edgar_warehouse.silver_writer.writer import MdmIds
+    from edgar_warehouse.mastering import reads
+    from edgar_warehouse.mastering.store import open_store
 
-    masters = {k: v for k, v in MdmIds(mdm_engine)(COMPANY_SOURCE, "company", keys).items() if v}
-    reader, out = ContractReader(mdm_engine), {}
-    for key, master in masters.items():
-        fields = reader.entity(master)["identity"].get("fields", {})
-        out[key] = tuple((fields.get(name) or {}).get("value") or None for name in ("sic", "state_of_incorporation"))
-    return out
+    store = open_store(mdm_engine)
+    try:
+        masters = reads.master_ids(store, COMPANY_SOURCE, keys)
+        bodies = store.master_bodies(set(masters.values()))
+    finally:
+        store.rollback()
+        store.close()
+    return {key: tuple((bodies[master]["fields"].get(name) or {}).get("value") or None
+                       for name in ("sic", "state_of_incorporation")) for key, master in masters.items()}
 
 
 def _rates(countries: set[str]) -> list[tuple]:

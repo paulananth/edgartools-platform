@@ -510,11 +510,8 @@ These name this repo's code and the failures each rule came from.
   `edgar_warehouse/mdm/store.py` (`MIGRATIONS`).
 - **Tests that hold the rules:**
   `tests/architecture/test_mdm_routine_retirement.py` (retired calculation
-  callers stay absent), `tests/storage_adapters/test_record_scope.py`
-  (indexed scope and validated references),
-  `tests/storage_adapters/test_prepared_effects.py` (indexed reads and a request
-  beyond the former size cap), and `tests/mdm/test_limits.py` (input
-  batching keeps an oversized record).
+  callers stay absent) and `tests/mdm/test_limits.py` (input batching keeps an
+  oversized record).
 - **No size refusal** (rebuild ticket 74): a 10,000-record closure cap and a
   16 MiB request cap, chosen for a local machine, stopped the ownership
   Proving Run, whose insider network was one connected group.

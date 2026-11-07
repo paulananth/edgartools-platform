@@ -18,6 +18,13 @@ from tests.integration.test_company_fact_silver import FOLDER, rows
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
 
 
+@pytest.fixture(autouse=True)
+def seeded_through_the_old_merge(monkeypatch):
+    from tests.support.old_master_ids import OldIds
+
+    monkeypatch.setattr("edgar_warehouse.silver_writer.writer.MdmIds", OldIds)
+
+
 class Artifacts:
     """What the worker asks of the artifact store: the verified receipt, and writing one."""
 
@@ -85,7 +92,8 @@ def test_other_units_rows_cannot_hide_a_missing_key(landed, database):
     """Another unit's filer lands too, so silver holds more rows than this unit's reading; one of
     this unit's own rows is then gone. A count of the table would pass; the unit's own keys do not."""
     from edgar_warehouse.silver_writer.relational import DatabaseSink
-    from edgar_warehouse.silver_writer.writer import MdmIds, land
+    from edgar_warehouse.silver_writer.writer import land
+    from tests.support.old_master_ids import OldIds as MdmIds
 
     store = Artifacts()
     out = silver_land.execute(envelope(), store)

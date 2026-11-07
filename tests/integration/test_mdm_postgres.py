@@ -205,7 +205,7 @@ def current_records(db):
 
 def bindings(db, source_code=None, *, by_subject=False):
     """Fixture bindings through the configured canonical master lookup."""
-    from edgar_warehouse.silver_writer.writer import MdmIds
+    from tests.support.old_master_ids import OldIds as MdmIds
 
     records = [r for r in current_records(db).values()
                if source_code is None or r["source_code"] == source_code]

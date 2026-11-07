@@ -102,14 +102,22 @@ bookkeeping:
             keys: {table: fund, record_column: record, dataset: sec.nport.fund.v1}
             readings: {record: {all: record}}
         - name: merge
-          operation: mdm.merge
+          operation: mastering.merge
           requires: [prepare]
           key: "{batch_id}"
           leases: ["mdm:consumer:{consumer}"]
           checks: [input.hash, output.receipt, mdm.committed]
+        # Links are a silver table, built from the stored records after the merge.
+        - name: links
+          operation: silver.derive
+          requires: [merge]
+          key: "{unit}"
+          leases: ["silver:{silver}", "silver:{reads}"]
+          checks: [input.hash, output.receipt, silver.derived]
+          input: {keys: {build: links, silver: relationship, reads: mastering_record}}
         - name: processed
           operation: journal.record
-          requires: [merge]
+          requires: [links]
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, journal.recorded]

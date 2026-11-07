@@ -1026,7 +1026,7 @@ bookkeeping:
             keys: {table: security, record_column: record, dataset: sec.nport.security.v2}
             readings: {record: {all: record}}
         - name: merge
-          operation: mdm.merge
+          operation: mastering.merge
           requires: [prepare]
           key: "{batch_id}"
           leases: ["mdm:consumer:{consumer}"]
@@ -1041,9 +1041,17 @@ bookkeeping:
           leases: ["silver:{silver}"]
           checks: [input.hash, output.receipt, silver.landed]
           input: {keys: {table: holding, silver: nport_holding}}
+        # Links are a silver table, built from the stored records after the merge.
+        - name: links
+          operation: silver.derive
+          requires: [land_holding]
+          key: "{unit}"
+          leases: ["silver:{silver}", "silver:{reads}"]
+          checks: [input.hash, output.receipt, silver.derived]
+          input: {keys: {build: links, silver: relationship, reads: mastering_record}}
         - name: processed
           operation: journal.record
-          requires: [land_holding]
+          requires: [links]
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, journal.recorded]
@@ -1074,7 +1082,7 @@ bookkeeping:
             keys: {table: security, record_column: record, dataset: sec.nport.security.v2}
             readings: {record: {all: record}}
         - name: merge
-          operation: mdm.merge
+          operation: mastering.merge
           requires: [prepare]
           key: "{batch_id}"
           leases: ["mdm:consumer:{consumer}"]

@@ -189,7 +189,7 @@ bookkeeping:
             keys: {table: security, record_column: record, dataset: sec.thirteenf.securities.v1}
             readings: {record: {all: record}}
         - name: merge
-          operation: mdm.merge
+          operation: mastering.merge
           requires: [prepare]
           key: "{batch_id}"
           leases: ["mdm:consumer:{consumer}"]

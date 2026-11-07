@@ -144,7 +144,7 @@ bookkeeping:
             keys: {table: company, dataset: sec.company.v1}
             readings: {combined: {all: combine}}
         - name: merge
-          operation: mdm.merge
+          operation: mastering.merge
           requires: [records]
           key: "{batch_id}"
           leases: ["mdm:consumer:{consumer}"]
@@ -161,7 +161,7 @@ bookkeeping:
     merge-batch:
       steps:
         - name: merge
-          operation: mdm.merge
+          operation: mastering.merge
           requires: []
           key: "{batch_id}"
           leases: ["mdm:consumer:{consumer}"]

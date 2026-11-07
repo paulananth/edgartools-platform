@@ -76,7 +76,7 @@ bookkeeping:
             keys: {table: filings, record_column: record, dataset: iapd.adv.filings.v1}
             readings: {record: {all: record}}
         - name: merge
-          operation: mdm.merge
+          operation: mastering.merge
           requires: [prepare]
           key: "{batch_id}"
           leases: ["mdm:consumer:{consumer}"]
@@ -137,7 +137,7 @@ bookkeeping:
             keys: {table: custody, record_column: record, dataset: iapd.adv.custodians.v1, distinct_on: [custodian_id]}
             readings: {record: {all: record}}
         - name: merge
-          operation: mdm.merge
+          operation: mastering.merge
           requires: [prepare]
           key: "{batch_id}"
           leases: ["mdm:consumer:{consumer}"]
