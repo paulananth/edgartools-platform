@@ -312,9 +312,15 @@ def _catalog(args):
                           "quality": quality_summary,
                           "cause": "Bookkeeping quality evidence is unknown or incomplete",
                           "next_action": "Finish or reconcile the Bookkeeping run, then retry publication."}
-                report["summary"] = (f"PENDING: Bookkeeping run {args.bookkeeping_run} has "
-                                     f"{quality_summary['units_unknown']} unknown unit(s); "
-                                     "complete verification before publishing.")
+                if not quality_summary.get("run_complete"):
+                    report["summary"] = (f"PENDING: Bookkeeping run {args.bookkeeping_run} is not complete; "
+                                         f"{quality_summary['units_verified']}/{quality_summary['units_expected']} "
+                                         f"units verified and {quality_summary['units_unknown']} unknown. "
+                                         "Complete run verification before publishing.")
+                else:
+                    report["summary"] = (f"PENDING: Bookkeeping run {args.bookkeeping_run} has "
+                                         f"{quality_summary['units_unknown']} unknown unit(s); "
+                                         "complete verification before publishing.")
                 return _catalog_output(report)
             from edgar_warehouse.bookkeeping.clean.quality import catalog_results
             results = catalog_results(quality_summary)

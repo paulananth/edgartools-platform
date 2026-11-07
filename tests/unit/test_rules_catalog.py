@@ -917,3 +917,20 @@ def test_incomplete_bookkeeping_run_is_reported_pending_without_catalog_writes(c
     assert report["failed_stage"] == "quality_evidence"
     assert report["quality"]["units_verified"] == 1
     assert report["quality"]["unknown_units"] == [{"step": "silver", "work_unit_ref": "opaque-unknown"}]
+
+
+def test_incomplete_run_summary_says_not_complete_when_no_units_are_unknown(capsys, monkeypatch):
+    monkeypatch.setattr(rules_cli, "_bookkeeping_quality", lambda _run_id: {
+        "status": "unknown", "run_id": "run-a", "run_complete": False,
+        "units_expected": 2, "units_verified": 2, "units_unknown": 0,
+        "unknown_units": [], "results": []})
+    monkeypatch.setattr(catalog, "connect", lambda *_args: pytest.fail("incomplete evidence cannot contact OpenMetadata"))
+
+    code = rules_cli._catalog(Namespace(action="publish", root="rules", draft_terms=False,
+                                        results=None, bookkeeping_run="run-a"))
+
+    assert code == 1
+    report = json.loads(capsys.readouterr().out)
+    assert report["status"] == "pending"
+    assert "is not complete" in report["summary"]
+    assert "2/2 units verified and 0 unknown" in report["summary"]
