@@ -25,14 +25,14 @@ branch from current `main` and integrated without losing its tested behavior?
 - [x] Confirm API history stores the exact synthetic load reference and confirm no `Shared` domain exists. Verified through the local OpenMetadata API; synthetic result was deleted, and the domain query returned false (2026-11-06 19:30 ET).
 - [ ] ~~Observe in the shipped OpenMetadata UI that operators can find historical per-load results and distinguish confirmed, pending and failed publication.~~ Deferred to [Observe Per-Load History in the Shipped OpenMetadata UI](06-observe-history-in-shipped-openmetadata-ui.md); the repository requires operator observation of the shipped UI.
 - [x] Write the Bookkeeping recovery and OpenMetadata result-history guidance in this separate change after PRs #1432 and #1418 were closed. Verified by reviewing both skill diffs (2026-11-06 20:32 ET).
-- [ ] Verify the installed data bundle imports the new Bookkeeping quality module without duplicating it across wheels. The first PR head failed `test_the_bundle_installs_whole_with_no_file_in_two_wheels` because the Bookkeeping wheel omitted `clean/quality.py`; the wheel manifest now includes it, and the newly built wheel contains it. Confirm the full installed-bundle test on the updated PR head.
+- [x] Verify the installed data bundle imports the new Bookkeeping quality module without duplicating it across wheels. The first PR head failed `test_the_bundle_installs_whole_with_no_file_in_two_wheels` because the Bookkeeping wheel omitted `clean/quality.py`; the Bookkeeping wheel now includes it. Verified by the installed-bundle test passing in the Engine CI job for PR #1484 head `216e83dd` (2026-11-07 11:25 ET).
 - [x] Run code review, resolve the misleading incomplete-run summary finding, and publish draft PR [Preserve verified per-load quality evidence for OpenMetadata (#1479)](https://github.com/paulananth/edgartools-platform/pull/1479); closed at the operator's request, with branch and commits retained.
-- [ ] Integrate the preserved implementation into a new PR from the fresh branch rebased onto current `origin/main` after PRs #1481–#1483 merged; publish, pass current-head CI and merge before checking this item.
+- [x] Integrate the preserved implementation into a new PR from the fresh branch rebased onto current `origin/main` after PRs #1481–#1483 merged. PR [#1484](https://github.com/paulananth/edgartools-platform/pull/1484) passed every current-head CI check and merged as `8d41e29e` (2026-11-07 11:25 ET).
 - [x] Add the recovery-format enablement gate to `skills/bookkeeping/RECOVERY.md` and the exact-timestamp history/readback contract to `skills/openmetadata/references/QUALITY-RESULT-HISTORY.md`. Verified by reviewing the document diff (2026-11-06 20:32 ET).
 - [x] Learning → skill: `skills/bookkeeping/RECOVERY.md` → **Enable a new receipt format**; `skills/openmetadata/SKILL.md` points per-load history readers to `skills/openmetadata/references/QUALITY-RESULT-HISTORY.md`. Verified by reviewing the document diff (2026-11-06 20:32 ET).
 
 ## Next action
 
-Keep this ticket open. The original implementation PR is closed and its branch
-is preserved. Restore that work through a fresh PR; the linked race-proof and
-operator-observation tickets keep those acceptance gates distinct.
+Keep this ticket open. Implementation is merged in PR #1484. The linked atomic
+attempt-supersession proof and shipped-UI observation remain separate open gates
+in tickets 03 and 06.
