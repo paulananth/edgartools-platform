@@ -531,6 +531,9 @@ the API with a throwaway case on a real table, never a real case, and delete the
 case and its empty suite (`DELETE /dataQuality/testCases/{id}?hardDelete=true&recursive=true`,
 then `DELETE /dataQuality/testSuites/basic/name/{suite}?hardDelete=true&recursive=true`).
 
+For historical results tied to individual loads, follow
+[Quality result history](references/QUALITY-RESULT-HISTORY.md).
+
 A PUT of a case on a table auto-creates that table's basic suite
 `{tableFQN}.testSuite` and attaches the case. Do not create a second suite for
 the same table.
