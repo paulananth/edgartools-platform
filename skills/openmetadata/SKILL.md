@@ -80,13 +80,16 @@ to the configured table assets. The local 2.0.2 API also returned `testCase`
 references for some products; match those separately to configured quality
 cases, and do not count them as table assets. Their rendered UI presentation
 has not been verified.
-`rules catalog publish` also writes every configured check and every
-registered prepared-table check as a quality case, and every configured fix
-as a correction. A profile proposal is not a case. A case has a pass or fail only
-when a silver load wrote a results file (`QUALITY_RESULTS_FILE`, or
-`land(..., results=path)`) and `publish --results FILE` sent it. The definitions are `edgartools-configured-table-check` and
-`edgartools-configured-column-check`, platform Other, and OpenMetadata does
-not execute them. A case whose column is on the table uses
+`rules catalog publish` also writes every configured check and every registered
+prepared-table check as a quality case, and every configured fix as a
+correction. A profile proposal is not a case. A case has a published result
+only when an external check supplies one through the legacy latest-only
+`--results FILE` input or verified completed Bookkeeping receipts via
+`--bookkeeping-run RUN_ID`. When both are present, `--bookkeeping-run` is used
+and `--results` is ignored. The
+definitions are `edgartools-configured-table-check` and
+`edgartools-configured-column-check`, platform Other; OpenMetadata does not
+execute them. A case whose column is on the table uses
 `<#E::table::{fqn}::columns::{column}>`. Any other case uses
 `<#E::table::{fqn}>`. A green publish that omits them is a publisher gap.
 A domain relationship is one pinned relationship type. Read it from the code
@@ -520,19 +523,22 @@ otherwise the Test Cases surface can imply that the correction runs or has a
 pass/fail result. Keep the correction in its owning Rules configuration and
 describe it as a planned action when projecting it as metadata.
 
-A result is `POST /api/v1/dataQuality/testCases/testCaseResults/{caseFQN}` with
-`timestamp`, `testCaseStatus` (`Success` or `Failed`), `testResultValue`,
-`passedRows` and `failedRows`; read it as `testCaseResult` with
-`fields=testCaseResult`. A failed result opens an incident. `check --results FILE`
-reports "result changed, publish again". A silver load's file keeps the latest
-report per check (`<table>.<check id>`). Only silver checks write one so far; the
-source checks and the master identifier limits have no results file yet. Probe
-the API with a throwaway case on a real table, never a real case, and delete the
-case and its empty suite (`DELETE /dataQuality/testCases/{id}?hardDelete=true&recursive=true`,
-then `DELETE /dataQuality/testSuites/basic/name/{suite}?hardDelete=true&recursive=true`).
+The legacy `--results FILE` path is latest-only: a silver load's file keeps the
+latest report per check (`<table>.<check id>`). It is not per-load Bookkeeping
+history. `publish` and `check` confirm either input through the exact timestamp
+history readback in
+[Quality result history](references/QUALITY-RESULT-HISTORY.md). `check` reports
+"result changed, publish again" when that readback differs. A failed result
+opens an incident. Only silver checks write this legacy file so far; the source
+checks and master identifier limits do not.
 
-For historical results tied to individual loads, follow
-[Quality result history](references/QUALITY-RESULT-HISTORY.md).
+For per-load results from a completed Bookkeeping run, use
+`edgar-warehouse rules catalog publish --bookkeeping-run RUN_ID`. That command
+also reconciles the configured catalog plan.
+
+Probe the API with a throwaway case on a real table, never a real case, and
+delete the case and its empty suite (`DELETE /dataQuality/testCases/{id}?hardDelete=true&recursive=true`,
+then `DELETE /dataQuality/testSuites/basic/name/{suite}?hardDelete=true&recursive=true`).
 
 A PUT of a case on a table auto-creates that table's basic suite
 `{tableFQN}.testSuite` and attaches the case. Do not create a second suite for
@@ -659,6 +665,8 @@ unset OM_LOGIN_EMAIL OM_LOGIN_PASSWORD OM_LOGIN_PASSWORD_B64 OM_LOGIN_BODY
 Keep the variables in the private shell only. Never echo or save the token in
 the repository. The URL passed to `catalog.connect` is the server root; that
 function adds `/api/v1`.
+For longer-lived writable-token requests, consult
+[Token issuance and lifetime](references/TOKEN-LIFECYCLE.md) first.
 
 A whole-service reset deletes the owned pipeline service, then the owned
 database service:

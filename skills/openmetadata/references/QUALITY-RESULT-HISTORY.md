@@ -1,9 +1,21 @@
 # Quality result history
 
-Keep a distinct native result for each case and load, using its timestamp as
-the history key. Read back the exact timestamp with `startTs` and `endTs` set to
-it, then compare status, checked and failed counts, and result detail. A
-successful HTTP response alone does not confirm publication.
+For per-load publication, the normal `rules catalog publish` workflow accepts
+`--bookkeeping-run RUN_ID`; it reads verified receipts from a completed
+Bookkeeping run and reconciles the configured catalog plan. Use this publisher,
+not a separate hand-written API procedure.
+
+For each case and load, this publisher sends a result to
+`POST /api/v1/dataQuality/testCases/testCaseResults/{caseFQN}` with `timestamp`,
+`testCaseStatus` (`Success` or `Failed`), `result`, `passedRows`, `failedRows`,
+and `testResultValue`.
+The publisher reads the exact timestamp back with
+`GET /api/v1/dataQuality/testCases/testCaseResults/{caseFQN}?startTs={timestamp}&endTs={timestamp}`
+using the FQN as one URL-encoded path segment. Require exactly one row with
+that timestamp; compare all six fields. `testResultValue` has `rowsChecked` and
+`rowsFailed` name/value entries with string values; `passedRows` is
+`rowsChecked - rowsFailed`. A successful HTTP response alone does not confirm
+publication.
 
 OpenMetadata history timestamps have millisecond precision. When multiple
 work units for one case share the same observed millisecond, assign deterministic

@@ -20,6 +20,17 @@ time. Enable it only after the measured resume completes within that maximum.
 Record the owner, procedure, measurement and maximum with the validation
 evidence. Parsing receipts or passing unit tests does not prove resume works.
 
+When a frozen step requests `silver.quality.evidence.v2`, the worker checks
+only whether `SILVER_QUALITY_EVIDENCE_V2` is set to `enabled`; it does not
+verify these qualifications. Keep the opt-in unset until the operator records
+the evidence and authorizes enablement. A request without that exact setting
+fails closed.
+
+## General run recovery
+
+These operational cases cover existing runs; they do not demonstrate a
+version-2 receipt resume or satisfy the qualification gate above.
+
 Resolve the requested source/feed again and compare its dataset/member set
 with the run's frozen manifest. A matching source name alone does not identify
 the same feed. Preserve the original Rules digest when recovering a run;
