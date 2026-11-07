@@ -416,10 +416,9 @@ Work it out from counts before starting:
   then requires exact timestamped OpenMetadata readback. Use
   `edgar-warehouse rules catalog check --bookkeeping-run <run-id>` for a
   read-only confirmation later. An incomplete run remains unknown and cannot
-  publish. Keep `SILVER_QUALITY_EVIDENCE_V2` unset until a named recovery owner,
-  documented resume procedure, disposable measured resume and operator-set
-  maximum recovery time are recorded; enable it only when the measurement is
-  within that maximum and the frozen run requests version-2 evidence. Catalog
+  publish. Keep `SILVER_QUALITY_EVIDENCE_V2` unset until
+  [Enable a new receipt format](../bookkeeping/RECOVERY.md#enable-a-new-receipt-format)
+  is met. Catalog
   entries describe the load and its checks; OpenMetadata does not run or resume
   the pipeline.
   `failures` groups the units that hold an error by step, state and error shape, with counts: read it before
