@@ -82,11 +82,11 @@ approvals:
   finalized: PR 1483
 - kind: source
   name: sec.ownership
-  digest: 6d5056f4f656b7633ad82f6c35e6c5dcd0c0b9514c49b1beb72f14fca7c77e3d
+  digest: a1e8c964ef867f52df411d3afceab02ba274cf3a3b2ddf9a9f870c46beffd887
   by: Operator
   words: Approved the rules always
-  at: '2026-11-06'
-  finalized: PR 1481
+  at: '2026-11-07'
+  finalized: PR 1489
 - kind: source
   name: sec.registration
   digest: 37e556f28d20058e27480856b0ab9bd3f88393dec0d62b961ef93d604bb9218c
