@@ -1,10 +1,9 @@
 # Restore Verified Per-Load Quality Evidence
 
 Type: task
-Status: open
+Status: resolved
 Origin: GitHub issue [Preserve verified per-load silver quality evidence](https://github.com/paulananth/edgartools-platform/issues/1434) and its approved plan
 Blocked by: none
-Blocks: 03, 04, 05, 07
 Labels: wayfinder:task
 
 ## Question
@@ -31,8 +30,8 @@ branch from current `main` and integrated without losing its tested behavior?
 - [x] Add the recovery-format enablement gate to `skills/bookkeeping/RECOVERY.md` and the exact-timestamp history/readback contract to `skills/openmetadata/references/QUALITY-RESULT-HISTORY.md`. Verified by reviewing the document diff (2026-11-06 20:32 ET).
 - [x] Learning → skill: `skills/bookkeeping/RECOVERY.md` → **Enable a new receipt format**; `skills/openmetadata/SKILL.md` points per-load history readers to `skills/openmetadata/references/QUALITY-RESULT-HISTORY.md`. Verified by reviewing the document diff (2026-11-06 20:32 ET).
 
-## Next action
+## Answer
 
-Keep this ticket open. Implementation is merged in PR #1484. The linked atomic
-attempt-supersession proof and shipped-UI observation remain separate open gates
-in tickets 03 and 06.
+The implementation was restored in [Restore verified per-load OpenMetadata quality results](https://github.com/paulaananth/edgartools-platform/pull/1484), merged at `8d41e29e01ea30f462fd8612e25d08a5cf3f1033` from checked head `216e83ddd063a65589467074e6ce4a7150fea910`. All 12 reported checks pass on that head. The implementation-restoration question is complete.
+
+The attempt-supersession proof and shipped-UI observation remain open in [Prove Atomic Attempt Supersession](03-prove-atomic-attempt-supersession.md) and [Observe Per-Load History in the Shipped OpenMetadata UI](06-observe-history-in-shipped-openmetadata-ui.md); recovery-maximum work remains open in [Set and Prove the Recovery Maximum](04-set-and-prove-recovery-maximum.md). These are separate gates, not blockers to this implementation task. Version-2 receipts remain disabled until the recovery gates pass.

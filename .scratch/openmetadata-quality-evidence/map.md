@@ -21,11 +21,6 @@ format disabled until its measured recovery is within an operator-set maximum.
   `skills/openmetadata/references/QUALITY-RESULT-HISTORY.md`.
 - Reuse captured local data. Do not request new provider data to complete this
   effort.
-- PR [Preserve verified per-load quality evidence for OpenMetadata (#1479)](https://github.com/paulananth/edgartools-platform/pull/1479),
-  [Report Bookkeeping load evidence in OpenMetadata (#1432)](https://github.com/paulananth/edgartools-platform/pull/1432),
-  and [Explain OpenMetadata catalog and per-load visibility (#1418)](https://github.com/paulananth/edgartools-platform/pull/1418)
-  were closed at the operator's request. Their branches remain preserved.
-  Restore implementation work on a fresh branch from current `main`.
 
 ## Decisions so far
 
@@ -34,14 +29,10 @@ format disabled until its measured recovery is within an operator-set maximum.
   not publication until the exact result reads back.
 - Require an owner, documented resume procedure, disposable measured resume
   and operator-set maximum recovery time before enabling the new receipt format.
+- [Restore Verified Per-Load Quality Evidence](issues/01-verified-per-load-quality-evidence.md): [Restore verified per-load OpenMetadata quality results](https://github.com/paulananth/edgartools-platform/pull/1484) merged with CI passing; the remaining attempt, recovery, and UI gates stay open in their own tickets.
 
 ## Not yet specified
 
-- The recovery-time maximum; set it after measuring a disposable resume in
-  [Set and Prove the Recovery Maximum](issues/04-set-and-prove-recovery-maximum.md).
-- Which existing captured local run is suitable for end-to-end verification;
-  select it after read-only inspection in
-  [Verify a Completed Load End to End](issues/05-verify-a-completed-load-end-to-end.md).
 
 ## Out of scope
 
