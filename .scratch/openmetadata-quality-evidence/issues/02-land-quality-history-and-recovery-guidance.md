@@ -1,7 +1,7 @@
 # Land Per-Load Guidance and Work Map
 
 Type: task
-Status: claimed
+Status: resolved
 Blocked by: none
 Blocks: 07
 Labels: wayfinder:task
@@ -17,6 +17,6 @@ Does the merged guidance in [Map and document per-load quality evidence (#1480)]
 - [x] Clarify that the recovery switch is conditional and manual; keep owner, resume, measured recovery and maximum gates deferred to [Set and Prove the Recovery Maximum](04-set-and-prove-recovery-maximum.md). The load skill now points at that recovery section instead of restating a second gate. Verified against `silver_land.py` (2026-11-07 16:20 ET).
 - [x] Add token lifecycle guidance that distinguishes short-lived login tokens from eight-day PATs and records the unsupported 2.0.2 API/CLI issuance boundary. Verified by reading `skills/openmetadata/references/TOKEN-LIFECYCLE.md` (2026-11-07 16:20 ET).
 - [x] Review the final skill and map diffs and links. Standards and Spec reviews found two false contracts: legacy confirmation does not use a `testCaseResult` projection, and `--bookkeeping-run` wins over `--results`. Both are corrected. Documentation checks passed (101 tests, 2026-11-07 16:21 ET); overlap guard found no overlap. GoF review: no structural refactor is justified.
-- [ ] Publish and merge the corrective follow-up PR after review and CI pass. Draft PR [Correct per-load quality guidance (#1496)](https://github.com/paulananth/edgartools-platform/pull/1496) contains guidance commit `be26520b64b5d386f958b865c80126e0742f532f` (2026-11-07 16:23 ET). CI has not been confirmed and it is not merged.
-- [ ] Record the follow-up head and merge result here; update the map and dependency edge.
-- [ ] Learning → skill: record each skill/reference changed or `none`.
+- [x] Publish and merge the corrective follow-up PR after review and CI pass. [Correct per-load quality guidance (#1496)](https://github.com/paulananth/edgartools-platform/pull/1496) passed the same 12 checks as the previous merged PR and squash-merged as `31ce68f36a1eff572e8aeba90fa8ccc1f76384fc` from head `014a1449b0d379d4b665905f1e4cbf656a44e28c` (2026-11-07 16:43 ET).
+- [x] Record the follow-up head and merge result here; update the map and dependency edge. Ticket 07 is no longer blocked by this ticket.
+- [x] Learning → skill: `skills/bookkeeping/RECOVERY.md`, `skills/data-operations/SKILL.md`, `skills/openmetadata/SKILL.md`, `skills/openmetadata/references/QUALITY-RESULT-HISTORY.md`, and `skills/openmetadata/references/TOKEN-LIFECYCLE.md`.
