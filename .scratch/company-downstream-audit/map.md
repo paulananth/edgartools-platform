@@ -29,14 +29,21 @@ form. Non-US companies remain in the Company kind, whose configured jurisdiction
 field is sourced from GLEIF; report that subgroup separately from the configured
 `international_organization` kind.
 
-The Silver identity contract needs a cutover trace. Of 55,320 Silver
-relationship rows, all resolve to legacy master IDs and none resolve to current
-governed MDM IDs or scanned current MDM history. Legacy masters contain 42,383
-`ISSUED_BY` edges, while governed MDM contains 505. The checked-out code at
-`8fb535d` reads Silver link IDs from governed MDM and no longer implements the
-relationship-table builder, but the local PostgreSQL server only stores data;
-it does not establish which worker code produced those rows. Two
-`sec.nport.security` Bookkeeping runs also remain `running`, with their
-`land_holding` work pending. Treat these as observed identity and run-state
-mismatches with unresolved producer/version ownership; do not refresh, delete,
-or recreate links until the deployed worker and cutover contract are verified.
+The local legacy source assertion store contains 1,248,313 assertion rows across
+11 feeds; field and identifier presence by feed is in the issue ledger. A
+fresh read of the designated shared server found 448,443 legacy masters, but
+the governed MDM projection tables contain no rows and have no RLS policies.
+Earlier protocol-7 resolver counts recorded in the issue ledger therefore
+cannot be reproduced on this connection and remain prior, unverified
+observations. Do not treat them as current defects until the populated governed
+snapshot is identified.
+
+Relationship reconciliation is still open. Silver has 55,320 rows: 42,383
+`ISSUED_BY` and 12,937 `IS_SUBFUND_OF`. The latter use the configured
+file-date-provisional start (`valid_from_basis=observed`); the unknown true
+inception remains flagged. Source assertions include repeated sightings, so
+their relationship assertion counts must be reduced to governed edge grain
+before comparing to Silver. Two N-PORT security Bookkeeping runs remain
+`running`, with holding land pending in both and links pending in the later
+run. Do not refresh, delete, recreate, resume, or cancel data as part of this
+read-only audit.
