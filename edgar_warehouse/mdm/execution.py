@@ -1,8 +1,6 @@
-"""Resumable MDM manifest execution, independent of command presentation.
+"""A prepared batch's records, read from its file under the source's registered reading.
 
-Callers supply the Store; this module owns source evidence, mapping pins and
-manifest progression. Transport, lease renewal and independent receipt
-verification remain with the worker and verifier.
+`mastering.merge` reads each batch with `batch_input`; `runtime_files` names the code a merge pins.
 """
 
 from __future__ import annotations
@@ -10,22 +8,15 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from collections import Counter
-from functools import partial
 from inspect import getfile
 from pathlib import Path
 from typing import Any
-from uuid import UUID
 
 
 from . import limits
 from .activation import check_policy
 from .adapters import UnsupportedRecord, normalize
-from .run import RunCoordinator
 from .evidence import deferred_record
-from .merge import MergeStage
-from .quality import counts as quality_counts
-from .quality import profile as quality_profile
 from .store import Conflict, Store, current_reading, reading_at, storage_adapter
 
 
@@ -65,24 +56,6 @@ def _finite_json_float(value):
     if not math.isfinite(result):
         raise ValueError("JSON number exceeds finite float range")
     return result
-
-
-def read_manifest(path: str) -> tuple[dict, str, Path]:
-    file = Path(path).resolve()
-    with file.open("rb") as handle:
-        raw = handle.read(32 * 1024**2 + 1)
-    if len(raw) > 32 * 1024**2:
-        raise ValueError("Input manifest exceeds 32 MiB")
-    manifest = json.loads(raw)
-    if manifest.get("contract_version") != 2 or not manifest.get("batches"):
-        raise ValueError("A nonempty version-2 input manifest is required")
-    ids = [b["batch_id"] for b in manifest["batches"]]
-    if len(ids) != len(set(ids)):
-        raise ValueError("Duplicate manifest batch identity")
-    allowed = {"mastering", "derive-relationships", "stewardship"}
-    if any(b.get("stage") not in allowed for b in manifest["batches"]):
-        raise ValueError("Unsupported manifest stage")
-    return manifest, hashlib.sha256(raw).hexdigest(), file.parent
 
 
 def batch_input(
@@ -233,155 +206,3 @@ def batch_input(
     if "record_count" in spec and len(result) + len(deferred) != spec["record_count"]:
         raise Conflict("Source member record_count mismatch")
     return {"assertions": result, "deferred": deferred, "occurrences": occurrences}
-
-
-def pinned_mapping_versions(store: Store, manifest: dict, scope: dict | None) -> dict[str, int]:
-    """The mapping version of each source the manifest reads, for the whole run.
-
-    Chosen once, when the run first starts, and kept in its frozen scope: a
-    corrected mapping registered part way through applies to the next run,
-    never to this run's later batches or its resume (rebuild ticket 103).
-    """
-    codes = sorted({b["input"]["source_code"] for b in manifest["batches"] if "input" in b})
-    if scope is not None:
-        pinned = scope.get("mapping_versions", {})
-        if missing := [code for code in codes if code not in pinned]:
-            raise Conflict(f"Run scope pins no reading of {', '.join(missing)}")
-        return pinned
-    pinned = {}
-    with store.engine.connect() as conn:
-        for code in codes:
-            reading = current_reading(conn, code)
-            if reading is None:
-                raise Conflict(f"Unregistered dataset {code}")
-            pinned[code] = reading[0]
-    return pinned
-
-
-def execute_manifest(
-    store: Store,
-    *,
-    path: str,
-    run_id: str,
-    stage: str | None = None,
-    limit: int | None = None,
-    preview: bool = False,
-) -> dict:
-    """Execute a complete manifest, or one explicitly bounded invocation.
-
-    A supplied stage selects its batches in manifest order. Without a record
-    limit every manifest batch must finish; publication and review completion
-    are reported separately. Bounded calls retain their progress for resume.
-    Preview proposes only the next eligible atomic batch and starts no run.
-    """
-    if limit is not None and not 1 <= limit <= limits.BATCH_RECORDS:
-        raise ValueError(
-            f"MDM --limit must be 1..{limits.BATCH_RECORDS} source records per invocation"
-        )
-    UUID(run_id)
-    manifest, manifest_hash, root = read_manifest(path)
-    if "native_source" in manifest:
-        # The native GLEIF path was retired (Issue 20 L6): GLEIF is read by its contract.
-        raise Conflict("Native publication manifests are retired; GLEIF is read by its contract")
-    coordinator = RunCoordinator(store)
-    handled = 0
-    committed = []
-    from .prepared_runs import batches
-
-    observed, retained = batches(store, run_id, [b["batch_id"] for b in manifest["batches"]])
-    mapping_versions = pinned_mapping_versions(store, manifest, coordinator.scope(run_id))
-    if not preview:
-        coordinator.start(
-            run_id,
-            [b["batch_id"] for b in manifest["batches"]],
-            manifest_digest=manifest_hash,
-            mapping_versions=mapping_versions,
-        )
-    prerequisites = set()
-    quality: Counter = Counter()
-    for batch in manifest["batches"]:
-        if batch["batch_id"] in observed:
-            prerequisites.add(batch["batch_id"])
-            continue
-        if stage is not None and batch["stage"] != stage:
-            prerequisites.add(batch["batch_id"])
-            continue
-        if not prerequisites <= observed:
-            raise Conflict("Complete preceding manifest batches before this stage")
-        found = batch_input(
-            batch,
-            root,
-            store,
-            policy_digest=manifest["policy_digest"],
-            mapping_versions=mapping_versions,
-        )
-        assertions, deferred = found["assertions"], found["deferred"]
-        occurrences = found["occurrences"]
-        batch_quality = quality_counts(assertions, deferred)
-        cost = (
-            0
-            if batch["batch_id"] in retained
-            else max(
-                1,
-                len(assertions) + len(deferred),
-                len(batch.get("decisions", [])),
-                len(batch.get("identities", [])),
-            )
-        )
-        if limit is not None and handled + cost > limit:
-            if handled == 0:
-                raise ValueError(f"Next atomic batch requires --limit at least {cost}")
-            break
-        command = {
-            "batch_id": batch["batch_id"],
-            "run_id": run_id,
-            "policy_digest": manifest["policy_digest"],
-            "consumer": batch["consumer"],
-            "expected_checkpoint": batch["expected_checkpoint"],
-            "checkpoint": batch["checkpoint"],
-            "as_of": manifest["as_of"],
-            "assertions": assertions,
-            "identities": batch.get("identities", []),
-            "decisions": batch.get("decisions", []),
-            "preview": preview,
-            "deferred": deferred,
-        }
-        if occurrences:
-            command["occurrences"] = occurrences
-        for key in (
-            "source_family",
-            "publication_family",
-            "committed_publication",
-            "continuity_proof",
-        ):
-            if key in batch:
-                command[key] = batch[key]
-        if preview:
-            result = MergeStage(store).apply(**command)
-        else:
-            # The batch's run report profile is kept with its finished event,
-            # and the run's report (`reconcile`, below) sums them as `checks`.
-            result = coordinator.execute(
-                run_id, batch["batch_id"], partial(MergeStage(store).apply, **command),
-                checks={"as_of": manifest["as_of"], "profile": quality_profile(assertions, deferred)},
-            )
-        if preview:
-            return result  # Preview one atomic batch against the current generation.
-        committed.append(result)
-        observed.add(batch["batch_id"])
-        prerequisites.add(batch["batch_id"])
-        if not result["duplicate"]:
-            handled += cost
-            quality.update(batch_quality)
-    if preview:
-        return {"preview": True, "commits": [], "records_processed": 0}
-    report = coordinator.reconcile(run_id)
-    if limit is None and report["missing_batches"]:
-        raise ValueError(f"MDM made no progress on {report['missing_batches']}")
-    return {
-        "commits": committed,
-        "records_processed": handled,
-        # What the data quality rule did to this run's records, per fix and check.
-        **({"quality": dict(sorted(quality.items()))} if quality else {}),
-        **report,
-    }

@@ -16,7 +16,6 @@ NAME_COUNT = ["--capture", "c", "--population", "p", "--gleif-reading", "a",
     (["mdm", "name-count", *NAME_COUNT], "name_count"),
     (["mdm", "rebuild-name-index", "--limit", "1"], "rebuild_name_index"),
     (["mdm", "rebuild-detail-lookup", "--limit", "1"], "rebuild_detail_lookup"),
-    (["mdm", "convert-native", "--limit", "1"], "convert_native"),
     (["mdm", "steward", "split", "--merge", "m", "--by", "Sam", "--reason", "wrong"], "steward_split"),
 ])
 def test_each_command_runs_its_function(monkeypatch, argv, function):

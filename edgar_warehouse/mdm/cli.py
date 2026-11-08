@@ -1,7 +1,7 @@
 """CLI subcommand: `edgar-warehouse mdm ...`, MDM only.
 
 Commands: migrate, check-connectivity, counts,
-prepare-capture, name-count, rebuild, rebuild-name-index, rebuild-detail-lookup and convert-native. The legacy MDM commands and their tables are
+prepare-capture, name-count, rebuild, rebuild-name-index and rebuild-detail-lookup. The legacy MDM commands and their tables are
 deleted (platform validation slice 2a).
 """
 from __future__ import annotations
@@ -79,13 +79,6 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     detail.add_argument("--page-size", type=int, default=200, help="Masters per owner transaction (1 to 1000)")
     detail.add_argument("--restart", action="store_true", help="Restart overtaken progress from the beginning")
     detail.set_defaults(handler=_logged_handler("rebuild-detail-lookup", _command("rebuild_detail_lookup")))
-    convert = mdm_sub.add_parser(
-        "convert-native",
-        help="Owner-only resumable conversion of a native store (NATIVE_MDM_DATABASE_URL, read only) "
-             "into a fresh governed one (MDM_DATABASE_URL)")
-    convert.add_argument("--limit", type=int, help="Stop after this many batches; a rerun resumes")
-    convert.set_defaults(handler=_logged_handler("convert-native", _command("convert_native")))
-
     steward = mdm_sub.add_parser("steward", help="Steward decisions on master data")
     steward_sub = steward.add_subparsers(dest="steward_command", required=True)
     split = steward_sub.add_parser("split", help="Split a consolidation a matching rule made: both masters return and "
