@@ -64,6 +64,17 @@ GLEIF subjects that are absent from the retained GLEIF source-record index, and
 none has a Silver issuer edge. This points to unresolved target-source coverage;
 the absent targets and Silver edges are not yet confirmed record defects.
 
+For international Company records, the SEC–GLEIF `sec-gleif-name-jurisdiction`
+binding rule is currently active. Its configured proof is 300/300 correct
+(95% one-sided lower bound 0.991062) with zero violations in 257 adversarial
+cases. A full legacy field comparison still has 134 of 3,073 mapped SEC place
+and GLEIF jurisdiction pairs that disagree under the pinned place mapping.
+The proof validates matching behavior on its measured cohort; it does not
+identify the current source assertions, prove the producing run used this rule
+version, or make these two source-owned fields interchangeable. Keep the 134
+as candidates pending identity, assertion, field-winner, and effective-time
+tracing.
+
 The full legacy listing scan found 1,392,524 listing rows. All 617,684 present
 MICs are valid in pinned `iso-10383-mic` version 1 and match the configured
 OpenFIGI exchange mapping; there are no missing MICs for mapped exchanges. Of
