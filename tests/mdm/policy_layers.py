@@ -459,9 +459,20 @@ def without_custodian_name_rule(policy: dict) -> dict:
     return body
 
 
+def without_adviser_cik(policy: dict) -> dict:
+    """Operator, 2026-11-08: "Both" (the Form ADV CIK join with the Schedule D 7.A link): the adviser CIK
+    rule, declared and switched on after its limited test. Peeled, the policy is the one before."""
+    body = _copy(policy)
+    body["kinds"]["company"]["rules"] = [r for r in body["kinds"]["company"]["rules"] if r["rule_id"] != "iapd-adv-cik"]
+    body["automatic_rules"] = [r for r in body["automatic_rules"] if r.get("rule_id") != "iapd-adv-cik"]
+    return body
+
+
 # Newest first: each layer, and Company's policy digest with it and every
 # layer after it still on.
 LAYERS = [
+    # The Form ADV adviser CIK rule: "Both" (2026-11-08).
+    (without_adviser_cik, "6764db627ebcc50ef36037ad1b8eabd3bb281a37e32e54bdaf702495af785365"),
     # The Form ADV custodian name rule (ticket 01, exact name only).
     (without_custodian_name_rule, "788ffd4fd739d65cb2014f5278c49724b3f2ace4a32c4cffc85780070b991d2f"),
     # A Security has one issuer at a time (ticket 24, relationship types version 3).

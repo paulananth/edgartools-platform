@@ -1,0 +1,16 @@
+# The reading of Form ADV Item 1.D(3) (IA_1D3_CIK) in one monthly bulk file: one
+# row per filing and CIK the adviser lists as its own. Most filings list one; a
+# few list several, among them a fund's (combine.yaml collects them by filing).
+execution: {profile: source.read, workers: 1, max_artifacts: 512}
+read:
+  format: csv
+  container: zip
+  member: "IA_1D3_CIK_*.csv"
+  encoding: [utf-8, windows-1252]
+  limits: {max_bytes: 33554432, max_member_bytes: 33554432, max_records: 100000}
+  tables:
+    ciks:
+      each: record
+      columns:
+        filing_id: {text: {path: FilingID, path_mode: literal}}
+        cik: {text: {path: CIK, path_mode: literal, null_if: [""]}}

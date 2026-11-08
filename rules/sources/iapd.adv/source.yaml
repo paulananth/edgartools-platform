@@ -52,13 +52,23 @@ bookkeeping:
             contract: custody-csv.yaml
             files: "*.zip"
             context: {published: {fact: published}}
+        - name: read_ciks
+          operation: source.read
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {each: file}
+          input:
+            contract: ciks-csv.yaml
+            files: "*.zip"
         - name: combine
           operation: source.combine
-          requires: [read_filings, read_custody]
+          requires: [read_filings, read_custody, read_ciks]
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.combined]
-          input: {contract: combine.yaml, readings: {filings: {all: read_filings}, custody: {all: read_custody}}}
+          input: {contract: combine.yaml, readings: {filings: {all: read_filings}, custody: {all: read_custody}, ciks: {all: read_ciks}}}
         - name: record
           operation: source.read
           requires: [combine]
@@ -207,11 +217,16 @@ dataset_contracts:
         # two, over 13 months), so it cannot join records. Operator,
         # 2026-10-09: "Keep LEI, lookup only (Recommended)". The SEC file
         # number (801-) is lookup only too. Item 1.D(3)
-        # lists 1 to 46 CIKs a filing (571 filings several): a record path holds
-        # one value, so CIKs are left out until a list-shaped identifier exists
-        # (ticket 07).
+        # lists 1 to 46 CIKs a filing (571 filings several). They are the
+        # adviser's identifiers now that a record holds a list of them
+        # (operator, 2026-11-08: "Both"; rule iapd-adv-cik): an adviser joins
+        # the SEC Company holding its CIK; a filing that lists a fund's CIK too
+        # reaches two Companies and goes to review.
         identifiers:
           crd: crd
+          cik: ciks
+        identifier_formats:
+          cik: sec_cik
         cross_references:
           sec_file_number: sec_file_number
           adv_lei: lei

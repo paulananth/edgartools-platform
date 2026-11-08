@@ -5,11 +5,11 @@ version: 1
 approvals:
 - kind: merge
   name: platform
-  digest: ccfda8ca4e6791dd92b58296beb5677a2305f96f5e91dbbbf5fc53d5ddc8a615
+  digest: 4beb59d943360db4714cdc6149426571e6eac6d5cf7bfc09885a943a0e777383
   by: Operator
   words: Approved the rules always
-  at: '2026-11-07'
-  finalized: PR 1490
+  at: '2026-11-08'
+  finalized: PR 1503
 - kind: pipeline
   name: graph-publication
   digest: ed3f36b01408246351ebce52c2f64eae6ab6fe3350532d36849b627f19950860
@@ -33,11 +33,11 @@ approvals:
   finalized: PR 1481
 - kind: source
   name: iapd.adv
-  digest: bbe3bf9e66fd75cc620d1a2f9cc3e63a3370ecccf3b440ee41d3444a1cb912a7
+  digest: 6a888116635e0fe998b46d3b74f264c6a43b73bb1dd5a81219c8db49ad4a9301
   by: Operator
   words: Approved the rules always
-  at: '2026-11-06'
-  finalized: PR 1481
+  at: '2026-11-08'
+  finalized: PR 1503
 - kind: source
   name: openfigi
   digest: 0d7919f6a5e2d65da3c6c9fcf38bb69c2a7ee512255ba25f30a15f5587392f01

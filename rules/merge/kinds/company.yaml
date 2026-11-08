@@ -409,6 +409,27 @@ rules:
   - primitive: identifier_cardinality@1
     args:
       namespace: crd
+# An adviser's filing joins the SEC Company holding a CIK its Item 1.D(3) lists
+# (operator, 2026-11-08: "Both", the CIK join with the Schedule D 7.A link).
+# It finds and never creates: only SEC's own records issue a CIK, so when no
+# Company holds it the CRD rule creates the adviser and the CIKs go onto it. A
+# filing listing CIKs that two Companies hold (an adviser's own and a fund's)
+# reaches both and goes to review; nothing merges.
+- rule_id: iapd-adv-cik
+  version: 2026-11-08.adviser-cik
+  family: binding
+  source: iapd.adv.filings.v1
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: wait
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: cik
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: cik
 - rule_id: iapd-adv-custodian-lei
   version: 2026-10-09.1
   family: binding

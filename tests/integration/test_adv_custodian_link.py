@@ -61,11 +61,12 @@ def csv_text(header: list[str], rows: list[list[str]]) -> str:
     return "\n".join(",".join(f'"{v}"' for v in r) for r in [header, *rows]) + "\n"
 
 
-def read(store, root: Path, contract_file: str, raw: dict, published: str) -> dict:
+def read(store, root: Path, contract_file: str, raw: dict, published: str | None) -> dict:
     root.mkdir(parents=True, exist_ok=True)
     body = {"source": NAME, "execution": {"profile": "source.read", "workers": 1, "max_artifacts": 1},
             **files.load(FOLDER / contract_file)}
-    context = store.put(root.as_uri(), {"version": 1, "input": raw, "values": {"published": published}})
+    values = {"published": published} if published else {}
+    context = store.put(root.as_uri(), {"version": 1, "input": raw, "values": values})
     return chain.read(store, root, body, [{"input": raw, "context": context}], 2)
 
 
@@ -87,11 +88,13 @@ def month(root: Path, published: str) -> tuple[list[dict], list[dict]]:
     with zipfile.ZipFile(body, "w") as z:
         z.writestr(f"IA_ADV_Base_A_{tag}.csv", csv_text(BASE, base))
         z.writestr(f"IA_Schedule_D_5K3_{tag}.csv", csv_text(CUSTODY, rows))
+        z.writestr(f"IA_1D3_CIK_{tag}.csv", csv_text(["FilingID", "CIK"], []))
     raw = store.put_bytes((root / "capture.zip").as_uri(), body.getvalue())
     filings = read(store, root / "filings", "adviser-filings-csv.yaml", raw, published)
     custody_rows = read(store, root / "custody", "custody-csv.yaml", raw, published)
+    ciks = read(store, root / "ciks", "ciks-csv.yaml", raw, None)
     combined = chain.combine(store, root / "combine", FOLDER / "combine.yaml",
-                             {"filings": filings, "custody": custody_rows})
+                             {"filings": filings, "custody": custody_rows, "ciks": ciks})
     # Each month's file restates every custodian it names: its own publication, the
     # month (YYYYMM) its revision, so a later month is a later revision (ticket 129).
     custodians = prepare(store, root / "mdm-custodians", custody_rows, "custody", CUSTODIANS, distinct_on=["custodian_id"],

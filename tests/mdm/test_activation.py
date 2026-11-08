@@ -817,7 +817,8 @@ class TestTheNameMatchingRules:
         company = policy_layers.company_part(POLICY)["automatic_rules"]
         assert company[:2] == [APPROVED_ACTIVATION, CIK_ACTIVATION]
         assert [e["rule_id"] for e in company[2:]] == [
-            "sec-gleif-name-jurisdiction", "sec-gleif-name-postal", *policy_layers.FORM_ADV_RULES,
+            "sec-gleif-name-jurisdiction", "sec-gleif-name-postal", "iapd-adv-crd", "iapd-adv-cik",
+            "iapd-adv-custodian-lei", "iapd-adv-custodian-bd",
             "iapd-adv-custodian-name", "nport-registrant-cik", "sec-gleif-name-city-or-postcode"]
         check_policy(POLICY)
 

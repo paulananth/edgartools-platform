@@ -36,6 +36,8 @@ def archive() -> bytes:
     with zipfile.ZipFile(out, "w") as z:
         z.writestr("IA_ADV_Base_A_20260501_20260531.csv", csv_text(BASE, [filing("F1")]))
         z.writestr("IA_Schedule_D_5K3_20260501_20260531.csv", csv_text(CUSTODY, ROWS))
+        # Item 1.D(3): the filing lists its CIK twice and as filed, without SEC's leading zeros.
+        z.writestr("IA_1D3_CIK_20260501_20260531.csv", csv_text(["FilingID", "CIK"], [["F1", "900001"], ["F1", "900001"]]))
     return out.getvalue()
 
 
@@ -87,6 +89,7 @@ def test_the_filing_carries_its_custodians(databases, tmp_path):
     (record,) = prepared(databases, tmp_path, "mastering")
     assert (record["filing_id"], record["crd"]) == ("F1", "999001")
     assert record["custodians"] == IDS  # the BD custodian once, however many rows name it
+    assert record["ciks"] == ["900001"]  # once, as filed: the identifier format pads it for MDM
 
 
 def test_a_custodian_named_by_several_rows_is_one_record(databases, tmp_path):
