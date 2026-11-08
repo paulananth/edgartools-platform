@@ -21,4 +21,4 @@ login for work. Use that same pattern for Bookkeeping.
 - [x] RUN.md names which env file holds `BOOKKEEPING_DATABASE_URL` (`worker.env` / `verifier.env` / `connection.env`; 2026-11-08 16:42 ET)
 - [x] Drop the copied seven-wastes line and the SKILL Run `BOOKKEEPING_MANIFEST_ROOT` sentence (KISS; 2026-11-08 16:38 ET)
 - [x] Learning → skill: bookkeeping RUN.md Configuration and SPEC Local use — one store URL key; `BOOKKEEPING_MANIFEST_ROOT` is the frozen-rules folder in `worker.env`. SKILL.md has no seven-wastes copy. PR unpublished: overlap_guard STOP vs Codex (2026-11-08 16:38 ET)
-- [ ] ~~Publish PR~~ deferred: overlap_guard STOP on `cli.py`, `skills/bookkeeping/{SKILL,SPEC}.md`, `skills/data-operations/SKILL.md`, `tests/integration/test_configured_bookkeeping_postgres.py` vs Codex worktrees and PR #1501
+- [x] Publish PR https://github.com/paulananth/edgartools-platform/pull/1504 head `cc453c03` (operator asked push despite overlap_guard STOP on closed Codex worktrees; 2026-11-08 16:45 ET)
