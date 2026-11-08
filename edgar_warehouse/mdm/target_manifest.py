@@ -15,7 +15,7 @@ and freezes every unit's input. Each step by its operation:
 - `mdm.prepare`: the readings its `input.readings` names, as one publication,
   with its `input.keys` (`table`, `record_column`, `dataset`); a target that
   only reads, for another run to read, has none;
-- `mdm.merge`: the preparation's manifest through the Merge Stage;
+- `mastering.merge`: the preparation's manifest through the merge;
 - `journal.record`: each document the run processed, once its merge is verified.
 
 Nothing here names a source or a kind.
@@ -191,7 +191,7 @@ def _read_step_of(step: dict, run: _Run) -> str:
     """The one read step a landing takes its rows from; a merge it also requires only orders it after the merge,
     so the masters its rows link to exist when they land."""
     reads = [name for name in step["requires"] if run.by_name[name]["operation"] == "source.read"]
-    waits = [name for name in step["requires"] if run.by_name[name]["operation"] in ("mdm.merge", "mastering.merge")]
+    waits = [name for name in step["requires"] if run.by_name[name]["operation"] == "mastering.merge"]
     if len(reads) != 1 or len(reads) + len(waits) != len(step["requires"]):
         raise ValueError(f"Step {step['name']}: a landing follows one read step (and may also wait for a merge) "
                          "and names its keys: table and silver")
@@ -222,7 +222,7 @@ def _derive(step: dict, run: _Run, units: dict) -> list[dict]:
 
 
 # Each operation's units, from the step, the run and the units of the steps before it.
-FORMS = {"source.read": _read, "source.combine": _combine, "mdm.prepare": _prepare, "mdm.merge": _merge, "mastering.merge": _merge, "journal.record": _record,
+FORMS = {"source.read": _read, "source.combine": _combine, "mdm.prepare": _prepare, "mastering.merge": _merge, "journal.record": _record,
          "silver.land": _land, "silver.derive": _derive}
 OPERATIONS = tuple(FORMS)
 

@@ -37,8 +37,8 @@ checked by a separate verifier. Nothing makes a request to SEC here.
    bundle's names and CIKs (`name-count.yaml`, lookup sets derived from the key
    readings); `combine` joins each main unit with the Name Count and the catalog
    (`combine-name-count-captured.yaml`); `records` prepares the bundle's rows as
-   one publication (`mdm.prepare`); `merge` runs it through the Merge Stage
-   (`mdm.merge`). The Name Count, combine and records inputs are composed from the
+   one publication (`mdm.prepare`); `merge` runs it through the merge
+   (`mastering.merge`). The Name Count, combine and records inputs are composed from the
    steps' verified readings. The returned Bookkeeping run ID is the recovery
    handle: `bookkeeping resume <run-id>` for its work and `change-journal
    recover bookkeeping <run-id>` for committed, undelivered Journal intent.

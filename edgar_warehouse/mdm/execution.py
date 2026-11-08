@@ -34,7 +34,7 @@ def runtime_files() -> list[Path]:
     from edgar_warehouse.bookkeeping.clean import config, destinations
     from edgar_warehouse.mdm import (
         activation, adapters, assessment, binding, cascade, catalog, classification,
-        correction, evidence, forced_publication, identifier_types, identity, matching, merge, registration, retirement,
+        correction, evidence, identifier_types, identity, matching, merge, registration, retirement,
         name_count, names, prepared, prepared_registry, prepared_publication, prepared_runs, master_reads, master_index, master_search, detail_lookups, record_reads, primitives, quality, relationships, run, schema, scope, store, survivorship,
     )
     from edgar_warehouse.rules import files, source_engine
@@ -44,7 +44,7 @@ def runtime_files() -> list[Path]:
     # CLI presentation is not executable merge behavior. This is not
     # the separately tracked complete environment/reproducibility fingerprint.
     modules = (activation, adapters, assessment, binding, cascade, catalog, classification, config,
-               correction, destinations, evidence, files, forced_publication, identifier_types,
+               correction, destinations, evidence, files, identifier_types,
                identity, limits, matching, merge, name_count, names, prepared, prepared_registry, prepared_publication, prepared_runs, master_reads, master_index, master_search, detail_lookups, record_reads, primitives, quality,
                relationships, registration, retirement, run, schema, scope, source_mapping, store, survivorship)
     adapter = store.storage_adapter()

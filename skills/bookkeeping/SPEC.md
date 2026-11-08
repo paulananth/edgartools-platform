@@ -104,8 +104,8 @@ ordering. Approval metadata is not copied into a mutable authoring file.
 
 ## Authoring and input manifests
 
-Each existing source has a `bookkeeping` section; graph publication is under
-`rules/pipelines/graph-publication/pipeline.yaml`. Targets declare ordered
+Each existing source has a `bookkeeping` section; a pipeline with no source,
+such as an extract with no merge, is under `rules/pipelines/<name>/pipeline.yaml`. Targets declare ordered
 steps, preceding-step prerequisites, work keys, actual conflicting resource
 keys, required checks, lease duration, heartbeat interval and retry policy.
 Defaults are 120 seconds, 30 seconds, and five bounded attempts with
@@ -208,7 +208,7 @@ refused; each file's and each fact's digest joins the processing identity and th
 
 The writer forms these for `source.read` and `source.combine` (one unit:
 the contract over its readings), and the publication steps `mdm.prepare`,
-`mdm.merge` and `journal.record`. A receipt names its document by `key`
+`mastering.merge` and `journal.record`. A receipt names its document by `key`
 (the bronze layout) or by `file` (a path inside the capture folder).
 Both are checked when the section is validated and stripped before the
 engine sees the steps, so a run's worklist rules are unchanged. Adding them
@@ -306,17 +306,13 @@ intent worklists can follow a merged batch without treating its commit receipt
 as a publication command. Final MDM verification checks the MDM worklists
 and exact required consumer set.
 
-MDM work is done by two worker profiles (mastering to-do 20e), never by
-control. `mdm.merge` takes one MDM input manifest (contract version 2;
-a batch's records file sits beside it) through the Merge Stage under an MDM
-run fixed by the envelope's effect key, and reports a receipt read back from
-MDM; its verifier reports `mdm.committed`. `mdm.publish` delivers one
-committed batch to one consumer in that consumer's generation order (the
-`journal` consumer becomes a Change Journal event under the envelope's run);
-its verifier reports `mdm.published`. A batch that changed nothing queues no
-consumer (MDM migration 017), so its receipt says there is nothing to publish. Both fence every MDM transaction with
-the envelope's live lease through the MDM database's `bookkeeping_guard`.
-The former `mdm.ingest` operation is `mdm.merge` with a file batch.
+MDM work is done by a worker profile, never by control. `mastering.merge`
+takes one MDM input manifest (contract version 2; a batch's records file sits
+beside it) and merges it one file at a time under one database lock; a retry
+skips a file already committed. Its receipt names each file and its record
+count, and its verifier reads the same rows with its own login and reports
+`mdm.committed`. MDM publishes nothing: a reader pulls the masters changed
+after its own checkpoint.
 
 MDM steps must lease `mdm:consumer:<command consumer>`; publication steps
 must lease `mdm:publication:<consumer>`. Configured batch/consumer keys must
@@ -467,7 +463,7 @@ No AWS rollout, legacy database reset or retirement is performed here.
   capture returns with the configured capture worker (L8). Today's Company
   route is in `docs/company-only-acquisition.md`.
 - Workers on 2026-10-02: `artifact.copy`, `jsonl.count`, `source.read`,
-  `mdm.merge` and `mdm.publish`; the SEC Company and acquisition workers were
+  and the MDM merge and publish workers, since replaced by `mastering.merge`; the SEC Company and acquisition workers were
   mastering to-do 20c, Person 20d.
 - A manifest consumer key: `"consumer": "mastering/company"`.
 - The live sources qualified end to end: SEC and GLEIF.

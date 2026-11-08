@@ -18,9 +18,33 @@ CHECK = "mdm.committed"
 def runtime_files() -> list[Path]:
     from edgar_warehouse import mastering
     from edgar_warehouse.mastering import merge, store
-    from .mdm_merge import runtime_files as prepared
+    from edgar_warehouse.mdm import connections, execution
 
-    return [Path(mastering.__file__), Path(merge.__file__), Path(store.__file__), *prepared()]
+    return [Path(mastering.__file__), Path(merge.__file__), Path(store.__file__), Path(connections.__file__),
+            *execution.runtime_files()]
+
+
+def _stage(envelope: dict, artifacts, folder: Path) -> tuple[Path, dict]:
+    """The manifest and each input file it names, by their own digests."""
+    from edgar_warehouse.mdm import limits
+
+    raw = artifacts.verified(envelope["input"], max_bytes=limits.MANIFEST_BYTES)
+    manifest = json.loads(raw)
+    path = folder / "manifest.json"
+    path.write_bytes(raw)
+    base = envelope["input"]["uri"].rsplit("/", 1)[0]
+    for batch in manifest.get("batches", []):
+        spec = batch.get("input")
+        if spec is None:
+            continue
+        name = Path(spec["path"])
+        if name.is_absolute() or ".." in name.parts or name == Path("manifest.json"):
+            raise ValueError("A manifest input must be a file beside the manifest")
+        target = folder / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(artifacts.verified({"uri": f"{base}/{name.as_posix()}", "sha256": spec["sha256"]},
+                                              max_bytes=limits.RECORDS_FILE_BYTES))
+    return path, manifest
 
 
 def _engine(*, restricted: bool):
@@ -55,7 +79,6 @@ def execute(envelope: dict, artifacts) -> dict:
     from edgar_warehouse.mastering.store import open_store
     from edgar_warehouse.mdm.execution import batch_input
     from edgar_warehouse.mdm.store import Store
-    from .mdm_merge import _stage
 
     if set(envelope["checks"]) != {CHECK}:
         raise ValueError(f"mastering.merge verifies {CHECK} only")

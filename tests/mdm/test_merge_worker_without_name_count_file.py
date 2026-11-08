@@ -28,7 +28,7 @@ def test_what_the_merge_workers_load_imports_without_the_file(rules_without_the_
     # The workers import the execution module inside `execute`, for every source;
     # `runtime_files` imports every module a merge pins.
     done = _python_with_rules(rules_without_the_file,
-                              "import edgar_warehouse.workers.mdm_merge, edgar_warehouse.workers.mdm_publish\n"
+                              "import edgar_warehouse.workers.mastering_merge\n"
                               "from edgar_warehouse.mdm import execution, matching\n"
                               "assert execution.runtime_files()")
     assert done.returncode == 0, done.stderr

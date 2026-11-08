@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.workers import mdm_merge, mdm_prepare
+from edgar_warehouse.workers import mastering_merge, mdm_prepare
 from tests.support.reading import reading
 
 
@@ -38,7 +38,7 @@ def test_staging_refuses_input_paths_that_escape_or_replace_the_manifest(tmp_pat
     staging = tmp_path / "staging"
     staging.mkdir()
     with pytest.raises(ValueError, match="file beside the manifest"):
-        mdm_merge._stage({"input": ref}, store, staging)
+        mastering_merge._stage({"input": ref}, store, staging)
     assert (staging / "manifest.json").read_bytes() == store.verified(ref)
 
 

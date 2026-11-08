@@ -187,7 +187,7 @@ bundle names at most 512 documents), read the catalog once (`catalog.yaml`), com
 (`combine-name-count-captured.yaml`): forms from the document's recent filings,
 tickers from the catalog in rank order, the business address and the Name Count
 entry; prepare the bundle's rows as one publication (`mdm.prepare`) and merge
-it (`mdm.merge`). Every step is executed by a worker and checked by a
+it (`mastering.merge`). Every step is executed by a worker and checked by a
 verifier; Bookkeeping keeps each receipt. The capture and catalog run IDs and
 the observation time are the caller's facts, bound into every row. Each
 record names its bronze document (`_origin.bronze`: `object`, the receipt key; `sha256`; `locator`),

@@ -226,7 +226,7 @@ def test_submission_rejects_invalid_proof_or_unapproved_mastering(databases, tmp
     # A source that masters nothing needs no proof (ticket 187), so the proof is damaged on a source that
     # masters: a pipeline whose first step merges into MDM, with its digest and its proof's digest kept equal.
     invalid["kind"] = "pipeline"
-    invalid["body"]["bookkeeping"]["targets"]["silver"]["steps"][0]["operation"] = "mdm.merge"
+    invalid["body"]["bookkeeping"]["targets"]["silver"]["steps"][0]["operation"] = "mastering.merge"
     invalid["body"]["dataset_contracts"] = {"fixture": {"contract": {}}}
     invalid["digest"] = digest(invalid["body"])
     invalid["proof"]["digest"] = invalid["digest"]
@@ -263,7 +263,7 @@ def test_two_way_rules_migration_preserves_all_document_digests(databases, tmp_p
     assert digest(files.policy(tmp_path)) == digest(files.policy())
     for name in ("gleif", "sec.company"):
         assert digest(files.source(name, tmp_path)) == digest(files.source(name))
-    assert digest(files.pipeline("graph-publication", tmp_path)) == digest(files.pipeline("graph-publication"))
+    assert digest(files.pipeline("sec.thirteenf.extract", tmp_path)) == digest(files.pipeline("sec.thirteenf.extract"))
     assert files.identifiers(tmp_path) == files.identifiers()  # the build's identifier types travel with it
 
 

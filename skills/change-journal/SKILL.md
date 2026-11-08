@@ -151,11 +151,8 @@ Bookkeeping's own control events are delivered by:
 edgar-warehouse change-journal recover bookkeeping <run-id> --limit <bound>
 ```
 
-MDM's events are delivered by the run's `mdm.publish` step: after
-`edgar-warehouse bookkeeping resume <run-id>`, run that step's worker and
-verifier again (data-platform, Master), or rerun the same `edgar-warehouse
-load`, which drives an open run first. There is no separate MDM recovery
-command; the worker holds the run's lease and MDM's own publication fence.
+MDM sends the journal no events: a reader pulls the masters changed after its
+own checkpoint, so there is no MDM delivery to recover.
 
 Recovery executes in `application.journal_recovery`, outside the journal core. They deliver committed intent only; never silently start provider
 work or redirect historical backlog. Preserve original roots and evidence.

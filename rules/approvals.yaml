@@ -11,13 +11,6 @@ approvals:
   at: '2026-11-08'
   finalized: PR 1508
 - kind: pipeline
-  name: graph-publication
-  digest: ed3f36b01408246351ebce52c2f64eae6ab6fe3350532d36849b627f19950860
-  by: Operator
-  words: approved all rules
-  at: '2026-11-04'
-  finalized: PR 1428
-- kind: pipeline
   name: sec.thirteenf.extract
   digest: 3b6cd24f69cd663835c0b19d2d0d15b05d2633bc0307e5c84eb0328ef93516c4
   by: Operator

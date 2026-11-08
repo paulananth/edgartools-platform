@@ -125,7 +125,7 @@ def _landing(requires):
     from edgar_warehouse.mdm import target_manifest
 
     by_name = {"read": {"operation": "source.read"}, "prepare": {"operation": "mdm.prepare"},
-               "merge": {"operation": "mdm.merge"}, "land": {"operation": "silver.land"}}
+               "merge": {"operation": "mastering.merge"}, "land": {"operation": "silver.land"}}
     run = SimpleNamespace(by_name=by_name, root="run")
     step = {"name": "land", "requires": requires, "input": {"keys": {"table": "t", "silver": "s"}}}
     units = {"read": [{"keys": {"unit": "u1"}}, {"keys": {"unit": "u2"}}], "merge": [{"keys": {"batch_id": "b"}}]}

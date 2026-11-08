@@ -6,12 +6,12 @@ import pytest
 
 from edgar_warehouse.bookkeeping.clean import destinations
 from edgar_warehouse.mdm import binding, cli, connections, execution
-from edgar_warehouse.workers import mdm_merge
+from edgar_warehouse.workers import mastering_merge
 from edgar_warehouse.workers.__main__ import runtime
 
 
 def test_command_presentation_does_not_change_the_merge_runtime(monkeypatch):
-    before = runtime(mdm_merge)
+    before = runtime(mastering_merge)
     command_file = Path(cli.__file__)
     read_bytes = Path.read_bytes
 
@@ -21,12 +21,12 @@ def test_command_presentation_does_not_change_the_merge_runtime(monkeypatch):
 
     monkeypatch.setattr(Path, "read_bytes", command_edit)
 
-    assert runtime(mdm_merge) == before
+    assert runtime(mastering_merge) == before
 
 
 @pytest.mark.parametrize("module", [execution, connections, binding, destinations])
 def test_execution_connection_and_matching_code_change_the_merge_runtime(monkeypatch, module):
-    before = runtime(mdm_merge)
+    before = runtime(mastering_merge)
     changed_file = Path(module.__file__)
     read_bytes = Path.read_bytes
 
@@ -36,4 +36,4 @@ def test_execution_connection_and_matching_code_change_the_merge_runtime(monkeyp
 
     monkeypatch.setattr(Path, "read_bytes", execution_edit)
 
-    assert runtime(mdm_merge) != before
+    assert runtime(mastering_merge) != before

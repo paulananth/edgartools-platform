@@ -88,13 +88,13 @@ def test_corrupt_json_control_documents(tmp_path, payload):
 def test_cli_commands_remain_available_and_resume_is_bounded():
     from edgar_warehouse.cli import build_parser
     parser = build_parser()
-    args = parser.parse_args(["rules", "run", "--pipeline", "graph-publication", "--target", "publish", "--resume-run-id", "original"])
+    args = parser.parse_args(["rules", "run", "--pipeline", "sec.thirteenf.extract", "--target", "extract", "--resume-run-id", "original"])
     assert args.resume_run_id == "original" and args.limit == 100
     assert parser.parse_args(["bookkeeping", "leases", "original"]).limit == 100
     # The legacy warehouse commands are deleted (platform validation slice 2a).
     with pytest.raises(SystemExit):
         parser.parse_args(["gold-refresh"])
-    assert pipeline("graph-publication")["pipeline"] == "graph-publication"
+    assert pipeline("sec.thirteenf.extract")["pipeline"] == "sec.thirteenf.extract"
 
 
 def stage_manifest():

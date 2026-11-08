@@ -17,7 +17,7 @@ from edgar_warehouse.silver_writer import database as silver
 from edgar_warehouse.silver_writer.cli import spec_file
 from edgar_warehouse.workers import mdm_prepare, silver_land, source_combine, source_read
 from tests.integration.test_configured_bookkeeping_postgres import databases  # noqa: F401
-from tests.integration.test_mdm_merge_worker_postgres import mdm  # noqa: F401
+from tests.support.mdm_database import mdm  # noqa: F401
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
 from tests.integration.test_thirteenf_securities_target_postgres import ALSO, BAD, GOOD, SOURCE, capture
 from tests.support.bookkeeping_protocol import drive

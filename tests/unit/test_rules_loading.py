@@ -12,7 +12,7 @@ READING = {
     "execution": {"max_artifacts": 2},
     "bookkeeping": {"targets": {
         "by_letter": {"steps": [{"name": "read", "operation": "source.read", "input": {"files": "letters/*"}},
-                                {"name": "merge", "operation": "mdm.merge"}]},
+                                {"name": "merge", "operation": "mastering.merge"}]},
         "everything": {"steps": [{"name": "read", "operation": "source.read", "input": {}}]},
     }},
 }

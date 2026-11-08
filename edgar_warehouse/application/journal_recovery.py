@@ -8,8 +8,7 @@ import json
 def _handle(args):
     """Deliver Bookkeeping's own pending control events for one run.
 
-    MDM's publications are not recovered here: rerunning the run's
-    `mdm.publish` worker delivers them under the run's lease (to-do 20e).
+    MDM sends the journal no events, so it has none to recover.
     """
     from sqlalchemy.exc import DBAPIError
     from edgar_warehouse.bookkeeping.clean.cli import configured_bookkeeping

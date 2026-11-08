@@ -362,17 +362,12 @@ Ambiguous records stay unbound or go to a steward for review.
 2. **Propose identity decisions.** Approved identifier rules run first;
    approved name rules follow where applicable. The proposal names the
    evidence and pinned policy it relies on.
-3. **Check and commit through the Merge Stage.** `mdm.merge` rechecks the
-   proposal against current state under the transaction lock. It computes
-   affected masters, selects eligible fields and profiles, validates links,
-   records decisions and history, advances the checkpoint and enqueues
-   publication in one transaction. The destination checks the worker's live
-   lease so an expired worker cannot commit.
-4. **Publish and verify.** `mdm.publish` delivers a committed batch to a
-   consumer in generation order. Changed-record consumers receive inserted
-   or changed records; the MDM journal consumer receives the whole batch.
-   Independent read-back verifies delivery. `mdm force-publish` can resend
-   every current record to a selected consumer for an operator repair.
+3. **Merge.** `mastering.merge` takes the prepared records one file at a
+   time under one database lock, finds or creates each master, and commits
+   the file with its masters, identifiers and reviews. A retry skips a file
+   already committed.
+4. **Read what changed.** A reader pulls the masters changed after its own
+   checkpoint. Nothing is pushed or stored for delivery.
 
 The Merge Stage is the only writer of master state. It recomputes the affected
 identities and the links requiring revalidation, rather than loading every
@@ -480,8 +475,7 @@ edgar-warehouse --help
 edgar-warehouse doctor
 edgar-warehouse rules catalog plan --root rules
 edgar-warehouse workers describe mdm.prepare
-edgar-warehouse workers describe mdm.merge
-edgar-warehouse workers describe mdm.publish
+edgar-warehouse workers describe mastering.merge
 ```
 
 Run a feed using [Bookkeeping run mode](skills/bookkeeping/RUN.md); resume one

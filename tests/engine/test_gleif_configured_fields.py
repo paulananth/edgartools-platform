@@ -161,18 +161,18 @@ def test_unused_mapping_expressions_are_validated_before_fields_projection():
 @pytest.mark.parametrize('part',['adapter','mapping','engine','steps','native','identity','survivorship','evidence'])
 def test_mdm_worker_runtime_pins_configured_mapping_dependencies(part,monkeypatch):
     from pathlib import Path
-    from edgar_warehouse.workers import mdm_merge,source_mapping
+    from edgar_warehouse.workers import mastering_merge,source_mapping
     from edgar_warehouse.workers.__main__ import runtime
     from edgar_warehouse.mdm import identity, survivorship, evidence
     paths={**{m.__name__.rsplit('.',1)[1]:Path(m.__file__) for m in (identity,survivorship,evidence)},
            'adapter':Path(adapters.__file__),'mapping':Path(source_mapping.__file__),
            **dict(zip(('engine','steps','native'),source_engine.runtime_files(),strict=True))}
     selected=paths[part]
-    assert selected in mdm_merge.runtime_files()
-    before=runtime(mdm_merge)
+    assert selected in mastering_merge.runtime_files()
+    before=runtime(mastering_merge)
     original=Path.read_bytes
     def changed(path):
         content=original(path)
         return content+b'\n deliberate dependency fault' if path==selected else content
     monkeypatch.setattr(Path,'read_bytes',changed)
-    assert runtime(mdm_merge)!=before
+    assert runtime(mastering_merge)!=before
