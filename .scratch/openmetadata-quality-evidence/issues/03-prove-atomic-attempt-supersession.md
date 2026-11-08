@@ -1,7 +1,7 @@
 # Prove Atomic Attempt Supersession
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: none
 Blocks: 05, 07
 Labels: wayfinder:task

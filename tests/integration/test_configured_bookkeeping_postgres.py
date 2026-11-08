@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import json
 import subprocess
+from threading import Event
 import time
 from uuid import uuid4
 
@@ -1017,6 +1018,65 @@ def test_a_lease_lapsing_while_the_verifier_runs_refuses_the_late_admission(data
         book.verifier.admit(late, report)
     book.verifier.admit(fresh, verification_report(book, fresh, copy))
     assert book.status(rid)["counts"] == {"verified": 1}
+
+
+@pytest.mark.parametrize("complete_replacement", [False, True], ids=["running", "verified"])
+def test_attempt_superseded_after_admission_precheck_is_refused_atomically(
+    databases, tmp_path, complete_replacement
+):
+    """A replacement cannot be completed or have its evidence replaced by a stale admission."""
+    book, rid, _, _ = submit(databases, tmp_path, count=1)
+    old_envelope = book.envelope(book.claim(rid, "s0", "0"))
+    candidate = copy.execute(old_envelope, book.artifacts)
+    book.report(old_envelope, candidate, RUNTIME)
+    stale = verification_for(book, rid, "s0", "0")
+    report = verification_report(book, stale, copy)
+    precheck_passed = Event()
+    resume_old_admission = Event()
+    original_artifacts = book.verifier.artifacts
+
+    class PausingArtifacts:
+        def __getattr__(self, name):
+            return getattr(original_artifacts, name)
+
+        def json(self, ref):
+            # Admission has checked the attempt before it reads this report.
+            if ref == report:
+                precheck_passed.set()
+                if not resume_old_admission.wait(timeout=10):
+                    raise TimeoutError("Admission did not resume after the replacement claim")
+            return original_artifacts.json(ref)
+
+    book.verifier.artifacts = PausingArtifacts()
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        pending = executor.submit(book.verifier.admit, stale, report)
+        try:
+            assert precheck_passed.wait(timeout=10), "Admission did not reach its report read"
+            expire(databases, book._claim_of(stale))
+            replacement = book.claim(rid, "s0", "0")
+            if complete_replacement:
+                replacement_envelope = book.envelope(replacement)
+                replacement_candidate = copy.execute(replacement_envelope, book.artifacts)
+                book.report(replacement_envelope, replacement_candidate, RUNTIME)
+                current = verification_for(book, rid, "s0", "0")
+                replacement_report = verification_report(book, current, copy)
+                book.verifier.admit(current, replacement_report)
+        finally:
+            resume_old_admission.set()
+        error = "Completion evidence changed" if complete_replacement else "Stale attempt"
+        with pytest.raises(DBAPIError, match=error):
+            pending.result(timeout=10)
+
+    state = book.status(rid)
+    assert state["items"][0]["attempt"] == replacement.attempt
+    if complete_replacement:
+        assert state["counts"] == {"verified": 1}
+        assert state["items"][0]["state"] == "verified"
+        assert state["items"][0]["receipt"]["evidence"] == replacement_report
+        assert state["items"][0]["receipt"]["evidence"] != report
+    else:
+        assert state["counts"] == {"running": 1}
+        assert state["items"][0]["state"] == "running"
 
 
 def test_a_verifier_runtime_is_pinned_for_the_run(databases, tmp_path):
