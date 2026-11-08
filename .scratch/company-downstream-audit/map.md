@@ -78,6 +78,28 @@ present on 2,693 and registration-authority entity ID on 3,141. This establishes
 population-wide field presence only; source-role requiredness and per-Company
 field correctness remain open.
 
+At 16:09 ET, mapped source fields were also checked by Company role without
+printing records or raw values. The 6,414 SEC Company assertions each contain
+name, address, description, fiscal year end, SIC, and incorporation state. All
+3,716 GLEIF assertions contain name, address, jurisdiction, status/legal-form/
+LOU/validation/registration fields, and creation date. Name/address appear in
+all 2,938 ADV adviser and all 494 ADV custodian assertions; the 5,841 N-PORT
+registrant assertions also all have name/address. These are source input
+counts, not survivor field completeness or downstream quality. Current Company
+binding counts are SEC 6,414, GLEIF 3,258 assigned/458 unbound, ADV adviser
+2,337, ADV custodian 224 assigned/263 name-only unbound, and N-PORT
+registrant/fund 1,947.
+
+At 16:12 ET, current role IDs were compared with the current Company fact and
+line-item tables. SEC-bound Company IDs reach 5,113,685 facts and 96,393 line
+items; GLEIF-bound IDs reach 3,771,437 facts and 68,816 line items. ADV adviser
+and N-PORT registrant IDs reach none of these tables. Current table totals are
+5,134,979 facts and 96,807 line items, so 21,294 facts and 414 line items are
+outside the SEC-bound cohort. The 14:30 “All Company” figures match the SEC
+cohort rather than current table totals. Treat this as an unresolved
+attribution discrepancy until the residual pointers and identity generation
+are traced; do not yet label it a bad link.
+
 Dependent checks were refreshed after population growth. At 15:36 ET all
 617,684 present MICs remained valid against the pinned reference and exchange
 mapping; permitted null-MIC groups were unchanged. At 15:40 ET the current
