@@ -22,8 +22,10 @@
 # identifies the issuer Company in MDM, which the Security reaches by
 # ISSUED_BY.
 # Rows are holding.yaml's `holding` table. Numbers stay as filed (text) in
-# the rows and land as exact decimals. Append only: a filed holding never
-# changes; an amended report is a new filing.
+# the rows and land as exact decimals. The four figures keep 12 decimal places
+# (operator, 2026-11-08: "Scale 12, as filed"): in 2026q2, 3,863,454 holdings
+# file a percentage with more than 10, and the writer never rounds. Append
+# only: a filed holding never changes; an amended report is a new filing.
 table: nport_holding
 definition: "One holding of one N-PORT filing, as filed, linked to the fund series, the registrant and the Security."
 grain: "one row per filing (accession number) and holding id"
@@ -77,7 +79,7 @@ columns:
   source: "holding.yaml"
   sensitivity: none
 - name: balance
-  type: DECIMAL(38,10)
+  type: DECIMAL(38,12)
   nullable: true
   definition: "The number of units held."
   source: "BALANCE"
@@ -95,19 +97,19 @@ columns:
   source: "CURRENCY_CODE"
   sensitivity: none
 - name: currency_value
-  type: DECIMAL(38,10)
+  type: DECIMAL(38,12)
   nullable: true
   definition: "The value in that currency."
   source: "CURRENCY_VALUE"
   sensitivity: none
 - name: exchange_rate
-  type: DECIMAL(38,10)
+  type: DECIMAL(38,12)
   nullable: true
   definition: "The rate to US dollars, as filed."
   source: "EXCHANGE_RATE"
   sensitivity: none
 - name: percentage
-  type: DECIMAL(38,10)
+  type: DECIMAL(38,12)
   nullable: true
   definition: "The share of the fund's net assets, as filed."
   source: "PERCENTAGE"
