@@ -54,11 +54,16 @@ cannot be reproduced on this connection and remain prior, unverified
 observations. Do not treat them as current defects until the populated governed
 snapshot is identified.
 
-The relationship endpoint comparisons, cohort downstream, listing, and
-row-check measurements below come from the earlier legacy/Silver population.
-The latest master snapshot added 207 Companies and 622 Securities; those
-dependent measures are prior-snapshot evidence until the listed refreshes are
-completed. Current Silver table row counts were refreshed at 13:34 ET.
+The 2026-11-08 14:15 ET source-key comparison checked all 16 configured Silver
+links against the exact current legacy source bindings. Non-registration
+links match the current binding when one exists; registration pointers
+diverge from the current legacy CIK identities and require producer-generation
+identification. The 14:30 ET Company cohort matrix is refreshed against the
+current legacy population, including 1,462 mapped non-US Companies and the
+exact overlap between 1,947 Company `fund` profiles and N-PORT registrants.
+Relationship pair, listing, and row-check measurements remain from an earlier
+population; the latest master snapshot added 207 Companies and 622 Securities,
+so those dependent measures must be refreshed before being treated as current.
 
 Relationship reconciliation is still open. Silver has 55,320 rows: 42,383
 `ISSUED_BY` and 12,937 `IS_SUBFUND_OF`. The latter use the configured
@@ -115,14 +120,14 @@ is mismatched. Reconcile the four source-absent keys, monthly publication
 grain, and the five-row difference between declarations and Silver before
 treating any as broken relationships.
 
-At 2026-11-08 13:50 ET, both N-PORT security Bookkeeping runs still showed
-`running`, with no step changes since the 13:11 ET check. The 11:54 ET run has 14 verified steps, `land_holding` and
-`processed` pending, and `merge` waiting. The 21:31 ET run has 3 verified, 3
-reported, 3 waiting, and 9 pending; `identifiers`, `series`, and `submissions`
-are verified, while `holding` and `holding_rows` wait. The `nport_holding`
-Silver `nport_holding` was refreshed at 13:34 ET and remains at zero rows.
-Do not resume, cancel, or otherwise alter these runs as part of this read-only
-audit.
+At 2026-11-08 14:30 ET, 28 Bookkeeping runs were running or waiting: 10
+`sec.registration` to Silver, three `openfigi` to mastering, four
+`sec.company-facts` to Silver, two `sec.nport.security`, and nine
+`sec.ownership` to security symbols. The N-PORT Silver holding count was zero
+at 14:26 ET. One N-PORT run had progressed through prepare/identifier/series/
+submission-related steps with holding landing pending and merge waiting; the
+other remained earlier in the holding path. No run was changed. Respect the
+30-minute inspection interval before the next status refresh.
 
 Other legacy source assertions declare 48 `SUCCESSOR_ENTITY`, 3,017
 `CUSTODIAN`, 4,962 `BENEFICIAL_OWNER_OF`, and 14,886 `EMPLOYED_BY`
