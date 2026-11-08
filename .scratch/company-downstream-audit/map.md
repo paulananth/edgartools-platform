@@ -32,6 +32,16 @@ private-offering form or fund name. Non-US companies remain in the Company kind,
 whose configured jurisdiction field is sourced from GLEIF; report that subgroup
 separately from the configured `international_organization` kind.
 
+For this audit, “Company type” means a configured role, source, profile, or
+measured cohort attached to the Company kind; these overlap and must not be
+summed as distinct Companies. The trace therefore covers SEC filers/issuers,
+GLEIF legal entities, ADV advisers, ADV custodians, N-PORT registrants,
+Company records with the `fund` profile, and mapped non-US Companies. N-PORT
+`fund_structure` is a separate kind. ADV private funds/PE have no active
+representation or denominator in the observed path. The other configured MDM
+kinds are Person, Security, branch, government, international organization,
+and venue; each is accounted for separately in the coverage matrix below.
+
 The local legacy source assertion store contains 1,248,313 assertion rows across
 11 feeds; field and identifier presence by feed is in the issue ledger. A
 fresh read of the designated shared server found 448,443 legacy masters, but
@@ -112,6 +122,31 @@ bind was observed. Those four Securities declare three `ISSUED_BY` links to two
 GLEIF subjects that are absent from the retained GLEIF source-record index, and
 none has a Silver issuer edge. This points to unresolved target-source coverage;
 the absent targets and Silver edges are not yet confirmed record defects.
+
+A source-assertion scan found 370 repeated ISIN values across OpenFIGI and
+N-PORT Security claims. The effective legacy `mastering_master` projection has
+zero repeated CUSIP, FIGI, or ISIN values across Security masters. N-PORT has
+394 CUSIP-keyed withheld ISIN occurrences over 371 source subjects (370
+distinct values); 154 of those values also occur as accepted claims on another
+master. That is consistent with the configured CUSIP-first keep-separate
+behavior. The effective master set also has three repeated SEDOL values and
+one repeated LoanX value, each on two masters and within the configured
+five-master forward claim. Ticker has 366 reused values; one reaches four
+masters against a forward claim of three and remains held for review. The raw
+ISIN collisions are not effective-master duplicates and are not confirmed
+defects. A future uniqueness/cardinality check should measure effective
+identifiers and verify raw conflicting claims remain withheld under the
+configured source/key-class policy.
+
+The assigned legacy identifier scan found no duplicate Company identities:
+8,361 CIK, 2,337 CRD, and 3,258 LEI values each map to one Company master, and
+no Company master holds multiple values in these reverse-one namespaces.
+Person CIK values are unique across 31,125 Person masters; 4,311 CIKs appear in
+both SEC submissions and ownership-owner assertions and resolve to the same
+master, with no Person holding multiple CIKs. Fund-structure series IDs
+(12,937) and LEIs (12,867) each map to one fund master, and no fund master
+holds multiple values in those namespaces. These are legacy assignment checks;
+they cannot stand in for the empty governed MDM projection.
 
 For international Company records, the SEC–GLEIF `sec-gleif-name-jurisdiction`
 binding rule is currently active. Its configured proof is 300/300 correct
