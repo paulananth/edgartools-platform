@@ -6,8 +6,9 @@
 # filings source extract (`filings`, adviser-filings-csv.yaml) and the custody
 # source extract (`custody`, custody-csv.yaml) of one monthly file; mdm.prepare
 # reads table `filings`. Measured over 13 months: at most 15 custodians on a
-# filing. The CIKs the adviser lists as its own (Item 1.D(3), `ciks`) join the
-# same way, from their source extract (ciks-csv.yaml).
+# filing. The CIKs the adviser lists as its own (Item 1.D(3), `ciks`) and those
+# of its related persons (Schedule D 7.A, `related_persons`) join the same way,
+# from their source extracts (ciks-csv.yaml, related-csv.yaml).
 # Pin canonical JSON of this file as the source.combine contract.
 execution: {profile: source.combine}
 combine:
@@ -15,6 +16,7 @@ combine:
   groups:
     filing_custodians: {source: custody, table: custody, key: filing_id, value: custodian_id, mode: collect, order_by: [], distinct: true, sort_values: true, skip_null_values: true, checks: {}, where: {}}
     filing_ciks: {source: ciks, table: ciks, key: filing_id, value: cik, mode: collect, order_by: [], distinct: true, sort_values: true, skip_null_values: true, checks: {}, where: {}}
+    filing_related: {source: related, table: related, key: filing_id, value: cik, mode: collect, order_by: [], distinct: true, sort_values: true, skip_null_values: true, checks: {}, where: {}}
   tables:
     filings:
       source: filings
@@ -24,3 +26,4 @@ combine:
       joins:
         custodians: {group: filing_custodians, key: filing_id, on_missing: empty, replace: false}
         ciks: {group: filing_ciks, key: filing_id, on_missing: empty, replace: false}
+        related_persons: {group: filing_related, key: filing_id, on_missing: empty, replace: false}

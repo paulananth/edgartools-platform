@@ -1,0 +1,17 @@
+# The reading of Form ADV Schedule D 7.A (IA_Schedule_D_7A_CIK) in one monthly
+# bulk file: one row per filing and CIK of a related person the adviser names.
+# The CIK is zero-filled to SEC's ten digits, the record key of SEC's Company
+# record, so the link finds its target.
+execution: {profile: source.read, workers: 1, max_artifacts: 512}
+read:
+  format: csv
+  container: zip
+  member: "IA_Schedule_D_7A_CIK_*.csv"
+  encoding: [utf-8, windows-1252]
+  limits: {max_bytes: 33554432, max_member_bytes: 33554432, max_records: 100000}
+  tables:
+    related:
+      each: record
+      columns:
+        filing_id: {text: {path: FilingID, path_mode: literal}}
+        cik: {text: {path: CIK, path_mode: literal, null_if: [""], transforms: [{pad: {left: "0000000000", right: ""}}, {keep_last: 10}]}}

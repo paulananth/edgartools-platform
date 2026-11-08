@@ -62,13 +62,23 @@ bookkeeping:
           input:
             contract: ciks-csv.yaml
             files: "*.zip"
+        - name: read_related
+          operation: source.read
+          requires: []
+          key: "{unit}"
+          leases: ["artifact:{destination}"]
+          checks: [input.hash, output.receipt, source.output]
+          units: {each: file}
+          input:
+            contract: related-csv.yaml
+            files: "*.zip"
         - name: combine
           operation: source.combine
-          requires: [read_filings, read_custody, read_ciks]
+          requires: [read_filings, read_custody, read_ciks, read_related]
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.combined]
-          input: {contract: combine.yaml, readings: {filings: {all: read_filings}, custody: {all: read_custody}, ciks: {all: read_ciks}}}
+          input: {contract: combine.yaml, readings: {filings: {all: read_filings}, custody: {all: read_custody}, ciks: {all: read_ciks}, related: {all: read_related}}}
         - name: record
           operation: source.read
           requires: [combine]
@@ -244,6 +254,15 @@ dataset_contracts:
           target_source: iapd.adv.custodians.v1
           valid_from: item.valid_from
           scope: IAPD Form ADV custodian
+        # The related persons Schedule D 7.A names by CIK (operator, 2026-11-08: "Both", then
+        # "RELATED_PERSON (Recommended)"): each links to SEC's Company record of that CIK, and waits
+        # until that record is mastered.
+        - type: RELATED_PERSON
+          each: related_persons
+          target_key: [item]
+          target_source: sec.company.v1
+          valid_from: item.valid_from
+          scope: IAPD Form ADV related person
   iapd.adv.custodians.v1:
     contract:
       provider: SEC Investment Adviser Public Disclosure (IAPD)

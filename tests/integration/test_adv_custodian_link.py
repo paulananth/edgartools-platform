@@ -56,6 +56,8 @@ MONTHS = {
     JUNE: ([filing("F2")], [custody("F2", "EXAMPLE CLEARING LLC", bd=BD)]),
 }
 
+RELATED = {MAY: [["F1", "1", "900002"]]}
+
 
 def csv_text(header: list[str], rows: list[list[str]]) -> str:
     return "\n".join(",".join(f'"{v}"' for v in r) for r in [header, *rows]) + "\n"
@@ -89,12 +91,16 @@ def month(root: Path, published: str) -> tuple[list[dict], list[dict]]:
         z.writestr(f"IA_ADV_Base_A_{tag}.csv", csv_text(BASE, base))
         z.writestr(f"IA_Schedule_D_5K3_{tag}.csv", csv_text(CUSTODY, rows))
         z.writestr(f"IA_1D3_CIK_{tag}.csv", csv_text(["FilingID", "CIK"], []))
+        # Schedule D 7.A: May's filing names one related person by CIK, as filed (no leading zeros).
+        z.writestr(f"IA_Schedule_D_7A_CIK_{tag}.csv", csv_text(["FilingID", "ReferenceID", "CIK"],
+                                                                RELATED.get(published, [])))
     raw = store.put_bytes((root / "capture.zip").as_uri(), body.getvalue())
     filings = read(store, root / "filings", "adviser-filings-csv.yaml", raw, published)
     custody_rows = read(store, root / "custody", "custody-csv.yaml", raw, published)
     ciks = read(store, root / "ciks", "ciks-csv.yaml", raw, None)
+    related = read(store, root / "related", "related-csv.yaml", raw, None)
     combined = chain.combine(store, root / "combine", FOLDER / "combine.yaml",
-                             {"filings": filings, "custody": custody_rows, "ciks": ciks})
+                             {"filings": filings, "custody": custody_rows, "ciks": ciks, "related": related})
     # Each month's file restates every custodian it names: its own publication, the
     # month (YYYYMM) its revision, so a later month is a later revision (ticket 129).
     custodians = prepare(store, root / "mdm-custodians", custody_rows, "custody", CUSTODIANS, distinct_on=["custodian_id"],
@@ -110,7 +116,7 @@ def test_an_adviser_links_to_its_custodians_across_months(database, tmp_path):
     # The custodian alone keys its record (ticket 129, "Fix 5"): the month is the publication's.
     custodian_subjects = {subject_key(CUSTODIANS, f"{p}{v}") for p, v in
                           (("bd:", BD), ("lei:", LEI), ("name:", "EXAMPLE TRUST CO"))}
-    assert {l["target_subject"] for l in may_filing["relationships"]} == custodian_subjects
+    assert {l["target_subject"] for l in may_filing["relationships"] if l["type"] == "CUSTODIAN"} == custodian_subjects
     assert {subject_key(CUSTODIANS, r["provenance"]["record_key"]) for r in may_custodians} == custodian_subjects
     assert len(may_custodians) == 3  # the BD custodian's two rows are one record
     # June restates the same custodians as new publications of the same records, not new ones.
@@ -137,3 +143,13 @@ def test_an_adviser_links_to_its_custodians_across_months(database, tmp_path):
     assert bd_link["last_seen"] == JUNE
     assert [(p["valid_from"], p["valid_from_basis"]) for p in lei_link["periods"]] == [(MAY, "observed")]
     assert lei_link["last_seen"] == MAY
+
+
+def test_a_related_person_named_by_cik_links_to_secs_company_record(tmp_path):
+    """Schedule D 7.A (operator, 2026-11-08: "RELATED_PERSON (Recommended)"): each CIK the filing names
+    links its adviser to SEC's Company record of that CIK, the record key zero-filled to ten digits."""
+    _, (may_filing,) = month(tmp_path / "may", MAY)
+    related = [l for l in may_filing["relationships"] if l["type"] == "RELATED_PERSON"]
+    assert [l["target_subject"] for l in related] == [subject_key("sec.company.v1", "0000900002")]
+    _, (june_filing,) = month(tmp_path / "june", JUNE)
+    assert not [l for l in june_filing["relationships"] if l["type"] == "RELATED_PERSON"]  # June names none
