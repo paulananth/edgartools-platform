@@ -28,7 +28,7 @@ def _handle(args):
     from .destinations import migrate_guard
     operation = args.bookkeeping_command
     if operation in {"init", "migrate"}:
-        owner = get_engine(os.environ["BOOKKEEPING_MIGRATION_DATABASE_URL"])
+        owner = get_engine()
         try:
             result = migrate(
                 owner,
@@ -40,7 +40,7 @@ def _handle(args):
             owner.dispose()
     elif operation == "grant-profile":
         from .database import grant_profile
-        owner = get_engine(os.environ["BOOKKEEPING_MIGRATION_DATABASE_URL"])
+        owner = get_engine()
         try:
             result = grant_profile(owner, profile=args.profile, worker=args.worker, verifier=args.verifier)
         finally:

@@ -66,6 +66,7 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
         worker, verifier, governance = (environment(f + ".env") for f in ("worker", "verifier", "governance"))
         assert "SILVER_DATABASE_URL" not in worker
         assert "MDM_MIGRATION_DATABASE_URL" not in worker
+        assert "BOOKKEEPING_MIGRATION_DATABASE_URL" not in worker
         book = engine("bookkeeping", "postgres")
         with book.connect() as conn:
             for profile in PROFILES:

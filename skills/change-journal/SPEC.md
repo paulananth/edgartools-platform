@@ -218,10 +218,10 @@ Producer workflow qualification in `edgar-warehouse plan workflow`
 reads back the actual completed validation root, exact frozen
 submission, verified work counts, checks, zero delivery backlog and journal
 receipts. An edited validation report cannot replace that authority. When
-deploying to different stores, retain the validation databases and explicitly
-provide both `BOOKKEEPING_VALIDATION_DATABASE_URL` and
-`CHANGE_JOURNAL_VALIDATION_DATABASE_URL` as read connections. With neither
-set, the validation root must exist in the selected fresh target stores. There
+deploying to different stores, retain the validation databases and point
+`BOOKKEEPING_DATABASE_URL` and `CHANGE_JOURNAL_DATABASE_URL` at those
+read connections. Otherwise the validation root must exist in the selected
+fresh target stores. There
 is no legacy lookup or history import when validation authority is unavailable.
 
 ## Qualification and cutover status

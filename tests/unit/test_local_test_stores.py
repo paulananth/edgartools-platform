@@ -154,3 +154,52 @@ def test_a_failure_shows_its_text_only_when_the_text_is_this_scripts_own_or_the_
     assert local.error_text(RuntimeError("did not become ready")) == "did not become ready"
     assert local.error_text(Blocked("Migration 7 is newer than this code")) == "Blocked: Migration 7 is newer than this code"
     assert local.error_text(KeyError("password=invented")) == "KeyError"
+
+
+def test_bookkeeping_owner_uses_the_runtime_url_key(tmp_path, monkeypatch):
+    stores = local.LocalStores(tmp_path, tmp_path)
+    stores.identity("one", create=True)
+
+    class Address:
+        def render_as_string(self, hide_password=False):
+            return "postgresql://invented@127.0.0.1/invented"
+
+    monkeypatch.setattr(stores, "url", lambda *a, **k: Address())
+    stores.connections("one")
+    worker = (stores.folder("one") / "worker.env").read_text()
+    connection = (stores.folder("one") / "connection.env").read_text()
+
+    def exported(text):
+        return [line.split("=", 1)[0][7:] for line in text.splitlines() if line.startswith("export ")]
+
+    assert "BOOKKEEPING_DATABASE_URL" in exported(worker)
+    assert "BOOKKEEPING_DATABASE_URL" in exported(connection)
+    assert "BOOKKEEPING_MIGRATION_DATABASE_URL" not in exported(worker)
+    assert "BOOKKEEPING_MIGRATION_DATABASE_URL" not in exported(connection)
+    assert "BOOKKEEPING_MIGRATION_DATABASE_URL" in worker
+    assert "BOOKKEEPING_MIGRATION_DATABASE_URL" in connection
+    assert "BOOKKEEPING_ADMIN_DATABASE_URL" not in exported(worker)
+    assert "BOOKKEEPING_ADMIN_DATABASE_URL" not in exported(connection)
+    assert "BOOKKEEPING_ADMIN_DATABASE_URL" in worker
+    assert "BOOKKEEPING_ADMIN_DATABASE_URL" in connection
+    assert "BOOKKEEPING_MANIFEST_ROOT" in exported(worker)
+    assert "BOOKKEEPING_MANIFEST_ROOT" in exported(connection)
+
+
+def test_bookkeeping_cli_does_not_name_a_migration_url():
+    text = (PATH.parents[2] / "edgar_warehouse/bookkeeping/clean/cli.py").read_text()
+    assert "BOOKKEEPING_MIGRATION_DATABASE_URL" not in text
+    assert "get_engine()" in text
+
+
+def test_provision_script_uses_the_bookkeeping_url_key():
+    text = (PATH.parents[1] / "scripts/provision-clean-bookkeeping.py").read_text()
+    assert "BOOKKEEPING_ADMIN_DATABASE_URL" not in text
+    assert 'os.environ["BOOKKEEPING_DATABASE_URL"]' in text
+    assert 'set(database="postgres")' in text
+    shell = (PATH.parents[1] / "scripts/provision-local-postgres-stores.sh").read_text()
+    assert "BOOKKEEPING_ADMIN_DATABASE_URL" not in shell
+    skills = PATH.parents[2] / "skills"
+    named = [str(path.relative_to(skills)) for path in skills.rglob("*.md")
+             if "BOOKKEEPING_ADMIN_DATABASE_URL" in path.read_text()]
+    assert named == []

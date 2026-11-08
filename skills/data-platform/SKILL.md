@@ -234,6 +234,9 @@ checks and points to the repository lifecycle script.
    `RULES_DATABASE_URL`, `BOOKKEEPING_DATABASE_URL`,
    `CHANGE_JOURNAL_DATABASE_URL`, `MDM_DATABASE_URL`,
    `RDM_DATABASE_URL`, and `SILVER_DATABASE_URL`.
+   `BOOKKEEPING_MANIFEST_ROOT` is the local folder (`file://` or a path) where
+   Rules freezes run configuration; `local-test-stores.py` writes it into
+   `worker.env`.
 
 5. **Check.** `edgar-warehouse doctor` must print `"ok": true`. It lists any
    command a skill names that does not exist, whether the engine loads, the

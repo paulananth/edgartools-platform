@@ -37,15 +37,16 @@ assert not names & set({DOMAIN!r})
                     assert added.returncode == 0, "Declared MySQL control extra failed to install"
                 def url(engine):
                     return engine.url.set(drivername=engine.dialect.name).render_as_string(hide_password=False)
-                environment = {**os.environ, "BOOKKEEPING_MIGRATION_DATABASE_URL": url(owner),
+                environment = {**os.environ,
                                "CHANGE_JOURNAL_MIGRATION_DATABASE_URL": url(journal_owner),
                                "CHANGE_JOURNAL_DATABASE_URL": url(journal_runtime)}
                 reader_url = reader.url.set(database=owner.url.database, drivername=owner.dialect.name).render_as_string(hide_password=False)
                 def invoke(*arguments, document=None, verifier=False, expected=0, module="edgar_warehouse.bookkeeping"):
+                    owner_command = arguments[0] in {"init", "migrate", "grant-profile"}
                     result = subprocess.run([str(python), "-I", "-m", module, *arguments],
                                             input=None if document is None else json.dumps(document), capture_output=True,
                                             text=True, cwd=tmp_path, timeout=30,
-                                            env={**environment, "BOOKKEEPING_DATABASE_URL": reader_url if verifier else url(worker)})
+                                            env={**environment, "BOOKKEEPING_DATABASE_URL": url(owner) if owner_command else (reader_url if verifier else url(worker))})
                     if result.returncode != expected:
                         (tmp_path / "private-installed-control.log").write_text(result.stdout + "\n" + result.stderr)
                     assert result.returncode == expected, "Installed control failed; private diagnostic retained"
