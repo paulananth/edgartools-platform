@@ -116,18 +116,25 @@ already set aside by identifier validation. All 3,022 current Silver
 custody rows have adviser IDs. Of these, 2,541 custodian IDs match the exact
 source key and current master; 475 rows point to the 263 waiting keys, and six
 rows across four keys have no retained source assertion. No populated pointer
-is mismatched. Reconcile the four source-absent keys, monthly publication
-grain, and the five-row difference between declarations and Silver before
-treating any as broken relationships.
+is mismatched. All six rows across four keys match the four configured
+nonblocking `invalid_lei_checksum` deferrals. The 3,017 declaration pairs
+exactly match the 3,017 unique Silver pairs, with no source-only or Silver-only
+pair. Silver has five additional rows because five filing/custodian pairs each
+contain two distinct custody facts, which the declared row grain permits. The
+configured `related_person_is_y_or_n` check ran on all 3,022 rows with zero
+failures, flags, or refusals. This closes the ADV custody pair and row-grain
+comparison; the complete per-Company field trace remains open.
 
-At 2026-11-08 14:30 ET, 28 Bookkeeping runs were running or waiting: 10
+At 2026-11-08 15:01 ET, 29 Bookkeeping runs were running or waiting: 10
 `sec.registration` to Silver, three `openfigi` to mastering, four
-`sec.company-facts` to Silver, two `sec.nport.security`, and nine
+`sec.company-facts` to Silver, two `sec.nport.security`, and ten
 `sec.ownership` to security symbols. The N-PORT Silver holding count was zero
-at 14:26 ET. One N-PORT run had progressed through prepare/identifier/series/
-submission-related steps with holding landing pending and merge waiting; the
-other remained earlier in the holding path. No run was changed. Respect the
-30-minute inspection interval before the next status refresh.
+at 15:01 ET. In the more advanced N-PORT run, identifiers, series,
+submissions, holding, and holding rows were verified; combine, holding
+combine, and issuer reduction were verified; holding landing and merge
+remained pending/waiting. The second run still had holding and holding rows
+waiting, with record waiting and landing/merge pending. No run was changed.
+Respect the 30-minute inspection interval before the next status refresh.
 
 Other legacy source assertions declare 48 `SUCCESSOR_ENTITY`, 3,017
 `CUSTODIAN`, 4,962 `BENEFICIAL_OWNER_OF`, and 14,886 `EMPLOYED_BY`
@@ -192,11 +199,22 @@ cases. A read-only full legacy Company comparison reproduced 134 disagreements
 among 3,073 records under the complete configured place-comparison semantics.
 All 134 are accepted Company masters; each SEC state-of-incorporation and GLEIF
 jurisdiction field is won by its expected source, and both source assertions
-are retained. This confirms the disagreement is present in both source-backed
-fields, but not that it is a defect: SEC and GLEIF fields remain separately
-owned, and identity history, effective times, and the producing rule version
-still need tracing. The proof validates matching behavior on its measured
-cohort; it does not attest every current field pair.
+are retained, with no field conflict entries. No current `mastering_decision`
+rows explain the match route. SEC effective time is null for all 3,258 matched
+pairs while GLEIF effective time is populated; the SEC source contract says its
+incorporation effective time is unknown. This confirms a field disagreement,
+not a defect: comparable time, match route, and processing rule version are
+unavailable. The proof validates matching behavior on its measured cohort; it
+does not attest every current field pair.
+
+The active Form 4 Security reader is ticker-only: v2 reads accession, issuer
+CIK, and symbol, but not filing period; all 5,273 v2 assertions have null
+effective time. Of these, 4,447 resolve to one current ticker holder, 725 have
+no current holder and remain unassigned, and 101 remain in conflict review
+because multiple current Securities share the ticker. No assigned result
+points outside the exact current ticker-holder set. This verifies current-key
+handling but not historical correctness. The issuer CIK to `ISSUED_BY` check
+remains to be run with a server-side join that accounts for temporal limits.
 
 The SEC Company classification queue contains 69,816 distinct blocking source
 records. The configured rules give 1,515 a probable kind (599 Company, 658
