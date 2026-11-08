@@ -77,6 +77,19 @@ engine's own checks:
 uv run python <this skill's folder>/scripts/quality_plan.py --help
 ```
 
+## Existing master projections
+
+When an audit examines fields already selected into master records, first pin
+the projection generation and compare each stored field-authority fingerprint
+and kind version with the policy configured for that generation. Verify that
+each selected field points to a retained assertion with the same source code,
+record key, and value; this establishes provenance, not business correctness.
+If the stored authority differs from the policy being assessed, report stale
+projection provenance and keep its field values out of current-policy defect
+counts until source identity, effective time, and the intended generation are
+reconciled. Do not treat a source name or field-presence count by itself as a
+quality failure.
+
 ## Modes, in order
 
 **plan → measure → decide → mark → write.** For a live feed, start at

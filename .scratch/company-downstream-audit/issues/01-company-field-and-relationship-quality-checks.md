@@ -41,7 +41,8 @@ invented examples, never names or identifiers from records.
 - [x] Refresh all operational Silver table row counts on the current snapshot (read-only 2026-11-08 15:40 ET). Company fact 5,134,979; line item 96,807; measure 168,360; insider position 14,331; insider reporting owner 5,743; ADV custody 3,022; registration offering 732; registration statement line 27,415; relationship 55,320 (`ISSUED_BY` 42,383, `IS_SUBFUND_OF` 12,937); N-PORT holding 0; 13F filing 168; 13F holding 283,725. Counts alone do not establish pointer identity; cohort-level downstream comparison remains open.
 - [x] Refresh declared relationship counts after the new assertions appeared (read-only 2026-11-08 13:50 ET). Current source counts remain 48 `SUCCESSOR_ENTITY`, 3,017 `CUSTODIAN`, 12,937 `IS_SUBFUND_OF`, 245,130 `ISSUED_BY`, 4,962 `BENEFICIAL_OWNER_OF`, and 14,886 `EMPLOYED_BY`. These are declaration sightings, not distinct governed edge counts; relationship key, endpoint and time comparisons remain open.
 - [x] Measure identifier cardinality in both directions for every populated kind with a bounded reverse claim (read-only 2026-11-08; Company refreshed 13:25 ET, Security refreshed 12:46 ET). Current Company BD number (106), CIK (8,361), CRD (2,337), and LEI (3,359) values are each unique across masters, with no master holding multiple values per namespace. Person CIK (31,125) maps to one Person master; 4,311 values appear in both SEC submissions and ownership-owner feeds and resolve to one master each, with no Person holding multiple CIKs. Fund-structure series IDs (12,937) and LEIs (12,867) each map to one fund master, with no fund master holding multiple values. Security effective identifiers: CUSIP 384,249 distinct values (zero repeated across masters), FIGI 1,392,524 (zero repeated), ISIN 390,955 (zero repeated), LoanX 423 (one repeated across two masters), SEDOL 22,832 (three repeated across two masters), and ticker 129,394 (366 reused; one on four masters against the configured forward limit of three, held for review). These are legacy assignment results; the current governed MDM projection is empty.
-- [x] Recompute nested nonempty source field and identifier values across the full retained assertion store (read-only streaming scan, 2026-11-08 17:15 ET). The cursor exhausted 1,257,503 assertions across 14 feeds; the total includes 2,938 `iapd.adv.filings.v2` Company assertions, of which 2,335 distinct legacy Company masters are linked and three assertions are unassigned. The v2 feed is not in the active Company merge source order. Per-feed nested-value counts are in the table below; they establish source field presence only, not semantics, requiredness, or full downstream coverage.
+- [x] Recompute nested nonempty source field and identifier values across the full retained assertion store (read-only streaming scan, 2026-11-08 17:15 ET). The cursor exhausted 1,257,503 assertions across 14 feeds; the total includes 2,938 `iapd.adv.filings.v2` Company assertions, of which 2,335 distinct legacy Company masters are linked and three assertions are unassigned. The rebase brought in #1503, whose current Company merge source order includes v2. Per-feed nested-value counts are in the table below; they establish source field presence only, not semantics, requiredness, or full downstream coverage.
+- [x] Compare each current Company master-field winner with its retained source assertion and configured field authority (read-only 2026-11-08 17:41–17:51 ET). Across 71,886 selected fields on canonical legacy Company masters, every winner assertion exists and its source code, record key, and field value match the retained assertion (zero missing assertions or mismatches). Only 4,434 field projections carry the authority fingerprint of current `rules/merge/kinds/company.yaml`; 67,452 carry a registered authority whose source order includes prior ADV filings v1. Four winners (two `name`, two `address`) cite v1, and no v2 claim for those fields is assigned to the same current master. The stored and current source orders share a `kind_version` string despite different source lists. This confirms stale field-authority provenance in the local legacy projection, not that every affected value is wrong. Trace v2 assertions through review/source identity and identify the intended projection generation before proposing any reload or remediation.
 - [x] Reconcile the three unassigned `iapd.adv.filings.v2` assertions to their review state (read-only aggregate, 2026-11-08 17:21 ET). All three are in open `conflicting_identifiers` review. Do not count them as missing Company masters or add a link-completeness failure for these held identity claims.
 - [x] Reproduce the operator-selected Company control trace in legacy MDM/Silver and select controls for the other populated kinds. The Company control resolves to one Company with one SEC Company and one GLEIF assertion, 15 populated MDM field names, two identifier namespaces, 25,135 fact rows, 437 line-item rows, 760 measure rows, 10 issuer-position rows, three insider issuer rows, and 57 `ISSUED_BY` edges targeting the Company. One control each was traced for fund structure, Person, and Security; their details and limits follow below. Governed identity remains unavailable in this snapshot.
 - [ ] Complete the batch-level all-kind audit: compare every retained assertion and canonical master by configured kind, source binding, identifier namespace, populated field, and downstream consumer; publish per-kind denominators, unresolved/held outcomes, mismatches, and temporal/source evidence. Existing aggregate scans and representative traces are evidence, but do not yet establish a checked result for every record or every Company field.
@@ -79,7 +80,7 @@ invented examples, never names or identifiers from records.
 - [ ] Draft check definitions in the owning source contract or Silver table spec; measure them on the pinned records, include counts in comments, and prove each check with a planted invalid record before proposing activation.
 - [ ] For cross-table or cross-store checks without a supported primitive, document the exact predicate and smallest required engine/configuration change as a separate issue; do not approximate it with a misleading field-only check.
 - [ ] Report coverage for every Company role/cohort and every configured MDM kind, confirmed defects, candidate findings still under investigation, check definitions and measurements, and deferred work. Do not create external tickets unless requested.
-- [x] Learning → skill: `none` (reviewed `skills/data-quality/SKILL.md` on 2026-11-08 14:01 ET). It already requires evidence-backed findings, supported generic checks, planted-invalid proofs, and separate tickets for unsupported predicates; this audit found no additional reusable rule to add.
+- [x] Learning → skill: `skills/data-quality/SKILL.md`, “Existing master projections” (updated 2026-11-08 17:54 ET). Pin the projection generation and match stored field authority to its policy before treating selected fields as current; matching provenance does not prove business correctness.
 
 ## Measured evidence and unresolved checks
 
@@ -138,9 +139,9 @@ Read-only source assertions in legacy mastering were streamed and counted on
 feeds. Counts below are distinct feed assertions and nonempty nested field or
 identifier values, not entity denominators. They establish source field
 presence, not correctness or requiredness. The 2,938 `iapd.adv.filings.v2`
-assertions are retained and mostly assigned to legacy masters, but v2 is not
-in the current Company merge policy's source order; keep it distinct from the
-active v1 role.
+assertions are retained and mostly assigned to legacy masters; v2 is in the
+current Company merge source order after #1503. The retained v1 assertions
+remain historical evidence and must not be described as the active role.
 
 Joining each retained source assertion to its legacy `entity_id` and the
 legacy master table gives this assignment coverage. A linked master means the
@@ -152,7 +153,7 @@ against the current governed authority.
 | Company | SEC Company | 6,414 | 6,414 | 0 |
 | Company | GLEIF Level 1 | 3,716 | 3,258 | 458 |
 | Company | IAPD ADV filings | 2,938 | 2,337 | 0 |
-| Company | IAPD ADV filings v2 (not in current Company merge source order) | 2,938 | 2,335 | 3 (all open `conflicting_identifiers`) |
+| Company | IAPD ADV filings v2 (in current Company merge source order) | 2,938 | 2,335 | 3 (all open `conflicting_identifiers`) |
 | Company | N-PORT registrant | 5,841 | 1,947 | 0 |
 | Company | IAPD ADV custodian | 494 | 224 | 263 |
 | Fund structure | N-PORT fund | 25,874 | 12,937 | 0 |
@@ -181,7 +182,7 @@ their deferral and source-coverage evidence.
 | Company — SEC Company | 6,414 | `address` 6,409; `fiscal_year_end` 6,217; `name` 6,414; `sic` 6,414; `state_of_incorporation` 5,787 | `cik` 6,414 |
 | Company — GLEIF Level 1 | 3,716 | `address`, `gleif_entity_status`, `gleif_initial_registration`, `gleif_legal_form`, `gleif_managing_lou`, `gleif_registration_authority`, `gleif_registration_status`, `gleif_validation_source`, `jurisdiction`, `name` 3,716 each; `gleif_entity_creation_date` 3,025; `gleif_registration_authority_entity_id` 3,549 | `lei` 3,716 |
 | Company — IAPD ADV filings v1 | 2,938 | `address` 2,716; `name` 2,938 | `crd` 2,938 |
-| Company — IAPD ADV filings v2 (not in active Company merge source order) | 2,938 | `address` 2,716; `name` 2,938 | `cik` 704; `crd` 2,938 |
+| Company — IAPD ADV filings v2 (current configured Company source) | 2,938 | `address` 2,716; `name` 2,938 | `cik` 704; `crd` 2,938 |
 | Company — IAPD ADV custodians | 494 | `address`, `name` 494 each | `bd_number` 106; `lei` 114 |
 | Company — N-PORT registrant | 5,841 | `address`, `name` 5,841 each | `cik` 5,841 |
 | Fund structure — N-PORT fund | 25,874 | `name` 25,874 | `sec_series_id` 25,874; `lei` 25,734 |
@@ -259,6 +260,28 @@ the series ID sufficient for identity; the LEI is optional and only joins when
 the source claim is unique. The proving-run count of two records without
 identity evidence is not an LEI-completeness threshold. No missing-LEI defect
 is observed in this cohort.
+
+### Company field-winner provenance
+
+The 17:41 ET read compared every field on the 10,905 canonical Company masters
+to the assertion selected by its stored winner metadata. The 71,886 selected
+field values all point to a retained assertion with the same source code and
+record key, and the projected value equals that assertion's value. The winner
+counts by field reproduce the corrected nonempty-value totals above. This is
+an internal lineage check: it does not prove that the source value is
+business-correct, that the configured precedence is appropriate, or that the
+current rule file would choose the same winner after replay.
+
+Four winners (two names and two addresses) cite retained ADV filings v1
+assertions, although the current Company source order names v2. A comparison
+of every Company field's stored authority fingerprint to the registered policy
+records found 67,452 projections under a v1 source order and 4,434 under the
+current v2 source order. Both policy bodies use the same `kind_version`
+string. No v2 claim for those four fields is assigned to the same current
+master. Determine whether the related v2 records are open identity conflicts,
+absent from the retained v2 capture, or bound to another identity before
+deciding the value impact. Do not change the mapping, source order, or records
+as part of this audit.
 
 ### Earlier reported governed MDM source-record coverage (not reproducible)
 
@@ -461,6 +484,7 @@ cannot yet yield record-level checks.
 
 | Finding or predicate | DataKitchen TestGen category | Existing platform support | Decision |
 |---|---|---|---|
+| Company projection fields were selected under the currently configured source authority | Not a row-value category; projection/configuration consistency | Stored field authority fingerprints can be compared with the registered and current policy; no existing row-local quality check proves a projection was rebuilt under current rules. | Confirmed local provenance drift: 67,452 of 71,886 field projections use the registered prior source order, while 4,434 match current config. This does not prove field values are wrong. Do not add `quality.yaml`; reconcile the intended projection generation and v1-to-v2 identity path before considering a replay. |
 | N-PORT fund LEI checksum invalid (14/25,874 source assertions) | Validity; a regex is not a checksum check. | Existing Dataset Contract identifier validation checks the checksum and records a blocking deferral. | Already detected; do not duplicate it in `quality.yaml`. Keep the source records held for the normal data-quality disposition. |
 | N-PORT Security CUSIP checksum invalid (2,428/428,262 source assertions) | Validity; a regex is not a checksum check. | Existing Dataset Contract identifier validation checks the checksum and records a nonblocking deferral. | Already detected; do not duplicate it in `quality.yaml`. Preserve the configured nonblocking disposition. |
 | N-PORT Security CUSIP invalid (1/428,262 source assertions) | Validity | Existing Dataset Contract identifier validation records a nonblocking deferral. | Already detected; do not duplicate it in `quality.yaml`. Preserve the configured nonblocking disposition. |

@@ -47,9 +47,9 @@ rows across 14 feeds, including 2,938 retained ADV filings v2 assertions
 (2,335 distinct linked legacy Company masters; three unassigned assertions,
 all held in `conflicting_identifiers` review).
 The 17:15 ET full stream measured nested nonempty field and identifier counts
-for every feed; the full per-feed table is in the issue ledger. ADV filings v2
-is not in the current Company merge source order and remains separate from the
-active v1 role. The latest read found
+for every feed; the full per-feed table is in the issue ledger. After rebasing,
+the current source file and #1503 confirm ADV filings v2 is in the Company
+merge source order; retained v1 assertions are historical evidence. The latest read found
 449,281 legacy master rows (449,272 canonical masters and nine aliases). A
 17:06 ET read found zero rows in each governed MDM entity, current-record, and
 relationship table. This blocks current governed-kind, generation, and
@@ -68,9 +68,12 @@ GLEIF entities, ADV advisers/custodians, N-PORT registrants/fund profiles,
 mapped non-US Companies, and 13F filers; it includes 1,462 mapped non-US
 Companies and 1,947 Company `fund` profiles; cohorts overlap. Registration
 is CIK-attributed because its pointer generation is unknown. Source fields
-are measured by feed, but role-specific master survivorship remains open.
-Retained ADV filings v2 is separate from the active Company merge source
-order. Private equity has no active representation or denominator, and
+are measured by feed, but role-specific master survivorship remains open. A
+17:41–17:51 ET provenance check found all 71,886 Company field winners agree
+with their retained assertions; only 4,434 stored field projections carry the
+current v2 source-order authority, while 67,452 retain the registered v1
+source-order authority. This is stale projection provenance, not proof that
+all affected values are wrong. Private equity has no active representation or denominator, and
 branch, government, international organization, and venue have no populated
 legacy master denominator.
 
@@ -82,7 +85,12 @@ status/legal-form/LOU/validation/registration fields each occur on 3,258
 masters; 2,693 have entity-creation date and 3,141 have registration-authority
 entity ID. Source-level nested-value counts by role are in the issue ledger.
 The old 16:06–16:09 wrapper counts are superseded. These counts are field
-presence only, not per-record correctness or requiredness.
+presence only, not per-record correctness or requiredness. The later Company
+winner scan also verified the retained assertion, source code, record key,
+and projected value for every populated field. Four winners (two names and two
+addresses) still cite ADV filings v1; no v2 claim for those fields is assigned
+to the same current master. The v1-to-v2 identity trace remains open, as do
+row-level business correctness and role-specific survivorship.
 
 At 16:55 ET, the 30 ADV-assigned Company masters without a name were checked
 against retained evidence and the current pure merge calculation. All 30 are
