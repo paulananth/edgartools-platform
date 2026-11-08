@@ -10,8 +10,9 @@
 # `relationships`.
 mdm-relationship-types:
   code_set: mdm-relationship-types
-  version: '3'
-  sha256: 4d9f696384fb3aa72aa0fa9b7dff6a3a22450d010488e6af580dca4658c94e70
+  # Version 4 adds RELATED_PERSON, Form ADV's own term (operator, 2026-11-08: "RELATED_PERSON (Recommended)").
+  version: '4'
+  sha256: 8ab302e8a54160a858200e8d887f7b97539952be7060270b6af7126476af1a71
 sec-place-codes:
   code_set: sec-place-codes
   version: '1'

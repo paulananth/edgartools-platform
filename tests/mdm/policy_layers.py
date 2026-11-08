@@ -459,6 +459,16 @@ def without_custodian_name_rule(policy: dict) -> dict:
     return body
 
 
+def without_related_person(policy: dict) -> dict:
+    """Operator, 2026-11-08: "RELATED_PERSON (Recommended)": the relationship types pinned at version 4,
+    which adds Form ADV's related person. Peeled, the pin is version 3."""
+    body = _copy(policy)
+    pin = body["reference_pins"][body["relationships"]["pin"]]
+    pin["version"] = "3"
+    pin["sha256"] = "4d9f696384fb3aa72aa0fa9b7dff6a3a22450d010488e6af580dca4658c94e70"
+    return body
+
+
 ADVISER_CIK_EARLIER = {"iapd-adv-crd": "2026-10-09.1", "iapd-adv-custodian-name": "2026-11-04.exact-name"}
 
 
@@ -482,6 +492,8 @@ def without_adviser_cik(policy: dict) -> dict:
 # Newest first: each layer, and Company's policy digest with it and every
 # layer after it still on.
 LAYERS = [
+    # Relationship types version 4, RELATED_PERSON: "RELATED_PERSON (Recommended)" (2026-11-08).
+    (without_related_person, "eeaa64a8a8ffbf294c805f793900880051965e335a9884078edf14be8ec42f95"),
     # The Form ADV adviser CIK rule: "Both" (2026-11-08).
     (without_adviser_cik, "4d817e5c79b216511d6780d9bb682663a6ba25c9210af113d34a0f1599b8dac6"),
     # The Form ADV custodian name rule (ticket 01, exact name only).

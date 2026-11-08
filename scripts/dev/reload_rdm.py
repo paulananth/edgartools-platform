@@ -121,7 +121,8 @@ WORDS = {
                                                "Add code properties to RDM (Recommended)"),
                   "2": ("claude (ticket 182)", None),
                   "3": ("claude (ticket 24)", "This can't be true \"Security with two issuers keep two ISSUED_BY links\" "
-                                              "fix the root cause")}),
+                                              "fix the root cause"),
+                  "4": ("claude (Form ADV related persons)", "RELATED_PERSON (Recommended)")}),
     "mdm-relationship-types-before-real-names": dict(
         name="MDM relationship types before the real names",
         definition="The table of relationship types as the operator approved it before the types took their real "

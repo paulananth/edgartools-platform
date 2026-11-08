@@ -38,6 +38,8 @@ def archive() -> bytes:
         z.writestr("IA_Schedule_D_5K3_20260501_20260531.csv", csv_text(CUSTODY, ROWS))
         # Item 1.D(3): the filing lists its CIK twice and as filed, without SEC's leading zeros.
         z.writestr("IA_1D3_CIK_20260501_20260531.csv", csv_text(["FilingID", "CIK"], [["F1", "900001"], ["F1", "900001"]]))
+        z.writestr("IA_Schedule_D_7A_CIK_20260501_20260531.csv",
+                   csv_text(["FilingID", "ReferenceID", "CIK"], [["F1", "1", "900002"]]))
     return out.getvalue()
 
 
@@ -90,6 +92,7 @@ def test_the_filing_carries_its_custodians(databases, tmp_path):
     assert (record["filing_id"], record["crd"]) == ("F1", "999001")
     assert record["custodians"] == IDS  # the BD custodian once, however many rows name it
     assert record["ciks"] == ["900001"]  # once, as filed: the identifier format pads it for MDM
+    assert record["related_persons"] == ["0000900002"]  # zero-filled: the key of SEC's Company record
 
 
 def test_a_custodian_named_by_several_rows_is_one_record(databases, tmp_path):
