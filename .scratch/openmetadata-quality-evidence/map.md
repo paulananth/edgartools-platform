@@ -29,8 +29,9 @@ format disabled until its measured recovery is within an operator-set maximum.
   not publication until the exact result reads back.
 - Require an owner, documented resume procedure, disposable measured resume
   and operator-set maximum recovery time before enabling the new receipt format.
-- [Restore Verified Per-Load Quality Evidence](issues/01-verified-per-load-quality-evidence.md): [Restore verified per-load OpenMetadata quality results](https://github.com/paulananth/edgartools-platform/pull/1484) merged with CI passing; the remaining attempt, recovery, and UI gates stay open in their own tickets.
-- [Land Per-Load Guidance and Work Map](issues/02-land-quality-history-and-recovery-guidance.md): [Correct per-load quality guidance](https://github.com/paulananth/edgartools-platform/pull/1496) merged with the current 12 CI checks passing. Legacy results stay latest-only, both inputs use exact timestamp readback, and version-2 recovery remains a manual opt-in. Attempt, recovery, end-to-end, and UI gates stay open.
+- [Restore Verified Per-Load Quality Evidence](issues/01-verified-per-load-quality-evidence.md): Implementation and package verification were restored and merged with CI passing.
+- [Land Per-Load Guidance and Work Map](issues/02-land-quality-history-and-recovery-guidance.md): Guidance merged with the current 12 CI checks passing; legacy results remain latest-only and version-2 recovery remains a manual opt-in.
+- [Prove Atomic Attempt Supersession](issues/03-prove-atomic-attempt-supersession.md): PostgreSQL rejects stale completion after precheck and preserves a replacement's evidence.
 
 ## Not yet specified
 
