@@ -5,7 +5,7 @@ version: 1
 approvals:
 - kind: merge
   name: platform
-  digest: 783990f85f4f438ca06de1a999df9cbb87ad9ad8f750af1244f5d0e909c8db00
+  digest: b68bd29fc006d1d7f01d2a28ea06a237888287544d029848e9c0ef7e07e6ed9f
   by: Operator
   words: Approved the rules always
   at: '2026-11-08'

@@ -649,6 +649,9 @@ identifiers:
     sources:
     - sec.company.v1
     - sec.nport.registrant.v1
+    # Form ADV filings list the adviser's own CIKs (Item 1.D(3); operator, 2026-11-08: "Both"). They
+    # find a Company and never create one (iapd-adv-cik waits), so the creating sources stay SEC's.
+    - iapd.adv.filings.v2
     normalizer: normalize_identifier@sec-cik-v2
     claim:
       forward: 1

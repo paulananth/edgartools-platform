@@ -470,6 +470,8 @@ def without_adviser_cik(policy: dict) -> dict:
     body = json.loads(json.dumps(_copy(policy)).replace('"iapd.adv.filings.v2"', '"iapd.adv.filings.v1"'))
     body["kinds"]["company"]["rules"] = [r for r in body["kinds"]["company"]["rules"] if r["rule_id"] != "iapd-adv-cik"]
     body["automatic_rules"] = [r for r in body["automatic_rules"] if r.get("rule_id") != "iapd-adv-cik"]
+    cik = body["kinds"]["company"]["identifiers"]["cik"]
+    cik["sources"] = [s for s in cik["sources"] if s != "iapd.adv.filings.v1"]
     for rule in [*body["kinds"]["company"]["rules"], *body["automatic_rules"]]:
         earlier = ADVISER_CIK_EARLIER.get(rule.get("rule_id"))
         if earlier:
@@ -481,7 +483,7 @@ def without_adviser_cik(policy: dict) -> dict:
 # layer after it still on.
 LAYERS = [
     # The Form ADV adviser CIK rule: "Both" (2026-11-08).
-    (without_adviser_cik, "dd91db0d5d33376d66bc9b5e4101b47f4354008b9cd542dfe0a7a8471f943120"),
+    (without_adviser_cik, "4d817e5c79b216511d6780d9bb682663a6ba25c9210af113d34a0f1599b8dac6"),
     # The Form ADV custodian name rule (ticket 01, exact name only).
     (without_custodian_name_rule, "788ffd4fd739d65cb2014f5278c49724b3f2ace4a32c4cffc85780070b991d2f"),
     # A Security has one issuer at a time (ticket 24, relationship types version 3).
