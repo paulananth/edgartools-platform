@@ -237,3 +237,14 @@ def test_a_landing_holds_one_piece_of_a_reading_at_a_time(monkeypatch):
     monkeypatch.setattr(source_readings, "_partition_chunks", lambda *a, **k: (
         (0, piece, 0, None) for piece in pieces))
     assert list(silver_land._artifacts({"input": {}}, None)) == pieces
+
+
+def test_every_figure_lands_as_filed_to_twelve_decimal_places():
+    """Operator, 2026-11-08: "Scale 12, as filed". SEC's holdings file a percentage with up to 12 decimal
+    places (3,863,454 of 5,347,869 holdings in one quarter have more than 10), and the writer never rounds."""
+    from edgar_warehouse.silver_writer.tables import data_table
+
+    table = data_table(spec_file(FOLDER / "silver-holding.yaml", None), "postgresql")
+    for column in ("balance", "currency_value", "exchange_rate", "percentage"):
+        figure = table.c[column].type.process_bind_param("0.000123456789", None)
+        assert str(figure) == "0.000123456789", column
