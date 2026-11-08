@@ -72,11 +72,18 @@ def read(store, root: Path, contract_file: str, raw: dict, published: str | None
     return chain.read(store, root, body, [{"input": raw, "context": context}], 2)
 
 
+def declared(table: str) -> dict:
+    """The keys the source itself gives its `mdm.prepare` step for a table: what a real load runs."""
+    targets = files.source(NAME)["bookkeeping"]["targets"].values()
+    (keys,) = [step["input"]["keys"] for target in targets for step in target["steps"]
+               if step["operation"] == "mdm.prepare" and step["input"]["keys"]["table"] == table]
+    return {k: v for k, v in keys.items() if k not in ("table", "dataset", "record_column")}
+
+
 def prepare(store, root: Path, reading: dict, table: str, code: str, **keys) -> list[dict]:
-    dated = {} if "effective_at" in keys else {"effective_column": "published"}
     prepared = chain.prepare(store, root, reading, {
         "table": table, "dataset": code, "policy": "0" * 64, "consumer": "check", "batch_id": f"check-{code}",
-        "as_of": "2026-10-16T00:00:00+00:00", **dated, **keys})
+        "as_of": "2026-10-16T00:00:00+00:00", **declared(table), **keys})
     return chain.records(store, root, prepared, code, files.source(NAME)["dataset_contracts"][code]["contract"])
 
 
@@ -103,8 +110,8 @@ def month(root: Path, published: str) -> tuple[list[dict], list[dict]]:
                              {"filings": filings, "custody": custody_rows, "ciks": ciks, "related": related})
     # Each month's file restates every custodian it names: its own publication, the
     # month (YYYYMM) its revision, so a later month is a later revision (ticket 129).
-    custodians = prepare(store, root / "mdm-custodians", custody_rows, "custody", CUSTODIANS, distinct_on=["custodian_id"],
-                         publication_key=f"iapd.adv:{tag}", revision=tag, effective_at=published)
+    custodians = prepare(store, root / "mdm-custodians", custody_rows, "custody", CUSTODIANS,
+                         publication_key=f"iapd.adv:{tag}", revision=tag)
     advisers = prepare(store, root / "mdm-filings", combined, "filings", FILINGS)
     return custodians, advisers
 

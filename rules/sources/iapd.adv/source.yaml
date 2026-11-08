@@ -214,10 +214,14 @@ dataset_contracts:
                   matching:
                     object:
                       fields: {}
-        version: iapd-adv-filing-csv-v1
+        version: iapd-adv-filing-csv-2026-11-08.month-end-as-effective-time
         retain_deferred: true
         source_record_provenance: true
         kind: company
+        # The month end of the file the record came from (context `published`). A custodian or related
+        # person link states no start of its own, so it starts when its record is first seen: without
+        # this time every such link waits as `unknown_relationship_start`.
+        effective_at: published
         record_key:
         - filing_id
         # CRD joins an adviser's filings into one Company (binding rule
