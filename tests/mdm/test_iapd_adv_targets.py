@@ -15,7 +15,7 @@ from tests.support.memory_journal import MemoryJournal
 
 SOURCE = "iapd.adv"
 FACTS = {"published": "2026-09-30T00:00:00Z"}
-STEPS = {"mastering": ["read_filings", "read_custody", "combine", "record", "prepare", "merge", "land_custody", "processed"],
+STEPS = {"mastering": ["read_filings", "read_custody", "read_ciks", "combine", "record", "prepare", "merge", "land_custody", "processed"],
          "custodians": ["read", "combine", "record", "prepare", "merge", "processed"]}
 
 
@@ -57,7 +57,7 @@ def test_each_target_has_its_steps_and_ends_in_the_change_journal(tmp_path, targ
 def test_the_filings_and_the_custodians_prepare_their_own_datasets(tmp_path):
     filings = Artifacts().json(write_manifest(**capture(tmp_path / "a", "mastering", [8]))["manifest"])["steps"]
     custodians = Artifacts().json(write_manifest(**capture(tmp_path / "b", "custodians", [8]))["manifest"])["steps"]
-    assert (filings["prepare"][0]["keys"]["dataset"], filings["prepare"][0]["keys"]["table"]) == ("iapd.adv.filings.v1", "filings")
+    assert (filings["prepare"][0]["keys"]["dataset"], filings["prepare"][0]["keys"]["table"]) == ("iapd.adv.filings.v2", "filings")
     assert (custodians["prepare"][0]["keys"]["dataset"], custodians["prepare"][0]["keys"]["table"]) == (
         "iapd.adv.custodians.v1", "custody")
     assert "distinct_on" not in filings["prepare"][0]["keys"]

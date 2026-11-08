@@ -55,7 +55,7 @@ links:
 - columns:
   - filing_id
   kind: company
-  source_code: iapd.adv.filings.v1
+  source_code: iapd.adv.filings.v2
   to_part: adviser
   source_key: filing_id
   mdm_id_column: adviser_mdm_id

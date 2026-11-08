@@ -16,7 +16,7 @@ defaults:
   - gleif.relationships.v1
   # Form ADV (profiling ticket 07): advisers' filings and the custodians they
   # name (one record per file), last, so SEC and GLEIF win every field they fill.
-  - iapd.adv.filings.v1
+  - iapd.adv.filings.v2
   - iapd.adv.custodians.v1
   # N-PORT registrants (ticket 79, part 2), last: every field another source
   # fills wins over N-PORT's (a merge-rule change, approved with its Proving
@@ -395,9 +395,10 @@ rules:
 # proven name rule (ticket 07b). Switched on (rebuild-priorities ticket 76;
 # operator, 2026-10-17 08:31 ET: "Switch on all three (Recommended)").
 - rule_id: iapd-adv-crd
-  version: 2026-10-09.1
+  # Version "filings v2": the filings carry their CIKs, a new dataset code (iapd.adv.filings.v2).
+  version: 2026-11-08.filings-v2
   family: binding
-  source: iapd.adv.filings.v1
+  source: iapd.adv.filings.v2
   applies_to_verdict: company
   emits:
   - bind
@@ -409,6 +410,27 @@ rules:
   - primitive: identifier_cardinality@1
     args:
       namespace: crd
+# An adviser's filing joins the SEC Company holding a CIK its Item 1.D(3) lists
+# (operator, 2026-11-08: "Both", the CIK join with the Schedule D 7.A link).
+# It finds and never creates: only SEC's own records issue a CIK, so when no
+# Company holds it the CRD rule creates the adviser and the CIKs go onto it. A
+# filing listing CIKs that two Companies hold (an adviser's own and a fund's)
+# reaches both and goes to review; nothing merges.
+- rule_id: iapd-adv-cik
+  version: 2026-11-08.adviser-cik-filings-v2
+  family: binding
+  source: iapd.adv.filings.v2
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: wait
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: cik
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: cik
 - rule_id: iapd-adv-custodian-lei
   version: 2026-10-09.1
   family: binding
@@ -446,13 +468,14 @@ rules:
 # waiting, several holders send it to review. A bank and its holding company have different names, so
 # they stay apart.
 - rule_id: iapd-adv-custodian-name
-  version: 2026-11-04.exact-name
+  # Version "filings v2": the holders' Form ADV filings are read under iapd.adv.filings.v2.
+  version: 2026-11-08.filings-v2
   family: exact_name_binding
   source: iapd.adv.custodians.v1
   holder_sources:
   - sec.company.v1
   - gleif.level1.v1
-  - iapd.adv.filings.v1
+  - iapd.adv.filings.v2
   applies_to_verdict: company
   emits:
   - bind
@@ -626,6 +649,9 @@ identifiers:
     sources:
     - sec.company.v1
     - sec.nport.registrant.v1
+    # Form ADV filings list the adviser's own CIKs (Item 1.D(3); operator, 2026-11-08: "Both"). They
+    # find a Company and never create one (iapd-adv-cik waits), so the creating sources stay SEC's.
+    - iapd.adv.filings.v2
     normalizer: normalize_identifier@sec-cik-v2
     claim:
       forward: 1
@@ -654,7 +680,7 @@ identifiers:
   crd:
     authority: FINRA Central Registration Depository
     sources:
-    - iapd.adv.filings.v1
+    - iapd.adv.filings.v2
     normalizer: normalize_identifier@crd-v1
     claim:
       forward: 1

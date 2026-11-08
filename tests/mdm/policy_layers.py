@@ -459,9 +459,31 @@ def without_custodian_name_rule(policy: dict) -> dict:
     return body
 
 
+ADVISER_CIK_EARLIER = {"iapd-adv-crd": "2026-10-09.1", "iapd-adv-custodian-name": "2026-11-04.exact-name"}
+
+
+def without_adviser_cik(policy: dict) -> dict:
+    """Operator, 2026-11-08: "Both" (the Form ADV CIK join with the Schedule D 7.A link): the adviser CIK
+    rule, declared and switched on after its limited test. Peeled, the policy is the one before.
+    The filings carry their CIKs under a new dataset code, so peeled, the filings are iapd.adv.filings.v1
+    again and the two rules reading them are back at their earlier versions."""
+    body = json.loads(json.dumps(_copy(policy)).replace('"iapd.adv.filings.v2"', '"iapd.adv.filings.v1"'))
+    body["kinds"]["company"]["rules"] = [r for r in body["kinds"]["company"]["rules"] if r["rule_id"] != "iapd-adv-cik"]
+    body["automatic_rules"] = [r for r in body["automatic_rules"] if r.get("rule_id") != "iapd-adv-cik"]
+    cik = body["kinds"]["company"]["identifiers"]["cik"]
+    cik["sources"] = [s for s in cik["sources"] if s != "iapd.adv.filings.v1"]
+    for rule in [*body["kinds"]["company"]["rules"], *body["automatic_rules"]]:
+        earlier = ADVISER_CIK_EARLIER.get(rule.get("rule_id"))
+        if earlier:
+            rule["version" if "version" in rule else "rule_version"] = earlier
+    return body
+
+
 # Newest first: each layer, and Company's policy digest with it and every
 # layer after it still on.
 LAYERS = [
+    # The Form ADV adviser CIK rule: "Both" (2026-11-08).
+    (without_adviser_cik, "4d817e5c79b216511d6780d9bb682663a6ba25c9210af113d34a0f1599b8dac6"),
     # The Form ADV custodian name rule (ticket 01, exact name only).
     (without_custodian_name_rule, "788ffd4fd739d65cb2014f5278c49724b3f2ace4a32c4cffc85780070b991d2f"),
     # A Security has one issuer at a time (ticket 24, relationship types version 3).
