@@ -108,9 +108,17 @@ class _Server:
         self.term_bodies, self.product_bodies, self.patches, self.draft = [], [], [], set()
         self.table_delete_params = []
         self.profiles, self.tags, self.certified, self.results = {}, {}, None, {}
+        self.pipelines, self.pipeline_lineage = {}, {}
 
     def __call__(self, method, path, body=None, params=None):
         self.calls.append((method, path))
+        if method == "DELETE" and path.startswith("/lineage/pipeline/"):
+            _, _, _, pipeline_id, _, table_id = path.split("/")
+            pipeline = next((name for name, entity in self.pipelines.items()
+                             if entity["id"] == pipeline_id), None)
+            table = next((name for name, found_id in self.ids.items() if found_id == table_id), None)
+            if pipeline and table:
+                self.pipeline_lineage.pop((pipeline, table), None)
         if method == "DELETE" and path.startswith("/tables/"):
             self.table_delete_params.append(params)
         if method == "PATCH":
@@ -165,7 +173,34 @@ class _Server:
             return {**body, "id": body["name"],
                     "fullyQualifiedName": body["glossary"] + "." + catalog.quote(body["name"])}
         if method == "PUT" and path == "/pipelines":
-            return {**body, "fullyQualifiedName": catalog.fqn(body["service"], body["name"]), "id": "pipeline-" + body["name"]}
+            name = catalog.fqn(body["service"], body["name"])
+            answer = {**body, "fullyQualifiedName": name, "id": "pipeline-" + body["name"]}
+            self.pipelines[name] = answer
+            return answer
+        if method == "GET" and path == "/pipelines":
+            return {"data": [{"fullyQualifiedName": name, "id": entity["id"]}
+                             for name, entity in self.pipelines.items()], "paging": {}}
+        if method == "GET" and path.startswith("/pipelines/name/"):
+            return self.pipelines.get(unquote(path.removeprefix("/pipelines/name/")), {})
+        if method == "PUT" and path.startswith("/lineage/pipeline/name/"):
+            pipeline, _, table = path.removeprefix("/lineage/pipeline/name/").partition("/table/name/")
+            self.pipeline_lineage[(unquote(pipeline), unquote(table))] = body
+            return {}
+        if method == "GET" and path.startswith("/lineage/pipeline/name/"):
+            pipeline = unquote(path.removeprefix("/lineage/pipeline/name/"))
+            entity = self.pipelines.get(pipeline)
+            if entity is None:
+                return {"entity": {}, "nodes": [], "upstreamEdges": [], "downstreamEdges": []}
+            edges, nodes = [], []
+            for (name, table), details in self.pipeline_lineage.items():
+                table_id = self.ids.get(table)
+                if name == pipeline and table_id:
+                    nodes.append({"id": table_id, "type": "table", "fullyQualifiedName": table})
+                    edges.append({"fromEntity": entity["id"], "toEntity": table_id,
+                                  "lineageDetails": {"description": details.get("description"),
+                                                     "source": details.get("source")}})
+            return {"entity": {"id": entity["id"], "type": "pipeline", "fullyQualifiedName": pipeline},
+                    "nodes": nodes, "upstreamEdges": [], "downstreamEdges": edges}
         if method == "PUT" and path == "/tables":
             name = f"{body['databaseSchema']}.{catalog.quote(body['name'])}"
             self.ids[name] = f"id-{len(self.ids)}"
@@ -234,6 +269,12 @@ def test_the_plan_names_domains_glossaries_and_store_certification():
     assert catalog.glossary_relation_type_name("ISSUED_BY") == "issuedBy"
     assert catalog.glossary_relation_type_name("IS_FUND-MANAGED_BY") == "isFundManagedBy"
     assert "relatedTo" not in {edge["relationType"] for edge in plan["glossary_relations"]}
+
+
+def test_catalog_check_reports_missing_pipeline_table_lineage():
+    plan = catalog.plan()
+    report = catalog.verify(plan, _Server(plan))
+    assert any("pipeline lineage" in difference for difference in report["differences"])
 
 
 def _terms(plan):
@@ -428,7 +469,7 @@ def test_catalog_publish_requires_matching_readback_and_returns_structured_resul
     monkeypatch.setattr(catalog, "connect", lambda url, token: calls.append((url, token)) or (lambda *args, **kwargs: {}))
     monkeypatch.setattr(catalog, "publish", lambda selected, call, **kw: calls.append("publish") or {
         "service": "edgartools-rules", "tables": 3, "pipelines": 2, "lineage": 2,
-        "removed": {"tables": 0, "schemas": 0, "databases": 0, "lineage": 0},
+        "removed": {"tables": 0, "schemas": 0, "databases": 0, "lineage": 0, "pipeline_lineage": 0},
     })
     monkeypatch.setattr(catalog, "verify", lambda selected, call, **kw: calls.append("readback") or {
         "ok": True, "tables": 3, "pipelines": 2, "differences": [],
@@ -544,12 +585,29 @@ def test_publish_deletes_only_what_the_rules_no_longer_name():
     assert deletes == ["/tables/id-old", "/databaseSchemas/id-gone", f"/lineage/table/{feed}/table/{company}"]
     # a renamed source's old table still holds test cases: the server refuses a delete that is not recursive
     assert server.table_delete_params == [{"hardDelete": "true", "recursive": "true"}]
-    assert result["removed"] == {"tables": 1, "schemas": 1, "databases": 0, "lineage": 1}
+    assert result["removed"] == {"tables": 1, "schemas": 1, "databases": 0, "lineage": 1, "pipeline_lineage": 0}
     assert sum(1 for method, path in server.calls if (method, path) == ("PUT", "/lineage")) == len(plan["lineage"])
     posts = [path for method, path in server.calls if method == "POST" and path.endswith("/relations")]
     assert any(path.startswith("/glossaryTerms/Company Identity/") for path in posts)
     assert len(posts) == len(plan["glossary_relations"])
     assert ("PUT", "/system/settings") in server.calls
+
+
+def test_publish_removes_stale_owned_pipeline_to_table_edges():
+    plan = catalog.plan()
+    expected = {(edge["pipeline"], edge["table"]) for edge in plan["service_lineage"]}
+    pipeline = sorted({edge["pipeline"] for edge in plan["service_lineage"]})[0]
+    table = next(name for name in _tables(plan) if (pipeline, name) not in expected)
+    server = _Server(plan)
+    server.pipeline_lineage[(pipeline, table)] = {"description": "Stale link", "source": "PipelineLineage"}
+
+    result = catalog.publish(plan, server)
+
+    assert (pipeline, table) not in server.pipeline_lineage
+    assert result["removed"]["pipeline_lineage"] == 1
+
+    report = catalog.verify(plan, server)
+    assert not [difference for difference in report["differences"] if "pipeline lineage" in difference]
 
 
 def test_publish_stops_when_the_server_names_a_table_otherwise():

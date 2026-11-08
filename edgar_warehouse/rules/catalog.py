@@ -1385,12 +1385,17 @@ def publish(plan: dict, call: Call, draft_terms: bool = False, results: dict | N
             if answer["fullyQualifiedName"] != name:
                 raise CatalogError(f"The server named pipeline {name} {answer['fullyQualifiedName']}")
             pipeline_ids[name] = answer["id"]
+    pipeline_targets: dict[str, set[str]] = defaultdict(set)
     for edge in plan.get("service_lineage") or []:
+        pipeline_id, table_id = pipeline_ids.get(edge["pipeline"]), ids.get(edge["table"])
+        if pipeline_id is None or table_id is None:
+            raise CatalogError("Pipeline lineage names an unknown pipeline or table")
+        pipeline_targets[pipeline_id].add(table_id)
         call("PUT", "/lineage/pipeline/name/" + escape(edge["pipeline"], safe="")
              + "/table/name/" + escape(edge["table"], safe=""),
              {"description": edge["description"], "source": "PipelineLineage"})
     service = plan["service"]["name"]
-    removed = {"tables": 0, "schemas": 0, "databases": 0, "lineage": 0}
+    removed = {"tables": 0, "schemas": 0, "databases": 0, "lineage": 0, "pipeline_lineage": 0}
     for table in _listed(call, "/tables", {"service": service}, service):
         if table["fullyQualifiedName"] not in ids:
             call("DELETE", f"/tables/{table['id']}", params={"hardDelete": "true", "recursive": "true"})
@@ -1422,6 +1427,17 @@ def publish(plan: dict, call: Call, draft_terms: bool = False, results: dict | N
             if edge["toEntity"] == table_id and stale:  # a link from another service is not ours to remove
                 call("DELETE", f"/lineage/table/{edge['fromEntity']}/table/{table_id}")
                 removed["lineage"] += 1
+
+    for pipeline_fqn, pipeline_id in sorted(pipeline_ids.items()):
+        graph = call("GET", "/lineage/pipeline/name/" + escape(pipeline_fqn, safe=""),
+                     params={"upstreamDepth": 0, "downstreamDepth": 1}) or {}
+        for edge in graph.get("downstreamEdges") or []:
+            target_id = edge.get("toEntity")
+            stale = edge.get("fromEntity") == pipeline_id and target_id in ours \
+                and target_id not in pipeline_targets[pipeline_id]
+            if stale:
+                call("DELETE", f"/lineage/pipeline/{pipeline_id}/table/{target_id}")
+                removed["pipeline_lineage"] += 1
     if plan.get("pipeline_service"):
         pipeline_service = plan["pipeline_service"]["name"]
         for pipeline in _listed(call, "/pipelines", {"service": pipeline_service}, pipeline_service):
@@ -1488,6 +1504,35 @@ def verify(plan: dict, call: Call, results: dict | None = None) -> dict:
     if plan.get("pipeline_service"):
         compare(plan["pipeline_service"], call("GET", "/services/pipelineServices/name/"
                 + escape(plan["pipeline_service"]["name"], safe="")), "pipeline_service")
+
+    if plan.get("pipeline_service"):
+        planned_pipeline_edges: dict[str, dict[str, dict]] = defaultdict(dict)
+        for edge in plan.get("service_lineage") or []:
+            planned_pipeline_edges[edge["pipeline"]][edge["table"]] = edge
+        for pipeline in plan.get("pipelines") or []:
+            pipeline_fqn = fqn(plan["pipeline_service"]["name"], pipeline["name"])
+            graph = call("GET", "/lineage/pipeline/name/" + escape(pipeline_fqn, safe=""),
+                         params={"upstreamDepth": 0, "downstreamDepth": 1}) or {}
+            entity = graph.get("entity") if isinstance(graph.get("entity"), dict) else {}
+            nodes = [entity, *(graph.get("nodes") or [])]
+            fqn_by_id = {node["id"]: node["fullyQualifiedName"] for node in nodes
+                         if isinstance(node, dict) and node.get("id") and node.get("fullyQualifiedName")}
+            actual = {}
+            for edge in graph.get("downstreamEdges") or []:
+                if edge.get("fromEntity") != entity.get("id"):
+                    continue
+                table = fqn_by_id.get(edge.get("toEntity"))
+                if table in identifiers:
+                    actual[table] = edge
+            expected = planned_pipeline_edges.get(pipeline_fqn, {})
+            if set(actual) != set(expected):
+                differences.append(pipeline_fqn + ": different pipeline lineage")
+            for table in actual.keys() & expected.keys():
+                details = actual[table].get("lineageDetails") or {}
+                where = pipeline_fqn + ".lineage." + table
+                compare(expected[table]["description"], details.get("description"), where + ".description")
+                compare("PipelineLineage", details.get("source"), where + ".source")
+
     for name, table_id in identifiers.items():
         graph = call("GET", "/lineage/table/name/" + escape(name, safe=""),
                      params={"upstreamDepth": 1, "downstreamDepth": 0}) or {}

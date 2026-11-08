@@ -11,12 +11,14 @@ the data-catalog skill. This skill says how that meaning is stored on
 OpenMetadata 2.0.7. Normal publication uses `rules catalog publish`; scoped
 repair of unsupported metadata relationships follows the procedure below.
 
-The page at `/lineage` is the service view. It draws a line only when lineage
-crosses from one service to another. Edges between tables in the same database
-service do not appear there. `rules catalog publish` also writes a pipeline-to-dataset
-edge for each source pipeline, so that page shows the pipeline service feeding
-the database service. The column-by-column flow is on the table's own Lineage
-tab, `GET /api/v1/lineage/table/name/{fqn}`.
+The `/lineage` page is the service view. It aggregates source pipelines and
+database assets to their service nodes, so per-source detail may collapse to
+two service entries. Do not delete those service entities: they are catalog
+containers, and removing them would not expose per-source edges. Read a
+Pipeline's native graph with
+`GET /api/v1/lineage/pipeline/name/<URL-encoded-FQN>?upstreamDepth=0&downstreamDepth=1`.
+Column-by-column table lineage is on the table's Lineage tab and at
+`GET /api/v1/lineage/table/name/<URL-encoded-FQN>?upstreamDepth=1&downstreamDepth=1`.
 
 Write a plain display name and a plain first sentence on every domain, table,
 product, and relationship type. The technical name stays the identity. Do not
@@ -368,31 +370,26 @@ reference list.
   it checks (source datasets and silver tables from their quality rules; a master
   kind table from its identifier limits: one case per `claim.forward` and
   `claim.reverse` of each identifier in `merge/kinds/<kind>.yaml`, none where the
-  limit is null). The operator-defined Mapping Document placement is a pipeline
-  custom property, with related source, Silver and master tables linked and
-  brief transformation descriptions on affected tables or columns. Keep
-  source-to-target relationships as native lineage; the platform diagram is
-  system-level and the Mapping Document carries field-level steps.
-  **Capability limit:** OpenMetadata 2.0.7 stores `entity_extension.extension`
-  in `VARCHAR(512)`. Raw cell text in every source `MAPPING.xlsx` exceeds 512
-  characters. Do not embed or truncate the workbook, or alter the schema. Ask
-  the operator to approve a short repository link or another document store
-  before writing the property. Check that the Pipeline custom-property
-  definition exists with
-  `GET /api/v1/metadata/types/name/pipeline/customProperties`, and use an
-  authorized writer.
-  The current plan, publisher and readback do not implement this
-  mapping-document projection; do not claim it was published. Silver-only
-  mappings come from registered `silver-*.yaml` specs. A code list's edge maps
-  its `code` to each column that holds those codes. A captured file feed's edge
-  to its dataset stays table to table: a file has no columns.
-
-  New pipeline entities are discovered from source and standalone-pipeline
-  YAML. Source-pipeline service links are derived from configured source tables;
-  no source-specific publisher code is needed. A standalone `pipeline.yaml`
-  currently creates a pipeline entity but not a service-lineage edge. This also
-  does not publish the Mapping Document as a pipeline custom property—that is a
-  separate publisher capability gap.
+  limit is null). The complete per-source `MAPPING.xlsx` remains the
+  integration specification in the rules repository. The operator deferred
+  publishing the document itself as a Pipeline custom property (2026-11-08:
+  "defer document but publish lineage"). OpenMetadata 2.0.7 stores
+  `entity_extension.extension` in `VARCHAR(512)`, below the raw text length
+  of every source workbook. Do not embed or truncate the workbook, alter the
+  schema, or create a link property without a new operator request.
+  Publish native lineage only: configured source pipeline-to-table associations
+  and rule-derived table/column edges. `rules catalog publish` reconciles the
+  planned pipeline edges; `rules catalog check` reads them through
+  `GET /api/v1/lineage/pipeline/name/<URL-encoded-FQN>?upstreamDepth=0&downstreamDepth=1`
+  and checks table edges separately. New source pipelines are discovered from
+  YAML; no source-specific code is needed.
+  Silver-only `MAPPING.xlsx` files have empty `Fields` sheets. Their Silver
+  specs have descriptive `source` text, not complete field-path maps; do not
+  invent column lineage from it. A code list edge maps its `code` to each
+  column that holds those codes. A captured file feed's edge to its dataset
+  stays table-to-table: a file has no columns.
+  Standalone `pipeline.yaml` files create Pipeline entities but no service
+  lineage edges in the current model.
   A page with an empty Quality tab is a table with no configured check.
 
 - A profile has one native place, the table profile. `PUT /api/v1/tables/{id}/tableProfile`
