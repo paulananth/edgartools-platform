@@ -15,7 +15,7 @@ The CLI entry is `edgar_warehouse/cli.py`; configured execution is
 
 `mdm` exposes migrate, check-connectivity, counts, name-count and
 prepare-clean-company. Mastering work is submitted through configured
-Bookkeeping capabilities (`mdm.ingest`, `mdm.merge`, `mdm.publish`).
+Bookkeeping capabilities (`mdm.prepare`, `mastering.merge`).
 Do not revive retired `mdm mastering`, warehouse batch commands, or parsers
 by copying a historical example.
 

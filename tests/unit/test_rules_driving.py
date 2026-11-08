@@ -43,7 +43,7 @@ def unit(step, state, error=None, key="k"):
     return {"step": step, "state": state, "error": error, "unit_key": key}
 
 
-STEPS = [{"name": "read", "operation": "source.read"}, {"name": "merge", "operation": "mdm.merge"}]
+STEPS = [{"name": "read", "operation": "source.read"}, {"name": "merge", "operation": "mastering.merge"}]
 
 
 def test_steps_run_in_declared_order_with_workers_only_where_units_are_left(monkeypatch):
@@ -56,7 +56,7 @@ def test_steps_run_in_declared_order_with_workers_only_where_units_are_left(monk
 
     work = [c for c in script.calls if c[1:3] == ("workers", "work")]
     verify = [c for c in script.calls if c[1:3] == ("workers", "verify")]
-    assert [c[3] for c in work] == ["source.read"] * 3 + ["mdm.merge"]  # one worker for a one-unit step
+    assert [c[3] for c in work] == ["source.read"] * 3 + ["mastering.merge"]  # one worker for a one-unit step
     assert [c[0] for c in verify] == ["verifier", "verifier"]
     assert script.calls[-1] == ("worker", "bookkeeping", "finalize", "run-1")
 

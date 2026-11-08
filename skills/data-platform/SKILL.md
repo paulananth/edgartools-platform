@@ -345,16 +345,13 @@ step:
   seen in it starts then. They exclude `effective_column`.
   See [READING.md](READING.md) for shape checks. Records files of at most 1,000 rows sit beside the
   manifest. Its verifier rebuilds them and reports `mdm.prepared`.
-- `mdm.merge`: one MDM input manifest (contract version 2) through the
-  Merge Stage; its verifier reads the batches back from MDM and reports
-  `mdm.committed`.
-- `mdm.publish`: one committed batch to one consumer (`journal`, `export`,
-  `graph`), in the consumer's generation order. Its unit's keys name the
-  batch and the consumer. Its verifier reports `mdm.published`.
+- `mastering.merge`: one MDM input manifest (contract version 2), merged one
+  file at a time; its verifier reads the files back from MDM and reports
+  `mdm.committed`. A reader pulls the masters changed after its checkpoint;
+  nothing is published.
 
 A unit's input names the step before it (`{"from": {"step": "read", "key": ...}}`
-in a version-2 input manifest), so one run goes read → prepare → merge →
-publish.
+in a version-2 input manifest), so one run goes read → prepare → merge.
 
 Before the first run, once per MDM database: `edgar-warehouse mdm migrate`,
 then `edgar-warehouse bookkeeping init-guard --runtime-role <MDM application role>`
@@ -378,16 +375,15 @@ The steps below are what it runs, for a run you drive by hand.
    `edgar-warehouse rules run --source <name> --target <merge target> --input-manifest <uri> --input-sha256 <sha256>`.
    A source with a `dataset_contracts` section needs the operator's approval of that rules version first (Mode 4).
 2. Work and verify **each declared profile in dependency order**: `source.read`,
-   `mdm.prepare`, `mdm.merge`, then each declared `mdm.publish` step. For example:
+   `mdm.prepare`, `mastering.merge`. For example:
    `edgar-warehouse workers work mdm.prepare <run_id> --limit 100`, then
    `edgar-warehouse workers verify mdm.prepare <run_id> --reports <uri> --limit 100`.
    Use the worker Bookkeeping login for work and the separate verifier login
-   for verify. For merge and publish, set `MDM_DATABASE_URL` to the MDM
+   for verify. For merge, set `MDM_DATABASE_URL` to the MDM
    application login for work (`MDM_APPLICATION_ROLE` names its role), and to
    the separate MDM verifier login for verify.
 3. Repeat work and verify for each profile until its units are verified.
    `--limit 100` bounds one invocation; it does not prove the whole step ran.
-   One publication consumer takes one batch at a time, in generation order.
 4. Finish: `edgar-warehouse bookkeeping finalize <run_id>`. Done when
    `edgar-warehouse bookkeeping status <run_id>` shows the run complete and
    every declared unit verified.

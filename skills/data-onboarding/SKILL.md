@@ -649,8 +649,7 @@ the kind is not mastered end to end until it is done. Say so in the log
 rather than stopping silently.
 
 **Execution target:** use the data-platform Parse and Master flow to declare
-`source.read` → `mdm.prepare` → `mdm.merge` and any required publication
-steps. Hand Bookkeeping the feed, target and verified worker profiles.
+`source.read` → `mdm.prepare` → `mastering.merge`. Hand Bookkeeping the feed, target and verified worker profiles.
 
 **Output:** `source.yaml` (and a new kind file, for a new domain) that loads
 cleanly.
@@ -809,7 +808,7 @@ capture is enough for a source whose rules are already proved on real files
    The writer forms units for a read of captured documents (slices, groups
    or each file, with per-document context, a companion file and same-file
    lookups), a read of a combine's pieces, `source.combine`, `mdm.prepare`,
-   `mdm.merge` and `journal.record`, and a reading or lookup of another
+   `mastering.merge` and `journal.record`, and a reading or lookup of another
    source's finished runs, `{run: {source, target, step}}`, which run first
    ([bookkeeping SPEC](../bookkeeping/SPEC.md));
    a target with any other step is refused. The same
@@ -1015,7 +1014,6 @@ These name today's sources only as examples; nothing above depends on them.
   `.scratch/company-mastering/research/27_proving_run.py` (6,726 records,
   about 25 minutes, a second pass that changes nothing).
 - **Unfinished live pipelines** (the one list; other skills point here):
-  `mdm.publish` delivers to a local contract sink only, not the required
-  consumers' durable destinations; live acquisition (`provider.capture`,
+  live acquisition (`provider.capture`,
   #933, qualified offline) waits for the worker runtime on AWS (ticket 71).
   A source's pipes switch on over captured files without it (#1108).

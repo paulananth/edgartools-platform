@@ -78,7 +78,7 @@ def test_application_owns_recovery_routes_and_core_excludes_them():
 
     args = build_parser().parse_args(["change-journal", "recover", "bookkeeping", "run", "--limit", "1"])
     assert args.handler.__module__ == "edgar_warehouse.application.journal_recovery"
-    # MDM's events are delivered by the run's mdm.publish worker (to-do 20e).
+    # MDM delivers no events to the journal: a reader pulls what changed after its checkpoint.
     with pytest.raises(SystemExit):
         build_parser().parse_args(["change-journal", "recover", "mdm", "batch", "--worker", "worker"])
     args = build_parser().parse_args(["change-journal", "events", "--limit", "1"])

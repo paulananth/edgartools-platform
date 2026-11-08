@@ -28,7 +28,7 @@ events/verify; no domain registry or callback is constructed there.
 
 Provider capture belongs to `acquisition.capture`; policy/registration authority
 to `rules.acquisition_authority`; source inventories to
-`application.source_evidence`; MDM delivery to `mdm.journal_delivery`.
+`application.source_evidence`. MDM sends the journal no events.
 The application composes existing owner recovery routes through
 `application.journal_recovery`, and producer workflow evidence through
 `application.journal_evidence`. These integrations depend on the journal
@@ -117,8 +117,8 @@ A run processes only the files its source has not processed under the same
 **processing identity**: the digest of the source's rules version (its
 readings, Dataset Contracts and policy) and every shared input it reads. A
 change to any of them processes every file of the source again. The unit is a
-whole file, never a field or a record inside one (record-level change is
-`mdm.publish`'s).
+whole file, never a field or a record inside one (a reader finds record-level
+change by pulling the masters changed after its checkpoint).
 
 - A capture target ends at capture: it keeps files and processes none, so it
   has no `journal.record` step. The step ends the target that processes the
@@ -133,28 +133,6 @@ whole file, never a field or a record inside one (record-level change is
   each joined on the unique `(producer, event_key)` index) and names only the
   files without an event; when none is left it starts no run.
 - `--all` names every file; its events say `forced: yes`.
-
-## What `mdm.publish` sends (change data capture)
-
-Inside a file, record-level change is `mdm.publish`'s (migration 018). A
-batch's journal row keeps the whole batch (payload contract 2: the history of
-what was decided). Every other consumer gets contract 3: only the records the
-batch inserted or changed, each with its `change` (`insert`, `update`; MDM
-keeps no deletes, so a record that ends is an update whose body says so), and
-no row at all when the batch changed none of its records. Rows queued before
-018 keep contract 2.
-
-**Force publish** sends every current record to one consumer, changed or not
-(a consumer that is new, rebuilt or out of step): `edgar-warehouse mdm
-force-publish --consumer <name> --output <folder>` writes the current snapshot
-as forced pages (`mdm.force_publish`, at most 10,000 records a page, in object
-order; every record's `change` is `snapshot` and the payload's `forced` is
-true), changes no master data, and writes the input manifest of the publish
-target (`rules run --pipeline graph-publication --target publish`). The same
-`--run-id` gives the same pages. The journal is refused: it holds every batch.
-Each page is its own batch, so a merge between two pages comes after the first
-in generation order; a consumer applies batches in generation order (as
-`mdm.publish` delivers them), so the snapshot plus what follows is current.
 
 ## Rules and source-owned evidence
 
@@ -206,8 +184,8 @@ edgar-warehouse change-journal verify <receipt.json>
 edgar-warehouse change-journal recover bookkeeping <root> --limit 100
 ```
 
-Recovery delegates to the owning Bookkeeping/outbox interface; MDM's events
-are delivered by the run's `mdm.publish` worker, rerun after a resume. Journal recovery
+Recovery delegates to the owning Bookkeeping/outbox interface; MDM sends the
+journal no events, so there is none to recover. Journal recovery
 delivers committed intent; it does not silently request new source data.
 Recovery returns 3 when deliveries remain pending or authority/evidence fails.
 Configured Rules submission supports an exact `--feed` binding. Install the

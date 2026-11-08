@@ -126,7 +126,7 @@ Confirm live commands with `edgar-warehouse bookkeeping --help` and
 
 ### The task protocol
 
-A step's `operation` names the **worker profile** that pulls it. The profiles are `artifact.copy`, `source.read`, `source.combine`, `mdm.prepare`, `mdm.merge`, `mdm.publish`, `provider.capture`, `journal.record`, `silver.land` (a reading's table into a registered silver table, verified by asking silver for the unit's own keys) and `silver.derive` (a silver table built from other silver tables, verified by reading it back against a receipt of its keys). Workers and
+A step's `operation` names the **worker profile** that pulls it. The profiles are `artifact.copy`, `source.read`, `source.combine`, `mdm.prepare`, `mastering.merge`, `provider.capture`, `journal.record`, `silver.land` (a reading's table into a registered silver table, verified by asking silver for the unit's own keys) and `silver.derive` (a silver table built from other silver tables, verified by reading it back against a receipt of its keys). Workers and
 verifiers reach Bookkeeping only through these commands, which print JSON:
 
 | Command | Who calls it | What it does |

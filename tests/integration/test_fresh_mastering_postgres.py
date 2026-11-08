@@ -17,14 +17,13 @@ from sqlalchemy.exc import DBAPIError
 from edgar_warehouse.mdm.consumer import ContractReader
 from edgar_warehouse.mdm.gleif_publication import dataset_contract
 from edgar_warehouse.mdm.merge import MergeStage
-from edgar_warehouse.mdm.publication import LocalContractSink
 from edgar_warehouse.mdm.store import Store, register_policy
 from tests.integration import test_mdm_postgres as core
 from tests.support.fresh_mastering import AS_OF, cohort, gleif_cohort
 from tests.support.rules_authority import register_dataset
 
 
-def test_fresh_company_person_and_relationship_mastering(database, tmp_path):
+def test_fresh_company_person_and_relationship_mastering(database):
     policy, contracts, readings = cohort()
     level1, link = gleif_cohort()
     gleif = {f"gleif.{m}.v1": dataset_contract(m) for m in ("level1", "relationships")}
@@ -86,15 +85,6 @@ def test_fresh_company_person_and_relationship_mastering(database, tmp_path):
         assert found["field_provenance"]
     snapshot = reader.snapshot_page("relationship", generation=second["generation"])
     assert snapshot["items"]
-    # Immutable publication envelopes are physically read back, for every
-    # configured consumer. The journal sink here verifies the contract only;
-    # real Journal delivery is covered in test_change_journal_mdm_postgres.
-    for consumer in policy["required_consumers"]:
-        sink = LocalContractSink(tmp_path / consumer)
-        while store.deliver_one(consumer, "local-qualification", sink):
-            pass
-        assert any(p.is_file() for p in (tmp_path / consumer).rglob("*")), consumer
-    assert store.run_status(run_id)["publication_complete"]
     assert stage.apply(**command)["duplicate"]
     assert stage.apply(**second_command)["duplicate"]
     with database.application.connect() as conn:

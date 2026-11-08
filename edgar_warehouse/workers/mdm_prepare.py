@@ -35,7 +35,7 @@ step); its keys say what to take from it, so nothing feed-specific runs:
 Each artifact's rows of that table become records files of at most 1,000
 rows beside the output, one batch each, keyed by the artifact's digest. The
 records a check set aside stay in the reading itself. The output is the
-manifest `mdm.merge` takes. Everything is a function of the reading and the
+manifest `mastering.merge` takes. Everything is a function of the reading and the
 keys, so the verifier rebuilds it and compares bytes.
 """
 from __future__ import annotations

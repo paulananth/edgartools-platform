@@ -1,7 +1,7 @@
 """CLI subcommand: `edgar-warehouse mdm ...`, MDM only.
 
 Commands: migrate, check-connectivity, counts,
-prepare-capture, name-count, force-publish, rebuild, rebuild-name-index, rebuild-detail-lookup and convert-native. The legacy MDM commands and their tables are
+prepare-capture, name-count, rebuild, rebuild-name-index, rebuild-detail-lookup and convert-native. The legacy MDM commands and their tables are
 deleted (platform validation slice 2a).
 """
 from __future__ import annotations
@@ -60,16 +60,6 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     name_count.add_argument("--catalog", help="The capture's exchange ticker catalog, by receipt key: the cascade reads "
                                           "each filer's tickers, as the Company chain does")
     name_count.set_defaults(handler=_logged_handler("name-count", _command("name_count")))
-
-    force = mdm_sub.add_parser("force-publish", help="Publish every current record to one consumer, changed or not "
-                               "(forced pages of the current snapshot; changes no master data), and write the "
-                               "publish target's input manifest")
-    force.add_argument("--consumer", required=True, help="A consumer the current policy requires, not the journal")
-    force.add_argument("--output", required=True, help="Folder for the pages' inputs and the manifest")
-    force.add_argument("--page-size", type=int, default=10000, help="Records a page, at most 10000")
-    force.add_argument("--run-id", help="Run again with the same pages (a stopped command)")
-    force.add_argument("--step", default="graph-publication", help="The publish target's step name")
-    force.set_defaults(handler=_logged_handler("force-publish", _command("force_publish")))
 
     replay = mdm_sub.add_parser("rebuild", help="Replay every stored record into the mastering tables; a stopped replay "
                                 "runs again and skips what is done")

@@ -339,7 +339,7 @@ Work it out from counts before starting:
 1. **Documents and bundles.** Count the documents not yet loaded, and divide
    by `execution.max_artifacts`.
 2. **Wide and narrow steps.** A wide step has one unit per file or group
-   (`source.read`). A narrow step is one unit per bundle (`mdm.merge`,
+   (`source.read`). A narrow step is one unit per bundle (`mastering.merge`,
    `mdm.prepare`). Only more bundles at once shorten narrow steps in total.
 3. **Bundles and readers.** One verifier checks a run's units one at a
    time, so a run's wide step goes no faster than its verifier: measured

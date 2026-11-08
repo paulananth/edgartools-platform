@@ -332,22 +332,14 @@ def test_source_sequence_runs_from_installed_bundle_without_checkout(installed):
     assert report["runtime_readiness"] == "not_checked"
 
 
-def test_publication_preparation_runs_from_installed_bundle_without_checkout(installed):
+def test_engine_number_text_and_store_migrations_run_from_installed_bundle(installed):
     python, root = installed
     result = _run(python, "-c", '''
-import hashlib
 from pathlib import Path
 from edgar_warehouse.rules import source_engine
-from edgar_warehouse.mdm import payloads, store
-from edgar_warehouse.workers import mdm_publish
+from edgar_warehouse.mdm import store
 raw = source_engine.postgres_jsonb_text('{"a":1e-7,"bbb":1.2300}')
 assert raw == '{"a": 0.0000001, "bbb": 1.2300}'
-row = {"payload_text": None, "generation": 1, "run_id": "00000000-0000-0000-0000-000000000001",
-       "policy_digest": "a"*64, "consumer": "export", "projections_text": '[{"x": 1.2300}]', "effects_text": None}
-row["payload_hash"] = hashlib.sha256(payloads.payload_text(row).encode()).hexdigest()
-assert payloads.prepare(row)["objects"] == [{"x":1.23}]
-assert set(source_engine.runtime_files()) <= set(mdm_publish.runtime_files())
-assert Path(payloads.__file__) in mdm_publish.runtime_files()
 assert (Path(store.__file__).parent/"migrations/016_publication_inputs.sql").is_file()
 assert all((Path(store.__file__).parent/"migrations"/name).is_file() for name in store.MIGRATIONS)
 print("publication preparation installed")
@@ -674,7 +666,7 @@ MASTER = {
              "leases": ["source-output:{batch_id}"], "checks": ["input.hash", "output.receipt", "source.output"]},
             {"name": "prepare", "operation": "mdm.prepare", "requires": ["read"], "key": "{batch_id}",
              "leases": ["mdm-prepare:{batch_id}"], "checks": ["input.hash", "output.receipt", "mdm.prepared"]},
-            {"name": "merge", "operation": "mdm.merge", "requires": ["prepare"], "key": "{batch_id}",
+            {"name": "merge", "operation": "mastering.merge", "requires": ["prepare"], "key": "{batch_id}",
              "leases": ["mdm:consumer:{consumer}"], "checks": ["input.hash", "output.receipt", "mdm.committed"]}],
         "checks": ["manifest.hash", "work.accounting", "journal.delivered"]}}},
 }
@@ -691,6 +683,17 @@ read:
         cik: { text: { path: cik } }
         name: { text: { path: name } }
 """
+
+
+def mastered(engine):
+    """Records the merge holds, its masters by kind, and their names."""
+    from sqlalchemy import text
+
+    with engine.connect() as conn:
+        records = conn.execute(text("SELECT count(*) FROM mastering_record")).scalar()
+        bodies = [json.loads(body) for body, in conn.execute(text("SELECT body FROM mastering_master"))]
+    current = [body for body in bodies if body.get("status") != "alias"]
+    return records, dict(Counter(body["kind"] for body in current)), [body.get("fields", {}).get("name") for body in current]
 
 
 # Each variant is one worker path through the installed bundle. A reading feature that a
@@ -714,7 +717,7 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
     recovery_trial = trial_mode == "xml-streamed-recovery"
     xml_trial = recovery_trial
     streamed_trial = trial_mode == "streamed-records" or xml_trial
-    profiles = ("source.read", *(("source.combine",) if combined_trial else ()), "mdm.prepare", "mdm.merge")
+    profiles = ("source.read", *(("source.combine",) if combined_trial else ()), "mdm.prepare", "mastering.merge")
     python, root = installed
     store = Artifacts()
     for profile in profiles:
@@ -948,16 +951,13 @@ read:
         rejected = _run(python, "-m", "edgar_warehouse.cli", "workers", "work", "source.read", bad_run,
                         env={**env, **worker}, cwd=root)
         assert rejected.returncode == 1 and "pinned-count" in rejected.stderr, rejected.stderr
-        for downstream in ("mdm.prepare", "mdm.merge"):
+        for downstream in ("mdm.prepare", "mastering.merge"):
             cli("workers", "work", downstream, bad_run, **worker)
         assert not (bad_out / "reading.json").exists() and not (bad_out / "reading.json.parts").exists()
         assert not (bad_out / "mdm/manifest.json").exists() and not (bad_out / "merged.json").exists()
         failed_state = json.loads(cli("bookkeeping", "status", bad_run))
         assert failed_state["counts"].get("verified", 0) == 0
-        with mdm_reader.connect() as conn:
-            from edgar_warehouse.mdm.inspection import counts
-            report = counts(mdm_reader)
-            assert report["stage_records"] == report["masters"] == {}
+        assert mastered(mdm_reader) == (0, {}, [])
 
     run_id = json.loads(cli("rules", "run", "--pipeline", pipeline_name, "--target", "master",
                             "--input-manifest", units["uri"], "--input-sha256", units["sha256"]))["run"]["run_id"]
@@ -973,9 +973,7 @@ read:
             assert rejected.returncode == 1 and "Artifact missing or unreadable" in rejected.stderr, rejected.stderr
             assert filers["uri"] in rejected.stderr
             assert not (out / "reading.json").exists() and not (out / "reading.json.parts").exists()
-            with mdm_reader.connect() as conn:
-                from edgar_warehouse.mdm.inspection import counts
-                assert counts(mdm_reader)["stage_records"] == {}
+            assert mastered(mdm_reader)[0] == 0
         finally:
             unavailable.rename(captured)
     for profile in profiles:
@@ -1037,14 +1035,9 @@ read:
         assert [row["character"] for row in rows] == ['é', '🦀']
     state = json.loads(cli("bookkeeping", "finalize", run_id))
     assert state["counts"] == {"verified": len(profiles)} and state["run"]["state"] == "complete"
-    from edgar_warehouse.mdm.inspection import counts
-    from edgar_warehouse.mdm.consumer import ContractReader
-    report = counts(mdm_reader)
-    names = [item["body"].get("fields", {}).get("name")
-             for item in ContractReader(mdm_reader).snapshot_page("entity")["items"]]
-    records = sum(report["stage_records"].values())
+    records, masters, names = mastered(mdm_reader)
     if trial_mode == "raw-person":
-        assert report["masters"] == {"person": 2}
+        assert masters == {"person": 2}
 
     mdm_admin.dispose()
     mdm_app.dispose()
@@ -1223,7 +1216,7 @@ print("installed Company raw combination and preparation passed")
     assert result.stdout.strip() == 'installed Company raw combination and preparation passed'
 
 
-def test_gleif_configured_mapping_publishes_and_recovers_from_installed_bundle(installed, databases, tmp_path):
+def test_gleif_configured_mapping_merges_from_installed_bundle(installed, databases, tmp_path):
     """Restricted PG16, installed native GLEIF fields, exact replay and lost ACK.
 
     Bounded fixture qualification; retained release semantics remain in use.
@@ -1295,7 +1288,6 @@ from edgar_warehouse.mdm.inspection import counts as store_counts
 from edgar_warehouse.mdm.record_reads import for_connection
 from edgar_warehouse.mdm.evidence import decision
 from edgar_warehouse.mdm.merge import MergeStage
-from edgar_warehouse.mdm.publication import LocalContractSink
 from edgar_warehouse.mdm.store import Store, digest
 from edgar_warehouse.workers import source_mapping
 body=json.load(sys.stdin)
@@ -1396,19 +1388,6 @@ with engine.connect() as conn:
         stored=reader._readings(reader.current([assertion["subject"]]))[assertion["subject"]]
         assert digest(stored)==digest(assertion)
         assert stored["provenance"]["matching"]["name_count"]["name_count"]==digest(counted)
-class LostAcknowledgement:
-    def __init__(self,sink): self.sink=sink
-    def publish(self,*args): self.sink.publish(*args); raise OSError("simulated lost acknowledgement")
-    def verify(self,*args): return self.sink.verify(*args)
-for consumer in body["consumers"]:
-    sink=LocalContractSink(Path("published")/consumer)
-    try: store.deliver_one(consumer,"installed",LostAcknowledgement(sink))
-    except OSError: pass
-    else: raise AssertionError("lost acknowledgement was not exercised")
-    assert not store.run_status(run)["publication_complete"]
-    while store.deliver_one(consumer,"installed",sink): pass
-    assert list(sink.directory.glob("*.json"))
-assert store.run_status(run)["publication_complete"]
 assert stage.apply(**command)["duplicate"] and stage.apply(**second_command)["duplicate"]
 assert stage.apply(**name_count_command)["duplicate"]
 with engine.connect() as conn:
@@ -1428,7 +1407,7 @@ pins={str(path):hashlib.sha256(Path(path).read_bytes()).hexdigest()
                    files.ROOT/"sources/gleif/name-count-complete-stream.yaml",
                    files.ROOT/"sources/sec.company/name-count-filer.yaml"]}
 print(json.dumps({"pins":pins,"generation":name_count_result["generation"],"counts":counts,
-                  "installed_gleif_mapping":True,"installed_sec_mapping":True,"installed_name_count_caller":True,"name_count_digest":digest(counted),"publication_recovery":True,"full_population":False}))
+                  "installed_gleif_mapping":True,"installed_sec_mapping":True,"installed_name_count_caller":True,"name_count_digest":digest(counted),"full_population":False}))
 engine.dispose()
 ''', cwd=root, document={"dsn": app.url.render_as_string(hide_password=False),
                          "policy": policy_digest, "readings": readings, "rows": rows, "sec_records": sec_records,
@@ -1436,11 +1415,10 @@ engine.dispose()
                          "checkout_name_count": checkout_name_count,
                          "name_count_archive": base64.b64encode(name_count_archive).decode(),
                          "checkout_entries": {str(r['row']['cik']): name_count.entry(checkout_name_count,r['row']['entity_name'],name_count_digest=digest(checkout_name_count))
-                                                for r in sec_records if r['source']=='sec.company'}, "leis": [CHILD_LEI, PARENT_LEI], "as_of": "2026-01-01T00:00:00+00:00",
-                         "consumers": policy["required_consumers"]})
+                                                for r in sec_records if r['source']=='sec.company'}, "leis": [CHILD_LEI, PARENT_LEI], "as_of": "2026-01-01T00:00:00+00:00"})
         assert done.returncode == 0, done.stderr
         proof = json.loads(done.stdout)
-        assert proof["installed_gleif_mapping"] and proof["installed_sec_mapping"] and proof["installed_name_count_caller"] and proof["publication_recovery"]
+        assert proof["installed_gleif_mapping"] and proof["installed_sec_mapping"] and proof["installed_name_count_caller"]
         (root / "installed-gleif-mapping-proof.json").write_text(json.dumps(proof, indent=2)+"\n")
     finally:
         admin.dispose()

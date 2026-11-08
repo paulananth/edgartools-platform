@@ -137,13 +137,13 @@ def test_lookup_opt_in_is_explicit_and_derived_pairs_use_the_same_evidence(tmp_p
 
 
 @pytest.mark.parametrize('module_name,changed_name', [('source_read', 'source_readings'),
-                                                     ('mdm_merge', 'relationships')])
+                                                     ('mastering_merge', 'relationships')])
 def test_evidence_and_relationship_edits_change_the_owning_runtime(monkeypatch, module_name, changed_name):
-    from edgar_warehouse.workers import mdm_merge
+    from edgar_warehouse.workers import mastering_merge
     from edgar_warehouse.mdm import relationships
     from edgar_warehouse.workers.__main__ import runtime
 
-    module = {'source_read': source_read, 'mdm_merge': mdm_merge}[module_name]
+    module = {'source_read': source_read, 'mastering_merge': mastering_merge}[module_name]
     changed = Path({'source_readings': source_readings, 'relationships': relationships}[changed_name].__file__)
     before = runtime(module)
     read_bytes = Path.read_bytes

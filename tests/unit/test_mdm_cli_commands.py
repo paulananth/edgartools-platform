@@ -14,7 +14,6 @@ NAME_COUNT = ["--capture", "c", "--population", "p", "--gleif-reading", "a",
     (["mdm", "counts"], "counts"),
     (["mdm", "check-connectivity"], "check_connectivity"),
     (["mdm", "name-count", *NAME_COUNT], "name_count"),
-    (["mdm", "force-publish", "--consumer", "graph", "--output", "o"], "force_publish"),
     (["mdm", "rebuild-name-index", "--limit", "1"], "rebuild_name_index"),
     (["mdm", "rebuild-detail-lookup", "--limit", "1"], "rebuild_detail_lookup"),
     (["mdm", "convert-native", "--limit", "1"], "convert_native"),
@@ -41,36 +40,11 @@ def test_a_split_previews_unless_confirmed_and_needs_who_and_why():
 
 def test_retired_commands_stay_unavailable():
     parser = build_parser()
-    for retired in ("mastering", "apply-decisions", "bronze-receipts", "correction-batch", "export"):
+    for retired in ("mastering", "apply-decisions", "bronze-receipts", "correction-batch", "export", "force-publish"):
         with pytest.raises(SystemExit):
             parser.parse_args(["mdm", retired])
     with pytest.raises(SystemExit):
         parser.parse_args(["mdm", "migrate", "--model", "legacy"])
-
-
-def test_force_publish_uses_the_governed_route(monkeypatch, tmp_path, capsys):
-    import json
-    from types import SimpleNamespace
-    from edgar_warehouse.mdm import forced_publication, store
-
-    calls, disposed = [], []
-    engine = SimpleNamespace(dispose=lambda: disposed.append(True))
-    selected = object()
-    monkeypatch.setattr(commands, "engine_from_env", lambda name: engine)
-    monkeypatch.setattr(store, "Store", lambda candidate: selected if candidate is engine else None)
-
-    def page(actual, consumer, run, number, after, limit):
-        assert actual is selected
-        calls.append((consumer, number))
-        return {"batch_id": "invented-forced-page", "generation": 1, "records": 1, "next": None}
-
-    monkeypatch.setattr(forced_publication, "page", page)
-    args = build_parser().parse_args(["mdm", "force-publish", "--consumer", "invented-export",
-                                     "--output", str(tmp_path / "output")])
-    assert commands.force_publish(args) == 0
-    report = json.loads(capsys.readouterr().out)
-    assert report["pages"] == report["records"] == 1 and report["forced"] is True
-    assert calls == [("invented-export", 1)] and disposed == [True]
 
 
 def test_owner_migration_defaults_to_governed_storage():
