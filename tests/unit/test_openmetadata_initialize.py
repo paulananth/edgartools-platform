@@ -158,6 +158,22 @@ def test_failed_initialization_exits_nonzero_with_a_stage(monkeypatch, capsys):
     assert '"stage": "initialize"' in capsys.readouterr().err
 
 
+@pytest.mark.parametrize("version", ["2.0.2", "2.0.7"])
+def test_qualified_server_release_allows_reviewed_exclusions(version, monkeypatch, capsys):
+    native = NativeAPI()
+
+    def qualified(method, path, body=None, params=None):
+        if path == "/system/version":
+            assert method == "GET"
+            return {"version": version}
+        return native(method, path, body, params)
+
+    monkeypatch.setattr(initialize, "connect", lambda environment: qualified)
+    assert initialize.main() == 0
+    assert '"status": "confirmed"' in capsys.readouterr().out
+    assert len(native.deleted) == 4
+
+
 def test_unqualified_server_release_stops_before_any_exclusion(monkeypatch, capsys):
     def native(method, path):
         assert (method, path) == ('GET', '/system/version')
