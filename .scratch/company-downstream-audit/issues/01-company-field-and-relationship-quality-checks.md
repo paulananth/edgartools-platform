@@ -69,7 +69,7 @@ invented examples, never names or identifiers from records.
 - [ ] Draft check definitions in the owning source contract or Silver table spec; measure them on the pinned records, include counts in comments, and prove each check with a planted invalid record before proposing activation.
 - [ ] For cross-table or cross-store checks without a supported primitive, document the exact predicate and smallest required engine/configuration change as a separate issue; do not approximate it with a misleading field-only check.
 - [ ] Report coverage for every Company role/cohort and every configured MDM kind, confirmed defects, candidate findings still under investigation, check definitions and measurements, and deferred work. Do not create external tickets unless requested.
-- [ ] Learning → skill: record any reusable trace or check-design rule in the relevant skill, or write `none` with the reason.
+- [x] Learning → skill: `none` (reviewed `skills/data-quality/SKILL.md` on 2026-11-08 14:01 ET). It already requires evidence-backed findings, supported generic checks, planted-invalid proofs, and separate tickets for unsupported predicates; this audit found no additional reusable rule to add.
 
 ## Measured evidence and unresolved checks
 
