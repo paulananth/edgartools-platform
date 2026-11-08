@@ -12,6 +12,7 @@ from urllib.request import Request, urlopen
 
 DEMO_SERVICES = (("llmServices", "ai_governance_llm"), ("mcpServices", "ai_governance_mcp"))
 DEMO_CHILD_COLLECTIONS = (("llmModels", "ai_governance_llm"), ("mcpServers", "ai_governance_mcp"))
+QUALIFIED_OPENMETADATA_VERSIONS = frozenset({"2.0.2", "2.0.7"})
 
 
 class InitError(RuntimeError):
@@ -129,7 +130,9 @@ def main():
     try:
         call = connect(os.environ)
         version = call("GET", "/system/version")
-        if not isinstance(version, dict) or version.get("version") != "2.0.2":
+        if (not isinstance(version, dict)
+                or not isinstance(version.get("version"), str)
+                or version["version"] not in QUALIFIED_OPENMETADATA_VERSIONS):
             raise InitError("Qualify the running OpenMetadata release before changing initialization exclusions")
         result = exclude_demo_services(call)
     except InitError as error:
