@@ -147,10 +147,17 @@ Links are a `relationship` silver table, one row a period, from a `silver.derive
 - [x] Rule tests on the new merge. Done 2026-11-06 23:30 ET: PRs 1485 and 1486. 13 test files moved; 2 stay on the bridge because they test the old engine, and leave in stage 5. Moving them found two gaps, fixed in 1485: only identifiers a rule minted could be found (153,031 tickers, SEDOLs and LoanX ids added to the local store), and the exact-name rule never ran.
 - [x] Links at full size. Done 2026-11-06 23:30 ET: PR 1487. `add_review` was quadratic; the build ran 30 min unfinished, and takes 7 min with a set.
 - [ ] N-PORT holdings in silver: 0 of 5,347,869 rows. All four figures reach 12 decimals against `DECIMAL(38,10)`. Waits on the operator: "10 is fine" means cut, round, or keep 12.
+  - [x] The scale: DECIMAL(38,12), as filed (operator, 2026-11-08: "Scale 12, as filed"); 3,863,454 of 5,347,869 percentages carry more than 10 places. PR 1505, merged 2026-11-08 17:12 ET. The land: running locally.
 - [ ] 198,808 reported links have no other end yet (`unresolved_endpoint`): measure why before stage 5.
+  - [x] Measured 2026-11-08 17:10 ET: 199,597 are N-PORT ISSUED_BY, 1,239 others; 20,255 distinct issuers missing, two of them 45,851 and 19,746 links. Who those two are: not yet looked up.
 - [ ] Steward revoke: the new merge has none, and PR 1485 removed its test. Waits on the operator: is it needed?
 - [ ] Close the stale runs `bfe91575` and `61f32231`, after the holdings land.
 - [ ] Stage 4, then: 13F, ownership and ADV from the existing files; the Apple chain from adviser to holding to AAPL.
+  - [x] ADV June 2026: custodians mastered (494 records, 231 bound: 114 by LEI, 106 by broker-dealer number, 11 by exact name; 263 wait); `adv_custody` 3,022 rows, 3,022 with an adviser id and 2,541 with a custodian id. Verified by count, 2026-11-08 13:05 ET.
+  - [x] 13F from the p07 files: 52 information tables, 10 managers; 283,725 holdings, 283,715 with a Security; 356 AAPL rows on the one AAPL Security, 355 with a manager (5 managers). Verified by count, 2026-11-08 13:15 ET.
+  - [x] Advisers join the SEC Company holding their Item 1.D(3) CIK (operator: "Both"): rule iapd-adv-cik, filings as iapd.adv.filings.v2. PR 1503, merged 2026-11-08 17:04 ET. Real June file: 704 filings carry CIKs; 2,935 of 2,938 keep their master; 3 in review (advisers this store made from the CRD first).
+  - [ ] The Schedule D 7.A RELATED_PERSON link (operator: "RELATED_PERSON (Recommended)"): PR 1506 committed; push waits on the operator's word past the guard.
+  - [ ] The Apple chain from an adviser: March 2026 ADV names Hilltop Holdings (a 13F manager holding AAPL) by CIK; load March once PR 1506 merges.
 - [ ] Stage 5: the old path deleted.
 - [x] Withheld values on the prototype, by the engine's matching (2026-11-06 11:03 ET).
 - [x] Withheld values on real `sec.nport.security` records: 23 ISIN values withheld across 10 chosen batches, and no identifier on two masters; the 5 batches of the old load gave identical masters (2026-11-06 15:43 ET).
