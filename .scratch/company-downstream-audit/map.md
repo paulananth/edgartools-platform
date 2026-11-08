@@ -84,6 +84,13 @@ including 67,166 at the final no-match step. The queue is a broad classification
 coverage gap to investigate, but those holds are not record defects without
 business review.
 
+Three row-local checks on Company Silver also pass on the full stored snapshot:
+period ordering on 5,134,979 facts and 96,807 line items, empty-value/reason
+consistency on 96,807 line items and 168,360 measures, and the allowed measure
+window on all 168,360 measures. Each predicate has zero failing rows. The four
+filing-consistency checks on Company facts remain unmeasured because they apply
+within each delivery; a combined-table comparison would change their meaning.
+
 The full legacy listing scan found 1,392,524 listing rows. All 617,684 present
 MICs are valid in pinned `iso-10383-mic` version 1 and match the configured
 OpenFIGI exchange mapping; there are no missing MICs for mapped exchanges. Of
