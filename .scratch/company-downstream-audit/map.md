@@ -47,8 +47,9 @@ rows across 13 feeds. It now includes 494 ADV custodian assertions and 5,758
 13F Security assertions, which were absent from the earlier snapshot. Field
 and identifier presence by feed is in the issue ledger. The latest read found
 449,281 legacy master rows (449,272 canonical masters and nine aliases). A
-13:51 ET read found zero governed MDM entity, current-record, or relationship
-rows; these tables have no RLS policies.
+16:02 ET read found zero rows in each governed MDM entity, current-record, and
+relationship table. This blocks current governed-kind, generation, and
+relationship verification in this local snapshot.
 Earlier protocol-7 resolver counts recorded in the issue ledger therefore
 cannot be reproduced on this connection and remain prior, unverified
 observations. Do not treat them as current defects until the populated governed
@@ -58,24 +59,56 @@ The 2026-11-08 14:15 ET source-key comparison checked all 16 configured Silver
 links against the exact current legacy source bindings. Non-registration
 links match the current binding when one exists; registration pointers
 diverge from the current legacy CIK identities and require producer-generation
-identification. The 14:30 ET Company cohort matrix is refreshed against the
-current legacy population, including 1,462 mapped non-US Companies and the
-exact overlap between 1,947 Company `fund` profiles and N-PORT registrants.
-Relationship pair, listing, and row-check measurements remain from an earlier
-population; the latest master snapshot added 207 Companies and 622 Securities,
-so those dependent measures must be refreshed before being treated as current.
+identification. The 14:30 ET Company cohort matrix covers SEC filers/issuers,
+GLEIF entities, ADV advisers/custodians, N-PORT registrants/fund profiles,
+mapped non-US Companies, and 13F filers; it includes 1,462 mapped non-US
+Companies and the 1,947 Company `fund` profiles. Its Silver attribution is
+historical, however: current Silver row counts were refreshed at 15:40 ET, so
+the role-specific row counts must be recomputed before they are reported as
+current. Company fields have not been stratified by role. Private equity has no
+active representation or denominator, and branch, government, international
+organization, and venue have no populated legacy master denominator.
 
-Relationship reconciliation is still open. Silver has 55,320 rows: 42,383
-`ISSUED_BY` and 12,937 `IS_SUBFUND_OF`. The latter use the configured
+At 16:06 ET, the full Company master population was re-aggregated by populated
+field without emitting any field values: 10,905 names, 10,724 addresses, 6,414
+SIC fields, 6,217 fiscal year ends, 5,787 incorporation states, and 3,258
+jurisdictions. Each core GLEIF status/legal-form/LOU/validation/registration field is
+present on 3,258 Company masters; entity-creation date is
+present on 2,693 and registration-authority entity ID on 3,141. This establishes
+population-wide field presence only; source-role requiredness and per-Company
+field correctness remain open.
+
+Dependent checks were refreshed after population growth. At 15:36 ET all
+617,684 present MICs remained valid against the pinned reference and exchange
+mapping; permitted null-MIC groups were unchanged. At 15:40 ET the current
+Company Silver row checks had zero failures (3,113,260 eligible fact periods,
+46,971 eligible line-item periods, and all 168,360 measure windows valid).
+At 15:43 ET, 42,383 of 42,385 resolved N-PORT issuer pairs exactly matched
+Silver; two source-only pairs await pending load stages, and there are no
+Silver-only pairs. At 15:43 ET, all 12,937 N-PORT subfund pairs matched Silver
+with observed file-date starts. At 15:46 ET, each ownership edge type's 4,139
+mastered Person/issuer pairs exactly matched `insider_reporting_owner`; 280
+pairs per type lack both assigned endpoints. Governed relationship comparison
+remains unavailable because its tables are empty.
+
+The permitted 16:01 ET Bookkeeping refresh found 29 active runs: ten
+`sec.registration` to Silver, four `sec.company-facts` to Silver, three
+OpenFIGI to mastering, two N-PORT Security runs, and ten ownership security
+symbol runs. N-PORT Silver holdings remain at zero. Both N-PORT runs still
+await holding landing; one is waiting in holding/holding_rows/record and the
+other has pending reduction. No run was changed.
+
+Relationship reconciliation remains partial. Silver has 55,320 rows: 42,383
+`ISSUED_BY` and 12,937 `IS_SUBFUND_OF`. The latter use the approved
 file-date-provisional start (`valid_from_basis=observed`); the unknown true
-inception remains flagged. Legacy N-PORT source assertions declare 245,130
-`ISSUED_BY` relationships, which reduce to 225,221 distinct Security/issuer
-subjects. Endpoint matching found 42,383 pairs in both source and Silver, 1,218
-source-only pairs, and no Silver-only pairs. Of the source-only pairs, 1,214
-lack an assigned GLEIF master, one lacks both masters, one lacks a Security
-master, and two have both endpoint masters but no Silver edge. Each of the two
-are possible omissions, but the `links` stage is still pending in one current
-N-PORT run. Their Silver relationship snapshot last loaded 2026-11-06 23:29 ET.
+inception remains flagged. At 15:43 ET, 245,130 `ISSUED_BY` declarations
+reduced to 225,221 distinct Security/issuer-source pairs; 42,385 pairs resolve
+to both current endpoints, 42,383 match Silver, two are source-only pending
+the active `links`/landing/merge stages, and none are Silver-only. Unresolved
+endpoint declarations are not counted as missing published edges. The prior
+1,218 source-only count used a broader, earlier endpoint population and is
+superseded for the resolved-pair comparison. All 12,937 `IS_SUBFUND_OF` pairs
+match Silver exactly. The current governed relationship projection is empty.
 
 The refreshed 13F flow is configured end to end and loaded: the security run
 completed with 44/44 work items verified and the filing run with 3/3 verified
@@ -132,16 +165,14 @@ configured `related_person_is_y_or_n` check ran on all 3,022 rows with zero
 failures, flags, or refusals. This closes the ADV custody pair and row-grain
 comparison; the complete per-Company field trace remains open.
 
-At 2026-11-08 15:31 ET, 29 Bookkeeping runs were running: 10
+At 2026-11-08 16:01 ET, the 29 active Bookkeeping runs remain: 10
 `sec.registration` to Silver, three `openfigi` to mastering, four
 `sec.company-facts` to Silver, two `sec.nport.security`, and ten
-`sec.ownership` to security symbols. The N-PORT Silver holding count was zero
-at 15:31 ET. Across the two N-PORT runs, one has verified prepare,
-identifiers, series, submissions, holding, holding rows, combine, holding
-combine, issuer reduction, and issuers; the other is waiting in holding,
-holding rows, and record. Both await holding landing; one still has links
-pending, and merge work remains pending/waiting. No run was changed.
-Respect the 30-minute inspection interval before the next status refresh.
+`sec.ownership` to security symbols. The N-PORT Silver holding count remains
+zero. Both N-PORT runs still await holding landing; one is waiting in
+holding/holding_rows/record and the other has pending reduction. One still has
+links pending, with merge work pending/waiting. No run was changed. Respect the
+30-minute inspection interval before the next status refresh.
 
 Other legacy source assertions declare 48 `SUCCESSOR_ENTITY`, 3,017
 `CUSTODIAN`, 4,962 `BENEFICIAL_OWNER_OF`, and 14,886 `EMPLOYED_BY`
