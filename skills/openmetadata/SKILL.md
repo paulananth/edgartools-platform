@@ -470,11 +470,12 @@ different jobs:
   run's frozen source and target to the configured Pipeline, writes
   `PUT /api/v1/pipelines/{fqn}/status`, and reads `pipelineStatus` back. Publish
   the catalog plan first if the target Pipeline does not exist.
-  The status API requires effective Pipeline `EditStatus`. The last local 2.0.7
-  object-level permission checks returned `notAllow` for Pipeline `EditStatus` /
-  `EditLineage`, Table `EditLineage`, and the owned PipelineService
-  `Create`/`Delete`/`EditAll`; no metadata write was attempted. Recheck after the
-  admin changes the bot's role.
+  The status API requires effective Pipeline `EditStatus`. Rechecked 2026-11-08 12:36 ET:
+  private login succeeded, the identity is not an admin, has no roles, and belongs only
+  to the Organization team. Object-level checks still returned `notAllow` for Pipeline
+  `EditStatus`/`EditLineage`, Table `EditLineage`, and the owned PipelineService
+  `Create`/`Delete`/`EditAll`; no metadata write was attempted. Recheck after an admin
+  assigns a role with those operations.
   This is an explicit status publication, not a Bookkeeping callback or a
   pipeline trigger; invoke it after the run transition that needs catalog
   visibility.
