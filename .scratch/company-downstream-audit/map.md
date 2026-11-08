@@ -67,8 +67,10 @@ nonnull Person/issuer endpoints in `insider_reporting_owner` with no pair-set
 difference. That Silver table does not preserve relationship type/capacity as
 a separate edge, so the typed link and period semantics still need a populated
 governed MDM snapshot. For GLEIF `SUCCESSOR_ENTITY`, none of 48 declarations
-has a legacy source Company master and 26 targets resolve to a Company. For
-ADV `CUSTODIAN`, all 3,017 declarations have a mastered adviser but the
+has a legacy source Company master; all 48 source subjects are held in open
+`binding_required` review, while 26 targets resolve to a Company. This is
+unresolved source identity, not a missing published edge. For ADV `CUSTODIAN`,
+all 3,017 declarations have a mastered adviser but the
 custodian source feed has no retained legacy assertions or masters; all 3,022
 Silver custody rows have null custodian MDM IDs. These are source/target
 coverage limits, not confirmed broken relationships. Five extra custody rows
