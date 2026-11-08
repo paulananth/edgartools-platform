@@ -67,13 +67,15 @@ the absent targets and Silver edges are not yet confirmed record defects.
 For international Company records, the SEC–GLEIF `sec-gleif-name-jurisdiction`
 binding rule is currently active. Its configured proof is 300/300 correct
 (95% one-sided lower bound 0.991062) with zero violations in 257 adversarial
-cases. A full legacy field comparison still has 134 of 3,073 mapped SEC place
-and GLEIF jurisdiction pairs that disagree under the pinned place mapping.
-The proof validates matching behavior on its measured cohort; it does not
-identify the current source assertions, prove the producing run used this rule
-version, or make these two source-owned fields interchangeable. Keep the 134
-as candidates pending identity, assertion, field-winner, and effective-time
-tracing.
+cases. A read-only full legacy Company comparison reproduced 134 disagreements
+among 3,073 records under the complete configured place-comparison semantics.
+All 134 are accepted Company masters; each SEC state-of-incorporation and GLEIF
+jurisdiction field is won by its expected source, and both source assertions
+are retained. This confirms the disagreement is present in both source-backed
+fields, but not that it is a defect: SEC and GLEIF fields remain separately
+owned, and identity history, effective times, and the producing rule version
+still need tracing. The proof validates matching behavior on its measured
+cohort; it does not attest every current field pair.
 
 The full legacy listing scan found 1,392,524 listing rows. All 617,684 present
 MICs are valid in pinned `iso-10383-mic` version 1 and match the configured
