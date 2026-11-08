@@ -29,7 +29,7 @@ invented examples, never names or identifiers from records.
 - [x] Inventory nonempty source assertion fields and identifiers for all 11 feeds represented in the legacy mastering snapshot, alongside the master-field presence inventory below. This is presence evidence only; it does not validate field semantics, requiredness, or full downstream coverage.
 - [ ] Reproduce the AAPL trace against the pinned snapshot and confirm the checklist catches its known Company paths; select a control entity for every other populated kind.
 - [ ] Trace every entity in deterministic batches through source-to-MDM identity, each MDM field, and each linked downstream field; report coverage, missing links, conflicts, duplicates, stale references, and applicable per-kind denominators.
-- [ ] Trace typed relationship paths for every populated kind, including `ISSUED_BY` from Security to its allowed issuer kinds; verify endpoint kind, direction, current MDM identity, time basis, and source evidence. Source assertion inventory confirms 12,937 N-PORT `IS_SUBFUND_OF`, 245,130 N-PORT `ISSUED_BY`, 4,962 `BENEFICIAL_OWNER_OF`, and 14,886 `EMPLOYED_BY` relation assertions; repeated filing sightings must be reduced to the governed edge grain before comparing to Silver.
+- [ ] Trace typed relationship paths for every populated kind, including `ISSUED_BY` from Security to its allowed issuer kinds; verify endpoint kind, direction, current MDM identity, time basis, and source evidence. Source assertions include 48 GLEIF `SUCCESSOR_ENTITY`, 3,017 ADV `CUSTODIAN`, 12,937 N-PORT `IS_SUBFUND_OF`, 245,130 N-PORT `ISSUED_BY`, 4,962 `BENEFICIAL_OWNER_OF`, and 14,886 `EMPLOYED_BY` declarations; repeated filing sightings must be reduced to governed edge grain before comparing to Silver.
 - [ ] Trace N-PORT registrants, funds, series, holdings, and securities to their mastered fund/security/company or other entity records; include private-equity structures where present and check actual configured representation. Legacy fund-structure masters: 12,937, all with the `fund` profile; 1,947 Company masters also carry `fund`. Silver `nport_holding` currently has zero rows, so holdings coverage is unmeasurable in this snapshot. All 12,937 Silver subfund links have `valid_from_basis=observed`; configured source rules use filing date provisionally while flagging that authoritative inception remains unknown.
 - [ ] Trace international entities and all non-US Company-like records through identifiers, source fields, relationships, and downstream references; report them separately from domestic Companies. The configured `international_organization` kind has zero observed masters; Company rules include a jurisdiction field, so determine the non-US Company denominator without exposing values.
 - [ ] Reproduce the earlier protocol-7 entity-link resolver comparison for every populated Silver link. Its prior row-level counts cannot be rerun while governed MDM tables are empty on the current shared connection; historic producer and safe refresh timing also remain unresolved.
@@ -60,6 +60,7 @@ defects, until the intended populated governed snapshot is identified.
 | Finding | Measurement | Current assessment | Next validation |
 |---|---|---|---|
 | Silver relationship edge counts and endpoint identity | Silver: 42,383 `ISSUED_BY` plus 12,937 `IS_SUBFUND_OF` (55,320 total). An earlier governed-store read reported 505 and 12,937 respectively, with zero raw exact matches on relationship ID, type, and endpoints. | The earlier raw-ID comparison is not reproducible: governed relationship projection is empty in the current shared connection. The 41,878-row `ISSUED_BY` difference and endpoint mapping remain provisional. Silver subfund links are file-date-provisional (`valid_from_basis=observed`) as configured; authoritative inception remains flagged unknown. | Identify the populated governed snapshot, map endpoints through configured source keys, and compare type, direction, effective date, and assertion evidence. |
+| Other configured relationship types are not represented in observed Silver relationship table | Legacy source assertions contain 48 `SUCCESSOR_ENTITY`, 3,017 `CUSTODIAN`, 4,962 `BENEFICIAL_OWNER_OF`, and 14,886 `EMPLOYED_BY` declarations. The observed Silver `relationship` table has only `ISSUED_BY` and `IS_SUBFUND_OF`; Silver `adv_custody` has 3,022 rows. | Candidate coverage gaps, not yet defects: source sightings may await endpoints or be consumed by a separate Silver table. Five more custody facts than `CUSTODIAN` declarations require filing/row-grain reconciliation. The governed projection is empty in this connection. | For each declared type, trace assertion → accepted MDM edge/reason → designated consumer. Compare ADV custody by filing and row, and check Silver table contract, source generation, and producer version before classifying absence. |
 | Silver entity-link resolver comparisons | Earlier reported current-resolver deltas: Company fact 5,113,685, line item 96,393, measure 167,640, insider position issuer 13,622, owner Person 4,962 set IDs, owner Company 32, and insider issuer 5,199. Reported no-current-master/null rows were 21,294, 414, 720, 709, 781, 5,711, and 544. | These exact-resolver comparisons are not reproducible while governed projection is empty. Preserve them as unverified prior measurements, not confirmed current defects; historic producer and refresh timing also remain unknown. | Identify the populated governed snapshot, rerun each table against the protocol-7 resolver, then trace confirmed rows to landing generation and runtime. |
 | Registration links | Earlier resolver read reported offerings: 491 matches, 1 resolvable null and 240 no-current-master null; statement lines: 17,407 matches, 3 resolvable null and 10,005 no-current-master null. | The four resolvable-but-null rows are candidates only until that populated resolver snapshot is reproduced. | Rerun against populated governed MDM, trace any confirmed rows to landing receipts, and prove the check with a planted null ID. |
 | ADV adviser/custodian links | Earlier resolver read reported 3,022 set adviser IDs across 1,864 keys without current masters, and 3,022 null custodian IDs across 498 keys (106 BD-number, 118 LEI, 274 name-only). | The current governed source-record projection is empty, so the earlier no-pointer counts are not reproducible now. The completed ADV run targeted legacy `mastering`; this does not prove governed MDM received the records. | Verify the run target, then compare adviser and identifier-based custodian keys with populated current assertions, masters, and receipts. Keep name-only cases conditional. |
@@ -68,6 +69,22 @@ defects, until the intended populated governed snapshot is identified.
 | Company jurisdiction cross-source disagreement | Of 3,073 legacy Company records with a mapped SEC state-of-incorporation code and a nonempty GLEIF jurisdiction field, 134 differ under the configured place-comparison semantics. The count applies the pinned `sec-place-codes` mapping and comparison logic in `crates/source-contract/src/matching_values.rs`; the installed native extension could not execute that helper. | Candidate only: the two fields may conflict, or may reflect a source/time/entity association issue. The declared Company name-binding rules include place predicates; check their proving/activation state and record-level cause. | Trace these 134 cases against source assertions, field winners, Company identity evidence, and effective times. Do not classify all as defects before that review. |
 | Listing venue MIC coverage | 617,684 of 1,392,524 listing details carried a MIC in the observed snapshot. | Composite listings can legitimately have no venue MIC; crosswalk scope and vintage must be accounted for. | Classify each exchange code using the pinned `iso-10383-mic` crosswalk and compare only listings expected to resolve. |
 
+### Legacy identity, deferral, and review queues
+
+These are counts of rows in the legacy MDM deferral and review tables at the
+same snapshot. A queue row is not necessarily a distinct entity or a defect;
+it shows where classification, identifier, or binding work was retained.
+
+| Source family | Retained queue evidence | Assessment |
+|---|---|---|
+| Company | 69,816 blocking `classification_deferred` events from SEC Company assertions. | Current classification rules deliberately defer some records; measure record-key distinctness and inspect aggregate rule-step causes before treating queue size as a failure. |
+| International Company / GLEIF | 39 nonblocking `unsupported_identity_kind` deferrals; 1,891 `binding_required` review rows, 458 still open. | Review and classification outcomes need a controlled disposition. The connected governed projection is empty, so no current governed endpoint comparison is possible. |
+| N-PORT fund | 14 blocking `invalid_lei_checksum` deferrals. | Existing identifier validation is catching invalid LEIs. Reconcile the retained source assertions and correct or disposition them through the normal workflow. |
+| N-PORT Security | 2,428 `invalid_cusip_checksum` deferrals and one `invalid_cusip`; 6 open `conflicting_identifiers` reviews. | Invalid CUSIPs are kept out of matching by the configured dataset contract; conflicting identifier cases remain explicit review work. |
+| Person / ownership owner | 11,096 `classification_deferred` and 34,038 `classification_entity_undetermined` SEC submissions events; ownership owner has 331 deferred and 450 undetermined events. | These queue counts exceed source/master counts and are events, not unique people. They show a classification coverage gap to measure by distinct source key before defining a quality threshold. |
+| Security ownership references | 15 and 83 `missing_record_identity` deferrals from ownership security v1/v2; 8 and 101 open `conflicting_identifiers` reviews respectively. | Trace the missing identity and conflict groups against their source contract and the Security lookup path; do not treat the empty `fields`/`identifiers` sections as an error by themselves. |
+| OpenFIGI | 37,681 nonblocking `not_found_by_openfigi` deferrals. | Not found may be an allowed lookup outcome; no completeness failure is asserted without an approved request/response coverage denominator. |
+
 ### Source assertion trace across populated kinds
 
 Read-only source assertions in legacy mastering were counted on 2026-11-08.
@@ -75,6 +92,32 @@ Counts below are distinct feed assertions and nonempty values, not entity
 denominators. They establish source field presence, not correctness or
 requiredness. This covers all 11 source feeds represented in the local
 assertion store.
+
+Joining each retained source assertion to its legacy `entity_id` and the
+legacy master table gives this assignment coverage. A linked master means the
+legacy store assigned the assertion; it does not certify the assigned identity
+against the current governed authority.
+
+| Kind | Source feed | Assertions | Distinct linked legacy masters | Assertion rows without a linked master |
+|---|---|---:|---:|---:|
+| Company | SEC Company | 6,414 | 6,414 | 0 |
+| Company | GLEIF Level 1 | 3,716 | 3,258 | 458 |
+| Company | IAPD ADV filings | 2,938 | 2,337 | 0 |
+| Company | N-PORT registrant | 5,841 | 1,947 | 0 |
+| Fund structure | N-PORT fund | 25,874 | 12,937 | 0 |
+| Person | SEC submissions | 31,097 | 31,097 | 0 |
+| Person | SEC ownership reporting owner | 4,962 | 4,339 | 0 |
+| Security | OpenFIGI | 733,538 | 382,649 | 0 |
+| Security | N-PORT security | 428,262 | 393,510 | 6 |
+| Security | SEC ownership security v1 | 398 | 335 | 63 |
+| Security | SEC ownership security v2 | 5,273 | 1,508 | 826 |
+
+No retained legacy assertion rows were present for `iapd.adv.custodians.v1` or
+`sec.thirteenf.securities.v1`, despite related Silver contract/table paths.
+That is a snapshot coverage gap to trace through captures and Bookkeeping; it
+does not prove the providers have no records. The ownership-security rows with
+no legacy master and the six N-PORT-security rows should be reviewed alongside
+the matching deferred reasons below.
 
 | Entity family / source feed | Assertions | Nonempty source fields (count each) | Nonempty identifiers (count each) |
 |---|---:|---|---|

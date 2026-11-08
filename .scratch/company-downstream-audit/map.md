@@ -41,9 +41,13 @@ snapshot is identified.
 Relationship reconciliation is still open. Silver has 55,320 rows: 42,383
 `ISSUED_BY` and 12,937 `IS_SUBFUND_OF`. The latter use the configured
 file-date-provisional start (`valid_from_basis=observed`); the unknown true
-inception remains flagged. Source assertions include repeated sightings, so
-their relationship assertion counts must be reduced to governed edge grain
-before comparing to Silver. Two N-PORT security Bookkeeping runs remain
-`running`, with holding land pending in both and links pending in the later
-run. Do not refresh, delete, recreate, resume, or cancel data as part of this
-read-only audit.
+inception remains flagged. Legacy source assertions also declare 48
+`SUCCESSOR_ENTITY`, 3,017 `CUSTODIAN`, 4,962 `BENEFICIAL_OWNER_OF`, and 14,886
+`EMPLOYED_BY` relationships. The Silver relationship table contains only
+`ISSUED_BY` and `IS_SUBFUND_OF`; the ADV custody fact table has 3,022 rows,
+five more than the declared CUSTODIAN relationships. These are coverage
+candidates: trace accepted endpoints, deferred reasons, grain, and intended
+consumer before classifying missing edges. Two N-PORT security Bookkeeping
+runs remain `running`, with holding land pending in both and links pending in
+the later run. Do not refresh, delete, recreate, resume, or cancel data as part
+of this read-only audit.
