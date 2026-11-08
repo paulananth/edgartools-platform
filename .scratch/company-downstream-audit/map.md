@@ -17,10 +17,10 @@ population. Check definitions must follow this repository's data-quality
 engine and may use DataKitchen TestGen as a reference for check categories;
 TestGen is not a runtime dependency.
 
-The configured MDM catalog has eight kinds. The observed populated legacy MDM
-snapshot has four: Company (10,698), fund structure (12,937), person (31,125),
-and security (393,683). Branch, government, international organization, and
-venue are configured but had no legacy master rows in that observation. A
+The configured MDM catalog has eight kinds. The refreshed legacy MDM snapshot
+has four populated kinds: Company (10,905), fund structure (12,937), person
+(31,125), and security (394,305). Branch, government, international
+organization, and venue have no legacy master rows in this snapshot. A
 fund profile is also permitted on Company, so fund coverage must include both
 Company fund profiles and fund-structure masters. `private_equity` is not a
 configured MDM kind. The active IAPD ADV MDM rules master adviser filings and
@@ -42,14 +42,23 @@ representation or denominator in the observed path. The other configured MDM
 kinds are Person, Security, branch, government, international organization,
 and venue; each is accounted for separately in the coverage matrix below.
 
-The local legacy source assertion store contains 1,248,313 assertion rows across
-11 feeds; field and identifier presence by feed is in the issue ledger. A
-fresh read of the designated shared server found 448,443 legacy masters, but
-the governed MDM projection tables contain no rows and have no RLS policies.
+The refreshed local legacy source assertion store contains 1,254,565 assertion
+rows across 13 feeds. It now includes 494 ADV custodian assertions and 5,758
+13F Security assertions, which were absent from the earlier snapshot. Field
+and identifier presence by feed is in the issue ledger. The latest read found
+449,281 legacy master rows (449,272 canonical masters and nine aliases). A
+13:51 ET read found zero governed MDM entity, current-record, or relationship
+rows; these tables have no RLS policies.
 Earlier protocol-7 resolver counts recorded in the issue ledger therefore
 cannot be reproduced on this connection and remain prior, unverified
 observations. Do not treat them as current defects until the populated governed
 snapshot is identified.
+
+The relationship endpoint comparisons, cohort downstream, listing, and
+row-check measurements below come from the earlier legacy/Silver population.
+The latest master snapshot added 207 Companies and 622 Securities; those
+dependent measures are prior-snapshot evidence until the listed refreshes are
+completed. Current Silver table row counts were refreshed at 13:34 ET.
 
 Relationship reconciliation is still open. Silver has 55,320 rows: 42,383
 `ISSUED_BY` and 12,937 `IS_SUBFUND_OF`. The latter use the configured
@@ -62,6 +71,18 @@ lack an assigned GLEIF master, one lacks both masters, one lacks a Security
 master, and two have both endpoint masters but no Silver edge. Each of the two
 are possible omissions, but the `links` stage is still pending in one current
 N-PORT run. Their Silver relationship snapshot last loaded 2026-11-06 23:29 ET.
+
+The refreshed 13F flow is configured end to end and loaded: the security run
+completed with 44/44 work items verified and the filing run with 3/3 verified
+at 12:44 ET. Silver has 168 filing rows and 283,725 holdings; all holdings join
+to one of 52 filing accessions. Current CIK-to-Company matching resolves 146
+filing rows; 22 rows across two CIKs have no current Company master, source
+assertion, or open review. Current CUSIP-to-Security matching resolves 283,715
+holdings; 10 rows share one CUSIP with no master or source assertion, and that
+key matches the existing nonblocking `invalid_cusip_checksum` deferral. No
+populated pointer is wrong-kind or mismatched to its filed key. Only the two
+manager CIKs remain unexplained source-coverage candidates. The run summary did
+not expose the count for the configured one-letter share-class quality check.
 
 The N-PORT `IS_SUBFUND_OF` endpoint set also matches exactly: all 12,937
 distinct source pairs resolve from a `fund_structure` with the `fund` profile
@@ -80,21 +101,28 @@ governed MDM snapshot. For GLEIF `SUCCESSOR_ENTITY`, none of 48 declarations
 has a legacy source Company master; all 48 source subjects are held in open
 `binding_required` review, while 26 targets resolve to a Company. This is
 unresolved source identity, not a missing published edge. For ADV `CUSTODIAN`,
-all 3,017 declarations have a mastered adviser but the
-custodian source feed has no retained legacy assertions or masters; all 3,022
-Silver custody rows have null custodian MDM IDs. These are source/target
-coverage limits, not confirmed broken relationships. Five extra custody rows
-cannot be classified without reconciling filing/row grain.
+all 3,017 declarations have a mastered adviser. The earlier assertion snapshot
+showed no custodian records; a refreshed read now finds 494 custodian
+assertions: 106 have BD numbers and 114 have LEIs, all assigned; 274 are
+name-only, of which 11 bind to one exact-name holder and 263 correctly wait
+because none of the configured holder sources has their name. The assigned
+assertions resolve to 224 distinct legacy masters. Four invalid-LEI rows are
+already set aside by identifier validation. All 3,022 current Silver
+custody rows have adviser IDs. Of these, 2,541 custodian IDs match the exact
+source key and current master; 475 rows point to the 263 waiting keys, and six
+rows across four keys have no retained source assertion. No populated pointer
+is mismatched. Reconcile the four source-absent keys, monthly publication
+grain, and the five-row difference between declarations and Silver before
+treating any as broken relationships.
 
-At 2026-11-08 12:37 ET, both N-PORT security Bookkeeping runs still showed
-`running`. The 11:54 ET run has `land_holding` and `processed` pending, with
-`merge` waiting; its other listed steps are verified. The 21:31 ET run has
-`series` and `identifiers` verified, registrants, issuers, and holdings
-reported, holding and holding-row work waiting, and `combine`,
-`holding_combine`, `issuer_reduce`, `land_holding`, `links`, `merge`, `prepare`,
-`processed`, and `reduce` pending. The `nport_holding` count was last measured
-as zero at 12:00 ET; it was not re-read at this status check. Do not resume,
-cancel, or otherwise alter these runs as part of this read-only audit.
+At 2026-11-08 13:50 ET, both N-PORT security Bookkeeping runs still showed
+`running`, with no step changes since the 13:11 ET check. The 11:54 ET run has 14 verified steps, `land_holding` and
+`processed` pending, and `merge` waiting. The 21:31 ET run has 3 verified, 3
+reported, 3 waiting, and 9 pending; `identifiers`, `series`, and `submissions`
+are verified, while `holding` and `holding_rows` wait. The `nport_holding`
+Silver `nport_holding` was refreshed at 13:34 ET and remains at zero rows.
+Do not resume, cancel, or otherwise alter these runs as part of this read-only
+audit.
 
 Other legacy source assertions declare 48 `SUCCESSOR_ENTITY`, 3,017
 `CUSTODIAN`, 4,962 `BENEFICIAL_OWNER_OF`, and 14,886 `EMPLOYED_BY`
@@ -141,9 +169,10 @@ defects. A future uniqueness/cardinality check should measure effective
 identifiers and verify raw conflicting claims remain withheld under the
 configured source/key-class policy.
 
-The assigned legacy identifier scan found no duplicate Company identities:
-8,361 CIK, 2,337 CRD, and 3,258 LEI values each map to one Company master, and
-no Company master holds multiple values in these reverse-one namespaces.
+The refreshed legacy Company identifier scan on 2026-11-08 13:25 ET found no
+duplicate identities: 106 BD-number, 8,361 CIK, 2,337 CRD, and 3,359 LEI
+values each map to one Company master, and no Company master holds multiple
+values in these reverse-one namespaces.
 Person CIK values are unique across 31,125 Person masters; 4,311 CIKs appear in
 both SEC submissions and ownership-owner assertions and resolve to the same
 master, with no Person holding multiple CIKs. Fund-structure series IDs
@@ -184,5 +213,9 @@ OpenFIGI exchange mapping; there are no missing MICs for mapped exchanges. Of
 the 774,840 rows without MIC, 414,643 have a composite FIGI and an exchange not
 in the current mapping, 42,639 have an unmapped exchange and no composite FIGI,
 and 317,558 have neither exchange nor composite venue detail. Only the first
-group is a composite/no-MIC candidate; the remaining groups still need source
-and business classification before a quality failure can be assigned.
+group has a composite FIGI, and the other exchange rows are unpaired by the
+configured mapping. The source explicitly leaves MIC null for composite or
+unpaired listings; rows without exchange/composite evidence likewise provide
+no MIC input. Missing MIC is therefore allowed in these groups, not a quality
+failure. Adding an exchange-to-MIC mapping would require approved authoritative
+reference data; the audit does not infer one from observed values.
