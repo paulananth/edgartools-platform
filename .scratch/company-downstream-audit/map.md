@@ -60,6 +60,16 @@ The 12,937 N-PORT fund structures all have their SEC series identifier. Of the
 claim; the configured series-ID rule allows identity without one. This is not
 a missing-LEI defect and should not become a mandatory-field check.
 
+For insider reporting owners, all 781 Silver rows without a Person link match
+781 distinct classification holds by the exact filing-owner key: 331 deferred
+and 450 undetermined. Thirty-two of those rows have a Company link; the other
+749 have neither owner link. The joins agree exactly, so these are unresolved
+classification cases rather than broken pointers; the valid terminal handling
+is configured: both classification reasons are nonblocking, and Bookkeeping
+lands the owner rows after merge. Keep these rows out of link-failure checks
+while classification remains unresolved; once classified, require the matching
+Person or Company link.
+
 The full legacy identifier scan found one ticker value held by four Security
 masters, above the configured forward claim of three. Both retained Form 4
 security assertions carrying that value are open `conflicting_identifiers`
