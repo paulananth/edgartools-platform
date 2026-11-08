@@ -11,11 +11,15 @@ the data-catalog skill. This skill says how that meaning is stored on
 OpenMetadata 2.0.7. Normal publication uses `rules catalog publish`; scoped
 repair of unsupported metadata relationships follows the procedure below.
 
-The `/lineage` page is the service view. It aggregates source pipelines and
-database assets to their service nodes, so per-source detail may collapse to
-two service entries. Do not delete those service entities: they are catalog
-containers, and removing them would not expose per-source edges. Read a
-Pipeline's native graph with
+The `/lineage` page is the service view: it aggregates exact Pipeline/Table
+edges to their containing services. Before migration, the local instance
+showed one shared PipelineService and the DatabaseService. `rules catalog plan`
+now declares one PipelineService per source; after `publish` reads back each
+new service, Pipeline and edge, it retires only the old shared PipelineService.
+The current server has not received that change because the bot lacks write
+permissions. Never delete a service by hand; the DatabaseService stays.
+
+For a target's exact graph, read
 `GET /api/v1/lineage/pipeline/name/<URL-encoded-FQN>?upstreamDepth=0&downstreamDepth=1`.
 Column-by-column table lineage is on the table's Lineage tab and at
 `GET /api/v1/lineage/table/name/<URL-encoded-FQN>?upstreamDepth=1&downstreamDepth=1`.
@@ -377,9 +381,10 @@ reference list.
   `entity_extension.extension` in `VARCHAR(512)`, below the raw text length
   of every source workbook. Do not embed or truncate the workbook, alter the
   schema, or create a link property without a new operator request.
-  Publish native lineage only: configured source pipeline-to-table associations
-  and rule-derived table/column edges. `rules catalog publish` reconciles the
-  planned pipeline edges; `rules catalog check` reads them through
+  Publish native lineage only: each source-target Pipeline is associated with
+  its source assets and configured Silver/MDM outputs; rule-derived table and
+  column edges describe supported transformations. `rules catalog publish`
+  reconciles Pipeline edges; `rules catalog check` reads them through
   `GET /api/v1/lineage/pipeline/name/<URL-encoded-FQN>?upstreamDepth=0&downstreamDepth=1`
   and checks table edges separately. New source pipelines are discovered from
   YAML; no source-specific code is needed.
@@ -409,8 +414,8 @@ Keep configuration, send and confirmation as three separate facts:
 
 1. `edgar-warehouse rules catalog plan --root <rules>` describes the configured
    inventory and makes no API request. Count domains, glossaries, terms,
-   tables, products, quality definitions/cases, pipelines and each lineage
-   family from this plan.
+   tables, products, quality definitions/cases, pipelines, PipelineServices and
+   each lineage family from this plan.
 2. `edgar-warehouse rules catalog publish --root <rules>` sends the plan and
    reconciles only its owned scope, then runs a readback. Its report keeps the
    send and confirmation stages distinct. A successful HTTP response alone
@@ -440,13 +445,15 @@ The current CLI does not provide trustworthy per-object created-versus-updated
 counts; do not infer these from plan counts or a successful PUT. Mark them
 unavailable unless a later publisher receipt or API evidence distinguishes
 them. The structured `publish` result reports configured counts, the publisher
-response and removals separately from readback. The current `check` verifies the service, database and
-schema inventory, tables, pipelines (including tasks), and table lineage. It
-does not verify every configured domain/glossary association, product
-membership/input port, quality object, domain lineage edge, pipeline-to-table
-edge, or all table annotations. Do not describe the entire catalog as confirmed
-from that check alone; read the missing objects through the native API and
-report any remaining gap as unverified until CLI coverage exists.
+response and removals separately from readback. The current `check` verifies the
+service, database and schema inventory, tables, Pipelines (including tasks),
+native Pipeline-to-table lineage and table-to-table lineage. It does not verify
+every domain/glossary association, product membership/input port, quality
+object, domain-lineage edge, Pipeline run status, or every table annotation.
+The separate `rules catalog status --bookkeeping-run` command verifies the
+latest Bookkeeping outcome on its target Pipeline. Do not describe the entire
+catalog as confirmed from `check` alone; read the missing objects through the
+native API and report any remaining gap as unverified until CLI coverage exists.
 
 Do not create a shared glossary, a domain named `Shared`, or a `Shared` tag.
 
@@ -455,10 +462,30 @@ Do not create a shared glossary, a domain named `Shared`, or a `Shared` tag.
 OpenMetadata's `Pipeline` and `ingestionPipeline` are different objects with
 different jobs:
 
-- A `Pipeline` describes a data workflow and its lineage. Its status API accepts
-  externally reported run status through `PUT /api/v1/pipelines/{fqn}/status`;
-  the API has no trigger for this object. A status record is run evidence only
-  when the actual runner reported it and its output was verified.
+- A `Pipeline` represents one configured source target in this catalog. Bookkeeping
+  is the control/run-evidence stage within that target pipeline, not a separate
+  Pipeline or PipelineService. Report its execution outcome on the matching
+  target Pipeline; do not create a Bookkeeping Pipeline.
+  `edgar-warehouse rules catalog status --bookkeeping-run RUN_ID` resolves the
+  run's frozen source and target to the configured Pipeline, writes
+  `PUT /api/v1/pipelines/{fqn}/status`, and reads `pipelineStatus` back. Publish
+  the catalog plan first if the target Pipeline does not exist.
+  The status API requires effective Pipeline `EditStatus`. The last local 2.0.7
+  object-level permission checks returned `notAllow` for Pipeline `EditStatus` /
+  `EditLineage`, Table `EditLineage`, and the owned PipelineService
+  `Create`/`Delete`/`EditAll`; no metadata write was attempted. Recheck after the
+  admin changes the bot's role.
+  This is an explicit status publication, not a Bookkeeping callback or a
+  pipeline trigger; invoke it after the run transition that needs catalog
+  visibility.
+  Running, waiting and blocked Bookkeeping runs map to `Pending`; a retryable
+  failed work item marks its task `Failed` with a generic safe summary.
+  A complete run maps to `Successful`. Bookkeeping has no terminal failed state;
+  never map a retryable attempt to overall `Failed`.
+  OpenMetadata stores only the latest Pipeline status. Bookkeeping holds the
+  current run/work-item state and attempt count, but a retry can replace its
+  prior error, so neither store promises durable per-attempt failure history.
+  The command never copies raw work-item errors or source records into OpenMetadata.
 - An `ingestionPipeline` runs a metadata connector through a configured
   pipeline-service client. `POST /api/v1/services/ingestionPipelines/trigger/{id}`
   triggers metadata ingestion. It does not start the platform's source capture,
@@ -711,8 +738,12 @@ In the verified 2.0.7 server, `GET /api/v1/lineage/getPlatformLineage?view=servi
 - [Minimum requirements](https://docs.open-metadata.org/v2.0.x/deployment/minimum-requirements)
 
 
-A whole-service reset deletes the owned pipeline service, then the owned
-database service:
+This destructive reset is distinct from `rules catalog publish`, which keeps
+the DatabaseService and retires only the exact old shared PipelineService after
+the new per-source PipelineServices, Pipelines and lineage read back. For an
+explicitly requested whole-service reset, delete every owned PipelineService
+(source, standalone and any remaining retired shared service), then the owned
+DatabaseService:
 
 1. `GET /api/v1/services/<type>/name/<exact-owned-name>`. Check the name and
    the fully qualified name.
@@ -738,11 +769,11 @@ products, and quality definitions can contain unrelated curation. Record the
 IDs and counts for the reviewed scope.
 
 Delete in dependency order: owned products, owned quality cases, owned custom
-quality definitions, owned pipeline service, owned database service, owned
-glossary terms, owned glossaries, owned domains, then owned custom tags. Remove
-products and cases before their referenced tables. Delete the pipeline service
-before the database service. For services, verify the exact service name and
-FQN first, delete by returned ID with `recursive=true&hardDelete=true`, then
+quality definitions, every owned PipelineService, the owned database service,
+owned glossary terms, owned glossaries, owned domains, then owned custom tags.
+Remove products and cases before their referenced tables. Delete all owned
+PipelineServices before the database service. For each service, verify the exact
+service name and FQN first, delete by returned ID with `recursive=true&hardDelete=true`, then
 repeat the GET and require 404. For each other resource, use its native API and
 returned ID; use recursive deletion only when the owned children are in the
 reviewed scope. Keep built-in definitions, classifications, tags,

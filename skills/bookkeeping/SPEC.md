@@ -386,6 +386,10 @@ edgar-warehouse bookkeeping checks <UUID>
 edgar-warehouse bookkeeping leases <UUID>
 ```
 
+`bookkeeping status` includes a safe `failed_steps` summary: distinct step
+names whose waiting work has a recorded attempt and error. It omits unit keys
+and raw error text; keep `items[].error` within Bookkeeping.
+
 Activation of mappings also requires `RULES_MDM_ACTIVATION_DATABASE_URL`.
 A source with a feed of its own declares its acquisition authority in Rules;
 one that reads files another source's feed captures declares none. Neither

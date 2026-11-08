@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from io import BytesIO
 import json
 import shutil
@@ -109,9 +110,24 @@ class _Server:
         self.table_delete_params = []
         self.profiles, self.tags, self.certified, self.results = {}, {}, None, {}
         self.pipelines, self.pipeline_lineage = {}, {}
+        self.pipeline_services = {}
+        self.pipeline_service_delete_params = []
 
     def __call__(self, method, path, body=None, params=None):
         self.calls.append((method, path))
+        if method == "DELETE" and path.startswith("/services/pipelineServices/"):
+            service_id = path.rsplit("/", 1)[1]
+            self.pipeline_service_delete_params.append(params)
+            service = next((name for name, entity in self.pipeline_services.items()
+                            if entity["id"] == service_id), None)
+            if service:
+                self.pipeline_services.pop(service)
+                for name, entity in list(self.pipelines.items()):
+                    if entity.get("service") == service:
+                        self.pipelines.pop(name)
+                        for edge in [key for key in self.pipeline_lineage if key[0] == name]:
+                            self.pipeline_lineage.pop(edge, None)
+            return {}
         if method == "DELETE" and path.startswith("/lineage/pipeline/"):
             _, _, _, pipeline_id, _, table_id = path.split("/")
             pipeline = next((name for name, entity in self.pipelines.items()
@@ -172,7 +188,15 @@ class _Server:
             self.term_bodies.append(body)
             return {**body, "id": body["name"],
                     "fullyQualifiedName": body["glossary"] + "." + catalog.quote(body["name"])}
+        if method == "PUT" and path == "/services/pipelineServices":
+            name = body["name"]
+            answer = {**body, "id": "pipeline-service-" + name, "fullyQualifiedName": name}
+            self.pipeline_services[name] = answer
+            return answer
+        if method == "GET" and path.startswith("/services/pipelineServices/name/"):
+            return self.pipeline_services.get(unquote(path.removeprefix("/services/pipelineServices/name/")))
         if method == "PUT" and path == "/pipelines":
+            assert "pipelineStatus" not in body, "PipelineStatus must use the run-status API"
             name = catalog.fqn(body["service"], body["name"])
             answer = {**body, "fullyQualifiedName": name, "id": "pipeline-" + body["name"]}
             self.pipelines[name] = answer
@@ -182,6 +206,12 @@ class _Server:
                              for name, entity in self.pipelines.items()], "paging": {}}
         if method == "GET" and path.startswith("/pipelines/name/"):
             return self.pipelines.get(unquote(path.removeprefix("/pipelines/name/")), {})
+        if method == "PUT" and path.startswith("/pipelines/") and path.endswith("/status"):
+            name = unquote(path.removeprefix("/pipelines/").removesuffix("/status"))
+            if name in self.pipelines and not getattr(self, "ignore_pipeline_status", False):
+                self.pipelines[name]["pipelineStatus"] = body
+                return self.pipelines[name]
+            return {}
         if method == "PUT" and path.startswith("/lineage/pipeline/name/"):
             pipeline, _, table = path.removeprefix("/lineage/pipeline/name/").partition("/table/name/")
             self.pipeline_lineage[(unquote(pipeline), unquote(table))] = body
@@ -203,7 +233,7 @@ class _Server:
                     "nodes": nodes, "upstreamEdges": [], "downstreamEdges": edges}
         if method == "PUT" and path == "/tables":
             name = f"{body['databaseSchema']}.{catalog.quote(body['name'])}"
-            self.ids[name] = f"id-{len(self.ids)}"
+            self.ids.setdefault(name, f"id-{len(self.ids)}")
             return {**body, "fullyQualifiedName": name, "id": self.ids[name]}
         if method == "GET" and path == "/tables" and not params.get("after"):  # two pages
             stale = {"fullyQualifiedName": "edgartools-rules.sources.gone.old", "id": "id-old"}
@@ -253,7 +283,8 @@ def test_the_plan_names_domains_glossaries_and_store_certification():
     assert all(f".{catalog.SOURCES}." in name for name in products["company_master"]["inputs"])
     assert all(f".{catalog.SOURCES}." in name for name in products["security_master"]["inputs"])
     gleif = [edge for edge in plan["service_lineage"] if edge["pipeline"].endswith("source:gleif:mastering")]
-    assert gleif and all("sources.gleif" in edge["table"] for edge in gleif)
+    assert any("sources.gleif" in edge["table"] for edge in gleif)
+    assert any("mdm." in edge["table"] for edge in gleif)
     cases = {case["name"]: case for case in plan["quality_cases"]}
     assert "sec.company.v1.name_present" in cases
     assert cases["sec.company.v1.dc_state_is_empty"]["description"].startswith("Correction")
@@ -269,6 +300,77 @@ def test_the_plan_names_domains_glossaries_and_store_certification():
     assert catalog.glossary_relation_type_name("ISSUED_BY") == "issuedBy"
     assert catalog.glossary_relation_type_name("IS_FUND-MANAGED_BY") == "isFundManagedBy"
     assert "relatedTo" not in {edge["relationType"] for edge in plan["glossary_relations"]}
+
+
+
+def test_pipeline_services_are_split_by_source_and_standalone_owner():
+    plan = catalog.plan()
+    service_names = {service["name"] for service in plan["pipeline_services"]}
+    owners = {}
+    for pipeline in plan["pipelines"]:
+        scope, owner, _ = pipeline["name"].split(":", 2)
+        expected = f"{catalog.PIPELINES_SERVICE}-{scope}-{owner.replace('.', '-')}"
+        assert pipeline["service"] == expected
+        assert expected in service_names
+        owners.setdefault((scope, owner), set()).add(pipeline["service"])
+    assert all(len(services) == 1 for services in owners.values())
+    assert service_names == {next(iter(services)) for services in owners.values()}
+    assert plan["retired_pipeline_service"] == catalog.PIPELINES_SERVICE
+
+
+def test_bookkeeping_steps_are_embedded_as_target_pipeline_tasks():
+    plan = catalog.plan()
+    for pipeline in plan["pipelines"]:
+        scope, _, target = pipeline["name"].split(":", 2)
+        path = files.ROOT / pipeline["pipelineLocation"]
+        body = files.load_source(path) if scope == "source" else files.load(path)
+        steps = (body.get("bookkeeping") or {}).get("targets", {}).get(target, {}).get("steps", [])
+        assert [task["name"] for task in pipeline["tasks"]] == [step["name"] for step in steps]
+
+
+def test_target_pipeline_lineage_includes_configured_silver_and_master_outputs():
+    plan = catalog.plan()
+    edges = defaultdict(set)
+    for edge in plan["service_lineage"]:
+        edges[edge["pipeline"]].add(edge["table"])
+    tables = set(_tables(plan))
+    master_prefix = catalog.fqn(catalog.SERVICE, catalog.MDM, catalog.MASTER_RECORDS) + "."
+    source_pipelines = set()
+    linked_silver = linked_master = False
+
+    for pipeline in plan["pipelines"]:
+        scope, folder, target_name = pipeline["name"].split(":", 2)
+        if scope != "source":
+            continue
+        path = files.ROOT / pipeline["pipelineLocation"]
+        body = files.load_source(path)
+        source = body.get("source") or folder
+        target = (body.get("bookkeeping") or {}).get("targets", {}).get(target_name, {})
+        pipeline_fqn = catalog.fqn(pipeline["service"], pipeline["name"])
+        source_pipelines.add(pipeline_fqn)
+        steps = target.get("steps") or []
+        for step in steps:
+            keys = (step.get("input") or {}).get("keys") or {}
+            if step["operation"] in ("silver.land", "silver.derive") and keys.get("silver"):
+                silver_table = catalog.fqn(catalog.SERVICE, catalog.SILVER, folder, keys["silver"])
+                if silver_table in tables:
+                    linked_silver = True
+                    assert silver_table in edges[pipeline_fqn], (
+                        "configured Silver output is missing from its target Pipeline lineage")
+        if any(step["operation"] == "mastering.merge" for step in steps):
+            datasets = {step["input"]["keys"]["dataset"] for step in steps
+                        if step["operation"] == "mdm.prepare"
+                        and (step.get("input") or {}).get("keys", {}).get("dataset")}
+            inputs = {catalog.fqn(catalog.SERVICE, catalog.SOURCES, source, dataset) for dataset in datasets}
+            outputs = {edge["to"] for edge in plan["lineage"]
+                       if edge["from"] in inputs and edge["to"].startswith(master_prefix)}
+            for output in outputs:
+                linked_master = True
+                assert output in edges[pipeline_fqn], (
+                    "rule-derived master output is missing from its target Pipeline lineage")
+    assert linked_silver and linked_master
+    assert source_pipelines <= set(edges)
+
 
 
 def test_catalog_check_reports_missing_pipeline_table_lineage():
@@ -400,7 +502,8 @@ def test_each_data_product_carries_its_identity_term_in_the_suggested_state():
 def _outcome_plan():
     return {
         "domains": [{}], "glossaries": [{}], "glossary_terms": [{}, {}], "tables": [{}, {}, {}],
-        "quality_definitions": [{}], "quality_cases": [{}, {}], "products": [{}], "pipelines": [{}, {}],
+        "quality_definitions": [{}], "quality_cases": [{}, {}], "products": [{}],
+        "pipelines": [{}, {}], "pipeline_services": [{}],
         "lineage": [{}, {}], "service_lineage": [{}], "domain_lineage": [{}], "glossary_relations": [{}, {}],
     }
 
@@ -408,7 +511,7 @@ def _outcome_plan():
 def test_catalog_plan_counts_cover_configured_catalog_objects():
     assert catalog.plan_counts(_outcome_plan()) == {
         "domains": 1, "glossaries": 1, "glossary_terms": 2, "assets": 3,
-        "quality_definitions": 1, "quality_cases": 2, "products": 1, "pipelines": 2,
+        "quality_definitions": 1, "quality_cases": 2, "products": 1, "pipelines": 2, "pipeline_services": 1,
         "lineage": {"table": 2, "pipeline": 1, "domain": 1, "glossary": 2},
     }
 
@@ -585,7 +688,8 @@ def test_publish_deletes_only_what_the_rules_no_longer_name():
     assert deletes == ["/tables/id-old", "/databaseSchemas/id-gone", f"/lineage/table/{feed}/table/{company}"]
     # a renamed source's old table still holds test cases: the server refuses a delete that is not recursive
     assert server.table_delete_params == [{"hardDelete": "true", "recursive": "true"}]
-    assert result["removed"] == {"tables": 1, "schemas": 1, "databases": 0, "lineage": 1, "pipeline_lineage": 0}
+    assert result["removed"] == {"tables": 1, "schemas": 1, "databases": 0, "lineage": 1,
+                                 "pipeline_lineage": 0, "pipelines": 0, "pipeline_services": 0}
     assert sum(1 for method, path in server.calls if (method, path) == ("PUT", "/lineage")) == len(plan["lineage"])
     posts = [path for method, path in server.calls if method == "POST" and path.endswith("/relations")]
     assert any(path.startswith("/glossaryTerms/Company Identity/") for path in posts)
@@ -993,3 +1097,88 @@ def test_incomplete_run_summary_says_not_complete_when_no_units_are_unknown(caps
     assert report["status"] == "pending"
     assert "is not complete" in report["summary"]
     assert "2/2 units verified and 0 unknown" in report["summary"]
+
+
+def test_catalog_status_reports_retryable_bookkeeping_failure_on_target_pipeline(capsys, monkeypatch):
+    plan = catalog.plan()
+    server = _Server(plan)
+    catalog.publish(plan, server)
+    pipeline = plan["pipelines"][0]
+    location = files.ROOT / pipeline["pipelineLocation"]
+    scope, folder, target = pipeline["name"].split(":", 2)
+    config = files.load_source(location) if scope == "source" else files.load(location)
+    run_name = config.get("source") or folder if scope == "source" else config["pipeline"]
+    run_id = "00000000-0000-0000-0000-000000000001"
+    step = pipeline["tasks"][0]["name"]
+    snapshot = {"run": {"run_id": run_id, "state": "waiting",
+                        "submission": {"kind": scope, "name": run_name, "target": target}},
+                "items": [{"step": step, "state": "waiting", "attempt": "00000000-0000-0000-0000-000000000002",
+                           "error": "private failure details"}],
+                "counts": {"waiting": 1}, "failed_steps": [step]}
+    monkeypatch.setenv("OPENMETADATA_URL", "https://catalog.example")
+    monkeypatch.setenv("OPENMETADATA_TOKEN", "not-a-credential")
+    monkeypatch.setattr(rules_cli, "_bookkeeping_status", lambda _run_id: snapshot)
+    monkeypatch.setattr(rules_cli, "_bookkeeping_quality", lambda _run_id: {"status": "unknown"})
+    monkeypatch.setattr(catalog, "connect", lambda *_args: server)
+
+    code = rules_cli._catalog(Namespace(action="status", root=str(files.ROOT), draft_terms=False,
+                                        results=None, bookkeeping_run=run_id))
+
+    report = json.loads(capsys.readouterr().out)
+    held = server.pipelines[catalog.fqn(pipeline["service"], pipeline["name"])]["pipelineStatus"]
+    assert code == 0
+    assert report["status"] == "confirmed"
+    assert report["pipeline_status"] == {"execution_status": "Pending", "failed_tasks": 1}
+    assert held["executionStatus"] == "Pending"
+    assert held["taskStatus"] == [{"name": step, "executionStatus": "Failed"}]
+    assert held["error"]["errorMessage"] == (
+        "A Bookkeeping attempt failed; inspect Bookkeeping for run details.")
+    assert "private failure details" not in json.dumps(report)
+    assert "private failure details" not in json.dumps(held)
+
+
+@pytest.mark.parametrize("kind", ["source", "pipeline"])
+@pytest.mark.parametrize("state", ["running", "waiting", "blocked", "complete"])
+def test_bookkeeping_run_states_map_to_target_pipeline(kind, state):
+    plan = catalog.plan()
+    folder = "sources" if kind == "source" else "pipelines"
+    pipeline = next(item for item in plan["pipelines"]
+                    if Path(item["pipelineLocation"]).parts[0] == folder)
+    path = files.ROOT / pipeline["pipelineLocation"]
+    body = files.load_source(path) if kind == "source" else files.load(path)
+    owner = body.get("source") or path.parent.name if kind == "source" else body["pipeline"]
+    target = pipeline["name"].rsplit(":", 1)[-1]
+    step = pipeline["tasks"][0]["name"]
+    run_id = "00000000-0000-0000-0000-000000000007"
+    failed_steps = [step] if state == "waiting" else []
+    snapshot = {"run": {"run_id": run_id, "state": state,
+                        "submission": {"kind": kind, "name": owner, "target": target}},
+                "items": ([{"step": step, "state": "waiting", "attempt":
+                            "00000000-0000-0000-0000-000000000008",
+                            "error": "private failure detail"}] if failed_steps else []),
+                "failed_steps": failed_steps}
+
+    update = catalog.pipeline_status_from_bookkeeping(plan, files.ROOT, snapshot)
+    expected_status = "Successful" if state == "complete" else "Pending"
+
+    assert update["pipeline"] == catalog.fqn(pipeline["service"], pipeline["name"])
+    assert update["status"]["executionStatus"] == expected_status
+    if failed_steps:
+        assert update["status"]["taskStatus"] == [{"name": step, "executionStatus": "Failed"}]
+        assert update["status"]["error"]["errorMessage"] == (
+            "A Bookkeeping attempt failed; inspect Bookkeeping for run details.")
+    else:
+        assert "taskStatus" not in update["status"]
+
+def test_pipeline_status_publication_requires_matching_readback():
+    plan = catalog.plan()
+    server = _Server(plan)
+    catalog.publish(plan, server)
+    pipeline = plan["pipelines"][0]
+    server.ignore_pipeline_status = True
+    update = {"pipeline": catalog.fqn(pipeline["service"], pipeline["name"]),
+              "status": {"timestamp": 1, "executionStatus": "Pending", "executionId":
+                         "00000000-0000-0000-0000-000000000005"}}
+
+    with pytest.raises(catalog.CatalogError, match="status readback did not match"):
+        catalog.publish_pipeline_status(plan, server, update)

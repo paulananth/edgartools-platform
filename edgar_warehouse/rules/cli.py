@@ -239,11 +239,132 @@ def _bookkeeping_quality(run_id: str) -> dict:
         bookkeeping.close()
 
 
+def _bookkeeping_status(run_id: str) -> dict:
+    """Read bounded Bookkeeping execution evidence without exposing its errors."""
+    from edgar_warehouse.bookkeeping.clean.cli import configured_bookkeeping
+
+    bookkeeping = configured_bookkeeping()
+    try:
+        return bookkeeping.status(run_id, limit=1000)
+    finally:
+        bookkeeping.close()
+
+
+def _catalog_run_status(args, plan: dict, counts: dict, catalog) -> int:
+    if getattr(args, "results", None) is not None or getattr(args, "draft_terms", False):
+        report = {"ok": False, "status": "failed", "failed_stage": "configuration",
+                  "plan": {"status": "ready", "counts": counts},
+                  "publish": {"status": "not_run"}, "readback": {"status": "not_run"},
+                  "cause": "Pipeline status does not accept quality result or draft-term options",
+                  "next_action": "Run status with only --bookkeeping-run and --root."}
+        report["summary"] = "FAILED: Pipeline status accepts only a Bookkeeping run and Rules root."
+        return _catalog_output(report, failure_code=2)
+    run_id = getattr(args, "bookkeeping_run", None)
+    if not run_id:
+        report = {"ok": False, "status": "failed", "failed_stage": "configuration",
+                  "plan": {"status": "ready", "counts": counts},
+                  "publish": {"status": "not_run"}, "readback": {"status": "not_run"},
+                  "cause": "A Bookkeeping run is required",
+                  "next_action": "Supply --bookkeeping-run with the target run UUID."}
+        report["summary"] = "FAILED: Pipeline status requires `--bookkeeping-run`."
+        return _catalog_output(report, failure_code=2)
+    try:
+        snapshot = _bookkeeping_status(run_id)
+        update = catalog.pipeline_status_from_bookkeeping(plan, Path(args.root), snapshot)
+    except (catalog.CatalogError, ValueError, KeyError, OSError) as error:
+        report = {"ok": False, "status": "failed", "failed_stage": "bookkeeping",
+                  "plan": {"status": "ready", "counts": counts},
+                  "publish": {"status": "not_run"}, "readback": {"status": "not_run"},
+                  "cause": ("Bookkeeping run has no unique planned target Pipeline"
+                            if isinstance(error, catalog.CatalogError) else
+                            "Bookkeeping run status is unavailable"),
+                  "next_action": "Check the Bookkeeping run and its configured source/target, then retry."}
+        report["summary"] = "FAILED: Bookkeeping run status could not be mapped to a target Pipeline."
+        return _catalog_output(report)
+    except Exception as error:
+        from sqlalchemy.exc import SQLAlchemyError
+        from edgar_warehouse.bookkeeping.clean.config import Blocked
+        if not isinstance(error, (SQLAlchemyError, Blocked)):
+            raise
+        report = {"ok": False, "status": "failed", "failed_stage": "bookkeeping",
+                  "plan": {"status": "ready", "counts": counts},
+                  "publish": {"status": "not_run"}, "readback": {"status": "not_run"},
+                  "cause": "Bookkeeping could not provide verified run status",
+                  "next_action": "Check Bookkeeping database access and the run's retained status."}
+        report["summary"] = "FAILED: Bookkeeping run status is unavailable."
+        return _catalog_output(report)
+
+    url, token = os.environ.get("OPENMETADATA_URL"), os.environ.get("OPENMETADATA_TOKEN")
+    endpoint = catalog.endpoint_identity(url)
+    if not url or not token:
+        report = {"ok": False, "status": "failed", "failed_stage": "configuration",
+                  "endpoint": endpoint, "plan": {"status": "ready", "counts": counts},
+                  "publish": {"status": "not_run"}, "readback": {"status": "not_run"},
+                  "cause": "OpenMetadata endpoint or bot token is not configured",
+                  "next_action": "Set OPENMETADATA_URL and OPENMETADATA_TOKEN, then rerun status."}
+        report["summary"] = (f"FAILED: Pipeline status configuration for {endpoint or 'OpenMetadata'}; "
+                             "set OPENMETADATA_URL and OPENMETADATA_TOKEN.")
+        return _catalog_output(report, failure_code=2)
+    completed_writes = 0
+    write_attempts = 0
+    try:
+        api_call = catalog.connect(url, token)
+
+        def call(method, path, body=None, params=None):
+            nonlocal completed_writes, write_attempts
+            is_write = method in ("POST", "PUT", "PATCH", "DELETE")
+            if is_write:
+                write_attempts += 1
+            answer = api_call(method, path, body, params)
+            if is_write:
+                completed_writes += 1
+            return answer
+
+        catalog.publish_pipeline_status(plan, call, update)
+    except catalog.CatalogError as error:
+        cause = _catalog_cause(error, catalog)
+        missing_pipeline = "target Pipeline is not published" in str(error)
+        rejected = re.search(r"HTTP 4\d\d\b", cause) is not None
+        status = "failed" if missing_pipeline or rejected or write_attempts == 0 else "partial"
+        report = {"ok": False, "status": status,
+                  "failed_stage": "precondition" if missing_pipeline else "publish",
+                  "endpoint": endpoint, "plan": {"status": "ready", "counts": counts},
+                  "publish": {"status": "rejected" if rejected else
+                              "partial" if write_attempts else "not_run",
+                              "completed_write_requests": completed_writes},
+                  "readback": {"status": "failed" if "readback" in str(error) else "not_run"},
+                  "cause": cause,
+                  "next_action": ("Run `rules catalog publish` to create or migrate the target Pipeline, then retry."
+                                  if missing_pipeline else
+                                  "Check the OpenMetadata token and Pipeline status permission, then retry."
+                                  if rejected else
+                                  "Run the read-only catalog check before retrying status publication.")}
+        report["summary"] = f"{status.upper()}: Pipeline status was not confirmed at {endpoint}: {cause}."
+        return _catalog_output(report)
+
+    status = update["status"]
+    failed_tasks = sum(task["executionStatus"] == "Failed" for task in status.get("taskStatus") or [])
+    report = {"ok": True, "status": "confirmed", "endpoint": endpoint,
+              "plan": {"status": "ready", "counts": counts},
+              "pipeline_status": {"execution_status": status["executionStatus"],
+                                  "failed_tasks": failed_tasks},
+              "publish": {"status": "sent", "completed_write_requests": 1},
+              "readback": {"status": "matched"},
+              "next_action": None}
+    report["summary"] = (f"CONFIRMED: target Pipeline status read back from {endpoint} as "
+                         f"{status['executionStatus']}; {failed_tasks} failed task(s) recorded.")
+    return _catalog_output(report)
+
+
 def _catalog_cause(error, catalog) -> str:
     """Summarize API failures without returning response bodies or endpoint data."""
     if not isinstance(error, catalog.CatalogError):
         return type(error).__name__
     message = str(error)
+    if "Bookkeeping target Pipeline is not published" in message:
+        return "The target Pipeline is not published yet"
+    if "Bookkeeping Pipeline status readback did not match" in message:
+        return "OpenMetadata Pipeline status readback did not match"
     if "quality result readback mismatch after send" in message:
         return "OpenMetadata quality result readback mismatch after send"
     if "quality result readback mismatch" in message:
@@ -266,7 +387,7 @@ def _catalog_counts_text(counts: dict) -> str:
             f"{counts['glossary_terms']} terms, {counts['assets']} assets, "
             f"{counts['quality_definitions']} quality definitions, {counts['quality_cases']} quality cases, "
             f"{counts['products']} products, "
-            f"{counts['pipelines']} pipelines, "
+            f"{counts['pipelines']} pipelines in {counts['pipeline_services']} PipelineServices, "
             f"{sum(lineage.values())} lineage edges")
 
 
@@ -300,6 +421,9 @@ def _catalog(args):
         print(f"PENDING: catalog plan only; {_catalog_counts_text(counts)}. Nothing was sent.", file=sys.stderr)
         print(json.dumps(plan, indent=2, sort_keys=True))
         return 0
+
+    if args.action == "status":
+        return _catalog_run_status(args, plan, counts, catalog)
 
     quality_summary = None
     try:
@@ -396,8 +520,9 @@ def _catalog(args):
                   "publish": {"status": "not_run"},
                   "readback": {"status": "matched" if result["ok"] else "drift",
                                **result,
-                               "scope": ["database service", "databases", "schemas", "tables", "pipelines",
-                                         "table lineage"]},
+                               "scope": ["database service", "databases", "schemas", "tables",
+                                         "per-source PipelineServices", "Pipelines and tasks",
+                                         "table-to-table lineage", "pipeline-to-table lineage"]},
                   "next_action": None if result["ok"] else
                       "Review readback differences, then rerun `rules catalog publish` and `check`."}
         report["summary"] = (f"CONFIRMED: readback from {endpoint} matches its checked scope; "
@@ -465,8 +590,9 @@ def _catalog(args):
                           "response": sent},
               "readback": {"status": "matched" if verified["ok"] else "drift",
                            **verified,
-                           "scope": ["database service", "databases", "schemas", "tables", "pipelines",
-                                     "table lineage"]},
+                           "scope": ["database service", "databases", "schemas", "tables",
+                                     "per-source PipelineServices", "Pipelines and tasks",
+                                     "table-to-table lineage", "pipeline-to-table lineage"]},
               "next_action": None if verified["ok"] else
                   "Review readback differences, then rerun `rules catalog publish` and `check`."}
     if verified["ok"]:
@@ -513,13 +639,13 @@ def register(subparsers):
     mapping.set_defaults(handler=_mapdoc)
     catalog = commands.add_parser(
         "catalog", help="The Data Catalog (OpenMetadata), published one way from the rules files")
-    catalog.add_argument("action", choices=("plan", "publish", "check"),
-                         help="plan: preview; publish: reconcile OpenMetadata; check: read back metadata and lineage")
+    catalog.add_argument("action", choices=("plan", "publish", "check", "status"),
+                         help="plan: preview; publish: reconcile; check: read back; status: publish a Bookkeeping run status")
     catalog.add_argument("--root", default=str(files.ROOT))
     catalog.add_argument("--results", type=Path,
                          help="publish, check: legacy silver quality results JSON file")
     catalog.add_argument("--bookkeeping-run",
-                         help="publish, check: use this completed run's verified per-unit quality receipts")
+                         help="publish/check: verified quality receipts; status: update the target Pipeline from this run")
     catalog.add_argument("--draft-terms", action="store_true",
                          help="publish: set every glossary term to Draft (a steward approves it); "
                               "by default the server's own status is left alone")

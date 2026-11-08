@@ -93,44 +93,101 @@ def test_every_dataset_quality_rule_and_declared_link_is_described():
                 assert rule["id"] in cases
 
 
-def test_publication_reconciles_only_its_own_pipeline_service():
+def test_publication_migrates_shared_pipeline_service_to_per_source_services():
     from tests.unit.test_rules_catalog import _Server
 
-    class Server(_Server):
-        def __call__(self, method, path, body=None, params=None):
-            if method == "GET" and path == "/pipelines":
-                return {"data": [{"fullyQualifiedName": catalog.PIPELINES_SERVICE + ".obsolete", "id": "obsolete"},
-                                 {"fullyQualifiedName": "other-service.keep", "id": "foreign"}]}
-            return super().__call__(method, path, body, params)
+    plan = catalog.plan()
+    server = _Server(plan)
+    legacy = catalog.PIPELINES_SERVICE
+    server.pipeline_services[legacy] = {
+        "name": legacy, "fullyQualifiedName": legacy, "serviceType": "CustomPipeline",
+        "description": "legacy", "id": "legacy-service",
+    }
+    foreign = "foreign-pipeline-service"
+    server.pipeline_services[foreign] = {
+        "name": foreign, "fullyQualifiedName": foreign, "serviceType": "CustomPipeline",
+        "description": "foreign", "id": "foreign-service",
+    }
+    foreign_pipeline = catalog.fqn(foreign, "keep")
+    server.pipelines[foreign_pipeline] = {
+        "name": "keep", "fullyQualifiedName": foreign_pipeline, "service": foreign, "id": "foreign-pipeline",
+    }
+    status = {"timestamp": 1, "executionStatus": "Failed", "executionId": "bookkeeping-run"}
+    for index, pipeline in enumerate(plan["pipelines"]):
+        old_fqn = catalog.fqn(legacy, pipeline["name"])
+        entity = {**pipeline, "service": legacy, "fullyQualifiedName": old_fqn, "id": f"legacy-{index}"}
+        if index == 0:
+            entity["pipelineStatus"] = status
+        server.pipelines[old_fqn] = entity
+    planned_fqns = {catalog.fqn(pipeline["service"], pipeline["name"]): pipeline["name"]
+                    for pipeline in plan["pipelines"]}
+    for edge in plan["service_lineage"]:
+        old_fqn = catalog.fqn(legacy, planned_fqns[edge["pipeline"]])
+        server.pipeline_lineage[(old_fqn, edge["table"])] = {"pipeline": old_fqn, "table": edge["table"]}
 
-    server = Server(catalog.plan())
-    result = catalog.publish(server.plan, server)
-    assert ("DELETE", "/pipelines/obsolete") in server.calls
-    assert ("DELETE", "/pipelines/foreign") not in server.calls
-    assert result["removed"]["pipelines"] == 1
+    publish_error = None
+    result = None
+    try:
+        result = catalog.publish(plan, server)
+    except catalog.CatalogError as error:
+        publish_error = str(error)
+    assert set(service["name"] for service in plan["pipeline_services"]) <= set(server.pipeline_services), \
+        f"publisher must create every per-source PipelineService before retiring the old service ({publish_error})"
+    assert publish_error is None, f"per-source PipelineService migration should publish: {publish_error}"
+    assert result is not None
+
+    assert set(service["name"] for service in plan["pipeline_services"]) <= set(server.pipeline_services)
+    assert legacy not in server.pipeline_services
+    assert foreign in server.pipeline_services
+    assert foreign_pipeline in server.pipelines
+    assert not any(name.startswith(legacy + ".") for name in server.pipelines)
+    assert result["removed"]["pipeline_services"] == 1
+    assert server.pipeline_service_delete_params == [{"recursive": "true", "hardDelete": "true"}]
+    first_pipeline = plan["pipelines"][0]
+    migrated_fqn = catalog.fqn(first_pipeline["service"], first_pipeline["name"])
+    assert server.pipelines[migrated_fqn]["pipelineStatus"] == status
+    retirement = server.calls.index(("DELETE", "/services/pipelineServices/legacy-service"))
+    lineage_readbacks = [index for index, (method, path) in enumerate(server.calls)
+                         if method == "GET" and path.startswith("/lineage/pipeline/name/")]
+    assert lineage_readbacks and max(lineage_readbacks) < retirement
+    assert result["removed"]["pipelines"] == len(plan["pipelines"])
+    assert not any(method == "DELETE" and path.startswith("/services/databaseServices/")
+                   for method, path in server.calls)
+    repeated = catalog.publish(plan, server)
+    assert repeated["removed"]["pipeline_services"] == 0
+    assert repeated["removed"]["pipelines"] == 0
+    assert server.pipelines[migrated_fqn]["pipelineStatus"] == status
 
 
 def test_catalog_check_reads_saved_metadata_and_detects_drift_without_writes():
     plan = {"service": {"name": catalog.SERVICE, "serviceType": "CustomDatabase", "description": "invented rules"},
             "databases": [], "schemas": [], "tables": [{"name": "invented", "databaseSchema": catalog.SERVICE + ".db.schema",
                 "columns": [{"name": "key", "dataType": "STRING", "description": "invented key"}], "description": "invented table"}],
-            "lineage": [], "pipeline_service": {"name": catalog.PIPELINES_SERVICE, "serviceType": "CustomPipeline"},
-            "pipelines": [{"name": "invented-flow", "service": catalog.PIPELINES_SERVICE,
+            "lineage": [],
+            "pipeline_services": [{"name": catalog.PIPELINES_SERVICE + "-source-invented",
+                                   "serviceType": "CustomPipeline"}],
+            "retired_pipeline_service": catalog.PIPELINES_SERVICE,
+            "pipelines": [{"name": "invented-flow", "service": catalog.PIPELINES_SERVICE + "-source-invented",
                            "tasks": [{"name": "copy", "taskType": "artifact.copy", "downstreamTasks": []}]}]}
     drift = False
     def call(method, path, body=None, params=None):
         assert method == "GET"
+        service_name = plan["pipeline_services"][0]["name"]
+        pipeline_name = catalog.fqn(service_name, "invented-flow")
         if path == "/tables":
             return {"data": [{"fullyQualifiedName": catalog.SERVICE + ".db.schema.invented", "id": "table-id"}]}
         if path == "/pipelines":
-            return {"data": [{"fullyQualifiedName": catalog.PIPELINES_SERVICE + ".invented-flow", "id": "pipeline-id"}]}
+            return {"data": [{"fullyQualifiedName": pipeline_name, "id": "pipeline-id"}]}
         if path.startswith("/tables/name/"):
             return {**plan["tables"][0], "description": "changed" if drift else "invented table"}
         if path.startswith("/pipelines/name/"):
-            assert params == {"fields": "tasks"}
-            return plan["pipelines"][0]
+            assert params == {"fields": "tasks,pipelineStatus"}
+            return {**plan["pipelines"][0], "fullyQualifiedName": pipeline_name}
         if path.startswith("/services/databaseServices/name/"): return plan["service"]
-        if path.startswith("/services/pipelineServices/name/"): return plan["pipeline_service"]
+        if path.startswith("/services/pipelineServices/name/"):
+            requested = path.removeprefix("/services/pipelineServices/name/")
+            return next((service for service in plan["pipeline_services"]
+                         if service["name"] == requested), None)
         return {"data": []}
     assert catalog.verify(plan, call)["ok"]
     drift = True

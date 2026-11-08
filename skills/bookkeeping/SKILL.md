@@ -295,7 +295,10 @@ edgar-warehouse bookkeeping leases <run-id> --limit 100
 ```
 
 Each needs `BOOKKEEPING_DATABASE_URL` (the runtime login). `status`,
-`checks` and `leases` take the run id; `runs` lists them.
+`checks` and `leases` take the run id; `runs` lists them. `status` also returns
+`failed_steps`, the distinct step names with a waiting work item, a recorded
+attempt and an error. This aggregate omits unit keys and error text; do not copy
+`items[].error` into OpenMetadata.
 
 ## Recover mode
 
