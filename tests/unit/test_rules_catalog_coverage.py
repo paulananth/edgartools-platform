@@ -181,7 +181,7 @@ def test_catalog_check_reads_saved_metadata_and_detects_drift_without_writes():
         if path.startswith("/tables/name/"):
             return {**plan["tables"][0], "description": "changed" if drift else "invented table"}
         if path.startswith("/pipelines/name/"):
-            assert params == {"fields": "tasks,pipelineStatus"}
+            assert params == {"fields": "displayName,tasks,pipelineStatus"}
             return {**plan["pipelines"][0], "fullyQualifiedName": pipeline_name}
         if path.startswith("/services/databaseServices/name/"): return plan["service"]
         if path.startswith("/services/pipelineServices/name/"):
