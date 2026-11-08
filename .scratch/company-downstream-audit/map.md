@@ -74,12 +74,18 @@ Silver custody rows have null custodian MDM IDs. These are source/target
 coverage limits, not confirmed broken relationships. Five extra custody rows
 cannot be classified without reconciling filing/row grain.
 
+At 2026-11-08 12:00 ET, both N-PORT security Bookkeeping runs still showed
+`running`, with zero `nport_holding` rows. The older run had `land_holding`
+pending, `merge` waiting, and `processed` pending. The later run had
+`land_holding`, `links`, `merge`, and `issuer_reduce` pending, with its holding
+steps waiting. Do not resume, cancel, or otherwise alter these runs as part of
+this read-only audit.
+
 Other legacy source assertions declare 48 `SUCCESSOR_ENTITY`, 3,017
 `CUSTODIAN`, 4,962 `BENEFICIAL_OWNER_OF`, and 14,886 `EMPLOYED_BY`
 relationships. The Silver relationship table contains only `ISSUED_BY` and
 `IS_SUBFUND_OF`; ownership issuer/Person pairs land in `insider_reporting_owner`
-instead. Do not refresh, delete, recreate, resume, or cancel pending data as
-part of this read-only audit.
+instead.
 
 The 12,937 N-PORT fund structures all have their SEC series identifier. Of the
 70 without a master LEI, every retained source assertion also lacks an LEI
