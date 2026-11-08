@@ -105,7 +105,7 @@ ordering. Approval metadata is not copied into a mutable authoring file.
 ## Authoring and input manifests
 
 Each existing source has a `bookkeeping` section; a pipeline with no source,
-such as the 13F extract, is under `rules/pipelines/<name>/pipeline.yaml`. Targets declare ordered
+such as an extract with no merge, is under `rules/pipelines/<name>/pipeline.yaml`. Targets declare ordered
 steps, preceding-step prerequisites, work keys, actual conflicting resource
 keys, required checks, lease duration, heartbeat interval and retry policy.
 Defaults are 120 seconds, 30 seconds, and five bounded attempts with
