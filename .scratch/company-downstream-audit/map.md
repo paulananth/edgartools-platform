@@ -42,12 +42,16 @@ representation or denominator in the observed path. The other configured MDM
 kinds are Person, Security, branch, government, international organization,
 and venue; each is accounted for separately in the coverage matrix below.
 
-The refreshed local legacy source assertion store contains 1,254,565 assertion
-rows across 13 feeds. It now includes 494 ADV custodian assertions and 5,758
-13F Security assertions, which were absent from the earlier snapshot. Field
-and identifier presence by feed is in the issue ledger. The latest read found
+The current local legacy source assertion store contains 1,257,503 assertion
+rows across 14 feeds, including 2,938 retained ADV filings v2 assertions
+(2,335 distinct linked legacy Company masters; three unassigned assertions,
+all held in `conflicting_identifiers` review).
+The 17:15 ET full stream measured nested nonempty field and identifier counts
+for every feed; the full per-feed table is in the issue ledger. ADV filings v2
+is not in the current Company merge source order and remains separate from the
+active v1 role. The latest read found
 449,281 legacy master rows (449,272 canonical masters and nine aliases). A
-16:02 ET read found zero rows in each governed MDM entity, current-record, and
+17:06 ET read found zero rows in each governed MDM entity, current-record, and
 relationship table. This blocks current governed-kind, generation, and
 relationship verification in this local snapshot.
 Earlier protocol-7 resolver counts recorded in the issue ledger therefore
@@ -59,46 +63,62 @@ The 2026-11-08 14:15 ET source-key comparison checked all 16 configured Silver
 links against the exact current legacy source bindings. Non-registration
 links match the current binding when one exists; registration pointers
 diverge from the current legacy CIK identities and require producer-generation
-identification. The 14:30 ET Company cohort matrix covers SEC filers/issuers,
+identification. The 16:31–16:38 ET Company cohort matrix covers SEC filers/issuers,
 GLEIF entities, ADV advisers/custodians, N-PORT registrants/fund profiles,
 mapped non-US Companies, and 13F filers; it includes 1,462 mapped non-US
-Companies and the 1,947 Company `fund` profiles. Its Silver attribution is
-historical, however: current Silver row counts were refreshed at 15:40 ET, so
-the role-specific row counts must be recomputed before they are reported as
-current. Company fields have not been stratified by role. Private equity has no
-active representation or denominator, and branch, government, international
-organization, and venue have no populated legacy master denominator.
+Companies and 1,947 Company `fund` profiles; cohorts overlap. Registration
+is CIK-attributed because its pointer generation is unknown. Source fields
+are measured by feed, but role-specific master survivorship remains open.
+Retained ADV filings v2 is separate from the active Company merge source
+order. Private equity has no active representation or denominator, and
+branch, government, international organization, and venue have no populated
+legacy master denominator.
 
-At 16:06 ET, the full Company master population was re-aggregated by populated
-field without emitting any field values: 10,905 names, 10,724 addresses, 6,414
-SIC fields, 6,217 fiscal year ends, 5,787 incorporation states, and 3,258
-jurisdictions. Each core GLEIF status/legal-form/LOU/validation/registration field is
-present on 3,258 Company masters; entity-creation date is
-present on 2,693 and registration-authority entity ID on 3,141. This establishes
-population-wide field presence only; source-role requiredness and per-Company
-field correctness remain open.
+At 16:09 ET, field presence was corrected to count nonempty nested `value`
+members rather than JSON field wrappers. The full Company master population
+has 10,875/10,905 names, 10,695 addresses, 6,414 SIC fields, 6,217 fiscal
+year ends, 5,787 incorporation states, and 3,258 jurisdictions. GLEIF
+status/legal-form/LOU/validation/registration fields each occur on 3,258
+masters; 2,693 have entity-creation date and 3,141 have registration-authority
+entity ID. Source-level nested-value counts by role are in the issue ledger.
+The old 16:06–16:09 wrapper counts are superseded. These counts are field
+presence only, not per-record correctness or requiredness.
 
-At 16:09 ET, mapped source fields were also checked by Company role without
-printing records or raw values. The 6,414 SEC Company assertions each contain
-name, address, description, fiscal year end, SIC, and incorporation state. All
-3,716 GLEIF assertions contain name, address, jurisdiction, status/legal-form/
-LOU/validation/registration fields, and creation date. Name/address appear in
-all 2,938 ADV adviser and all 494 ADV custodian assertions; the 5,841 N-PORT
-registrant assertions also all have name/address. These are source input
-counts, not survivor field completeness or downstream quality. Current Company
-binding counts are SEC 6,414, GLEIF 3,258 assigned/458 unbound, ADV adviser
-2,337, ADV custodian 224 assigned/263 name-only unbound, and N-PORT
-registrant/fund 1,947.
+At 16:55 ET, the 30 ADV-assigned Company masters without a name were checked
+against retained evidence and the current pure merge calculation. All 30 are
+stored as `status=review`; recomputing from their 78 retained assertions
+reproduces 30 `authoritative_identifier_conflict` reviews on the `cik`
+namespace and withholds their fields, matching the stored projection. This is
+an unresolved identity conflict for steward review, not a confirmed missing
+name defect. Do not add a missing-name check that would flag these intentional
+holdbacks. Current Company binding counts are SEC 6,414, GLEIF 3,258
+assigned/458 unbound, ADV adviser 2,337, ADV custodian 224 assigned/263
+name-only unbound, and N-PORT registrant/fund 1,947.
 
-At 16:12 ET, current role IDs were compared with the current Company fact and
-line-item tables. SEC-bound Company IDs reach 5,113,685 facts and 96,393 line
-items; GLEIF-bound IDs reach 3,771,437 facts and 68,816 line items. ADV adviser
-and N-PORT registrant IDs reach none of these tables. Current table totals are
-5,134,979 facts and 96,807 line items, so 21,294 facts and 414 line items are
-outside the SEC-bound cohort. The 14:30 “All Company” figures match the SEC
-cohort rather than current table totals. Treat this as an unresolved
-attribution discrepancy until the residual pointers and identity generation
-are traced; do not yet label it a bad link.
+At 16:31–16:38 ET, downstream tables were regrouped by current Company IDs for
+SEC, GLEIF, ADV adviser/custodian, N-PORT registrant/fund, mapped non-US, 13F
+filers, and their union. The full current cohort table is in the issue ledger.
+The mapped non-US group contains 1,405 SEC place foreign/Canadian Companies
+and 57 additional GLEIF non-US Companies with no SEC place. The 13F manager
+set contains eight Companies. Registration counts use current CIK matching,
+not pointer evidence, because the stored registration pointer generation is
+unidentified. Cohorts overlap and their counts are not additive.
+
+At 16:20 ET, the residual Company fact/line/measure rows were traced by key
+without emitting identifiers. All 21,294 null fact pointers fall on nine CIK
+keys; none has a `sec.company.v1` binding. One CIK key resolves to a Company
+master through `sec.nport.registrant.v1`; eight have no current CIK identifier.
+The 414 null line-item and 720 null measure rows share two CIK keys; neither
+has a current CIK identifier or source binding. Key coverage is facts 320/329,
+line items 309/311, and measures 309/311, while all three profiles record
+`inclusion: 1.0`. This is a measured difference from profile evidence, not a
+confirmed failure of an enforced SLA. The Dataset Contract requires the exact
+`sec.company.v1` source key. Resolve whether a Company mastered through N-PORT
+is a valid link target and trace the remaining unmastered keys through the
+source-coverage boundary before defining a failing check. No nonnull pointer
+is outside the current Company master set. The 14:30 “All Company” figures
+equaled the SEC-bound subgroup and should not be used as current all-Company
+totals.
 
 Dependent checks were refreshed after population growth. At 15:36 ET all
 617,684 present MICs remained valid against the pinned reference and exchange
