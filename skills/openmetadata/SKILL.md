@@ -8,7 +8,7 @@ description: Write and read this platform's catalog on OpenMetadata. Use before 
 This is the only place for OpenMetadata implementation. Business meaning, the
 subject domains, the glossary words, and what a relationship type is stay in
 the data-catalog skill. This skill says how that meaning is stored on
-OpenMetadata 2.0.2. Normal publication uses `rules catalog publish`; scoped
+OpenMetadata 2.0.7. Normal publication uses `rules catalog publish`; scoped
 repair of unsupported metadata relationships follows the procedure below.
 
 The page at `/lineage` is the service view. It draws a line only when lineage
@@ -23,10 +23,11 @@ product, and relationship type. The technical name stays the identity. Do not
 open a description with a file path, a rules version, or a JSON list. A person
 should understand the first sentence without knowing the rules layout.
 
-Read the running version from `GET /api/v1/system/version`. The API behavior
-below was checked on 2.0.2; refresh the selected version's schema before another
-deployment. Treat rolling documentation as concept guidance, not proof of the
-installed API. Use the existing private endpoint and bot credentials.
+Read the target's running version from `GET /api/v1/system/version`. The local
+service was verified on 2.0.7; the versioned schemas below match it. When a
+target differs, check that release's schema and API behavior before publishing.
+Treat rolling documentation as concept guidance, not proof of the installed
+API. Use the existing private endpoint and bot credentials.
 
 ## Native objects and their connections
 
@@ -367,15 +368,31 @@ reference list.
   it checks (source datasets and silver tables from their quality rules; a master
   kind table from its identifier limits: one case per `claim.forward` and
   `claim.reverse` of each identifier in `merge/kinds/<kind>.yaml`, none where the
-  limit is null). The approved Mapping Document placement is a Markdown custom
-  property on its pipeline, with relevant source, Silver and master tables
-  linking to that pipeline. Silver-only mappings come from registered
-  `silver-*.yaml` specs. The current main-branch plan, publisher and readback do
-  not implement this projection, so do not report complete Mapping Documents as
-  published. A field mapping shown in column lineage remains separate from the
-  integration specification. A code list's edge maps its `code` to each column
-  that holds those codes. A captured file feed's edge to its dataset stays table
-  to table: a file has no columns.
+  limit is null). The operator-defined Mapping Document placement is a pipeline
+  custom property, with related source, Silver and master tables linked and
+  brief transformation descriptions on affected tables or columns. Keep
+  source-to-target relationships as native lineage; the platform diagram is
+  system-level and the Mapping Document carries field-level steps.
+  **Capability limit:** OpenMetadata 2.0.7 stores `entity_extension.extension`
+  in `VARCHAR(512)`. Raw cell text in every source `MAPPING.xlsx` exceeds 512
+  characters. Do not embed or truncate the workbook, or alter the schema. Ask
+  the operator to approve a short repository link or another document store
+  before writing the property. Check that the Pipeline custom-property
+  definition exists with
+  `GET /api/v1/metadata/types/name/pipeline/customProperties`, and use an
+  authorized writer.
+  The current plan, publisher and readback do not implement this
+  mapping-document projection; do not claim it was published. Silver-only
+  mappings come from registered `silver-*.yaml` specs. A code list's edge maps
+  its `code` to each column that holds those codes. A captured file feed's edge
+  to its dataset stays table to table: a file has no columns.
+
+  New pipeline entities are discovered from source and standalone-pipeline
+  YAML. Source-pipeline service links are derived from configured source tables;
+  no source-specific publisher code is needed. A standalone `pipeline.yaml`
+  currently creates a pipeline entity but not a service-lineage edge. This also
+  does not publish the Mapping Document as a pipeline custom property—that is a
+  separate publisher capability gap.
   A page with an empty Quality tab is a table with no configured check.
 
 - A profile has one native place, the table profile. `PUT /api/v1/tables/{id}/tableProfile`
@@ -577,9 +594,9 @@ receipt and any additional qualification in the task record, not this skill.
 - [Data Contracts: validation and enforcement limits](https://docs.open-metadata.org/v2.0.x/how-to-guides/data-contracts/spec)
 - [Ingestion execution options](https://docs.open-metadata.org/v2.0.x/deployment/ingestion)
 - [Data Quality](https://docs.open-metadata.org/v2.0.x/how-to-guides/data-quality-observability/quality)
-- [Versioned create schemas](https://github.com/open-metadata/OpenMetadata/tree/2.0.2-release/openmetadata-spec/src/main/resources/json/schema/api)
-- [Lineage schema](https://github.com/open-metadata/OpenMetadata/blob/2.0.2-release/openmetadata-spec/src/main/resources/json/schema/type/entityLineage.json)
-- [Column-tag readback implementation](https://github.com/open-metadata/OpenMetadata/blob/2.0.2-release/openmetadata-service/src/main/java/org/openmetadata/service/jdbi3/TableRepository.java)
+- [Versioned create schemas](https://github.com/open-metadata/OpenMetadata/tree/2.0.7-release/openmetadata-spec/src/main/resources/json/schema/api)
+- [Lineage schema](https://github.com/open-metadata/OpenMetadata/blob/2.0.7-release/openmetadata-spec/src/main/resources/json/schema/type/entityLineage.json)
+- [Column-tag readback implementation](https://github.com/open-metadata/OpenMetadata/blob/2.0.7-release/openmetadata-service/src/main/java/org/openmetadata/service/jdbi3/TableRepository.java)
 
 ## Local server
 
@@ -667,6 +684,35 @@ the repository. The URL passed to `catalog.connect` is the server root; that
 function adds `/api/v1`.
 For longer-lived writable-token requests, consult
 [Token issuance and lifetime](references/TOKEN-LIFECYCLE.md) first.
+
+### Upgrade the local server
+
+Check the target release's official upgrade guide and compatibility requirements before changing image pins. For the 2.0.2 → 2.0.7 upgrade, PostgreSQL 15+ and Elasticsearch 9.x are supported (9.3.0 recommended); run the metadata database migration before starting the new server.
+
+Back up the metadata database outside the repository and validate the dump with `pg_restore --list`. Preserve the `db-data` and `es-data` volumes. A pre-upgrade dump is only for rollback: restore it into a clean database and start the matching source-version server. Never restore an old-version dump over the migrated database or run an older server against the upgraded schema.
+
+Keep the `postgresql`, `execute-migrate-all`, and `openmetadata-server` images on the same target release. This repository's migration service runs `./bootstrap/openmetadata-ops.sh migrate` before the server. Use the repository entrypoint:
+
+```bash
+bash infra/openmetadata/init.sh
+```
+
+The initializer also performs the idempotent native-API demo exclusion/readback. Its release allowlist is intentionally fail-closed: qualify the target release's API behavior and tests before adding it; unknown releases must not run exclusions. After startup, verify `GET /api/v1/system/version` and the owned entity readbacks, then reindex all search indexes with the container CLI:
+
+```bash
+docker compose -f infra/openmetadata/docker-compose.yml exec -T openmetadata-server ./bootstrap/openmetadata-ops.sh reindex
+```
+
+Do not treat a healthy server alone as a completed upgrade. Read back the assets and lineage after reindex.
+
+### Check service and asset lineage separately
+
+In the verified 2.0.7 server, `GET /api/v1/lineage/getPlatformLineage?view=service` returns `nodes`, `upstreamEdges`, and `downstreamEdges` as keyed objects, not arrays. This is the service-level graph; a blank or sparse service canvas does not establish whether table lineage exists. Check each intended asset edge separately through `GET /api/v1/lineage/table/name/<URL-encoded-FQN>?upstreamDepth=1&downstreamDepth=1`, and inspect the returned upstream/downstream edges and column lineage.
+
+- [Docker upgrade guide](https://docs.open-metadata.org/v2.0.x/deployment/upgrade/docker)
+- [Upgrade backup and restore behavior](https://docs.open-metadata.org/v2.0.x/deployment/upgrade/how-does-it-work)
+- [Minimum requirements](https://docs.open-metadata.org/v2.0.x/deployment/minimum-requirements)
+
 
 A whole-service reset deletes the owned pipeline service, then the owned
 database service:
