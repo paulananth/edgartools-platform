@@ -731,8 +731,8 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
     migrate_guard(mdm_admin, runtime_role="clean_application")
     with mdm_admin.begin() as conn:
         policy = register_policy(conn, {"version": 1, "required_consumers": ["export"], "automatic_rules": [],
-                                        "kinds": {"company": {"version": "1", "defaults": {"sources": ["fixture.filers"]}}},
-                                        "fields": {"company": {"name": {"sources": ["fixture.filers"]}}}})
+                                        "kinds": {"company": {"version": "1", "defaults": {"sources": ["fixture.filers"]},
+                                                              "fields": {"name": {"sources": ["fixture.filers"]}}}}})
         register_dataset(conn, "fixture.filers", "1", core.contract_body(adapter={
             "version": "v1", "kind": "company", "record_key": ["cik"], "identifiers": {"cik": "cik"},
             "reading": mapped_reading({"name": "name"})}))
