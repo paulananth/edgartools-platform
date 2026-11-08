@@ -44,16 +44,42 @@ snapshot is identified.
 Relationship reconciliation is still open. Silver has 55,320 rows: 42,383
 `ISSUED_BY` and 12,937 `IS_SUBFUND_OF`. The latter use the configured
 file-date-provisional start (`valid_from_basis=observed`); the unknown true
-inception remains flagged. Legacy source assertions also declare 48
-`SUCCESSOR_ENTITY`, 3,017 `CUSTODIAN`, 4,962 `BENEFICIAL_OWNER_OF`, and 14,886
-`EMPLOYED_BY` relationships. The Silver relationship table contains only
-`ISSUED_BY` and `IS_SUBFUND_OF`; the ADV custody fact table has 3,022 rows,
-five more than the declared CUSTODIAN relationships. These are coverage
-candidates: trace accepted endpoints, deferred reasons, grain, and intended
-consumer before classifying missing edges. Two N-PORT security Bookkeeping
-runs remain `running`, with holding land pending in both and links pending in
-the later run. Do not refresh, delete, recreate, resume, or cancel data as part
-of this read-only audit.
+inception remains flagged. Legacy N-PORT source assertions declare 245,130
+`ISSUED_BY` relationships, which reduce to 225,221 distinct Security/issuer
+subjects. Endpoint matching found 42,383 pairs in both source and Silver, 1,218
+source-only pairs, and no Silver-only pairs. Of the source-only pairs, 1,214
+lack an assigned GLEIF master, one lacks both masters, one lacks a Security
+master, and two have both endpoint masters but no Silver edge. Each of the two
+are possible omissions, but the `links` stage is still pending in one current
+N-PORT run. Their Silver relationship snapshot last loaded 2026-11-06 23:29 ET.
+
+The N-PORT `IS_SUBFUND_OF` endpoint set also matches exactly: all 12,937
+distinct source pairs resolve from a `fund_structure` with the `fund` profile
+to a `company` with the `fund` profile, and all 12,937 appear in Silver with
+zero source-only or Silver-only pairs. Every Silver start is present and uses
+`valid_from_basis=observed`; the source does not provide an authoritative
+inception date, so the configured file-date fallback remains provisional.
+
+Ownership link endpoints reach their designated Silver consumer. The
+`BENEFICIAL_OWNER_OF` and `EMPLOYED_BY` source sets each reduce to the same
+4,139 distinct mastered Person/issuer Company pairs, exactly matching the
+nonnull Person/issuer endpoints in `insider_reporting_owner` with no pair-set
+difference. That Silver table does not preserve relationship type/capacity as
+a separate edge, so the typed link and period semantics still need a populated
+governed MDM snapshot. For GLEIF `SUCCESSOR_ENTITY`, none of 48 declarations
+has a legacy source Company master and 26 targets resolve to a Company. For
+ADV `CUSTODIAN`, all 3,017 declarations have a mastered adviser but the
+custodian source feed has no retained legacy assertions or masters; all 3,022
+Silver custody rows have null custodian MDM IDs. These are source/target
+coverage limits, not confirmed broken relationships. Five extra custody rows
+cannot be classified without reconciling filing/row grain.
+
+Other legacy source assertions declare 48 `SUCCESSOR_ENTITY`, 3,017
+`CUSTODIAN`, 4,962 `BENEFICIAL_OWNER_OF`, and 14,886 `EMPLOYED_BY`
+relationships. The Silver relationship table contains only `ISSUED_BY` and
+`IS_SUBFUND_OF`; ownership issuer/Person pairs land in `insider_reporting_owner`
+instead. Do not refresh, delete, recreate, resume, or cancel pending data as
+part of this read-only audit.
 
 The 12,937 N-PORT fund structures all have their SEC series identifier. Of the
 70 without a master LEI, every retained source assertion also lacks an LEI
