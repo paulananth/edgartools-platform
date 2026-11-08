@@ -470,10 +470,10 @@ different jobs:
   run's frozen source and target to the configured Pipeline, writes
   `PUT /api/v1/pipelines/{fqn}/status`, and reads `pipelineStatus` back. Publish
   the catalog plan first if the target Pipeline does not exist.
-  The status API requires effective Pipeline `EditStatus`. The current local identity
-  is an admin, and `rules catalog publish` confirmed the per-source plan at 12:57 ET.
-  Publishing a run's latest status still needs `BOOKKEEPING_DATABASE_URL`; it was
-  missing, so no new failure status was written.
+  The status API requires effective Pipeline `EditStatus`. Load
+  `BOOKKEEPING_DATABASE_URL` from the configured private runtime environment and
+  verify connectivity without printing the URL. Publish only a real run's status
+  returned by Bookkeeping; never synthesize a failure to populate the catalog.
   This is an explicit status publication, not a Bookkeeping callback or a
   pipeline trigger; invoke it after the run transition that needs catalog
   visibility.
