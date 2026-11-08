@@ -318,6 +318,19 @@ def test_pipeline_services_are_split_by_source_and_standalone_owner():
     assert plan["retired_pipeline_service"] == catalog.PIPELINES_SERVICE
 
 
+def test_pipeline_display_names_are_distinct_and_omit_the_shared_prefix():
+    plan = catalog.plan()
+    labels = [item["displayName"] for item in plan["pipeline_services"] + plan["pipelines"]]
+    assert len(labels) == len(set(labels))
+    assert all(not label.startswith("edgartools-rules") for label in labels)
+    named = next(pipeline for pipeline in plan["pipelines"]
+                 if pipeline["name"] == "source:gleif:subfund-pairs")
+    assert named["displayName"] == "GLEIF sub-fund pairs"
+    company = next(pipeline for pipeline in plan["pipelines"]
+                   if pipeline["name"] == "source:sec.company:capture")
+    assert company["displayName"] == "SEC Company Capture"
+
+
 def test_bookkeeping_steps_are_embedded_as_target_pipeline_tasks():
     plan = catalog.plan()
     for pipeline in plan["pipelines"]:

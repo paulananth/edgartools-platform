@@ -11,11 +11,12 @@ the data-catalog skill. This skill says how that meaning is stored on
 OpenMetadata 2.0.7. Normal publication uses `rules catalog publish`; scoped
 repair of unsupported metadata relationships follows the procedure below.
 
-The `/lineage` page is the service view: it aggregates exact Pipeline/Table
-edges to their containing services. The local instance now has one PipelineService
-per source and per standalone pipeline owner. `rules catalog publish` read back
-each new service, Pipeline and edge, then retired the old shared PipelineService.
-Do not delete a service by hand; the DatabaseService stays.
+The `/lineage` page is the service view. It is not the platform architecture
+diagram: that page names Capture, Bookkeeping, workers, MDM, Silver and Gold.
+This canvas shows one PipelineService per source or standalone pipeline, plus
+the database service. Each service and pipeline has a short `displayName`; the
+technical name stays the identity. Do not delete a service by hand; the
+DatabaseService stays.
 
 For a target's exact graph, read
 `GET /api/v1/lineage/pipeline/name/<URL-encoded-FQN>?upstreamDepth=0&downstreamDepth=1`.
@@ -23,8 +24,9 @@ Column-by-column table lineage is on the table's Lineage tab and at
 `GET /api/v1/lineage/table/name/<URL-encoded-FQN>?upstreamDepth=1&downstreamDepth=1`.
 
 Write a plain display name and a plain first sentence on every domain, table,
-product, and relationship type. The technical name stays the identity. Do not
-open a description with a file path, a rules version, or a JSON list. A person
+product, relationship type, PipelineService and Pipeline. The technical name
+stays the identity. Do not open a description with a file path, a rules version,
+or a JSON list. A person
 should understand the first sentence without knowing the rules layout.
 
 Read the target's running version from `GET /api/v1/system/version`. The local

@@ -366,13 +366,27 @@ def _pipeline_service_name(scope: str, owner: str) -> str:
     return f"{PIPELINES_SERVICE}-{scope}-{owner.replace('.', '-')}"
 
 
+_VISIBLE_WORDS = {"sec": "SEC", "gleif": "GLEIF", "nport": "N-PORT", "iapd": "IAPD",
+                  "adv": "ADV", "openfigi": "OpenFIGI", "figi": "FIGI", "thirteenf": "13F"}
+
+
+def _visible_name(raw: str) -> str:
+    """A short label for the catalog canvas. The technical name stays the identity."""
+    parts = raw.replace(".", " ").replace("-", " ").replace("_", " ").split()
+    return " ".join(_VISIBLE_WORDS.get(part.lower(), part.capitalize()) for part in parts)
+
+
 def _pipeline_services(pipelines: list[dict], root: Path) -> list[dict]:
-    names = sorted({pipeline["service"] for pipeline in pipelines})
-    return [{"name": name, "serviceType": "CustomPipeline",
+    by_name = {}
+    for pipeline in pipelines:
+        by_name.setdefault(pipeline["service"], pipeline)
+    return [{"name": name,
+             "displayName": _visible_name(pipeline["name"].split(":", 2)[1]),
+             "serviceType": "CustomPipeline",
              "description": "Configured source and standalone pipeline definitions; "
                             f"rules digest `{rules_digest(root)}`. "
                             "This catalog does not enable schedules or run workloads."}
-            for name in names]
+            for name, pipeline in sorted(by_name.items())]
 
 
 def _pipelines(root: Path) -> list[dict]:
@@ -415,13 +429,13 @@ def _pipelines(root: Path) -> list[dict]:
                 if previous != owner:
                     raise CatalogError(f"Pipeline service name collision for {service_name}")
                 pipeline = {"name": f"{scope}:{path.parent.name}:{name}",
+                            "displayName": pipeline_metadata.get("display_name")
+                            or f"{_visible_name(path.parent.name)} {_visible_name(name)}",
                             "service": service_name,
                             "description": f"Configured {scope} `{path.parent.name}`, target `{name}`. "
                                            f"Definition only; approval, activation and runs are separate. "
                                            f"Run checks: {target.get('checks') or []}.",
                             "pipelineLocation": path.relative_to(root).as_posix(), "tasks": tasks}
-                if pipeline_metadata.get("display_name"):
-                    pipeline["displayName"] = pipeline_metadata["display_name"]
                 result.append(pipeline)
     return result
 
@@ -1421,7 +1435,7 @@ def _pipeline_projection_differences(plan: dict, call: Call, tables: set[str],
     for pipeline in pipelines:
         pipeline_fqn = fqn(pipeline["service"], pipeline["name"])
         actual_pipeline = call("GET", "/pipelines/name/" + escape(pipeline_fqn, safe=""),
-                               params={"fields": "tasks,pipelineStatus"}) or {}
+                               params={"fields": "displayName,tasks,pipelineStatus"}) or {}
         if actual_pipeline.get("fullyQualifiedName") != pipeline_fqn:
             differences.append(pipeline_fqn + ": missing or differently named pipeline")
         compare(pipeline, actual_pipeline, pipeline_fqn)
