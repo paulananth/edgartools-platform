@@ -224,6 +224,19 @@ holding/holding_rows/record and the other has pending reduction. One still has
 links pending, with merge work pending/waiting. No run was changed. Respect the
 30-minute inspection interval before the next status refresh.
 
+At the later 17:54 ET read, both `sec.nport.security` runs were still active
+and neither had verified `land_holding`, but `silver.nport_holding` contained
+5,347,869 rows in one period. The rows had 5,347,869 distinct
+`(accession_number, holding_id)` keys and every row had a registrant CIK and
+registrant pointer. Of these, 4,516,886 had an exact current series-to-fund
+pointer; 830,315 had no series and no fund pointer; and 668 rows had a series
+with no current fund master (four distinct series IDs). Security pointers
+were null on 1,386,984 rows, including 197,709 without a Security key. The
+remaining 1,189,275 keyed rows with null pointers still require identity
+classification. Silver presence does not prove which Bookkeeping run landed
+the rows or that either run completed; keep the run and table evidence
+separate until the landing generation is tied to the load.
+
 Other legacy source assertions declare 48 `SUCCESSOR_ENTITY`, 3,017
 `CUSTODIAN`, 4,962 `BENEFICIAL_OWNER_OF`, and 14,886 `EMPLOYED_BY`
 relationships. The Silver relationship table contains only `ISSUED_BY` and
