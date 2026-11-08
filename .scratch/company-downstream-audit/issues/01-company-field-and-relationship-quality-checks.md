@@ -33,6 +33,7 @@ invented examples, never names or identifiers from records.
 - [x] Determine whether private equity has a separate representation in the active MDM/Silver path. The eight-kind catalog has no PE kind; `fund` is a profile on Company/fund structure. Active IAPD ADV rules master adviser filings and custodians, not private-fund records. Retained ADV schemas still describe private-fund details and PE roster indicators, but the read-only local Silver snapshot has no private-fund table (3,022 custody rows; zero N-PORT holdings). This establishes no current PE quality denominator; it does not establish defects in any PE records. Verified against current config/schema and local Silver on 2026-11-08 10:25 ET.
 - [ ] Trace N-PORT registrants, funds, series, holdings, and securities to their mastered fund/security/company or other entity records. Keep N-PORT series distinct from ADV private funds. Legacy fund-structure masters: 12,937, all with the `fund` profile; 1,947 Company masters also carry `fund`. Silver `nport_holding` currently has zero rows, so holdings coverage is unmeasurable in this snapshot. All 12,937 Silver subfund links have `valid_from_basis=observed`; configured source rules use filing date provisionally while flagging that authoritative inception remains unknown.
 - [x] Trace the entire legacy non-US Company cohort through source assertions, identifiers, field presence, and Silver references. Pinned SEC place mapping identifies 1,405 records; 57 additional records without an SEC place have a non-US GLEIF jurisdiction under the approved country mapping (1,462 total). This is a legacy/Silver trace; current governed identity remains unverified. The configured `international_organization` kind has no legacy masters.
+- [x] Compare every Silver MDM pointer directly with the complete legacy master-ID set. Read-only full-table grouping covered all 16 configured link columns on 2026-11-08 10:29 ET: every populated Company-fact/line-item/measure, insider, ADV-adviser, and relationship endpoint ID matched a legacy master; `adv_custody.custodian_mdm_id` was null on all 3,022 rows; registration pointers (491 offering rows and 17,407 statement-line rows) did not match any legacy master ID; all three N-PORT holding links had zero rows. Those registration IDs belong to an unverified MDM identity generation because governed master tables are empty on this connection; the comparison is membership evidence, not proof that they are stale or wrong.
 - [ ] Reproduce the earlier protocol-7 entity-link resolver comparison for every populated Silver link. Its prior row-level counts cannot be rerun while governed MDM tables are empty on the current shared connection; historic producer and safe refresh timing also remain unresolved.
 - [ ] Map Silver relationship endpoints from legacy IDs to current MDM identities by configured source keys, then compare typed edges, direction, and effective dates. Silver has 55,320 rows; the governed relationship projection is empty in the current connection, while a prior snapshot reported 13,442. Confirm the loaded producer and identity transition before deciding whether to repair or retire any rows.
 - [ ] Classify Security listing FIGI-to-market/venue coverage: distinguish mapped MICs, valid no-MIC composites, unmapped exchanges, and missing or mismatched MICs using the pinned RDM crosswalk.
@@ -216,13 +217,50 @@ The ADV source run was complete. The two N-PORT security runs remain running
 with holding land pending as described above. These states explain why empty
 or partial Silver tables cannot be treated as complete quality populations.
 
+### Complete Silver pointer membership against legacy MDM IDs
+
+Read-only full-table grouping on 2026-11-08 compared every nonnull populated
+Silver MDM pointer with all 448,443 IDs in legacy `public.mastering_master`. It read link
+columns, counted membership, and emitted no entity values or IDs. A match proves
+only that the pointer exists in that legacy master snapshot; it does not prove
+that the source key, entity kind, or relationship evidence is correct.
+
+| Silver pointer | Rows | Null pointer rows | Rows pointing to legacy master IDs | Distinct matching legacy IDs | Nonnull IDs absent from legacy masters |
+|---|---:|---:|---:|---:|---:|
+| `adv_custody.adviser_mdm_id` | 3,022 | 0 | 3,022 | 1,493 | 0 |
+| `adv_custody.custodian_mdm_id` | 3,022 | 3,022 | 0 | 0 | 0 |
+| `company_fact.company_mdm_id` | 5,134,979 | 21,294 | 5,113,685 | 320 | 0 |
+| `company_line_item.company_mdm_id` | 96,807 | 414 | 96,393 | 309 | 0 |
+| `company_measure.company_mdm_id` | 168,360 | 720 | 167,640 | 309 | 0 |
+| `insider_position.issuer_mdm_id` | 14,331 | 709 | 13,622 | 1,621 | 0 |
+| `insider_reporting_owner.person_mdm_id` | 5,743 | 781 | 4,962 | 4,339 | 0 |
+| `insider_reporting_owner.company_mdm_id` | 5,743 | 5,711 | 32 | 22 | 0 |
+| `insider_reporting_owner.issuer_mdm_id` | 5,743 | 544 | 5,199 | 1,664 | 0 |
+| `nport_holding.fund_mdm_id` | 0 | 0 | 0 | 0 | 0 |
+| `nport_holding.registrant_mdm_id` | 0 | 0 | 0 | 0 | 0 |
+| `nport_holding.security_mdm_id` | 0 | 0 | 0 | 0 | 0 |
+| `registration_offering.registrant_mdm_id` | 732 | 241 | 0 | 0 | 491 |
+| `registration_statement_line.registrant_mdm_id` | 27,415 | 10,008 | 0 | 0 | 17,407 |
+| `relationship.source_master_id` | 55,320 | 0 | 55,320 | 55,320 | 0 |
+| `relationship.target_master_id` | 55,320 | 0 | 55,320 | 4,125 | 0 |
+
+The 3,022 missing custodian pointers align with the absence of retained legacy
+assertions for `iapd.adv.custodians.v1`; the configured custody table expects a
+Company MDM link, but no current source assertion/master population is available
+to resolve it. This is a source-to-master coverage candidate, not a null check
+that can be enabled without reconciling the intended capture and pipeline.
+Registration is the opposite case: its populated pointers are from an identity
+set absent from the legacy master table. Since the governed projection is empty,
+these may be valid pointers from a different MDM generation. Do not flag them as
+orphans until the producing generation and authoritative resolver are identified.
+
 ## Coverage by entity family
 
 | Family | Configured representation and observed population | Downstream evidence | Audit status |
 |---|---|---|---|
 | Companies | Separate `company` kind; SEC Company, GLEIF Level 1, IAPD ADV and N-PORT registrant inputs. Legacy MDM: 10,698; current governed count unavailable. Legacy Company has a nonempty jurisdiction field on 3,258 records; pinned-place mapping yields a 1,462 non-US cohort. | Company facts, line items, measures, insider issuer/owner links, ADV custody and registration links. | Partial. Source and master presence are measured; non-US source/master identity, downstream and 134 jurisdiction-candidate traces remain unfinished. |
 | N-PORT funds | `fund_structure` is the series-level master; Company can separately hold profile `fund`. Legacy fund structures: 12,937; legacy Company fund profiles: 1,947. | N-PORT security holding spec includes fund, registrant Company and security links, but Silver currently has 0 holdings. Silver has 12,937 `IS_SUBFUND_OF` rows with file-date-provisional starts. | Partial. Registrant/series and file-date semantics are configured and measured; holdings cannot be traced until a populated run finishes; cross-store identity remains open. |
-| Private equity and ADV private funds | Current MDM catalog has eight kinds; no PE kind. `fund` is a profile available on Company and `fund_structure`; N-PORT fund records create `fund_structure` masters keyed by SEC series ID. Current `iapd.adv` mastering rules cover adviser filing and custodian records, not private-fund records. Older/parallel ADV schema/docs retain private-fund detail and firm-roster PE indicators (`fund_type`, `any_pe_funds`, `pe_fund_count`). | Current local Silver snapshot read on 2026-11-08 contains 3,022 `adv_custody` rows and 0 `nport_holding` rows; it has no `adv_private_fund` table. Historical `sec_adv_private_fund` schema is not evidence that the active configured pipeline populated or masters PE funds. | No current PE cohort or denominator can be audited. Treat as an active-path coverage gap to reconcile across source capture, Bookkeeping, and intended consumer. Do not infer PE from a `private_offering` filing or fund name, and do not convert the lack of a configured PE population into a record-level failure. |
+| Private equity and ADV private funds | Current MDM catalog has eight kinds; no PE kind. `fund` is a profile available on Company and `fund_structure`; N-PORT fund records create `fund_structure` masters keyed by SEC series ID. Current `iapd.adv` mastering rules cover adviser filing and custodian records, not private-fund records. The pinned relationship catalog defines `INVESTMENT_ADVISER_TO` for an adviser-profile entity to a fund-profile entity, but active source rules do not emit it. Older/parallel ADV schema/docs retain private-fund detail and firm-roster PE indicators (`fund_type`, `any_pe_funds`, `pe_fund_count`); legacy docs name the relationship `MANAGES_FUND`, so that historical terminology needs reconciliation before reuse. | Current local Silver snapshot read on 2026-11-08 contains 3,022 `adv_custody` rows and 0 `nport_holding` rows; it has no `adv_private_fund` table. Historical `sec_adv_private_fund` schema is not evidence that the active configured pipeline populated or masters PE funds. | No current PE cohort or denominator can be audited. Treat this as an active source-to-relationship-to-consumer coverage gap to reconcile across source capture, Bookkeeping, and intended consumer. Do not infer PE from a `private_offering` filing or fund name, and do not convert the lack of a configured PE population into a record-level failure. |
 | International companies/entities | Legacy Company: 1,405 with SEC place mapped `FOREIGN`/`CANADIAN`; 57 more with no SEC place but non-US GLEIF jurisdiction; 1,462 total under this rule. Of 3,258 nonempty GLEIF jurisdictions, 599 map non-US. Legacy `international_organization` has zero masters; current governed count unavailable. | Company downstream tables are listed above; current governed endpoint comparison cannot be repeated. | Partial. Non-US denominator is measured in legacy MDM, but source identity/downstream trace and the 134 jurisdiction candidates remain open. |
 | People | Separate `person` kind; legacy MDM: 31,125; current governed count unavailable. Sources are SEC submissions and beneficial-ownership reporting-owner assertions. | `insider_reporting_owner` has 5,743 rows; 4,339 distinct nonnull Person links resolve to legacy Person, 781 rows have no Person link. | Partial. Conditional owner type and full entity-to-downstream trace remain open; null count is not itself a defect. |
 | Securities | Separate `security` kind; legacy MDM: 393,683; current governed count unavailable. Sources include 13F, N-PORT security and OpenFIGI. | Silver has 42,383 `ISSUED_BY` relationships, 0 N-PORT holdings, and no configured 13F Silver tables in the observed schema. Listing MIC coverage is 617,684/1,392,524. | Partial. Issuer endpoints, listing/venue exceptions and incomplete run/table coverage remain to trace. |
