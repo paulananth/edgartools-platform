@@ -105,7 +105,14 @@ a separate edge, so the typed link and period semantics still need a populated
 governed MDM snapshot. For GLEIF `SUCCESSOR_ENTITY`, none of 48 declarations
 has a legacy source Company master; all 48 source subjects are held in open
 `binding_required` review, while 26 targets resolve to a Company. This is
-unresolved source identity, not a missing published edge. For ADV `CUSTODIAN`,
+unresolved source identity, not a missing published edge. Across all 3,716
+GLEIF Level 1 assertions, 458 are unassigned and all 458 are in open
+`binding_required` review; the full review set has 1,891 subjects, 1,433
+closed and 458 open. A separate 39 GLEIF deferred records have
+`unsupported_identity_kind`: 34 probable `fund_structure`, three `government`,
+and two without a probable kind. Do not infer private-equity status from the
+probable `fund_structure` label. Keep these held/deferred inputs outside
+mastered Company denominators. For ADV `CUSTODIAN`,
 all 3,017 declarations have a mastered adviser. The earlier assertion snapshot
 showed no custodian records; a refreshed read now finds 494 custodian
 assertions: 106 have BD numbers and 114 have LEIs, all assigned; 274 are
@@ -125,15 +132,15 @@ configured `related_person_is_y_or_n` check ran on all 3,022 rows with zero
 failures, flags, or refusals. This closes the ADV custody pair and row-grain
 comparison; the complete per-Company field trace remains open.
 
-At 2026-11-08 15:01 ET, 29 Bookkeeping runs were running or waiting: 10
+At 2026-11-08 15:31 ET, 29 Bookkeeping runs were running: 10
 `sec.registration` to Silver, three `openfigi` to mastering, four
 `sec.company-facts` to Silver, two `sec.nport.security`, and ten
 `sec.ownership` to security symbols. The N-PORT Silver holding count was zero
-at 15:01 ET. In the more advanced N-PORT run, identifiers, series,
-submissions, holding, and holding rows were verified; combine, holding
-combine, and issuer reduction were verified; holding landing and merge
-remained pending/waiting. The second run still had holding and holding rows
-waiting, with record waiting and landing/merge pending. No run was changed.
+at 15:31 ET. Across the two N-PORT runs, one has verified prepare,
+identifiers, series, submissions, holding, holding rows, combine, holding
+combine, issuer reduction, and issuers; the other is waiting in holding,
+holding rows, and record. Both await holding landing; one still has links
+pending, and merge work remains pending/waiting. No run was changed.
 Respect the 30-minute inspection interval before the next status refresh.
 
 Other legacy source assertions declare 48 `SUCCESSOR_ENTITY`, 3,017
@@ -212,9 +219,16 @@ CIK, and symbol, but not filing period; all 5,273 v2 assertions have null
 effective time. Of these, 4,447 resolve to one current ticker holder, 725 have
 no current holder and remain unassigned, and 101 remain in conflict review
 because multiple current Securities share the ticker. No assigned result
-points outside the exact current ticker-holder set. This verifies current-key
-handling but not historical correctness. The issuer CIK to `ISSUED_BY` check
-remains to be run with a server-side join that accounts for temporal limits.
+points outside the exact current ticker-holder set. A bounded MDM-to-Silver
+comparison of those 4,447 assigned assertions found 4,359 issuer CIKs with a
+Company identity: 2,822 current `ISSUED_BY` edges target it, six target a
+different Company, and 1,531 have no current edge. The remaining 88 CIKs have
+no CIK holder. These are assertion counts, not distinct Securities. Since the
+reader does not retain filing period and all v2 effective times are null, the
+six differing targets and 1,531 absent edges are temporal/source-coverage
+candidates, not confirmed defects. The 88 missing Company identities also
+need source-coverage review. Establish whether filing period supplies a valid
+effective time and whether this source is authorized to state `ISSUED_BY`.
 
 The SEC Company classification queue contains 69,816 distinct blocking source
 records. The configured rules give 1,515 a probable kind (599 Company, 658
