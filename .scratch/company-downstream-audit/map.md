@@ -54,3 +54,12 @@ consumer before classifying missing edges. Two N-PORT security Bookkeeping
 runs remain `running`, with holding land pending in both and links pending in
 the later run. Do not refresh, delete, recreate, resume, or cancel data as part
 of this read-only audit.
+
+The full legacy identifier scan found one ticker value held by four Security
+masters, above the configured forward claim of three. Both retained Form 4
+security assertions carrying that value are open `conflicting_identifiers`
+reviews, matching the configured `on_several: review` behavior; no bad automatic
+bind was observed. Those four Securities declare three `ISSUED_BY` links to two
+GLEIF subjects that are absent from the retained GLEIF source-record index, and
+none has a Silver issuer edge. This points to unresolved target-source coverage;
+the absent targets and Silver edges are not yet confirmed record defects.
