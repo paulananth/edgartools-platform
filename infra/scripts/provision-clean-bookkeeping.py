@@ -2,10 +2,10 @@
 """Create fresh local control stores; never import or reset legacy state.
 
 Run with uv run --extra mdm infra/scripts/provision-clean-bookkeeping.py.
-BOOKKEEPING_ADMIN_DATABASE_URL names the admin connection (postgres DB),
-BOOKKEEPING_RUNTIME_PASSWORD supplies the new runtime login's password.
-Optional --rules uses RULES_AGENT_PASSWORD; --journal uses
-CHANGE_JOURNAL_RUNTIME_PASSWORD. No versions are activated.
+BOOKKEEPING_DATABASE_URL names a server login; the script opens the
+postgres database to create stores. BOOKKEEPING_RUNTIME_PASSWORD supplies
+the new runtime login's password. Optional --rules uses RULES_AGENT_PASSWORD;
+--journal uses CHANGE_JOURNAL_RUNTIME_PASSWORD. No versions are activated.
 """
 from __future__ import annotations
 
@@ -82,7 +82,8 @@ def main():
     parser.add_argument("--rules", action="store_true", help="Also create the one-table Rules store, without activating any version")
     parser.add_argument("--journal", action="store_true", help="Also create the empty shared Change Journal")
     args = parser.parse_args()
-    result = provision(os.environ["BOOKKEEPING_ADMIN_DATABASE_URL"], rules=args.rules, journal=args.journal)
+    url = str(make_url(os.environ["BOOKKEEPING_DATABASE_URL"]).set(database="postgres"))
+    result = provision(url, rules=args.rules, journal=args.journal)
     print(json.dumps(result, sort_keys=True))
 
 

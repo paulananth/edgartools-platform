@@ -206,14 +206,19 @@ class LocalStores:
         migration = {variable.replace("_DATABASE_URL", "_MIGRATION_DATABASE_URL"):
                      self.url(name, database).render_as_string(hide_password=False)
                      for database, (variable, _) in selected.items()}
+        # Bookkeeping owner uses BOOKKEEPING_DATABASE_URL, as MDM uses MDM_DATABASE_URL.
+        bookkeeping_owner = migration.pop("BOOKKEEPING_MIGRATION_DATABASE_URL")
+        connection = {**migration, "BOOKKEEPING_DATABASE_URL": bookkeeping_owner}
         verifier = {"BOOKKEEPING_DATABASE_URL": self.url(name, "bookkeeping", "bookkeeping_verifier").render_as_string(hide_password=False),
                     "MDM_DATABASE_URL": self.url(name, "mdm", "mdm_verifier").render_as_string(hide_password=False)}
         governance = {"RULES_DATABASE_URL": self.url(name, "rules", "rules_governance").render_as_string(hide_password=False),
                       "RULES_MDM_ACTIVATION_DATABASE_URL": self.url(name, "mdm", "mdm_governance").render_as_string(hide_password=False)}
-        for filename, extra in (("connection.env", migration), ("worker.env", {}),
+        for filename, extra in (("connection.env", connection), ("worker.env", {}),
                                 ("verifier.env", verifier), ("governance.env", governance)):
             # Clear a previous shell's owner/silver settings before choosing a duty.
-            unset = [*migration, "RULES_MDM_ACTIVATION_DATABASE_URL", "DESTINATION_MIGRATION_DATABASE_URL"]
+            unset = [*migration, "BOOKKEEPING_MIGRATION_DATABASE_URL",
+                     "BOOKKEEPING_ADMIN_DATABASE_URL",
+                     "RULES_MDM_ACTIVATION_DATABASE_URL", "DESTINATION_MIGRATION_DATABASE_URL"]
             if not include_silver:
                 unset += ["SILVER_DATABASE_URL", "SILVER_MIGRATION_DATABASE_URL"]
             lines = ["unset " + " ".join(unset)]

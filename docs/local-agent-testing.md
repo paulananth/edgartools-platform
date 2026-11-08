@@ -55,7 +55,8 @@ Four private files are written in the environment folder:
 
 Source `worker.env` before work and `verifier.env` before verification. These
 files clear owner/activation settings left by another duty and carry the silver login.
-`BOOKKEEPING_MANIFEST_ROOT` points to private local files. Connections and
+`BOOKKEEPING_MANIFEST_ROOT` is the environment's `manifests/` folder (`file://`
+or a path) where Rules freezes run configuration. Connections and
 passwords are never printed by initialization.
 
 For a core-only isolated test, add `--no-silver` to `up`. A rerun keeps an existing

@@ -22,16 +22,20 @@ def test_installed_rules_and_real_workers_complete_and_resume_one_run(installed,
         rules_owner, rules_runtime, rules_role = stack.enter_context(database_factory())
         owner, worker, role = stack.enter_context(database_factory())
         journal_owner, journal, journal_role = stack.enter_context(database_factory())
+        owner_url = owner.url.render_as_string(hide_password=False)
         env = {"RULES_MIGRATION_DATABASE_URL": rules_owner.url.render_as_string(hide_password=False),
                "RULES_DATABASE_URL": rules_runtime.url.render_as_string(hide_password=False),
                "RULES_MDM_ACTIVATION_DATABASE_URL": "",
-               "BOOKKEEPING_MIGRATION_DATABASE_URL": owner.url.render_as_string(hide_password=False),
                "BOOKKEEPING_DATABASE_URL": worker.url.render_as_string(hide_password=False),
                "BOOKKEEPING_MANIFEST_ROOT": (root / "runs").as_uri(),
                "CHANGE_JOURNAL_MIGRATION_DATABASE_URL": journal_owner.url.render_as_string(hide_password=False),
                "CHANGE_JOURNAL_DATABASE_URL": journal.url.render_as_string(hide_password=False)}
         def command(*args, verifier=False, report=True):
-            selected = {**env, **({"BOOKKEEPING_DATABASE_URL": reader.url.set(database=owner.url.database).render_as_string(hide_password=False)} if verifier else {})}
+            selected = {**env}
+            if args[:2] in (("bookkeeping", "init"), ("bookkeeping", "migrate"), ("bookkeeping", "grant-profile")):
+                selected["BOOKKEEPING_DATABASE_URL"] = owner_url
+            elif verifier:
+                selected["BOOKKEEPING_DATABASE_URL"] = reader.url.set(database=owner.url.database).render_as_string(hide_password=False)
             result = _run(python, "-m", "edgar_warehouse.cli", *args, env=selected, cwd=root)
             if result.returncode:
                 (root / "private-control-pipeline.log").write_text(result.stdout + "\n" + result.stderr)

@@ -20,10 +20,15 @@ unsupported required stage is a blocker, not a reason to drop that stage.
 ## Configuration and execution
 
 Supply connection URLs through the environment without printing credentials:
-`BOOKKEEPING_DATABASE_URL`, `RULES_DATABASE_URL`,
-`BOOKKEEPING_MANIFEST_ROOT` and `CHANGE_JOURNAL_DATABASE_URL`; MDM work also needs
-`MDM_DATABASE_URL`. Activation/registration connections and provisioning are
-described in [the specification](SPEC.md).
+`BOOKKEEPING_DATABASE_URL`, `RULES_DATABASE_URL` and
+`CHANGE_JOURNAL_DATABASE_URL`; MDM work also needs `MDM_DATABASE_URL`.
+Source `worker.env` before work (`BOOKKEEPING_DATABASE_URL` is the runtime
+login) and `verifier.env` before verify. Owner login is `connection.env`
+(init and migrate; see SPEC). `BOOKKEEPING_MANIFEST_ROOT` is the local folder
+(`file://` or a path) where Rules freezes each run's configuration;
+`local-test-stores.py` writes it into `worker.env` as that environment's
+`manifests/` folder. On AWS it is an S3 prefix. Activation/registration
+connections and provisioning are described in [the specification](SPEC.md).
 Old run ids are not fallbacks.
 
 For a new or changed Rules body, write only the planned configuration through

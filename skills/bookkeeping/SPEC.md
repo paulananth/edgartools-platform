@@ -345,24 +345,18 @@ and pending journal deliveries are retained.
 
 ## Local use
 
-Use an isolated PostgreSQL 16 instance. Provisioning creates empty stores and
-restricted logins under NOLOGIN owners. It refuses to adopt databases owned by
-another workstream. Passwords come from environment variables and are not
-printed or committed.
-
-```bash
-uv run --extra mdm infra/scripts/provision-clean-bookkeeping.py --rules
-```
-
-The script requires `BOOKKEEPING_ADMIN_DATABASE_URL`,
-`BOOKKEEPING_RUNTIME_PASSWORD` and, with `--rules`,
-`RULES_AGENT_PASSWORD`. Set runtime connection variables to the created
-logins. `BOOKKEEPING_MANIFEST_ROOT` names file storage for offline acceptance
-or an S3 prefix for AWS.
+Use the shared local PostgreSQL 16 server
+(`infra/scripts/local-test-stores.py up <name>`). It creates empty stores,
+restricted logins under NOLOGIN owners, and private env files. It refuses to
+adopt databases owned by another workstream. `connection.env` sets
+`BOOKKEEPING_DATABASE_URL` to the owner; `worker.env` sets it to the runtime
+login. `BOOKKEEPING_MANIFEST_ROOT` in `worker.env` is that environment's
+`manifests/` folder (`file://` or a path). On AWS it is an S3 prefix. Source
+`worker.env` before work; never print the files.
 
 Existing control databases can be migrated explicitly with
 `bookkeeping migrate --runtime-role <role>` and `rules init`, using
-`BOOKKEEPING_MIGRATION_DATABASE_URL` and `RULES_MIGRATION_DATABASE_URL`.
+`BOOKKEEPING_DATABASE_URL` set to the owner login and `RULES_MIGRATION_DATABASE_URL`.
 Use `bookkeeping init` only to initialize the fresh control schema;
 `bookkeeping migrate` refuses a missing schema. `change-journal init` or
 `change-journal migrate` and `bookkeeping init-guard` use their separate

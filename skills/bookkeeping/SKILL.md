@@ -5,8 +5,6 @@ description: Initialize or migrate Bookkeeping, or plan, validate, run, inspect 
 
 # Bookkeeping
 
-Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#the-seven-wastes) and drop what adds no value.
-
 > Part of the **data-platform** skill, installed as one package with its
 > commands. Start there for setup (install, stores, `edgar-warehouse doctor`)
 > and for the whole flow; this skill holds one step's detail.
@@ -175,9 +173,9 @@ Both install the selected engine's frozen migrations and refresh restricted runt
 schema blocks both. These modes create no run, import no legacy history or
 checkpoints, and do not change Rules, Change Journal or destination schemas.
 
-Use a separate migration owner in `BOOKKEEPING_MIGRATION_DATABASE_URL`
-and an existing restricted runtime role. Never use the runtime connection
-or a runtime login as the migration owner. Check
+Set `BOOKKEEPING_DATABASE_URL` to a separate migration owner and pass an
+existing restricted runtime role. Never use the runtime login as the
+migration owner. Check
 the configured database, selected engine/version and role before executing; do not print
 connection secrets. Then run the selected command and verify the returned
 migration checksums, five control tables, runtime privileges and zero imported
