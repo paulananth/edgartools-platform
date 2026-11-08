@@ -63,3 +63,12 @@ bind was observed. Those four Securities declare three `ISSUED_BY` links to two
 GLEIF subjects that are absent from the retained GLEIF source-record index, and
 none has a Silver issuer edge. This points to unresolved target-source coverage;
 the absent targets and Silver edges are not yet confirmed record defects.
+
+The full legacy listing scan found 1,392,524 listing rows. All 617,684 present
+MICs are valid in pinned `iso-10383-mic` version 1 and match the configured
+OpenFIGI exchange mapping; there are no missing MICs for mapped exchanges. Of
+the 774,840 rows without MIC, 414,643 have a composite FIGI and an exchange not
+in the current mapping, 42,639 have an unmapped exchange and no composite FIGI,
+and 317,558 have neither exchange nor composite venue detail. Only the first
+group is a composite/no-MIC candidate; the remaining groups still need source
+and business classification before a quality failure can be assigned.
