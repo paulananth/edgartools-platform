@@ -23,11 +23,14 @@ and security (393,683). Branch, government, international organization, and
 venue are configured but had no legacy master rows in that observation. A
 fund profile is also permitted on Company, so fund coverage must include both
 Company fund profiles and fund-structure masters. `private_equity` is not a
-configured MDM kind; classify its actual representation from the configured
-Company/fund rules and evidence rather than inferring it from a private-offering
-form. Non-US companies remain in the Company kind, whose configured jurisdiction
-field is sourced from GLEIF; report that subgroup separately from the configured
-`international_organization` kind.
+configured MDM kind. The active IAPD ADV MDM rules master adviser filings and
+custodians, not private-fund records. Retained/parallel ADV schema and docs
+describe private-fund detail and PE roster indicators, but the current local
+Silver snapshot has no private-fund table; therefore no PE cohort or record
+quality denominator is available in the active path. Do not infer PE from a
+private-offering form or fund name. Non-US companies remain in the Company kind,
+whose configured jurisdiction field is sourced from GLEIF; report that subgroup
+separately from the configured `international_organization` kind.
 
 The local legacy source assertion store contains 1,248,313 assertion rows across
 11 feeds; field and identifier presence by feed is in the issue ledger. A
