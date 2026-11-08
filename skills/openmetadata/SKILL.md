@@ -8,25 +8,32 @@ description: Write and read this platform's catalog on OpenMetadata. Use before 
 This is the only place for OpenMetadata implementation. Business meaning, the
 subject domains, the glossary words, and what a relationship type is stay in
 the data-catalog skill. This skill says how that meaning is stored on
-OpenMetadata 2.0.2. Normal publication uses `rules catalog publish`; scoped
+OpenMetadata 2.0.7. Normal publication uses `rules catalog publish`; scoped
 repair of unsupported metadata relationships follows the procedure below.
 
-The page at `/lineage` is the service view. It draws a line only when lineage
-crosses from one service to another. Edges between tables in the same database
-service do not appear there. `rules catalog publish` also writes a pipeline-to-dataset
-edge for each source pipeline, so that page shows the pipeline service feeding
-the database service. The column-by-column flow is on the table's own Lineage
-tab, `GET /api/v1/lineage/table/name/{fqn}`.
+The `/lineage` page is the service view. It is not the platform architecture
+diagram: that page names Capture, Bookkeeping, workers, MDM, Silver and Gold.
+This canvas shows one PipelineService per source or standalone pipeline, plus
+the database service. Each service and pipeline has a short `displayName`; the
+technical name stays the identity. Do not delete a service by hand; the
+DatabaseService stays.
+
+For a target's exact graph, read
+`GET /api/v1/lineage/pipeline/name/<URL-encoded-FQN>?upstreamDepth=0&downstreamDepth=1`.
+Column-by-column table lineage is on the table's Lineage tab and at
+`GET /api/v1/lineage/table/name/<URL-encoded-FQN>?upstreamDepth=1&downstreamDepth=1`.
 
 Write a plain display name and a plain first sentence on every domain, table,
-product, and relationship type. The technical name stays the identity. Do not
-open a description with a file path, a rules version, or a JSON list. A person
+product, relationship type, PipelineService and Pipeline. The technical name
+stays the identity. Do not open a description with a file path, a rules version,
+or a JSON list. A person
 should understand the first sentence without knowing the rules layout.
 
-Read the running version from `GET /api/v1/system/version`. The API behavior
-below was checked on 2.0.2; refresh the selected version's schema before another
-deployment. Treat rolling documentation as concept guidance, not proof of the
-installed API. Use the existing private endpoint and bot credentials.
+Read the target's running version from `GET /api/v1/system/version`. The local
+service was verified on 2.0.7; the versioned schemas below match it. When a
+target differs, check that release's schema and API behavior before publishing.
+Treat rolling documentation as concept guidance, not proof of the installed
+API. Use the existing private endpoint and bot credentials.
 
 ## Native objects and their connections
 
@@ -367,15 +374,27 @@ reference list.
   it checks (source datasets and silver tables from their quality rules; a master
   kind table from its identifier limits: one case per `claim.forward` and
   `claim.reverse` of each identifier in `merge/kinds/<kind>.yaml`, none where the
-  limit is null). The approved Mapping Document placement is a Markdown custom
-  property on its pipeline, with relevant source, Silver and master tables
-  linking to that pipeline. Silver-only mappings come from registered
-  `silver-*.yaml` specs. The current main-branch plan, publisher and readback do
-  not implement this projection, so do not report complete Mapping Documents as
-  published. A field mapping shown in column lineage remains separate from the
-  integration specification. A code list's edge maps its `code` to each column
-  that holds those codes. A captured file feed's edge to its dataset stays table
-  to table: a file has no columns.
+  limit is null). The complete per-source `MAPPING.xlsx` remains the
+  integration specification in the rules repository. The operator deferred
+  publishing the document itself as a Pipeline custom property (2026-11-08:
+  "defer document but publish lineage"). OpenMetadata 2.0.7 stores
+  `entity_extension.extension` in `VARCHAR(512)`, below the raw text length
+  of every source workbook. Do not embed or truncate the workbook, alter the
+  schema, or create a link property without a new operator request.
+  Publish native lineage only: each source-target Pipeline is associated with
+  its source assets and configured Silver/MDM outputs; rule-derived table and
+  column edges describe supported transformations. `rules catalog publish`
+  reconciles Pipeline edges; `rules catalog check` reads them through
+  `GET /api/v1/lineage/pipeline/name/<URL-encoded-FQN>?upstreamDepth=0&downstreamDepth=1`
+  and checks table edges separately. New source pipelines are discovered from
+  YAML; no source-specific code is needed.
+  Silver-only `MAPPING.xlsx` files have empty `Fields` sheets. Their Silver
+  specs have descriptive `source` text, not complete field-path maps; do not
+  invent column lineage from it. A code list edge maps its `code` to each
+  column that holds those codes. A captured file feed's edge to its dataset
+  stays table-to-table: a file has no columns.
+  Standalone `pipeline.yaml` files create Pipeline entities but no service
+  lineage edges in the current model.
   A page with an empty Quality tab is a table with no configured check.
 
 - A profile has one native place, the table profile. `PUT /api/v1/tables/{id}/tableProfile`
@@ -395,8 +414,8 @@ Keep configuration, send and confirmation as three separate facts:
 
 1. `edgar-warehouse rules catalog plan --root <rules>` describes the configured
    inventory and makes no API request. Count domains, glossaries, terms,
-   tables, products, quality definitions/cases, pipelines and each lineage
-   family from this plan.
+   tables, products, quality definitions/cases, pipelines, PipelineServices and
+   each lineage family from this plan.
 2. `edgar-warehouse rules catalog publish --root <rules>` sends the plan and
    reconciles only its owned scope, then runs a readback. Its report keeps the
    send and confirmation stages distinct. A successful HTTP response alone
@@ -426,13 +445,15 @@ The current CLI does not provide trustworthy per-object created-versus-updated
 counts; do not infer these from plan counts or a successful PUT. Mark them
 unavailable unless a later publisher receipt or API evidence distinguishes
 them. The structured `publish` result reports configured counts, the publisher
-response and removals separately from readback. The current `check` verifies the service, database and
-schema inventory, tables, pipelines (including tasks), and table lineage. It
-does not verify every configured domain/glossary association, product
-membership/input port, quality object, domain lineage edge, pipeline-to-table
-edge, or all table annotations. Do not describe the entire catalog as confirmed
-from that check alone; read the missing objects through the native API and
-report any remaining gap as unverified until CLI coverage exists.
+response and removals separately from readback. The current `check` verifies the
+service, database and schema inventory, tables, Pipelines (including tasks),
+native Pipeline-to-table lineage and table-to-table lineage. It does not verify
+every domain/glossary association, product membership/input port, quality
+object, domain-lineage edge, Pipeline run status, or every table annotation.
+The separate `rules catalog status --bookkeeping-run` command verifies the
+latest Bookkeeping outcome on its target Pipeline. Do not describe the entire
+catalog as confirmed from `check` alone; read the missing objects through the
+native API and report any remaining gap as unverified until CLI coverage exists.
 
 Do not create a shared glossary, a domain named `Shared`, or a `Shared` tag.
 
@@ -441,10 +462,29 @@ Do not create a shared glossary, a domain named `Shared`, or a `Shared` tag.
 OpenMetadata's `Pipeline` and `ingestionPipeline` are different objects with
 different jobs:
 
-- A `Pipeline` describes a data workflow and its lineage. Its status API accepts
-  externally reported run status through `PUT /api/v1/pipelines/{fqn}/status`;
-  the API has no trigger for this object. A status record is run evidence only
-  when the actual runner reported it and its output was verified.
+- A `Pipeline` represents one configured source target in this catalog. Bookkeeping
+  is the control/run-evidence stage within that target pipeline, not a separate
+  Pipeline or PipelineService. Report its execution outcome on the matching
+  target Pipeline; do not create a Bookkeeping Pipeline.
+  `edgar-warehouse rules catalog status --bookkeeping-run RUN_ID` resolves the
+  run's frozen source and target to the configured Pipeline, writes
+  `PUT /api/v1/pipelines/{fqn}/status`, and reads `pipelineStatus` back. Publish
+  the catalog plan first if the target Pipeline does not exist.
+  The status API requires effective Pipeline `EditStatus`. The current local identity
+  is an admin, and `rules catalog publish` confirmed the per-source plan at 12:57 ET.
+  Publishing a run's latest status still needs `BOOKKEEPING_DATABASE_URL`; it was
+  missing, so no new failure status was written.
+  This is an explicit status publication, not a Bookkeeping callback or a
+  pipeline trigger; invoke it after the run transition that needs catalog
+  visibility.
+  Running, waiting and blocked Bookkeeping runs map to `Pending`; a retryable
+  failed work item marks its task `Failed` with a generic safe summary.
+  A complete run maps to `Successful`. Bookkeeping has no terminal failed state;
+  never map a retryable attempt to overall `Failed`.
+  OpenMetadata stores only the latest Pipeline status. Bookkeeping holds the
+  current run/work-item state and attempt count, but a retry can replace its
+  prior error, so neither store promises durable per-attempt failure history.
+  The command never copies raw work-item errors or source records into OpenMetadata.
 - An `ingestionPipeline` runs a metadata connector through a configured
   pipeline-service client. `POST /api/v1/services/ingestionPipelines/trigger/{id}`
   triggers metadata ingestion. It does not start the platform's source capture,
@@ -577,9 +617,9 @@ receipt and any additional qualification in the task record, not this skill.
 - [Data Contracts: validation and enforcement limits](https://docs.open-metadata.org/v2.0.x/how-to-guides/data-contracts/spec)
 - [Ingestion execution options](https://docs.open-metadata.org/v2.0.x/deployment/ingestion)
 - [Data Quality](https://docs.open-metadata.org/v2.0.x/how-to-guides/data-quality-observability/quality)
-- [Versioned create schemas](https://github.com/open-metadata/OpenMetadata/tree/2.0.2-release/openmetadata-spec/src/main/resources/json/schema/api)
-- [Lineage schema](https://github.com/open-metadata/OpenMetadata/blob/2.0.2-release/openmetadata-spec/src/main/resources/json/schema/type/entityLineage.json)
-- [Column-tag readback implementation](https://github.com/open-metadata/OpenMetadata/blob/2.0.2-release/openmetadata-service/src/main/java/org/openmetadata/service/jdbi3/TableRepository.java)
+- [Versioned create schemas](https://github.com/open-metadata/OpenMetadata/tree/2.0.7-release/openmetadata-spec/src/main/resources/json/schema/api)
+- [Lineage schema](https://github.com/open-metadata/OpenMetadata/blob/2.0.7-release/openmetadata-spec/src/main/resources/json/schema/type/entityLineage.json)
+- [Column-tag readback implementation](https://github.com/open-metadata/OpenMetadata/blob/2.0.7-release/openmetadata-service/src/main/java/org/openmetadata/service/jdbi3/TableRepository.java)
 
 ## Local server
 
@@ -668,8 +708,41 @@ function adds `/api/v1`.
 For longer-lived writable-token requests, consult
 [Token issuance and lifetime](references/TOKEN-LIFECYCLE.md) first.
 
-A whole-service reset deletes the owned pipeline service, then the owned
-database service:
+### Upgrade the local server
+
+Check the target release's official upgrade guide and compatibility requirements before changing image pins. For the 2.0.2 → 2.0.7 upgrade, PostgreSQL 15+ and Elasticsearch 9.x are supported (9.3.0 recommended); run the metadata database migration before starting the new server.
+
+Back up the metadata database outside the repository and validate the dump with `pg_restore --list`. Preserve the `db-data` and `es-data` volumes. A pre-upgrade dump is only for rollback: restore it into a clean database and start the matching source-version server. Never restore an old-version dump over the migrated database or run an older server against the upgraded schema.
+
+Keep the `postgresql`, `execute-migrate-all`, and `openmetadata-server` images on the same target release. This repository's migration service runs `./bootstrap/openmetadata-ops.sh migrate` before the server. Use the repository entrypoint:
+
+```bash
+bash infra/openmetadata/init.sh
+```
+
+The initializer also performs the idempotent native-API demo exclusion/readback. Its release allowlist is intentionally fail-closed: qualify the target release's API behavior and tests before adding it; unknown releases must not run exclusions. After startup, verify `GET /api/v1/system/version` and the owned entity readbacks, then reindex all search indexes with the container CLI:
+
+```bash
+docker compose -f infra/openmetadata/docker-compose.yml exec -T openmetadata-server ./bootstrap/openmetadata-ops.sh reindex
+```
+
+Do not treat a healthy server alone as a completed upgrade. Read back the assets and lineage after reindex.
+
+### Check service and asset lineage separately
+
+In the verified 2.0.7 server, `GET /api/v1/lineage/getPlatformLineage?view=service` returns `nodes`, `upstreamEdges`, and `downstreamEdges` as keyed objects, not arrays. This is the service-level graph; a blank or sparse service canvas does not establish whether table lineage exists. Check each intended asset edge separately through `GET /api/v1/lineage/table/name/<URL-encoded-FQN>?upstreamDepth=1&downstreamDepth=1`, and inspect the returned upstream/downstream edges and column lineage.
+
+- [Docker upgrade guide](https://docs.open-metadata.org/v2.0.x/deployment/upgrade/docker)
+- [Upgrade backup and restore behavior](https://docs.open-metadata.org/v2.0.x/deployment/upgrade/how-does-it-work)
+- [Minimum requirements](https://docs.open-metadata.org/v2.0.x/deployment/minimum-requirements)
+
+
+This destructive reset is distinct from `rules catalog publish`, which keeps
+the DatabaseService and retires only the exact old shared PipelineService after
+the new per-source PipelineServices, Pipelines and lineage read back. For an
+explicitly requested whole-service reset, delete every owned PipelineService
+(source, standalone and any remaining retired shared service), then the owned
+DatabaseService:
 
 1. `GET /api/v1/services/<type>/name/<exact-owned-name>`. Check the name and
    the fully qualified name.
@@ -695,11 +768,11 @@ products, and quality definitions can contain unrelated curation. Record the
 IDs and counts for the reviewed scope.
 
 Delete in dependency order: owned products, owned quality cases, owned custom
-quality definitions, owned pipeline service, owned database service, owned
-glossary terms, owned glossaries, owned domains, then owned custom tags. Remove
-products and cases before their referenced tables. Delete the pipeline service
-before the database service. For services, verify the exact service name and
-FQN first, delete by returned ID with `recursive=true&hardDelete=true`, then
+quality definitions, every owned PipelineService, the owned database service,
+owned glossary terms, owned glossaries, owned domains, then owned custom tags.
+Remove products and cases before their referenced tables. Delete all owned
+PipelineServices before the database service. For each service, verify the exact
+service name and FQN first, delete by returned ID with `recursive=true&hardDelete=true`, then
 repeat the GET and require 404. For each other resource, use its native API and
 returned ID; use recursive deletion only when the owned children are in the
 reviewed scope. Keep built-in definitions, classifications, tags,

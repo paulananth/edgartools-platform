@@ -43,6 +43,7 @@ import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Callable
+from uuid import UUID
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote as escape, urlencode, urlsplit
 from urllib.request import Request, urlopen
@@ -361,8 +362,36 @@ def _feeds(body: dict) -> list[tuple[str, dict]]:
     return sorted(((body.get("acquisition") or {}).get("feeds") or {}).items())
 
 
+def _pipeline_service_name(scope: str, owner: str) -> str:
+    return f"{PIPELINES_SERVICE}-{scope}-{owner.replace('.', '-')}"
+
+
+_VISIBLE_WORDS = {"sec": "SEC", "gleif": "GLEIF", "nport": "N-PORT", "iapd": "IAPD",
+                  "adv": "ADV", "openfigi": "OpenFIGI", "figi": "FIGI", "thirteenf": "13F"}
+
+
+def _visible_name(raw: str) -> str:
+    """A short label for the catalog canvas. The technical name stays the identity."""
+    parts = raw.replace(".", " ").replace("-", " ").replace("_", " ").split()
+    return " ".join(_VISIBLE_WORDS.get(part.lower(), part.capitalize()) for part in parts)
+
+
+def _pipeline_services(pipelines: list[dict], root: Path) -> list[dict]:
+    by_name = {}
+    for pipeline in pipelines:
+        by_name.setdefault(pipeline["service"], pipeline)
+    return [{"name": name,
+             "displayName": _visible_name(pipeline["name"].split(":", 2)[1]),
+             "serviceType": "CustomPipeline",
+             "description": "Configured source and standalone pipeline definitions; "
+                            f"rules digest `{rules_digest(root)}`. "
+                            "This catalog does not enable schedules or run workloads."}
+            for name, pipeline in sorted(by_name.items())]
+
+
 def _pipelines(root: Path) -> list[dict]:
     """Native catalog pipelines for every declared source and standalone target."""
+    owners = {}
     result = []
     for folder, scope, filename in (("sources", "source", "source.yaml"),
                                     ("pipelines", "pipeline", "pipeline.yaml")):
@@ -394,38 +423,79 @@ def _pipelines(root: Path) -> list[dict]:
                           "downstreamTasks": [other["name"] for other in steps
                                               if step["name"] in (other.get("requires") or [])]}
                          for step in steps]
-                pipeline = {"name": f"{scope}:{path.parent.name}:{name}", "service": PIPELINES_SERVICE,
-                               "description": f"Configured {scope} `{path.parent.name}`, target `{name}`. "
-                                              f"Definition only; approval, activation and runs are separate. "
-                                              f"Run checks: {target.get('checks') or []}.",
-                               "pipelineLocation": path.relative_to(root).as_posix(), "tasks": tasks}
-                if pipeline_metadata.get("display_name"):
-                    pipeline["displayName"] = pipeline_metadata["display_name"]
+                service_name = _pipeline_service_name(scope, path.parent.name)
+                owner = (scope, path.parent.name)
+                previous = owners.setdefault(service_name, owner)
+                if previous != owner:
+                    raise CatalogError(f"Pipeline service name collision for {service_name}")
+                pipeline = {"name": f"{scope}:{path.parent.name}:{name}",
+                            "displayName": pipeline_metadata.get("display_name")
+                            or f"{_visible_name(path.parent.name)} {_visible_name(name)}",
+                            "service": service_name,
+                            "description": f"Configured {scope} `{path.parent.name}`, target `{name}`. "
+                                           f"Definition only; approval, activation and runs are separate. "
+                                           f"Run checks: {target.get('checks') or []}.",
+                            "pipelineLocation": path.relative_to(root).as_posix(), "tasks": tasks}
                 result.append(pipeline)
     return result
 
 
-def _service_lineage(pipelines: list[dict], tables: list[dict]) -> list[dict]:
-    """The Lineage page draws a line only between services. Dataset edges stay
-    inside one database service, so that page stays blank until a pipeline
-    points at a table."""
+def _service_lineage(pipelines: list[dict], tables: list[dict], table_lineage: list[dict],
+                     root: Path) -> list[dict]:
+    """Connect each source target to its source assets and configured outputs."""
     by_source: dict[str, list[str]] = defaultdict(list)
+    table_names = {_table_name(table) for table in tables}
     for table in tables:
         schema = table["databaseSchema"]
         if ".sources." not in schema:
             continue
         source = schema.split(".sources.", 1)[1].strip('"')
         by_source[source].append(_table_name(table))
+    lineage_by_dataset: dict[str, set[str]] = defaultdict(set)
+    for edge in table_lineage:
+        if edge["to"].startswith(fqn(SERVICE, MDM) + "."):
+            lineage_by_dataset[edge["from"]].add(edge["to"])
     edges = []
     for pipeline in pipelines:
         scope, _, rest = pipeline["name"].partition(":")
-        source, _, target = rest.partition(":")
-        if scope != "source" or not by_source.get(source):
+        source_folder, _, target_name = rest.partition(":")
+        if scope != "source":
             continue
-        for table in by_source[source]:
-            pipeline_label = pipeline.get("displayName") or target
-            edges.append({"pipeline": fqn(PIPELINES_SERVICE, pipeline["name"]), "table": table,
-                          "description": f"The {pipeline_label} pipeline of {source} reads or writes this dataset."})
+        path = root / pipeline["pipelineLocation"]
+        body = files.load_source(path)
+        source = body.get("source") or source_folder
+        target = (body.get("bookkeeping") or {}).get("targets", {}).get(target_name, {})
+        steps = target.get("steps") or []
+        edge_descriptions = {
+            table: f"The {pipeline.get('displayName') or target_name} pipeline of {source} uses this source dataset."
+            for table in by_source.get(source, [])
+        }
+        datasets = {
+            fqn(SERVICE, SOURCES, source, keys["dataset"])
+            for step in steps if step["operation"] == "mdm.prepare"
+            if (keys := (step.get("input") or {}).get("keys") or {}).get("dataset")
+        }
+        if any(step["operation"] == "mastering.merge" for step in steps):
+            for dataset in datasets:
+                for table in lineage_by_dataset.get(dataset, set()):
+                    if table in table_names:
+                        edge_descriptions[table] = (
+                            f"The {pipeline.get('displayName') or target_name} pipeline of {source} "
+                            "publishes this mastered table.")
+        for step in steps:
+            if step["operation"] not in ("silver.land", "silver.derive"):
+                continue
+            silver_table = ((step.get("input") or {}).get("keys") or {}).get("silver")
+            if not silver_table:
+                continue
+            table = fqn(SERVICE, SILVER, source_folder, silver_table)
+            if table in table_names:
+                edge_descriptions[table] = (
+                    f"The {pipeline.get('displayName') or target_name} pipeline of {source} "
+                    "writes this Silver table.")
+        pipeline_fqn = fqn(pipeline["service"], pipeline["name"])
+        edges.extend({"pipeline": pipeline_fqn, "table": table, "description": description}
+                     for table, description in sorted(edge_descriptions.items()))
     return edges
 
 
@@ -884,6 +954,8 @@ def plan(root: Path | None = None) -> dict:
                        "description": f"One {_display(kind)} in the master data. "
                                       "The first dataset with a value fills each field."
                                       + _kind_profile_text(kind, profiles)})
+    pipelines = _pipelines(root)
+    pipeline_services = _pipeline_services(pipelines, root)
     return {
         "service": {"name": SERVICE, "serviceType": "CustomDatabase",
                     "description": "The Data Catalog, published one way from the rules; change the rules, "
@@ -904,11 +976,10 @@ def plan(root: Path | None = None) -> dict:
                       if silver_schemas else []),
         "tables": tables,
         "lineage": lineage,
-        "pipeline_service": {"name": PIPELINES_SERVICE, "serviceType": "CustomPipeline",
-                             "description": f"Configured pipeline definitions; rules digest `{rules_digest(root)}`. "
-                                            "This catalog does not enable schedules or run workloads."},
-        "pipelines": _pipelines(root),
-        "service_lineage": _service_lineage(_pipelines(root), tables),
+        "pipeline_services": pipeline_services,
+        "retired_pipeline_service": PIPELINES_SERVICE,
+        "pipelines": pipelines,
+        "service_lineage": _service_lineage(pipelines, tables, lineage, root),
         "profiles": [mark for mark in _profile_marks(profiles)
                      if mark["table"] in {_table_name(table) for table in tables}],
         **_meaning(root, policy, tables, lineage, read),
@@ -927,6 +998,7 @@ def plan_counts(plan: dict) -> dict:
         "quality_cases": len(plan.get("quality_cases") or []),
         "products": len(plan.get("products") or []),
         "pipelines": len(plan.get("pipelines") or []),
+        "pipeline_services": len(plan.get("pipeline_services") or []),
         "lineage": {
             "table": len(plan.get("lineage") or []),
             "pipeline": len(plan.get("service_lineage") or []),
@@ -1313,6 +1385,190 @@ def _publish_marks(plan: dict, call: Call, ids: dict[str, str]) -> None:
                       "labelType": "Manual", "state": "Suggested"}}])
 
 
+
+
+def _compare_metadata(expected, actual, where: str, differences: list[str]) -> None:
+    if where.endswith(".description") and isinstance(actual, str):
+        actual = html.unescape(actual)
+    if isinstance(expected, str) and isinstance(actual, dict) and "fullyQualifiedName" in actual:
+        actual = actual["fullyQualifiedName"]
+    if expected == [] and actual is None:
+        actual = []
+    if isinstance(expected, dict):
+        if not isinstance(actual, dict):
+            differences.append(where + ": missing object")
+            return
+        for key, value in expected.items():
+            _compare_metadata(value, actual.get(key), where + "." + key, differences)
+    elif isinstance(expected, list):
+        if not isinstance(actual, list) or len(expected) != len(actual):
+            differences.append(where + ": different list")
+        else:
+            for index, value in enumerate(expected):
+                _compare_metadata(value, actual[index], f"{where}[{index}]", differences)
+    elif expected != actual:
+        differences.append(where + ": differs")
+
+
+def _pipeline_projection_differences(plan: dict, call: Call, tables: set[str],
+                                     statuses: dict[str, dict] | None = None) -> list[str]:
+    differences = []
+
+    def compare(expected, actual, where):
+        _compare_metadata(expected, actual, where, differences)
+
+    services = {service["name"]: service for service in plan.get("pipeline_services") or []}
+    pipelines = plan.get("pipelines") or []
+    expected_by_service = defaultdict(set)
+    for pipeline in pipelines:
+        expected_by_service[pipeline["service"]].add(fqn(pipeline["service"], pipeline["name"]))
+    for name, service in services.items():
+        compare(service, call("GET", "/services/pipelineServices/name/" + escape(name, safe="")),
+                "pipeline_service." + name)
+        listed = _listed(call, "/pipelines", {"service": name}, name)
+        if {row["fullyQualifiedName"] for row in listed} != expected_by_service[name]:
+            differences.append("pipelines in " + name + ": different membership")
+
+    planned_edges: dict[str, dict[str, dict]] = defaultdict(dict)
+    for edge in plan.get("service_lineage") or []:
+        planned_edges[edge["pipeline"]][edge["table"]] = edge
+    for pipeline in pipelines:
+        pipeline_fqn = fqn(pipeline["service"], pipeline["name"])
+        actual_pipeline = call("GET", "/pipelines/name/" + escape(pipeline_fqn, safe=""),
+                               params={"fields": "displayName,tasks,pipelineStatus"}) or {}
+        if actual_pipeline.get("fullyQualifiedName") != pipeline_fqn:
+            differences.append(pipeline_fqn + ": missing or differently named pipeline")
+        compare(pipeline, actual_pipeline, pipeline_fqn)
+        if statuses and pipeline_fqn in statuses and not _status_contains(
+                statuses[pipeline_fqn], actual_pipeline.get("pipelineStatus")):
+            differences.append(pipeline_fqn + ": pipeline status differs")
+
+        graph = call("GET", "/lineage/pipeline/name/" + escape(pipeline_fqn, safe=""),
+                     params={"upstreamDepth": 0, "downstreamDepth": 1}) or {}
+        entity = graph.get("entity") if isinstance(graph.get("entity"), dict) else {}
+        nodes = [entity, *(graph.get("nodes") or [])]
+        fqn_by_id = {node["id"]: node["fullyQualifiedName"] for node in nodes
+                     if isinstance(node, dict) and node.get("id") and node.get("fullyQualifiedName")}
+        actual_edges = {}
+        for edge in graph.get("downstreamEdges") or []:
+            if edge.get("fromEntity") != entity.get("id"):
+                continue
+            table = fqn_by_id.get(edge.get("toEntity"))
+            if table in tables:
+                actual_edges[table] = edge
+        expected_edges = planned_edges.get(pipeline_fqn, {})
+        if set(actual_edges) != set(expected_edges):
+            differences.append(pipeline_fqn + ": different pipeline lineage")
+        for table in actual_edges.keys() & expected_edges.keys():
+            details = actual_edges[table].get("lineageDetails") or {}
+            where = pipeline_fqn + ".lineage." + table
+            compare(expected_edges[table]["description"], details.get("description"), where + ".description")
+            compare("PipelineLineage", details.get("source"), where + ".source")
+    return differences
+
+
+def _pipeline_status(call: Call, name: str) -> dict | None:
+    answer = call("GET", "/pipelines/name/" + escape(name, safe=""),
+                  params={"fields": "pipelineStatus"}) or {}
+    return answer.get("pipelineStatus")
+
+
+def _status_contains(expected: dict, actual: dict | None) -> bool:
+    if not isinstance(actual, dict):
+        return False
+    for key, value in expected.items():
+        held = actual.get(key)
+        if isinstance(value, dict):
+            if not _status_contains(value, held):
+                return False
+        elif isinstance(value, list):
+            if (not isinstance(held, list) or len(value) != len(held)
+                    or any(not _status_contains(wanted, found)
+                           if isinstance(wanted, dict) else wanted != found
+                           for wanted, found in zip(value, held))):
+                return False
+        elif value != held:
+            return False
+    return True
+
+
+def pipeline_status_from_bookkeeping(plan: dict, root: Path, snapshot: dict) -> dict:
+    """Map one Bookkeeping run view to the configured target Pipeline."""
+    if not isinstance(snapshot, dict):
+        raise CatalogError("Bookkeeping returned an invalid run status")
+    run = snapshot.get("run")
+    submission = run.get("submission") if isinstance(run, dict) else None
+    if not isinstance(submission, dict):
+        raise CatalogError("Bookkeeping returned an invalid run status")
+    kind, owner, target = submission.get("kind"), submission.get("name"), submission.get("target")
+    raw_run_id, state = run.get("run_id"), run.get("state")
+    try:
+        run_id = str(UUID(str(raw_run_id)))
+    except (TypeError, ValueError, AttributeError):
+        run_id = ""
+    if (not run_id or not isinstance(owner, str) or not owner or not isinstance(target, str)
+            or not target or kind not in ("source", "pipeline")
+            or state not in ("running", "waiting", "blocked", "complete")):
+        raise CatalogError("Bookkeeping returned an invalid run status")
+    root = Path(root)
+    matches = []
+    for pipeline in plan.get("pipelines") or []:
+        relative = Path(pipeline["pipelineLocation"])
+        folder = relative.parts[0] if relative.parts else None
+        pipeline_scope = "source" if folder == "sources" else "pipeline" if folder == "pipelines" else None
+        path = root / relative
+        if pipeline_scope != kind:
+            continue
+        if pipeline["name"].rsplit(":", 1)[-1] != target:
+            continue
+        body = files.load_source(path) if kind == "source" else files.load(path)
+        target_map = (body.get("bookkeeping") or {}).get("targets") or {}
+        if target not in target_map:
+            continue
+        configured_owner = (body.get("source") or path.parent.name) if kind == "source" else body.get("pipeline")
+        if configured_owner == owner:
+            matches.append(pipeline)
+    if len(matches) != 1:
+        raise CatalogError("Bookkeeping run target has no unique planned Pipeline")
+
+    pipeline = matches[0]
+    task_names = {task["name"] for task in pipeline.get("tasks") or []}
+    failed_steps = snapshot.get("failed_steps")
+    if (not isinstance(failed_steps, list)
+            or any(not isinstance(step, str) or step not in task_names for step in failed_steps)):
+        raise CatalogError("Bookkeeping failure steps do not match the target Pipeline")
+    failed_steps = set(failed_steps)
+    if state == "complete" and failed_steps:
+        raise CatalogError("A complete Bookkeeping run cannot have retryable failed steps")
+    status = {"timestamp": int(time.time() * 1000),
+              "executionStatus": "Successful" if state == "complete" else "Pending",
+              "executionId": run_id}
+    if state != "complete" and failed_steps:
+        status["taskStatus"] = [{"name": task, "executionStatus": "Failed"}
+                                for task in sorted(failed_steps)]
+        status["error"] = {
+            "errorType": "BookkeepingAttemptFailure",
+            "errorMessage": "A Bookkeeping attempt failed; inspect Bookkeeping for run details.",
+            "failedTask": sorted(failed_steps)[0],
+        }
+    return {"pipeline": fqn(pipeline["service"], pipeline["name"]), "status": status}
+
+
+def publish_pipeline_status(plan: dict, call: Call, update: dict) -> dict:
+    """Update one existing target Pipeline through OpenMetadata's run-status API."""
+    name, status = update.get("pipeline"), update.get("status")
+    planned = {fqn(pipeline["service"], pipeline["name"]) for pipeline in plan.get("pipelines") or []}
+    if name not in planned or not isinstance(status, dict):
+        raise CatalogError("Bookkeeping status does not name a planned Pipeline")
+    entity = call("GET", "/pipelines/name/" + escape(name, safe=""), params={"fields": "pipelineStatus"})
+    if not isinstance(entity, dict) or entity.get("fullyQualifiedName") != name:
+        raise CatalogError("Bookkeeping target Pipeline is not published")
+    call("PUT", "/pipelines/" + escape(name, safe="") + "/status", status)
+    if not _status_contains(status, _pipeline_status(call, name)):
+        raise CatalogError("Bookkeeping Pipeline status readback did not match")
+    return {"pipeline": name, "status": status}
+
+
 def publish(plan: dict, call: Call, draft_terms: bool = False, results: dict | None = None) -> dict:
     """Make the catalog equal to `plan`: create or update everything it names,
     then delete, inside its own service only, the tables, schemas and lineage
@@ -1377,20 +1633,43 @@ def publish(plan: dict, call: Call, draft_terms: bool = False, results: dict | N
              + "/table/name/" + escape(edge["table"], safe=""),
              {"description": edge["description"], "source": "Manual"})
     pipeline_ids = {}
-    if plan.get("pipeline_service"):
-        _upsert(call, "/services/pipelineServices", plan["pipeline_service"])
-        for pipeline in plan.get("pipelines") or []:
-            name = fqn(plan["pipeline_service"]["name"], pipeline["name"])
-            answer = _upsert(call, "/pipelines", pipeline)
-            if answer["fullyQualifiedName"] != name:
-                raise CatalogError(f"The server named pipeline {name} {answer['fullyQualifiedName']}")
-            pipeline_ids[name] = answer["id"]
+    pipeline_statuses = {}
+    pipeline_services = plan.get("pipeline_services") or []
+    retired_service = plan.get("retired_pipeline_service")
+    retired_services = [retired_service] if retired_service else []
+    for service in pipeline_services:
+        _upsert(call, "/services/pipelineServices", service)
+    for pipeline in plan.get("pipelines") or []:
+        name = fqn(pipeline["service"], pipeline["name"])
+        status = _pipeline_status(call, name)
+        if status is None:
+            for retired_service in retired_services:
+                old_name = fqn(retired_service, pipeline["name"])
+                status = _pipeline_status(call, old_name)
+                if status is not None:
+                    break
+        body = dict(pipeline)
+        answer = _upsert(call, "/pipelines", body)
+        if answer["fullyQualifiedName"] != name:
+            raise CatalogError(f"The server named pipeline {name} {answer['fullyQualifiedName']}")
+        pipeline_ids[name] = answer["id"]
+        if status is not None:
+            call("PUT", "/pipelines/" + escape(name, safe="") + "/status", status)
+            if not _status_contains(status, _pipeline_status(call, name)):
+                raise CatalogError(f"The server did not preserve the status of pipeline {name}")
+            pipeline_statuses[name] = status
+    pipeline_targets: dict[str, set[str]] = defaultdict(set)
     for edge in plan.get("service_lineage") or []:
+        pipeline_id, table_id = pipeline_ids.get(edge["pipeline"]), ids.get(edge["table"])
+        if pipeline_id is None or table_id is None:
+            raise CatalogError("Pipeline lineage names an unknown pipeline or table")
+        pipeline_targets[pipeline_id].add(table_id)
         call("PUT", "/lineage/pipeline/name/" + escape(edge["pipeline"], safe="")
              + "/table/name/" + escape(edge["table"], safe=""),
              {"description": edge["description"], "source": "PipelineLineage"})
     service = plan["service"]["name"]
-    removed = {"tables": 0, "schemas": 0, "databases": 0, "lineage": 0}
+    removed = {"tables": 0, "schemas": 0, "databases": 0, "lineage": 0,
+               "pipeline_lineage": 0, "pipelines": 0, "pipeline_services": 0}
     for table in _listed(call, "/tables", {"service": service}, service):
         if table["fullyQualifiedName"] not in ids:
             call("DELETE", f"/tables/{table['id']}", params={"hardDelete": "true", "recursive": "true"})
@@ -1422,12 +1701,43 @@ def publish(plan: dict, call: Call, draft_terms: bool = False, results: dict | N
             if edge["toEntity"] == table_id and stale:  # a link from another service is not ours to remove
                 call("DELETE", f"/lineage/table/{edge['fromEntity']}/table/{table_id}")
                 removed["lineage"] += 1
-    if plan.get("pipeline_service"):
-        pipeline_service = plan["pipeline_service"]["name"]
-        for pipeline in _listed(call, "/pipelines", {"service": pipeline_service}, pipeline_service):
-            if pipeline["fullyQualifiedName"] not in pipeline_ids:
+
+    for pipeline_fqn, pipeline_id in sorted(pipeline_ids.items()):
+        graph = call("GET", "/lineage/pipeline/name/" + escape(pipeline_fqn, safe=""),
+                     params={"upstreamDepth": 0, "downstreamDepth": 1}) or {}
+        for edge in graph.get("downstreamEdges") or []:
+            target_id = edge.get("toEntity")
+            stale = edge.get("fromEntity") == pipeline_id and target_id in ours \
+                and target_id not in pipeline_targets[pipeline_id]
+            if stale:
+                call("DELETE", f"/lineage/pipeline/{pipeline_id}/table/{target_id}")
+                removed["pipeline_lineage"] += 1
+    planned_pipeline_fqns = set(pipeline_ids)
+    for service in pipeline_services:
+        service_name = service["name"]
+        for pipeline in _listed(call, "/pipelines", {"service": service_name}, service_name):
+            if pipeline["fullyQualifiedName"] not in planned_pipeline_fqns:
                 call("DELETE", f"/pipelines/{pipeline['id']}", params={"hardDelete": "true"})
                 removed["pipelines"] = removed.get("pipelines", 0) + 1
+    pipeline_differences = _pipeline_projection_differences(plan, call, set(ids), pipeline_statuses)
+    if pipeline_differences:
+        raise CatalogError("Pipeline projection readback failed: " + "; ".join(pipeline_differences))
+    for service_name in retired_services:
+        retired = call("GET", "/services/pipelineServices/name/" + escape(service_name, safe=""))
+        if retired is None:
+            continue
+        if (retired.get("name") != service_name
+                or retired.get("fullyQualifiedName") != service_name
+                or retired.get("serviceType") != "CustomPipeline"
+                or not retired.get("id")):
+            raise CatalogError(f"Refusing to retire a pipeline service with unexpected identity: {service_name}")
+        old_pipelines = _listed(call, "/pipelines", {"service": service_name}, service_name)
+        call("DELETE", f"/services/pipelineServices/{retired['id']}",
+             params={"recursive": "true", "hardDelete": "true"})
+        if call("GET", "/services/pipelineServices/name/" + escape(service_name, safe="")) is not None:
+            raise CatalogError(f"Retired pipeline service still exists: {service_name}")
+        removed["pipeline_services"] = removed.get("pipeline_services", 0) + 1
+        removed["pipelines"] = removed.get("pipelines", 0) + len(old_pipelines)
     if draft_terms:
         _draft_terms(plan, call)
     return {"service": service, "tables": len(plan["tables"]), "lineage": len(plan["lineage"]),
@@ -1439,34 +1749,12 @@ def verify(plan: dict, call: Call, results: dict | None = None) -> dict:
     differences = []
 
     def compare(expected, actual, where):
-        if where.endswith(".description") and isinstance(actual, str):
-            actual = html.unescape(actual)
-        if isinstance(expected, str) and isinstance(actual, dict) and "fullyQualifiedName" in actual:
-            actual = actual["fullyQualifiedName"]
-        if expected == [] and actual is None:
-            actual = []
-        if isinstance(expected, dict):
-            if not isinstance(actual, dict):
-                differences.append(where + ": missing object")
-                return
-            for key, value in expected.items():
-                compare(value, actual.get(key), where + "." + key)
-        elif isinstance(expected, list):
-            if not isinstance(actual, list) or len(expected) != len(actual):
-                differences.append(where + ": different list")
-            else:
-                for index, value in enumerate(expected):
-                    compare(value, actual[index], f"{where}[{index}]")
-        elif expected != actual:
-            differences.append(where + ": differs")
+        _compare_metadata(expected, actual, where, differences)
 
     service = plan["service"]["name"]
     compare(plan["service"], call("GET", "/services/databaseServices/name/" + escape(service, safe="")), "service")
     identifiers = {}
-    for collection, scope in (("databases", service), ("schemas", service),
-                              ("tables", service), ("pipelines", plan.get("pipeline_service", {}).get("name"))):
-        if scope is None:
-            continue
+    for collection, scope in (("databases", service), ("schemas", service), ("tables", service)):
         endpoint = "databaseSchemas" if collection == "schemas" else collection
         if collection == "schemas":
             listed = [row for database in plan["databases"] for row in _listed(
@@ -1479,15 +1767,18 @@ def verify(plan: dict, call: Call, results: dict | None = None) -> dict:
             parent = entry.get("databaseSchema") or entry.get("database") or entry.get("service") or service
             name = parent + "." + quote(entry["name"])
             expected_names.add(name)
-            compare(entry, call("GET", f"/{endpoint}/name/{escape(name, safe='')}",
-                                params={"fields": "tasks"} if collection == "pipelines" else None), name)
+            compare(entry, call("GET", f"/{endpoint}/name/{escape(name, safe='')}"), name)
         if set(names) != expected_names:
             differences.append(collection + ": different membership")
         if collection == "tables":
             identifiers = names
-    if plan.get("pipeline_service"):
-        compare(plan["pipeline_service"], call("GET", "/services/pipelineServices/name/"
-                + escape(plan["pipeline_service"]["name"], safe="")), "pipeline_service")
+
+    differences.extend(_pipeline_projection_differences(plan, call, set(identifiers)))
+    retired_service = plan.get("retired_pipeline_service")
+    if (retired_service
+            and call("GET", "/services/pipelineServices/name/" + escape(retired_service, safe="")) is not None):
+        differences.append("retired pipeline service remains: " + retired_service)
+
     for name, table_id in identifiers.items():
         graph = call("GET", "/lineage/table/name/" + escape(name, safe=""),
                      params={"upstreamDepth": 1, "downstreamDepth": 0}) or {}

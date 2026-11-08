@@ -195,6 +195,9 @@ def status(engine, run_id, limit, step=None):
         items = rows(conn, select(*(work.c[key] for key in
             ("step", "unit_key", "ordinal", "state", "attempt", "attempts", "receipt", "checks", "error"))
         ).where(*selected).order_by(work.c.step, work.c.ordinal).limit(limit))
+        failures = rows(conn, select(work.c.step).where(
+            *selected, work.c.state == "waiting", work.c.attempt.is_not(None),
+            work.c.error.is_not(None)).distinct().order_by(work.c.step))
         progress = rows(conn, select(checkpoints).where(checkpoints.c.run_id == run_id))
         authority = rows(conn, select(leases).where(leases.c.run_id == run_id).order_by(
             leases.c.resource).limit(limit))
@@ -206,6 +209,7 @@ def status(engine, run_id, limit, step=None):
             case((outbox.c.delivered_at.is_(None), 0), else_=1),
             outbox.c.delivered_at, outbox.c.created_at).limit(limit))
     return {"items": items, "counts": {row["state"]: row["count"] for row in counts},
+            "failed_steps": [row["step"] for row in failures],
             "checkpoints": progress, "leases": authority, "pending_deliveries": pending,
             "deliveries": deliveries}
 

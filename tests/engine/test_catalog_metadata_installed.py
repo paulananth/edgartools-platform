@@ -9,7 +9,8 @@ def test_catalog_plan_and_all_mapping_documents_work_outside_the_checkout(instal
     result = _run(python, "-m", "edgar_warehouse.cli", "rules", "catalog", "plan", cwd=root)
     assert result.returncode == 0, result.stderr
     plan = json.loads(result.stdout)
-    assert plan["pipeline_service"]["serviceType"] == "CustomPipeline"
+    assert plan["pipeline_services"] and all(
+        service["serviceType"] == "CustomPipeline" for service in plan["pipeline_services"])
     assert plan["pipelines"] and all(p["tasks"] for p in plan["pipelines"])
     assert any(t["databaseSchema"].endswith(".relationships") for t in plan["tables"])
     check = _run(python, "-m", "edgar_warehouse.cli", "rules", "mapdoc", "check", cwd=root)

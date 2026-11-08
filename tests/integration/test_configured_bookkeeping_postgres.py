@@ -328,6 +328,7 @@ def test_one_steps_status_counts_only_its_units_and_a_busy_unit_is_claimed_again
     waiting = book.status(rid, step="s1")
     assert waiting["counts"] == {"pending": 2, "waiting": 1}
     assert [(i["unit_key"], i["error"]) for i in waiting["items"] if i["state"] == "waiting"] == [("0", CONTENTION)]
+    assert waiting["failed_steps"] == []
     for key in "012":
         complete(book, rid, key)
     assert book.status(rid, step="s0")["counts"] == {"verified": 3}
@@ -335,6 +336,25 @@ def test_one_steps_status_counts_only_its_units_and_a_busy_unit_is_claimed_again
     complete(book, rid, "0", step="s1")  # the waiting unit is claimed again once s0 is verified
     assert book.status(rid, step="s1")["counts"] == {"pending": 2, "verified": 1}
     assert book.status(rid)["counts"] == {"pending": 2, "verified": 4}
+
+
+def test_status_exposes_failed_attempt_steps_without_error_text(databases, tmp_path):
+    book, run_id, _, _ = submit(databases, tmp_path, count=1)
+    claim = book.claim(run_id, "s0", "0", sleep=lambda _: None)
+    assert claim
+
+    book.fail(book.envelope(claim), "private failure detail")
+    status = book.status(run_id)
+
+    assert status["failed_steps"] == ["s0"]
+    assert "private failure detail" not in json.dumps(status["failed_steps"])
+    retry = book.claim(run_id, "s0", "0", sleep=lambda _: None)
+    assert retry
+    retried = book.status(run_id)
+    assert retried["failed_steps"] == []
+    assert retried["items"][0]["attempts"] == 2
+    assert retried["items"][0]["error"] is None
+    book.close()
 
 
 def staged_submission(databases, tmp_path):
