@@ -12,12 +12,10 @@ OpenMetadata 2.0.7. Normal publication uses `rules catalog publish`; scoped
 repair of unsupported metadata relationships follows the procedure below.
 
 The `/lineage` page is the service view: it aggregates exact Pipeline/Table
-edges to their containing services. Before migration, the local instance
-showed one shared PipelineService and the DatabaseService. `rules catalog plan`
-now declares one PipelineService per source; after `publish` reads back each
-new service, Pipeline and edge, it retires only the old shared PipelineService.
-The current server has not received that change because the bot lacks write
-permissions. Never delete a service by hand; the DatabaseService stays.
+edges to their containing services. The local instance now has one PipelineService
+per source and per standalone pipeline owner. `rules catalog publish` read back
+each new service, Pipeline and edge, then retired the old shared PipelineService.
+Do not delete a service by hand; the DatabaseService stays.
 
 For a target's exact graph, read
 `GET /api/v1/lineage/pipeline/name/<URL-encoded-FQN>?upstreamDepth=0&downstreamDepth=1`.
@@ -470,12 +468,10 @@ different jobs:
   run's frozen source and target to the configured Pipeline, writes
   `PUT /api/v1/pipelines/{fqn}/status`, and reads `pipelineStatus` back. Publish
   the catalog plan first if the target Pipeline does not exist.
-  The status API requires effective Pipeline `EditStatus`. Rechecked 2026-11-08 12:36 ET:
-  private login succeeded, the identity is not an admin, has no roles, and belongs only
-  to the Organization team. Object-level checks still returned `notAllow` for Pipeline
-  `EditStatus`/`EditLineage`, Table `EditLineage`, and the owned PipelineService
-  `Create`/`Delete`/`EditAll`; no metadata write was attempted. Recheck after an admin
-  assigns a role with those operations.
+  The status API requires effective Pipeline `EditStatus`. The current local identity
+  is an admin, and `rules catalog publish` confirmed the per-source plan at 12:57 ET.
+  Publishing a run's latest status still needs `BOOKKEEPING_DATABASE_URL`; it was
+  missing, so no new failure status was written.
   This is an explicit status publication, not a Bookkeeping callback or a
   pipeline trigger; invoke it after the run transition that needs catalog
   visibility.
