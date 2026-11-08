@@ -77,6 +77,13 @@ owned, and identity history, effective times, and the producing rule version
 still need tracing. The proof validates matching behavior on its measured
 cohort; it does not attest every current field pair.
 
+The SEC Company classification queue contains 69,816 distinct blocking source
+records. The configured rules give 1,515 a probable kind (599 Company, 658
+Person, 226 fund structure, 32 government); 68,301 have no probable kind,
+including 67,166 at the final no-match step. The queue is a broad classification
+coverage gap to investigate, but those holds are not record defects without
+business review.
+
 The full legacy listing scan found 1,392,524 listing rows. All 617,684 present
 MICs are valid in pinned `iso-10383-mic` version 1 and match the configured
 OpenFIGI exchange mapping; there are no missing MICs for mapped exchanges. Of
