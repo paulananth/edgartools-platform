@@ -312,6 +312,22 @@ field-only checks.
 | Security | N-PORT issuer-placeholder and filed share-class checks; 13F share-class check; CUSIP/ISIN identifier checks. | Effective legacy master identities have zero repeated CUSIP, FIGI or ISIN values; repeated raw N-PORT ISIN claims are withheld under the CUSIP-first rule. A candidate uniqueness/cardinality check must measure effective identifiers and verify source-level conflicts remain withheld; do not fail every repeated raw claim. Also trace `ISSUED_BY` endpoints and classify remaining listing MIC groups. |
 | Branch, government, international organization, venue | No populated master family in the legacy snapshot; no downstream quality denominator. | Do not emit zero-failure checks over empty populations. Inspect deferred government candidates and venue lookup behavior after an authoritative populated governed snapshot is available. |
 
+### Check disposition across the audited families
+
+No new check is enabled from this audit yet: the investigated anomalies are
+either explained by configured behavior, lack a complete denominator, or have
+not been confirmed as defects. Existing measured row-local Company checks pass
+on the stated snapshot. This is not a claim that every entity has been fully
+traced or that all data is defect-free.
+
+| Finding or predicate | DataKitchen TestGen category | Existing platform support | Decision |
+|---|---|---|---|
+| Security effective identifier cardinality and source-claim disposition | Uniqueness and consistency | Identifier claims are constrained by the merge contract; field-only Silver checks cannot see accepted versus withheld claims. | No effective-master duplicate was observed for CUSIP, FIGI, or ISIN. Keep CUSIP-keyed conflicting ISIN claims withheld; do not flag raw repeats as defects. |
+| Silver MDM pointers resolve to the correct current entity | Referential integrity | No current field-only check can join Silver to the authoritative MDM resolver. | Candidate for a generic cross-store Silver check; requires current governed MDM data and a planted bad-pointer proof. |
+| Typed relationship type, direction, endpoints, and effective dates agree with MDM | Referential integrity and consistency | No existing check can compare the Silver edge with authoritative typed MDM relationships. | Candidate for a relationship-aware extension to the cross-store check; source-only pairs remain unconfirmed while N-PORT load steps are pending. |
+| Owner link matches the classified Person-or-Company role | Completeness and consistency | The current check kinds do not express conditional cross-field rules. | Candidate for a conditional check only after classification is final; keep the 781 currently held rows out of failure counts. |
+| SEC incorporation place and GLEIF jurisdiction agree for the same entity and time | Consistency | No current field-only check can compare both sources and effective-time history. | Investigate the 134 disagreements first; do not add an enabled check until entity identity, rule version, and effective time explain them. |
+
 These configurations already cover source-level completeness, validity, and
 some consistency conditions. The measured cross-store identity and typed-edge
 predicates are referential checks in DataKitchen TestGen terms, but require a
