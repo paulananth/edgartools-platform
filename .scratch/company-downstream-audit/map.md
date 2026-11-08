@@ -55,6 +55,11 @@ runs remain `running`, with holding land pending in both and links pending in
 the later run. Do not refresh, delete, recreate, resume, or cancel data as part
 of this read-only audit.
 
+The 12,937 N-PORT fund structures all have their SEC series identifier. Of the
+70 without a master LEI, every retained source assertion also lacks an LEI
+claim; the configured series-ID rule allows identity without one. This is not
+a missing-LEI defect and should not become a mandatory-field check.
+
 The full legacy identifier scan found one ticker value held by four Security
 masters, above the configured forward claim of three. Both retained Form 4
 security assertions carrying that value are open `conflicting_identifiers`

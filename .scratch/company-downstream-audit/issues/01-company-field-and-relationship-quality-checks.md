@@ -40,6 +40,7 @@ invented examples, never names or identifiers from records.
 - [x] Trace the 134 jurisdiction candidates against their accepted legacy masters, field winners, and retained assertion presence (pinned place mapping plus configured `places_agree` logic, read-only 2026-11-08 11:08 ET). All 134 are accepted Company masters; each field winner is from its expected source, and both SEC Company and GLEIF Level 1 assertions are retained for every candidate. This rules out missing source assertions as the explanation, but not stale/effective-time or identity-history causes.
 - [x] Break down SEC Company classification deferrals by configured rule step and distinct source-record locator (read-only 2026-11-08 11:10 ET). All 69,816 blocking events map to distinct locators. Step 11 leaves 67,166 unclassified with no probable kind; step 1 adds 1,062 without a probable kind; step 7 adds 73 without a probable kind. The other 1,515 are explicitly held as probable Company (599), Person (658), fund structure (226), or government (32). This measures the configured hold-back population without treating every deferral as a defect.
 - [x] Re-measure row-local configured Company Silver checks on the full current stored population (read-only 2026-11-08 11:19 ET). All 5,134,979 `company_fact` rows (3,113,260 with both period dates), 96,807 `company_line_item` rows (46,971 with both period dates), and 168,360 `company_measure` rows were checked. `period_start_not_after_end`, `empty_value_has_reason`, and `window_years_known` each have zero failing rows; all three tables have zero persisted `quality` tags. `one_value` checks remain unmeasured here because they are scoped to an individual delivery, not the combined historical table.
+- [x] Reconcile the 70 N-PORT fund structures without a master LEI to their retained assertions (read-only 2026-11-08 11:24 ET). All 70 have a `sec_series_id` in the master and source assertion; none of their retained N-PORT fund assertions claims an LEI. The configured series-ID rule can identify them without a LEI, so the 70 are not defects and are not comparable to the two proving-run exceptions that lacked identity evidence.
 - [ ] Reproduce the earlier protocol-7 entity-link resolver comparison for every populated Silver link. Its prior row-level counts cannot be rerun while governed MDM tables are empty on the current shared connection; historic producer and safe refresh timing also remain unresolved.
 - [ ] Map Silver relationship endpoints from legacy IDs to current MDM identities by configured source keys, then compare typed edges, direction, and effective dates. Silver has 55,320 rows; the governed relationship projection is empty in the current connection, while a prior snapshot reported 13,442. Confirm the loaded producer and identity transition before deciding whether to repair or retire any rows.
 - [ ] Finish classifying Security listing venue coverage. Confirm the 414,643 no-MIC composite rows are valid composite listings; classify the 42,639 rows with an unmapped exchange and no composite FIGI against the pinned RDM MIC crosswalk; establish whether the 317,558 rows with neither exchange nor composite venue detail are expected for this source. Do not classify them as failures merely because MIC is absent.
@@ -144,11 +145,13 @@ the matching deferred reasons below.
 
 The N-PORT fund feed contains two assertions per 12,937 series in this
 snapshot. Its 140 assertions without LEI correspond to 70 fund masters without
-LEI, above the two-record exception in the pinned proving rationale. This is a
-reconciliation candidate: series ID remains the configured identifying key,
-and the proving snapshot/source delivery must be matched before treating it as
-a defect. The 5,671 SEC ownership-security assertions have no nonempty fields
-or identifiers; their cross-reference and consumer path still needs tracing.
+LEI. Read-only source-to-master tracing confirmed that all 70 have a series ID
+and none of their retained source assertions claims an LEI. The configured
+series-ID rule identifies them without a LEI; the two proving-run exceptions
+refer to records without identity evidence and are not a missing-LEI
+threshold. This is an allowed source state, not a defect. The 5,671 SEC
+ownership-security assertions have no nonempty fields or identifiers; their
+cross-reference and consumer path still needs tracing.
 
 ### Representative legacy control traces
 
@@ -197,13 +200,12 @@ the field's source and business contract.
 | Person (31,125) | `legal_name` 31,125 | `cik` 31,125 |
 | Security (393,683) | `asset_category` 389,114; `currency` 393,500; `derivative_category` 5,264; `investment_country` 392,902; `issuer_type` 390,300; `market_sector` 382,648; `name_of_issuer` 393,674; `restricted` 390,318; `security_type` 382,500; `security_type2` 380,488; `share_class` 1,449; `title_of_class` 393,510 | `cusip` 375,014; `figi` 382,649; `isin` 390,458; `loanx` 424; `sedol` 22,092; `ticker` 129,767 |
 
-The 70 fund structures without a nonempty LEI exceed the two-record exception
-count stated in the pinned proving-run rationale. The binding rules allow the
-SEC series ID to identify a fund without an LEI, and the N-PORT combine rule
-skips an LEI that is absent or not uniquely attributable. This is therefore a
-reconciliation candidate, not a confirmed defect: identify the snapshot and
-source-delivery difference from the proving run before deciding whether the
-additional missing LEIs are expected.
+The 70 fund structures without a nonempty LEI all retain a SEC series ID, and
+their source assertions carry no LEI claim. The configured binding rule makes
+the series ID sufficient for identity; the LEI is optional and only joins when
+the source claim is unique. The proving-run count of two records without
+identity evidence is not an LEI-completeness threshold. No missing-LEI defect
+is observed in this cohort.
 
 ### Earlier reported governed MDM source-record coverage (not reproducible)
 
@@ -287,7 +289,7 @@ truthfully as existing field-only checks.
 | Family | Existing configured checks | Measured gap or next check |
 |---|---|---|
 | Company, including international Company records | SEC name presence, registered-agent/placeholder-address handling, pinned SEC place-code validity; GLEIF name and address checks; ADV name presence; N-PORT registrant provisional registration-start flag. | Reconcile SEC incorporation place with GLEIF jurisdiction for the 134-record candidate cohort after source/effective-time tracing. Use a cross-source consistency check only after the cause is resolved; the observed field-presence counts are not completeness targets. |
-| N-PORT fund structure | Series ID and LEI format/cardinality rules; `subfund_start_is_authoritative` flags when the start is provisional. | Reconcile 70 masters without LEI against the two-record proving exception. Keep the SEC series ID as sufficient identity when LEI is absent or nonunique. A check must distinguish an allowed missing LEI from an unapproved exception. |
+| N-PORT fund structure | Series ID and LEI format/cardinality rules; `subfund_start_is_authoritative` flags when the start is provisional. | The 70 masters without LEI all have a series ID and no source LEI claim; this is allowed by the configured rule. Do not make LEI mandatory. Holdings remain unavailable in the observed snapshot. |
 | Private equity and ADV private funds | No PE kind or PE-specific quality contract in the current MDM/source rules. Current MDM has N-PORT `fund_structure` records and `fund` profiles; retained ADV schemas describe private-fund detail and PE roster indicators but do not connect those records to the active `iapd.adv` MDM/Silver path. | Do not infer PE from `private_offering` or fund names. Reconcile the intended source, capture, Bookkeeping path, and consumer; only then define a supported PE cohort and check denominator. The current snapshot cannot support a PE record-quality check. |
 | Person | SEC submissions and ownership owner name-presence and letter-pattern checks; CIK identifier contract. | Trace owner classification to the conditional Person/Company links. A null Company link is not a defect for an individual; this needs a conditional cross-field/reference check. |
 | Security | N-PORT issuer-placeholder and filed share-class checks; 13F share-class check; CUSIP/ISIN identifier checks. | Trace `ISSUED_BY` endpoints to configured issuer kinds and evidence. Classify listing MICs using exchange code plus the pinned MIC reference; absence is not failure for composite listings. |
