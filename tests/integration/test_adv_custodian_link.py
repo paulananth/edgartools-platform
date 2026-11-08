@@ -27,7 +27,7 @@ from tests.integration import test_mdm_postgres as core
 from tests.support import source_chain as chain
 from tests.support.rules_authority import register_dataset
 
-NAME, FILINGS, CUSTODIANS = "iapd.adv", "iapd.adv.filings.v1", "iapd.adv.custodians.v1"
+NAME, FILINGS, CUSTODIANS = "iapd.adv", "iapd.adv.filings.v2", "iapd.adv.custodians.v1"
 FOLDER = files.ROOT / "sources" / NAME
 CRD, BD, LEI = "999001", "8-99901", "9999000000EXAMPLE016"  # invented; the LEI's check digits are valid
 MAY, JUNE = "2026-05-31T00:00:00+00:00", "2026-06-30T00:00:00+00:00"

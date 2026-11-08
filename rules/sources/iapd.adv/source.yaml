@@ -83,7 +83,7 @@ bookkeeping:
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, mdm.prepared]
           input:
-            keys: {table: filings, record_column: record, dataset: iapd.adv.filings.v1}
+            keys: {table: filings, record_column: record, dataset: iapd.adv.filings.v2}
             readings: {record: {all: record}}
         - name: merge
           operation: mastering.merge
@@ -160,7 +160,7 @@ bookkeeping:
           checks: [input.hash, output.receipt, journal.recorded]
       checks: [manifest.hash, work.accounting, journal.delivered]
 dataset_contracts:
-  iapd.adv.filings.v1:
+  iapd.adv.filings.v2:
     contract:
       provider: SEC Investment Adviser Public Disclosure (IAPD)
       family: iapd_adv_bulk

@@ -273,17 +273,19 @@ automatic_rules:
 - kind: company
   family: binding
   rule_id: iapd-adv-crd
-  rule_version: 2026-10-09.1
+  rule_version: 2026-11-08.filings-v2
   verdict: bind
   activation: deterministic
 # iapd-adv-cik: on under the operator's 2026-11-08 word "Both" (the CIK join with the Schedule D 7.A
 # link), on the limited test of invented records (tests/integration/test_adv_cik_join.py): an adviser
 # joins the Company holding its CIK in either order, a filing listing two Companies' CIKs goes to
-# review and merges nothing, and a second pass changes nothing.
+# review and merges nothing, and a second pass changes nothing. The filings carry their CIKs under a
+# new dataset code (iapd.adv.filings.v2), so iapd-adv-crd and iapd-adv-custodian-name read it at
+# their "filings v2" versions; nothing else in them changes.
 - kind: company
   family: binding
   rule_id: iapd-adv-cik
-  rule_version: 2026-11-08.adviser-cik
+  rule_version: 2026-11-08.adviser-cik-filings-v2
   verdict: bind
   activation: deterministic
 - kind: company
@@ -305,7 +307,7 @@ automatic_rules:
 - kind: company
   family: exact_name_binding
   rule_id: iapd-adv-custodian-name
-  rule_version: 2026-11-04.exact-name
+  rule_version: 2026-11-08.filings-v2
   verdict: bind
   activation: exact_name
   proof:

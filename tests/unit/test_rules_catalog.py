@@ -37,7 +37,7 @@ def test_every_source_feed_dataset_and_mdm_field_is_in_the_catalog():
     company = tables["edgartools-rules.mdm.master_records.company"]
     assert {"name", "address", "jurisdiction", "state_of_incorporation"} <= {c["name"] for c in company["columns"]}
     name = next(c for c in company["columns"] if c["name"] == "name")
-    assert ("sec.company.v1, then gleif.level1.v1, then iapd.adv.filings.v1, then "
+    assert ("sec.company.v1, then gleif.level1.v1, then iapd.adv.filings.v2, then "
             "iapd.adv.custodians.v1, then sec.nport.registrant.v1: the first with a value wins") in name["description"]
     relationships = tables['edgartools-rules.sources.gleif."gleif.relationships.v1"']
     assert "It supplies no Company fields." in relationships["description"]
@@ -62,7 +62,7 @@ def test_a_second_kind_from_another_sources_files_has_its_feed_lineage():
     feed = [e for e in plan["lineage"] if e["to"].endswith('"sec.submissions.person.v1"')]
     assert [e["from"] for e in feed] == ['edgartools-rules.sources."sec.company".submissions']
     # A source whose family no feed captures gets no feed lineage; GLEIF's own feed leads to it.
-    assert not [e for e in plan["lineage"] if e["to"].endswith('"iapd.adv.filings.v1"')]
+    assert not [e for e in plan["lineage"] if e["to"].endswith('"iapd.adv.filings.v2"')]
     assert [e["from"] for e in plan["lineage"] if e["to"].endswith('"gleif.level1.v1"')] == [
         "edgartools-rules.sources.gleif.golden_copy"]
 

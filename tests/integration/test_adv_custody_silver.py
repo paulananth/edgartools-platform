@@ -24,7 +24,7 @@ from tests.integration import test_mdm_postgres as core
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
 
 FOLDER = files.ROOT / "sources" / "iapd.adv"
-FILINGS, CUSTODIANS = "iapd.adv.filings.v1", "iapd.adv.custodians.v1"
+FILINGS, CUSTODIANS = "iapd.adv.filings.v2", "iapd.adv.custodians.v1"
 # Two custody rows of one filing: a broker-dealer named by its number, and a related person named by its name.
 ROWS = [
     {"filing_id": "F1", "row": 1, "custodian_id": "bd:8-00001", "related_person": "N", "amount": "1500000000", "published": "2026-06-30T00:00:00Z"},

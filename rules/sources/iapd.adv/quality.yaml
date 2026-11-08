@@ -2,7 +2,7 @@
 # set aside as an open exception (never merges, never stops the run).
 version: iapd-adv-quality-v1
 quality:
-  iapd.adv.filings.v1:
+  iapd.adv.filings.v2:
     checks:
     - id: filing_name_present
       test: present@1

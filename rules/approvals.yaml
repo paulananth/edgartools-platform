@@ -5,7 +5,7 @@ version: 1
 approvals:
 - kind: merge
   name: platform
-  digest: 4beb59d943360db4714cdc6149426571e6eac6d5cf7bfc09885a943a0e777383
+  digest: 783990f85f4f438ca06de1a999df9cbb87ad9ad8f750af1244f5d0e909c8db00
   by: Operator
   words: Approved the rules always
   at: '2026-11-08'
@@ -33,7 +33,7 @@ approvals:
   finalized: PR 1481
 - kind: source
   name: iapd.adv
-  digest: 6a888116635e0fe998b46d3b74f264c6a43b73bb1dd5a81219c8db49ad4a9301
+  digest: 22c52994fee9bfe0fc42361fba96dc363cacde72d43ac5f1a79ef9c346e54757
   by: Operator
   words: Approved the rules always
   at: '2026-11-08'

@@ -17,7 +17,7 @@ from tests.integration.test_openfigi_security import bound
 from tests.mdm import policy_layers
 from tests.support import masters
 
-FILINGS, COMPANIES = "iapd.adv.filings.v1", "sec.company.v1"
+FILINGS, COMPANIES = "iapd.adv.filings.v2", "sec.company.v1"
 ADVISER_CIK, FUND_CIK, NEW_CIK = "0000900001", "0000900002", "0000900003"
 
 

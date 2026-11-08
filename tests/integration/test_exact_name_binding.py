@@ -17,7 +17,7 @@ from tests.integration.test_openfigi_security import bound
 from tests.mdm import policy_layers
 from tests.support import masters
 
-FILINGS, CUSTODIANS = "iapd.adv.filings.v1", "iapd.adv.custodians.v1"
+FILINGS, CUSTODIANS = "iapd.adv.filings.v2", "iapd.adv.custodians.v1"
 NAME_ONE, NAME_TWO, NAME_NONE = "a1" * 32, "b2" * 32, "c3" * 32  # invented name ids (64 hex)
 def policy_body() -> dict:
     """The real policy: the rule is declared and on in it (ticket 01)."""
