@@ -90,6 +90,21 @@ counts until source identity, effective time, and the intended generation are
 reconciled. Do not treat a source name or field-presence count by itself as a
 quality failure.
 
+## Cross-store pointers
+
+Before assessing a nullable downstream pointer, read its declared source key,
+source binding, target kind, null policy, and time basis. Pin the Silver landing
+and MDM generations. Classify the key as absent, unmatched, uniquely resolved,
+ambiguous or held, or uniquely resolved without a source binding. An identifier
+match alone does not prove the configured source route exists. Count a pointer
+as a defect only when the pinned contract requires it, one authoritative target
+and source binding exist for that generation and time, and the verified landing
+is null or points elsewhere. Keep expected no-key, unmapped, ambiguous, deferred,
+and review-held cases separate; never turn them into a blanket nonnull check.
+If the available quality primitive cannot express this comparison, document
+the required cross-store capability and prove it with a planted invalid pointer
+before proposing activation.
+
 ## Modes, in order
 
 **plan → measure → decide → mark → write.** For a live feed, start at

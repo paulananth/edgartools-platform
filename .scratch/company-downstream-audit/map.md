@@ -230,12 +230,34 @@ and neither had verified `land_holding`, but `silver.nport_holding` contained
 `(accession_number, holding_id)` keys and every row had a registrant CIK and
 registrant pointer. Of these, 4,516,886 had an exact current series-to-fund
 pointer; 830,315 had no series and no fund pointer; and 668 rows had a series
-with no current fund master (four distinct series IDs). Security pointers
+with no current fund master (seven distinct series IDs). Security pointers
 were null on 1,386,984 rows, including 197,709 without a Security key. The
 remaining 1,189,275 keyed rows with null pointers still require identity
 classification. Silver presence does not prove which Bookkeeping run landed
 the rows or that either run completed; keep the run and table evidence
 separate until the landing generation is tied to the load.
+
+The 18:35 ET read-only pointer trace classified the 1,189,275 keyed rows with
+null Security pointers across 6,254 keys. No key matches multiple current
+Security masters. 5,978 keys/1,187,745 rows have neither a current matching
+identifier nor a retained N-PORT Security v2 record; 270 keys/1,365 rows
+match one current Security identifier but have no v2 record; four keys/19
+rows have an unbound v2 record with no current identifier match; and two
+keys/146 rows match one current identifier but remain unassigned in v2.
+Six open `conflicting_identifiers` review sightings cover the unassigned
+source records. The current key and source evidence explain the nulls; they
+do not establish a pointer defect. At 18:35 ET both N-PORT runs remained
+active without verified `land_holding`; one had 14/17 items verified and
+`merge` in `failed_steps`, while the other had 3/18 verified and was waiting
+in the holding path. The Silver landing still cannot be tied to either run.
+
+The seven Silver series keys without a current fund master have no retained
+`sec.nport.fund.v1` assertion and map to 14 blocking `invalid_lei_checksum`
+deferrals. Their 668 rows have null fund pointers as the active contract
+requires for those held identities. Do not blanket-check fund or Security
+pointer presence; diagnose the merge failure and tie the existing Silver
+rows to a verified receipt and intended MDM generation before deciding
+whether any cross-store check is actionable.
 
 Other legacy source assertions declare 48 `SUCCESSOR_ENTITY`, 3,017
 `CUSTODIAN`, 4,962 `BENEFICIAL_OWNER_OF`, and 14,886 `EMPLOYED_BY`
