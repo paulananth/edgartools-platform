@@ -681,15 +681,14 @@ class TestAKindLevelDefault:
 
     @pytest.mark.parametrize("kind", ["company", "person", "fixture_kind"])
     def test_source_priority_refusal_follows_the_configured_kind(self, kind):
-        from edgar_warehouse.mdm.merge import check_source_priorities
-        from edgar_warehouse.mdm.store import Conflict
+        from edgar_warehouse.mastering.merge import check_source_priorities
 
         policy = {"kinds": {kind: {"defaults": {"sources": ["fixture.primary"]}}}}
-        with pytest.raises(Conflict, match="no source priority for: fixture.secondary"):
+        with pytest.raises(ValueError, match="no source priority for: fixture.secondary"):
             check_source_priorities(policy, [{"kind": kind, "source_code": "fixture.secondary"}])
 
     def test_source_priority_is_scoped_to_each_kind(self):
-        from edgar_warehouse.mdm.merge import check_source_priorities
+        from edgar_warehouse.mastering.merge import check_source_priorities
 
         policy = {"kinds": {
             "first": {"defaults": {"sources": ["fixture.primary"]}},

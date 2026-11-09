@@ -81,7 +81,22 @@ def merge_file(store, settings: Settings, records: list[dict], *, again: bool = 
         raise
 
 
+def check_source_priorities(policy: dict, records: list[dict]) -> None:
+    """A kind's fill rule must name every source of that kind among its records.
+
+    A policy may be registered before a later source arrives, but once that source's records do, a source
+    the rule leaves out fails the file, instead of silently dropping all of its fields."""
+    present = defaultdict(set)
+    for record in records:
+        present[record["kind"]].add(record["source_code"])
+    for kind, block in sorted((policy.get("kinds") or {}).items()):
+        defaults = block.get("defaults")
+        if defaults and (missing := present[kind] - set(defaults.get("sources", []))):
+            raise ValueError(f"{kind} policy has no source priority for: " + ", ".join(sorted(missing)))
+
+
 def _merge(store, settings: Settings, records: list[dict], key: str, again: bool) -> dict:
+    check_source_priorities(settings.policy, records)
     file_no = store.last_file() + 1
     store.load_stage([(r["assertion_id"], r["subject"], r["source_code"], first(r["identifiers"].get("lei")),
                        json.dumps(r, separators=(",", ":"))) for r in records],
