@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Restore every published RDM code set from git into an empty RDM store, and check each pin.
 
-Usage (source the store's worker.env first; run from the repository root):
-    python skills/data-operations/scripts/rdm_restore_published.py --by <name> --words "<their exact words>"
+Usage (source the store's worker.env first):
+    python rdm_restore_published.py --by <name> --words "<their exact words>"
 
 Each version under rules/reference/published/<code set>/<version> is drafted from its
 canonical.jsonl, approved in the operator's words, published, and its sha256 compared with
@@ -20,7 +20,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-PUBLISHED = Path("rules/reference/published")
+from edgar_warehouse.rules import files
+
+PUBLISHED = files.ROOT / "reference" / "published"
 CODE_KEYS = ("code", "label", "definition", "parent_code", "valid_from", "valid_to", "status", "invalid_reason")
 OPTIONAL_KEYS = ("value", "unit", "properties")  # kept only when the published row holds one
 
