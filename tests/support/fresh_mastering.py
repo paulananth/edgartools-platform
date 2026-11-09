@@ -3,16 +3,11 @@
 Company rows come from the pinned four-company fixture. Person controls
 are separate raw JSON documents with their original field names; no runtime
 field-name conversion is used.
-
-GLEIF readings go through the GLEIF contracts (`adapters.normalize`): two
-Level 1 records from the same fixture, and one accounting-parent record
-between them. That parent record is synthetic, not a GLEIF fact.
 """
 
 from pathlib import Path
 import json
 
-from edgar_warehouse.mdm import gleif_publication
 from edgar_warehouse.mdm.adapters import normalize
 from edgar_warehouse.mdm.store import digest
 from edgar_warehouse.rules import files
@@ -49,53 +44,3 @@ def cohort():
                          "member": "four_companies_v1.json", "record_locator": str(row["cik"])},
         ))
     return policy, contracts, readings
-
-
-def _node(lei):
-    return {"NodeID": {"$": lei}, "NodeIDType": {"$": "LEI"}}
-
-
-def _gleif(member, row, ordinal):
-    publication = {"publication_key": f"offline-cohort/gleif/{member}", "revision": 1,
-                   "artifact_sha256": digest(row), "member": member,
-                   "record_locator": str(ordinal)}
-    return normalize(row, source_code=f"gleif.{member}.v1", contract=gleif_publication.dataset_contract(member),
-                     publication={**publication, "effective_at": None})
-
-
-def gleif_cohort():
-    """The two GLEIF Level 1 readings, then the synthetic parent link reading."""
-    fixture = json.loads(FIXTURE.read_text())
-    level1 = [_gleif("level1", row, n) for n, row in enumerate(fixture["gleif"])
-              if row["LEI"]["$"] in {CHILD_LEI, PARENT_LEI}]
-    link = _gleif("relationships", {"RelationshipRecord": {
-        "Relationship": {
-            "StartNode": _node(CHILD_LEI), "EndNode": _node(PARENT_LEI),
-            "RelationshipType": {"$": "IS_DIRECTLY_CONSOLIDATED_BY"},
-            "RelationshipPeriods": {"RelationshipPeriod": {
-                "PeriodType": {"$": "RELATIONSHIP_PERIOD"},
-                "StartDate": {"$": "2020-01-01T00:00:00Z"}}},
-            "RelationshipStatus": {"$": "ACTIVE"}},
-        "Registration": {"LastUpdateDate": {"$": AS_OF}, "RegistrationStatus": {"$": "PUBLISHED"}},
-    }}, 0)
-    return level1, link
-
-
-def gleif_successor(effective: str):
-    """The child's Level 1 record again, now naming the parent as its successor
-    with a completed merger on `effective` (synthetic: a parent absorbing its
-    subsidiary; profiling ticket 04c), read by the GLEIF contract."""
-    fixture = json.loads(FIXTURE.read_text())
-    (row,) = [r for r in fixture["gleif"] if r["LEI"]["$"] == CHILD_LEI]
-    row = json.loads(json.dumps(row))
-    row["Entity"]["SuccessorEntity"] = [{"SuccessorLEI": {"$": PARENT_LEI}}]
-    row["Entity"]["LegalEntityEvents"] = {"LegalEntityEvent": [{
-        "@event_status": "COMPLETED", "LegalEntityEventType": {"$": "MERGERS_AND_ACQUISITIONS"},
-        "LegalEntityEventEffectiveDate": {"$": effective},
-        "AffectedFields": {"AffectedField": [{"$": PARENT_LEI}]}}]}
-    row["Registration"]["LastUpdateDate"] = {"$": AS_OF}
-    # A later GLEIF publication: a new revision of the same record.
-    publication = {"publication_key": "offline-cohort/gleif/level1/succession", "revision": 2,
-                   "artifact_sha256": digest(row), "member": "level1", "record_locator": "0"}
-    return normalize(row, source_code="gleif.level1.v1", contract=gleif_publication.dataset_contract("level1"),
-                     publication={**publication, "effective_at": None})
