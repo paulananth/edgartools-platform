@@ -175,7 +175,7 @@ The decision that two existing master identities describe the same subject and w
 _Avoid_: Source Record Binding, corporate acquisition, merging fields because their values are similar
 
 **Field Survivorship**:
-The rules that select a master field value from eligible source claims after identity has been resolved, while retaining the claims that were not selected.
+The rules that select a master field value from eligible source values after identity has been resolved, while retaining the values that were not selected.
 _Avoid_: Proof of identity, source rank as permission to merge identities
 
 **Name Count**:
@@ -192,7 +192,7 @@ _Avoid_: A per-source configuration table, a runtime switch, a place to store sa
 
 **Identifier Contract**:
 The declaration, per identifier namespace, of who issues the value, how many identities one value may name and how many values one identity may carry, the second handle used to detect a violation, and the measurement that verified the claim.
-_Avoid_: "The id is unique" as an unstated assumption, a name match as the claim, a contract without a measurement
+_Avoid_: "The id is unique" as an unstated assumption, a name match standing in for the identifier, a contract without a measurement
 
 **Cross-reference**:
 The one table of every identifier a golden record carries, each joined to its golden record id. Every identifier goes through mastering: its entity type's Identifier Contract and matching rules decide whether it finds the golden record a source record joins, creates one, or leaves the record waiting. An identifier no matching rule covers is still recorded on the golden record, and records that share it stay separate until a rule binds them.
@@ -642,7 +642,7 @@ _Avoid_: Extracted temporary file as source authority, undocumented side file, p
 
 **GLEIF Candidate Backstop**:
 The weekly re-evaluation of unresolved, unmatched, newly eligible, or materially changed MDM entities against current captured GLEIF evidence.
-_Avoid_: Daily full-universe rematch, treating no candidate as a permanent no-LEI claim
+_Avoid_: Daily full-universe rematch, treating no candidate as a permanent no-LEI finding
 
 **GLEIF Full Reconciliation**:
 The monthly comparison of the complete captured GLEIF Golden Copy with all in-scope MDM enrichment state, including records missed or retired across delta processing.

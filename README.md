@@ -263,7 +263,7 @@ They answer different questions; one rule should not silently answer another.
 | What does a row mean? | Dataset Contracts under `dataset_contracts:` in `source.yaml` | Name its kind, record key, identifiers, fields, links and time. |
 | Is a value usable? | `quality.yaml` | Apply declared fixes, check the result and report what was set aside or withheld. |
 | Do records describe the same subject? | `rules/merge/kinds/<kind>.yaml` | Approved matching rules use identity evidence; lookup references alone do not join records. |
-| Which source supplies a field? | The kind's `defaults.sources` and `fields.<field>` | Rank eligible claims after identity has been resolved. |
+| Which source supplies a field? | The kind's `defaults.sources` and `fields.<field>` | Rank eligible source values after identity has been resolved. |
 | Is an identifier well formed, and may it decide identity? | `rules/identifiers/` and the kind's Identifier Contracts | Format validation and identity authority are separate requirements. |
 | What do codes and links mean? | `rules/reference/`, pinned reference versions, including the relationship types (RDM code set `mdm-relationship-types`) | Give values and relationship types a shared, explicit meaning. |
 | What runs, and when is it complete? | The source's `bookkeeping` section or `rules/pipelines/<pipeline>/pipeline.yaml` | Declare worker steps, dependencies, checks and completion requirements. |
@@ -338,7 +338,7 @@ mastering an identity are different operations.
 | --- | --- | --- |
 | **Source Record Binding** | Assign a source record to the identity it describes. | Two providers report the same approved legal-entity identifier, so their records can bind to one Company under its Identifier Contract. |
 | **Identity Consolidation** | Decide that two existing master identities represent the same subject. | A correction proposes combining two published Companies. This needs its own accepted decision; it is not implied by a field priority. |
-| **Field Survivorship** | Select an eligible value after identity is resolved. | One source supplies the preferred legal name; another supplies an address where the policy allows it. Losing claims remain evidence. |
+| **Field Survivorship** | Select an eligible value after identity is resolved. | One source supplies the preferred legal name; another supplies an address where the policy allows it. Values that lose remain evidence. |
 | **Relationship projection** | Create a typed link between accepted endpoints for the stated time. | A Company is an accounting subsidiary of another Company. This is different from a reported holding or beneficial ownership. |
 
 For example, suppose two captured sources call a fictitious business “Example
