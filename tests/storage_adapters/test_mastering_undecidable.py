@@ -9,6 +9,7 @@ import pytest
 
 from edgar_warehouse.mdm import adapters
 from edgar_warehouse.mdm.evidence import deferred_record
+from edgar_warehouse.mastering.reconcile import reconcile
 from edgar_warehouse.rules import files
 from tests.storage_adapters.test_mastering import AS_OF, POLICY, opened, merge
 
@@ -55,7 +56,11 @@ def test_an_undecidable_record_is_set_aside_with_its_reason_and_creates_no_golde
         assert db.rows("select count(*) from mastering_master")[0][0] == 0  # no golden record was created
         assert db.rows("select count(*) from mastering_record")[0][0] == 0
         assert db.rows("select reason from mastering_deferred where source_code=%s", [code]) == [(refused.value.reason,)]
+        (closed,) = reconcile(db, code)  # the source's accounts close: one set aside, none stored, none waiting
+        assert (closed["set_aside_delivered"], closed["set_aside_stored"], closed["stored"], closed["closes"]) == (1, 1, 0, True)
         # The control: a decidable record of the same source is mastered, so the test tells the two apart.
         merge.merge_file(db, settings, [read(source, code, decidable)])
         db.commit()
         assert db.rows("select count(*) from mastering_master")[0][0] == 1
+        (closed,) = reconcile(db, code)
+        assert (closed["new"], closed["stored"], closed["golden_record"], closed["set_aside_stored"], closed["closes"]) == (1, 1, 1, 1, True)
