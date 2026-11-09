@@ -36,7 +36,9 @@ Each source: empty its data, load it from its captured files, record counts (fil
 From [the initial load sequence](../../../docs/initial-and-daily-source-load.md), steps 1 to 4. The doc's "what blocks the full load" table is older than the rebuild, so recheck each line before relying on it.
 
 - [ ] Capture inventory frozen: every retained SEC, GLEIF and OpenFIGI delivery with files, receipts and hashes (no provider request).
-- [ ] Rules documents loaded and RDM code sets restored with exact version pins (SEC place codes, place types, ownership transaction codes).
+- [x] Rules documents loaded on `local-staging` (2026-11-09 10:16 ET): `rules load --root rules --version rules-2026-11-09.go-live` saved 15 versions (13 sources, 1 merge policy, 1 pipeline), all approved from `rules/approvals.yaml` in git with no test run, then `rules activate` (merge policy first, then the pipeline and each source, all with exit 0) left 15 of 15 active. Activation needs `governance.env` sourced beside `worker.env` for `RULES_MDM_ACTIVATION_DATABASE_URL`; without it `rules activate` stops with "MDM activation requires an explicit destination connection".
+- [ ] RDM code sets restored with exact version pins (SEC place codes, place types, ownership transaction codes).
+- [ ] Skill gaps from the rules step: `data-operations` step 2 says "`rules load` saves every file under a root; do not use it here" and step 3 omits `governance.env`, while the go-live path for a new store is `rules load` then `rules activate` with `governance.env` (as `data-onboarding` APPROVE.md says); make the skills agree.
 - [ ] Each source registered on the new store, with its targets, manifests and worker and verifier logins; the matching rules the operator approved are the ones switched on.
 - [ ] Name counts built from whole populations: the full SEC submissions, the ticker catalog and the full GLEIF Level 1 publication.
 - [ ] Sources with an incomplete path named, not omitted: N-PORT run builder (ticket 79), OpenFIGI listing enrichment (ticket 80), and complete mastering targets for ADV, ownership and 13F.
