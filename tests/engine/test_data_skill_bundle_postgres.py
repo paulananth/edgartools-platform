@@ -290,7 +290,7 @@ print(json.dumps({{"shipped": shipped, "modules": modules, "absent": absent, "ru
     assert twice == []
     assert found["absent"] == {}  # `silver line-items` failed so: financials was not shipped (ticket 48)
     assert all(found["rules_read"])  # `silver line-items` failed so: its line-items.yaml was looked for beside a checkout (ticket 48)
-    assert {"edgar_warehouse.cli", "edgar_warehouse.workers.source_read", "edgar_warehouse.mdm.merge",
+    assert {"edgar_warehouse.cli", "edgar_warehouse.workers.source_read", "edgar_warehouse.mastering.merge",
             "edgar_warehouse.rules.cli", "edgar_warehouse.database_connections", "edgar_warehouse.database_types",
             "edgar_warehouse.rdm.storage", "edgar_warehouse.rdm.mysql_migration",
             "edgar_warehouse.mdm.schema"} <= set(found["modules"])
@@ -1224,9 +1224,8 @@ def test_gleif_configured_mapping_merges_from_installed_bundle(installed, databa
     This does not qualify the full captured Company/GLEIF population.
     """
     from sqlalchemy import create_engine
-    from edgar_warehouse.mdm.store import migrate, register_policy, digest
+    from edgar_warehouse.mdm.store import migrate, digest
     from tests.support.fresh_mastering import cohort, FIXTURE, CHILD_LEI, PARENT_LEI
-    from tests.support.rules_authority import register_dataset
 
     python, root = installed
     name = f"gleif_installed_{uuid4().hex[:8]}"
@@ -1237,12 +1236,6 @@ def test_gleif_configured_mapping_merges_from_installed_bundle(installed, databa
     try:
         migrate(admin, application_role="clean_application")
         policy, contracts, readings = cohort()
-        gleif = {f"gleif.{member}.v1": files.mdm_contract("gleif", f"gleif.{member}.v1")
-                 for member in ("level1", "relationships", "reporting_exceptions")}
-        with admin.begin() as conn:
-            policy_digest = register_policy(conn, policy)
-            for code, body in {**contracts, **gleif}.items():
-                register_dataset(conn, code, str(uuid4()), body)
         rows = [row for row in json.loads(FIXTURE.read_text())["gleif"]
                 if row["LEI"]["$"] in {CHILD_LEI, PARENT_LEI}]
         assert len(rows) == 2
@@ -1282,14 +1275,11 @@ import copy, hashlib, json, sys
 from pathlib import Path
 from uuid import uuid4
 from sqlalchemy import create_engine, text
-from sqlalchemy.exc import DBAPIError
 from edgar_warehouse.rules import files, source_engine
 from edgar_warehouse.mdm import adapters, sec_company
-from edgar_warehouse.mdm.inspection import counts as store_counts
-from edgar_warehouse.mdm.record_reads import for_connection
-from edgar_warehouse.mdm.evidence import decision
-from edgar_warehouse.mdm.merge import MergeStage
-from edgar_warehouse.mdm.store import Store, digest
+from edgar_warehouse.mastering import merge, reads
+from edgar_warehouse.mastering.store import open_store
+from edgar_warehouse.mdm.store import digest
 from edgar_warehouse.workers import source_mapping
 body=json.load(sys.stdin)
 assert files.ROOT == files.BUNDLED
@@ -1324,25 +1314,18 @@ for row in body["rows"]:
                  "artifact_sha256":digest(row),"member":"level1","effective_at":None}
     kwargs={"source_code":"gleif.level1.v1","publication":publication}
     assertions.append(adapters.normalize(row,contract=contract,**kwargs))
-store=Store(engine); stage=MergeStage(store); run=str(uuid4())
-command={"batch_id":"installed-gleif-fields","run_id":run,"consumer":"installed-gleif-qualification",
-         "policy_digest":body["policy"],"expected_checkpoint":0,"checkpoint":1,
-         "as_of":body["as_of"],"assertions":[*sec_readings,*assertions]}
-first=stage.apply(**command)
-with engine.connect() as conn:
-    counts=store_counts(engine)["masters"]
-    assert counts=={"company":2,"person":2},counts
-    reader=for_connection(conn)
-    bindings={subject:row.get("entity_id") for subject,row in reader.current(
-        [record["subject"] for record in [*sec_readings,*assertions]]).items()}
-assert all(bindings[row["subject"]] is None for row in assertions)
-companies=[row for row in sec_readings if row["kind"]=="company"]
-decisions=[decision("bind",actor="steward",reason="offline fixture binding",at=body["as_of"],
-    subject=row["subject"],entity_id=bindings[sec["subject"]],evidence=[row["assertion_id"]])
-    for row,sec in zip(assertions,companies,strict=True)]
-second_command={**command,"batch_id":"installed-gleif-bindings","assertions":[],"decisions":decisions,
-                "expected_checkpoint":1,"checkpoint":2}
-second=stage.apply(**second_command)
+db=open_store(engine)
+def merged(records):
+    by_kind={}
+    for record in records: by_kind.setdefault(record["kind"],[]).append(record)
+    return [merge.merge_file(db,merge.Settings(files.policy(),"installed-gleif-qualification",kind,body["as_of"]),found)
+            for kind,found in sorted(by_kind.items())]
+first_records=[*sec_readings,*assertions]
+merged(first_records)
+counts=reads.counts(db)["masters"]
+assert counts=={"company":2,"person":2},counts
+# The two GLEIF records wait for a binding: no approved rule joins them to SEC.
+assert not db.bound([row["subject"] for row in assertions])
 # Build a fresh name count inside the installation and carry its exact evidence
 # through actual SEC normalization, Merge Stage and publication/recovery.
 import io, base64
@@ -1380,25 +1363,19 @@ for record in body["sec_records"]:
     actual=adapters.normalize(row,**kwargs)
     assert digest(actual)==digest(adapters.normalize(old_row,**kwargs))
     name_count_assertions.append(actual)
-name_count_command={**command,"batch_id":"installed-name-count-reading","assertions":name_count_assertions,
-                "expected_checkpoint":2,"checkpoint":3}
-name_count_result=stage.apply(**name_count_command)
-with engine.connect() as conn:
-    for assertion in name_count_assertions:
-        reader=for_connection(conn)
-        stored=reader._readings(reader.current([assertion["subject"]]))[assertion["subject"]]
-        assert digest(stored)==digest(assertion)
-        assert stored["provenance"]["matching"]["name_count"]["name_count"]==digest(counted)
-assert stage.apply(**command)["duplicate"] and stage.apply(**second_command)["duplicate"]
-assert stage.apply(**name_count_command)["duplicate"]
-with engine.connect() as conn:
-    assert conn.scalar(text("SELECT count(*) FROM public.mdm_store_batch"))==3
-    assert sum(store_counts(engine)["masters"].values())==4
-for sql in ("DELETE FROM public.mdm_store_evidence","DELETE FROM public.mdm_store_current","CREATE TABLE mdm.bypass(id int)"):
+merged(name_count_assertions)
+for assertion in name_count_assertions:
+    (stored,)=[json.loads(row[0]) for row in db.rows("select body from mastering_record where assertion_id=%s",[assertion["assertion_id"]])]
+    assert digest(stored)==digest(assertion)
+    assert stored["provenance"]["matching"]["name_count"]["name_count"]==digest(counted)
+assert all(done["skipped"] for done in merged(first_records)+merged(name_count_assertions))  # a second delivery changes nothing
+assert sum(reads.counts(db)["masters"].values())==4
+for sql in ("delete from mastering_decision","update mastering_decision set operation='x'","drop table mastering_master"):
     try:
-        with engine.begin() as conn: conn.execute(text(sql))
-    except DBAPIError as error: assert error.orig.pgcode=="42501"
+        db.rows(sql)
+    except Exception as error: assert "denied" in str(error).lower() or "owner" in str(error).lower(), error
     else: raise AssertionError("restricted operation accepted")
+    db.rollback()
 pins={str(path):hashlib.sha256(Path(path).read_bytes()).hexdigest()
       for path in [*source_engine.runtime_files(),Path(source_mapping.__file__),Path(adapters.__file__),
                    files.ROOT/"sources/gleif/source.yaml",
@@ -1407,11 +1384,11 @@ pins={str(path):hashlib.sha256(Path(path).read_bytes()).hexdigest()
                    Path(name_count.__file__),
                    files.ROOT/"sources/gleif/name-count-complete-stream.yaml",
                    files.ROOT/"sources/sec.company/name-count-filer.yaml"]}
-print(json.dumps({"pins":pins,"generation":name_count_result["generation"],"counts":counts,
+print(json.dumps({"pins":pins,"counts":counts,
                   "installed_gleif_mapping":True,"installed_sec_mapping":True,"installed_name_count_caller":True,"name_count_digest":digest(counted),"full_population":False}))
 engine.dispose()
 ''', cwd=root, document={"dsn": app.url.render_as_string(hide_password=False),
-                         "policy": policy_digest, "readings": readings, "rows": rows, "sec_records": sec_records,
+                         "readings": readings, "rows": rows, "sec_records": sec_records,
                          "name_count_arguments": name_count_arguments,
                          "checkout_name_count": checkout_name_count,
                          "name_count_archive": base64.b64encode(name_count_archive).decode(),

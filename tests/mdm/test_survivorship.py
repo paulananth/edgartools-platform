@@ -1,7 +1,7 @@
 """Direct tests for MDM's field selection and claim collapse.
 
 `clean/survivorship.py` had no test of its own: everything reaching it went
-through `MergeStage.apply` in the Docker-backed integration suite, so a
+through the merge in the Docker-backed integration suite, so a
 regression here reported itself as a merge failure. Company mastering tickets
 01 and 02 land three changes in this file (the revision guard's key, where a
 kind's field rules live, and which digest a field records), so it gets a seam

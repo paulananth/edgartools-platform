@@ -26,4 +26,4 @@ Moved out of AGENTS.md (ticket 63) unchanged: the files an agent reads to find i
 | Docker images | `Dockerfile`, `Dockerfile.warehouse-deps`, `Dockerfile.mdm-deps`, `Dockerfile.mdm-neo4j` |
 | Shared local PostgreSQL | `docs/local-agent-testing.md`, `infra/scripts/local-test-stores.py` |
 
-Large files should be read in chunks before editing: `edgar_warehouse/mdm/merge.py`, `skills/data-platform/READING.md` and `skills/data-onboarding/SKILL.md`.
+Large files should be read in chunks before editing: `edgar_warehouse/mastering/merge.py`, `skills/data-platform/READING.md` and `skills/data-onboarding/SKILL.md`.
