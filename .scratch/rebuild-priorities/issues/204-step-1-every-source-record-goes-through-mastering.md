@@ -44,7 +44,11 @@ Counts on the shared store, records with no golden record, by source and reason 
 
 Checklist for this section:
 
-- [ ] SEC filers: the Company classification default, built and tested (both orders; a person-shaped name still a Person), then the limited test on real counts and approval.
+- [ ] SEC filers: the Company classification default, built and tested (2026-11-09 16:31 ET; operator: "1 agreed", then "I label it, you check it (Recommended)" for the proof sample). Found by reading `rules/merge/kinds/company.yaml` (`sec-company-candidate`, version 2026-09-25.13): step 8 takes operating filers, step 10 takes type other with an industry code, a category and a legal-form word, step 9 defers person-suffixed names, and step 11 sets aside everything else (67,166 of the 69,816 set-aside records). Steps 1 to 7b are deliberate set-asides for other entity types (asset-backed issuers 1,062, funds and governments about 254, held-back shells 599) and stay. Making step 11 a Company would double-master the 31,097 individuals the person rule takes as Persons, so the default must first defer person-shaped names with the person rule's own test. A changed classification rule is switched on only by a measured proof (`rules/merge/policy.yaml`: Wilson lower bound per step, an adversarial fixture and a cohort). Parts:
+  - [ ] Rule: a step before the default that defers person-shaped names (the person rule's name-shape test), a step for type other with a legal-form word and no industry code or category, then the default as a Company; new rule version.
+  - [ ] Measure through the engine: how many of the 67,166 become Companies, how many stay deferred as person-shaped, none double-mastered (counts only).
+  - [ ] Proof: a random sample of the newly classified filers per new step, labelled by evidence (legal-form word, industry code, tickers, name shape), the whole table shown to the operator; the adversarial fixture and cohort hashes refreshed; the Wilson bound recomputed.
+  - [ ] Approval line for the merge policy digest under "Approved the rules always", then reload the SEC company source so the new Companies exist; count before and after.
 - [ ] OpenFIGI not found: attach the record to the Security that holds its CUSIP and record the answer; count the 7,560 ISIN-only records the same way.
 - [ ] Records with an invalid check digit master by their other identifiers or name; the operator's word on the proposal.
 - [ ] Form 4 reporting owners follow the SEC filer ruling.
