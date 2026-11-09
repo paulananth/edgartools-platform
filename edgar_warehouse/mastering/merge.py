@@ -83,8 +83,10 @@ def merge_file(store, settings: Settings, records: list[dict], *, again: bool = 
         if store.file_done(key) and not again:
             store.commit()
             return {"file": key, "skipped": True}
+        delivery = _delivery(store, records, deferred)
         set_aside(store, list(deferred), quiet or {})
         counts = _merge(store, settings, records, key, again) if records else {"records": 0}
+        store.add_delivery(key, delivery)
         if not records:
             store.finish_file(key, 0)
         store.commit()
@@ -92,6 +94,22 @@ def merge_file(store, settings: Settings, records: list[dict], *, again: bool = 
     except BaseException:
         store.rollback()
         raise
+
+
+def _delivery(store, records: list[dict], deferred) -> list[tuple]:
+    """(source, records, already held, set aside) for what this file delivers, so a source's records can be reconciled.
+    A record is already held when the store has it, or an earlier record of this file is the same assertion."""
+    held = store.known_assertions(r["assertion_id"] for r in records)
+    seen, delivered, repeated, aside = set(), Counter(), Counter(), Counter()
+    for r in records:
+        delivered[r["source_code"]] += 1
+        if r["assertion_id"] in held or r["assertion_id"] in seen:
+            repeated[r["source_code"]] += 1
+        seen.add(r["assertion_id"])
+    for r in deferred:
+        aside[r["source_code"]] += 1
+    return [(source, delivered[source], repeated[source], aside[source])
+            for source in sorted({*delivered, *aside})]
 
 
 def check_source_priorities(policy: dict, records: list[dict]) -> None:
