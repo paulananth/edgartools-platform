@@ -261,3 +261,33 @@ def test_receipt_time_is_independent_of_the_reading_sessions_timezone(journal):
         assert reader.get(first["event"]["producer"],first["event"]["event_key"])==first
         assert reader.verify(first)==first
     finally:alternate.dispose()
+
+
+def test_a_file_set_is_recorded_and_read_in_batches_with_one_receipt_each(journal):
+    owner, runtime, role, journal = journal
+    values = [event(producer="invented.batch", feed="invented.feed") for _ in range(450)]
+    before = journal.status()["events"]
+    receipts = journal.append_many(values)
+    assert len(receipts) == 450 and journal.status()["events"] == before + 450
+    assert journal.append_many(deepcopy(values)) == receipts  # a rerun adds nothing
+    assert journal.status()["events"] == before + 450
+    keys = [v["event_key"] for v in values]
+    stored = journal.get_many("invented.batch", [*keys, "absent"])  # more than one group of 400
+    assert [stored[k] for k in keys] == receipts and "absent" not in stored
+    assert journal.verify_many(receipts) == receipts
+    with pytest.raises(JournalConflict):
+        journal.verify_many([receipts[0], {**receipts[1], "id": receipts[1]["id"] + 1}])
+
+
+def test_a_conflict_in_a_batch_raises_and_a_replay_leaves_one_event_each(journal):
+    owner, runtime, role, journal = journal
+    first = event(producer="invented.conflict")
+    journal.append(first)
+    fresh = event(producer="invented.conflict")
+    before = journal.status()["events"]
+    with pytest.raises(JournalConflict):
+        journal.append_many([fresh, {**first, "feed": "different.feed"}])
+    assert journal.status()["events"] in (before, before + 1)  # MySQL keeps events before the refused one
+    assert journal.append_many([fresh, first]) == [journal.get(fresh["producer"], fresh["event_key"]),
+                                                   journal.get(first["producer"], first["event_key"])]
+    assert journal.status()["events"] == before + 1  # the replay adds nothing twice

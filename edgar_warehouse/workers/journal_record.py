@@ -71,9 +71,16 @@ def execute(envelope: dict, artifacts) -> dict:
     body = json.loads(artifacts.verified(envelope["input"], max_bytes=MAX_INPUT))
     journal, values = _journal(), _events(envelope, body)
     seen = journal.found(changed_files.PRODUCER, [v["event_key"] for v in values])
+    fresh = [v for v in values if v["event_key"] not in seen]
+    if fresh:
+        try:
+            journal.append_many(fresh)
+        except JournalConflict:  # a race with another run: the loop below settles each file singly
+            pass
+    stored = journal.get_many(changed_files.PRODUCER, [v["event_key"] for v in values])
     receipts = []
     for value in values:
-        receipt = journal.get(value["producer"], value["event_key"]) if value["event_key"] in seen else None
+        receipt = stored.get(value["event_key"])
         if receipt is None:
             try:
                 receipt = journal.append(value)
@@ -100,7 +107,7 @@ def verify(envelope: dict, artifacts) -> tuple[dict, list]:
         journal.verify(forced, expected=_forced(envelope, body))
     if len(receipts) != len(expected):
         raise ValueError("The receipts do not name every file")
-    for receipt, value in zip(receipts, expected, strict=True):
-        if not _matches(journal.verify(receipt), value):
+    for receipt, value in zip(journal.verify_many(receipts), expected, strict=True):
+        if not _matches(receipt, value):
             raise ValueError(f"The Change Journal records {value['scope']['file']} otherwise")
     return {CHECK: True}, []

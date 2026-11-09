@@ -61,6 +61,20 @@ def record_event(engine, body, content_hash):
         conn.execute(text(statement), {"b": body, "h": content_hash})
 
 
+def record_events(engine, items):
+    """Every (body, content hash) on one connection with one readiness check. PostgreSQL and SQL Server
+    commit once and roll a refused batch back whole; MySQL's routine commits each event itself, so events
+    before a refused one stay. Recording is idempotent, so a caller replays the rest singly either way."""
+    name = engine.dialect.name
+    statement = {"postgresql": "SELECT journal.record_event(:b,:h)",
+        "mysql": "CALL journal_record_event(:b,:h)",
+        "mssql": "EXEC journal.record_event @body=:b,@content_hash=:h"}[name]
+    with engine.begin() as conn:
+        assert_ready(conn)
+        for body, content_hash in items:
+            conn.execute(text(statement), {"b": body, "h": content_hash})
+
+
 def key_condition(engine, table, producer, event_key):
     if engine.dialect.name == "mysql":
         return and_(table.c.producer == producer.encode(), table.c.key_hash == bytes.fromhex(edgar_control.hash_text(event_key)), table.c.event_key == event_key.encode())
@@ -89,6 +103,23 @@ def get_event(engine, producer, event_key):
     return transport_row(row) if row else None
 
 
+def get_events(engine, producer, event_keys):
+    """{event_key: stored row} of the keys the journal holds: one read of up to 400 keys, one connection.
+    The full key is compared here, as `found_events` does, so a hash collision names nothing."""
+    table = readable_table(engine)
+    wanted = list(dict.fromkeys(event_keys))
+    found = {}
+    with engine.connect() as conn:
+        assert_ready(conn)
+        for start in range(0, len(wanted), 400):
+            query = read_events_statement(engine, table).where(hashed_keys_condition(engine, table, producer, wanted[start:start+400]))
+            if engine.dialect.name == "mssql": query = query.with_hint(table, "WITH (FORCESEEK)", "mssql")
+            for row in conn.execute(query).mappings():
+                key = row["event_key"].decode() if isinstance(row["event_key"], bytes) else row["event_key"]
+                if key in wanted: found[key] = transport_row(row)
+    return found
+
+
 def list_events(engine, *, source=None, feed=None, run_id=None, limit=100, after=0):
     table = readable_table(engine)
     query = read_events_statement(engine,table).where(table.c.id > after)
@@ -100,14 +131,14 @@ def list_events(engine, *, source=None, feed=None, run_id=None, limit=100, after
         return [transport_row(row) for row in conn.execute(query.order_by(table.c.id).limit(limit)).mappings()]
 
 
+def hashed_keys_condition(engine, table, producer, group):
+    return and_(table.c.producer == (producer.encode() if engine.dialect.name == "mysql" else producer),
+                table.c.key_hash.in_([bytes.fromhex(edgar_control.hash_text(key)) for key in group]))
+
+
 def find_keys_statement(engine, producer, group):
     table = readable_table(engine)
-    if engine.dialect.name == "postgresql":
-        condition = and_(table.c.producer == producer, table.c.key_hash.in_([bytes.fromhex(edgar_control.hash_text(key)) for key in group]))
-    else:
-        condition = and_(table.c.producer == (producer.encode() if engine.dialect.name == "mysql" else producer),
-            table.c.key_hash.in_([bytes.fromhex(edgar_control.hash_text(key)) for key in group]))
-    query=select(table.c.event_key).where(condition)
+    query=select(table.c.event_key).where(hashed_keys_condition(engine, table, producer, group))
     return query.with_hint(table,"WITH (FORCESEEK)","mssql") if engine.dialect.name=="mssql" else query
 
 

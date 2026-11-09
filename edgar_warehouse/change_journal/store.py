@@ -93,6 +93,41 @@ class ChangeJournal:
         stored = storage.get_event(self.engine, producer, event_key)
         return json.loads(edgar_control.prepare_journal_receipt(canonical(stored))) if stored else None
 
+    def get_many(self, producer: str, event_keys: list[str]) -> dict[str, dict]:
+        """The receipt of each key the journal holds, in one read of up to 400 keys."""
+        import edgar_control
+        import json
+        from . import storage
+        stored = storage.get_events(self.engine, producer, event_keys)
+        return {key: json.loads(edgar_control.prepare_journal_receipt(canonical(row))) for key, row in stored.items()}
+
+    def append_many(self, values: list[dict]) -> list[dict]:
+        """`append` for a file set: every event on one connection, then one read back. A content conflict
+        raises `JournalConflict` (events before it may stay on MySQL); the caller settles the rest singly."""
+        import edgar_control
+        import json
+        from . import storage
+        prepared = [json.loads(edgar_control.prepare_journal_event(
+            json.dumps(v, ensure_ascii=False, allow_nan=False, separators=(",", ":")))) for v in values]
+        try:
+            storage.record_events(self.engine, [(p["body"], p["canonical_hash"]) for p in prepared])
+        except DBAPIError as exc:
+            if "journal_content_conflict" in str(exc.orig):
+                raise JournalConflict("Producer event key already names different content") from None
+            raise
+        stored = {}
+        for producer in dict.fromkeys(p["producer"] for p in prepared):
+            stored.update({(producer, k): r for k, r in self.get_many(
+                producer, [p["event_key"] for p in prepared if p["producer"] == producer]).items()})
+        receipts = []
+        for p in prepared:
+            receipt = stored.get((p["producer"], p["event_key"]))
+            if receipt is None:
+                raise JournalConflict("Journal durable read-back mismatch")
+            edgar_control.check_journal_receipt(canonical(receipt), p["body"])
+            receipts.append(receipt)
+        return receipts
+
     def found(self, producer: str, event_keys: list[str]) -> set[str]:
         from . import storage
         import edgar_control
@@ -120,6 +155,23 @@ class ChangeJournal:
                 raise JournalConflict(str(error)) from None
             raise
         return receipt
+
+    def verify_many(self, receipts: list[dict]) -> list[dict]:
+        """`verify` for a file set: each receipt checked against what the journal holds, read once."""
+        import edgar_control
+        import json
+        try:
+            checked = [json.loads(edgar_control.check_journal_receipt(canonical(r), None)) for r in receipts]
+            stored = {}
+            for producer in dict.fromkeys(c["producer"] for c in checked):
+                stored[producer] = self.get_many(producer, [c["event_key"] for c in checked if c["producer"] == producer])
+            for receipt, c in zip(receipts, checked, strict=True):
+                edgar_control.confirm_journal_receipt(canonical(receipt), canonical(stored[c["producer"]].get(c["event_key"])))
+        except ValueError as error:
+            if "mismatch" in str(error):
+                raise JournalConflict(str(error)) from None
+            raise
+        return receipts
 
     def status(self, *, source: str | None = None, feed: str | None = None) -> dict:
         from . import storage
