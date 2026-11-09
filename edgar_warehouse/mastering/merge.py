@@ -144,8 +144,7 @@ def _merge(store, settings: Settings, records: list[dict], key: str, again: bool
     exact = _match_exact_names(store, settings, records, bound, counts)
     bound.update(exact)
     named |= exact
-    rules = _rules(settings)
-    waits = {rule["source"] for rule in rules if rule.get("on_no_match") == "wait"}
+    waits = _waiting_sources(settings)
     store.open_reviews(WAITING, [(r["subject"], r["assertion_id"]) for r in records
                                  if r["source_code"] in waits and r["subject"] not in bound])
     store.close_reviews(WAITING, sorted(named))
@@ -263,11 +262,21 @@ def _match_names(store, settings: Settings, records, bound: dict, counts: Counte
     return named
 
 
+def _waiting_sources(settings: Settings) -> set[str]:
+    """The sources of every switched-on rule of this kind, of any family, that leaves a record waiting when nothing is found."""
+    return {rule["source"] for rule in settings.policy["kinds"][settings.kind].get("rules") or []
+            if rule.get("on_no_match") == "wait" and activated(settings.policy, settings.kind, rule, "bind")}
+
+
+def _exact_rules(settings: Settings) -> list[dict]:
+    return [rule for rule in settings.policy["kinds"][settings.kind].get("rules") or []
+            if rule.get("family") == matching.EXACT_NAME_FAMILY and activated(settings.policy, settings.kind, rule, "bind")]
+
+
 def _match_exact_names(store, settings: Settings, records, bound: dict, counts: Counter) -> dict:
     """A waiting record joins the one master holding its name id; several send it to review. With none, a rule
     that mints (`on_no_match: mint`) creates one golden record for the name, which the source's later records join."""
-    rules = [rule for rule in settings.policy["kinds"][settings.kind].get("rules") or []
-             if rule.get("family") == matching.EXACT_NAME_FAMILY and activated(settings.policy, settings.kind, rule, "bind")]
+    rules = _exact_rules(settings)
     if not rules:
         return {}
     named = {}
