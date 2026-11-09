@@ -42,6 +42,8 @@ A relationship type is vocabulary. Its permitted ends stay on that asset;
 they are not evidence that a relationship exists. A dataset that declares a
 type is not lineage to that type. The
 [openmetadata](../openmetadata/SKILL.md) skill owns its destination mapping.
+The governance picture of a target is the
+[data-governance lineage skill](../data-governance/LINEAGE.md).
 
 ### Confirm relationships before showing them
 

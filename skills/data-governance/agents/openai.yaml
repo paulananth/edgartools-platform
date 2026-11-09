@@ -1,0 +1,4 @@
+interface:
+  display_name: "Data Governance"
+  short_description: "Judge source evidence, material controls, trusted outputs, and lineage"
+  default_prompt: "Use $data-governance to judge whether this target's lineage shows actual sources, material controls, and trusted outputs."
