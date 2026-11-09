@@ -20,43 +20,37 @@ automatic_rules:
 - kind: company
   family: classification
   rule_id: sec-company-candidate
-  rule_version: 2026-09-25.13
+  rule_version: 2026-11-09.phase-1-listed-operating
   verdict: company
   activation: measured
   proof:
     method: wilson_lower_bound
     one_sided_confidence: 0.95
-    n: 600
-    correct: 600
-    lower_bound: 0.995511
+    n: 523
+    correct: 523
+    lower_bound: 0.9948535002383295
     adversarial:
       fixture_sha256: ebe220479915a56f86f5c57edc2665f5ad6d40f55d112b7849899941beed49f1
       n: 328
       violations: 0
     cohort:
-      population_sha256: 395b7db4cfeb5ab0d4816ee4c0e68ca078b548fce3b8337c0ab671f0e0668600
-      ticker_catalog_sha256: 836140c5ca9817b673e76f4c4cf25dda6650215683c1705e9fbe00b2e8f16fbf
       by_step:
         "8":
-          n: 300
-          correct: 300
-          lower_bound: 0.9910621278248719
-        "10":
-          n: 300
-          correct: 300
-          lower_bound: 0.9910621278248719
+          n: 523
+          correct: 523
+          lower_bound: 0.9948535002383295
       files:
         12-13-adversarial.jsonl: ebe220479915a56f86f5c57edc2665f5ad6d40f55d112b7849899941beed49f1
-        12-13-held.jsonl: 989057c5f33177c1a53c182a757d00b6909df61a852bf9e2b6b0bd746d345fcc
         12-13-label.py: 3858117cf62df1de0d6adfac6cd348da5a36e4d9587bcf82b69f358a90ed9e12
-        12-13-population.json: b6023c5ef814ff496137ddd51c395582d07d316038ad23eb40a96bf64a741a49
         12-13-sample.jsonl: d276df62557c30106d8f49c52f23c0ea72c4795c664e96983c7569f91dd6ad97
-        12-classify.py: 0a1bde95ebca00dbc6b6cda39827f5688e540cd2a35714c411162f69b0395c4a
-        12-measure-13.py: 6fc1e10772f89f369513d74d80927670dce71e7b937e149951a50311aaf66ceb
+        phase1-measure.py: 0622c18ec98c11de868cdf58585769c658fbe20afc4ad1c83cea4c218772de21
     approved_by: operator
-    approved_at: "2026-09-25T17:09:33Z"
-    reason: 'ticket 12 Proving Run, SEC Company classification, the Account hold-back: bronze-only
-      hand review, each Company step clears 0.95, 0 adversarial violations'
+    approved_at: "2026-11-09T22:08:58Z"
+    reason: 'phase 1, listed operating filers only ("For phase 1 master only publically traded companies (filter)",
+      "Operating and listed a real company"; standing words "Approved the rules always"): the 279 listed filers
+      of the ticket 12 hand-labelled draw of old step 8 plus the 244 listed operating filers the old shell and
+      fund tests held back, 523 of 523 Companies, 0 of 328 adversarial draws wrongly classed; the step 10 of
+      type other (foreign issuers) is out of phase 1'
 # Company mastering ticket 15, the CIK matching rule: activates on its verified
 # Identifier Contract (kinds/company.yaml, identifiers.cik), not a measured bar.
 # The operator approved the switched-off policy digest

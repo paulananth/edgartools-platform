@@ -32,6 +32,8 @@ def test_removing_person_fixture_conversion_preserves_all_assertion_ids_and_prov
                 records[n] = record = without_name_id(record)
                 record["assertion_id"] = digest({k: v for k, v in record.items() if k != "assertion_id"})
             if record["source_code"] == "sec.company.v1":
+                # Phase 1 (ticket 204) renamed the classification rule's version; the pinned cohort holds the one before.
+                record["provenance"]["classification"]["version"] = "2026-09-25.13"
                 records[n] = record = old_words(record)
                 record["source_code"] = "sec.submissions.company.v1"
                 record["subject"] = digest([record["source_code"], record["record_key"]])

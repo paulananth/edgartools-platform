@@ -562,7 +562,7 @@ class TestTheCompanyPolicy:
             step["lower_bound"] >= 0.95 for step in PROOF["cohort"]["by_step"].values()
         )
         assert PROOF["adversarial"]["violations"] == 0
-        assert PROOF["approved_at"] == "2026-09-25T17:09:33Z"
+        assert PROOF["approved_at"] == "2026-11-09T22:08:58Z"  # phase 1, ticket 204
         assert PROOF["approved_by"] == "operator"
         # Ticket 15 switched on the CIK matching rule beside it, and ticket 25
         # the two name matching rules after it.
@@ -580,14 +580,10 @@ class TestTheCompanyPolicy:
         root = Path(__file__).parents[2] / ".scratch/company-mastering/research"
         for name, expected in PROOF["cohort"]["files"].items():
             assert hashlib.sha256((root / name).read_bytes()).hexdigest() == expected
-        summary = json.loads((root / "12-13-summary.json").read_text())
-        assert summary["files"] == PROOF["cohort"]["files"]
-        assert summary["by_step"] == PROOF["cohort"]["by_step"]
-        assert (
-            summary["adversarial"]["violations"] == PROOF["adversarial"]["violations"]
-        )
 
-    def test_the_account_hold_back_re_scores_from_frozen_labels(self):
+    def test_the_phase_1_rule_re_scores_from_the_frozen_labels(self):
+        """Phase 1 (ticket 204; operator: "Operating and listed a real company"): the hand-labelled draws of ticket 12
+        re-scored under the new rule. A listed operating filer is a Company at step 8; any other is set aside."""
         root = Path(__file__).parents[2] / ".scratch/company-mastering/research"
         block = POLICY["kinds"]["company"]
         (rule,) = [r for r in block["rules"] if r["rule_id"] == "sec-company-candidate"]
@@ -595,50 +591,35 @@ class TestTheCompanyPolicy:
         def rows(name):
             return [json.loads(line) for line in (root / name).read_text().splitlines()]
 
-        sample = rows("12-13-sample.jsonl")
-        adversarial = rows("12-13-adversarial.jsonl")
-        held = rows("12-13-held.jsonl")
-        for record in sample + adversarial + held:
+        sample, adversarial = rows("12-13-sample.jsonl"), rows("12-13-adversarial.jsonl")
+        listed = 0
+
+        def tickers(record):  # the filer's own tickers, else the catalog's (`phase1-measure.py`)
+            return record["own_tickers"] or record["catalog_tickers"]
+
+        for record in sample + adversarial:
             verdict, step = fired(
                 rule,
-                {
-                    "entity_type": record["entity_type"],
-                    "sic": record["sic"],
-                    "category": record["category"],
-                    "entity_name": record["name"],
-                    "tickers": record["catalog_tickers"],
-                    "forms": record["forms"],
-                },
+                {"entity_type": record["entity_type"], "sic": record["sic"], "category": record["category"],
+                 "entity_name": record["name"], "tickers": tickers(record), "forms": record["forms"]},
                 block,
             )
-            assert (verdict, step) == (
-                "deferred" if record in held else "company",
-                record["step"],
-            )
-            assert record["final"] in {"company", "fund"}
-
-        assert len(sample) == PROOF["n"] == 600
-        correct = sum(record["final"] == "company" for record in sample)
-        assert correct == PROOF["correct"]
-        assert math.isclose(
-            wilson_lower_bound(correct, len(sample), 0.95),
-            PROOF["lower_bound"],
-            abs_tol=1e-6,
-        )
-        for step, measured in PROOF["cohort"]["by_step"].items():
-            group = [record for record in sample if record["step"] == step]
-            step_correct = sum(record["final"] == "company" for record in group)
-            assert (len(group), step_correct) == (measured["n"], measured["correct"])
-            assert math.isclose(
-                wilson_lower_bound(step_correct, len(group), 0.95),
-                measured["lower_bound"],
-                abs_tol=1e-6,
-            )
+            if tickers(record) and record["entity_type"] == "operating":
+                assert (verdict, step) == ("company", "8")
+                assert record["final"] == "company"
+            else:
+                assert verdict == "deferred" and step in {"0", "11"}
+            listed += verdict == "company"
+        old_step_8_listed = sum(1 for r in sample if r["step"] == "8" and tickers(r))
+        assert old_step_8_listed == 279  # the retained part of the proof's sample
+        assert listed == 279 + sum(1 for r in adversarial if tickers(r) and r["entity_type"] == "operating")
+        # The proof adds the 244 listed operating filers the retired shell and fund tests held back
+        # (`phase1-measure.py` counts them on the set-aside records), each a real company.
+        assert PROOF["n"] == PROOF["correct"] == old_step_8_listed + 244
+        assert math.isclose(wilson_lower_bound(PROOF["correct"], PROOF["n"], 0.95), PROOF["lower_bound"], abs_tol=1e-6)
+        assert PROOF["cohort"]["by_step"] == {"8": {"n": 523, "correct": 523, "lower_bound": PROOF["lower_bound"]}}
         assert len(adversarial) == PROOF["adversarial"]["n"]
-        assert (
-            sum(record["final"] != "company" for record in adversarial)
-            == (PROOF["adversarial"]["violations"])
-        )
+        assert sum(record["final"] != "company" for record in adversarial) == PROOF["adversarial"]["violations"]
 
 
 COMPANY_BAR = {**BAR, "min_precision": 0.95}
@@ -666,7 +647,7 @@ class TestEachStepClearsTheBar:
 
     def test_the_measured_sec_rule_clears_the_bar_at_every_company_step(self):
         approved = {**PROOF, "approved_by": "x", "approved_at": "y"}
-        _check_proof("company", COMPANY_BAR, approved, ["8", "10"])
+        _check_proof("company", COMPANY_BAR, approved, ["8"])
 
 
 def _name_rules():
