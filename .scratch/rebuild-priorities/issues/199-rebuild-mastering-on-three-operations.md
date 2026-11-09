@@ -186,5 +186,13 @@ Links are a `relationship` silver table, one row a period, from a `silver.derive
   - [ ] Measure a real `processed` step again on the next load: the median was 11.4 s over 511 files.
 - [ ] Person and Fund on MySQL; OpenFIGI at full size on the final version.
 - [ ] The rebuilt path on every source, compared with the engine; the old path deleted.
-- [ ] Parts from ticket 197: the catalog read in every bundle; the cost of a step whatever its work; bundles that share keys; deadlocks in claims; the batch document stored and compared many times; a resumed run stepping over retained batches; why a stored bundle is loaded again.
+- [ ] Parts from ticket 197: sorted 2026-11-08 22:49 ET against what `main` now holds.
+  - [x] The `processed` step, 11 s for one row per file set: batched journal writes, PR 1528.
+  - [x] The 7 to 26 s every step costs whatever its work: measured, a control call is 0.25 s and an empty worker pass 0.3 s, so about 1.5 s a step; the rest was the work (above).
+  - [x] ~~Bundles that share keys conflict at the merge~~ gone with the old merge: the new merge takes one lock, and `test_two_writers_on_the_same_identifiers_leave_one_master_each` runs on both engines.
+  - [x] ~~A resumed run stepping over retained batches~~ gone: the new merge skips a finished file by its key, and a second run changes nothing (`test_a_replay_masters_every_source_and_a_second_run_changes_nothing`).
+  - [x] ~~The batch document stored and compared many times (batch, proposal, three consumers)~~, ~~the other 180 statements~~, ~~the floor~~ and ~~why bundle 11 was loaded again~~: all measured the old merge, deleted in PR 1520; the new merge writes by file.
+  - [ ] The catalog read in every bundle (27% of `sec.company` run time): not checked against the new path; the `catalog` step still exists in `rules/sources`.
+  - [ ] Two deadlocks in claims at 3 bundles at once: Bookkeeping's claim path is unchanged; not re-measured.
+  - [ ] Python preparation builds and hashes the batch document more than once: `mdm.prepare` and `batch_input` are live; not re-measured.
 - [x] Learning → skill: `skills/mdm-engineering/SKILL.md`, "Writes and transactions" (a lock call commits first, so an all-or-nothing step is one function) and "Retire redundant tests" (dead code by import graph, not a pin list); a link's start and declared keys are in PR 1513 (2026-11-08 21:10 ET).
