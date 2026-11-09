@@ -6,7 +6,7 @@ import json
 from collections import defaultdict
 from contextlib import contextmanager
 
-from edgar_warehouse.mastering import lookups, merge
+from edgar_warehouse.mastering import links as link_builder, lookups, merge
 from edgar_warehouse.mastering.store import open_store
 from edgar_warehouse.mdm.identifier_types import TYPES
 from edgar_warehouse.rules import files
@@ -65,3 +65,16 @@ def cross_referencing(engine, namespace: str, value: str) -> list[str]:
     with opened(engine) as store:
         lookups.build(store)
         return lookups.cross_referencing(store, namespace, value)
+
+
+def links(engine, policy: dict | None = None, as_of: str = "2026-12-31T00:00:00+00:00", of_type: str = "") -> list[dict]:
+    """Every link the stored records report, as the link step builds them: source and target master ids, periods."""
+    with opened(engine) as store:
+        edges, _ = link_builder.calculate(store, policy or files.policy(), as_of, {})
+    return [edge for edge in edges if not of_type or edge["type"] == of_type]
+
+
+def names(engine) -> dict[str, str]:
+    """Each live master's name, by master id."""
+    return {entity: body["fields"]["name"]["value"] for entity, body in bodies(engine).items()
+            if body.get("status") != "alias" and body.get("fields", {}).get("name")}
