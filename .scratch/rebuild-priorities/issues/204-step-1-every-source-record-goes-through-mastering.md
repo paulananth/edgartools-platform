@@ -26,6 +26,31 @@ All 14 merge steps in `rules/sources` run `mastering.merge`. Some identifiers ar
 - By source and entity type, each of the 14 sources lands only in its own entity type, with one exception: one SEC submissions person record (an individual filer) sits on a Company golden record that also holds two Form ADV filings, joined by CIK. That is one record with two entity types, against step 2.
 - Per-source, per-type tests do not exist yet.
 
+## Step 1 for every source: the gaps and the rulings (2026-11-09 16:06 ET; operator: "Make sure every source follows step 1 no excuses")
+
+Counts on the shared store, records with no golden record, by source and reason (counts only):
+
+| Source | Records | Why | Ruling and fix |
+|---|---|---|---|
+| SEC company and SEC submissions person (the same filers) | about 38,700 filers | The company classification takes only the types operating and investment; the person rule takes only person-shaped names; a filer of type other with a company name matches neither | Operator: "1 agreed": an SEC filer that is not a person becomes a Company by default; a person only when the name shape proves it. To build: the Company classification rule, tested on invented records, then on real counts |
+| Form 4 security | 889 | The ticker rule creates nothing | Operator: create by issuer CIK and title (above) |
+| Form ADV custodians named only by name | 1,429 | The exact-name rule waits | Operator: by name, with name plus place for names without a legal form (parts 3 to 5 above); part 3 merged (PRs 1565, 1566) |
+| GLEIF | 21,589 | GLEIF never creates a Company | Operator: "2 no gleif is a secondary source". A secondary source attaches to golden records other sources create and never creates one; its records wait with a recorded review. This is the one stated exception to "every record has a golden record" |
+| OpenFIGI "not found" | 30,121 CUSIPs and 7,560 ISINs | The provider returned nothing, and the record is set aside | Operator: "3 openfigi is currently creating only equity so if it is equity then yes if not no". Measured: 30,117 of the 30,121 CUSIPs are already held by Security golden records made from 13F and N-PORT, so the not-found record attaches to that Security and records that OpenFIGI does not know it; 4 CUSIPs are held by none and carry no security type, so by the ruling they create nothing. The 7,560 ISIN-only records are not yet measured |
+| Records with an invalid check digit (LEI or CUSIP) | 34 + 14 + 2,429 + 1 | The whole record is set aside for one bad identifier | The record masters by its other identifiers or its name and the bad value is kept as flagged evidence (proposed; not yet ruled) |
+| Form 4 reporting owners | 781 | Person or company undecided | Same ruling as the SEC filers |
+| Missing record identity | 98 | No usable key | To look at |
+| Form ADV filings v2 and N-PORT security | 12 and 6 | Not yet looked at | To look at |
+
+Checklist for this section:
+
+- [ ] SEC filers: the Company classification default, built and tested (both orders; a person-shaped name still a Person), then the limited test on real counts and approval.
+- [ ] OpenFIGI not found: attach the record to the Security that holds its CUSIP and record the answer; count the 7,560 ISIN-only records the same way.
+- [ ] Records with an invalid check digit master by their other identifiers or name; the operator's word on the proposal.
+- [ ] Form 4 reporting owners follow the SEC filer ruling.
+- [ ] Look at the 98 missing-identity records, the 12 Form ADV filings v2 and the 6 N-PORT securities.
+- [ ] Name "secondary source" in `CONTEXT.md` once the operator agrees the definition: a source that attaches to golden records others create and never creates one.
+
 ## Checklist
 
 - [ ] Show that no code path writes a golden record except `mastering.merge`: list every writer of the master tables and name each caller (read the code, then test it).
