@@ -126,11 +126,21 @@ WITHOUT_TICKET_129_FIELDS = {
     "sec.company.v1": "7786ffdd0187f24b4206762125ae09535cdc1c98b009406e174b8175a25006c4",
     "gleif.level1.v1": "d03454b6e1f76e3d98378193dce2e5fd60df0a95180e3a1aeb7397a3cd8cc8b0",
 }
+def _before_phase_1(contract: dict) -> dict:
+    """The contract with the SEC Company classification rule's version it had before phase 1 (ticket 204), for the
+    digests pinned before; the contract used afterwards keeps the current version, which the policy holds."""
+    classification = (contract.get("adapter") or {}).get("classification")
+    if classification and classification.get("rule_id") == "sec-company-candidate":
+        return {**contract, "adapter": {**contract["adapter"], "classification": {**classification, "version": "2026-09-25.13"}}}
+    return contract
+
+
 def _with_company_fields_back(contract: dict, code: str) -> dict:
     from tests.support.name_count_words import before_name_id
 
     contract = before_name_id(contract)  # ticket 01: the name id and its version came after
-    assert _historic_digest(contract) == WITHOUT_TICKET_129_FIELDS[code], code
+    pinned = _before_phase_1(contract)
+    assert _historic_digest(pinned) == WITHOUT_TICKET_129_FIELDS[code], code
     return before_ticket_129(contract, code)
 
 
@@ -155,12 +165,12 @@ def _restore_company_identity(value):
 
 
 def _historic_digest(value) -> str:
-    return digest(_restore_company_identity(value))
+    return digest(_restore_company_identity(_before_phase_1(value) if isinstance(value, dict) else value))
 
 
 def _with_retired_lists(contract: dict, code: str) -> dict:
     historic_code = HISTORIC_SEC_CODE if code == "sec.company.v1" else code
-    assert _historic_digest(contract) == ONE_STATEMENT[code], code
+    assert _historic_digest(_before_phase_1(contract)) == ONE_STATEMENT[code], code
     return {**contract, "adapter": {**contract["adapter"], **RETIRED_LISTS[historic_code]}}
 
 
@@ -184,8 +194,10 @@ def test_the_company_configuration_is_unchanged():
     assert _historic_digest(v6) == WITH_QUALITY["contract"]
     assert _historic_digest(_without_quality(v6)) == BEFORE["contract"]
     assert digest(RETIRED_LISTS[HISTORIC_SEC_CODE]["fields"]) == BEFORE["fields"]
-    assert digest(sec_company.PROOF) == BEFORE["proof"]
-    assert digest(sec_company.APPROVED_ACTIVATION) == BEFORE["approved_activation"]
+    # Phase 1 (ticket 204) replaced the rule's proof and activation; the lineage holds the ones before.
+    held = json.loads((Path(__file__).parent / "fixtures/company_classification_2026_09_25_13.json").read_text())
+    assert digest(held["entry"]["proof"]) == BEFORE["proof"]
+    assert digest(held["entry"]) == BEFORE["approved_activation"]
     assert digest(policy_layers.company_proofs(sec_company.NAME_PROOFS, COMPANY)) == BEFORE["name_proofs"]
     # Each switched-on name rule carries its measured proof, unchanged, with
     # the operator's approval added.

@@ -25,6 +25,7 @@ def sec(name="APPLIED MATERIALS INC /DE", state="DC", street="3050 BOWERS AVENUE
         "cik": 6951,
         "entity_name": name,
         "entity_type": "operating",
+        "tickers": ["AMAT"],  # phase 1 (ticket 204) masters listed filers only
         "sic": "3674",
         "state_of_incorporation": state,
         "business_address": {

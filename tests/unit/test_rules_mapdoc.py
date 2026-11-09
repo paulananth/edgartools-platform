@@ -133,7 +133,7 @@ def test_the_sheets_say_what_the_rules_say():
     assert "The SEC company is not already linked to another LEI" in kind["Matching rules"][3][5]
     assert ["jurisdiction", "gleif.level1.v1", "gleif.level1.v1", "Kind default",
             "merge/kinds/company.yaml defaults.sources"] in kind["Who wins each field"]
-    assert len(kind["Classification"]) == 15  # the 14 steps of sec-company-candidate
+    assert len(kind["Classification"]) == 9  # the 8 steps of sec-company-candidate (phase 1, ticket 204)
     # Platform validation 06a: a GLEIF link starts at its child's Level 1 record, read from
     # the GLEIF record as published (L6), not from a row the older reader built.
     links = [row[2:5] for row in found["gleif"]["Fields"] if row[0] == "gleif.relationships.v1"]
@@ -153,8 +153,14 @@ def test_a_condition_names_its_own_kind_and_reads_a_ceiling_of_none():
     security = " ".join(row[5] for row in found["security"]["Matching rules"][1:])
     assert "Security holds" in security and "Company" not in security
     steps = " ".join(row[6] for row in found["company"]["Classification"][1:])
-    assert "forms holds none of the list bdc_election" in steps
-    assert "at least  " not in steps and "at least 1 of the list" in steps
+    # Phase 1 (ticket 204) dropped the Company steps that read a ceiling of none and a floor of one, so the renderer
+    # is tested on made conditions, and the Company steps still read without an empty floor.
+    ceiling = mapdoc._conditions([{"primitive": "values_overlap@1", "args": {"field": "forms", "values": "bdc_election",
+                                                                            "max_count": 0}}], "company")
+    floor = mapdoc._conditions([{"primitive": "values_overlap@1", "args": {"field": "forms", "values": "form_10",
+                                                                          "min_count": 1}}], "company")
+    assert "forms holds none of the list bdc_election" in ceiling and "at least 1 of the list" in floor
+    assert "at least  " not in steps and "at least  " not in ceiling
     passes = " ".join(row[5] for row in found["company"]["Matching rules"][1:])
     assert "Refused flags: none" in passes and "Refused flags: ;" not in passes
 

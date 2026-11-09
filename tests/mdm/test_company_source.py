@@ -24,7 +24,7 @@ TEST_POLICY["automatic_rules"] = [
         "kind": "company",
         "family": "classification",
         "rule_id": "sec-company-candidate",
-        "rule_version": "2026-09-25.13",
+        "rule_version": "2026-11-09.phase-1-listed-operating",
         "verdict": "company",
         "activation": "measured",
         "proof": proof(),
@@ -84,7 +84,9 @@ def test_native_company_kind_identifiers_and_unknown_effective_time():
         )
 
 
-def test_step_ten_requires_the_landing_filer_category():
+def test_phase_1_masters_only_operating_filers_with_a_ticker():
+    """Operator, 2026-11-09: "For phase 1 master only publically traded companies (filter)"; "Operating and listed a
+    real company". A filer SEC types other (a foreign issuer) is outside phase 1, and so is one with no ticker."""
     publication = {
         "publication_key": "capture-1/company",
         "revision": 0,
@@ -92,32 +94,21 @@ def test_step_ten_requires_the_landing_filer_category():
         "artifact_sha256": "a" * 64,
         "member": "records.jsonl",
     }
-    row = source_row(
-        1306965,
-        entity_name="Shell plc",
-        entity_type="other",
-        sic="1311",
-        category="",
-    )
-    row["last_synced_at"] = row["last_synced_at"].isoformat()
-    for missing in ("", None):
-        with pytest.raises(
-            UnsupportedRecord, match="classification_deferred"
-        ) as caught:
-            normalize(
-                {**row, "category": missing},
-                source_code=SOURCE_CODE,
-                contract=CONTRACT,
-                publication=publication,
-            )
-        assert caught.value.detail["classification"]["step"] == "11"
-    body = normalize(
-        {**row, "category": "Large accelerated filer"},
-        source_code=SOURCE_CODE,
-        contract=CONTRACT,
-        publication=publication,
-    )
-    assert body["provenance"]["classification"]["step"] == "10"
+
+    def row(**changes):
+        made = source_row(1306965, entity_name="Shell plc", sic="1311", category="Large accelerated filer", **changes)
+        made["last_synced_at"] = made["last_synced_at"].isoformat()
+        return made
+
+    def classified(made):
+        return normalize(made, source_code=SOURCE_CODE, contract=CONTRACT, publication=publication)
+
+    assert classified(row(entity_type="operating"))["provenance"]["classification"]["step"] == "8"
+    for outside, step in ((row(entity_type="other"), "11"), (row(entity_type="operating", tickers=[]), "0"),
+                          (row(entity_type="other", tickers=[]), "0")):
+        with pytest.raises(UnsupportedRecord, match="classification_deferred") as caught:
+            classified(outside)
+        assert caught.value.detail["classification"]["step"] == step
 
 
 def test_a_corrected_reading_of_one_sec_publication_is_a_second_assertion():

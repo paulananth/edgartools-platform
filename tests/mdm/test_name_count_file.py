@@ -192,17 +192,22 @@ def test_each_filer_reaches_the_cascade_as_the_full_company_chain_prepares_it(tm
     filers = _cascade_filers(tmp_path, documents(), CATALOG_ROWS)
     answers = json.loads((Path(__file__).parents[1] / "integration/fixtures/company-mastering-records.json").read_text())
     contract = files.source("sec.company")["dataset_contracts"]["sec.company.v1"]["contract"]
-    expected = [cascade.filer_of(adapters.normalize(json.loads(line), source_code=b["source_code"], contract=contract,
-                                                    policy=files.policy(), publication={
-                                                        **name_count_file.CASCADE_PUBLICATION, "record_locator": "x"}))
-                for b in answers["batches"] for line in b["records_jsonl"].splitlines()]
-    assert len(filers) == 3 and {f.cik: f for f in filers} == {f.cik: f for f in expected}
-    assert {f.cik: f.business_country for f in filers} == {"0000320193": "US", "0000789019": "US", "0000000042": "GB"}
+    def classified(b, line):
+        try:
+            return [cascade.filer_of(adapters.normalize(json.loads(line), source_code=b["source_code"], contract=contract,
+                                                        policy=files.policy(), publication={
+                                                            **name_count_file.CASCADE_PUBLICATION, "record_locator": "x"}))]
+        except adapters.UnsupportedRecord:  # phase 1 (ticket 204): the unlisted filer (cik 42) is set aside
+            return []
+
+    expected = [f for b in answers["batches"] for line in b["records_jsonl"].splitlines() for f in classified(b, line)]
+    assert len(filers) == 2 and {f.cik: f for f in filers} == {f.cik: f for f in expected}
+    assert {f.cik: f.business_country for f in filers} == {"0000320193": "US", "0000789019": "US"}
 
 
 def test_forms_and_tickers_classify_a_filer_as_the_merge_stage_does(tmp_path):
-    """A fund's report forms set an operating filer aside, and a ticker keeps a REIT a Company,
-    so the cascade counts exactly the filers MDM stages."""
+    """A fund's report forms set an operating filer aside, and a ticker keeps a REIT a Company; phase 1 (ticket 204)
+    sets aside a filer with no ticker, so the cascade counts exactly the filers MDM stages."""
     from tests.support.sec_capture import address, catalog, document
 
     fund = document(11, "EXAMPLE HOLDINGS INC", forms=("N-CSR",), business=address())
@@ -210,7 +215,7 @@ def test_forms_and_tickers_classify_a_filer_as_the_merge_stage_does(tmp_path):
     plain = document(33, "EXAMPLE TOOLS INC", business=address(street="3 MAIN ST"))
     filers = _cascade_filers(tmp_path, {11: fund, 22: reit, 33: plain},
                              catalog((22, "EXAMPLE REALTY TRUST", "EXRT", "NYSE")))
-    assert sorted(f.cik for f in filers) == ["0000000022", "0000000033"]
+    assert sorted(f.cik for f in filers) == ["0000000022"]  # 33 has no ticker: outside phase 1
 
 
 @pytest.mark.parametrize('existing', [False, True])

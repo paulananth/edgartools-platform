@@ -31,16 +31,19 @@ def cohort():
     }
     fixture = json.loads(FIXTURE.read_text())
     readings = []
-    company = [("sec.company.v1", row) for row in fixture["sec"]
+    # Phase 1 (ticket 204) masters listed operating filers only; the pinned fixture states no tickers, so the two
+    # operating rows are read with the tickers they have, and keyed by the row as pinned.
+    listed = {320193: ["AAPL"], 789019: ["MSFT"]}
+    company = [("sec.company.v1", {**row, "tickers": listed[row["cik"]]}, row) for row in fixture["sec"]
                if row["entity_type"] == "operating"]
     person_file = FIXTURE.with_name("person_raw.jsonl")
-    person = [("sec.submissions.person.v1", json.loads(line))
+    person = [("sec.submissions.person.v1", (raw := json.loads(line)), raw)
               for line in person_file.read_text().splitlines() if line.strip()]
-    for code, row in [*company, *person]:
+    for code, row, pinned in [*company, *person]:
         readings.append(normalize(
             row, source_code=code, contract=contracts[code], policy=policy,
-            publication={"publication_key": f"offline-cohort/{row['cik']}@{digest(row)}",
-                         "revision": 1, "artifact_sha256": digest(row),
-                         "member": "four_companies_v1.json", "record_locator": str(row["cik"])},
+            publication={"publication_key": f"offline-cohort/{pinned['cik']}@{digest(pinned)}",
+                         "revision": 1, "artifact_sha256": digest(pinned),
+                         "member": "four_companies_v1.json", "record_locator": str(pinned["cik"])},
         ))
     return policy, contracts, readings

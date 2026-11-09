@@ -322,7 +322,7 @@ dataset_contracts:
         classification:
           kind: company
           rule_id: sec-company-candidate
-          version: 2026-09-25.13
+          version: 2026-11-09.phase-1-listed-operating
         # Behind the operator's decision (2026-09-26): EIN and SEC's stated LEI
         # are kept as lookup-only identifiers. Identifiers are fixed within a
         # source code, so they wait for a new one (sec.company.v2);
