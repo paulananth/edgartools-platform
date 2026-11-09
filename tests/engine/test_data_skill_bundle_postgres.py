@@ -1251,6 +1251,8 @@ def test_gleif_configured_mapping_merges_from_installed_bundle(installed, databa
             if record["source"]=="sec.company":  # a Delaware business address, as SEC writes it
                 record["row"]["business_address"]={"street":"  Source Street  ","street2":None,"city":"City",
                                                    "region":" de ","postal_code":"12345","country":"US"}
+                # Phase 1 (ticket 204) masters listed operating filers only; the pinned fixture states no tickers.
+                record["row"]["tickers"]={320193:["AAPL"],789019:["MSFT"]}[record["row"]["cik"]]
         readings=[]
         for record in sec_records:
             row=record["row"];code=f"{record['source']}.v1"
