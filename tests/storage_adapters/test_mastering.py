@@ -375,3 +375,28 @@ def test_a_link_waits_for_its_other_end_and_keeps_its_earliest_start(database_fa
         merge.merge_file(db, SECURITY, [filed("2026-06-01T00:00:00+00:00", 2)])
         later, _ = links.calculate(db, POLICY, AS_OF, links.stored_of([row]))
         assert [r["valid_from"] for r in links.rows_of(later)] == [row["valid_from"]]
+
+
+PERSON = merge.Settings(POLICY, "invented-digest", "person", AS_OF)
+FUND = merge.Settings(POLICY, "invented-digest", "fund_structure", AS_OF)
+PERSON_SOURCE, FUND_SOURCE = "sec.submissions.person.v1", "sec.nport.fund.v1"
+
+
+def test_person_and_fund_join_by_their_identifier_and_a_rerun_changes_nothing(database_factory):
+    """Person by CIK and Fund by series id, each kind under the real rules, on each engine (invented records)."""
+    with opened(database_factory) as db:
+        person = lambda key, cik: record(PERSON_SOURCE, key, "person", {"name": f"INVENTED PERSON {key}"}, cik=cik)
+        fund = lambda key, series: record(FUND_SOURCE, key, "fund_structure", {"name": f"INVENTED FUND {key}"},
+                                          sec_series_id=series)
+        people = [person("p1", "0000000901"), person("p1-again", "0000000901"), person("p2", "0000000902")]
+        funds = [fund("f1", "S000000901"), fund("f1-again", "S000000901"), fund("f2", "S000000902")]
+        assert merge.merge_file(db, PERSON, people).get("merges", 0) == 0
+        assert merge.merge_file(db, FUND, funds).get("merges", 0) == 0
+        held = {b["kind"] for b in live(db).values()}
+        assert held == {"person", "fund_structure"}
+        assert sum(1 for b in live(db).values() if b["kind"] == "person") == 2  # one master a CIK
+        assert sum(1 for b in live(db).values() if b["kind"] == "fund_structure") == 2  # one master a series
+        before = masters(db)
+        merge.merge_file(db, PERSON, people, again=True)
+        merge.merge_file(db, FUND, funds, again=True)
+        assert masters(db) == before
