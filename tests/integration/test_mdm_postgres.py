@@ -7,11 +7,7 @@ from uuid import uuid4
 
 from sqlalchemy import create_engine, text
 
-from edgar_warehouse.mdm.store import (
-    Store,
-    migrate,
-    register_policy,
-)
+from edgar_warehouse.mdm.store import migrate, register_policy
 from tests.support.relationship_types import with_relationship_types
 from tests.support.rules_authority import register_dataset
 
@@ -96,8 +92,7 @@ def initialize_database(admin, app):
     return Database(admin, app, policy, version)
 
 
-from edgar_warehouse.mdm.evidence import assertion, decision
-from edgar_warehouse.mdm.merge import MergeStage
+from edgar_warehouse.mdm.evidence import assertion
 
 AS_OF = "2026-09-18T00:00:00+00:00"
 AT = "2026-01-01T00:00:00+00:00"
@@ -116,65 +111,6 @@ def source(key="c1", source_code="fixture.primary", revision=1, **kw):
     )
 
 
-def identity_and_binding(a, entity_id=None, *, published_at=AT):
-    entity_id = entity_id or str(uuid4())
-    return {"entity_id": entity_id, "kind": a["kind"], "published_at": published_at}, decision(
-        "bind",
-        actor="steward",
-        reason="fixture source reviewed",
-        at=AT,
-        subject=a["subject"],
-        entity_id=entity_id,
-        evidence=[a["assertion_id"]],
-    )
-
-
-def apply(db, n, **kw):
-    return MergeStage(Store(db.application)).apply(
-        batch_id=f"work-{n}",
-        run_id=kw.pop("run_id", str(uuid4())),
-        policy_digest=db.policy,
-        consumer="fixture",
-        expected_checkpoint=n - 1,
-        checkpoint=n,
-        as_of=AS_OF,
-        **kw,
-    )
-
-
-def documents(db, kind):
-    """Read fixture objects through the public, generation-pinned contract."""
-    from edgar_warehouse.mdm.consumer import ContractReader
-
-    reader, after, found, generation = ContractReader(db.application), "", {}, None
-    while True:
-        page = reader.snapshot_page(kind, after=after, generation=generation, limit=1000)
-        generation = page["generation"]
-        found.update((row["object_id"], row["body"]) for row in page["items"])
-        after = page["next_after"]
-        if after is None:
-            return found
-
-
-# --- Company mastering ticket 01: a mapping may be corrected ------------------
-# Real PG16 against migration 031. A re-read of one publication under a
-# corrected mapping must add a row beside its predecessor: before the ticket's
-# amendments a changed reading raised on the revision guard and an unchanged
-# one collided on assertion_id, so neither could ever be stored.
-
-
-def register_reading(database, code, body):
-    with database.admin.begin() as conn:
-        register_dataset(conn, code, database.registry, body)
-    with database.application.connect() as conn:
-        return conn.scalar(
-            text(
-                "SELECT max(mapping_version) FROM mdm.dataset_mapping WHERE source_code=:c"
-            ),
-            {"c": code},
-        )
-
-
 def contract_body(**changes):
     return {
         "provider": "test",
@@ -187,32 +123,3 @@ def contract_body(**changes):
         "semantics": "patch",
         **changes,
     }
-
-
-def current_records(db):
-    """Inspect the small fixture's stored pointers, then validate through its reader."""
-    import json
-    from sqlalchemy import select
-    from edgar_warehouse.mdm.record_reads import for_connection
-
-    with db.application.connect().execution_options(isolation_level="REPEATABLE READ") as conn:
-        reader = for_connection(conn)
-        table = reader.adapter.tables["lookup"]
-        subjects = [json.loads(body)["subject"] for body in conn.scalars(
-            select(table.c.body).where(table.c.type_bytes == b"source-record"))]
-        return reader.current(subjects)
-
-
-def bindings(db, source_code=None, *, by_subject=False):
-    """Fixture bindings through the configured canonical master lookup."""
-    from tests.support.old_master_ids import OldIds as MdmIds
-
-    records = [r for r in current_records(db).values()
-               if source_code is None or r["source_code"] == source_code]
-    groups = {(r["source_code"], r["kind"]) for r in records}
-    found = {}
-    for code, kind in groups:
-        selected = [r for r in records if (r["source_code"], r["kind"]) == (code, kind)]
-        ids = MdmIds(db.application)(code, kind, {r["record_key"] for r in selected})
-        found.update((r["subject"] if by_subject else r["record_key"], ids.get(r["record_key"])) for r in selected)
-    return found

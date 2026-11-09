@@ -1,0 +1,25 @@
+{
+  "pins": {
+    "/Users/aneenaananth/projects/edgartools-platform-old-merge-end/edgar_warehouse/rules/source_engine.py": "d8b65dde54676b10219ae07a7ad9ff3d50fda9eb963fae67eba8c2f46ff1c2b1",
+    "/Users/aneenaananth/projects/edgartools-platform-old-merge-end/edgar_warehouse/rules/steps.py": "f19b77ba57a038b9742e7fcf25b4545266c6ec46ca6f732737ac743ea350e810",
+    "/Users/aneenaananth/edgar-local-tmp/arm-venv/lib/python3.12/site-packages/source_contract/source_contract.abi3.so": "d1f2d3818849441d6d0308d3c30ed7a6afc8fff8d90d6f950574ef5d4b255817",
+    "/Users/aneenaananth/projects/edgartools-platform-old-merge-end/edgar_warehouse/workers/source_mapping.py": "4ec4d53ee17a2f6283c234db49d7ab68073a3f8e328f538990007b4e1cd920b4",
+    "/Users/aneenaananth/projects/edgartools-platform-old-merge-end/edgar_warehouse/mdm/adapters.py": "c0bf58d5df2952f7d0a68c9f6c9d413f8a54c718c52fafd894f4f77d1b6805df",
+    "/Users/aneenaananth/projects/edgartools-platform-old-merge-end/rules/sources/gleif/source.yaml": "7326288be1ca026053b03734bdaff91e1a2f1ca823b0b48daeb9ca8f89996f79",
+    "/Users/aneenaananth/projects/edgartools-platform-old-merge-end/rules/sources/sec.company/source.yaml": "77c52e147f21e4b36f05952ba3b9cd80d607439eb35f5d27c9d650116d989ae1",
+    "/Users/aneenaananth/projects/edgartools-platform-old-merge-end/rules/sources/sec.submissions.person/source.yaml": "b15fe41ddd795b1f2b9cb6a40f523cae0a94481b52ac1ec27bdabf2d2ddf8b3c",
+    "/Users/aneenaananth/projects/edgartools-platform-old-merge-end/edgar_warehouse/mdm/sec_company.py": "569dd978a5d1b5631ea38fa11c877063748af69e5e29c7f8e4a2a40b419c40d6",
+    "/Users/aneenaananth/projects/edgartools-platform-old-merge-end/edgar_warehouse/mdm/name_count.py": "e9dbc86e5309abe9d6af03457d0a72e5b16aa25b507e69e7ef8a945dc428bae6",
+    "/Users/aneenaananth/projects/edgartools-platform-old-merge-end/rules/sources/gleif/name-count-complete-stream.yaml": "f87ac142fef3056ba497cba8af94e1d71f9c6912f83860adb64b5cdf8647b853",
+    "/Users/aneenaananth/projects/edgartools-platform-old-merge-end/rules/sources/sec.company/name-count-filer.yaml": "e68f127759f8120f99a3c433c7629f61a902ccb516436276d44b7ca1825e473a"
+  },
+  "counts": {
+    "company": 2,
+    "person": 2
+  },
+  "installed_gleif_mapping": true,
+  "installed_sec_mapping": true,
+  "installed_name_count_caller": true,
+  "name_count_digest": "9cb4b4622f232d617e32635ce14c6e3ddee8e251b45bca7b581ed1651d2917b9",
+  "full_population": false
+}
