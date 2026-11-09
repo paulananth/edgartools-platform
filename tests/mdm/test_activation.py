@@ -937,12 +937,20 @@ def test_an_exact_name_rule_that_finds_and_never_creates_is_accepted():
     check_policy(body)
 
 
+def test_an_exact_name_rule_that_mints_when_no_master_holds_the_name_is_accepted():
+    body = exact_policy(on_no_match="mint")
+    entry = copy.deepcopy(EXACT_ENTRY)
+    entry["proof"] = {**entry["proof"], "names": entry["proof"]["names"] + 3, "created": 3}
+    body["automatic_rules"].append(entry)
+    check_policy(body)
+
+
 @pytest.mark.parametrize("change", [
-    {"on_no_match": "mint"}, {"on_several": "bind"}, {"holder_sources": []}, {"holder_sources": ["a.v1"]},
+    {"on_no_match": "guess"}, {"on_several": "bind"}, {"holder_sources": []}, {"holder_sources": ["a.v1"]},
     {"key": "name"}, {"when": [{"primitive": "identifier_match@1", "args": {"namespace": "lei"}}]},
     {"emits": ["bind", "create"]},
 ])
-def test_an_exact_name_rule_that_could_create_or_guess_is_refused(change):
+def test_an_exact_name_rule_that_could_guess_is_refused(change):
     with pytest.raises(Conflict):
         check_policy(exact_policy(**change))
 

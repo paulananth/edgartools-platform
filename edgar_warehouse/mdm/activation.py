@@ -603,15 +603,16 @@ def _check_cascade_pass(rule_id: str, rule: dict, tests: list) -> None:
 
 def check_exact_name_rule(kind: str, rule: dict, kinds: dict) -> None:
     """An exact-name matching rule (ticket 01): a source's record joins the one master
-    that records of the holder sources hold under the same name id. It finds, so it
-    never creates (`wait`) and never guesses between masters (`review`)."""
+    that records of the holder sources hold under the same name id. It never guesses
+    between masters (`review`). With none it waits (`wait`) or, where the operator has
+    ruled that the name makes the golden record, creates it (`mint`)."""
     rule_id = rule.get("rule_id")
     if rule.get("applies_to_verdict") != kind:
         raise Conflict(f"Exact-name rule {rule_id} applies to {rule.get('applies_to_verdict')}, but sits in kind {kind}")
     if rule.get("emits") != ["bind"]:
         raise Conflict(f"Exact-name rule {rule_id} must emit exactly bind")
-    if rule.get("on_no_match") != "wait" or rule.get("on_several") != "review":
-        raise Conflict(f"Exact-name rule {rule_id} never creates a master: on_no_match wait, on_several review")
+    if rule.get("on_no_match") not in ("wait", "mint") or rule.get("on_several") != "review":
+        raise Conflict(f"Exact-name rule {rule_id} needs on_no_match wait or mint, and on_several review")
     holders = rule.get("holder_sources")
     if (not rule.get("source") or not isinstance(holders, list) or not holders
             or not all(isinstance(h, str) and h for h in holders) or rule["source"] in holders):
@@ -625,14 +626,16 @@ def _check_exact_name(kind: str, block: dict, rule: dict, entry: dict) -> None:
     contract to verify; what is shown is how the rule behaved on real names."""
     proof = entry.get("proof") or {}
     counts = ("names", "attached", "review", "waiting")
+    created = proof.get("created", 0)
     if (entry.get("verdict") != "bind"
             or not all(type(proof.get(c)) is int and proof[c] >= 0 for c in counts)
-            or proof["names"] != proof["attached"] + proof["review"] + proof["waiting"]
+            or type(created) is not int or created < 0
+            or proof["names"] != proof["attached"] + proof["review"] + proof["waiting"] + created
             or proof["attached"] < 1 or proof.get("second_pass_changed_nothing") is not True
             or not all(proof.get(k) for k in ("approved_by", "approved_at", "reason"))):
         raise Conflict(
             f"Activation of {rule['rule_id']} needs its limited test: names = attached + review + "
-            "waiting (at least one attached), a second pass that changed nothing, and its approval")
+            "waiting + created (at least one attached), a second pass that changed nothing, and its approval")
 
 
 RULE_CHECKS = {
