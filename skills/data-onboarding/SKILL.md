@@ -549,6 +549,11 @@ missing, go on and log it.
     period end such as a fiscal year end often lies after it. Count the
     values that fall outside the delivery's window; they are why each row
     keeps its own date.
+  - A link that states no start takes the time its record was first seen,
+    so the record must carry one. Give the adapter `effective_at` naming the
+    field that dates it (the month end of its file, a report date); without it
+    every such link waits as `unknown_relationship_start`. Count the waiting
+    links after the first load of a real file, not only in a test.
   - A relationship ends only on an end the source states. A record missing
     from a later file, or a source that falls silent, closes nothing.
   - Order and compare by the date the event happened, never the date it was

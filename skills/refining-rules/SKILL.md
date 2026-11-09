@@ -261,6 +261,16 @@ names, and no further. Then `rules save` and record the proof, or carry the
 last one forward (same table, its last row). Show what changes, record by
 record.
 
+A test of a source prepares with the keys the source itself declares for its
+`mdm.prepare` step, read from the rules file, never keys the test writes. A
+test that dates its own records passes while a real load, using the declared
+keys, builds nothing; make the test fail first without the fix.
+
+A test that merges runs a policy with every kind it loads: each kind has its
+`kinds` entry, with its field rules inside it, and the policy is registered
+through `register_policy`, which checks it. A policy handed straight to the
+merge skips that check and passes where the real load refuses.
+
 ### approve and switch-on
 
 Follow [APPROVE.md](../data-onboarding/APPROVE.md). A new version applies
