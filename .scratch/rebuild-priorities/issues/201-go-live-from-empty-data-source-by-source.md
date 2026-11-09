@@ -31,9 +31,26 @@ Each source: empty its data, load it from its captured files, record counts (fil
 - [ ] SEC company facts and SEC registration (Silver only)
 - [ ] Reconcile waiting links once both endpoints exist; record the totals
 
+## Prerequisites
+
+From [the initial load sequence](../../../docs/initial-and-daily-source-load.md), steps 1 to 4. The doc's "what blocks the full load" table is older than the rebuild, so recheck each line before relying on it.
+
+- [ ] Capture inventory frozen: every retained SEC, GLEIF and OpenFIGI delivery with files, receipts and hashes (no provider request).
+- [ ] Rules documents loaded and RDM code sets restored with exact version pins (SEC place codes, place types, ownership transaction codes).
+- [ ] Each source registered on the new store, with its targets, manifests and worker and verifier logins; the matching rules the operator approved are the ones switched on.
+- [ ] Name counts built from whole populations: the full SEC submissions, the ticker catalog and the full GLEIF Level 1 publication.
+- [ ] Sources with an incomplete path named, not omitted: N-PORT run builder (ticket 79), OpenFIGI listing enrichment (ticket 80), and complete mastering targets for ADV, ownership and 13F.
+- [ ] Ticket 199's open parts that a fresh load meets: the rules version recorded on mastering records, and the Silver `links` stale-lease stop seen in the GLEIF loads.
+- [ ] Ticket 02's origin check of the 327 governed-store runs done first, since an empty start erases that evidence.
+
+## Init, decided
+
+- Environment (operator, 2026-11-09 08:42 ET: "I recommend a new store. Call it local-staging"): a new store named `local-staging`, not the shared `local-test-server`. A new store leaves the current stores as they are, so no backup is needed first.
+- Bookkeeping and the Change Journal start empty (operator, 2026-11-09: "Empty bookkeeping, empty change journal", "This is for ticket 201 init"). MDM and Silver data start empty too.
+- [x] Initialize the store from the skills alone (2026-11-09 08:46 ET). First try failed on gaps in the skill (no interpreter in the command, a checkout behind `origin/main`, a store tied to its creating checkout, a stale skill link); `local-staging` was dropped, the skill text fixed in a working copy, and the retest passed in 17 s: six stores, Bookkeeping, Change Journal and Silver without rows, MDM with six setup tables holding rows. The skill fix waits on the overlap guard (another runtime edits `skills/data-operations/SKILL.md`).
+
 ## Open decisions, to settle one at a time
 
-- [ ] Which environment is emptied: the shared `local-test-server` (needs every user's word, since shared data is never replaced while others use it) or a new store from `local-test-stores.py up`. Recommended: a new store, kept as the go-live store.
-- [ ] Take a backup of the current stores before emptying, and name where it is kept.
+- [x] Environment: `local-staging`, a new store (see Init, decided). Backup of the current stores: not needed.
 - [ ] Whether a source that cannot yet load (ticket 79 N-PORT run builder, ticket 80 OpenFIGI listing enrichment, ADV and 13F mastering targets) is deferred or loaded as far as its path supports. The load sequence says to report the missing source and stage, not to omit it.
 - [ ] Learning → skill: name the skill line this ticket changed, or write "none".
