@@ -460,6 +460,16 @@ def without_custodian_name_rule(policy: dict) -> dict:
     return body
 
 
+def without_custodian_name_creation(policy: dict) -> dict:
+    """The Form ADV custodian rules that create a Company by name, and by name and place (operator, 2026-11-09:
+    "master using name and company type", "Name plus place (Recommended)"), with their activations."""
+    body = _copy(policy)
+    gone = {"iapd-adv-custodian-name-form", "iapd-adv-custodian-name-place"}
+    body["kinds"]["company"]["rules"] = [r for r in body["kinds"]["company"]["rules"] if r["rule_id"] not in gone]
+    body["automatic_rules"] = [e for e in body["automatic_rules"] if e.get("rule_id") not in gone]
+    return body
+
+
 def without_phase_1_listed_operating(policy: dict) -> dict:
     """Phase 1 (ticket 204; operator, 2026-11-09: "For phase 1 master only publically traded companies (filter)",
     "Operating and listed a real company"): the Company classification rule and its measured proof of the version
@@ -508,6 +518,8 @@ def without_adviser_cik(policy: dict) -> dict:
 # Newest first: each layer, and Company's policy digest with it and every
 # layer after it still on.
 LAYERS = [
+    # The custodian rules that create a Company by name, and by name and place (ticket 204, 2026-11-09).
+    (without_custodian_name_creation, "c66426dcb0e136b719cb5b6b4fc9a6d02e305c36683f17bef4a7a26f1417c627"),
     # The Company classification: listed operating filers only (ticket 204, 2026-11-09).
     (without_phase_1_listed_operating, "db8423032eb2c7824baf205df6fb768620c1b4c128d394df181e2d5a2b26bd45"),
     # Relationship types version 4, RELATED_PERSON: "RELATED_PERSON (Recommended)" (2026-11-08).

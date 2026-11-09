@@ -800,7 +800,8 @@ class TestTheNameMatchingRules:
         assert [e["rule_id"] for e in company[2:]] == [
             "sec-gleif-name-jurisdiction", "sec-gleif-name-postal", "iapd-adv-crd", "iapd-adv-cik",
             "iapd-adv-custodian-lei", "iapd-adv-custodian-bd",
-            "iapd-adv-custodian-name", "nport-registrant-cik", "sec-gleif-name-city-or-postcode"]
+            "iapd-adv-custodian-name", "iapd-adv-custodian-name-form", "iapd-adv-custodian-name-place",
+            "nport-registrant-cik", "sec-gleif-name-city-or-postcode"]  # the two creating custodian rules: 2026-11-09
         check_policy(POLICY)
 
     def test_an_activation_needs_the_operators_approval(self):

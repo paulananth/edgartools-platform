@@ -81,13 +81,15 @@ def _name_id(item) -> str:
 def _name_place_id(item) -> str:
     """The id of a name and its place (operator, 2026-11-09: "Name plus place"): the name's tokens and the
     tokens of its city, region and country, so one bare name in two cities is two ids. The item is an object
-    with `name` and any of `city`, `region` and `country`; a name or a place with no token is refused."""
+    with `name` and any of `city`, `region` and `country`; a name with no token is refused, a place with none gives no id."""
     if not isinstance(item, dict):
         raise UnsupportedRecord("invalid_name_place")
     name = _tokens(item.get("name") or "")
     place = [t for part in ("city", "region", "country") for t in _tokens(item.get(part) or "")]
-    if not name or not place:
+    if not name:
         raise UnsupportedRecord("invalid_name_place")
+    if not place:
+        return ""  # no place, no name-and-place id: the record keeps its other keys and waits for a steward
     return hashlib.sha256(("name_place_id@1\x1f" + " ".join(name) + "\x1f" + " ".join(place)).encode("utf-8")).hexdigest()
 
 
@@ -318,7 +320,9 @@ def _named_values(row: dict, paths: dict, formats: dict, *, set_aside: list | No
             if items:
                 found[namespace] = list(dict.fromkeys(items))
         elif item is not None and str(item).strip():
-            found[namespace] = format_value(item, formats.get(namespace))
+            formatted = format_value(item, formats.get(namespace))
+            if formatted:  # a format may state no value (a name with no place has no name-and-place id)
+                found[namespace] = formatted
     return found
 
 
