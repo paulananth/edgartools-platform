@@ -78,21 +78,23 @@ def _receipt(count: int, seen: set, quality: dict | None = None) -> bytes:
 def _quality_identity(envelope: dict, table: str, spec: dict) -> dict:
     """Stable, source-value-free identity for one work unit's executed checks."""
     claim = envelope.get("claim") or {}
-    fields = ("run_id", "step", "key", "attempt")
+    fields = ("run_id", "step", "key")
     if any(not isinstance(claim.get(field), str) or not claim[field] for field in fields):
-        raise ValueError("Version-2 quality evidence requires the Bookkeeping run, step, unit and attempt")
+        raise ValueError("Version-2 quality evidence requires the Bookkeeping run, step and unit")
     # Bookkeeping keys can contain provider record identifiers. Keep a stable,
     # opaque reference so a result can be correlated back to the unit without
     # copying any source key into the receipt or catalog.
+    # The identity names the work unit, never the attempt: a unit re-executed
+    # after a lost report writes the same receipt to the same immutable output,
+    # so the observation time already written for it is reused.
     binding = json.dumps([claim[field] for field in fields], separators=(",", ":")).encode()
     unit_ref = hashlib.sha256(binding).hexdigest()[:24]
-    return {"run_id": claim["run_id"], "step": claim["step"], "work_unit_ref": unit_ref,
-            "attempt": claim["attempt"], "table": table,
+    return {"run_id": claim["run_id"], "step": claim["step"], "work_unit_ref": unit_ref, "table": table,
             "checks": [{"id": item["id"], "kind": item["check"], "failure_action": item["on_fail"]}
                        for item in spec.get("checks") or []]}
 
 
-def _quality_observation(identity: dict, reports: list[dict], at: str | None = None) -> dict:
+def _quality_observation(identity: dict, reports: list[dict], at: str) -> dict:
     """Deterministically combine per-artifact check counts for this work unit."""
     by_id = {item["id"]: {"kind": item["kind"], "failure_action": item["failure_action"],
                           "rows_checked": 0, "rows_failed": 0}
@@ -109,12 +111,35 @@ def _quality_observation(identity: dict, reports: list[dict], at: str | None = N
                 raise ValueError("Executed quality results differ from the registered silver checks")
             by_id[check_id]["rows_checked"] += report["rows_checked"]
             by_id[check_id]["rows_failed"] += outcome["rows_failed"]
-    return {**identity, "observed_at": at or datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+    return {**identity, "observed_at": at,
             "rows_checked": checked, "rows_flagged": flagged, "rows_refused": refused,
             "checks": by_id}
 
 
-def _recomputed_quality(identity: dict, artifacts, envelope: dict, keys: dict, spec: dict) -> dict:
+def _retained_observation(envelope: dict, artifacts, identity: dict) -> str | None:
+    """The observation time already written for this work unit, when an earlier
+    attempt wrote its receipt and its report was lost. The receipt is immutable
+    and names the work unit, so a re-execution reuses that time and writes the
+    same bytes; a receipt of another unit is never reused."""
+    try:
+        retained = artifacts.read(envelope["output"])
+    except ValueError:  # no receipt has been written for this unit yet
+        return None
+    try:
+        receipt = json.loads(retained)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    quality = receipt.get("quality") if isinstance(receipt, dict) and receipt.get("version") == 2 else None
+    if not isinstance(quality, dict):
+        return None
+    if (quality.get("run_id"), quality.get("step"), quality.get("work_unit_ref")) != (
+            identity["run_id"], identity["step"], identity["work_unit_ref"]):
+        return None
+    observed_at = quality.get("observed_at")
+    return observed_at if isinstance(observed_at, str) and observed_at else None
+
+
+def _recomputed_quality(identity: dict, artifacts, envelope: dict, keys: dict, spec: dict, at: str) -> dict:
     """Recompute outcomes from original unit rows; never read the mutable latest-results file."""
     from edgar_warehouse.silver_writer.checks import run
 
@@ -122,7 +147,7 @@ def _recomputed_quality(identity: dict, artifacts, envelope: dict, keys: dict, s
     for artifact in _artifacts(envelope, artifacts):
         _, report = run(spec, _rows(artifact, keys))
         reports.append(report)
-    return _quality_observation(identity, reports)
+    return _quality_observation(identity, reports, at)
 
 
 def engines():
@@ -163,7 +188,9 @@ def execute(envelope: dict, artifacts) -> dict:
         quality = None
         if quality_enabled:
             identity = _quality_identity(envelope, keys["silver"], spec)
-            quality = _quality_observation(identity, quality_reports)
+            observed_at = (_retained_observation(envelope, artifacts, identity)
+                           or datetime.now(timezone.utc).isoformat(timespec="milliseconds"))
+            quality = _quality_observation(identity, quality_reports, observed_at)
         return artifacts.put_bytes(envelope["output"], _receipt(count, seen, quality))
     finally:
         silver.dispose()
@@ -225,8 +252,7 @@ def verify(envelope: dict, artifacts) -> tuple[dict, list]:
             if observed_at.tzinfo is None:
                 raise ValueError("Version-2 silver receipt observation time must include a timezone")
             identity = _quality_identity(envelope, keys["silver"], spec)
-            actual = _recomputed_quality(identity, artifacts, envelope, keys, spec)
-            actual["observed_at"] = quality["observed_at"]
+            actual = _recomputed_quality(identity, artifacts, envelope, keys, spec, quality["observed_at"])
             if quality != actual:
                 raise ValueError("The receipt's quality outcomes differ from the original reading")
             expected = _receipt(count, seen, actual)

@@ -26,6 +26,50 @@ verify these qualifications. Keep the opt-in unset until the operator records
 the evidence and authorizes enablement. A request without that exact setting
 fails closed.
 
+### The version-2 quality receipt: owner, procedure, measurement
+
+**Owner.** The platform operator owns recovery of a version-2 quality run. The
+operator decides whether to resume, and the resume itself is run through
+Bookkeeping's own commands by whoever holds the control and worker logins.
+
+**Procedure.** A version-2 receipt names the work unit, not the attempt, and
+carries the observation time of that unit's first successful landing. A unit
+re-executed after a lost report therefore writes the same bytes to the same
+immutable output, and the evidence a resumed load carries is the evidence the
+first attempt produced.
+
+1. Read bounded status: `edgar-warehouse bookkeeping status <run-id>`. A
+   `reported` unit is awaiting its verifier; a `running` unit's worker stopped.
+2. Reopen the run: `edgar-warehouse bookkeeping resume <run-id>`. It rechecks
+   every completed unit's retained evidence and blocks the run if any evidence
+   is corrupt; a `reported` unit's candidate is retained and is admitted by its
+   verifier.
+3. Run the workers and verifiers for the run's profiles again
+   (`edgar-warehouse workers work <profile> <run-id>` and
+   `… verify <profile> <run-id>`). A unit whose attempt ended is reclaimed
+   after its lease expires; its re-execution reconciles with the receipt it
+   already wrote.
+4. Finish: `edgar-warehouse bookkeeping finalize <run-id>`. It delivers control's
+   events and records the run's checks; exit 3 means the run is not complete
+   yet.
+5. Read the admitted quality evidence with `edgar-warehouse rules catalog
+   publish --bookkeeping-run <run-id>` (or `… check`): the run's per-unit
+   results are read from the admitted receipts, and an incomplete run stays
+   unknown and is never published as a load's quality result.
+
+**Measurement.** A disposable resume was measured on 2026-11-09 (ET) over
+invented company-facts files in a disposable PostgreSQL 16 container, with no
+provider data: `tests/integration/test_quality_recovery_postgres.py`. Two
+interruption shapes were exercised — a receipt reported and not admitted, and
+a receipt written whose report was lost — and both resumed to a complete run
+with admitted version-2 evidence. The measured resume (reopen, work, verify,
+deliver, finalize) took 0.293 s for the reported-but-unadmitted unit and
+0.943 s for the lost report, against a 300 s ceiling in the proof.
+
+That measurement is the evidence the operator's maximum is set against. The
+maximum recovery time is the operator's decision, recorded with this procedure;
+the feature stays disabled until it is.
+
 ## General run recovery
 
 These operational cases cover existing runs; they do not demonstrate a

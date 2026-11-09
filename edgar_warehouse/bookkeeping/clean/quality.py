@@ -18,9 +18,14 @@ QUALITY_CHECK = "silver.quality.evidence.v2"
 MAX_COUNT = 2**63 - 1
 
 
-def work_unit_reference(run_id: str, step: str, key: str, attempt: str) -> str:
-    """Opaque stable identity; work keys may themselves contain provider data."""
-    binding = json.dumps([run_id, step, key, attempt], separators=(",", ":")).encode()
+def work_unit_reference(run_id: str, step: str, key: str) -> str:
+    """Opaque stable identity; work keys may themselves contain provider data.
+
+    The reference names the work unit, never an attempt: a unit re-executed
+    after a lost report keeps one receipt, one observation time and one
+    correlation, so a resumed load's evidence is the same evidence.
+    """
+    binding = json.dumps([run_id, step, key], separators=(",", ":")).encode()
     return hashlib.sha256(binding).hexdigest()[:24]
 
 
@@ -44,9 +49,9 @@ def aggregate(bookkeeping, run_id: str) -> dict:
     totals = {}
     for step, unit_key in sorted(expected):
         item = by_identity.get((step, unit_key))
+        reference = work_unit_reference(run_id, step, unit_key)
         if item is None or item["state"] != "verified" or not item.get("receipt"):
-            attempt = str(item["attempt"]) if item and item.get("attempt") else ""
-            unknown_units.append({"step": step, "work_unit_ref": work_unit_reference(run_id, step, unit_key, attempt)})
+            unknown_units.append({"step": step, "work_unit_ref": reference})
             continue
         candidate = {"uri": item["receipt"]["uri"], "sha256": item["receipt"]["sha256"]}
         raw = bookkeeping.artifacts.verified(candidate)
@@ -56,15 +61,13 @@ def aggregate(bookkeeping, run_id: str) -> dict:
             raise Blocked("Admitted silver quality receipt is not valid JSON") from exc
         quality = receipt.get("quality") if isinstance(receipt, dict) and receipt.get("version") == 2 else None
         if not isinstance(quality, dict):
-            unknown_units.append({"step": step, "work_unit_ref": work_unit_reference(
-                run_id, step, unit_key, str(item["attempt"]))})
+            unknown_units.append({"step": step, "work_unit_ref": reference})
             continue
         attempt = str(item["attempt"])
-        expected_identity = (run_id, step, work_unit_reference(run_id, step, unit_key, attempt), attempt)
-        actual_identity = (quality.get("run_id"), quality.get("step"), quality.get("work_unit_ref"),
-                           quality.get("attempt"))
+        expected_identity = (run_id, step, reference)
+        actual_identity = (quality.get("run_id"), quality.get("step"), quality.get("work_unit_ref"))
         if actual_identity != expected_identity:
-            raise Blocked("Admitted silver quality receipt has a different run, step, unit or attempt")
+            raise Blocked("Admitted silver quality receipt has a different run, step or unit")
         outcomes = quality.get("checks")
         if not isinstance(outcomes, dict) or not outcomes:
             unknown_units.append({"step": step, "work_unit_ref": expected_identity[2]})

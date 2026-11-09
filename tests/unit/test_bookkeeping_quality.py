@@ -42,8 +42,8 @@ def row(unit, attempt, uri):
 
 def receipt(unit, attempt, failed):
     return {"version": 2, "quality": {"run_id": "run-a", "step": "land",
-            "work_unit_ref": quality.work_unit_reference("run-a", "land", unit, attempt),
-            "attempt": attempt, "table": "sample_table", "observed_at": "2026-11-06T12:00:00+00:00",
+            "work_unit_ref": quality.work_unit_reference("run-a", "land", unit),
+            "table": "sample_table", "observed_at": "2026-11-06T12:00:00+00:00",
             "checks": {"valid_category": {"kind": "in_set", "failure_action": "flag",
                                              "rows_checked": 10, "rows_failed": failed}}}}
 
@@ -71,8 +71,8 @@ def test_aggregation_sums_verified_units_and_preserves_failure_action(storage_wo
                                   "kind": "in_set", "failure_action": "flag", "units": 2,
                                   "rows_checked": 20, "rows_failed": 2, "status": "failed"}]
     assert {entry["work_unit_ref"] for entry in result["results"]} == {
-        quality.work_unit_reference("run-a", "land", "unit-a", "attempt-a"),
-        quality.work_unit_reference("run-a", "land", "unit-b", "attempt-b")}
+        quality.work_unit_reference("run-a", "land", "unit-a"),
+        quality.work_unit_reference("run-a", "land", "unit-b")}
     assert "unit-a" not in json.dumps(result)
 
 
@@ -92,16 +92,16 @@ def test_incomplete_run_keeps_all_expected_units_unknown(storage_work):
     assert result["units_unknown"] == 1
     assert len(result["results"]) == 1
     assert result["results"][0]["work_unit_ref"] == quality.work_unit_reference(
-        "run-a", "land", "unit-a", "attempt-a")
+        "run-a", "land", "unit-a")
     assert "unit-a" not in json.dumps(result)
 
 
-def test_aggregation_rejects_receipt_for_another_attempt(storage_work):
+def test_aggregation_rejects_receipt_for_another_unit(storage_work):
     rows = [row("unit-a", "attempt-a", "memory://a")]
     storage_work.rows = rows
-    bookkeeping = Bookkeeping(rows, {"memory://a": receipt("unit-a", "stale-attempt", 0)})
+    bookkeeping = Bookkeeping(rows, {"memory://a": receipt("unit-b", "attempt-b", 0)})
 
-    with pytest.raises(Blocked, match="different run, step, unit or attempt"):
+    with pytest.raises(Blocked, match="different run, step or unit"):
         quality.aggregate(bookkeeping, "run-a")
 
 
