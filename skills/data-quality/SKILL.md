@@ -77,6 +77,51 @@ engine's own checks:
 uv run python <this skill's folder>/scripts/quality_plan.py --help
 ```
 
+## Existing master projections
+
+Use this procedure for source-backed winner fields in an existing MDM
+projection.
+
+When an audit examines fields already selected into master records, first pin
+the projection generation and compare each stored field-authority fingerprint
+and kind version with the policy configured for that generation. For a
+full-population comparison, use one repeatable-read snapshot and bounded
+primary-key pages. Keep raw rows traversed separate from canonical, non-alias
+masters, and report the accepted field denominator and mismatch count by kind
+and mismatch class. Do not combine denominators or policy shares from different
+snapshots.
+
+For each accepted, source-backed field projection, follow its winner to the
+retained assertion and compare source code, record key, effective time, claim
+presence, operation, winner value, projected value, and clear state. Aggregate
+mismatches without emitting record keys or field values. Zero mismatches prove
+that the selected projection agrees with its retained claim; they do not prove
+that the business value or selected winner is correct. If the stored authority
+differs from the policy being assessed, report stale projection provenance and
+keep those fields out of current-policy defect counts until source identity,
+effective time, and the intended generation are reconciled. A source name or
+field-presence count alone is not a quality failure.
+
+## Cross-store pointers
+
+Before assessing a nullable downstream pointer, read its declared source key,
+source binding, target kind, null policy, and time basis. Pin the Silver landing
+and MDM generations. Classify the key as absent, unmatched, uniquely resolved,
+ambiguous or held, or uniquely resolved without a source binding. An identifier
+match alone does not prove the configured source route exists. Count a pointer
+as a defect only when the pinned contract requires it, one authoritative target
+and source binding exist for that generation and time, and the verified landing
+is null or points elsewhere. Keep expected no-key, unmapped, ambiguous, deferred,
+and review-held cases separate; never turn them into a blanket nonnull check.
+Trace any declared source time through the reading and preparation stages to the
+stored assertion or relationship. A contract description does not prove that
+the loader materialized the time. Keep a publication's effective time separate
+from a relationship's own start date, and preserve date-only, timezone, and
+observed-file-date semantics without inventing a conversion.
+If the available quality primitive cannot express this comparison, document
+the required cross-store capability and prove it with a planted invalid pointer
+before proposing activation.
+
 ## Modes, in order
 
 **plan → measure → decide → mark → write.** For a live feed, start at
