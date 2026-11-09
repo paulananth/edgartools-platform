@@ -67,10 +67,18 @@ def cross_referencing(engine, namespace: str, value: str) -> list[str]:
         return lookups.cross_referencing(store, namespace, value)
 
 
-def links(engine, policy: dict | None = None, as_of: str = "2026-12-31T00:00:00+00:00", of_type: str = "") -> list[dict]:
-    """Every link the stored records report, as the link step builds them: source and target master ids, periods."""
+def link_run(engine, policy: dict | None = None, as_of: str = "2026-12-31T00:00:00+00:00", last: list[dict] | None = None):
+    """What the link step builds from the stored records: the links, and how many reported ones wait, by reason.
+    `last` is the previous run's links, so a link keeps a start its record no longer shows."""
     with opened(engine) as store:
-        edges, _ = link_builder.calculate(store, policy or files.policy(), as_of, {})
+        return link_builder.calculate(store, policy or files.policy(), as_of,
+                                      link_builder.stored_of(link_builder.rows_of(last or [])))
+
+
+def links(engine, policy: dict | None = None, as_of: str = "2026-12-31T00:00:00+00:00", of_type: str = "",
+          last: list[dict] | None = None) -> list[dict]:
+    """Every link the stored records report, as the link step builds them: source and target master ids, periods."""
+    edges, _ = link_run(engine, policy, as_of, last)
     return [edge for edge in edges if not of_type or edge["type"] == of_type]
 
 

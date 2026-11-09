@@ -17,12 +17,9 @@ from pathlib import Path
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.mdm.evidence import subject_key
-from edgar_warehouse.mdm.merge import MergeStage
-from edgar_warehouse.mdm.store import Store, register_policy
-from edgar_warehouse.rules import files
 from tests.integration import test_mdm_postgres as core
 from tests.integration import test_nport_link_start as cusip
-from tests.support.rules_authority import register_dataset
+from tests.support import masters
 
 
 CODE = "sec.nport.security.v2"  # ISIN-only Securities share it (ticket 120)
@@ -64,23 +61,16 @@ def test_an_isin_only_security_links_to_its_one_issuer(database, tmp_path):
     links = {r["provenance"]["record_key"]: [l for l in r.get("relationships") or [] if l["type"] == "ISSUED_BY"] for r in records}
     # The CUSIP's own Security comes from the same run (ticket 120), linked to its one LEI.
     assert {k: len(v) for k, v in links.items()} == {ONE: 1, TWO: 0, NONE: 0, CUSIP: 1}
-    for code in (cusip.ADV, cusip.GLEIF):
-        core.register_reading(database, code, core.contract_body())
-    with database.admin.begin() as conn:
-        register_dataset(conn, CODE, database.registry, files.mdm_contract(cusip.NAME, CODE))
-        policy = register_policy(conn, policy_body())
-    stage = MergeStage(Store(database.application))
-    cusip.apply(stage, policy, "custodian", [core.source(
-        key="custodian", source_code=cusip.ADV, fields={"name": "Example Corp"}, identifiers={"lei": LEI})], 1)
-    cusip.apply(stage, policy, "gleif", [core.source(
+    policy = policy_body()
+    masters.seed(database.application, [core.source(
+        key="custodian", source_code=cusip.ADV, fields={"name": "Example Corp"}, identifiers={"lei": LEI})], policy)
+    masters.seed(database.application, [core.source(
         key=LEI, source_code=cusip.GLEIF, fields={"name": "Example Corp"}, identifiers={"lei": LEI},
-        provenance={"matching": {"nport_issuer": True}})], 2)
-    cusip.apply(stage, policy, "q2", records, 3)
-    periods = [body["periods"] for body in core.documents(database, "relationship").values()
-               if body["type"] == "ISSUED_BY"]
-    (only,) = periods
+        provenance={"matching": {"nport_issuer": True}})], policy)
+    masters.seed(database.application, records, policy)
+    (only,) = masters.links(database.application, policy, as_of="2026-10-16T00:00:00+00:00", of_type="ISSUED_BY")
     # ONE's holdings were filed 5 June and 28 May: the link starts at the earlier (ticket 113).
-    assert [(p["valid_from"], p["valid_from_basis"]) for p in only] == [(cusip.MAY28, "observed")]
+    assert [(p["valid_from"], p["valid_from_basis"]) for p in only["periods"]] == [(cusip.MAY28, "observed")]
 
 
 def test_an_isin_counts_a_fund_series_as_its_umbrella_trust(tmp_path):
@@ -108,12 +98,9 @@ def test_under_the_files_policy_nport_masters_its_securities(database, tmp_path)
     under the repo's own policy N-PORT's two Security rules are on. The CUSIP record and
     the ISIN-only record of the ISIN filed with it are one Security; no ISIN is on two."""
     records = prepared_records(tmp_path)
-    with database.admin.begin() as conn:
-        register_dataset(conn, CODE, database.registry, files.mdm_contract(cusip.NAME, CODE))
-        policy = register_policy(conn, files.policy())
-    cusip.apply(MergeStage(Store(database.application)), policy, "q2", records, 1)
-    bound = core.bindings(database, CODE)
-    assert bound[CUSIP] == bound[ONE] and bound[TWO] not in (None, bound[CUSIP])
-    securities = [v for v in core.documents(database, "entity").values() if v["kind"] == "security"]
+    bound = masters.seed(database.application, records)
+    assert bound[CUSIP] == bound[ONE] and bound.get(TWO) not in (None, bound[CUSIP])
+    securities = [v for v in masters.bodies(database.application).values()
+                  if v["kind"] == "security" and v.get("status") != "alias"]
     held = [i for s in securities for i in s.get("identifiers", {}).get("isin", [])]
     assert len(held) == len(set(held))
