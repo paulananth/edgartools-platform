@@ -1,6 +1,7 @@
 create table if not exists mastering_master(entity_id char(36) primary key, changed_file bigint not null default 0, body text not null, created_at timestamptz not null default clock_timestamp());
 create index if not exists mastering_master_changed on mastering_master(changed_file, entity_id);
 create table if not exists mastering_file(file_key char(64) primary key, records bigint not null);
+create table if not exists mastering_delivery(file_key char(64) not null, source_code varchar(64) not null, records bigint not null, repeated bigint not null, deferred bigint not null, primary key(file_key, source_code));
 create table if not exists mastering_identifier(namespace varchar(32) not null, value varchar(128) not null, entity_id char(36) not null, primary key(namespace, value, entity_id));
 create index if not exists mastering_identifier_entity on mastering_identifier(entity_id);
 create table if not exists mastering_record(assertion_id varchar(128) primary key, subject varchar(255) not null, entity_id char(36), bound_id char(36), source_code varchar(64) not null, lei varchar(32), body text not null);

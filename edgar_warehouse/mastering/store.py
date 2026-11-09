@@ -9,7 +9,7 @@ from pathlib import Path
 
 BLOCK = 2000
 LOCK = "merge"
-WRITTEN = ("master", "file", "identifier", "record", "name_key", "review", "withheld", "deferred",
+WRITTEN = ("master", "file", "delivery", "identifier", "record", "name_key", "review", "withheld", "deferred",
            "stage", "stage_key", "stage_bound", "lookup", "lookup_progress")
 
 
@@ -66,6 +66,22 @@ class Store:
         for block in blocks(keys):
             found.update(self.rows(f"select file_key,records from mastering_file where file_key in ({marks(block)})", block))
         return found
+
+    def known_assertions(self, ids) -> set:
+        """Which of these assertions the store already holds."""
+        found = set()
+        for block in blocks(sorted(set(ids))):
+            found.update(row[0] for row in self.rows(
+                f"select assertion_id from mastering_record where assertion_id in ({marks(block)})", block))
+        return found
+
+    def add_delivery(self, key: str, rows: list) -> None:
+        """What one file delivered, by source: its records, how many the store already held, and its set-asides.
+        A file delivered again keeps its first count."""
+        have = {row[0] for row in self.rows("select source_code from mastering_delivery where file_key=%s", [key])}
+        fresh = [(key, source, *counts) for source, *counts in rows if source not in have]
+        if fresh:
+            self.insert("mastering_delivery", ("file_key", "source_code", "records", "repeated", "deferred"), fresh)
 
     def finish_file(self, key: str, records: int) -> None:
         self.cursor.execute("insert into mastering_file(file_key,records) values (%s,%s)", [key, records])
