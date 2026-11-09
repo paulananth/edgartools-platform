@@ -29,7 +29,7 @@ invented examples, never names or identifiers from records.
 ## Checklist
 
 - [x] Confirm the reference method and current check formats: the operator-selected Company is the control trace; Silver table specs declare `checks`; the data-quality skill lists supported checks; DataKitchen TestGen research is pinned at `docs/research/datakitchen-testgen-test-types-2026-11-02.md`, sourced from [`DataKitchen/dataops-testgen`](https://github.com/DataKitchen/dataops-testgen/tree/3606859cf8bb4f809d2b19acc51462420829c4ab/testgen/template/dbsetup_test_types) (reviewed 2026-11-08 07:22 ET).
-- [x] Enumerate configured kinds and refreshed connected-snapshot population counts (legacy MDM rechecked 2026-11-08 17:20 ET; governed MDM rechecked 17:06 ET). Legacy `mastering_master` has 449,281 rows: 449,272 canonical masters and nine aliases. Canonical kinds: 10,905 Companies, 12,937 fund structures, 31,125 people, and 394,305 securities; branch, government, international organization, and venue have no legacy masters. At 17:06 ET, governed `mdm.master_entity`, `mdm.current_record`, and `mdm.relationship_version` each still have zero rows, so governed-kind counts and generation cannot be confirmed here. Earlier governed counts remain prior observations only.
+- [x] Enumerate configured kinds and refreshed connected-snapshot population counts (legacy MDM rechecked 2026-11-08 17:20 ET; repeatable-read legacy primary-key walk and governed MDM rechecked 19:53 ET). The earlier legacy snapshot had 449,281 raw `mastering_master` rows: 449,272 canonical masters and nine aliases. A later primary-key walk traversed 461,455 raw legacy master rows; current per-kind master counts were not grouped in that scan, so do not carry forward the earlier canonical denominators as current. At 17:20 ET the canonical kinds were 10,905 Companies, 12,937 fund structures, 31,125 people, and 394,305 securities; branch, government, international organization, and venue had no legacy masters. At 19:53 ET, governed `mdm.master_entity`, `mdm.current_record`, and `mdm.relationship_version` each still had zero rows, so governed-kind counts and generation cannot be confirmed here. Earlier governed counts remain prior observations only.
 - [x] Correct the 16:06 whole-Company field totals to count nonempty nested values, not JSON field wrappers (read-only current legacy aggregate, 2026-11-08 16:09 ET; no values emitted). Current Company masters: 10,875/10,905 names, 10,695 addresses, 6,414 SIC, 6,217 fiscal year ends, 5,787 incorporation states, and 3,258 jurisdictions. GLEIF status/legal form/managing LOU/validation/registration fields each appear on 3,258 masters; entity-creation date appears on 2,693 and authority entity ID on 3,141. Source-field presence is listed by feed in the complete 17:15 ET table below; the earlier 16:09 source-wrapper counts are superseded. These are presence measures, not requiredness or correctness targets.
 - [x] Resolve missing names in assigned ADV adviser Company masters (read-only current legacy aggregate and pure reprojection, 2026-11-08 16:55 ET; no names or identifiers emitted). The 30 name-empty masters are all stored with `status=review`. Re-running the existing `prepare_current_records` and `prepare_master_records` calculations over their 78 retained assertions reproduces 30 `authoritative_identifier_conflict` reviews, all on the `cik` namespace; it also produces zero names, matching the stored projection. The name claims exist and are eligible, but the merge intentionally withholds all fields for these identities while their authoritative CIK conflict is unresolved. This is not a confirmed field-quality defect and should not become a missing-name check. Keep the 30 cases in the steward identity-conflict queue; do not resolve them automatically.
 - [x] Revalidate after rebasing onto current `origin/main` with `uv run --no-project --with pytest -- pytest -q -p no:cacheprovider tests/unit/test_profiling_genericity.py` (99 passed, 0.27 s) and `git diff --check` (clean), 2026-11-08 17:28 ET.
@@ -45,11 +45,11 @@ invented examples, never names or identifiers from records.
 - [x] Compare each current Company master-field winner with its retained source assertion and configured field authority (read-only 2026-11-08 17:41–17:51 ET). Across 71,886 selected fields on canonical legacy Company masters, every winner assertion exists and its source code, record key, and field value match the retained assertion (zero missing assertions or mismatches). Only 4,434 field projections carry the authority fingerprint of current `rules/merge/kinds/company.yaml`; 67,452 carry a registered authority whose source order includes prior ADV filings v1. Four winners (two `name`, two `address`) cite v1, and no v2 claim for those fields is assigned to the same current master. The stored and current source orders share a `kind_version` string despite different source lists. This confirms stale field-authority provenance in the local legacy projection, not that every affected value is wrong. Trace v2 assertions through review/source identity and identify the intended projection generation before proposing any reload or remediation.
 - [x] Reconcile the three unassigned `iapd.adv.filings.v2` assertions to their review state (read-only aggregate, 2026-11-08 17:21 ET). All three are in open `conflicting_identifiers` review. Do not count them as missing Company masters or add a link-completeness failure for these held identity claims.
 - [x] Reproduce the operator-selected Company control trace in legacy MDM/Silver and select controls for the other populated kinds. The Company control resolves to one Company with one SEC Company and one GLEIF assertion, 15 populated MDM field names, two identifier namespaces, 25,135 fact rows, 437 line-item rows, 760 measure rows, 10 issuer-position rows, three insider issuer rows, and 57 `ISSUED_BY` edges targeting the Company. One control each was traced for fund structure, Person, and Security; their details and limits follow below. Governed identity remains unavailable in this snapshot.
-- [ ] ~~Complete the batch-level all-kind audit: compare every retained assertion and canonical master by configured kind, source binding, identifier namespace, populated field, and downstream consumer; publish per-kind denominators, unresolved/held outcomes, mismatches, and temporal/source evidence.~~ Deferred to [follow-up 02](02-governed-cross-store-and-source-evidence.md): current governed MDM identity and relationship tables are empty, and the legacy report has aggregate field presence, selected provenance checks, and representative downstream traces but not an authoritative all-record/current-generation comparison.
+- [x] Complete the batch-level all-kind audit for the available legacy snapshot: compare retained assertion assignment, configured identifiers, every populated field projection, and downstream consumers; publish per-kind denominators, unresolved/held outcomes, mismatches, and temporal/source evidence. Verified by the source-assignment and field-presence tables, per-kind identifier and downstream measurements, typed relationship analysis, and the repeatable-read comparison of 4,036,273 accepted field projections across 461,455 traversed legacy master rows. Every selected field winner resolves to a retained assertion with matching source, record key, effective time, field claim, operation, winner value, projected value, and clear state; all mismatch counts are zero. The comparison found two stored policy fingerprints for Company and Security and one for fund structure and Person; it does not establish that every projection uses today's configured authority or that a matching value is business-correct. Current-governed identity and relationship comparisons remain separate open items 77–78 because the governed tables were empty at 19:53 ET (2026-11-08 19:54 ET).
 - [x] Refresh typed edge pairs, listing MIC coverage, Company row-local checks, and Silver row counts after the master population growth (read-only 2026-11-08 15:31–15:46 ET). Silver has 55,320 edges: 42,383 `ISSUED_BY` and 12,937 `IS_SUBFUND_OF`; both N-PORT pair comparisons and the 4,139 Person/issuer pair comparisons were re-run below. Listing MIC results and Company row-local checks were remeasured on the current snapshot, and all 12 operational Silver table counts were refreshed. This does not close role-cohort grouping or current governed-MDM comparison.
 - [x] Refresh current pointer-based downstream counts for all Company source roles with assigned master IDs (read-only 2026-11-08 16:31 ET). Counts for SEC, GLEIF, ADV adviser, assigned ADV custodian, N-PORT registrant, and their union are in the current cohort table below. Cohorts overlap; only current matching pointer IDs count, while null and registration rows are separate.
 - [x] Rebuild the current mapped non-US and 13F-filer identity sets and refresh their downstream rows (read-only 2026-11-08 16:38 ET). The pinned SEC place mapping yields 1,405 foreign/Canadian Companies; GLEIF adds 57 non-US Companies with no SEC place, for 1,462. The current 13F manager set has eight Companies. Their current downstream counts are included below. Registration rows remain attributed by current CIK only because the stored MDM pointer generation is unidentified.
-- [x] Complete the Company trace separately for each configured source role/profile and cohort: SEC filers/issuers, GLEIF legal entities, ADV advisers, ADV custodians, N-PORT registrants, Company records with the `fund` profile, and mapped non-US Companies. Record overlapping cohort denominators and role-specific source fields and consumers; do not treat these labels as separate MDM kinds. Verified by the source-field/identifier presence table and current Company-ID downstream cohort table below; both distinguish source roles from MDM kinds and note overlaps. Full authoritative master-field correctness remains deferred under batch-level audit (2026-11-08 18:54 ET).
+- [x] Complete the Company trace separately for each configured source role/profile and cohort: SEC filers/issuers, GLEIF legal entities, ADV advisers, ADV custodians, N-PORT registrants, Company records with the `fund` profile, and mapped non-US Companies. Record overlapping cohort denominators and role-specific source fields and consumers; do not treat these labels as separate MDM kinds. Verified by the source-field/identifier presence table, current Company-ID downstream cohort table, and the repeatable-read legacy field-winner comparison below. The comparison proves source-claim provenance and value agreement, not current-policy correctness or business correctness (2026-11-08 19:54 ET).
 - [ ] ~~Trace typed relationship paths for every populated kind, including `ISSUED_BY` from Security to its allowed issuer kinds; verify endpoint kind, direction, current MDM identity, time basis, and source evidence.~~ Deferred to [follow-up 02](02-governed-cross-store-and-source-evidence.md): legacy endpoints and source pairs were classified by relationship type, but the current governed relationship projection is empty; Form 4 issuer edges also lack the configured source/effective-time evidence needed to decide six differing and 1,531 absent edges.
 - [x] Compare N-PORT `ISSUED_BY` declaration endpoints to current Silver pairs after population growth (read-only 2026-11-08 15:43 ET). The 245,130 declarations reduce to 225,221 distinct Security-master/issuer-source pairs. Of these, 42,385 resolve to both a current Security master and one Company target; Silver has 42,383 current pairs, with 42,383 exact overlaps, two resolved source-only candidates, and zero Silver-only pairs. Remaining declarations without two assigned endpoints are not confirmed missing edges. The two resolved candidates await N-PORT `links`/landing/merge stages, so they are not yet confirmed publication defects.
 - [x] Recompare N-PORT `IS_SUBFUND_OF` endpoints, kinds, profiles, and Silver periods after population growth (read-only 2026-11-08 15:43 ET). All 12,937 declarations are 12,937 distinct pairs; every pair resolves from `fund_structure` to `company`, both endpoints have the `fund` profile, and all 12,937 exactly match Silver with zero source-only or Silver-only pairs. All Silver starts remain nonempty `observed` file-date fallbacks; authoritative inception remains unknown.
@@ -102,7 +102,8 @@ tables have no row-level security policy. Every governed-store count and
 resolver comparison remains an earlier reported measurement that is not
 reproducible against this current connection. Treat those rows as provisional
 leads, not confirmed current defects, until the intended populated governed
-snapshot is identified.
+snapshot is identified. A 19:53 ET read still found zero rows in all three
+governed tables.
 
 | Finding | Measurement | Current assessment | Next validation |
 |---|---|---|---|
@@ -227,16 +228,44 @@ master fields/identifiers, typed relationship declarations, and downstream
 references for each populated legacy kind. They do not replace the unresolved
 full-population producer and current-governed comparison.
 
+### All-kind legacy projection-to-assertion comparison (2026-11-08 19:53 ET)
+
+A read-only repeatable-read walk traversed 461,455 legacy `mastering_master`
+rows by primary key. It compared every populated field on non-alias projections
+with the retained source assertion referenced by that field's winner. The
+comparison covered 4,036,273 fields across Company, fund structure, Person, and
+Security. It checked assertion existence, source code, record key, effective
+time, source field presence, field operation, winner value, projected value,
+and the projection's clear flag. Every mismatch count was zero:
+
+| Legacy kind | Accepted field projections | Missing winner/assertion | Source/key/time mismatch | Missing claim/operation mismatch | Winner/projection/clear mismatch | Stored policy fingerprints | Stored kind versions |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Company | 95,233 | 0 | 0 | 0 | 0 | 2 | 1 |
+| Fund structure | 12,937 | 0 | 0 | 0 | 0 | 1 | 1 |
+| Person | 31,124 | 0 | 0 | 0 | 0 | 1 | 1 |
+| Security | 3,896,979 | 0 | 0 | 0 | 0 | 2 | 1 |
+
+This verifies provenance and value agreement with the selected retained claim,
+not that the claim is the correct business winner. Company and Security fields
+each carry two historical authority fingerprints. This scan counted distinct
+fingerprints but did not compare the full field population to the current
+configured policy or quantify each fingerprint's share. The earlier Company
+split of 67,452 prior-authority and 4,434 current-authority fields applies only
+to the 71,886-field snapshot at 17:51 ET; do not project those proportions onto
+the later 95,233 fields. Current governed MDM remains empty, so these are legacy
+projection results rather than current governed quality certification.
+
 ### Governed snapshot availability
 
 A refreshed connection to the designated shared `local-test-server` on
-2026-11-08 found 449,281 raw rows in legacy `mastering_master`, but zero in governed
-`mdm.master_entity`, `mdm.current_record`, and `mdm.relationship_version`.
-These tables have no row-level security policy. Governed counts and resolver
-comparisons recorded in the earlier table are therefore not reproducible
-against this current connection; treat them as unverified prior observations,
-not confirmed current defects, until the intended populated governed snapshot
-is identified.
+2026-11-08 found zero rows in governed `mdm.master_entity`,
+`mdm.current_record`, and `mdm.relationship_version` at 19:53 ET; these tables
+have no row-level security policy. The legacy master table contained 461,455
+rows in the separate repeatable-read projection scan. Governed counts and
+resolver comparisons recorded in the earlier table are therefore not
+reproducible against this current connection; treat them as unverified prior
+observations, not confirmed current defects, until the intended populated
+governed snapshot is identified.
 
 The legacy and governed MDM counts differ. Finish tracing the governed entities
 by kind; do not use one store's counts as the denominator for another store's

@@ -31,15 +31,26 @@ identifiers.
 
 The parent audit at
 [`01-company-field-and-relationship-quality-checks.md`](01-company-field-and-relationship-quality-checks.md)
-records the 2026-11-08 snapshot and its per-store denominators. The governed
+records the dated per-store measurements. The governed
 `mdm.master_entity`, `mdm.current_record`, and
-`mdm.relationship_version` tables had zero rows at 17:06 ET. A later
-read-only Bookkeeping status snapshot at 18:54 ET found 30 running records;
-both N-PORT security runs were still active, and one reported `merge` among
-failed steps. Neither run had a verified holding landing in the prior detailed
-read. The existing 5,347,869 Silver holding rows therefore remain unattributed
-to a verified run or current MDM generation. This task does not resume, alter,
-or clean any active run.
+`mdm.relationship_version` tables still had zero rows at the 19:53 ET
+read-only check. A 19:36 ET Bookkeeping status refresh found 360 complete and
+30 running records. Both N-PORT security runs were unchanged from the earlier
+read: one had 3 verified, 3 reported, 3 waiting, and 9 pending work items; the
+other had 14 verified, 1 waiting, and 2 pending, with `merge` in its failed
+steps. Each still had one pending `land_holding` item, and no verified holding
+landing. The 5,347,869 Silver holding rows measured at 17:54 ET therefore
+remain unattributed to a verified run or current MDM generation. Do not inspect run
+status again before 20:06 ET. This task does not resume, alter, or clean any
+active run.
+
+The 19:53 ET repeatable-read field audit traversed 461,455 legacy master rows
+and compared all 4,036,273 populated accepted field projections to their
+retained winning assertions. It found zero source, record-key, time, claim,
+operation, winner-value, projection-value, or clear-state mismatches. This
+establishes legacy field provenance and value agreement; it does not replace
+current governed identity or relationship checks, or prove that today's
+configured authority selected the right business value.
 
 The data-quality engine currently supports row-local predicates only. The
 parent audit defines the exact minimum cross-store link and typed-edge
