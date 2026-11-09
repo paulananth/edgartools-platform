@@ -364,6 +364,10 @@ location: `Path(__file__).parents[N]` and `.parent`. Before the move, grep `pare
   the run first starts, kept in its frozen scope (`mdm.run.scope`), and read
   back on every later call and resume, never resolved again per batch. The
   commit still checks it.
+- A store call that takes the lock commits what came before it, so a step
+  that must be all or nothing (a split, a reversal) is one function that
+  takes the lock first, then does every write, then commits once, and rolls
+  back on any error. Ordering separate calls cannot make it atomic.
 
 ## Choose the cheapest proof
 
@@ -483,6 +487,13 @@ When removing a checkout wrapper, retain its shared scenario and the installed
 engine/kind invocation. Record obsolete obligations separately from duplicates.
 Count collected cases and existing fixture vectors separately; measure runtime
 separately too. A percentage target is not evidence for removing a test.
+
+Before deleting old code, find what is dead by the import graph from the live
+entry points (the commands and worker operations), never by a runtime pin
+list: a module named in a pin list looks reachable and is not. Delete the
+modules with their pins and their tests in one change, port the tests whose
+obligation still holds, and run the installed-bundle check that names required
+modules, since it fails on a deleted name only in CI.
 
 ## Examples
 

@@ -131,10 +131,10 @@ Links are a `relationship` silver table, one row a period, from a `silver.derive
 - [ ] ~~Chained reversals and quarantine~~ deferred to none: dropped, nothing uses them.
 - [x] Stage 1: `edgar_warehouse/mastering/`, 9 tests on both engines (2026-11-06 11:48 ET).
 - [x] Stage 2: the `mastering.merge` worker on a real load's prepared manifest: 1,947 of 1,947 `sec.nport.registrant` records, each master with the engine's CIK and its record's fields, verified, 4.4 s against 59.3 s for the old merge step of that load (2026-11-06 12:10 ET).
-- [ ] Point the Rules Database at `mastering.merge`, source by source: a load runs the approved version there, not `rules/` on disk.
+- [x] Point the Rules Database at `mastering.merge`: done with stage 4 unit B, the rule version is active on all 13 sources and merge/platform (PR 1481, 2026-11-06 23:30 ET); every merge step in `rules/sources` is `mastering.merge`.
 - [x] Stage 3: `mdm rebuild`, every record replayed and compared: 431,028 masters match, and 4,797 of 4,797 for the records the old load stored late (2026-11-06 15:43 ET).
 - [x] Review of stages 1 to 3 on Standards, Spec and GoF: two integer columns made BIGINT, a merge writes identifiers once, `compare` holds no transaction, `master_ids` deleted, the lock tested with two writers. The lock is one row for all kinds, not one a kind, since the changed-file number readers pull by runs across kinds; the prototype lines here describe one a kind. Without the lock the new test gives 400 masters for 200 (2026-11-06 15:47 ET).
-- [ ] Stage 4: readers moved; relationships with the silver write.
+- [x] Stage 4: readers moved; relationships with the silver write. Readers pull by checkpoint, `consumer.py` and `inspection.py` are deleted, links are the `relationship` silver table from `silver.derive` (PRs 1478, 1481, 1487, 1520; checked 2026-11-08 21:09 ET).
 - [x] Stage 4, facts rule: `facts.yaml` has its `execution` block, and a test passes every `source.read` contract through the worker's own check, PR 1475 (2026-11-06 18:30 ET).
 - [x] Stage 4, retro checks: the guard runs `rules approvals check` when rules change, PR 1476; three skill rules, PR 1477 (2026-11-06 18:37 ET).
 - [x] Stage 4, `context` on the mastering tables, PR 1478: 12 Apple questions, 7 the same as the old answers, 5 better, 0 worse (2026-11-06 20:07 ET).
@@ -171,14 +171,14 @@ Links are a `relationship` silver table, one row a period, from a `silver.derive
 - [x] Records set aside by classification on the prototype, 152,557 of 152,557 (2026-11-06 11:03 ET).
 - [x] Delivery to readers on the prototype: a reader pulls what changed after its checkpoint; no payload is stored (2026-11-06 11:29 ET).
 - [x] Operator's decision: stop writing the `journal`, `export` and `graph` payloads, given that none is read. Operator, 2026-11-06 11:36 ET, to "May I stop writing the three delivery payloads?": "1 yes".
-- [ ] `consumer.py` and `MdmIds` on the new tables, and the rest of the per-record lookups.
+- [x] `consumer.py` and `MdmIds` on the new tables: `MdmIds` on the mastering tables (PR 1481), `consumer.py` deleted (PR 1520). Per-record lookups are the `reads` module and `mastering_lookup*` tables, tested in `tests/storage_adapters/test_mastering.py` (2026-11-08 21:09 ET).
 - [x] Database-side safety on the prototype: one lock per kind, a real kill, two writers, a restricted login, on both engines (2026-11-06 11:29 ET).
-- [ ] Database-side safety in production code, through the storage adapter, proved equal before the old routines go.
-- [ ] The thin slice: one source from load to reader, in the repo, on both engines.
+- [x] Database-side safety in production code, through the storage adapter: `tests/storage_adapters/test_mastering.py` runs on PostgreSQL and MySQL in CI, with a failed file leaving nothing, two writers on the same identifiers leaving one master each, and the runtime login unable to erase a decision or change a table. The old routines are deleted (PR 1520, 2026-11-08 21:09 ET).
+- [x] The thin slice: records to reader on both engines in `test_mastering.py` (a reader stays in step by asking what changed; finds a master by source key, identifier and after a merge), and on real files the Apple chain from adviser to AAPL (2026-11-08 21:09 ET).
 - [x] Rule which rules allow a merge from the rule itself: the engine's matching does (2026-11-06 11:03 ET).
-- [ ] Survivor by `published_at` then id, as replay does.
+- [ ] Survivor by `published_at` then id, as replay does. Found 2026-11-08 21:09 ET: `merge.py` keeps the master with the earliest `created_at` (wall clock at insert) then id (`store.oldest`), while `rebuild.stored` replays records in key order. The two agree only when masters were first made in key order. Not yet measured: how many stored merges would pick another survivor under replay.
 - [ ] Bookkeeping per file, not per batch; the `processed` step; what the step around the silver writer costs.
 - [ ] Person and Fund on MySQL; OpenFIGI at full size on the final version.
 - [ ] The rebuilt path on every source, compared with the engine; the old path deleted.
 - [ ] Parts from ticket 197: the catalog read in every bundle; the cost of a step whatever its work; bundles that share keys; deadlocks in claims; the batch document stored and compared many times; a resumed run stepping over retained batches; why a stored bundle is loaded again.
-- [ ] Learning → skill.
+- [x] Learning → skill: `skills/mdm-engineering/SKILL.md`, "Writes and transactions" (a lock call commits first, so an all-or-nothing step is one function) and "Retire redundant tests" (dead code by import graph, not a pin list); a link's start and declared keys are in PR 1513 (2026-11-08 21:10 ET).
