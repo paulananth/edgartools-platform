@@ -36,7 +36,7 @@ def policy_body() -> dict:
 def openfigi(cusip: str, ticker: str) -> dict:
     return core.source(key=cusip, source_code=OPENFIGI, kind="security",
                        fields={"name_of_issuer": "Example Corp."},
-                       identifiers={"cusip": cusip, "ticker": ticker})
+                       identifiers={"cusip": cusip, "ticker": ticker}, provenance={"matching": {"found": ["listed"]}})
 
 
 def form4(symbol: str, title: str = "Class A Common Stock") -> dict:

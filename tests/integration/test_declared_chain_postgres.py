@@ -106,7 +106,7 @@ def run_target(databases, tmp_path, body, target=TARGET):
 
 
 def test_the_declared_chain_gives_the_hand_built_chains_records(databases, tmp_path, monkeypatch):
-    by_hand, refused_by_hand = figi.prepared_records(tmp_path / "hand")
+    by_hand, refused_by_hand = figi.prepared_all(tmp_path / "hand")
     body = declared(monkeypatch)
     state, book = run_target(databases, tmp_path, body)
 
@@ -118,7 +118,8 @@ def test_the_declared_chain_gives_the_hand_built_chains_records(databases, tmp_p
     assert {r["provenance"]["record_key"]: comparable(r) for r in found} == {
         r["provenance"]["record_key"]: comparable(r) for r in by_hand}
     assert refused == refused_by_hand
-    # 6 CUSIP and 4 ISIN answers found; 8 CUSIPs and 7 ISINs not found.
-    assert len(found) == len(by_hand) == 10 and len(refused) == 15
+    # 6 CUSIP and 4 ISIN answers found; 8 CUSIPs and 7 ISINs not found: records too (operator, 2026-11-09), none refused.
+    assert len(found) == len(by_hand) == 25 and len(refused) == 0
+    assert sum(1 for r in found if figi.is_found(r)) == 10
     # 16 requests, 6 answers groups, reduce, line counts, lines, listing, combine, record, prepare.
     assert state["counts"] == {"verified": 29}

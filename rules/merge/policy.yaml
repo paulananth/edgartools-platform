@@ -381,13 +381,25 @@ automatic_rules:
 - kind: security
   family: binding
   rule_id: openfigi-security-cusip
-  rule_version: 2026-10-25.1
+  rule_version: 2026-11-09.found-answers-only
   verdict: bind
   activation: deterministic
 - kind: security
   family: binding
   rule_id: openfigi-security-isin
-  rule_version: 2026-10-25.1
+  rule_version: 2026-11-09.found-answers-only
+  verdict: bind
+  activation: deterministic
+- kind: security
+  family: binding
+  rule_id: openfigi-not-found-cusip
+  rule_version: 2026-11-09.1
+  verdict: bind
+  activation: deterministic
+- kind: security
+  family: binding
+  rule_id: openfigi-not-found-isin
+  rule_version: 2026-11-09.1
   verdict: bind
   activation: deterministic
 - kind: security
