@@ -1,6 +1,6 @@
 # Mastered entity and downstream data audit
 
-**Status: COMPLETE WITH OPEN EVIDENCE GAPS.** Audit every populated MDM kind through its configured
+**Status: IN PROGRESS.** Audit every populated MDM kind through its configured
 source fields, relationships, and downstream fields, then turn only
 evidence-backed defects into repeatable data-quality checks. Scope includes
 Companies, international entities, N-PORT fund structures, private-equity
@@ -49,15 +49,19 @@ all held in `conflicting_identifiers` review).
 The 17:15 ET full stream measured nested nonempty field and identifier counts
 for every feed; the full per-feed table is in the issue ledger. After rebasing,
 the current source file and #1503 confirm ADV filings v2 is in the Company
-merge source order; retained v1 assertions are historical evidence. The latest read found
-449,281 legacy master rows (449,272 canonical masters and nine aliases). A
-17:06 ET read found zero rows in each governed MDM entity, current-record, and
-relationship table. This blocks current governed-kind, generation, and
-relationship verification in this local snapshot.
-Earlier protocol-7 resolver counts recorded in the issue ledger therefore
-cannot be reproduced on this connection and remain prior, unverified
-observations. Do not treat them as current defects until the populated governed
-snapshot is identified.
+merge source order; retained v1 assertions are historical evidence. A 19:53 ET
+read found zero rows in the schema-native `mdm.master_entity`,
+`mdm.current_record`, and `mdm.relationship_version` tables. A later read using
+the MDM CLI's governed storage adapter found a populated, separate
+`public.mdm_store_current` snapshot at global generation 2619 (2026-11-08
+20:38 ET): 435,836 entities (8,361 Company, 12,937 fund structure, 31,097
+Person, and 383,441 Security), 13,442 relationships (12,937
+`IS_SUBFUND_OF` and 505 `ISSUED_BY`), and 154,969 reviews. The two table
+families must not be conflated. The current generic store's producing source
+run, batch lineage, policy, and relation to the active Bookkeeping legacy
+projection are not yet verified. Prior protocol-7 resolver measurements are
+not evidence for this generation. Keep current-store comparisons open until
+its producer and source bindings are pinned.
 
 The 2026-11-08 14:15 ET source-key comparison checked all 16 configured Silver
 links against the exact current legacy source bindings. Non-registration
@@ -158,7 +162,11 @@ the active `links`/landing/merge stages, and none are Silver-only. Unresolved
 endpoint declarations are not counted as missing published edges. The prior
 1,218 source-only count used a broader, earlier endpoint population and is
 superseded for the resolved-pair comparison. All 12,937 `IS_SUBFUND_OF` pairs
-match Silver exactly. The current governed relationship projection is empty.
+match Silver exactly. The generic governed store contains 505 `ISSUED_BY` and
+12,937 `IS_SUBFUND_OF` relationships at generation 2619, but their source-run,
+endpoint and time evidence have not been reconciled to the declarations or
+Silver rows. The legacy exact-pair result does not certify this separate
+generation.
 
 The refreshed 13F flow is configured end to end and loaded: the security run
 completed with 44/44 work items verified and the filing run with 3/3 verified
@@ -313,7 +321,8 @@ both SEC submissions and ownership-owner assertions and resolve to the same
 master, with no Person holding multiple CIKs. Fund-structure series IDs
 (12,937) and LEIs (12,867) each map to one fund master, and no fund master
 holds multiple values in those namespaces. These are legacy assignment checks;
-they cannot stand in for the empty governed MDM projection.
+they do not establish source bindings or correct identity assignments in the
+separate populated generic MDM store.
 
 For international Company records, the SEC–GLEIF `sec-gleif-name-jurisdiction`
 binding rule is currently active. Its configured proof is 300/300 correct
