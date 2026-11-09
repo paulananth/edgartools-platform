@@ -63,16 +63,16 @@ steps. A passing API write is not that confirmation.
 SEC Company mastering, approved 2026-11-08:
 
 - SEC submissions and the ticker reference are direct inputs.
-- Name Count is the only material derived control. It is built from SEC filer
+- Name Matching is the only material derived control. It is built from SEC filer
   names and the verified GLEIF Golden Copy, digest-checked against the capture
   receipts, and it feeds mastering. Show both sources into that control.
-- The eight Bookkeeping steps stay one node: main, keys, catalog, name count,
+- The eight Bookkeeping steps stay one node: main, keys, catalog, name matching,
   combine, records, merge, processed. They are tasks, not graph nodes.
 - Company master and the Change Journal are the trusted outputs.
 - The capture target and the merge-batch target stay off this graph.
 - On the three layers: the service layer is that source's pipeline service
   and the database service; the domain layer is the subject of the master;
-  the data product layer is the legal-entity package. Name Count, the ticker
+  the data product layer is the legal-entity package. Name Matching, the ticker
   reference, and the journal are not that product.
 - No live catalog objects were changed by the prototype. Publication follows
   this picture; do not invent a pipeline to draw the steps.

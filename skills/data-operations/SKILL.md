@@ -263,7 +263,7 @@ edgar-warehouse load \
   `scripts/capture_receipts.py <capture folder>` once: it writes one receipt per
   file and never replaces a receipts file.
 - **A reload whose inputs changed needs `--revision N`** (default 0, the
-  first publication). A changed input (a new Name Count, say) changes a record under the
+  first publication). A changed input (a new Name Matching, say) changes a record under the
   same revision, and the Stage refuses it ("Source native revision has
   contradictory publications"): pass a revision higher than the last load's
   (the bundles all stopped at merge until it was raised).
