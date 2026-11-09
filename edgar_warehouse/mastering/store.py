@@ -86,6 +86,15 @@ class Store:
         return self.rows("select distinct i.namespace,i.value,i.entity_id from mastering_identifier i "
                          "join mastering_stage_key s on s.namespace=i.namespace and s.value=i.value")
 
+    def kinds(self, entities) -> dict:
+        """The entity type of each golden record, read from its body."""
+        found = {}
+        for block in blocks(sorted(entities)):
+            for entity, body in self.rows(
+                    f"select entity_id,body from mastering_master where entity_id in ({marks(block)})", block):
+                found[entity] = json.loads(body).get("kind")
+        return found
+
     def add_identifiers(self, rows: list) -> None:
         if rows:
             self.insert("mastering_identifier", ("namespace", "value", "entity_id"), rows)
