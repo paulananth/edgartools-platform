@@ -52,6 +52,9 @@ MONTHS = {
 }
 
 RELATED = {MAY: [["F1", "1", "900002"]]}
+JULY = "2026-07-31T00:00:00+00:00"
+MONTHS[JULY] = ([filing("F3")], [custody("F3", "EXAMPLE HOLDINGS INC"), custody("F3", "EXAMPLE CAPITAL"),
+                                 custody("F3", "EXAMPLE FUND N.A.")])
 
 
 def csv_text(header: list[str], rows: list[list[str]]) -> str:
@@ -146,3 +149,15 @@ def test_a_related_person_named_by_cik_links_to_secs_company_record(tmp_path):
     assert [l["target_subject"] for l in related] == [subject_key("sec.company.v1", "0000900002")]
     _, (june_filing,) = month(tmp_path / "june", JUNE)
     assert not [l for l in june_filing["relationships"] if l["type"] == "RELATED_PERSON"]  # June names none
+
+
+def test_a_custodian_named_only_by_name_carries_its_name_keys(tmp_path):
+    """Name only: the name id for every name, the legal-form key only for a name that ends in a legal form,
+    the name-and-place key for a name with a place (operator, 2026-11-09: the strict list, "Name plus place")."""
+    custodians, _ = month(tmp_path / "july", JULY)
+    by_name = {r["fields"]["name"]["value"]: r["cross_references"] for r in custodians}
+    assert set(by_name) == {"EXAMPLE HOLDINGS INC", "EXAMPLE CAPITAL", "EXAMPLE FUND N.A."}
+    assert all("name_id" in refs and "name_place_id" in refs for refs in by_name.values())
+    assert "name_form_id" in by_name["EXAMPLE HOLDINGS INC"] and "name_form_id" in by_name["EXAMPLE FUND N.A."]
+    assert "name_form_id" not in by_name["EXAMPLE CAPITAL"]  # no legal form: the name alone does not make a Company
+    assert by_name["EXAMPLE HOLDINGS INC"]["name_form_id"] == by_name["EXAMPLE HOLDINGS INC"]["name_id"]

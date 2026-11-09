@@ -353,6 +353,10 @@ dataset_contracts:
           lei: lei
         cross_references:
           name_id: legal_name
+          name_form_id: legal_form_name
+          name_place_id: name_place
           adv_lei: lei
         cross_reference_formats:
           name_id: name_id@1
+          name_form_id: name_id@1
+          name_place_id: name_place_id@1

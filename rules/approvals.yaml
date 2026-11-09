@@ -26,11 +26,11 @@ approvals:
   finalized: PR 1481
 - kind: source
   name: iapd.adv
-  digest: 99be403259ec142c6839c7f85d90d283be18596628a0efe9015751151a84e40b
+  digest: 6feddb708c30e4f93c4944cfe4ed22ffa8783cfef75bb182e8cfa6c0c1fef907
   by: Operator
   words: Approved the rules always
-  at: '2026-11-08'
-  finalized: PR 1510
+  at: '2026-11-09'
+  finalized: PR 1566
 - kind: source
   name: openfigi
   digest: 0d7919f6a5e2d65da3c6c9fcf38bb69c2a7ee512255ba25f30a15f5587392f01
