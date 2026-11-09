@@ -145,7 +145,7 @@ needs no writer of its own:
     key's `<name>=<value>` folder; the contract's declared type must match)
     or `null` (where the contract's field is nullable);
   - `runfile: <name>`: the step's one document is a run file's canonical
-    bytes (a Name Count is a run file, not a captured document); one unit,
+    bytes (a Name Matching is a run file, not a captured document); one unit,
     with no `files`, `beside` or `pieces`;
   - `always: true` (with `files`, one unit): documents every bundle reads, an
     exchange catalog. `load` adds them to each bundle (they count in its
@@ -161,7 +161,7 @@ needs no writer of its own:
     is cut into groups or each file, one composed slot per document. `over:
     all` in place of that reads every unit of `from` (1..256) in one reading,
     so a large shared file is read once per bundle, not once per group (a 6 MB
-    Name Count reads in 0.56 s whatever the number of keys; `value_column` may
+    Name Matching reads in 0.56 s whatever the number of keys; `value_column` may
     then be left out for a plain set). A set
     may name `run: {source, target, step}` in place of `from`: another run's
     step, read whole. Or every set `{file: <name>}`, given whole by a run file;
@@ -198,7 +198,7 @@ of a compacted capture finds no units and is refused.
 A target may declare its run's own inputs, `run: {facts: [names], files:
 [names], projections: {<file>: [parts]}, matches: [{file, path, to}]}`:
 `projections` names the top-level parts of a file that count toward the
-processing identity (the rest, such as the capture a Name Count was built from,
+processing identity (the rest, such as the capture a Name Matching was built from,
 moves nothing); `matches` ties a file to the capture (`to: receipts_sha256`: the
 file's dotted `path` must equal the sha256 of the capture's receipts file, else
 the manifest is refused as not counting this capture). Facts are what the
