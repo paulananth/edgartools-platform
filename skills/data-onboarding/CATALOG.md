@@ -4,8 +4,9 @@ Use this procedure for catalog creation, recovery, business naming or publicatio
 covering all entities and pipelines. Publish metadata only. Source records, job
 execution, schedules and activation retain their own authorization.
 
-Use service APIs and CLI tools only. Never use computer use, browser automation
-or GUI interaction on this project.
+Use service APIs and CLI tools. Observe the shipped lineage UI with Playwright
+only when the operator asks for that observation. Lineage follows the
+[data-governance lineage skill](../data-governance/LINEAGE.md).
 
 ## Discover meaning; do not maintain rename lists
 

@@ -18,6 +18,11 @@ the database service. Each service and pipeline has a short `displayName`; the
 technical name stays the identity. Do not delete a service by hand; the
 DatabaseService stays.
 
+What belongs on a target's graph is the
+[data-governance lineage skill](../data-governance/LINEAGE.md). This skill
+stores that picture. Do not add a pipeline or an edge to force a task onto
+the canvas.
+
 For a target's exact graph, read
 `GET /api/v1/lineage/pipeline/name/<URL-encoded-FQN>?upstreamDepth=0&downstreamDepth=1`.
 Column-by-column table lineage is on the table's Lineage tab and at
