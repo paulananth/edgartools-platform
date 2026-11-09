@@ -229,18 +229,18 @@ For example: a cascade pass, a name rule, or records waiting for review.
 **Name matching across two sources.** When two sources share no issued
 identifier, a record joins the other source's master by name, and only
 where the name is unique on both sides:
-1. **Count every name over both whole sources first**: the Name Count, one
+1. **Count every name over both whole sources first**: the Name Matching, one
    file built from the complete captures of both (never from what a Stage
    holds, so load order cannot change an answer), each name normalized the
    same way on both sides (legal form kept), the other source's other and
    transliterated names counted too. Rebuild it whenever a source's names or
    the matching rules change: it carries the passes' answers.
-2. **A name rule** binds a pair whose name the Name Count counts once on each
+2. **A name rule** binds a pair whose name the Name Matching counts once on each
    side, plus one more agreeing value (a jurisdiction, a postal code);
    **a cascade** runs passes strict to loose (name and address parts, then
    fewer parts), each pass binding one to one over what earlier passes left.
    A pass part given as a list agrees when any one of its parts does.
-3. The preparation of the source whose records bind reads the Name Count file,
+3. The preparation of the source whose records bind reads the Name Matching file,
    and the Merge Stage re-checks each pair on its own rows.
 4. Measure every new link a rule adds against the rules already on (**Measure it**,
    above): label each one, plus the risky arms (a match through another
@@ -249,7 +249,7 @@ where the name is unique on both sides:
 
 A rule that asks whether two records state the same time compares them as
 instants, never as text: the Stage stores a record's `effective_at` in UTC
-(`+00:00`), while a Name Count or a source keeps the provider's spelling (`Z`, an
+(`+00:00`), while a Name Matching or a source keeps the provider's spelling (`Z`, an
 offset). A source's record-keeping date that only marks a new version is that
 record's effective time, not a field of the master (rebuild ticket 129).
 
@@ -299,7 +299,7 @@ Never invent a command.
   about 3 minutes per 1,000 documents on a laptop.
 - Open work on the live SEC Company and GLEIF pipelines: see data-onboarding's
   Examples, "Unfinished live pipelines" (one list, kept there).
-- Name matching across two sources: SEC Company to GLEIF. The Name Count is
+- Name matching across two sources: SEC Company to GLEIF. The Name Matching is
   `edgar-warehouse mdm name-count` (readings in
   `rules/sources/sec.company/name-count-*.yaml` and
   `rules/sources/gleif/name-count-*.yaml`; about 11 minutes over the whole

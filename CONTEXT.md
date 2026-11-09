@@ -178,9 +178,9 @@ _Avoid_: Source Record Binding, corporate acquisition, merging fields because th
 The rules that select a master field value from eligible source values after identity has been resolved, while retaining the values that were not selected.
 _Avoid_: Proof of identity, source rank as permission to merge identities
 
-**Name Count**:
-The pinned count, over one whole SEC capture and one full GLEIF Golden Copy, of how many SEC filers and how many GLEIF legal entities carry each name with its legal form kept. It proposes no binding. A name matching rule may bind only a name whose SEC count and GLEIF count are each exactly one.
-_Avoid_: Name Frequency, Name Census, Census, a matcher, a list of approved pairs, a count over the records a Stage happens to hold
+**Name Matching**:
+The last resort of mastering, and the counts it needs: how many SEC filers and how many GLEIF legal entities carry each name with its legal form kept, counted over one whole SEC capture and one whole GLEIF publication. It proposes no binding. A name rule may bind only a name whose SEC count and GLEIF count are each exactly one. It is part of the GLEIF merge, not a separate job.
+_Avoid_: Name Count, Name Frequency, Name Census, Census, a matcher, a list of approved pairs, a count over the records a Stage happens to hold
 
 **Match Exclusion**:
 An evidence-backed decision that specified source records or identities must not be combined while the decision remains in force.

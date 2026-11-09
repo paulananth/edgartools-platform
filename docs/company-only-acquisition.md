@@ -17,7 +17,7 @@ checked by a separate verifier. Nothing makes a request to SEC here.
      --output <bundle folder> --as-of <instant> --revision 0
    ```
 
-   It checks the inputs, binds the approved run IDs and the Name Count digest
+   It checks the inputs, binds the approved run IDs and the Name Matching digest
    into the contracts and freezes every unit's input; the documents stay in
    the capture, named by their receipts. Its report names the manifest
    (`manifest.uri`, `manifest.sha256`) and the publication.
@@ -33,12 +33,12 @@ checked by a separate verifier. Nothing makes a request to SEC here.
    Its steps, in `rules/sources/sec.company/source.yaml`:
    `main` and `keys` read each document (`name-count-main.yaml`,
    `name-count-keys.yaml`, two a unit); `catalog` reads the ticker catalog
-   (`catalog.yaml`); `name_count` reads the Name Count file narrowed to the
+   (`catalog.yaml`); `name_count` reads the Name Matching file narrowed to the
    bundle's names and CIKs (`name-count.yaml`, lookup sets derived from the key
-   readings); `combine` joins each main unit with the Name Count and the catalog
+   readings); `combine` joins each main unit with the Name Matching and the catalog
    (`combine-name-count-captured.yaml`); `records` prepares the bundle's rows as
    one publication (`mdm.prepare`); `merge` runs it through the merge
-   (`mastering.merge`). The Name Count, combine and records inputs are composed from the
+   (`mastering.merge`). The Name Matching, combine and records inputs are composed from the
    steps' verified readings. The returned Bookkeeping run ID is the recovery
    handle: `bookkeeping resume <run-id>` for its work and `change-journal
    recover bookkeeping <run-id>` for committed, undelivered Journal intent.
