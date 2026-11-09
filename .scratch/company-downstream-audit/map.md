@@ -1,6 +1,6 @@
 # Mastered entity and downstream data audit
 
-**Status: IN PROGRESS.** Audit every populated MDM kind through its configured
+**Status: COMPLETE WITH OPEN EVIDENCE GAPS.** Audit every populated MDM kind through its configured
 source fields, relationships, and downstream fields, then turn only
 evidence-backed defects into repeatable data-quality checks. Scope includes
 Companies, international entities, N-PORT fund structures, private-equity
