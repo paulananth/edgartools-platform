@@ -313,6 +313,42 @@ automatic_rules:
     approved_by: operator
     approved_at: '2026-11-04T17:52:00-05:00'
     reason: 'Complete and then run and switch on (Form ADV); exact name only (Agreed); limited test on the real June 2026 names'
+# iapd-adv-custodian-name-form and iapd-adv-custodian-name-place (operator, 2026-11-09: "master using name and company
+# type if company type does not exist provide me option", then "Name plus place (Recommended)", "2 yes"; the strict
+# legal-form list accepted; standing words "Approved the rules always"): a custodian named only by its name creates its
+# Company, by the name when it ends in a legal form and by the name with its city, state and country when it does not.
+- kind: company
+  family: exact_name_binding
+  rule_id: iapd-adv-custodian-name-form
+  rule_version: 2026-11-09.1
+  verdict: bind
+  activation: exact_name
+  proof:
+    names: 477
+    attached: 102
+    review: 9
+    waiting: 10
+    created: 356
+    second_pass_changed_nothing: true
+    approved_by: operator
+    approved_at: '2026-11-09T23:22:22Z'
+    reason: 'Custodians named only by name create their Company by name when it ends in a legal form; limited test on the real Form ADV custodian files of March and June 2026 (custodians alone, in a throwaway PostgreSQL): 477 names, 102 attached to a Company the custodian source already made, 9 to review, 10 waiting, 356 created, second pass unchanged'
+- kind: company
+  family: exact_name_binding
+  rule_id: iapd-adv-custodian-name-place
+  rule_version: 2026-11-09.1
+  verdict: bind
+  activation: exact_name
+  proof:
+    names: 724
+    attached: 43
+    review: 1
+    waiting: 6
+    created: 674
+    second_pass_changed_nothing: true
+    approved_by: operator
+    approved_at: '2026-11-09T23:22:22Z'
+    reason: 'Custodians named only by name with no legal form create their Company by name and place; limited test on the real Form ADV custodian files of March and June 2026 (custodians alone, in a throwaway PostgreSQL): 724 names, 43 attached to a Company the custodian source already made, 1 to review, 6 waiting, 674 created, second pass unchanged'
 # openfigi-security-cusip, openfigi-isin-security-cusip, openfigi-security-isin
 # (version 2026-10-23.1, ticket 120, OpenFIGI first; operator, 2026-10-23:
 # "make the seurities run should process openfigi first", "agreed"): OpenFIGI's

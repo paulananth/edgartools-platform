@@ -369,6 +369,35 @@ rules:
   key: name_id@1
   on_no_match: wait
   on_several: review
+# A custodian named only by its name that no other source's Company holds (operator, 2026-11-09: "master using name
+# and company type", then "Name plus place"): a name that ends in a legal form creates one Company for that name,
+# which the custodian's later records join; a name with no legal form creates one Company per place (name, city, state
+# and country). The rule above runs first, so an existing Company of the same name is joined, never doubled. Both rules
+# only act on the custodian's own records.
+- rule_id: iapd-adv-custodian-name-form
+  version: 2026-11-09.1
+  family: exact_name_binding
+  source: iapd.adv.custodians.v1
+  holder_sources: []
+  applies_to_verdict: company
+  emits:
+  - bind
+  key: name_id@1
+  cross_reference: name_form_id
+  on_no_match: mint
+  on_several: review
+- rule_id: iapd-adv-custodian-name-place
+  version: 2026-11-09.1
+  family: exact_name_binding
+  source: iapd.adv.custodians.v1
+  holder_sources: []
+  applies_to_verdict: company
+  emits:
+  - bind
+  key: name_place_id@1
+  cross_reference: name_place_id
+  on_no_match: mint
+  on_several: review
 # A GLEIF record an N-PORT holding names as its issuer joins the one Company
 # that holds its LEI, and otherwise waits for the SEC-GLEIF name rules; it
 # never creates a Company (operator, 2026-10-16: "Wait, config only

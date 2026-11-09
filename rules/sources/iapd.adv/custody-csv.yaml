@@ -108,11 +108,31 @@ read:
                 - regex_replace: {pattern: "^.{18}[^0-9].$|^.{19}[^0-9]$", with: ""}
                 - pad: {left: "lei:", right: ""}
                 null_if: ["lei:"]
-            - text:
-                path: "5K(3)(a)"
-                path_mode: literal
-                transforms: [{trim: true}, {case: upper}, {pad: {left: "name:", right: ""}}]
-                null_if: ["name:"]
+            # A custodian named only by its name (operator, 2026-11-09: "Name plus place"): a name that ends in a
+            # legal form is one custodian whatever its city; a name with no legal form is one custodian per place
+            # (name, city, state and country), so one bare name in two cities is two. `equal` holds when both
+            # sides are null, and the right side is always null.
+            - choose:
+                condition:
+                  equal:
+                    left: {text: {path: "5K(3)(a)", path_mode: literal, transforms: [{trim: true}, {regex_extract: {pattern: '(?i)^.*\b(?:LLC|L\.L\.C|LP|L\.P|LLP|LLLP|PLLC|PC|INC|INCORPORATED|CORP|CORPORATION|CO|COMPANY|LTD|LIMITED|PLC|N\.A|NA|SA|S\.A|AG|GMBH|BV|NV)\.?$', group: 0}}], null_if: [""]}}
+                    right: {text: {path: "5K(3)(a)", path_mode: literal, transforms: [{regex_replace: {pattern: "(?s)^.*$", with: ""}}], null_if: [""]}}
+                then:
+                  concat:
+                  - {const: {value: "name:"}}
+                  - {text: {path: "5K(3)(a)", path_mode: literal, transforms: [{trim: true}, {case: upper}], null_if: [""]}}
+                  - {const: {value: "|"}}
+                  - {coalesce: {skip: "null", values: [{text: {path: "5K(3)(c) City", path_mode: literal, transforms: [{trim: true}, {case: upper}], null_if: [""]}}, {const: {value: ""}}]}}
+                  - {const: {value: "|"}}
+                  - {coalesce: {skip: "null", values: [{text: {path: "5K(3)(c) State", path_mode: literal, transforms: [{trim: true}, {case: upper}], null_if: [""]}}, {const: {value: ""}}]}}
+                  - {const: {value: "|"}}
+                  - {coalesce: {skip: "null", values: [{text: {path: "5K(3)(c) Country", path_mode: literal, transforms: [{trim: true}, {case: upper}], null_if: [""]}}, {const: {value: ""}}]}}
+                else:
+                  text:
+                    path: "5K(3)(a)"
+                    path_mode: literal
+                    transforms: [{trim: true}, {case: upper}, {pad: {left: "name:", right: ""}}]
+                    null_if: ["name:"]
         amount: {text: {path: "5K(3)(g)", path_mode: literal, null_if: [""]}}
         published: {context: {name: published}}
     # The silver table's rows (silver-custody.yaml): the facts of the row and the custodian's key. The
@@ -143,10 +163,30 @@ read:
                 - regex_replace: {pattern: "^.{18}[^0-9].$|^.{19}[^0-9]$", with: ""}
                 - pad: {left: "lei:", right: ""}
                 null_if: ["lei:"]
-            - text:
-                path: "5K(3)(a)"
-                path_mode: literal
-                transforms: [{trim: true}, {case: upper}, {pad: {left: "name:", right: ""}}]
-                null_if: ["name:"]
+            # A custodian named only by its name (operator, 2026-11-09: "Name plus place"): a name that ends in a
+            # legal form is one custodian whatever its city; a name with no legal form is one custodian per place
+            # (name, city, state and country), so one bare name in two cities is two. `equal` holds when both
+            # sides are null, and the right side is always null.
+            - choose:
+                condition:
+                  equal:
+                    left: {text: {path: "5K(3)(a)", path_mode: literal, transforms: [{trim: true}, {regex_extract: {pattern: '(?i)^.*\b(?:LLC|L\.L\.C|LP|L\.P|LLP|LLLP|PLLC|PC|INC|INCORPORATED|CORP|CORPORATION|CO|COMPANY|LTD|LIMITED|PLC|N\.A|NA|SA|S\.A|AG|GMBH|BV|NV)\.?$', group: 0}}], null_if: [""]}}
+                    right: {text: {path: "5K(3)(a)", path_mode: literal, transforms: [{regex_replace: {pattern: "(?s)^.*$", with: ""}}], null_if: [""]}}
+                then:
+                  concat:
+                  - {const: {value: "name:"}}
+                  - {text: {path: "5K(3)(a)", path_mode: literal, transforms: [{trim: true}, {case: upper}], null_if: [""]}}
+                  - {const: {value: "|"}}
+                  - {coalesce: {skip: "null", values: [{text: {path: "5K(3)(c) City", path_mode: literal, transforms: [{trim: true}, {case: upper}], null_if: [""]}}, {const: {value: ""}}]}}
+                  - {const: {value: "|"}}
+                  - {coalesce: {skip: "null", values: [{text: {path: "5K(3)(c) State", path_mode: literal, transforms: [{trim: true}, {case: upper}], null_if: [""]}}, {const: {value: ""}}]}}
+                  - {const: {value: "|"}}
+                  - {coalesce: {skip: "null", values: [{text: {path: "5K(3)(c) Country", path_mode: literal, transforms: [{trim: true}, {case: upper}], null_if: [""]}}, {const: {value: ""}}]}}
+                else:
+                  text:
+                    path: "5K(3)(a)"
+                    path_mode: literal
+                    transforms: [{trim: true}, {case: upper}, {pad: {left: "name:", right: ""}}]
+                    null_if: ["name:"]
         amount: {text: {path: "5K(3)(g)", path_mode: literal, null_if: [""]}}
         published: {context: {name: published}}

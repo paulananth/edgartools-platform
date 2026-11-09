@@ -18,7 +18,11 @@ def test_the_name_id_and_the_name_and_place_id_never_collide():
     assert ID({"name": "Example Capital", "city": "Example City"}) != FORMATS["name_id@1"]("Example Capital Example City")
 
 
-@pytest.mark.parametrize("item", [{"name": "Example Capital"}, {"city": "Example City"}, {"name": " ,. ", "city": "X"}, "Example Capital"])
-def test_a_name_or_a_place_with_no_token_is_refused(item):
+@pytest.mark.parametrize("item", [{"city": "Example City"}, {"name": " ,. ", "city": "X"}, "Example Capital"])
+def test_a_name_with_no_token_is_refused(item):
     with pytest.raises(UnsupportedRecord):
         ID(item)
+
+
+def test_a_name_with_no_place_gives_no_id_and_does_not_set_the_record_aside():
+    assert ID({"name": "Example Capital"}) == ""
