@@ -193,7 +193,7 @@ rules:
 # (openfigi-security-cusip 2026-10-23.1, openfigi-isin-security-cusip and
 # openfigi-security-isin 2026-10-24.1) and wait for their switch-on.
 - rule_id: openfigi-security-cusip
-  version: 2026-10-25.1
+  version: 2026-11-09.found-answers-only
   family: binding
   source: openfigi.security.v3
   applies_to_verdict: security
@@ -201,6 +201,9 @@ rules:
   - bind
   on_no_match: mint
   when:
+  - primitive: evidence_present@1
+    args:
+      document: provenance.matching.found
   - primitive: identifier_match@1
     args:
       namespace: cusip
@@ -208,7 +211,7 @@ rules:
     args:
       namespace: cusip
 - rule_id: openfigi-security-isin
-  version: 2026-10-25.1
+  version: 2026-11-09.found-answers-only
   family: binding
   source: openfigi.security.v3
   applies_to_verdict: security
@@ -216,6 +219,50 @@ rules:
   - bind
   on_no_match: mint
   when:
+  - primitive: evidence_present@1
+    args:
+      document: provenance.matching.found
+  - primitive: identifier_match@1
+    args:
+      namespace: isin
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: isin
+# An identifier OpenFIGI did not find (operator, 2026-11-09: "openfigi is currently creating only equity so if it
+# is equity then yes if not no"): the answer attaches to the Security that already holds that CUSIP or ISIN, and
+# creates nothing, since a not-found answer states no security type. With no holder it waits for a recorded reason.
+- rule_id: openfigi-not-found-cusip
+  version: 2026-11-09.1
+  family: binding
+  source: openfigi.security.v3
+  applies_to_verdict: security
+  emits:
+  - bind
+  on_no_match: wait
+  when:
+  - primitive: evidence_present@1
+    args:
+      document: provenance.matching.found
+    negate: true
+  - primitive: identifier_match@1
+    args:
+      namespace: cusip
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: cusip
+- rule_id: openfigi-not-found-isin
+  version: 2026-11-09.1
+  family: binding
+  source: openfigi.security.v3
+  applies_to_verdict: security
+  emits:
+  - bind
+  on_no_match: wait
+  when:
+  - primitive: evidence_present@1
+    args:
+      document: provenance.matching.found
+    negate: true
   - primitive: identifier_match@1
     args:
       namespace: isin
