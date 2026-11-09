@@ -33,3 +33,5 @@ live catalog shows the same edges. An HTTP success is not that match.
 When the operator asks to see the shipped lineage UI, observe it with
 Playwright and compare the nodes to this contract. Every other catalog step
 stays on the API and CLI.
+
+
