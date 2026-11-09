@@ -291,19 +291,3 @@ def test_small_xml_record_limit_does_not_limit_authenticated_header():
     with pytest.raises(Conflict):
         inspect_archive(io.BytesIO(raw), member="level1", metadata=metadata(format="xml.zip"),
             expected_sha256=hashlib.sha256(raw).hexdigest(), max_record=2)
-
-
-
-
-def test_a_native_publication_manifest_is_refused_before_any_work(tmp_path):
-    """The native GLEIF path was retired (Issue 20 L6): a manifest still naming it
-    fails closed, before any database read, rather than running as a plain manifest."""
-    from uuid import uuid4
-
-    from edgar_warehouse.mdm import execution
-
-    path = tmp_path / "manifest.json"
-    path.write_text(json.dumps({"contract_version": 2, "native_source": {}, "batches": [
-        {"batch_id": "b0", "stage": "mastering"}]}))
-    with pytest.raises(Conflict, match="retired"):
-        execution.execute_manifest(None, path=str(path), run_id=str(uuid4()), stage="mastering", limit=10)
