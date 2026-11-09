@@ -22,6 +22,6 @@ Mastering searches the cross-reference table for all the identifiers the source 
 
 - [ ] Prove a record stating two identifiers is searched on both together: a test where each identifier alone finds a different golden record.
 - [ ] Prove each Identifier Contract limit (issuer, forward, reverse) with a test that breaks it.
-- [ ] Prove a name is tried only when no identifier finds a golden record, and binds only on exactly one golden record (ticket 202 rewrites the GLEIF name rules to search).
+- [ ] ~~Prove a name is tried only when no identifier finds a golden record, and binds only on exactly one golden record (ticket 202 rewrites the GLEIF name rules to search).~~ moved to ticket 204 (step 1) (2026-11-09 17:42 ET; operator: "This should move to step 1"). The order of the search, name only when no identifier finds a golden record, stays here.
 - [ ] Name former name and place as separate approved rules, each with its own proof (ticket 203).
 - [ ] Learning → skill: name the skill line this ticket changed, or write "none".
