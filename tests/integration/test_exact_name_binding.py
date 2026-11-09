@@ -112,3 +112,31 @@ def test_a_second_pass_of_a_minting_rule_changes_nothing(database):
     before = masters.bodies(database.application)
     masters.seed(database.application, records, policy)
     assert masters.bodies(database.application) == before
+
+
+def two_key_policy() -> dict:
+    """A second exact-name rule that creates, keyed on its own cross reference (`name_form_id`); the first still only joins."""
+    body = policy_body()
+    (rule,) = [r for r in body["kinds"]["company"]["rules"] if r["rule_id"] == "iapd-adv-custodian-name"]
+    (entry,) = [e for e in body["automatic_rules"] if e["rule_id"] == "iapd-adv-custodian-name"]
+    second = {**copy.deepcopy(rule), "rule_id": "invented-custodian-name-form", "cross_reference": "name_form_id",
+              "on_no_match": "mint"}
+    body["kinds"]["company"]["rules"].append(second)
+    body["automatic_rules"].append({**copy.deepcopy(entry), "rule_id": second["rule_id"]})
+    return body
+
+
+def formed(key: str, name_id: str, form_id: str | None) -> dict:
+    references = {"name_id": name_id, **({"name_form_id": form_id} if form_id else {})}
+    return core.source(key=key, source_code=CUSTODIANS, kind="company", fields={}, cross_references=references)
+
+
+def test_a_rule_keyed_on_its_own_cross_reference_creates_only_for_records_that_carry_it(database):
+    policy = two_key_policy()
+    masters.seed(database.application, [formed("name:WITH", NAME_ONE, NAME_ONE), formed("name:BARE", NAME_NONE, None)], policy)
+    assert companies(database) == 1  # the record with a legal form created one; the bare name waits
+    assert bound(database, CUSTODIANS, "name:WITH") is not None
+    assert bound(database, CUSTODIANS, "name:BARE") is None
+    masters.seed(database.application, [formed("name:WITH-AGAIN", NAME_ONE, NAME_ONE)], policy)
+    assert companies(database) == 1
+    assert bound(database, CUSTODIANS, "name:WITH-AGAIN") == bound(database, CUSTODIANS, "name:WITH")

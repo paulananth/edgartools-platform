@@ -946,7 +946,7 @@ def test_an_exact_name_rule_that_mints_when_no_master_holds_the_name_is_accepted
 
 
 @pytest.mark.parametrize("change", [
-    {"on_no_match": "guess"}, {"on_several": "bind"}, {"holder_sources": []}, {"holder_sources": ["a.v1"]},
+    {"on_no_match": "guess"}, {"cross_reference": "Name Form"}, {"cross_reference": "a_name_that_is_far_too_long"}, {"on_several": "bind"}, {"holder_sources": []}, {"holder_sources": ["a.v1"]},
     {"key": "name"}, {"when": [{"primitive": "identifier_match@1", "args": {"namespace": "lei"}}]},
     {"emits": ["bind", "create"]},
 ])
