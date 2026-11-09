@@ -15,19 +15,15 @@ from __future__ import annotations
 
 import zipfile
 from pathlib import Path
-from uuid import uuid4
 
 import pytest
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.mdm.evidence import subject_key
-from edgar_warehouse.mdm.merge import MergeStage
-from edgar_warehouse.mdm.store import Store, register_policy
 from edgar_warehouse.rules import files
 from tests.integration import test_mdm_postgres as core
 from tests.mdm import policy_layers
-from tests.support import source_chain as chain
-from tests.support.rules_authority import register_dataset
+from tests.support import masters, source_chain as chain
 
 
 NAME, CODE, GLEIF, ADV = "sec.nport.security", "sec.nport.security.v2", "gleif.level1.v1", "iapd.adv.custodians.v1"
@@ -134,74 +130,66 @@ def policy_body() -> dict:
     return policy_layers.with_rules_on(body, "security", "nport-security-cusip", "nport-security-isin")
 
 
-def apply(stage, policy, batch, assertions, checkpoint):
-    stage.apply(batch_id=batch, run_id=str(uuid4()), policy_digest=policy, consumer="check",
-                expected_checkpoint=checkpoint - 1, checkpoint=checkpoint, as_of="2026-10-16T00:00:00+00:00",
-                assertions=assertions)
-
-
 def mastered_issuer(database):
-    """The policy registered, and the issuer's Company: an ADV custodian gives it
-    the LEI, and the issuer's GLEIF record joins it."""
-    for code in (ADV, GLEIF):
-        core.register_reading(database, code, core.contract_body())
-    with database.admin.begin() as conn:
-        register_dataset(conn, CODE, database.registry, files.mdm_contract(NAME, CODE))
-        policy = register_policy(conn, policy_body())
-    stage = MergeStage(Store(database.application))
-    apply(stage, policy, "custodian", [core.source(key="custodian", source_code=ADV, fields={"name": "Example Corp"},
-                                                   identifiers={"lei": LEI})], 1)
-    apply(stage, policy, "gleif", [core.source(key=LEI, source_code=GLEIF, fields={"name": "Example Corp"},
-                                               identifiers={"lei": LEI},
-                                               provenance={"matching": {"nport_issuer": True}})], 2)
-    return stage, policy
+    """The policy, and the issuer's Company: an ADV custodian gives it the LEI, and the issuer's GLEIF record joins it."""
+    policy = policy_body()
+    masters.seed(database.application, [core.source(key="custodian", source_code=ADV, fields={"name": "Example Corp"},
+                                                    identifiers={"lei": LEI})], policy)
+    masters.seed(database.application, [core.source(key=LEI, source_code=GLEIF, fields={"name": "Example Corp"},
+                                                    identifiers={"lei": LEI},
+                                                    provenance={"matching": {"nport_issuer": True}})], policy)
+    return policy
 
 
-def issued_by(database):
-    return [(body["periods"], body.get("last_seen"))
-            for body in core.documents(database, "relationship").values() if body["type"] == "ISSUED_BY"]
+def issued_by(database, policy, last=None):
+    return masters.links(database.application, policy, as_of="2026-10-16T00:00:00+00:00", of_type="ISSUED_BY", last=last)
 
 
-def starts(database):
-    ((periods, _),) = issued_by(database)
-    return [(p["valid_from"], p["valid_from_basis"]) for p in periods]
+def starts(link):
+    return [(p["valid_from"], p["valid_from_basis"]) for p in link["periods"]]
 
 
 def test_an_issued_by_link_starts_at_its_earliest_filing(database, tmp_path):
     q2 = prepared_records(tmp_path / "q2", Q2)
     linked = [r for r in q2 if any(l["type"] == "ISSUED_BY" for l in r.get("relationships") or [])]
     assert len(q2) == 2 and len(linked) == 1
-    stage, policy = mastered_issuer(database)
-    apply(stage, policy, "q2", q2, 3)
-    reviews = [body["reason"] for body in core.documents(database, "review").values() if body.get("open")]
-    assert "unknown_relationship_start" not in reviews
-    assert starts(database) == [(MAY28, "observed")]
+    policy = mastered_issuer(database)
+    masters.seed(database.application, q2, policy)
+    _, waiting = masters.link_run(database.application, policy, "2026-10-16T00:00:00+00:00")
+    assert "unknown_relationship_start" not in waiting
+    (link,) = issued_by(database, policy)
+    assert starts(link) == [(MAY28, "observed")]
 
 
 def test_a_later_quarter_keeps_the_start(database, tmp_path):
     q2 = prepared_records(tmp_path / "q2", Q2, revision=20262)
     q3 = prepared_records(tmp_path / "q3", Q3, revision=20263, filings={"A-1": "14-AUG-2026", "A-2": "14-AUG-2026"})
-    stage, policy = mastered_issuer(database)
-    apply(stage, policy, "q2", q2, 3)
-    apply(stage, policy, "q3", q3, 4)
-    assert starts(database) == [(MAY28, "observed")]
+    policy = mastered_issuer(database)
+    masters.seed(database.application, q2, policy)
+    first = issued_by(database, policy)
+    masters.seed(database.application, q3, policy)
+    (link,) = issued_by(database, policy, last=first)
+    assert starts(link) == [(MAY28, "observed")]
 
 
 def test_a_backfilled_earlier_quarter_moves_the_start_back(database, tmp_path):
     q3 = prepared_records(tmp_path / "q3", Q3, revision=20262, filings={"A-1": "14-AUG-2026", "A-2": "14-AUG-2026"})
     q2 = prepared_records(tmp_path / "q2", Q2, revision=20263)
-    stage, policy = mastered_issuer(database)
-    apply(stage, policy, "q3", q3, 3)
-    assert starts(database) == [(AUG14, "observed")]
-    apply(stage, policy, "q2", q2, 4)
-    assert starts(database) == [(MAY28, "observed")]
+    policy = mastered_issuer(database)
+    masters.seed(database.application, q3, policy)
+    first = issued_by(database, policy)
+    assert [starts(link) for link in first] == [[(AUG14, "observed")]]
+    masters.seed(database.application, q2, policy)
+    (link,) = issued_by(database, policy, last=first)
+    assert starts(link) == [(MAY28, "observed")]
 
 
 def test_a_holding_with_no_filing_date_starts_at_the_quarter(database, tmp_path):
     q2 = prepared_records(tmp_path / "q2", Q2, filings={})
-    stage, policy = mastered_issuer(database)
-    apply(stage, policy, "q2", q2, 3)
-    assert starts(database) == [(Q2, "observed")]
+    policy = mastered_issuer(database)
+    masters.seed(database.application, q2, policy)
+    (link,) = issued_by(database, policy)
+    assert starts(link) == [(Q2, "observed")]
 
 
 def test_a_filing_date_of_another_shape_is_none(tmp_path):

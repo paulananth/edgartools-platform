@@ -13,12 +13,10 @@ import zipfile
 from pathlib import Path
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.mdm.merge import MergeStage
-from edgar_warehouse.mdm.store import Store, register_policy
 from edgar_warehouse.rules import files
 from tests.integration import test_mdm_postgres as core
 from tests.integration import test_nport_link_start as link
-from tests.support.rules_authority import register_dataset
+from tests.support import masters
 
 LEI_OTHER = "9999000000EXAMPLE032"  # invented; the check digits are not needed to name a second issuer
 ISIN = "ZZ0000000099"  # invented, check digit valid
@@ -52,28 +50,33 @@ def two_records(tmp_path, second_lei: str, second_filing: str):
     return records(tmp_path, holdings, [("1", ISIN), ("2", ISIN)], {"A-1": "05-JUN-2026", "A-2": second_filing})
 
 
+def live_securities(database):
+    return [v for v in masters.bodies(database.application).values()
+            if v["kind"] == "security" and v.get("status") != "alias"]
+
+
 def test_the_records_of_one_security_give_it_one_link_starting_at_the_earliest_filing(database, tmp_path):
     made = two_records(tmp_path, link.LEI, "28-MAY-2026")
     assert len(made) == 2  # the ISIN-only record, and the CUSIP's, which carries the same ISIN
-    stage, policy = link.mastered_issuer(database)
-    link.apply(stage, policy, "q2", made, 3)
-    securities = [v for v in core.documents(database, "entity").values() if v["kind"] == "security" and v.get("status") != "alias"]
-    assert len(securities) == 1
-    assert link.starts(database) == [(link.MAY28, "observed")]
+    policy = link.mastered_issuer(database)
+    masters.seed(database.application, made, policy)
+    assert len(live_securities(database)) == 1
+    (only,) = link.issued_by(database, policy)
+    assert link.starts(only) == [(link.MAY28, "observed")]
 
 
 def test_records_of_one_security_naming_two_issuers_give_it_no_link_and_a_review(database, tmp_path):
     made = two_records(tmp_path, LEI_OTHER, "28-MAY-2026")
-    stage, policy = link.mastered_issuer(database)
+    policy = link.mastered_issuer(database)
     # The second issuer is mastered too, as the first is.
-    link.apply(stage, policy, "custodian2", [core.source(key="custodian2", source_code=link.ADV, fields={"name": "Other Corp"},
-                                                         identifiers={"lei": LEI_OTHER})], 3)
-    link.apply(stage, policy, "gleif2", [core.source(key=LEI_OTHER, source_code=link.GLEIF, fields={"name": "Other Corp"},
-                                                     identifiers={"lei": LEI_OTHER},
-                                                     provenance={"matching": {"nport_issuer": True}})], 4)
-    link.apply(stage, policy, "q2", made, 5)
-    securities = [v for v in core.documents(database, "entity").values() if v["kind"] == "security" and v.get("status") != "alias"]
-    assert len(securities) == 1
+    masters.seed(database.application, [core.source(key="custodian2", source_code=link.ADV, fields={"name": "Other Corp"},
+                                                    identifiers={"lei": LEI_OTHER})], policy)
+    masters.seed(database.application, [core.source(key=LEI_OTHER, source_code=link.GLEIF, fields={"name": "Other Corp"},
+                                                    identifiers={"lei": LEI_OTHER},
+                                                    provenance={"matching": {"nport_issuer": True}})], policy)
+    masters.seed(database.application, made, policy)
+    assert len(live_securities(database)) == 1
     # A Security has one issuer (relationship types version 3): neither link stands, and a review asks.
-    assert not [b for b in core.documents(database, "relationship").values() if b["type"] == "ISSUED_BY"]
-    assert "conflicting_targets" in [r["reason"] for r in core.documents(database, "review").values() if r.get("open")]
+    edges, waiting = masters.link_run(database.application, policy, "2026-10-16T00:00:00+00:00")
+    assert not [edge for edge in edges if edge["type"] == "ISSUED_BY"]
+    assert "conflicting_targets" in waiting

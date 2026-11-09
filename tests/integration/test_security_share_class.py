@@ -15,13 +15,9 @@ from pathlib import Path
 
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from tests.integration import test_mdm_postgres as core
-from edgar_warehouse.mdm.merge import MergeStage
-from edgar_warehouse.mdm.store import Store, register_policy
 from edgar_warehouse.rules import files
 from tests.integration import test_nport_link_start as nport
-from tests.support import source_chain as chain
-from tests.support.rules_authority import register_dataset
+from tests.support import masters, source_chain as chain
 
 # Invented CUSIPs, check digits valid.
 CLASS_A, PLAIN, TWO, TRANCHE, BARE = "ZZ0000013", "ZZ0000021", "ZZ0000039", "ZZ0000047", "ZZ0000054"
@@ -127,15 +123,13 @@ def test_thirteenf_names_the_one_class_its_titles_agree_on(tmp_path):
 
 
 def test_the_mastered_security_carries_its_class(database, tmp_path):
-    """The Merge Stage on a disposable PostgreSQL 16: the Security takes the letter
+    """The merge on a disposable PostgreSQL 16: the Security takes the letter
     as a field; the Securities its titles name none or two of have none."""
     records = nport_records(tmp_path)
-    with database.admin.begin() as conn:
-        register_dataset(conn, nport.CODE, database.registry, files.mdm_contract(nport.NAME, nport.CODE))
-        # N-PORT's Security rules wait for their switch-on (ticket 138); on here, for the test only.
-        policy = register_policy(conn, nport.policy_body())
-    nport.apply(MergeStage(Store(database.application)), policy, "class", records, 1)
+    # N-PORT's Security rules wait for their switch-on (ticket 138); on here, for the test only.
+    masters.seed(database.application, records, nport.policy_body())
     rows = [(body["identifiers"]["cusip"][0], body.get("fields", {}).get("share_class"))
-            for body in core.documents(database, "entity").values() if body["kind"] == "security"]
+            for body in masters.bodies(database.application).values()
+            if body["kind"] == "security" and body.get("status") != "alias"]
     mastered = {cusip: (value.get("value") if isinstance(value, dict) else value) for cusip, value in rows}
     assert mastered == {CLASS_A: "A", PLAIN: None, TWO: None, TRANCHE: None, BARE: None}
