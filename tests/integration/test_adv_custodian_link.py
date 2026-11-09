@@ -15,17 +15,12 @@ from __future__ import annotations
 import io
 import zipfile
 from pathlib import Path
-from uuid import uuid4
 
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.mdm.evidence import subject_key
-from edgar_warehouse.mdm.merge import MergeStage
-from edgar_warehouse.mdm.store import Store, register_policy
 from edgar_warehouse.rules import files
-from tests.integration import test_mdm_postgres as core
-from tests.support import source_chain as chain
-from tests.support.rules_authority import register_dataset
+from tests.support import masters, source_chain as chain
 
 NAME, FILINGS, CUSTODIANS = "iapd.adv", "iapd.adv.filings.v2", "iapd.adv.custodians.v1"
 FOLDER = files.ROOT / "sources" / NAME
@@ -129,19 +124,10 @@ def test_an_adviser_links_to_its_custodians_across_months(database, tmp_path):
     # June restates the same custodians as new publications of the same records, not new ones.
     june_keys = {r["provenance"]["record_key"] for r in june_custodians}
     assert june_keys <= {r["provenance"]["record_key"] for r in may_custodians}
-    with database.admin.begin() as conn:
-        for code in (FILINGS, CUSTODIANS):
-            register_dataset(conn, code, database.registry, files.mdm_contract(NAME, code))
-        policy = register_policy(conn, files.policy())
-    stage = MergeStage(Store(database.application))
-    for n, (batch, records) in enumerate([("may-custodians", may_custodians), ("may-filings", may_filings),
-                                          ("june-custodians", june_custodians), ("june-filings", june_filings)], 1):
-        stage.apply(batch_id=batch, run_id=str(uuid4()), policy_digest=policy, consumer="check",
-                    expected_checkpoint=n - 1, checkpoint=n, as_of="2026-10-16T00:00:00+00:00",
-                    assertions=records)
-    links = [body for body in core.documents(database, "relationship").values() if body["type"] == "CUSTODIAN"]
-
-    named = {body["fields"]["name"]["value"]: entity for entity, body in core.documents(database, "entity").items()}
+    for records in (may_custodians, may_filings, june_custodians, june_filings):
+        masters.seed(database.application, records)
+    links = masters.links(database.application, of_type="CUSTODIAN")
+    named = {name: entity for entity, name in masters.names(database.application).items()}
     assert len(links) == 2  # BD and LEI custodians; the one named only by name waits
     by_target = {l["target_id"]: l for l in links}
     bd_link, lei_link = by_target[named["EXAMPLE CLEARING LLC"]], by_target[named["EXAMPLE BANK NA"]]
