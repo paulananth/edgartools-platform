@@ -367,11 +367,27 @@ def test_pipeline_display_names_are_distinct_and_omit_the_shared_prefix():
 def test_bookkeeping_steps_are_embedded_as_target_pipeline_tasks():
     plan = catalog.plan()
     for pipeline in plan["pipelines"]:
+        if catalog._is_step(pipeline):
+            continue
         scope, _, target = pipeline["name"].split(":", 2)
         path = files.ROOT / pipeline["pipelineLocation"]
         body = files.load_source(path) if scope == "source" else files.load(path)
         steps = (body.get("bookkeeping") or {}).get("targets", {}).get(target, {}).get("steps", [])
         assert [task["name"] for task in pipeline["tasks"]] == [step["name"] for step in steps]
+
+
+def test_a_step_pipeline_carries_its_own_step_as_its_task():
+    plan = catalog.plan()
+    steps = [pipeline for pipeline in plan["pipelines"] if catalog._is_step(pipeline)]
+    assert steps
+    for pipeline in steps:
+        scope, owner, target, step = pipeline["name"].split(":")
+        path = files.ROOT / pipeline["pipelineLocation"]
+        body = files.load_source(path) if scope == "source" else files.load(path)
+        declared = (body.get("bookkeeping") or {}).get("targets", {}).get(target, {}).get("steps", [])
+        operation = next(item["operation"] for item in declared if item["name"] == step)
+        assert [task["name"] for task in pipeline["tasks"]] == [step]
+        assert pipeline["tasks"][0]["taskType"] == operation
 
 
 def test_target_pipeline_lineage_includes_configured_silver_and_master_outputs():

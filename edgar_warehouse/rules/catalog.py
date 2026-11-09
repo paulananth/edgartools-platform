@@ -418,13 +418,18 @@ def _is_step(pipeline: dict) -> bool:
 
 
 def _step_pipelines(pipeline: dict, target: dict) -> list[dict]:
+    """One Pipeline per step a steward can see fail, each carrying that step as its task."""
     return [{"name": f"{pipeline['name']}:{step['name']}",
              "displayName": f"{_visible_name(step['name'])}: {pipeline['displayName']}",
              "service": pipeline["service"],
              "description": f"Step `{step['name']}` of {pipeline['displayName']}: "
                             f"{STEWARD_STEPS.get(step['operation'], RUN_FILE_READ)}. "
                             f"Declared checks: {step.get('checks') or []}. Definition only.",
-             "pipelineLocation": pipeline["pipelineLocation"], "tasks": []}
+             "pipelineLocation": pipeline["pipelineLocation"],
+             "tasks": [{"name": step["name"], "taskType": step["operation"],
+                        "description": f"Step `{step['name']}` of {pipeline['displayName']}. "
+                                       f"Declared checks: {step.get('checks') or []}.",
+                        "downstreamTasks": []}]}
             for step in _steward_steps(target)]
 
 
