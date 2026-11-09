@@ -251,7 +251,8 @@ def _match_names(store, settings: Settings, records, bound: dict, counts: Counte
 
 
 def _match_exact_names(store, settings: Settings, records, bound: dict, counts: Counter) -> dict:
-    """A waiting record joins the one master holding its name id; several send it to review. It never creates."""
+    """A waiting record joins the one master holding its name id; several send it to review. With none, a rule
+    that mints (`on_no_match: mint`) creates one golden record for the name, which the source's later records join."""
     rules = [rule for rule in settings.policy["kinds"][settings.kind].get("rules") or []
              if rule.get("family") == matching.EXACT_NAME_FAMILY and activated(settings.policy, settings.kind, rule, "bind")]
     here = {r["subject"]: r for r in records if name_id(r)}
@@ -261,10 +262,12 @@ def _match_exact_names(store, settings: Settings, records, bound: dict, counts: 
     members.update(store.named(EXACT, sorted({name_id(r) for r in here.values()})))
     named = {}
     for rule in rules:
-        holding, waiting = defaultdict(set), {}
+        mints = rule.get("on_no_match") == "mint"
+        holders = {*rule["holder_sources"], *([rule["source"]] if mints else [])}
+        holding, waiting, created = defaultdict(set), {}, {}
         for value, subject, source, entity in members:
             entity = entity or bound.get(subject)
-            if entity and source in rule["holder_sources"]:
+            if entity and source in holders:
                 holding[value].add(entity)
             elif not entity and source == rule["source"]:
                 waiting[subject] = value
@@ -275,6 +278,8 @@ def _match_exact_names(store, settings: Settings, records, bound: dict, counts: 
             elif found:
                 counts["ambiguous_name_match"] += 1
                 store.open_reviews("ambiguous_name_match", [(subject, (here.get(subject) or {}).get("assertion_id"))])
+            elif mints:
+                named[subject] = created.setdefault(value, str(uuid4()))
     return named
 
 
