@@ -29,4 +29,5 @@ What is the one order in which a Company is matched, and which rules sit in it?
 - [ ] Count the registrant LEIs against the full GLEIF file, from a scope of those 1,939 LEIs: how many equal a GLEIF LEI, and how many are the same entity by name and place (counts only).
 - [ ] Write the LEI rule, declared and not switched on, in a copy of the policy; test both source orders and a second pass; the limited test is the proof.
 - [ ] State "no other identifier available" as one precondition shared by every name rule (it exists today as `holds_no_other_lei@1` for LEI only), and add former name to the name rule family with its own proof.
+- [ ] Decide whether the adviser's stated LEI (Form ADV filings, 7,246 records) and the N-PORT fund series LEI (25,848 records) join the GLEIF record with the same LEI, as the registrant LEI does. Found by ticket 204's list of keys stored and never searched, 2026-11-09 18:49 ET.
 - [ ] Learning → skill: name the skill line this ticket changed, or write "none".
