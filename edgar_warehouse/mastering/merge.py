@@ -163,8 +163,11 @@ def _match_identifiers(store, settings: Settings, records, bound: dict, counts: 
         for item in items:
             wanted[item["namespace"]].add(item["value"])
     found = defaultdict(dict)
-    for namespace, value, entity in store.holders(wanted):
-        found[(namespace, value)][entity] = settings.kind
+    held = store.holders(wanted)
+    kinds = store.kinds({entity for _, _, entity in held})
+    for namespace, value, entity in held:
+        if kinds.get(entity) == settings.kind:  # a record joins only golden records of its own entity type
+            found[(namespace, value)][entity] = settings.kind
     reached = set()
     for items in plan["applicable"].values():
         hit = {e for item in items for e in found.get((item["namespace"], item["value"]), {})}
