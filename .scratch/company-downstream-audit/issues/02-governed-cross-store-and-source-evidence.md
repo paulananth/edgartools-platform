@@ -1,7 +1,7 @@
 # Close current-identity and cross-store quality evidence gaps
 
-Type: follow-up task  
-Status: open  
+Type: follow-up task
+Status: open
 Blocked by: a populated, generation-pinned governed MDM snapshot and verified load receipts
 
 ## Goal
