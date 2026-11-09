@@ -386,15 +386,21 @@ reference list.
   `entity_extension.extension` in `VARCHAR(512)`, below the raw text length
   of every source workbook. Do not embed or truncate the workbook, alter the
   schema, or create a link property without a new operator request.
-  Publish native lineage only. A source-target Pipeline has inbound edges from
-  the feeds and reference files it reads and from the run file a step reads,
-  and outbound edges to the tables it publishes: mastered, Silver, and the
-  Change Journal when a step records processed files. A run file's own edges
-  come from the feeds its contract requires. A feed no step reads, a dataset
-  the target prepares, and a Bookkeeping step are not on the graph. Rule-derived
-  table and column edges describe supported transformations.
-  `rules catalog publish` reconciles Pipeline edges in both directions;
-  `rules catalog check` reads them through
+  Publish native lineage only. Each source target keeps one Pipeline for its
+  tasks and run status; it carries no lineage edge. Each step a steward can see
+  fail (capture, combine, prepare, merge, land, derive, and the step that reads
+  a pinned run file) is its own Pipeline named `<target>:<step>` in the same
+  PipelineService, and carries the lineage. A step has inbound edges from the
+  feeds, reference files and run file it reads, edges to the next step, and
+  outbound edges to what it writes: the prepared dataset, mastered tables,
+  Silver tables, and the Change Journal after the last step when the target
+  records processed files. A run file's own edges come from the feeds its
+  contract requires. A feed no step reads, a plumbing step, and a Bookkeeping
+  task are not on the graph. The service layer shows pipeline services beside
+  the database service and is not the picture; the Domain and Data Product
+  layers are separate views. Rule-derived table and column edges describe
+  supported transformations. `rules catalog publish` reconciles these edges in
+  both directions; `rules catalog check` reads them through
   `GET /api/v1/lineage/pipeline/name/<URL-encoded-FQN>?upstreamDepth=1&downstreamDepth=1`
   and checks table edges separately. New source pipelines are discovered from
   YAML; no source-specific code is needed.
