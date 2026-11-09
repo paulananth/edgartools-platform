@@ -30,9 +30,32 @@ read:
         row: {ordinal: {}}
         legal_name: {text: {path: "5K(3)(a)", path_mode: literal, null_if: [""]}}
         business_name: {text: {path: "5K(3)(b)", path_mode: literal, null_if: [""]}}
+        # The name only when it ends in a legal form (operator, 2026-11-09: the strict list; TRUST and BANK are
+        # not forms), else null: the key of the rule that creates a Company by name alone.
+        legal_form_name:
+          text:
+            path: "5K(3)(a)"
+            path_mode: literal
+            transforms:
+            - trim: true
+            - regex_extract:
+                pattern: '(?i)^.*\b(?:LLC|L\.L\.C|LP|L\.P|LLP|LLLP|PLLC|PC|INC|INCORPORATED|CORP|CORPORATION|CO|COMPANY|LTD|LIMITED|PLC|N\.A|NA|SA|S\.A|AG|GMBH|BV|NV)\.?$'
+                group: 0
+            null_if: [""]
         city: {text: {path: "5K(3)(c) City", path_mode: literal, null_if: [""]}}
         state: {text: {path: "5K(3)(c) State", path_mode: literal, null_if: [""]}}
         country: {text: {path: "5K(3)(c) Country", path_mode: literal, null_if: [""]}}
+        # The name and its place, for the key of the rule that creates a Company by name and place
+        # (operator, 2026-11-09: "Name plus place"): `name_place_id@1` folds them into one id.
+        name_place:
+          object:
+            fields:
+              name: {text: {path: "5K(3)(a)", path_mode: literal, null_if: [""]}}
+              city: {text: {path: "5K(3)(c) City", path_mode: literal, transforms: [{trim: true}], null_if: [""]}}
+              region: {text: {path: "5K(3)(c) State", path_mode: literal, transforms: [{trim: true}], null_if: [""]}}
+              country: {text: {path: "5K(3)(c) Country", path_mode: literal, transforms: [{trim: true}], null_if: [""]}}
+            omit_nulls: true
+            null_if_empty: true
         related_person: {text: {path: "5K(3)(d)", path_mode: literal, null_if: [""]}}
         bd_number: {text: {path: "5K(3)(e)", path_mode: literal, transforms: [{trim: true}], null_if: [""]}}
         other_id: {text: {path: "5K(3)(f)", path_mode: literal, null_if: [""]}}

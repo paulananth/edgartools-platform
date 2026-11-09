@@ -58,6 +58,12 @@ def _lei(item) -> str:
     return value
 
 
+def _tokens(text) -> list[str]:
+    """NFKC, case fold, split on every run of characters that is not a letter or a digit."""
+    folded = unicodedata.normalize("NFKC", unicodedata.normalize("NFKC", str(text)).casefold())
+    return [t for t in re.split(r"[^\w]+|_", folded) if t]
+
+
 def _name_id(item) -> str:
     """An id made from a name, for a record with no id another source shares
     (operator, 2026-10-06: "no id exists you just need to create a id using
@@ -66,11 +72,23 @@ def _name_id(item) -> str:
     "class a" and "class c" stay apart; the sha256 of the tokens. One recipe
     for every source, so two sources' records with one name share it. The
     profiling skill's `name_matching.name_id` computes the same value."""
-    folded = unicodedata.normalize("NFKC", unicodedata.normalize("NFKC", str(item)).casefold())
-    tokens = [t for t in re.split(r"[^\w]+|_", folded) if t]
+    tokens = _tokens(item)
     if not tokens:
         raise UnsupportedRecord("invalid_name")
     return hashlib.sha256(("name_id@1\x1f" + " ".join(tokens)).encode("utf-8")).hexdigest()
+
+
+def _name_place_id(item) -> str:
+    """The id of a name and its place (operator, 2026-11-09: "Name plus place"): the name's tokens and the
+    tokens of its city, region and country, so one bare name in two cities is two ids. The item is an object
+    with `name` and any of `city`, `region` and `country`; a name or a place with no token is refused."""
+    if not isinstance(item, dict):
+        raise UnsupportedRecord("invalid_name_place")
+    name = _tokens(item.get("name") or "")
+    place = [t for part in ("city", "region", "country") for t in _tokens(item.get(part) or "")]
+    if not name or not place:
+        raise UnsupportedRecord("invalid_name_place")
+    return hashlib.sha256(("name_place_id@1\x1f" + " ".join(name) + "\x1f" + " ".join(place)).encode("utf-8")).hexdigest()
 
 
 def _declared(kind: IdentifierType):
@@ -90,6 +108,7 @@ FORMATS = {
     "sec_cik": _sec_cik,
     "lei": _lei,
     "name_id@1": _name_id,
+    "name_place_id@1": _name_place_id,
 }
 # Ticket 81: the declared identifier types (`rules/identifiers/`) are formats
 # too; a declared name never replaces a hand-written one.
