@@ -185,8 +185,8 @@ The declaration, per identifier namespace, of who issues the value, how many ide
 _Avoid_: "The id is unique" as an unstated assumption, a name match as the claim, a contract without a measurement
 
 **Cross-reference**:
-The one table of every identifier a master identity carries, each joined to its master id and marked as matching or lookup only. A matching identifier, declared by its kind's Identifier Contract, finds the identity a record joins. A lookup-only identifier only finds: it is never the identity's own, never creates one and never merges two. Records that share one stay separate, unless a matching rule lets a filer's copy of an identifier another source issues (a FIGI 13F files) find the identity that holds it.
-_Avoid_: A second identifiers table, a crosswalk, a name that creates an identity, merging identities on a lookup-only identifier
+The one table of every identifier a golden record carries, each joined to its golden record id. Every identifier goes through mastering: its entity type's Identifier Contract and matching rules decide whether it finds the golden record a source record joins, creates one, or leaves the record waiting. An identifier no matching rule covers is still recorded on the golden record, and records that share it stay separate until a rule binds them.
+_Avoid_: A second identifiers table, a crosswalk, a name that creates a golden record, merging golden records on an identifier no matching rule covers
 
 **Source Contract**:
 The one versioned file that declares everything about one source after its Bronze Artifacts exist: how they are read, the silver table they produce, the Dataset Contract that maps them into MDM, and the test cases and batch gate that prove it.
