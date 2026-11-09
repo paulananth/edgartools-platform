@@ -191,7 +191,10 @@ submits one source.
    not install, approve or start a run. Detail is in
    `docs/specs/source-sequencing.md` in the repository.
 2. **Install that source only.** Save its document into the Rules database.
-   `rules load` saves every file under a root; do not use it here.
+   `rules load` saves every file under a root; do not use it for one source. A new store taking every
+   source (a go-live) needs nothing but git: `rules load --root rules --version <name>` saves each document
+   and approves it from `rules/approvals.yaml` with no test run, then `rules activate` each one (merge
+   policy first, then the pipeline, then the sources).
    ```bash
    edgar-warehouse rules save --source <name> --version <v> rules/sources/<name>/source.yaml
    ```
@@ -200,7 +203,9 @@ submits one source.
    proof forward when [mdm-engineering](../mdm-engineering/SKILL.md#choose-the-cheapest-proof)'s
    "Choose the cheapest proof" allows it, and run no new test. Otherwise data-onboarding's **test** step runs and records one (`rules
    test --version`). A test that stops is not a proof and is not recorded.
-3. **Enable it.** Follow [APPROVE](../data-onboarding/APPROVE.md). Activate
+3. **Enable it.** Follow [APPROVE](../data-onboarding/APPROVE.md). Source `governance.env` beside
+   `worker.env`: activation registers the version in MDM and stops with "MDM activation requires an
+   explicit destination connection" without it. Activate
    the merge policy this source depends on first, then this source:
    ```bash
    edgar-warehouse rules activate --source <name> --version <v>
@@ -236,9 +241,13 @@ edgar-warehouse load \
 ```
 
 - `--stores` is the folder holding the stores' `worker.env`, `verifier.env`
-  and `governance.env` (`infra/scripts/local-test-stores.py up <name>` writes
-  them). Each step runs under its own duty's login. Nothing is printed from
-  those files.
+  and `governance.env` (`uv run --extra mdm python infra/scripts/local-test-stores.py up <name>`
+  writes them, and initializes every store empty). Each step runs under its own duty's login.
+  Nothing is printed from those files.
+- **Create a store from an up-to-date checkout, and keep its lifecycle there.** `up` refuses a checkout
+  behind `origin/main`, and a store belongs to the checkout that created it: `up`, `stop`, `backup` and `copy`
+  from another checkout stop at "Environment belongs to another worktree". A stale untracked skill link
+  blocks fast-forwarding the main checkout; remove the link (not its target) first.
 - Add `--fact name=value` and `--file name=path` for each input the target's
   `run` declares; `scripts/run_inputs.py <source>` in the data-onboarding skill lists them.
 - **A target that lands silver registers its tables itself**, before it submits
