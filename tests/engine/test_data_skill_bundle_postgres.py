@@ -290,7 +290,7 @@ print(json.dumps({{"shipped": shipped, "modules": modules, "absent": absent, "ru
     assert twice == []
     assert found["absent"] == {}  # `silver line-items` failed so: financials was not shipped (ticket 48)
     assert all(found["rules_read"])  # `silver line-items` failed so: its line-items.yaml was looked for beside a checkout (ticket 48)
-    assert {"edgar_warehouse.cli", "edgar_warehouse.workers.source_read", "edgar_warehouse.mdm.merge",
+    assert {"edgar_warehouse.cli", "edgar_warehouse.workers.source_read", "edgar_warehouse.mastering.merge",
             "edgar_warehouse.rules.cli", "edgar_warehouse.database_connections", "edgar_warehouse.database_types",
             "edgar_warehouse.rdm.storage", "edgar_warehouse.rdm.mysql_migration",
             "edgar_warehouse.mdm.schema"} <= set(found["modules"])
