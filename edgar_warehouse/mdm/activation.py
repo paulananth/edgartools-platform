@@ -617,6 +617,9 @@ def check_exact_name_rule(kind: str, rule: dict, kinds: dict) -> None:
     if (not rule.get("source") or not isinstance(holders, list) or not holders
             or not all(isinstance(h, str) and h for h in holders) or rule["source"] in holders):
         raise Conflict(f"Exact-name rule {rule_id} must name its source and the other sources whose records hold the masters")
+    reference = rule.get("cross_reference", "name_id")
+    if not isinstance(reference, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,15}", reference):
+        raise Conflict(f"Exact-name rule {rule_id} names its cross reference in at most 16 lowercase letters, digits or underscores")
     if rule.get("key") != "name_id@1" or rule.get("when"):
         raise Conflict(f"Exact-name rule {rule_id} rests on the name id (key: name_id@1) and no other test")
 

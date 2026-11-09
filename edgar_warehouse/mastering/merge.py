@@ -23,6 +23,7 @@ NORMALIZERS = {kind.normalizer_name: kind.upper for kind in TYPES.values()}
 KINDS = {role: sorted(kinds) for role, kinds in PROFILE_KINDS.items()}
 WAITING = "binding_required"
 EXACT = "exact"
+NAME_ID = "name_id"  # the cross reference an exact-name rule keys on unless it names another
 
 
 @dataclass(frozen=True)
@@ -41,17 +42,29 @@ def first(value):
     return value[0] if isinstance(value, list) else value
 
 
-def name_id(record: dict) -> str | None:
-    return first((record.get("cross_references") or {}).get("name_id"))
+def reference_of(record: dict, namespace: str) -> str | None:
+    return first((record.get("cross_references") or {}).get(namespace))
 
 
-def name_keys(record: dict) -> list[tuple]:
+def role_of(namespace: str) -> str:
+    """The name-key role of a cross reference: the name id keeps its stored role, any other is its own namespace."""
+    return EXACT if namespace == NAME_ID else namespace
+
+
+def exact_namespaces(settings: "Settings") -> list[str]:
+    """Every cross reference an exact-name rule of this kind keys on, declared or switched on."""
+    rules = settings.policy["kinds"].get(settings.kind, {}).get("rules") or []
+    return sorted({NAME_ID, *(r.get("cross_reference", NAME_ID) for r in rules if r.get("family") == matching.EXACT_NAME_FAMILY)})
+
+
+def name_keys(record: dict, namespaces=(NAME_ID,)) -> list[tuple]:
     """The LEIs the record's Name Count pass found, so a name match is a lookup."""
     found = ((record.get("provenance") or {}).get("matching") or {}).get("name_count") or {}
     cascade = (found.get("cascade") or {}).get("lei")
     entries = found.get("leis") or []
     named = entries[0][0] if entries and entries[0] else None
-    return [(role, value, record["subject"]) for role, value in (("cascade", cascade), ("name_count", named), (EXACT, name_id(record)))
+    exact = [(role_of(ns), reference_of(record, ns)) for ns in namespaces]
+    return [(role, value, record["subject"]) for role, value in (("cascade", cascade), ("name_count", named), *exact)
             if isinstance(value, str) and value]
 
 
@@ -121,7 +134,7 @@ def _merge(store, settings: Settings, records: list[dict], key: str, again: bool
     file_no = store.last_file() + 1
     store.load_stage([(r["assertion_id"], r["subject"], r["source_code"], first(r["identifiers"].get("lei")),
                        json.dumps(r, separators=(",", ":"))) for r in records],
-                     list({k for r in records for k in name_keys(r)}))
+                     list({k for r in records for k in name_keys(r, exact_namespaces(settings))}))
     subjects = sorted({r["subject"] for r in records})
     bound = store.bound(subjects)
     counts = Counter()
@@ -255,13 +268,16 @@ def _match_exact_names(store, settings: Settings, records, bound: dict, counts: 
     that mints (`on_no_match: mint`) creates one golden record for the name, which the source's later records join."""
     rules = [rule for rule in settings.policy["kinds"][settings.kind].get("rules") or []
              if rule.get("family") == matching.EXACT_NAME_FAMILY and activated(settings.policy, settings.kind, rule, "bind")]
-    here = {r["subject"]: r for r in records if name_id(r)}
-    if not rules or not here:
+    if not rules:
         return {}
-    members = {(name_id(r), r["subject"], r["source_code"], None) for r in here.values()}
-    members.update(store.named(EXACT, sorted({name_id(r) for r in here.values()})))
     named = {}
     for rule in rules:
+        namespace = rule.get("cross_reference", NAME_ID)
+        here = {r["subject"]: r for r in records if reference_of(r, namespace)}
+        if not here:
+            continue
+        members = {(reference_of(r, namespace), r["subject"], r["source_code"], None) for r in here.values()}
+        members.update(store.named(role_of(namespace), sorted({reference_of(r, namespace) for r in here.values()})))
         mints = rule.get("on_no_match") == "mint"
         holders = {*rule["holder_sources"], *([rule["source"]] if mints else [])}
         holding, waiting, created = defaultdict(set), {}, {}
@@ -269,7 +285,7 @@ def _match_exact_names(store, settings: Settings, records, bound: dict, counts: 
             entity = entity or bound.get(subject)
             if entity and source in holders:
                 holding[value].add(entity)
-            elif not entity and source == rule["source"]:
+            elif not entity and source == rule["source"] and subject not in named:
                 waiting[subject] = value
         for subject, value in waiting.items():
             found = holding[value]
