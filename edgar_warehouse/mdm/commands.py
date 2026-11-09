@@ -51,17 +51,22 @@ def name_count(args) -> int:
 
 def steward_split(args) -> int:
     """Split a consolidation a rule made (ticket 142): previews unless `--confirm`."""
-    from datetime import UTC, datetime
+    from functools import cache
 
-    from .steward import split
-    from .store import Store
+    from edgar_warehouse.mastering import steward
+    from edgar_warehouse.mastering.store import open_store
+    from edgar_warehouse.workers.mastering_merge import _settings
 
-    mdm = engine_from_env("MDM_DATABASE_URL")
+    at = datetime.now(timezone.utc).isoformat()
+    engine = engine_from_env("MDM_DATABASE_URL", restricted=True)
+    db = open_store(engine)
+    manifest = {"policy_digest": args.policy_digest, "as_of": at}
     try:
-        report = split(Store(mdm), merge_id=args.merge, actor=args.by, reason=args.reason,
-                       at=datetime.now(UTC).isoformat(), confirm=args.confirm)
+        report = steward.split(db, cache(lambda kind: _settings(engine, manifest, kind)), merge_id=args.merge,
+                               actor=args.by, reason=args.reason, at=at, confirm=args.confirm)
     finally:
-        mdm.dispose()
+        db.close()
+        engine.dispose()
     print(json.dumps(report, sort_keys=True))
     return 0
 

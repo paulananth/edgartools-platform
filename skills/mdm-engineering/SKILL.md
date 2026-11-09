@@ -223,11 +223,10 @@ lock, and a proposal another run has overtaken is proposed again (a few
 tries, then the run stops).
 
 **A wrong consolidation is split by a steward, never edited** (ticket 142). `edgar-warehouse mdm steward split
---merge <decision id> --by <name> --reason <words>` previews, and `--confirm` writes one `reverse` decision that
-names the merge, as one batch of its own consumer through the Merge Stage. Replay returns both masters with their
-listings and links, and the reversed pair is a Match Exclusion (a later record reaching both goes to review as
-`excluded_consolidation`). A reversal is anchored by the merge it names, not by the masters, so find it with
-`related_decisions([merge id])`; `context` shows a master's splits.
+--merge <decision id> --by <name> --reason <words> --policy-digest <digest>` previews, and `--confirm` writes one
+`reverse` decision that names the merge, in one transaction with the replay of both masters' records. Both masters
+return with their listings and links, and the reversed pair is a Match Exclusion (a later record reaching both goes
+to review). A split merge is refused a second time; `context` shows a master's splits.
 
 **Then read only what the batch touches,** by key, through an index:
 

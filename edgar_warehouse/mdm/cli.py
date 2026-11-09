@@ -86,6 +86,7 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     split.add_argument("--merge", required=True, help="The merge decision's id, as `edgar-warehouse context` shows it")
     split.add_argument("--by", required=True, help="Who splits it, recorded on the decision")
     split.add_argument("--reason", required=True, help="Why, in words, recorded on the decision")
+    split.add_argument("--policy-digest", required=True, help="The registered merge rules the masters are replayed under")
     split.add_argument("--confirm", action="store_true", help="Write the split (without it, only show it)")
     split.set_defaults(handler=_logged_handler("steward-split", _command("steward_split")))
 

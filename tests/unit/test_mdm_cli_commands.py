@@ -16,7 +16,7 @@ NAME_COUNT = ["--capture", "c", "--population", "p", "--gleif-reading", "a",
     (["mdm", "name-count", *NAME_COUNT], "name_count"),
     (["mdm", "rebuild-name-index", "--limit", "1"], "rebuild_name_index"),
     (["mdm", "rebuild-detail-lookup", "--limit", "1"], "rebuild_detail_lookup"),
-    (["mdm", "steward", "split", "--merge", "m", "--by", "Sam", "--reason", "wrong"], "steward_split"),
+    (["mdm", "steward", "split", "--merge", "m", "--by", "Sam", "--reason", "wrong", "--policy-digest", "d"], "steward_split"),
 ])
 def test_each_command_runs_its_function(monkeypatch, argv, function):
     called = []
@@ -27,9 +27,10 @@ def test_each_command_runs_its_function(monkeypatch, argv, function):
 
 def test_a_split_previews_unless_confirmed_and_needs_who_and_why():
     parser = build_parser()
-    split = ["mdm", "steward", "split", "--merge", "m", "--by", "Sam", "--reason", "two different companies"]
+    split = ["mdm", "steward", "split", "--merge", "m", "--by", "Sam", "--reason", "two different companies",
+             "--policy-digest", "d"]
     assert parser.parse_args(split).confirm is False and parser.parse_args([*split, "--confirm"]).confirm is True
-    for missing in ("--by", "--reason", "--merge"):
+    for missing in ("--by", "--reason", "--merge", "--policy-digest"):
         argv = split[:]
         at = argv.index(missing)
         del argv[at:at + 2]
