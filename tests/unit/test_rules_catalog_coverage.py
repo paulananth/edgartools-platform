@@ -14,8 +14,11 @@ def test_every_source_and_standalone_target_has_a_native_pipeline():
             body = files.load_source(path) if scope == "source" else files.load(path)
             for target, definition in (body.get("bookkeeping", {}).get("targets") or {}).items():
                 expected[f"{scope}:{path.parent.name}:{target}"] = definition
-    actual = {p["name"]: p for p in plan["pipelines"]}
+    actual = {p["name"]: p for p in plan["pipelines"] if not catalog._is_step(p)}
     assert set(actual) == set(expected)
+    assert {p["name"] for p in plan["pipelines"] if catalog._is_step(p)} == {
+        f"{name}:{step['name']}" for name, definition in expected.items() if name.startswith("source:")
+        for step in catalog._steward_steps(definition)}
     for name, definition in expected.items():
         tasks = {t["name"]: t for t in actual[name]["tasks"]}
         assert set(tasks) == {s["name"] for s in definition["steps"]}
@@ -122,6 +125,8 @@ def test_publication_migrates_shared_pipeline_service_to_per_source_services():
     planned_fqns = {catalog.fqn(pipeline["service"], pipeline["name"]): pipeline["name"]
                     for pipeline in plan["pipelines"]}
     for edge in plan["service_lineage"]:
+        if "table" not in edge:
+            continue
         old_fqn = catalog.fqn(legacy, planned_fqns[edge["pipeline"]])
         server.pipeline_lineage[(old_fqn, edge["table"])] = {"pipeline": old_fqn, "table": edge["table"]}
 
