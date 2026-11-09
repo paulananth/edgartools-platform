@@ -186,7 +186,7 @@ Links are a `relationship` silver table, one row a period, from a `silver.derive
   - [ ] Measure a real `processed` step again on the next load: the median was 11.4 s over 511 files.
 - [x] Person and Fund on MySQL: `test_person_and_fund_join_by_their_identifier_and_a_rerun_changes_nothing` runs both kinds under the real rules on PostgreSQL and MySQL with invented records (a CIK or series id gives one master, a rerun changes nothing); it fails when one expected count is changed (2026-11-09 05:57 ET). Not run: Person and Fund real captures on MySQL.
 - [ ] OpenFIGI at full size on the final version: 733,538 OpenFIGI records are stored on the local PostgreSQL store, but the mastering tables do not record which rules version loaded them, so "final version" is not proven.
-- [ ] The rebuilt path on every source, compared with the engine; the old path deleted.
+- [x] The rebuilt path on every source, compared with the engine; the old path deleted (2026-11-09 06:08 ET). Compared: stage 3's `mdm rebuild` replayed every stored record of every kind and matched 431,028 masters, and 4,797 of 4,797 for records stored late (2026-11-06 15:43 ET); 13 rule-test files moved (PRs 1485, 1486). Deleted: PRs 1509, 1511, 1520 (2026-11-08). Limit: 13F, ownership, ADV and N-PORT holdings were first loaded on the new path, so no engine answer exists to compare; their proof is the Apple chain and their own tests.
 - [ ] Parts from ticket 197: sorted 2026-11-08 22:49 ET against what `main` now holds.
   - [x] The `processed` step, 11 s for one row per file set: batched journal writes, PR 1528.
   - [x] The 7 to 26 s every step costs whatever its work: measured, a control call is 0.25 s and an empty worker pass 0.3 s, so about 1.5 s a step; the rest was the work (above).
