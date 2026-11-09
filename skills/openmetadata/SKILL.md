@@ -386,11 +386,16 @@ reference list.
   `entity_extension.extension` in `VARCHAR(512)`, below the raw text length
   of every source workbook. Do not embed or truncate the workbook, alter the
   schema, or create a link property without a new operator request.
-  Publish native lineage only: each source-target Pipeline is associated with
-  its source assets and configured Silver/MDM outputs; rule-derived table and
-  column edges describe supported transformations. `rules catalog publish`
-  reconciles Pipeline edges; `rules catalog check` reads them through
-  `GET /api/v1/lineage/pipeline/name/<URL-encoded-FQN>?upstreamDepth=0&downstreamDepth=1`
+  Publish native lineage only. A source-target Pipeline has inbound edges from
+  the feeds and reference files it reads and from the run file a step reads,
+  and outbound edges to the tables it publishes: mastered, Silver, and the
+  Change Journal when a step records processed files. A run file's own edges
+  come from the feeds its contract requires. A feed no step reads, a dataset
+  the target prepares, and a Bookkeeping step are not on the graph. Rule-derived
+  table and column edges describe supported transformations.
+  `rules catalog publish` reconciles Pipeline edges in both directions;
+  `rules catalog check` reads them through
+  `GET /api/v1/lineage/pipeline/name/<URL-encoded-FQN>?upstreamDepth=1&downstreamDepth=1`
   and checks table edges separately. New source pipelines are discovered from
   YAML; no source-specific code is needed.
   Silver-only `MAPPING.xlsx` files have empty `Fields` sheets. Their Silver

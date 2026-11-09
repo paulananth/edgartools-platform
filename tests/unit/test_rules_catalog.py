@@ -109,7 +109,7 @@ class _Server:
         self.term_bodies, self.product_bodies, self.patches, self.draft = [], [], [], set()
         self.table_delete_params = []
         self.profiles, self.tags, self.certified, self.results = {}, {}, None, {}
-        self.pipelines, self.pipeline_lineage = {}, {}
+        self.pipelines, self.pipeline_lineage, self.pipeline_inbound = {}, {}, {}
         self.pipeline_services = {}
         self.pipeline_service_delete_params = []
 
@@ -127,6 +127,17 @@ class _Server:
                         self.pipelines.pop(name)
                         for edge in [key for key in self.pipeline_lineage if key[0] == name]:
                             self.pipeline_lineage.pop(edge, None)
+            return {}
+        if method == "DELETE" and path.startswith("/lineage/table/") and "/pipeline/" in path:
+            _, _, _, table_id, _, pipeline_id = path.split("/")
+            pipeline = next((name for name, entity in self.pipelines.items() if entity["id"] == pipeline_id), None)
+            table = next((name for name, found_id in self.ids.items() if found_id == table_id), None)
+            self.pipeline_inbound.pop((pipeline, table), None)
+        if method == "PUT" and path == "/lineage" and body["edge"]["toEntity"]["type"] == "pipeline":
+            pipeline = next(name for name, entity in self.pipelines.items()
+                            if entity["id"] == body["edge"]["toEntity"]["id"])
+            table = next(name for name, found_id in self.ids.items() if found_id == body["edge"]["fromEntity"]["id"])
+            self.pipeline_inbound[(pipeline, table)] = body["edge"]["lineageDetails"]
             return {}
         if method == "DELETE" and path.startswith("/lineage/pipeline/"):
             _, _, _, pipeline_id, _, table_id = path.split("/")
@@ -221,7 +232,7 @@ class _Server:
             entity = self.pipelines.get(pipeline)
             if entity is None:
                 return {"entity": {}, "nodes": [], "upstreamEdges": [], "downstreamEdges": []}
-            edges, nodes = [], []
+            edges, nodes, inbound = [], [], []
             for (name, table), details in self.pipeline_lineage.items():
                 table_id = self.ids.get(table)
                 if name == pipeline and table_id:
@@ -229,8 +240,15 @@ class _Server:
                     edges.append({"fromEntity": entity["id"], "toEntity": table_id,
                                   "lineageDetails": {"description": details.get("description"),
                                                      "source": details.get("source")}})
+            for (name, table), details in self.pipeline_inbound.items():
+                table_id = self.ids.get(table)
+                if name == pipeline and table_id:
+                    nodes.append({"id": table_id, "type": "table", "fullyQualifiedName": table})
+                    inbound.append({"fromEntity": table_id, "toEntity": entity["id"],
+                                    "lineageDetails": {"description": details.get("description"),
+                                                       "source": details.get("source")}})
             return {"entity": {"id": entity["id"], "type": "pipeline", "fullyQualifiedName": pipeline},
-                    "nodes": nodes, "upstreamEdges": [], "downstreamEdges": edges}
+                    "nodes": nodes, "upstreamEdges": inbound, "downstreamEdges": edges}
         if method == "PUT" and path == "/tables":
             name = f"{body['databaseSchema']}.{catalog.quote(body['name'])}"
             self.ids.setdefault(name, f"id-{len(self.ids)}")
@@ -385,6 +403,58 @@ def test_target_pipeline_lineage_includes_configured_silver_and_master_outputs()
     assert source_pipelines <= set(edges)
 
 
+def _target_graph(plan: dict, source: str, target: str) -> tuple[set[str], set[str]]:
+    """The tables one target reads (inbound) and publishes (outbound), without the service prefix."""
+    name = catalog.fqn(catalog.PIPELINES_SERVICE + "-source-" + source.replace(".", "-"), f"source:{source}:{target}")
+    cut = len(catalog.SERVICE) + 1
+    edges = [edge for edge in plan["service_lineage"] if edge["pipeline"] == name]
+    return ({edge["table"][cut:] for edge in edges if edge.get("inbound")},
+            {edge["table"][cut:] for edge in edges if not edge.get("inbound")})
+
+
+def test_company_mastering_graph_is_feeds_reference_control_and_trusted_outputs():
+    plan = catalog.plan()
+    inbound, outbound = _target_graph(plan, "sec.company", "mastering")
+    assert inbound == {'sources."sec.company".submissions', 'sources."sec.company".company_tickers_exchange',
+                       'sources."sec.company".name_count'}
+    assert outbound == {"mdm.master_records.company", "journal.change_journal.processed_files"}
+    built = {edge["from"][len(catalog.SERVICE) + 1:] for edge in plan["lineage"]
+             if edge["to"] == catalog.fqn(catalog.SERVICE, catalog.SOURCES, "sec.company", "name_count")}
+    assert built == {'sources.gleif.golden_copy', 'sources."sec.company".submissions'}
+
+
+def test_a_target_that_only_merges_publishes_its_master_and_reads_nothing():
+    inbound, outbound = _target_graph(catalog.plan(), "sec.company", "merge-batch")
+    assert inbound == set()
+    assert outbound == {"mdm.master_records.company"}
+
+
+def test_a_capture_target_reads_its_feed_and_publishes_nothing():
+    inbound, outbound = _target_graph(catalog.plan(), "sec.company", "capture")
+    assert inbound == {'sources."sec.company".submissions'}
+    assert outbound == set()
+
+
+def test_an_unread_feed_and_a_prepared_dataset_are_not_on_the_graph():
+    plan = catalog.plan()
+    inbound, outbound = _target_graph(plan, "sec.company", "mastering")
+    assert 'sources."sec.company"."sec.company.v1"' not in inbound | outbound
+    inbound, _ = _target_graph(plan, "gleif", "subfund-pairs")
+    assert inbound == {"sources.gleif.golden_copy"}
+
+
+def test_publish_writes_an_inbound_edge_into_the_pipeline_and_removes_a_stale_one():
+    plan = catalog.plan()
+    server = _Server(plan)
+    name = next(edge["pipeline"] for edge in plan["service_lineage"] if edge.get("inbound"))
+    unread = catalog.fqn(catalog.SERVICE, catalog.SOURCES, "sec.company", "sec.company.v1")
+    catalog.publish(plan, server)
+    expected = {(edge["pipeline"], edge["table"]) for edge in plan["service_lineage"] if edge.get("inbound")}
+    assert set(server.pipeline_inbound) == expected
+    server.pipeline_inbound[(name, unread)] = {"description": "old", "source": "PipelineLineage"}
+    report = catalog.publish(plan, server)
+    assert set(server.pipeline_inbound) == expected
+    assert report["removed"]["pipeline_lineage"] == 1
 
 def test_catalog_check_reports_missing_pipeline_table_lineage():
     plan = catalog.plan()
@@ -703,7 +773,8 @@ def test_publish_deletes_only_what_the_rules_no_longer_name():
     assert server.table_delete_params == [{"hardDelete": "true", "recursive": "true"}]
     assert result["removed"] == {"tables": 1, "schemas": 1, "databases": 0, "lineage": 1,
                                  "pipeline_lineage": 0, "pipelines": 0, "pipeline_services": 0}
-    assert sum(1 for method, path in server.calls if (method, path) == ("PUT", "/lineage")) == len(plan["lineage"])
+    inbound = sum(1 for edge in plan["service_lineage"] if edge.get("inbound"))
+    assert sum(1 for method, path in server.calls if (method, path) == ("PUT", "/lineage")) == len(plan["lineage"]) + inbound
     posts = [path for method, path in server.calls if method == "POST" and path.endswith("/relations")]
     assert any(path.startswith("/glossaryTerms/Company Identity/") for path in posts)
     assert len(posts) == len(plan["glossary_relations"])
@@ -782,12 +853,12 @@ def test_an_approved_profile_puts_silver_fields_quality_rules_and_code_sets_in_t
 def test_without_a_profile_or_a_silver_spec_the_catalog_has_no_silver_or_rdm_database(tmp_path):
     root = tmp_path / "rules"
     shutil.copytree(files.ROOT, root, ignore=shutil.ignore_patterns("profile.yaml", "silver-*.yaml"))
-    assert {d["name"] for d in catalog.plan(root)["databases"]} == {"sources", "mdm"}
+    assert {d["name"] for d in catalog.plan(root)["databases"]} == {"sources", "mdm", "journal"}
 
 
 def test_an_approved_profile_in_the_repo_adds_silver_and_rdm():
     # OpenFIGI's approved findings (ticket 80) are the first profile committed.
-    assert {d["name"] for d in catalog.plan()["databases"]} == {"sources", "mdm", "silver", "rdm"}
+    assert {d["name"] for d in catalog.plan()["databases"]} == {"sources", "mdm", "silver", "rdm", "journal"}
 
 
 def test_a_registered_silver_table_shows_as_it_lands(tmp_path):
