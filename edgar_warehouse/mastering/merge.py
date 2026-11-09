@@ -95,6 +95,27 @@ def check_source_priorities(policy: dict, records: list[dict]) -> None:
             raise ValueError(f"{kind} policy has no source priority for: " + ", ".join(sorted(missing)))
 
 
+def refuse_if_split(store, merge_id: str, keep: str, gone: str) -> None:
+    if any(d["operation"] == "reverse" and d["target"] == merge_id for d in store.decisions_about([keep, gone])):
+        raise ValueError(f"Merge {merge_id} was already split")
+
+
+def split_merge(store, settings: Settings, keep: str, gone: str, verdict: dict) -> dict:
+    """Undo one merge in one transaction: the records return to the master they were first bound to, the
+    reversal is stored, and both masters' records are merged again so each holds its own identifiers."""
+    try:
+        store.take_lock()
+        refuse_if_split(store, verdict["target"], keep, gone)
+        records = [json.loads(body) for _, _, body in store.split(keep, gone)]
+        store.add_decision(verdict, keep, gone)
+        counts = _merge(store, settings, records, file_key(records), True)
+        store.commit()
+        return counts
+    except BaseException:
+        store.rollback()
+        raise
+
+
 def _merge(store, settings: Settings, records: list[dict], key: str, again: bool) -> dict:
     check_source_priorities(settings.policy, records)
     file_no = store.last_file() + 1
