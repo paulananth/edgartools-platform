@@ -309,7 +309,8 @@ def _quality(contract: dict, fields: dict, matching: dict) -> dict | None:
     return apply(contract["quality"], fields, matching)
 
 
-def _named_values(row: dict, paths: dict, formats: dict, *, set_aside: list | None = None) -> dict:
+def _named_values(row: dict, paths: dict, formats: dict, *, set_aside: list | None = None,
+                  set_aside_invalid: tuple = ()) -> dict:
     """namespace → path into namespace → formatted value; an empty value is left out.
 
     With `set_aside` (a list), a path to a list gives each value once, in
@@ -335,7 +336,16 @@ def _named_values(row: dict, paths: dict, formats: dict, *, set_aside: list | No
             if items:
                 found[namespace] = list(dict.fromkeys(items))
         elif item is not None and str(item).strip():
-            formatted = format_value(item, formats.get(namespace))
+            try:
+                formatted = format_value(item, formats.get(namespace))
+            except UnsupportedRecord as refused:
+                # An identifier the contract lists in `set_aside_invalid` that fails its check digit is held back
+                # beside the record, never dropped, so the record is mastered by its other identifiers (the
+                # contract's caller refuses the record when none is left).
+                if namespace not in set_aside_invalid or set_aside is None or not str(refused.reason).endswith("_checksum"):
+                    raise
+                set_aside.append({"namespace": namespace, "value": str(item), "reason": str(refused.reason)})
+                continue
             if formatted:  # a format may state no value (a name with no place has no name-and-place id)
                 found[namespace] = formatted
     return found
@@ -387,7 +397,10 @@ def normalize(
     key = format_value(key, mapping.get("record_key_format"))
     set_aside: list[dict] = []
     identifiers = _named_values(row, mapping.get("identifiers", {}), mapping.get("identifier_formats", {}),
-                                set_aside=set_aside)
+                                set_aside=set_aside, set_aside_invalid=tuple(mapping.get("set_aside_invalid", ())))
+    if not identifiers and set_aside and mapping.get("set_aside_invalid"):
+        # Nothing is left to master the record by: it is set aside for the first identifier that failed.
+        raise UnsupportedRecord(set_aside[0]["reason"])
     # Lookup-only ids (profiling ticket 03): kept with the record, never bound.
     cross_references = _named_values(
         row, mapping.get("cross_references", {}), mapping.get("cross_reference_formats", {})
