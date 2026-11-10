@@ -225,6 +225,16 @@ class Store:
                 found[subject].append({"namespace": namespace, "raw": raw})
         return dict(found)
 
+    def in_review(self, subjects, *, except_reason: str) -> set:
+        """The subjects with an open review for any reason but `except_reason`: a record an earlier rule sent to a
+        data steward is not joined or created for by a later one."""
+        found = set()
+        for block in blocks(subjects):
+            found.update(r[0] for r in self.rows(
+                f"select subject from mastering_review where open_review=1 and reason<>%s and subject in ({marks(block)})",
+                [except_reason, *block]))
+        return found
+
     def close_reviews(self, reason: str, subjects) -> None:
         for block in blocks(subjects):
             self.cursor.execute(f"update mastering_review set open_review=0 where reason=%s and subject in ({marks(block)})", [reason, *block])

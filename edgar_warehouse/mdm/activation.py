@@ -601,7 +601,7 @@ def _check_cascade_pass(rule_id: str, rule: dict, tests: list) -> None:
         raise Conflict(f"Cascade rule {rule_id} has invalid pass arguments")
 
 
-EXACT_NAME_KEYS = frozenset({"name_id@1", "name_place_id@1"})
+EXACT_NAME_KEYS = frozenset({"name_id@1", "name_place_id@1", "issuer_symbol_id@1"})
 
 
 def check_exact_name_rule(kind: str, rule: dict, kinds: dict) -> None:

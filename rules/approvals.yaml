@@ -5,11 +5,11 @@ version: 1
 approvals:
 - kind: merge
   name: platform
-  digest: 892f2396615393c801af79dbb3538426f65c91da15a54e2e31450fad417a9116
+  digest: 5817f4fbbd3f63be55d6dfa450558bae3f9ecf8f9456f784775c36dfff043739
   by: Operator
   words: Approved the rules always
   at: '2026-11-09'
-  finalized: PR 1576
+  finalized: PR 1586
 - kind: pipeline
   name: sec.thirteenf.extract
   digest: 3b6cd24f69cd663835c0b19d2d0d15b05d2633bc0307e5c84eb0328ef93516c4
@@ -75,11 +75,11 @@ approvals:
   finalized: PR 1483
 - kind: source
   name: sec.ownership
-  digest: 6f7009114fd797969b0d0e1d4b8df210e3ee0540f38e85e4c828c1261ed2f621
+  digest: 441321c73697c2adf30ab3ed29770311d66efe8ee27959f50c99390b05595627
   by: Operator
   words: Approved the rules always
-  at: '2026-11-07'
-  finalized: PR 1490
+  at: '2026-11-09'
+  finalized: PR 1586
 - kind: source
   name: sec.registration
   digest: 37e556f28d20058e27480856b0ab9bd3f88393dec0d62b961ef93d604bb9218c

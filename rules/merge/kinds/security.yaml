@@ -311,6 +311,24 @@ rules:
     args:
       namespace: ticker
       max_per_10k: 5
+# A Form 4 security no Security holds (operator, 2026-11-09: "This is not following step 1" on a Form 4 security stored
+# without a golden record; then "Create by issuer and title (Recommended)"): the rule above finds the Security OpenFIGI
+# gave the symbol, and when none holds it this rule creates one for the issuer and its symbol, which the same issuer's
+# later filings join. The filing's issuer block states the issuer CIK and the symbol, not the security's title, so those
+# two identify it; the symbol alone is not used, since one ticker names two securities (17,941 ticker and exchange pairs
+# sit on two or more CUSIPs). The rule above runs first.
+- rule_id: form4-security-issuer-symbol
+  version: 2026-11-09.1
+  family: exact_name_binding
+  source: sec.ownership.security.v2
+  holder_sources: []
+  applies_to_verdict: security
+  emits:
+  - bind
+  key: issuer_symbol_id@1
+  cross_reference: issuer_symbol_id
+  on_no_match: mint
+  on_several: review
 identifiers:
   cusip:
     authority: CUSIP Global Services (ANSI X9.6)
