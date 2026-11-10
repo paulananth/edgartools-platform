@@ -196,6 +196,13 @@ class Store:
         self.insert("mastering_decision", ("decision_id", "operation", "left_id", "right_id", "body"),
                     [(body["decision_id"], body["operation"], left, right, json.dumps(body))])
 
+    def add_binds(self, decisions: list[dict]) -> None:
+        """The bind decisions of a file: one row per source record bound, read as the decision at its time (a later
+        merge moves the record, and `mastering_record` holds where it is now). A replay writes nothing twice."""
+        self.insert("mastering_decision", ("decision_id", "operation", "left_id", "right_id", "body"),
+                    [(d["decision_id"], "bind", d["subject"], d["entity_id"], json.dumps(d, separators=(",", ":")))
+                     for d in decisions])
+
     def decisions_about(self, entities) -> list[dict]:
         return [json.loads(row[0]) for row in self.rows(
             "select body from mastering_decision where operation in ('merge','exclude','reverse') "

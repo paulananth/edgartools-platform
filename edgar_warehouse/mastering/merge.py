@@ -156,10 +156,11 @@ def _merge(store, settings: Settings, records: list[dict], key: str, again: bool
     subjects = sorted({r["subject"] for r in records})
     bound = store.bound(subjects)
     counts = Counter()
-    survivors = _match_identifiers(store, settings, records, bound, counts, file_no)
-    named = _match_names(store, settings, records, bound, counts)
+    binds = []  # every bind decision of this file, whichever rule made it (step 6: every decision is recorded)
+    survivors = _match_identifiers(store, settings, records, bound, counts, file_no, binds)
+    named = _match_names(store, settings, records, bound, counts, binds)
     bound.update(named)
-    exact = _match_exact_names(store, settings, records, bound, counts)
+    exact = _match_exact_names(store, settings, records, bound, counts, binds)
     bound.update(exact)
     named |= exact
     waits = _waiting_sources(settings)
@@ -168,6 +169,7 @@ def _merge(store, settings: Settings, records: list[dict], key: str, again: bool
     store.close_reviews(WAITING, sorted(named))
     held = {s: bound[s] for s in subjects if s in bound} | named
     store.save_records(held)
+    store.add_binds(binds)
     touched = set(held.values()) | survivors
     if touched:
         _write_masters(store, settings, sorted(touched), file_no, counts)
@@ -180,7 +182,7 @@ def _rules(settings: Settings) -> list[dict]:
     return [rule for kind, rule in matching.active_rules(settings.policy) if kind == settings.kind]
 
 
-def _match_identifiers(store, settings: Settings, records, bound: dict, counts: Counter, file_no: int) -> set:
+def _match_identifiers(store, settings: Settings, records, bound: dict, counts: Counter, file_no: int, binds: list) -> set:
     known = [r["subject"] for r in records if r["subject"] in bound]
     plan = plan_record_matches({
         "policy": settings.policy, "assertions": records, "decisions": [], "identities": [], "bound": known,
@@ -237,6 +239,7 @@ def _match_identifiers(store, settings: Settings, records, bound: dict, counts: 
     for decision in made["decisions"]:
         if decision["operation"] == "bind":
             bound[decision["subject"]] = live(decision["entity_id"])
+            binds.append({**decision, "policy_digest": settings.policy_digest})
             store.add_withheld([(decision["subject"], w["namespace"], w["raw"]) for w in decision.get("withheld") or ()])
     for review in made["reviews"]:
         counts[review["reason"]] += 1
@@ -245,7 +248,7 @@ def _match_identifiers(store, settings: Settings, records, bound: dict, counts: 
     return survivors
 
 
-def _match_names(store, settings: Settings, records, bound: dict, counts: Counter) -> dict:
+def _match_names(store, settings: Settings, records, bound: dict, counts: Counter, binds: list) -> dict:
     named, values = {}, {}
     for rule in _rules(settings):
         cascade = any(test["primitive"] == matching.cascade.TEST for test in rule["when"])
@@ -257,11 +260,12 @@ def _match_names(store, settings: Settings, records, bound: dict, counts: Counte
         pairs = [(c, h) for c, h in pairs if c["subject"] not in bound and c["subject"] not in named and h["subject"] in bound]
         if not pairs:
             continue
-        reach, lei = defaultdict(set), {}
+        reach, lei, candidates = defaultdict(set), {}, {}
         for (candidate, holder), (passed, flagged) in zip(
                 pairs, matching.compare_candidate_records(rule, [(h, c) for c, h in pairs]), strict=True):
             if passed:
                 reach[candidate["subject"]].add(bound[holder["subject"]])
+                candidates[candidate["subject"]] = candidate
                 lei[candidate["subject"]] = first(candidate["identifiers"]["lei"])
             elif flagged:
                 counts["cascade_flagged_pair"] += 1
@@ -276,6 +280,7 @@ def _match_names(store, settings: Settings, records, bound: dict, counts: Counte
                 continue
             held.setdefault(entity, set()).add(lei[subject])
             named[subject], values[subject] = entity, lei[subject]
+            binds.append(_bind_decision(settings, rule, subject, candidates[subject].get("assertion_id"), entity, "name_match lei"))
     store.add_identifiers([("lei", values[s], e) for s, e in named.items()])
     return named
 
@@ -291,7 +296,7 @@ def _exact_rules(settings: Settings) -> list[dict]:
             if rule.get("family") == matching.EXACT_NAME_FAMILY and activated(settings.policy, settings.kind, rule, "bind")]
 
 
-def _match_exact_names(store, settings: Settings, records, bound: dict, counts: Counter) -> dict:
+def _match_exact_names(store, settings: Settings, records, bound: dict, counts: Counter, binds: list) -> dict:
     """A waiting record joins the one master holding its name id; several send it to review. With none, a rule
     that mints (`on_no_match: mint`) creates one golden record for the name, which the source's later records join."""
     rules = _exact_rules(settings)
@@ -321,12 +326,25 @@ def _match_exact_names(store, settings: Settings, records, bound: dict, counts: 
             found = holding[value]
             if len(found) == 1:
                 named[subject] = next(iter(found))
+                binds.append(_bind_decision(settings, rule, subject, (here.get(subject) or {}).get("assertion_id"), named[subject], f"exact_name {namespace}"))
             elif found:
                 counts["ambiguous_name_match"] += 1
                 store.open_reviews("ambiguous_name_match", [(subject, (here.get(subject) or {}).get("assertion_id"))])
             elif mints:
                 named[subject] = created.setdefault(value, str(uuid4()))
+                binds.append(_bind_decision(settings, rule, subject, (here.get(subject) or {}).get("assertion_id"), named[subject], f"exact_name {namespace} created"))
     return named
+
+
+def _bind_decision(settings: Settings, rule: dict, subject: str, assertion_id, entity: str, reason: str) -> dict:
+    """The decision a name rule made, in the shape the identifier rules return: the rule and its version, the source
+    record it used and its outcome. The id covers those and not the policy digest, so a replay under a new policy
+    writes the same decision once."""
+    core = {"operation": "bind", "actor": f"rule:{rule['rule_id']}@{rule['version']}", "reason": reason,
+            "at": settings.as_of, "subject": subject, "entity_id": entity, "evidence": [assertion_id],
+            "rule_id": rule["rule_id"], "rule_version": rule["version"]}
+    return {**core, "decision_id": hashlib.sha256(json.dumps(core, sort_keys=True).encode()).hexdigest(),
+            "policy_digest": settings.policy_digest}
 
 
 def _write_masters(store, settings: Settings, entities: list, file_no: int, counts: Counter) -> None:
