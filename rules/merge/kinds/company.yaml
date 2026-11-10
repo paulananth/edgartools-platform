@@ -21,7 +21,7 @@ defaults:
   # N-PORT registrants (ticket 79, part 2), last: every field another source
   # fills wins over N-PORT's (a merge-rule change, approved with its Proving
   # Run under the operator's standing words, 2026-10-15).
-  - sec.nport.registrant.v1
+  - sec.nport.registrant.v2
   allow_unknown_effective: true
 rules:
 - rule_id: sec-company-candidate
@@ -137,7 +137,7 @@ rules:
 - rule_id: nport-registrant-cik
   version: 2026-10-15.1
   family: binding
-  source: sec.nport.registrant.v1
+  source: sec.nport.registrant.v2
   applies_to_verdict: company
   emits:
   - bind
@@ -149,6 +149,24 @@ rules:
   - primitive: identifier_cardinality@1
     args:
       namespace: cik
+# An N-PORT registrant's stated LEI finds the one Company that holds it (ticket 203; operator, 2026-11-10: "Master it
+# ;consider it a source"): a Company a Form ADV custodian or a GLEIF record already gave that LEI. None holds it: the
+# CIK rule above creates the registrant's Company. Two Companies hold it: the record goes to review.
+- rule_id: nport-registrant-lei
+  version: 2026-11-10.searched
+  family: binding
+  source: sec.nport.registrant.v2
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: lei
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: lei
 - rule_id: sec-gleif-name-jurisdiction
   version: 2026-09-25.1
   family: name_binding
@@ -564,7 +582,7 @@ identifiers:
     authority: SEC/EDGAR
     sources:
     - sec.company.v1
-    - sec.nport.registrant.v1
+    - sec.nport.registrant.v2
     # Form ADV filings list the adviser's own CIKs (Item 1.D(3); operator, 2026-11-08: "Both"). They
     # find a Company and never create one (iapd-adv-cik waits), so the creating sources stay SEC's.
     - iapd.adv.filings.v2
@@ -618,10 +636,12 @@ identifiers:
       max_per_10k: 5
   lei:
     authority: GLEIF (ISO 17442)
-    # GLEIF's own record issues an LEI (ticket 22, the issuer rule).
+    # GLEIF's own record issues an LEI (ticket 22, the issuer rule). An N-PORT registrant states the LEI too
+    # (operator, 2026-11-10: "Master it ;consider it a source"), so a GLEIF record with that LEI joins its Company.
     sources:
     - iapd.adv.custodians.v1
     - gleif.level1.v1
+    - sec.nport.registrant.v2
     normalizer: normalize_identifier@lei-v1
     claim:
       forward: 1
@@ -633,10 +653,10 @@ identifiers:
       field: kind
       predicate: kind_equal@1
     verification:
-      corpus_sha256: 9a0a7bbe236126d31b0411cf2296ca25684bb0bbd1a971e65dc7966558d34d93
+      corpus_sha256: d394aacb960e161cc4fa82ea0729ec64a15f9fc6508fcee53aa07863f550e71a
       approved_by: operator
-      approved_at: "2026-10-17T12:31:29Z"
-      reason: "tickets 75 and 76: Form ADV run beside GLEIF and SEC, 13 months, 24,760 Companies, no CRD, LEI or BD number on two Companies, 15,339 custodian links, a third pass changed nothing"
+      approved_at: "2026-11-10T14:20:00Z"
+      reason: "tickets 75, 76 and 203: Form ADV run beside GLEIF and SEC (13 months, 24,760 Companies, no CRD, LEI or BD number on two Companies), and from 2026-11-10 the N-PORT registrant's stated LEI (operator: \"Master it ;consider it a source\"; standing approval \"Approved the rules always\"): limited test .scratch/rebuild-priorities/research/203_registrant_lei_limited_test.json, 1,943 registrant Company and LEI pairs, 1,712 keep their LEI, 231 find it on another Company and go to review"
     tolerance:
       unit: items
       warm_up_decisions: 10000

@@ -279,7 +279,7 @@ dataset_contracts:
         relationships:
         - type: IS_SUBFUND_OF
           target_key: [latest.cik]
-          target_source: sec.nport.registrant.v1
+          target_source: sec.nport.registrant.v2
           # No stated inception: the existing engine uses effective_at and
           # records valid_from_basis=observed. A real stated date may replace it.
           valid_from: authoritative_start

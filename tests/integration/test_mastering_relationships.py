@@ -22,7 +22,7 @@ CASES = [
     ("RELATED_PERSON", "iapd.adv.filings.v2", "company", {"cik": "0000999002", "crd": "999002"},
      "sec.company.v1", "company", {"cik": "0000999003"}, "0000999003"),
     ("IS_SUBFUND_OF", "sec.nport.fund.v1", "fund_structure", {"sec_series_id": "S999000001"},
-     "sec.nport.registrant.v1", "company", {"cik": "0000999004"}, "0000999004"),
+     "sec.nport.registrant.v2", "company", {"cik": "0000999004"}, "0000999004"),
 ]
 
 

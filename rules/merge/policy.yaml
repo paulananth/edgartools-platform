@@ -381,6 +381,15 @@ automatic_rules:
   rule_version: 2026-10-15.1
   verdict: bind
   activation: deterministic
+# nport-registrant-lei (ticket 203): an N-PORT registrant's LEI finds the Company that holds it. Switched on under the
+# operator's standing approval ("Approved the rules always") and his ruling of 2026-11-10 ("Master it ;consider it a
+# source"), after the limited test (.scratch/rebuild-priorities/research/203_registrant_lei_limited_test.json).
+- kind: company
+  family: binding
+  rule_id: nport-registrant-lei
+  rule_version: 2026-11-10.searched
+  verdict: bind
+  activation: deterministic
 - kind: fund_structure
   family: binding
   rule_id: nport-fund-series

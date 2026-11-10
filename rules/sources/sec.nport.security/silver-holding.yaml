@@ -144,7 +144,7 @@ links:
 - columns:
   - registrant_cik
   kind: company
-  source_code: sec.nport.registrant.v1
+  source_code: sec.nport.registrant.v2
   to_part: registrant
   source_key: registrant_cik
   mdm_id_column: registrant_mdm_id

@@ -78,7 +78,7 @@ bookkeeping:
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, mdm.prepared]
           input:
-            keys: {table: registrant, record_column: record, dataset: sec.nport.registrant.v1}
+            keys: {table: registrant, record_column: record, dataset: sec.nport.registrant.v2}
             readings: {record: {all: record}}
         - name: merge
           operation: mastering.merge
@@ -150,7 +150,7 @@ read:
     max_spool_bytes: 1073741824
     max_output_rows: 1000000
 dataset_contracts:
-  sec.nport.registrant.v1:
+  sec.nport.registrant.v2:
     contract:
       provider: SEC
       family: sec.nport-datasets
@@ -213,7 +213,7 @@ dataset_contracts:
           - profile_start
           - date_basis
           - date_is_provisional
-        version: sec-nport-registrant-2026-11-06.provisional-file-date
+        version: sec-nport-registrant-2026-11-10.lei-searched
         retain_deferred: true
         source_record_provenance: true
         kind: company
@@ -222,17 +222,22 @@ dataset_contracts:
         - cik
         record_key_format: sec_cik
         # CIK joins the one Company holding it, or creates it (operator,
-        # 2026-10-15: "agreed"). The SEC file number (811-) and the LEI the
-        # registrant states are lookup only, never joining (profiling proposed
-        # both as cross-references; the operator ruled the SEC LEI lookup only,
-        # 2026-09-26).
+        # 2026-10-15: "agreed"). The LEI the registrant states is searched
+        # like any source's identifier (operator, 2026-11-10: "Master it
+        # ;consider it a source", reversing the "lookup only" of 2026-09-26):
+        # it finds the Company that holds it and is held by the Company it
+        # joins. A registrant whose LEI fails its check digits is still
+        # mastered by its CIK; the bad value is set aside and flagged. The
+        # SEC file number (811-) stays a cross-reference.
         identifiers:
           cik: cik
+          lei: latest.lei
         identifier_formats:
           cik: sec_cik
+          lei: lei
+        set_aside_invalid: [lei]
         cross_references:
           sec_file_number: latest.file_number
-          nport_lei: latest.lei
         # N-PORT establishes the registrant's fund role. Its earliest retained
         # filing is a provisional observation, not the true registration start.
         profiles:

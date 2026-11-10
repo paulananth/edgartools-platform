@@ -686,7 +686,8 @@ def _historic_company_identity(value):
     if isinstance(value, list):
         return [_historic_company_identity(item) for item in value]
     if isinstance(value, str):
-        return {"sec.company.v1": "sec.submissions.company.v1",
+        return {"sec.nport.registrant.v2": "sec.nport.registrant.v1",
+                "sec.company.v1": "sec.submissions.company.v1",
                 "sec.company": "sec.submissions.company",
                 "company-2026-10-31.sec-company-source-identity":
                     "company-2026-10-25.one-value-per-identifier"}.get(value, value)
@@ -801,7 +802,8 @@ class TestTheNameMatchingRules:
             "sec-gleif-name-jurisdiction", "sec-gleif-name-postal", "iapd-adv-crd", "iapd-adv-cik",
             "iapd-adv-custodian-lei", "iapd-adv-custodian-bd",
             "iapd-adv-custodian-name", "iapd-adv-custodian-name-form", "iapd-adv-custodian-name-place",
-            "nport-registrant-cik", "sec-gleif-name-city-or-postcode"]  # the two creating custodian rules: 2026-11-09
+            "nport-registrant-cik", "nport-registrant-lei",
+            "sec-gleif-name-city-or-postcode"]  # the two creating custodian rules: 2026-11-09; the registrant LEI: 2026-11-10
         check_policy(POLICY)
 
     def test_an_activation_needs_the_operators_approval(self):

@@ -202,7 +202,7 @@ class TestTheCompanyRule:
             "gleif.relationships.v1",
             "iapd.adv.filings.v2",
             "iapd.adv.custodians.v1",
-            "sec.nport.registrant.v1",
+            "sec.nport.registrant.v2",
         ]
 
 

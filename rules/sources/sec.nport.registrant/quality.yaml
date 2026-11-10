@@ -1,6 +1,6 @@
 version: nport-registration-2026-11-06.provisional-file-date
 quality:
-  sec.nport.registrant.v1:
+  sec.nport.registrant.v2:
     fixes: []
     checks:
     - id: fund_registration_start_is_authoritative
