@@ -20,6 +20,7 @@ Every source has gone live from empty data stores. Rules stay, reference code se
 Each source: empty its data, load it from its captured files, record counts (files, records, masters, links waiting). One line ticked per source, with its ET stamp.
 
 - [ ] SEC company (Companies, by CIK)
+  - FINDING (2026-11-09 23:23 ET): the SEC company load cannot start as configured. `rules/sources/sec.company` declares the Name Count as a run file (`scripts/run_inputs.py sec.company`: facts capture_run, catalog_run, observed_at, load_mode; file name_count), and `edgar-warehouse mdm name-count` needs the whole SEC submissions population, a population list, a verified full GLEIF Golden Copy reading (`rules/sources/gleif/name-count-complete-stream.yaml`, 3.4M records) and its metadata, so GLEIF has to be read in full before SEC company can load. The capture (`mdm/captures/sec.submissions.company/all-76230`) and the ticker catalog are on the machine. Ticket 202 removes the file: the GLEIF merge searches the golden records by name itself. Two ways forward: (a) build the Name Count now (a full GLEIF read, then the SEC read), or (b) do ticket 202 first, which needs the operator's word on whether an earlier name binding stays when a later load makes the name shared (recommended: it stays, a steward splits it, decisions are never undone silently).
 - [ ] N-PORT registrant (Companies, by CIK)
 - [ ] Form ADV filings and custodians (adviser and custodian Companies)
 - [ ] GLEIF Level 1 (finds Companies, never creates), then GLEIF relationships
