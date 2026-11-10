@@ -49,12 +49,12 @@ Checklist for this section:
   - [ ] Measure through the engine: how many of the 67,166 become Companies, how many stay deferred as person-shaped, none double-mastered (counts only).
   - [ ] Proof: a random sample of the newly classified filers per new step, labelled by evidence (legal-form word, industry code, tickers, name shape), the whole table shown to the operator; the adversarial fixture and cohort hashes refreshed; the Wilson bound recomputed.
   - [ ] Approval line for the merge policy digest under "Approved the rules always", then reload the SEC company source so the new Companies exist; count before and after.
-- [ ] OpenFIGI not found: attach the record to the Security that holds its CUSIP and record the answer; count the 7,560 ISIN-only records the same way.
+- [x] OpenFIGI not found: attach the record to the Security that holds its CUSIP and record the answer; count the 7,560 ISIN-only records the same way. DONE (2026-11-09 21:01 ET): on the shared store all 733,820 stored OpenFIGI records have a golden record; 37,734 not-found answers are set aside with their reason, and 30,117 of their 30,121 CUSIPs and 7,540 of their 7,560 ISINs are held by a Security (the 4 and 20 left are held by none).
 - [ ] Records with an invalid check digit master by their other identifiers or name; the operator's word on the proposal.
-- [ ] Form 4 reporting owners follow the SEC filer ruling.
-- [ ] Look at the 98 missing-identity records, the 12 Form ADV filings v2 and the 6 N-PORT securities.
+- [x] Form 4 reporting owners follow the SEC filer ruling. DONE (2026-11-09 21:01 ET): 4,962 stored reporting owners all have a golden record; 781 are set aside (450 `classification_entity_undetermined`, 331 `classification_deferred`), the same rule the SEC person source uses.
+- [x] Look at the 98 missing-identity records, the 12 Form ADV filings v2 and the 6 N-PORT securities. DONE (2026-11-09 21:01 ET): see the two parts below.
   - [x] The 98 missing-identity records (2026-11-09 20:40 ET, counts only, read from `mastering_deferred` on the shared store): all 98 are Form 4 security records (15 under `sec.ownership.security.v1`, 83 under `v2`) that carry an issuer CIK and no trading symbol. A Form 4 Security is identified by its issuer and symbol, so with no symbol it has no identity; it stays set aside with the reason `missing_record_identity`, creates no golden record, and `mdm reconcile` counts it as set aside. No change needed: this is step 1 working (an unidentifiable record waits). Phase 1 masters publicly traded companies only, and an issuer with no symbol is outside it.
-  - [ ] The 12 Form ADV filings v2 and the 6 N-PORT securities.
+  - [x] The 12 Form ADV filings v2 and the 6 N-PORT securities. DONE (2026-11-09 21:01 ET): all 18 are stored and wait with an open `conflicting_identifiers` review (12 filings: CIK and CRD found two golden records; 6 securities: CUSIP, ISIN and SEDOL found two). That is step 4 for a data steward, not a step 1 gap.
 - [ ] Name "secondary source" in `CONTEXT.md` once the operator agrees the definition: a source that attaches to golden records others create and never creates one.
 
 ## Checklist
