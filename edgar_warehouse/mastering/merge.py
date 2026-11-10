@@ -182,6 +182,16 @@ def _rules(settings: Settings) -> list[dict]:
     return [rule for kind, rule in matching.active_rules(settings.policy) if kind == settings.kind]
 
 
+def merge_masters(store, settings: Settings, decision: dict, keep: str, gone: str, file_no: int, stored: bool) -> None:
+    """Two golden records become one: the older keeps the other's identifiers and records, the other stays as an
+    alias, and the decision is written. A rule and a data steward merge the same way."""
+    store.repoint(keep, gone)
+    if stored:
+        alias = {"entity_id": gone, "kind": settings.kind, "canonical_id": keep, "status": "alias"}
+        store.write_masters([(gone, json.dumps(alias))], file_no)
+    store.add_decision(decision, keep, gone)
+
+
 def _match_identifiers(store, settings: Settings, records, bound: dict, counts: Counter, file_no: int, binds: list) -> set:
     known = [r["subject"] for r in records if r["subject"] in bound]
     plan = plan_record_matches({
@@ -226,11 +236,7 @@ def _match_identifiers(store, settings: Settings, records, bound: dict, counts: 
             stored = store.oldest([left, right])
             keep = stored[0] if stored else min(left, right)
             gone = right if keep == left else left
-            store.repoint(keep, gone)
-            if gone in stored:
-                alias = {"entity_id": gone, "kind": settings.kind, "canonical_id": keep, "status": "alias"}
-                store.write_masters([(gone, json.dumps(alias))], file_no)
-            store.add_decision(decision, keep, gone)
+            merge_masters(store, settings, decision, keep, gone, file_no, gone in stored)
             moved[gone] = keep
             survivors.discard(gone)
             survivors.add(keep)

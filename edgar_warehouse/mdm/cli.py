@@ -94,6 +94,17 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     split.add_argument("--policy-digest", required=True, help="The registered merge rules the masters are replayed under")
     split.add_argument("--confirm", action="store_true", help="Write the split (without it, only show it)")
     split.set_defaults(handler=_logged_handler("steward-split", _command("steward_split")))
+    resolve = steward_sub.add_parser("resolve", help="Close a `conflicting_identifiers` review: the record reached golden "
+                                     "records its identifiers disagree on. `merge`: they are one (the older survives, the "
+                                     "record joins it). `exclude`: the record is a different one and gets its own. Shows what "
+                                     "it would do; writes only with --confirm")
+    resolve.add_argument("--subject", required=True, help="The waiting record's subject, as `edgar-warehouse context` shows it")
+    resolve.add_argument("--result", required=True, choices=("merge", "exclude"))
+    resolve.add_argument("--by", required=True, help="Who resolves it, recorded on the decisions")
+    resolve.add_argument("--reason", required=True, help="Why, in words, recorded on the decisions")
+    resolve.add_argument("--policy-digest", required=True, help="The registered merge rules the golden records are written under")
+    resolve.add_argument("--confirm", action="store_true", help="Write the resolution (without it, only show it)")
+    resolve.set_defaults(handler=_logged_handler("steward-resolve", _command("steward_resolve")))
 
     counts = mdm_sub.add_parser("counts", help="Print MDM entity and record counts")
     counts.set_defaults(handler=_logged_handler("counts", _command("counts")))

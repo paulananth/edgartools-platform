@@ -17,6 +17,8 @@ NAME_COUNT = ["--capture", "c", "--population", "p", "--gleif-reading", "a",
     (["mdm", "rebuild-name-index", "--limit", "1"], "rebuild_name_index"),
     (["mdm", "rebuild-detail-lookup", "--limit", "1"], "rebuild_detail_lookup"),
     (["mdm", "steward", "split", "--merge", "m", "--by", "Sam", "--reason", "wrong", "--policy-digest", "d"], "steward_split"),
+    (["mdm", "steward", "resolve", "--subject", "s", "--result", "merge", "--by", "Sam", "--reason", "same",
+      "--policy-digest", "d"], "steward_resolve"),
 ])
 def test_each_command_runs_its_function(monkeypatch, argv, function):
     called = []
@@ -36,6 +38,21 @@ def test_a_split_previews_unless_confirmed_and_needs_who_and_why():
         del argv[at:at + 2]
         with pytest.raises(SystemExit):
             parser.parse_args(argv)
+
+
+def test_a_resolution_previews_unless_confirmed_and_needs_a_result_who_and_why():
+    parser = build_parser()
+    resolve = ["mdm", "steward", "resolve", "--subject", "s", "--result", "exclude", "--by", "Sam", "--reason", "other",
+               "--policy-digest", "d"]
+    assert parser.parse_args(resolve).confirm is False and parser.parse_args([*resolve, "--confirm"]).confirm is True
+    for missing in ("--subject", "--result", "--by", "--reason", "--policy-digest"):
+        argv = resolve[:]
+        at = argv.index(missing)
+        del argv[at:at + 2]
+        with pytest.raises(SystemExit):
+            parser.parse_args(argv)
+    with pytest.raises(SystemExit):
+        parser.parse_args([*resolve[:resolve.index("--result") + 1], "drop", *resolve[resolve.index("--result") + 2:]])
 
 
 def test_retired_commands_stay_unavailable():

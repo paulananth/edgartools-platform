@@ -71,6 +71,28 @@ def steward_split(args) -> int:
     return 0
 
 
+def steward_resolve(args) -> int:
+    """Close a `conflicting_identifiers` review (ticket 207): previews unless `--confirm`."""
+    from functools import cache
+
+    from edgar_warehouse.mastering import steward
+    from edgar_warehouse.mastering.store import open_store
+    from edgar_warehouse.workers.mastering_merge import _settings
+
+    at = datetime.now(timezone.utc).isoformat()
+    engine = engine_from_env("MDM_DATABASE_URL", restricted=True)
+    db = open_store(engine)
+    manifest = {"policy_digest": args.policy_digest, "as_of": at}
+    try:
+        report = steward.resolve(db, cache(lambda kind: _settings(engine, manifest, kind)), subject=args.subject,
+                                 result=args.result, actor=args.by, reason=args.reason, at=at, confirm=args.confirm)
+    finally:
+        db.close()
+        engine.dispose()
+    print(json.dumps(report, sort_keys=True))
+    return 0
+
+
 def _print_mdm_report(read) -> int:
     """Run one read on the MDM database as the application role and print it."""
     mdm = engine_from_env("MDM_DATABASE_URL")
