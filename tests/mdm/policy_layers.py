@@ -80,9 +80,9 @@ def without_nport_registrant(policy: dict) -> dict:
     switched on). Peeled, the policy is the one before."""
     body = _copy(policy)
     company = body["kinds"]["company"]
-    company["defaults"]["sources"] = [s for s in company["defaults"]["sources"] if s != NPORT_REGISTRANT]
+    company["defaults"]["sources"] = [s for s in company["defaults"]["sources"] if s not in (NPORT_REGISTRANT, "sec.nport.registrant.v1")]
     cik = company["identifiers"]["cik"]
-    cik["sources"] = [s for s in cik["sources"] if s != NPORT_REGISTRANT]
+    cik["sources"] = [s for s in cik["sources"] if s not in (NPORT_REGISTRANT, "sec.nport.registrant.v1")]
     company["rules"] = [r for r in company["rules"] if r["rule_id"] != "nport-registrant-cik"]
     return body
 

@@ -24,8 +24,9 @@ def normalized(tmp_path, source, table, row):
     records = [r['record'] for part, _ in iter_artifacts(reading, store,
                max_bytes=10_000_000, max_rows=100) for r in part['tables'][table]]
     assert len(records) == 1
-    contract = files.load_source(folder / 'source.yaml')['dataset_contracts'][source + '.v1']['contract']
-    return normalize(records[0], source_code=source + '.v1', contract=contract,
+    code = source + ('.v2' if source == 'sec.nport.registrant' else '.v1')  # the registrant's identifiers moved (ticket 203)
+    contract = files.load_source(folder / 'source.yaml')['dataset_contracts'][code]['contract']
+    return normalize(records[0], source_code=code, contract=contract,
                      publication={'publication_key': 'invented-delivery', 'revision': 1,
                                   'effective_at': None, 'artifact_sha256': 'a' * 64, 'member': 'invented'})
 
