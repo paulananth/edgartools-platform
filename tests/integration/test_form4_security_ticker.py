@@ -20,7 +20,7 @@ from tests.integration.test_openfigi_security import bound, securities
 from tests.mdm import policy_layers
 from tests.support import masters
 
-OPENFIGI = "openfigi.security.v3"
+OPENFIGI = "openfigi.security.v4"
 FORM4 = "sec.ownership.security.v2"
 ONE, TWO, THREE = "ZZ0000013", "ZZ0000021", "ZZ0000039"  # invented CUSIPs, check digits valid
 

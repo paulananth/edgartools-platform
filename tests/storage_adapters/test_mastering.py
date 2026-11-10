@@ -20,7 +20,7 @@ AS_OF = "2026-11-06T12:00:00+00:00"
 POLICY = files.policy()
 COMPANY = merge.Settings(POLICY, "invented-digest", "company", AS_OF)
 SECURITY = merge.Settings(POLICY, "invented-digest", "security", AS_OF)
-SEC, FIGI, GLEIF = "sec.company.v1", "openfigi.security.v3", "gleif.level1.v1"
+SEC, FIGI, GLEIF = "sec.company.v1", "openfigi.security.v4", "gleif.level1.v1"
 NPORT = next(r for r in POLICY["kinds"]["security"]["rules"] if r["rule_id"] == "nport-security-cusip")["source"]
 
 

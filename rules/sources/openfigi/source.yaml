@@ -41,7 +41,7 @@ acquisition:
     mapping:
       family: openfigi
       datasets:
-      - openfigi.security.v3
+      - openfigi.security.v4
       scope:
       - batch
       capabilities:
@@ -1229,7 +1229,7 @@ bookkeeping:
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, mdm.prepared]
           input:
-            keys: {table: security, record_column: record, dataset: openfigi.security.v3}
+            keys: {table: security, record_column: record, dataset: openfigi.security.v4}
             readings: {record: {all: record}}
         - name: merge
           operation: mastering.merge
@@ -1250,7 +1250,7 @@ dataset_contracts:
   # openfigi.security.v1 (CUSIPs) and openfigi.security_isin.v2 (ISINs). A new
   # source code, since a Rules database holds both and an identifier cannot be
   # added on an existing one (2026-10-24).
-  openfigi.security.v3:
+  openfigi.security.v4:
     contract:
       provider: OpenFIGI
       family: openfigi
