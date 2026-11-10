@@ -79,6 +79,7 @@ def migrate(engine, *, agent_role: str = "rules_agent", approver_role: str = "ru
         conn.exec_driver_sql(f"REVOKE ALL ON ALL TABLES IN SCHEMA rules FROM PUBLIC,{agent},{approver}")
         conn.exec_driver_sql(f"GRANT USAGE ON SCHEMA rules TO {agent},{approver}")
         conn.exec_driver_sql(f"GRANT SELECT ON rules.rule_version TO {agent},{approver}")
+        conn.exec_driver_sql(f"GRANT SELECT ON rules.source_entity_type TO {agent},{approver}")
         conn.exec_driver_sql(f"GRANT INSERT(kind,name,version,body,digest) ON rules.rule_version TO {agent}")
         conn.exec_driver_sql(f"GRANT UPDATE(status,proof,batch_hash,clean_mdm) ON rules.rule_version TO {agent}")
         # The agent records the operator's approval in their name and words
