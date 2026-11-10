@@ -776,6 +776,8 @@ dataset_contracts:
                         # check that lists a Security they disagree on.
                         share_classes_filed:
                           join: {path: classes.class_sample, item_path: share_class, separator: "", max_items: 26}
+                        # The CUSIP as filed, for the quality check of its check digit.
+                        cusip_filed: {value: {path: cusip}}
           input_fields:
           - key
           - key_class
@@ -800,10 +802,15 @@ dataset_contracts:
         # v3 (ticket 138): a CUSIP's record carries every ISIN filed with it.
         # v4 (ticket 138): and the six facts its holdings file most.
         # v5 (ticket 199): an ISSUED_BY start is observed, not stated.
-        version: sec-nport-security-v5
+        version: sec-nport-security-v6
         retain_deferred: true
         source_record_provenance: true
         kind: security
+        # A CUSIP failing its check digit is held back beside the record (identifiers_set_aside) and flagged by
+        # the quality check `cusip_check_digit` (operator, 2026-11-10: add a data quality check for invalid
+        # check-digit CUSIPs and choose another identifier for merging): the record is mastered by its ISIN,
+        # SEDOL or LoanX, and set aside with `invalid_cusip_checksum` only when it states none.
+        set_aside_invalid: [cusip]
         # The CUSIP or the ISIN, each checked as an identifier below, so a bad
         # check digit is still held back with its own reason.
         record_key:

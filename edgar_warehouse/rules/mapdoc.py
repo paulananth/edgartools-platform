@@ -59,6 +59,7 @@ QUALITY_WORDS = {
     "in_set@1": "The value is one of: {values}",
     "pattern@1": "The value matches {regex}",
     "lei_check_digit@1": "The LEI check digits pass",
+    "identifier_check_digit@1": "The {identifier} check digit passes",
     "placeholder@1": "The value is not a placeholder: {values}",
     "registered_agent_address@1": "The address is not a registered agent's: {markers}",
     "in_reference@1": "The value is in the reference table {table}",

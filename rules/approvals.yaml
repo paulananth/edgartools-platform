@@ -68,11 +68,11 @@ approvals:
   finalized: PR 1481
 - kind: source
   name: sec.nport.security
-  digest: 0b3c8373d3d06a5206f1f4832fec57a7dab64ad0ed15cb0df70735a5ef1a623d
+  digest: d09caace08134369cef519ce77da25caf8cc60178adbcb53ec03ce6790856bfe
   by: Operator
   words: Approved the rules always
-  at: '2026-11-06'
-  finalized: PR 1483
+  at: '2026-11-10'
+  finalized: PR 1603
 - kind: source
   name: sec.ownership
   digest: 441321c73697c2adf30ab3ed29770311d66efe8ee27959f50c99390b05595627
