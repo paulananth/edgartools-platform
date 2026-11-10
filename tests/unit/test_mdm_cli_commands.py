@@ -19,6 +19,7 @@ NAME_COUNT = ["--capture", "c", "--population", "p", "--gleif-reading", "a",
     (["mdm", "steward", "split", "--merge", "m", "--by", "Sam", "--reason", "wrong", "--policy-digest", "d"], "steward_split"),
     (["mdm", "steward", "resolve", "--subject", "s", "--result", "merge", "--by", "Sam", "--reason", "same",
       "--policy-digest", "d"], "steward_resolve"),
+    (["mdm", "clear-source", "--source", "openfigi.security.v4"], "clear_source"),
 ])
 def test_each_command_runs_its_function(monkeypatch, argv, function):
     called = []
@@ -53,6 +54,14 @@ def test_a_resolution_previews_unless_confirmed_and_needs_a_result_who_and_why()
             parser.parse_args(argv)
     with pytest.raises(SystemExit):
         parser.parse_args([*resolve[:resolve.index("--result") + 1], "drop", *resolve[resolve.index("--result") + 2:]])
+
+
+def test_clearing_a_source_previews_unless_confirmed_and_needs_the_source():
+    parser = build_parser()
+    clear = ["mdm", "clear-source", "--source", "x.v1"]
+    assert parser.parse_args(clear).confirm is False and parser.parse_args([*clear, "--confirm"]).confirm is True
+    with pytest.raises(SystemExit):
+        parser.parse_args(["mdm", "clear-source"])
 
 
 def test_retired_commands_stay_unavailable():

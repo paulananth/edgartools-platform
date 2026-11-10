@@ -93,6 +93,26 @@ def steward_resolve(args) -> int:
     return 0
 
 
+def clear_source(args) -> int:
+    """Restart one source from empty (the `data-operations` skill): previews unless `--confirm`."""
+    from edgar_warehouse.mastering import clear
+    from edgar_warehouse.mastering.store import open_store
+
+    # The owner login: the runtime role may not delete decisions, which are the record of what was decided.
+    engine = engine_from_env("MDM_MIGRATION_DATABASE_URL", restricted=False)
+    db = open_store(engine)
+    try:
+        report = clear.clear(db, args.source, confirm=args.confirm)
+    except ValueError as refused:
+        print(f"Clearing stopped: {refused}", file=sys.stderr)
+        return 1
+    finally:
+        db.close()
+        engine.dispose()
+    print(json.dumps(report, sort_keys=True))
+    return 0
+
+
 def _print_mdm_report(read) -> int:
     """Run one read on the MDM database as the application role and print it."""
     mdm = engine_from_env("MDM_DATABASE_URL")
