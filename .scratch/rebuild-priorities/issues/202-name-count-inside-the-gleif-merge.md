@@ -2,7 +2,7 @@
 
 Priority: 202. Map: [Rebuild priorities](../map.md). Opened 2026-11-09 11:25 ET (operator: "This should be part of the mastering process not a separate job functionality required but it is part of GLEIF load only").
 
-Type: task. Status: open. Blocked by: none.
+Type: task. Status: parked as clean-up (2026-11-10 13:18 ET; operator: "Park This ticket as clean-up"). Labels: clean-up. Blocked by: none.
 
 ## Question
 
@@ -84,4 +84,13 @@ Measured, read-only: the term sits in 70 files, about 24,800 lines of them: the 
 - [ ] Step A, build the waterfall pass: `waterfall.py` computes the pairs from the SEC Companies in the store and the GLEIF publication (the whole publication, once), and writes its answer as the name keys the merge already reads. Proof: on the same data it gives the same pairs as the old file (counts only, on the shared store), through the engine, in both orders, with a second pass changing nothing.
 - [ ] Step B, the GLEIF merge reads the waterfall pass instead of the file the SEC records carried; the rule steps and primitives take the waterfall names; new rule versions, the approval line, Mapping Documents and pins.
 - [ ] Step C, delete: the `name_count` step and run file of `sec.company` (a SEC load no longer waits for a file), the `name-count-*` pipelines, `mdm name-count`, `name_count.py`, `name_count_file.py`, `cascade.py` (its passes live in `waterfall.py`), the Rust pairs reader if nothing else uses it, the tests of the retired code, and every word in skills, docs and scripts; the architecture test fails on `name count`, `name_count`, `name-count` and `cascade` in tracked code, rules, skills and docs.
+
+## Parked as clean-up (2026-11-10 13:18 ET)
+
+Operator: "Park This ticket as clean-up". Nothing here is on the path to the go-live, so the work stops and nothing is lost:
+
+- **What keeps working:** the Name Count and the file it writes stay as they are. A SEC company load still needs that file (ticket 201), and the GLEIF name rules still read the answer the SEC records carry. No part of this ticket is started: no code, no branch.
+- **What is kept:** the replay result (the golden-record search reproduces 1,208 of 6,251 GLEIF attachments, with no disagreement, so it cannot replace the passes), Way 1 and the words **waterfall matching** (`CONTEXT.md`, which no longer names a Name Count or a cascade), the measured size of the removal and its three steps (A, B, C above), and the parts under "Remove \"Name Count\" completely".
+- **What waits with it:** the part of ticket 204 that proves a name binds only on exactly one golden record (it is built here), and the removal of the words from the skills, docs and code.
+- **To take it up again:** start at step A, with the proof that the waterfall pass gives the same pairs as the old file.
 
