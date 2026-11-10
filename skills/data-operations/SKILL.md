@@ -357,7 +357,7 @@ changed what its records join) is cleared and loaded again. Never delete rows by
    `load` with a **new** `--capture-run`. Runs left open before are finished or left as they are (see "When it
    stops"); their documents load again. Silver, Bookkeeping and the Change Journal need no clearing: a changed
    dataset code or rules version is a new processing identity.
-4. **Reconcile** (`mdm reconcile --source <code>`) before the next source.
+4. **Check the load's own report** (`Done: N documents loaded`) and `mdm counts` before the next source.
 
 ### Fit the load into the window
 

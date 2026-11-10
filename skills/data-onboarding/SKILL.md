@@ -747,12 +747,6 @@ capture is enough for a source whose rules are already proved on real files
      checked by its worker's verifier, then `records`). The test keeps only
      what is its own: the files, each artifact's context and lookups, and the
      preparation keys. Never copy the chain into a test.
-   - **Reconcile the source's records before approval** (operator, 2026-11-09: the per-source accounting is part of
-     source onboarding). After the real-file run, `edgar-warehouse mdm reconcile --source <dataset code>` (read-only,
-     with the stores' `verifier.env`) must close: the records delivered and not already held equal the records stored;
-     each stored record has a golden record, or an open review that says why it waits; each set-aside record has its
-     reason. It exits 1 and names the source and the numbers that do not close. A difference is a defect to fix, never
-     a note, and `delivery_not_recorded` (a store merged before deliveries were tracked) is not closed.
    - **Prove each relationship the source states.** On invented records through the real merge, a record that mentions a
      party with no golden record makes only its own golden record and no link; when the mentioned party's own record is
      mastered, the link resolves and both keep their own entity types. A relationship never creates a golden record.

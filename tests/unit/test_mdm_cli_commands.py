@@ -66,7 +66,7 @@ def test_clearing_a_source_previews_unless_confirmed_and_needs_the_source():
 
 def test_retired_commands_stay_unavailable():
     parser = build_parser()
-    for retired in ("mastering", "apply-decisions", "bronze-receipts", "correction-batch", "export", "force-publish"):
+    for retired in ("mastering", "apply-decisions", "bronze-receipts", "correction-batch", "export", "force-publish", "reconcile"):
         with pytest.raises(SystemExit):
             parser.parse_args(["mdm", retired])
     with pytest.raises(SystemExit):
