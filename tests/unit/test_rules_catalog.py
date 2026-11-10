@@ -109,7 +109,7 @@ class _Server:
         self.term_bodies, self.product_bodies, self.patches, self.draft = [], [], [], set()
         self.table_delete_params = []
         self.profiles, self.tags, self.certified, self.results = {}, {}, None, {}
-        self.pipelines, self.pipeline_lineage = {}, {}
+        self.pipelines, self.pipeline_lineage, self.pipeline_inbound = {}, {}, {}
         self.pipeline_services = {}
         self.pipeline_service_delete_params = []
 
@@ -128,11 +128,32 @@ class _Server:
                         for edge in [key for key in self.pipeline_lineage if key[0] == name]:
                             self.pipeline_lineage.pop(edge, None)
             return {}
-        if method == "DELETE" and path.startswith("/lineage/pipeline/"):
-            _, _, _, pipeline_id, _, table_id = path.split("/")
-            pipeline = next((name for name, entity in self.pipelines.items()
-                             if entity["id"] == pipeline_id), None)
+        if method == "DELETE" and path.startswith("/lineage/table/") and "/pipeline/" in path:
+            _, _, _, table_id, _, pipeline_id = path.split("/")
+            pipeline = next((name for name, entity in self.pipelines.items() if entity["id"] == pipeline_id), None)
             table = next((name for name, found_id in self.ids.items() if found_id == table_id), None)
+            self.pipeline_inbound.pop((pipeline, table), None)
+        if method == "PUT" and path == "/lineage" and body["edge"]["toEntity"]["type"] == "pipeline":
+            by_id = {entity["id"]: name for name, entity in self.pipelines.items()}
+            pipeline = by_id[body["edge"]["toEntity"]["id"]]
+            if body["edge"]["fromEntity"]["type"] == "pipeline":
+                before = by_id[body["edge"]["fromEntity"]["id"]]
+                self.pipeline_lineage[(before, pipeline)] = body["edge"]["lineageDetails"]
+                self.pipeline_inbound[(pipeline, before)] = body["edge"]["lineageDetails"]
+                return {}
+            table = next(name for name, found_id in self.ids.items() if found_id == body["edge"]["fromEntity"]["id"])
+            self.pipeline_inbound[(pipeline, table)] = body["edge"]["lineageDetails"]
+            return {}
+        if method == "DELETE" and path.startswith("/lineage/pipeline/"):
+            _, _, _, pipeline_id, kind, other_id = path.split("/")
+            by_id = {entity["id"]: name for name, entity in self.pipelines.items()}
+            pipeline = by_id.get(pipeline_id)
+            if kind == "pipeline":
+                after = by_id.get(other_id)
+                self.pipeline_lineage.pop((pipeline, after), None)
+                self.pipeline_inbound.pop((after, pipeline), None)
+                return {}
+            table = next((name for name, found_id in self.ids.items() if found_id == other_id), None)
             if pipeline and table:
                 self.pipeline_lineage.pop((pipeline, table), None)
         if method == "DELETE" and path.startswith("/tables/"):
@@ -221,16 +242,28 @@ class _Server:
             entity = self.pipelines.get(pipeline)
             if entity is None:
                 return {"entity": {}, "nodes": [], "upstreamEdges": [], "downstreamEdges": []}
-            edges, nodes = [], []
-            for (name, table), details in self.pipeline_lineage.items():
-                table_id = self.ids.get(table)
-                if name == pipeline and table_id:
-                    nodes.append({"id": table_id, "type": "table", "fullyQualifiedName": table})
-                    edges.append({"fromEntity": entity["id"], "toEntity": table_id,
+            edges, nodes, inbound = [], [], []
+
+            def node(name):
+                found = self.ids.get(name) or (self.pipelines[name]["id"] if name in self.pipelines else None)
+                return found, "pipeline" if name in self.pipelines else "table"
+
+            for (name, other), details in self.pipeline_lineage.items():
+                other_id, kind = node(other)
+                if name == pipeline and other_id:
+                    nodes.append({"id": other_id, "type": kind, "fullyQualifiedName": other})
+                    edges.append({"fromEntity": entity["id"], "toEntity": other_id,
                                   "lineageDetails": {"description": details.get("description"),
                                                      "source": details.get("source")}})
+            for (name, other), details in self.pipeline_inbound.items():
+                other_id, kind = node(other)
+                if name == pipeline and other_id:
+                    nodes.append({"id": other_id, "type": kind, "fullyQualifiedName": other})
+                    inbound.append({"fromEntity": other_id, "toEntity": entity["id"],
+                                    "lineageDetails": {"description": details.get("description"),
+                                                       "source": details.get("source")}})
             return {"entity": {"id": entity["id"], "type": "pipeline", "fullyQualifiedName": pipeline},
-                    "nodes": nodes, "upstreamEdges": [], "downstreamEdges": edges}
+                    "nodes": nodes, "upstreamEdges": inbound, "downstreamEdges": edges}
         if method == "PUT" and path == "/tables":
             name = f"{body['databaseSchema']}.{catalog.quote(body['name'])}"
             self.ids.setdefault(name, f"id-{len(self.ids)}")
@@ -282,9 +315,9 @@ def test_the_plan_names_domains_glossaries_and_store_certification():
         "company_fact", "company_line_item"}
     assert all(f".{catalog.SOURCES}." in name for name in products["company_master"]["inputs"])
     assert all(f".{catalog.SOURCES}." in name for name in products["security_master"]["inputs"])
-    gleif = [edge for edge in plan["service_lineage"] if edge["pipeline"].endswith("source:gleif:mastering")]
-    assert any("sources.gleif" in edge["table"] for edge in gleif)
-    assert any("mdm." in edge["table"] for edge in gleif)
+    gleif = [edge for edge in plan["service_lineage"] if "source:gleif:mastering:" in edge["pipeline"]]
+    assert any("sources.gleif" in edge.get("table", "") for edge in gleif)
+    assert any("mdm." in edge.get("table", "") for edge in gleif)
     cases = {case["name"]: case for case in plan["quality_cases"]}
     assert "sec.company.v1.name_present" in cases
     assert cases["sec.company.v1.dc_state_is_empty"]["description"].startswith("Correction")
@@ -334,6 +367,8 @@ def test_pipeline_display_names_are_distinct_and_omit_the_shared_prefix():
 def test_bookkeeping_steps_are_embedded_as_target_pipeline_tasks():
     plan = catalog.plan()
     for pipeline in plan["pipelines"]:
+        if catalog._is_step(pipeline):
+            continue
         scope, _, target = pipeline["name"].split(":", 2)
         path = files.ROOT / pipeline["pipelineLocation"]
         body = files.load_source(path) if scope == "source" else files.load(path)
@@ -341,11 +376,28 @@ def test_bookkeeping_steps_are_embedded_as_target_pipeline_tasks():
         assert [task["name"] for task in pipeline["tasks"]] == [step["name"] for step in steps]
 
 
+def test_a_step_pipeline_carries_its_own_step_as_its_task():
+    plan = catalog.plan()
+    steps = [pipeline for pipeline in plan["pipelines"] if catalog._is_step(pipeline)]
+    assert steps
+    for pipeline in steps:
+        scope, owner, target, step = pipeline["name"].split(":")
+        path = files.ROOT / pipeline["pipelineLocation"]
+        body = files.load_source(path) if scope == "source" else files.load(path)
+        declared = (body.get("bookkeeping") or {}).get("targets", {}).get(target, {}).get("steps", [])
+        operation = next(item["operation"] for item in declared if item["name"] == step)
+        assert [task["name"] for task in pipeline["tasks"]] == [step]
+        assert pipeline["tasks"][0]["taskType"] == operation
+
+
 def test_target_pipeline_lineage_includes_configured_silver_and_master_outputs():
     plan = catalog.plan()
     edges = defaultdict(set)
+    steps_of = {catalog.fqn(p["service"], p["name"]): catalog.fqn(p["service"], p["name"].rsplit(":", 1)[0])
+                for p in plan["pipelines"] if catalog._is_step(p)}
     for edge in plan["service_lineage"]:
-        edges[edge["pipeline"]].add(edge["table"])
+        if "table" in edge:
+            edges[steps_of[edge["pipeline"]]].add(edge["table"])
     tables = set(_tables(plan))
     master_prefix = catalog.fqn(catalog.SERVICE, catalog.MDM, catalog.MASTER_RECORDS) + "."
     source_pipelines = set()
@@ -353,14 +405,15 @@ def test_target_pipeline_lineage_includes_configured_silver_and_master_outputs()
 
     for pipeline in plan["pipelines"]:
         scope, folder, target_name = pipeline["name"].split(":", 2)
-        if scope != "source":
+        if scope != "source" or catalog._is_step(pipeline):
             continue
         path = files.ROOT / pipeline["pipelineLocation"]
         body = files.load_source(path)
         source = body.get("source") or folder
         target = (body.get("bookkeeping") or {}).get("targets", {}).get(target_name, {})
         pipeline_fqn = catalog.fqn(pipeline["service"], pipeline["name"])
-        source_pipelines.add(pipeline_fqn)
+        if catalog._steward_steps(target):
+            source_pipelines.add(pipeline_fqn)
         steps = target.get("steps") or []
         for step in steps:
             keys = (step.get("input") or {}).get("keys") or {}
@@ -382,8 +435,84 @@ def test_target_pipeline_lineage_includes_configured_silver_and_master_outputs()
                 assert output in edges[pipeline_fqn], (
                     "rule-derived master output is missing from its target Pipeline lineage")
     assert linked_silver and linked_master
-    assert source_pipelines <= set(edges)
+    assert source_pipelines and source_pipelines <= set(edges)
 
+
+def _target_graph(plan: dict, source: str, target: str) -> dict[str, set]:
+    """What one target's steps read, publish and hand on, without the service prefix: sets of
+    (step, table) for `reads` and `writes`, and (step, step) for `next`."""
+    steps = {catalog.fqn(p["service"], p["name"]): p["name"].rsplit(":", 1)[-1]
+             for p in plan["pipelines"] if p["name"].startswith(f"source:{source}:{target}:")}
+    cut = len(catalog.SERVICE) + 1
+    found = {"reads": set(), "writes": set(), "next": set()}
+    for edge in plan["service_lineage"]:
+        if edge["pipeline"] not in steps:
+            continue
+        if "next" in edge:
+            found["next"].add((steps[edge["pipeline"]], steps[edge["next"]]))
+        else:
+            found["reads" if edge.get("inbound") else "writes"].add((steps[edge["pipeline"]], edge["table"][cut:]))
+    return found
+
+
+def test_company_mastering_graph_is_steps_with_their_feeds_reference_control_and_outputs():
+    plan = catalog.plan()
+    graph = _target_graph(plan, "sec.company", "mastering")
+    submissions, ticker = 'sources."sec.company".submissions', 'sources."sec.company".company_tickers_exchange'
+    dataset = 'sources."sec.company"."sec.company.v1"'
+    assert graph["reads"] == {("combine", submissions), ("combine", ticker), ("name_count", submissions),
+                              ("name_count", 'sources."sec.company".name_count'), ("merge", dataset)}
+    assert graph["writes"] == {("records", dataset), ("merge", "mdm.master_records.company"),
+                               ("merge", "journal.change_journal.processed_files")}
+    assert graph["next"] == {("name_count", "combine"), ("combine", "records")}
+    built = {edge["from"][len(catalog.SERVICE) + 1:] for edge in plan["lineage"]
+             if edge["to"] == catalog.fqn(catalog.SERVICE, catalog.SOURCES, "sec.company", "name_count")}
+    assert built == {'sources.gleif.golden_copy', 'sources."sec.company".submissions'}
+
+
+def test_plumbing_steps_and_the_target_pipeline_itself_carry_no_lineage():
+    plan = catalog.plan()
+    targets = {catalog.fqn(p["service"], p["name"]) for p in plan["pipelines"] if not catalog._is_step(p)}
+    on_graph = {edge["pipeline"] for edge in plan["service_lineage"]}
+    assert on_graph and not on_graph & targets
+    steps = {p["name"].rsplit(":", 1)[-1] for p in plan["pipelines"] if catalog._is_step(p)}
+    assert not {"keys", "main", "catalog", "processed"} & steps
+    assert {"capture", "name_count", "combine", "records", "merge"} <= steps
+
+
+def test_a_target_that_only_merges_publishes_its_master_and_reads_nothing():
+    graph = _target_graph(catalog.plan(), "sec.company", "merge-batch")
+    assert graph == {"reads": set(), "writes": {("merge", "mdm.master_records.company")}, "next": set()}
+
+
+def test_a_capture_target_reads_its_feed_and_publishes_nothing():
+    graph = _target_graph(catalog.plan(), "sec.company", "capture")
+    assert graph == {"reads": {("capture", 'sources."sec.company".submissions')}, "writes": set(), "next": set()}
+
+
+def test_a_feed_is_read_by_the_first_step_that_can_fail_after_the_read():
+    graph = _target_graph(catalog.plan(), "gleif", "mastering")
+    assert ("prepare", "sources.gleif.golden_copy") in graph["reads"]
+
+
+def test_a_target_whose_steps_are_all_plumbing_has_no_graph():
+    assert _target_graph(catalog.plan(), "gleif", "subfund-pairs") == {"reads": set(), "writes": set(), "next": set()}
+
+
+def test_publish_writes_inbound_and_step_edges_and_removes_a_stale_one():
+    plan = catalog.plan()
+    server = _Server(plan)
+    name = next(edge["pipeline"] for edge in plan["service_lineage"] if edge.get("inbound"))
+    unread = catalog.fqn(catalog.SERVICE, catalog.MDM, catalog.MASTER_RECORDS, "company")
+    catalog.publish(plan, server)
+    expected = {(edge["pipeline"], edge["table"]) for edge in plan["service_lineage"] if edge.get("inbound")}
+    assert {key for key in server.pipeline_inbound if key[1] in _tables(plan)} == expected
+    chained = {(edge["pipeline"], edge["next"]) for edge in plan["service_lineage"] if "next" in edge}
+    assert chained and chained <= set(server.pipeline_lineage)
+    server.pipeline_inbound[(name, unread)] = {"description": "old", "source": "PipelineLineage"}
+    report = catalog.publish(plan, server)
+    assert {key for key in server.pipeline_inbound if key[1] in _tables(plan)} == expected
+    assert report["removed"]["pipeline_lineage"] == 1
 
 
 def test_catalog_check_reports_missing_pipeline_table_lineage():
@@ -703,7 +832,8 @@ def test_publish_deletes_only_what_the_rules_no_longer_name():
     assert server.table_delete_params == [{"hardDelete": "true", "recursive": "true"}]
     assert result["removed"] == {"tables": 1, "schemas": 1, "databases": 0, "lineage": 1,
                                  "pipeline_lineage": 0, "pipelines": 0, "pipeline_services": 0}
-    assert sum(1 for method, path in server.calls if (method, path) == ("PUT", "/lineage")) == len(plan["lineage"])
+    inbound = sum(1 for edge in plan["service_lineage"] if edge.get("inbound") or "next" in edge)
+    assert sum(1 for method, path in server.calls if (method, path) == ("PUT", "/lineage")) == len(plan["lineage"]) + inbound
     posts = [path for method, path in server.calls if method == "POST" and path.endswith("/relations")]
     assert any(path.startswith("/glossaryTerms/Company Identity/") for path in posts)
     assert len(posts) == len(plan["glossary_relations"])
@@ -712,8 +842,8 @@ def test_publish_deletes_only_what_the_rules_no_longer_name():
 
 def test_publish_removes_stale_owned_pipeline_to_table_edges():
     plan = catalog.plan()
-    expected = {(edge["pipeline"], edge["table"]) for edge in plan["service_lineage"]}
-    pipeline = sorted({edge["pipeline"] for edge in plan["service_lineage"]})[0]
+    expected = {(edge["pipeline"], edge["table"]) for edge in plan["service_lineage"] if "table" in edge}
+    pipeline = sorted({edge["pipeline"] for edge in plan["service_lineage"] if "table" in edge})[0]
     table = next(name for name in _tables(plan) if (pipeline, name) not in expected)
     server = _Server(plan)
     server.pipeline_lineage[(pipeline, table)] = {"description": "Stale link", "source": "PipelineLineage"}
@@ -782,12 +912,12 @@ def test_an_approved_profile_puts_silver_fields_quality_rules_and_code_sets_in_t
 def test_without_a_profile_or_a_silver_spec_the_catalog_has_no_silver_or_rdm_database(tmp_path):
     root = tmp_path / "rules"
     shutil.copytree(files.ROOT, root, ignore=shutil.ignore_patterns("profile.yaml", "silver-*.yaml"))
-    assert {d["name"] for d in catalog.plan(root)["databases"]} == {"sources", "mdm"}
+    assert {d["name"] for d in catalog.plan(root)["databases"]} == {"sources", "mdm", "journal"}
 
 
 def test_an_approved_profile_in_the_repo_adds_silver_and_rdm():
     # OpenFIGI's approved findings (ticket 80) are the first profile committed.
-    assert {d["name"] for d in catalog.plan()["databases"]} == {"sources", "mdm", "silver", "rdm"}
+    assert {d["name"] for d in catalog.plan()["databases"]} == {"sources", "mdm", "silver", "rdm", "journal"}
 
 
 def test_a_registered_silver_table_shows_as_it_lands(tmp_path):

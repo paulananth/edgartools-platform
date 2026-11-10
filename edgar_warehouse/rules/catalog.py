@@ -57,6 +57,7 @@ SERVICE = "edgartools-rules"
 PIPELINES_SERVICE = SERVICE + "-pipelines"
 SOURCES, MDM, MASTER_RECORDS = "sources", "mdm", "master_records"
 SILVER, RDM, CODE_SETS = "silver", "rdm", "code_sets"
+JOURNAL, JOURNAL_SCHEMA, JOURNAL_TABLE = "journal", "change_journal", "processed_files"
 TEXT = "STRING"  # the catalog shows what a value means, not a database type
 # One relationship endpoint the rules name differently from its catalog domain.
 ENDPOINT_CATALOG_NAME = {"venue": "market_venue"}
@@ -389,6 +390,49 @@ def _pipeline_services(pipelines: list[dict], root: Path) -> list[dict]:
             for name, pipeline in sorted(by_name.items())]
 
 
+# What a step does, for the steps a steward can see fail. Any other step is plumbing and is not drawn.
+STEWARD_STEPS = {
+    "artifact.copy": "copies the captured files",
+    "provider.capture": "captures the provider's files",
+    "source.combine": "combines what the earlier steps read",
+    "mdm.prepare": "prepares the records and holds back any that fail a configured data quality check",
+    "mastering.merge": "merges the prepared records into the master",
+    "silver.land": "lands the records in Silver and runs that table's data quality checks",
+    "silver.derive": "derives a Silver table from landed records",
+}
+RUN_FILE_READ = "reads the pinned run file the target relies on"
+
+
+def _steward_steps(target: dict) -> list[dict]:
+    """The steps of a target a steward can see fail: capture, combine, prepare,
+    merge, land and derive, and the step that reads a pinned run file."""
+    run_files = (target.get("run") or {}).get("files") or []
+    return [step for step in target.get("steps") or []
+            if step["operation"] in STEWARD_STEPS
+            or (step["operation"] == "source.read" and (step.get("input") or {}).get("runfile") in run_files)]
+
+
+def _is_step(pipeline: dict) -> bool:
+    """A step pipeline is named `scope:owner:target:step`; a target pipeline has three parts."""
+    return pipeline["name"].count(":") == 3
+
+
+def _step_pipelines(pipeline: dict, target: dict) -> list[dict]:
+    """One Pipeline per step a steward can see fail, each carrying that step as its task."""
+    return [{"name": f"{pipeline['name']}:{step['name']}",
+             "displayName": f"{_visible_name(step['name'])}: {pipeline['displayName']}",
+             "service": pipeline["service"],
+             "description": f"Step `{step['name']}` of {pipeline['displayName']}: "
+                            f"{STEWARD_STEPS.get(step['operation'], RUN_FILE_READ)}. "
+                            f"Declared checks: {step.get('checks') or []}. Definition only.",
+             "pipelineLocation": pipeline["pipelineLocation"],
+             "tasks": [{"name": step["name"], "taskType": step["operation"],
+                        "description": f"Step `{step['name']}` of {pipeline['displayName']}. "
+                                       f"Declared checks: {step.get('checks') or []}.",
+                        "downstreamTasks": []}]}
+            for step in _steward_steps(target)]
+
+
 def _pipelines(root: Path) -> list[dict]:
     """Native catalog pipelines for every declared source and standalone target."""
     owners = {}
@@ -437,66 +481,189 @@ def _pipelines(root: Path) -> list[dict]:
                                            f"Run checks: {target.get('checks') or []}.",
                             "pipelineLocation": path.relative_to(root).as_posix(), "tasks": tasks}
                 result.append(pipeline)
+                if scope == "source":
+                    result += _step_pipelines(pipeline, target)
     return result
 
 
-def _service_lineage(pipelines: list[dict], tables: list[dict], table_lineage: list[dict],
-                     root: Path) -> list[dict]:
-    """Connect each source target to its source assets and configured outputs."""
-    by_source: dict[str, list[str]] = defaultdict(list)
+def _literal(pattern: str) -> str:
+    """The longest path segment of a file pattern that has no wildcard."""
+    return max((part for part in pattern.split("/") if part and not set(part) & set("*?[")), key=len, default="")
+
+
+def _read_feeds(source: str, body: dict, steps: list[dict], families: dict[str, list[tuple[str, str]]]) -> list[tuple[str, str]]:
+    """The (source, feed) pairs a target reads. A source with feeds of its own
+    reads the one a step's file pattern names, or its only feed; a source with
+    none reads the feeds that capture its bronze family."""
+    if not any(step["operation"] in ("source.read", "artifact.copy", "provider.capture") for step in steps):
+        return []
+    own = _feeds(body)
+    if not own:
+        return families.get((body.get("bronze") or {}).get("family"), [])
+    named = {_literal(step["input"]["files"]) for step in steps
+             if isinstance((step.get("input") or {}).get("files"), str)}
+    chosen = [(source, name) for name, spec in own if spec.get("family") in named]
+    return chosen or ([(source, own[0][0])] if len(own) == 1 else [])
+
+
+def _file_table(source: str, name: str, text: str) -> dict:
+    return {"name": name, "databaseSchema": fqn(SERVICE, SOURCES, source), "description": text,
+            "columns": [{"name": "record", "dataType": TEXT, "description": "One entry of the file."}]}
+
+
+def _control_feeds(root: Path, folder: str, source: str, contract: str, read: list[tuple[str, str]],
+                   bodies: dict[str, dict]) -> list[tuple[str, str]]:
+    """The feeds a run file is built from: each key its contract requires that
+    names a source gives that source's feeds, and a key that starts this
+    source's own name gives the feeds this target reads."""
+    path = root / "sources" / folder / contract
+    required = ((files.load(path).get("read") or {}).get("require") or []) if path.is_file() else []
+    built = []
+    for key in required:
+        other = next((name for name, body in bodies.items() if key in (name, body.get("source"))), None)
+        if other is not None and other != folder:
+            built += [(bodies[other].get("source") or other, feed) for feed, _ in _feeds(bodies[other])]
+        elif source.startswith(key + "."):
+            built += read
+    return sorted(set(built))
+
+
+def _ancestors(steps: list[dict]) -> dict[str, set[str]]:
+    """Each step's earlier steps, through `requires`, however far back."""
+    by_name = {step["name"]: step for step in steps}
+    found: dict[str, set[str]] = {}
+
+    def up(name: str) -> set[str]:
+        if name not in found:
+            found[name] = set()
+            for earlier in by_name[name].get("requires") or []:
+                found[name] |= {earlier} | up(earlier)
+        return found[name]
+    return {name: up(name) for name in by_name}
+
+
+def _governed(pipelines: list[dict], tables: list[dict], table_lineage: list[dict], root: Path,
+              families: dict[str, list[tuple[str, str]]]) -> tuple[list[dict], list[dict], list[dict]]:
+    """The path a steward follows for each source target: the feeds and
+    reference files it reads, the run file it relies on and what builds it,
+    then the steps that can fail, and the tables they publish. Returns the
+    reference, run-file and journal tables, their lineage, and the edges of
+    the step pipelines: an inbound edge ends on the step, a `next` edge joins
+    two steps."""
     table_names = {_table_name(table) for table in tables}
-    for table in tables:
-        schema = table["databaseSchema"]
-        if ".sources." not in schema:
-            continue
-        source = schema.split(".sources.", 1)[1].strip('"')
-        by_source[source].append(_table_name(table))
     lineage_by_dataset: dict[str, set[str]] = defaultdict(set)
     for edge in table_lineage:
         if edge["to"].startswith(fqn(SERVICE, MDM) + "."):
             lineage_by_dataset[edge["from"]].add(edge["to"])
-    edges = []
+    bodies = {path.parent.name: files.load_source(path) for path in sorted((root / "sources").glob("*/source.yaml"))}
+    all_families = set(families)
+    journal = fqn(SERVICE, JOURNAL, JOURNAL_SCHEMA, JOURNAL_TABLE)
+    new_tables, new_lineage, edges, journaled = [], [], [], False
     for pipeline in pipelines:
         scope, _, rest = pipeline["name"].partition(":")
-        source_folder, _, target_name = rest.partition(":")
-        if scope != "source":
+        folder, _, target_name = rest.partition(":")
+        if scope != "source" or _is_step(pipeline):
             continue
-        path = root / pipeline["pipelineLocation"]
-        body = files.load_source(path)
-        source = body.get("source") or source_folder
+        body = bodies[folder]
+        source = body.get("source") or folder
         target = (body.get("bookkeeping") or {}).get("targets", {}).get(target_name, {})
         steps = target.get("steps") or []
-        edge_descriptions = {
-            table: f"The {pipeline.get('displayName') or target_name} pipeline of {source} uses this source dataset."
-            for table in by_source.get(source, [])
-        }
-        datasets = {
-            fqn(SERVICE, SOURCES, source, keys["dataset"])
-            for step in steps if step["operation"] == "mdm.prepare"
-            if (keys := (step.get("input") or {}).get("keys") or {}).get("dataset")
-        }
-        if any(step["operation"] == "mastering.merge" for step in steps):
-            for dataset in datasets:
-                for table in lineage_by_dataset.get(dataset, set()):
-                    if table in table_names:
-                        edge_descriptions[table] = (
-                            f"The {pipeline.get('displayName') or target_name} pipeline of {source} "
-                            "publishes this mastered table.")
+        names = [step["name"] for step in _steward_steps(target)]
+        if not names:
+            continue
+        ancestors = _ancestors(steps)
+        label = pipeline.get("displayName") or target_name
+
+        def at(step: str) -> str:
+            return fqn(pipeline["service"], f"{pipeline['name']}:{step}")
+
+        def first(step: str) -> list[str]:
+            """The steps a steward sees first after this one."""
+            reaching = [name for name in names if step == name or step in ancestors[name]]
+            return [name for name in reaching if not any(other != name and other in ancestors[name] for other in reaching)]
+        inbound: dict[tuple[str, str], str] = {}
+        outbound: dict[tuple[str, str], str] = {}
+        read: list[tuple[str, str]] = []
         for step in steps:
-            if step["operation"] not in ("silver.land", "silver.derive"):
+            operation, spec = step["operation"], step.get("input") or {}
+            if operation not in ("source.read", "artifact.copy", "provider.capture") or spec.get("runfile"):
                 continue
+            pattern = spec.get("files")
+            name = _literal(pattern) if isinstance(pattern, str) else ""
+            if name and name not in all_families:
+                table = fqn(SERVICE, SOURCES, source, name)
+                if table not in table_names:
+                    new_tables.append(_file_table(source, name, f"Reference file `{name}`: files `{source}` reads "
+                                                  "that no feed captures. Its steps name it, not a feed."))
+                    table_names.add(table)
+                for seen in first(step["name"]):
+                    inbound[(seen, table)] = f"Step `{seen}` of {label} reads reference file `{name}`."
+                continue
+            feeds = _read_feeds(source, body, [step], families)
+            read += feeds
+            for owner, feed in feeds:
+                for seen in first(step["name"]):
+                    inbound[(seen, fqn(SERVICE, SOURCES, owner, feed))] = f"Step `{seen}` of {label} reads feed `{feed}`."
+        run_files = (target.get("run") or {}).get("files") or []
+        for step in steps:
+            name = (step.get("input") or {}).get("runfile")
+            if name not in run_files:
+                continue
+            table = fqn(SERVICE, SOURCES, source, name)
+            built = _control_feeds(root, folder, source, str(step["input"].get("contract")), sorted(set(read)), bodies)
+            if table not in table_names:
+                new_tables.append(_file_table(source, name, f"Run file `{name}`: a pinned file a step of `{source}` "
+                                              "reads, built from " + (", ".join(f"`{feed}`" for _, feed in built)
+                                                                        or "no declared feed") + "."))
+                table_names.add(table)
+                new_lineage += [{"from": fqn(SERVICE, SOURCES, owner, feed), "to": table, "columns": [],
+                                 "description": f"Run file `{name}` is built from feed `{feed}`."}
+                                for owner, feed in built]
+            for seen in first(step["name"]):
+                inbound[(seen, table)] = f"Step `{seen}` of {label} reads run file `{name}`."
+        prepared = {step["name"]: fqn(SERVICE, SOURCES, source, keys["dataset"])
+                    for step in steps if step["operation"] == "mdm.prepare"
+                    if (keys := (step.get("input") or {}).get("keys") or {}).get("dataset")}
+        for step, dataset in prepared.items():
+            if dataset in table_names and step in names:
+                outbound[(step, dataset)] = f"Step `{step}` of {label} prepares this dataset."
+        for step in steps:
+            if step["operation"] != "mastering.merge" or step["name"] not in names:
+                continue
+            earlier = {dataset for prep, dataset in prepared.items() if prep in ancestors[step["name"]]}
+            for dataset in earlier & table_names:
+                inbound[(step["name"], dataset)] = f"Step `{step['name']}` of {label} merges this dataset."
+            for dataset in earlier or {fqn(SERVICE, SOURCES, source, code) for code in body.get("dataset_contracts") or {}}:
+                for table in lineage_by_dataset.get(dataset, set()) & table_names:
+                    outbound[(step["name"], table)] = f"Step `{step['name']}` of {label} publishes this mastered table."
+        for step in steps:
             silver_table = ((step.get("input") or {}).get("keys") or {}).get("silver")
-            if not silver_table:
-                continue
-            table = fqn(SERVICE, SILVER, source_folder, silver_table)
-            if table in table_names:
-                edge_descriptions[table] = (
-                    f"The {pipeline.get('displayName') or target_name} pipeline of {source} "
-                    "writes this Silver table.")
-        pipeline_fqn = fqn(pipeline["service"], pipeline["name"])
-        edges.extend({"pipeline": pipeline_fqn, "table": table, "description": description}
-                     for table, description in sorted(edge_descriptions.items()))
-    return edges
+            if step["operation"] in ("silver.land", "silver.derive") and silver_table and step["name"] in names:
+                table = fqn(SERVICE, SILVER, folder, silver_table)
+                if table in table_names:
+                    outbound[(step["name"], table)] = f"Step `{step['name']}` of {label} writes this Silver table."
+        if any(step["operation"] == "journal.record" for step in steps):
+            for last in (name for name in names if not any(name in ancestors[other] for other in names)):
+                outbound[(last, journal)] = f"Step `{last}` of {label} is the last step that records processed files."
+            journaled = True
+        edges += [{"pipeline": at(step), "table": table, "description": text, "inbound": True}
+                  for (step, table), text in sorted(inbound.items())]
+        edges += [{"pipeline": at(step), "table": table, "description": text}
+                  for (step, table), text in sorted(outbound.items())]
+        merged = {name for name in names if any(spec["name"] == name and spec["operation"] == "mastering.merge" for spec in steps)}
+        for before in names:
+            for after in names:
+                between = any(before in ancestors[mid] and mid in ancestors[after] for mid in names)
+                if before not in ancestors[after] or between or (before in prepared and after in merged and prepared[before] in table_names):
+                    continue
+                edges.append({"pipeline": at(before), "next": at(after),
+                              "description": f"Step `{after}` of {label} runs after step `{before}`."})
+    if journaled:
+        new_tables.append({"name": JOURNAL_TABLE, "displayName": "Change Journal",
+                           "databaseSchema": fqn(SERVICE, JOURNAL, JOURNAL_SCHEMA),
+                           "description": "The Change Journal: the files each pipeline recorded as processed.",
+                           "columns": [{"name": "file", "dataType": TEXT, "description": "One processed file."}]})
+    return new_tables, new_lineage, edges
 
 
 def _codes_read(root: Path, codes: list[str]) -> set[str]:
@@ -956,6 +1123,10 @@ def plan(root: Path | None = None) -> dict:
                                       + _kind_profile_text(kind, profiles)})
     pipelines = _pipelines(root)
     pipeline_services = _pipeline_services(pipelines, root)
+    governed_tables, governed_lineage, service_lineage = _governed(pipelines, tables, lineage, root, captured)
+    tables += governed_tables
+    lineage += governed_lineage
+    has_journal = any(table["databaseSchema"] == fqn(SERVICE, JOURNAL, JOURNAL_SCHEMA) for table in tables)
     return {
         "service": {"name": SERVICE, "serviceType": "CustomDatabase",
                     "description": "The Data Catalog, published one way from the rules; change the rules, "
@@ -966,20 +1137,25 @@ def plan(root: Path | None = None) -> dict:
             *([{"name": SILVER, "service": SERVICE,
                 "description": "Silver: every registered or profiled table and its fields, with their data quality rules."},
                {"name": RDM, "service": SERVICE, "description": "RDM: the code sets the profiled data needs."}]
-              if silver_schemas else [])],
+              if silver_schemas else []),
+            *([{"name": JOURNAL, "service": SERVICE,
+                "description": "The Change Journal: the files each pipeline recorded as processed."}]
+              if has_journal else [])],
         "schemas": schemas + [{"name": MASTER_RECORDS, "database": fqn(SERVICE, MDM),
                                "description": "The kinds MDM masters."}]
                    + ([{"name": "relationships", "database": fqn(SERVICE, MDM),
                         "description": "Pinned relationship types. One asset per type. The ends stay on the type."}]
                       if relationship_tables else []) + silver_schemas
                    + ([{"name": CODE_SETS, "database": fqn(SERVICE, RDM), "description": "Code sets, by name."}]
-                      if silver_schemas else []),
+                      if silver_schemas else [])
+                   + ([{"name": JOURNAL_SCHEMA, "database": fqn(SERVICE, JOURNAL),
+                        "description": "One table: the files recorded as processed."}] if has_journal else []),
         "tables": tables,
         "lineage": lineage,
         "pipeline_services": pipeline_services,
         "retired_pipeline_service": PIPELINES_SERVICE,
         "pipelines": pipelines,
-        "service_lineage": _service_lineage(pipelines, tables, lineage, root),
+        "service_lineage": service_lineage,
         "profiles": [mark for mark in _profile_marks(profiles)
                      if mark["table"] in {_table_name(table) for table in tables}],
         **_meaning(root, policy, tables, lineage, read),
@@ -1429,9 +1605,14 @@ def _pipeline_projection_differences(plan: dict, call: Call, tables: set[str],
         if {row["fullyQualifiedName"] for row in listed} != expected_by_service[name]:
             differences.append("pipelines in " + name + ": different membership")
 
-    planned_edges: dict[str, dict[str, dict]] = defaultdict(dict)
+    known = set(tables) | {fqn(pipeline["service"], pipeline["name"]) for pipeline in pipelines}
+    planned_edges: dict[str, dict[tuple[bool, str], dict]] = defaultdict(dict)
     for edge in plan.get("service_lineage") or []:
-        planned_edges[edge["pipeline"]][edge["table"]] = edge
+        if "next" in edge:
+            planned_edges[edge["pipeline"]][(False, edge["next"])] = edge
+            planned_edges[edge["next"]][(True, edge["pipeline"])] = edge
+        else:
+            planned_edges[edge["pipeline"]][(bool(edge.get("inbound")), edge["table"])] = edge
     for pipeline in pipelines:
         pipeline_fqn = fqn(pipeline["service"], pipeline["name"])
         actual_pipeline = call("GET", "/pipelines/name/" + escape(pipeline_fqn, safe=""),
@@ -1444,25 +1625,27 @@ def _pipeline_projection_differences(plan: dict, call: Call, tables: set[str],
             differences.append(pipeline_fqn + ": pipeline status differs")
 
         graph = call("GET", "/lineage/pipeline/name/" + escape(pipeline_fqn, safe=""),
-                     params={"upstreamDepth": 0, "downstreamDepth": 1}) or {}
+                     params={"upstreamDepth": 1, "downstreamDepth": 1}) or {}
         entity = graph.get("entity") if isinstance(graph.get("entity"), dict) else {}
         nodes = [entity, *(graph.get("nodes") or [])]
         fqn_by_id = {node["id"]: node["fullyQualifiedName"] for node in nodes
                      if isinstance(node, dict) and node.get("id") and node.get("fullyQualifiedName")}
         actual_edges = {}
-        for edge in graph.get("downstreamEdges") or []:
-            if edge.get("fromEntity") != entity.get("id"):
-                continue
-            table = fqn_by_id.get(edge.get("toEntity"))
-            if table in tables:
-                actual_edges[table] = edge
+        for inbound, listed, here, there in ((False, "downstreamEdges", "fromEntity", "toEntity"),
+                                             (True, "upstreamEdges", "toEntity", "fromEntity")):
+            for edge in graph.get(listed) or []:
+                if edge.get(here) != entity.get("id"):
+                    continue
+                table = fqn_by_id.get(edge.get(there))
+                if table in known:
+                    actual_edges[(inbound, table)] = edge
         expected_edges = planned_edges.get(pipeline_fqn, {})
         if set(actual_edges) != set(expected_edges):
             differences.append(pipeline_fqn + ": different pipeline lineage")
-        for table in actual_edges.keys() & expected_edges.keys():
-            details = actual_edges[table].get("lineageDetails") or {}
-            where = pipeline_fqn + ".lineage." + table
-            compare(expected_edges[table]["description"], details.get("description"), where + ".description")
+        for key in actual_edges.keys() & expected_edges.keys():
+            details = actual_edges[key].get("lineageDetails") or {}
+            where = pipeline_fqn + (".lineage.from." if key[0] else ".lineage.to.") + key[1]
+            compare(expected_edges[key]["description"], details.get("description"), where + ".description")
             compare("PipelineLineage", details.get("source"), where + ".source")
     return differences
 
@@ -1513,6 +1696,8 @@ def pipeline_status_from_bookkeeping(plan: dict, root: Path, snapshot: dict) -> 
     root = Path(root)
     matches = []
     for pipeline in plan.get("pipelines") or []:
+        if _is_step(pipeline):
+            continue
         relative = Path(pipeline["pipelineLocation"])
         folder = relative.parts[0] if relative.parts else None
         pipeline_scope = "source" if folder == "sources" else "pipeline" if folder == "pipelines" else None
@@ -1659,10 +1844,29 @@ def publish(plan: dict, call: Call, draft_terms: bool = False, results: dict | N
                 raise CatalogError(f"The server did not preserve the status of pipeline {name}")
             pipeline_statuses[name] = status
     pipeline_targets: dict[str, set[str]] = defaultdict(set)
+    pipeline_sources: dict[str, set[str]] = defaultdict(set)
     for edge in plan.get("service_lineage") or []:
+        if "next" in edge:
+            before, after = pipeline_ids.get(edge["pipeline"]), pipeline_ids.get(edge["next"])
+            if before is None or after is None:
+                raise CatalogError("Pipeline lineage names an unknown pipeline step")
+            pipeline_targets[before].add(after)
+            pipeline_sources[after].add(before)
+            call("PUT", "/lineage", {"edge": {
+                "fromEntity": {"id": before, "type": "pipeline"}, "toEntity": {"id": after, "type": "pipeline"},
+                "description": edge["description"],
+                "lineageDetails": {"description": edge["description"], "source": "PipelineLineage"}}})
+            continue
         pipeline_id, table_id = pipeline_ids.get(edge["pipeline"]), ids.get(edge["table"])
         if pipeline_id is None or table_id is None:
             raise CatalogError("Pipeline lineage names an unknown pipeline or table")
+        if edge.get("inbound"):
+            pipeline_sources[pipeline_id].add(table_id)
+            call("PUT", "/lineage", {"edge": {
+                "fromEntity": {"id": table_id, "type": "table"}, "toEntity": {"id": pipeline_id, "type": "pipeline"},
+                "description": edge["description"],
+                "lineageDetails": {"description": edge["description"], "source": "PipelineLineage"}}})
+            continue
         pipeline_targets[pipeline_id].add(table_id)
         call("PUT", "/lineage/pipeline/name/" + escape(edge["pipeline"], safe="")
              + "/table/name/" + escape(edge["table"], safe=""),
@@ -1702,15 +1906,25 @@ def publish(plan: dict, call: Call, draft_terms: bool = False, results: dict | N
                 call("DELETE", f"/lineage/table/{edge['fromEntity']}/table/{table_id}")
                 removed["lineage"] += 1
 
+    pipeline_ids_set = set(pipeline_ids.values())
     for pipeline_fqn, pipeline_id in sorted(pipeline_ids.items()):
         graph = call("GET", "/lineage/pipeline/name/" + escape(pipeline_fqn, safe=""),
-                     params={"upstreamDepth": 0, "downstreamDepth": 1}) or {}
+                     params={"upstreamDepth": 1, "downstreamDepth": 1}) or {}
         for edge in graph.get("downstreamEdges") or []:
             target_id = edge.get("toEntity")
-            stale = edge.get("fromEntity") == pipeline_id and target_id in ours \
+            stale = edge.get("fromEntity") == pipeline_id and (target_id in ours or target_id in pipeline_ids_set) \
                 and target_id not in pipeline_targets[pipeline_id]
             if stale:
-                call("DELETE", f"/lineage/pipeline/{pipeline_id}/table/{target_id}")
+                kind = "pipeline" if target_id in pipeline_ids_set else "table"
+                call("DELETE", f"/lineage/pipeline/{pipeline_id}/{kind}/{target_id}")
+                removed["pipeline_lineage"] += 1
+        for edge in graph.get("upstreamEdges") or []:
+            source_id = edge.get("fromEntity")
+            stale = edge.get("toEntity") == pipeline_id and (source_id in ours or source_id in pipeline_ids_set) \
+                and source_id not in pipeline_sources[pipeline_id]
+            if stale:
+                kind = "pipeline" if source_id in pipeline_ids_set else "table"
+                call("DELETE", f"/lineage/{kind}/{source_id}/pipeline/{pipeline_id}")
                 removed["pipeline_lineage"] += 1
     planned_pipeline_fqns = set(pipeline_ids)
     for service in pipeline_services:
