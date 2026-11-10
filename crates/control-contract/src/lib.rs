@@ -2,6 +2,7 @@
 pub mod bookkeeping;
 #[cfg(feature = "python")]
 mod opaque;
+pub mod policy_slice;
 pub mod reference;
 pub mod silver;
 pub mod text_search;
@@ -332,6 +333,11 @@ mod python {
             .map_err(PyValueError::new_err)
     }
     #[pyfunction]
+    fn source_policy_digest(py: Python<'_>, policy: String, source: String) -> PyResult<String> {
+        py.allow_threads(|| crate::policy_slice::source_policy_digest(&policy, &source))
+            .map_err(PyValueError::new_err)
+    }
+    #[pyfunction]
     fn check_reference(py: Python<'_>, raw: String) -> PyResult<()> {
         py.allow_threads(|| super::check_reference(&raw))
             .map_err(PyValueError::new_err)
@@ -351,6 +357,7 @@ mod python {
         m.add_function(wrap_pyfunction!(prepare_journal_read, m)?)?;
         m.add_function(wrap_pyfunction!(confirm_journal_receipt, m)?)?;
         m.add_function(wrap_pyfunction!(digest_json, m)?)?;
+        m.add_function(wrap_pyfunction!(source_policy_digest, m)?)?;
         m.add_function(wrap_pyfunction!(check_reference, m)?)?;
         m.add_function(wrap_pyfunction!(prepare_run_checks, m)?)?;
         m.add_function(wrap_pyfunction!(prepare_run_completion, m)?)?;

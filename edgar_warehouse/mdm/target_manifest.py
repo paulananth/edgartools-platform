@@ -31,6 +31,7 @@ from pathlib import Path
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.bookkeeping.clean.config import COMPOSE_LIST, run_inputs, validate
+from edgar_warehouse.control_contract import source_policy_digest
 from edgar_warehouse.rules import files as rules_files
 from . import changed_files, raw_capture, read_units
 from .evidence import instant
@@ -404,7 +405,10 @@ def write_manifest(
     policy = digest(rules_files.policy())
     shared = [*shared, *({"name": f"always:{key}", "sha256": raw_capture.document(folder, receipts, key)["sha256"]}
                          for key in sorted(always))]
-    processing = changed_files.identity(changed_files.source_rules(source), policy, shared)
+    # The identity holds the part of the policy that acts on this source's files, so another source's rule change does
+    # not process them again (operator, 2026-11-10: "Change journal must work"); the run keeps the whole policy digest.
+    processing = changed_files.identity(
+        changed_files.source_rules(source), source_policy_digest(rules_files.policy(), dataset or ""), shared)  # a silver-only target has no dataset: the shared sections only
     fresh = set(changed_files.select(source, processing, files, force=force, ledger=journal))
     listed = len(keys)
     keys = [key for key in keys if key in fresh or any(o in fresh for o, _ in paired[key])]

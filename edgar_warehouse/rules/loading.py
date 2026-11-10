@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import json
+import re
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -248,7 +249,7 @@ class Loader:
         return plan
 
     def load(self, *, capture: Path, capture_run: str, as_of: str, facts: list[str], run_files: list[str],
-             revision: int = 0) -> dict:
+             revision: int = 0, force: bool = False) -> dict:
         result = {"source": self.source, "target": self.target, "finished_open_runs": [], "bundles": []}
         result["silver_registered"] = self.register_silver()
         unfinished, result["left_as_they_are"] = self.open_runs()
@@ -275,6 +276,12 @@ class Loader:
         self.say(f"{self.source} {self.target}: {sum(len(b) for b in cut)} documents in {len(cut)} bundles, "
                  f"{self.at_a_time} at once")
         extra = [*(a for fact in facts for a in ("--fact", fact)), *(a for f in run_files for a in ("--file", f))]
+        if force:
+            # Force publish (operator, 2026-11-10): ignore the Change Journal and process every document of the source
+            # again, as a new publication of this capture run; the journal records the run as forced.
+            capture_run = f"{capture_run}+force-{re.sub(r'[^0-9]', '', as_of)}"
+            extra.append("--all")
+            self.say(f"Force publish: every document of {self.source} is processed again as run {capture_run}")
         folder = self.root / as_of.replace(":", "")
         result["bundles"] = self.at_once([
             (f"bundle {number}", lambda number=number, keys=keys: self.bundle(
@@ -297,7 +304,7 @@ def _handle(args) -> int:
             raise RunStopped("--capture-run is required unless --plan")
         result = loader.load(capture=args.capture.expanduser(), capture_run=args.capture_run,
                              as_of=args.as_of or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                             facts=args.fact or [], run_files=args.file or [], revision=args.revision)
+                             facts=args.fact or [], run_files=args.file or [], revision=args.revision, force=args.force)
     except (RunStopped, ValueError) as error:
         print(f"Load stopped: {error}", file=sys.stderr)
         print("Run the same command again to carry on from here.", file=sys.stderr)
@@ -327,6 +334,10 @@ def register(subparsers) -> None:
     parser.add_argument("--revision", type=int, default=0,
                         help="The source publication's order (default 0): a delivery whose inputs changed (a new Name "
                              "Count, say) is a new publication and needs a higher revision than the one loaded before")
+    parser.add_argument("--force", action="store_true",
+                        help="Force publish: ignore the Change Journal and process every document of the source again, "
+                             "as a new publication of the capture run (the journal records it as forced). Use it when "
+                             "the result must be made again whatever the journal holds")
     parser.add_argument("--fact", action="append", help="A run fact the target declares: name=value (repeat)")
     parser.add_argument("--file", action="append", help="A run file the target declares: name=path (repeat)")
     parser.set_defaults(handler=_handle)
