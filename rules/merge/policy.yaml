@@ -465,6 +465,27 @@ automatic_rules:
 # is keyed by its SEDOL, else its LoanX. Switched on under the operator's standing approval, 2026-11-04
 # (\"switch on for form 4 keep it standing approval for ticket 190 191\"), after the limited test
 # (.scratch/rebuild-priorities/research/190_limited_test.json, sha256 0c2be443...2555) passed.
+# form4-security-issuer-symbol (operator, 2026-11-09: "This is not following step 1" on a Form 4 security stored
+# without a golden record; "Create by issuer and title (Recommended)"; standing words "Approved the rules always"):
+# the limited test on the real Form 4 securities no Security held, 826 records, run through the mastering merge in a
+# throwaway PostgreSQL: 337 issuer-and-symbol keys, each one Security created, all 826 records bound, no review, and a
+# second pass changed nothing.
+- kind: security
+  family: exact_name_binding
+  rule_id: form4-security-issuer-symbol
+  rule_version: 2026-11-09.1
+  verdict: bind
+  activation: exact_name
+  proof:
+    names: 337
+    attached: 0
+    review: 0
+    waiting: 0
+    created: 337
+    second_pass_changed_nothing: true
+    approved_by: operator
+    approved_at: '2026-11-09T22:54:58Z'
+    reason: 'Form 4 securities no Security holds are created by issuer and symbol (Create by issuer and title, Recommended); limited test on the 826 real records: 337 created, 0 review, second pass unchanged'
 - kind: security
   family: binding
   rule_id: nport-security-sedol

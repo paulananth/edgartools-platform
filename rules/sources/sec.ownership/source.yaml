@@ -176,10 +176,14 @@ dataset_contracts:
         - accession_number
         - issuer_cik
         - symbol
+        # The issuer and its symbol together (operator, 2026-11-09: "Create by issuer and title"): the filing's issuer
+        # block states the issuer CIK and trading symbol, so those identify the issuer's listed security.
         cross_references:
           ticker: symbol
+          issuer_symbol_id: .
         cross_reference_formats:
           ticker: ticker
+          issuer_symbol_id: issuer_symbol_id@1
   sec.ownership.reporting_owner.v1:
     contract:
       provider: SEC

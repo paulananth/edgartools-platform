@@ -93,6 +93,20 @@ def _name_place_id(item) -> str:
     return hashlib.sha256(("name_place_id@1\x1f" + " ".join(name) + "\x1f" + " ".join(place)).encode("utf-8")).hexdigest()
 
 
+def _issuer_symbol_id(item) -> str:
+    """The id of an issuer's listed security (operator, 2026-11-09: a Form 4 security no Security holds is created by
+    "issuer and title"; the filing's issuer block states the issuer CIK and trading symbol, so those identify it).
+    The item is an object with `issuer_cik` and `symbol`; a symbol is tokens of letters and digits, the CIK keeps its
+    digits as written (no zeros are removed); either missing is refused."""
+    if not isinstance(item, dict):
+        raise UnsupportedRecord("invalid_issuer_symbol")
+    cik = re.sub(r"\s+", "", str(item.get("issuer_cik") or ""))
+    symbol = "".join(_tokens(item.get("symbol") or ""))
+    if not cik or not symbol:
+        raise UnsupportedRecord("invalid_issuer_symbol")
+    return hashlib.sha256(("issuer_symbol_id@1\x1f" + cik + "\x1f" + symbol).encode("utf-8")).hexdigest()
+
+
 def _declared(kind: IdentifierType):
     def checked(item) -> str:
         value, reason = kind.refusal(item)
@@ -111,6 +125,7 @@ FORMATS = {
     "lei": _lei,
     "name_id@1": _name_id,
     "name_place_id@1": _name_place_id,
+    "issuer_symbol_id@1": _issuer_symbol_id,
 }
 # Ticket 81: the declared identifier types (`rules/identifiers/`) are formats
 # too; a declared name never replaces a hand-written one.
