@@ -95,3 +95,23 @@ def test_a_review_that_is_not_open_or_a_missing_reason_is_refused(database_facto
             steward.resolve(db, settings_of, subject=waiting["subject"], result="merge", actor=BY, reason=" ", at=AT)
         with pytest.raises(ValueError, match="one of merge, exclude"):
             steward.resolve(db, settings_of, subject=waiting["subject"], result="drop", actor=BY, reason=WHY, at=AT)
+
+
+def test_a_steward_merge_keeps_the_older_and_the_identifiers_source_records_and_history_of_both(database_factory):
+    with opened(database_factory) as db:
+        by_cusip, by_isin = answer("by-cusip", cusip=CUSIP, figi=LISTING), answer("by-isin", isin=ISIN, figi=OTHER)
+        merge.merge_file(db, SECURITY, [by_cusip])
+        merge.merge_file(db, SECURITY, [by_isin])
+        older = db.bound([by_cusip["subject"]])[by_cusip["subject"]]
+        both = answer("both", cusip=CUSIP, isin=ISIN, figi=figi("00RSLV05"))
+        merge.merge_file(db, SECURITY, [both])  # its identifiers reach two golden records: it waits
+        steward.resolve(db, settings_of, subject=both["subject"], result="merge", actor=BY, reason=WHY, at=AT, confirm=True)
+        (survivor, body), = live(db).items()
+        assert survivor == older  # the older golden record survives
+        assert set(body["identifiers"]["cusip"]) == {CUSIP} and set(body["identifiers"]["isin"]) == {ISIN}
+        assert set(body["identifiers"]["figi"]) == {LISTING, OTHER, figi("00RSLV05")}
+        bound = db.bound([by_cusip["subject"], by_isin["subject"], both["subject"]])
+        assert set(bound.values()) == {older}  # every source record of both golden records
+        (said,) = [json.loads(b) for (b,) in db.rows("select body from mastering_decision where operation='merge'")]
+        assert (said["actor"], said["reason"], said["left"]) == (BY, WHY, older)  # the history names the steward
+        assert [m for m in db.rows("select body from mastering_master") if '"alias"' in m[0]]  # the younger stays as an alias
