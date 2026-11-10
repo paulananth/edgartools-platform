@@ -428,7 +428,10 @@ Work it out from counts before starting:
   then requires exact timestamped OpenMetadata readback. Use
   `edgar-warehouse rules catalog check --bookkeeping-run <run-id>` for a
   read-only confirmation later. An incomplete run remains unknown and cannot
-  publish. Keep `SILVER_QUALITY_EVIDENCE_V2` unset until
+  publish. The publish reconciles the whole catalog plan, not only the quality
+  results: run it from a checkout at current `origin/main`, or it removes
+  catalog objects the current rules describe. The quality results themselves
+  are keyed by timestamp and survive that reconcile. Keep `SILVER_QUALITY_EVIDENCE_V2` unset until
   [Enable a new receipt format](../bookkeeping/RECOVERY.md#enable-a-new-receipt-format)
   is met. Catalog
   entries describe the load and its checks; OpenMetadata does not run or resume
