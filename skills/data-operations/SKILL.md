@@ -295,7 +295,14 @@ What it does, in order:
    queue. A bundle that stops does not stop the others. Once `--minutes`
    has passed no new bundle starts, and every stop is named at the end. The Change Journal leaves out documents already loaded under
    these rules. Already-loaded documents are counted and skipped, and an
-   unchanged rerun starts no work.
+   unchanged rerun starts no work. "These rules" are the source's own rules and the part of the merge policy that
+   acts on it (its rules, their identifier contracts, the kind's field defaults), so a rule of another source does
+   not load its documents again. If a bundle says `512 of 512 documents to load` when you expected `already loaded`,
+   something in that slice changed: find what before the load spends hours.
+   **Force publish** (`load --force`) is the explicit exception: it ignores the Change Journal and processes every
+   document of the source again, as a new publication of the capture run (`<run>+force-<time>`); the journal records
+   it as forced. Use it when the result must be made again whatever the journal holds (after `mdm clear-source`,
+   or to rebuild from retained files). Never for a daily run.
 
 It prints one line per bundle as it goes. At the end it prints a JSON
 summary: documents loaded, documents already loaded, and each run's id and

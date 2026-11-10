@@ -4,7 +4,7 @@ The Change Journal decides per file, never per field: a file is identical,
 and skipped, when the journal already records that this source processed
 this file key with this content hash under the same processing identity.
 The processing identity is the digest of the source's rules version (its
-reading, Dataset Contract and policy) and every shared input the run reads,
+reading, Dataset Contract and the part of the policy that acts on it) and every shared input the run reads,
 so a change to any of them processes every file again (operator,
 2026-10-13: "Rules + shared inputs"). A forced run processes every file and
 says so (`--all`). Recording happens in the run's last step,
@@ -24,8 +24,11 @@ EVENT_TYPE = "file.processed"
 
 def identity(rules, policy: str, shared: list[dict] | None = None) -> str:
     """The processing identity: the rules a run reads files under (the
-    source's readings and Dataset Contracts, as their documents), the policy
-    digest, and every shared input by name and sha256 (a name count, a catalog)."""
+    source's readings and Dataset Contracts, as their documents), the digest of
+    the part of the merge policy that acts on the source (`source_policy_digest`:
+    its rules, their identifier contracts and the kind's field defaults, so a rule
+    of another source does not process these files again), and every shared input
+    by name and sha256 (a name count, a catalog)."""
     return digest({"rules": rules, "policy": policy,
                    "shared": sorted((s["name"], s["sha256"]) for s in shared or [])})
 

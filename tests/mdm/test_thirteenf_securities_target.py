@@ -64,3 +64,29 @@ def test_a_second_pass_changes_nothing_and_changed_rules_name_every_file_again(t
     after = write_manifest(**{**options, "output": str(tmp_path / "other")})
     named = Artifacts().json(Artifacts().json(after["manifest"])["steps"]["processed"][0]["input"])["files"]
     assert [f["key"] for f in named] == [key(1), key(2)]
+
+
+def test_another_sources_rule_change_leaves_a_recorded_file_skipped_and_its_own_rule_change_names_it_again(tmp_path, monkeypatch):
+    """The Change Journal must work (operator, 2026-11-10): the processing identity holds the part of the merge policy
+    that acts on this source, so a new rule for N-PORT does not process the 13F files again."""
+    import copy
+
+    from edgar_warehouse.rules import files as rules_files
+
+    options = capture(tmp_path, [1, 2])
+    recorded(options, write_manifest(**options))
+    real = rules_files.policy()
+
+    def changed(source, version):
+        policy = copy.deepcopy(real)
+        for rule in policy["kinds"]["security"]["rules"]:
+            if rule["source"] == source:
+                rule["version"] = version
+        return policy
+
+    monkeypatch.setattr(rules_files, "policy", lambda root=None: changed("sec.nport.security.v2", "2099-01-01.nport"))
+    assert write_manifest(**{**options, "output": str(tmp_path / "other-source")})["manifest"] is None  # still skipped
+    monkeypatch.setattr(rules_files, "policy", lambda root=None: changed("sec.thirteenf.securities.v2", "2099-01-01.own"))
+    after = write_manifest(**{**options, "output": str(tmp_path / "own-source")})
+    named = Artifacts().json(Artifacts().json(after["manifest"])["steps"]["processed"][0]["input"])["files"]
+    assert [f["key"] for f in named] == [key(1), key(2)]  # its own rule changed: every file again

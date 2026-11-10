@@ -15,6 +15,19 @@ Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#
 The journal records immutable events and verifies durable delivery. It owns no
 loader, acquisition policy, work scheduler, business verifier or producer outbox.
 
+## Skipping and forcing
+
+A file is skipped when the journal records its source, key, content hash and **processing identity**. The identity
+is the digest of the source's own rules, the part of the merge policy that acts on the source (its rules and their
+activations, the identifier contracts they search or that name it as an issuer, the kind's field defaults and the
+sections every kind shares) and every shared input it reads. A rule of another source is not in it, so it does not
+process this source again; the slicing is `edgar_control.source_policy_digest` (Rust, beside the digest). A first
+run after the identity formula changes names every file once.
+
+**Force publish** ignores the journal: `edgar-warehouse load --force` (underneath, `mdm prepare-capture --all`)
+processes every document of the source again as a new publication of the capture run, and the journal records the
+run (`files.forced`). It is for a result that must be made again whatever the journal holds, never the daily run.
+
 ## Required independence
 
 The journal package and standalone CLI may depend only on their own code, pure

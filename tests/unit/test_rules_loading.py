@@ -42,7 +42,7 @@ class Recorded:
 
     def __init__(self, open_runs=(), processed=(), versions=None, pinned=None):
         self.calls, self.open, self.processed, self.submitted = [], list(open_runs), set(processed), 0
-        self.revisions, self.registered = [], []
+        self.revisions, self.registered, self.prepared = [], [], []
         self.deadline = float("inf")
         self.versions, self.pinned = versions or {}, pinned or {}
 
@@ -50,6 +50,7 @@ class Recorded:
         self.calls.append(args[:2])
         if args[:2] == ("mdm", "prepare-capture"):
             self.revisions.append(args[args.index("--revision") + 1])
+            self.prepared.append(args)
         if args[:2] == ("silver", "register"):
             self.registered.append(args)
             return "{}"
@@ -117,6 +118,22 @@ def test_a_load_names_the_publication_revision_and_defaults_to_the_first(tmp_pat
         capture=folder, capture_run="capture-1", as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
 
     assert (named.revisions, plain.revisions) == (["3"], ["0"])
+
+
+def test_a_force_publish_names_every_document_again_as_a_new_run_and_a_normal_load_does_not(tmp_path, monkeypatch):
+    """Force publish (operator, 2026-11-10): ignore the Change Journal and process the source again."""
+    folder = capture(tmp_path / "c", "letters/a.json")
+    forced, normal = Recorded(), Recorded()
+
+    loader(tmp_path, monkeypatch, forced).load(
+        capture=folder, capture_run="capture-1", as_of="2026-10-25T00:00:00Z", facts=[], run_files=[], force=True)
+    loader(tmp_path, monkeypatch, normal).load(
+        capture=folder, capture_run="capture-1", as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
+
+    (call,) = forced.prepared
+    assert "--all" in call and call[call.index("--capture-run") + 1] == "capture-1+force-20261025000000"
+    (call,) = normal.prepared
+    assert "--all" not in call and call[call.index("--capture-run") + 1] == "capture-1"
 
 
 def test_a_run_left_open_is_finished_before_anything_new(tmp_path, monkeypatch):

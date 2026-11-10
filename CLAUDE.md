@@ -57,7 +57,8 @@ recovery, use [data-operations](skills/data-operations/SKILL.md).
   (operator: "always load everything from source"). The Change Journal skips
   files already processed with the same source, key, content hash and processing
   identity. Changed rules or relevant shared inputs also require reprocessing.
-  Leave `--all` off for normal runs; use it only for an explicit forced replay.
+  Leave `--all` off for normal runs; use it only for an explicit forced replay (force publish: `load --force`, which
+  ignores the Change Journal and processes the source again).
   Read [the load sequence](docs/initial-and-daily-source-load.md) before SEC,
   GLEIF or OpenFIGI loads. Provider access retains its existing authorization.
 - Use one permanent local PostgreSQL 16 server shared by all agents. Initialize
