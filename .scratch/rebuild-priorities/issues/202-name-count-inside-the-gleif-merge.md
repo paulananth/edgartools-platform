@@ -28,6 +28,18 @@ The GLEIF load already runs after the SEC Companies are mastered. At its merge:
 
 **Trap:** `CONTEXT.md` forbids "a count over the records a Stage happens to hold". A GLEIF load in parts (the full file was split into three scopes during the local load) would count only each part. The GLEIF side must be counted over the whole publication, not over the scope or the bundle in hand.
 
+
+## Build plan (written 2026-11-09 23:34 ET; assumes the recommended ruling: an earlier name binding stays when a later load makes the name shared, a steward splits it, and the shared name only stops new binds)
+
+Measured blast radius (files that name `name_count`): 6 source files under `rules/sources/sec.company` (source, fields, combine and name-count yamls), `rules/mastering/engine-v1.yaml`, 8 engine and integration tests, `tests/mdm/test_bind_run_inputs.py`, `edgar_warehouse/mdm/{matching,cascade,catalog,execution,name_count,name_count_file,store,cli,commands}.py` and `mastering/merge.py`. One PR would be too large to review, so four, each green on its own:
+
+1. **Count inside the merge, beside the file.** `_match_names` computes the SEC-side count from the stored SEC Companies and the GLEIF-side count from a per-publication count table (built once from the captured file, keyed by the publication's identity), and uses them instead of `provenance.matching.name_count`. Both counts are written on the bind decision (step 6 already records binds). Test: a name unique on both sides binds, a name shared on either side waits, a scoped load reads the whole-publication counts.
+2. **Prove it agrees with the file** on the same data (counts only), then take the file's use out of the three GLEIF name rules.
+3. **Take the `name_count` step, run file and `--file name_count` out of `sec.company`**, with the policy, approvals, Mapping Documents and the pinned digests that follow.
+4. **Drop `mdm name-count`**, `name_count_file.py` and the older readers; update `CONTEXT.md` ("Name Matching") and the load sequence's step 4.
+
+Until part 3 lands the SEC company load needs the file (ticket 201). Parts 1 to 3 are the go-live's prerequisite.
+
 ## Checklist
 
 - [x] Name the whole-publication GLEIF count's source (2026-11-09 13:54 ET, design from the structural consult; no code run). The count per name is built once per GLEIF publication from the captured file and stored under the publication's identity. A scoped load reads the stored counts and never recounts, so a name shared outside its scope waits, and no scope re-reads the 927 MB zip (about 45 min each in the local loads). A delta publication stays refused. The SEC side is counted from the stored SEC Company records when the GLEIF merge starts, and the count used is recorded on each decision. A later SEC load can make a bound name stop being unique: proposed, leave it bound and record the count it used; a duplicate found later goes through mastering again (step 4). Needs the operator's word on that proposal before the code.
