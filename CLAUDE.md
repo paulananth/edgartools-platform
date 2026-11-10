@@ -123,8 +123,9 @@ ET (`2026-09-24 14:05 ET`), never UTC. Say up front when a part will take long
 (a full scan, a large test suite, a deploy), and report the elapsed time of any
 step over ten minutes, so the operator can see where the time went.
 
-- **Read the clock before every stamp:** `TZ=America/New_York date`. A
-  guessed time is wrong more often than not.
+- **Never type a time.** Write `{{now}}` where a stamp goes; `bash scripts/dev/commit_push.sh <message-file>`
+  stamps it from the clock, runs the guard and commits and pushes only if the guard exits 0 (a typed
+  time ran ahead of the clock and a `;`-chained guard let it ship, 2026-11-10).
 - **The last part of every ticket is `Learning → skill`.** Name the skill
   line the ticket changed with what it learned, or write "none". A rule,
   practice or how-to learned here belongs in a skill (data work, MDM

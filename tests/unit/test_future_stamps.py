@@ -54,3 +54,28 @@ def test_the_script_fails_on_a_future_stamp_added_to_a_tracked_or_a_new_file_and
     (tmp_path / ".scratch" / "new.md").write_text("- [x] guessed (2099-01-01 00:00 ET)\n")
     created = run()
     assert created.returncode == 1 and "new.md" in created.stderr
+
+
+def test_now_becomes_the_clock_and_a_later_stamp_is_pulled_back_to_it():
+    text = "- [x] a ({{now}})\n- [x] b (2026-11-01 17:36 ET)\n- [x] c (2026-11-01 16:22 ET)\n"
+    assert future_stamps.stamped(text, NOW) == (
+        "- [x] a (2026-11-01 17:25 ET)\n- [x] b (2026-11-01 17:25 ET)\n- [x] c (2026-11-01 16:22 ET)\n")
+
+
+def test_the_script_fails_on_a_now_left_unstamped_and_stamp_fixes_it_and_a_future_stamp(tmp_path):
+    (tmp_path / ".scratch").mkdir()
+    note = tmp_path / ".scratch" / "t.md"
+    note.write_text("- [x] kept (2020-01-01 09:00 ET)\n")
+    _git(tmp_path, "init", "-q", "-b", "main")
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-q", "-m", "base")
+    script = str(ROOT / "scripts" / "dev" / "future_stamps.py")
+
+    def run(*flags):
+        return subprocess.run([sys.executable, script, *flags, "HEAD"], cwd=tmp_path, capture_output=True, text=True)
+
+    note.write_text(note.read_text() + "- [x] new ({{now}})\n- [x] guessed (2099-01-01 00:00 ET)\n")
+    assert run().returncode == 1
+    assert run("--stamp").returncode == 0
+    text = note.read_text()
+    assert "{{now}}" not in text and "2099" not in text and "kept (2020-01-01 09:00 ET)" in text
