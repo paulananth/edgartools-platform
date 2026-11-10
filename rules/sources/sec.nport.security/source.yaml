@@ -802,7 +802,7 @@ dataset_contracts:
         # v3 (ticket 138): a CUSIP's record carries every ISIN filed with it.
         # v4 (ticket 138): and the six facts its holdings file most.
         # v5 (ticket 199): an ISSUED_BY start is observed, not stated.
-        version: sec-nport-security-v6
+        version: sec-nport-security-v7
         retain_deferred: true
         source_record_provenance: true
         kind: security
@@ -811,6 +811,10 @@ dataset_contracts:
         # check-digit CUSIPs and choose another identifier for merging): the record is mastered by its ISIN,
         # SEDOL or LoanX, and set aside with `invalid_cusip_checksum` only when it states none.
         set_aside_invalid: [cusip]
+        # With no other identifier, a real security is still mastered Security: the CUSIP as filed, flagged by
+        # that check (operator, 2026-11-10: "if a security is found in 13f or NPort we must have a mastered
+        # security"). A CUSIP no identifier at all (one repeated character) is still set aside.
+        last_resort: {cusip: filed_cusip}
         # The CUSIP or the ISIN, each checked as an identifier below, so a bad
         # check digit is still held back with its own reason.
         record_key:

@@ -1,0 +1,20 @@
+{
+  "ticket": 204,
+  "rule": "nport-security-filed-cusip",
+  "version": "2026-11-10.last-resort",
+  "corpus": "every N-PORT record set aside for a CUSIP failing its check digit on the shared store (counts only)",
+  "set_aside_for_a_bad_cusip": 2429,
+  "derivative_contracts_with_made_up_identifiers_stay_set_aside": 1397,
+  "real_securities_measured": 1033,
+  "has_an_isin_mastered_by_the_isin_since_pr_1603": 591,
+  "no_security_shares_the_first_8_characters_creates_one": 420,
+  "one_security_shares_the_first_8_characters_with_a_different_name_creates_one_flagged": 22,
+  "same_name_join_by_name_cusip_8_and_type": 0,
+  "decision": "the name, CUSIP-8 and security type match would join none of the 1,033, so only the last-resort key is built (operator, 2026-11-10: Yes, the simple key, no type mapping)",
+  "invented_record_tests": {
+    "a_bad_cusip_alone_is_kept_as_filed_and_flagged": "pass (failed on the old code: the record was set aside)",
+    "a_bad_cusip_alone_creates_a_flagged_security_and_never_joins_one_by_that_value": "pass on PostgreSQL 16 and MySQL; the same filed value from a later file is the same Security",
+    "a_value_that_is_no_cusip_at_all_is_still_set_aside": "pass"
+  },
+  "result": "pass: 442 real securities (420 and 22) become mastered Securities by their filed CUSIP, none merges, none joins by the filed value; 591 join OpenFIGI's Security by their ISIN"
+}

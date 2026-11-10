@@ -35,7 +35,16 @@ def test_a_good_cusip_is_kept_and_not_flagged():
     assert "cusip_check_digit" not in str(record["provenance"].get("quality"))
 
 
-def test_a_bad_cusip_with_no_other_identifier_is_still_set_aside_with_its_reason():
+def test_a_bad_cusip_with_no_other_identifier_is_kept_as_filed_and_flagged():
+    """A real security must be a mastered Security (operator, 2026-11-10): the CUSIP as filed is its last-resort key."""
+    record = read(cusip=BAD)
+    assert record["identifiers"] == {"filed_cusip": BAD}
+    assert record["provenance"]["identifiers_set_aside"] == [
+        {"namespace": "cusip", "value": BAD, "reason": "invalid_cusip_checksum"}]
+    assert "cusip_check_digit" in str(record["provenance"]["quality"])
+
+
+def test_a_value_that_is_no_cusip_at_all_is_still_set_aside_with_its_reason():
     with pytest.raises(adapters.UnsupportedRecord) as refused:
-        read(cusip=BAD)
-    assert refused.value.reason == "invalid_cusip_checksum"
+        read(cusip="111111111")  # one repeated character is a stand-in, never an identity
+    assert refused.value.reason in ("invalid_cusip", "invalid_cusip_checksum")

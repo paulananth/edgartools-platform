@@ -115,6 +115,25 @@ rules:
 # (ticket 190; operator, 2026-11-04: "You can not build every make isin work for others", "Always
 # build generic"): it joins the Security that holds the value, or is created; a value held by two
 # Securities goes to review. One rule per identifier kind, since a matching rule names one.
+- rule_id: nport-security-filed-cusip
+  # "A security found in N-PORT must be a mastered Security" (ticket 204; operator, 2026-11-10): a holding whose CUSIP
+  # fails its check digit and which states no ISIN, SEDOL or LoanX is keyed by the CUSIP as filed, flagged by the
+  # `cusip_check_digit` quality check. It creates; the value never joins a Security by itself (a steward merges a
+  # near-match with `mdm steward resolve`).
+  version: 2026-11-10.last-resort
+  family: binding
+  source: sec.nport.security.v2
+  applies_to_verdict: security
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: filed_cusip
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: filed_cusip
 - rule_id: nport-security-sedol
   version: 2026-11-04.1
   family: binding
@@ -503,6 +522,28 @@ identifiers:
       approved_by: operator
       approved_at: "2026-11-10T12:10:00Z"
       reason: "ticket 206 limited test (.scratch/rebuild-priorities/research/206_share_class_limited_test.json), approved under the operator's standing approval (2026-10-15: \"Approved the rules always\") and his ruling \"step 3 agreed\" (2026-11-10). The 72 stored OpenFIGI records of the 25 share class values two Securities held: 50 Securities became 25, the 8 pairs with no conflicting CUSIP or ISIN joined, the 17 with a conflict sent their other 27 records to review, none merged"
+    tolerance:
+      unit: items
+      warm_up_decisions: 10000
+      max_per_10k: 5
+  # A CUSIP as filed (ticket 204; operator, 2026-11-10): the last-resort key of an N-PORT security whose CUSIP fails
+  # its check digit and which states no other identifier. One Security per value; it never merges two.
+  filed_cusip:
+    authority: the filer (a CUSIP as written, the check digit not verified)
+    sources:
+    - sec.nport.security.v2
+    normalizer: normalize_identifier@filed_cusip-v1
+    claim:
+      forward: 1
+      reverse: null
+    compatibility:
+      field: kind
+      predicate: kind_equal@1
+    verification:
+      corpus_sha256: 3226938eda11d1fec14f8b98291105e504ffcab55e79543a827d10654c807062
+      approved_by: operator
+      approved_at: "2026-11-10T19:00:00Z"
+      reason: "ticket 204 limited test (.scratch/rebuild-priorities/research/204_filed_cusip_limited_test.json), approved under the operator's standing approval (\"Approved the rules always\") and his ruling \"Yes, the simple key, no type mapping (Recommended)\" (2026-11-10). 1,033 real N-PORT securities set aside for a bad CUSIP: 591 have an ISIN and join by it, 442 create one Security each by the filed CUSIP, 0 join by a name match; derivative contracts stay set aside"
     tolerance:
       unit: items
       warm_up_decisions: 10000

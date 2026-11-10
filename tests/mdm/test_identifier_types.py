@@ -145,6 +145,7 @@ PINNED = {
     ("sedol", 1): "8fa0cb7dddfcd15e892a5a74dbce6fb19c1c3da1bd9ab9559ce6fa1fb0ba6df3",
     ("loanx", 1): "781d1eb3655508412be932a9b1963a9c86932d74b9f7d6998fbfa258888752d3",
     ("ticker", 1): "469a9cdea42454f39527e893c9e3b2110d7af02eb532b69d0a3d1263538a73a5",
+    ("filed_cusip", 1): "9d633cbd66ed144a664dd83572357ea139c9e786410e17e6135526142a3bb7db",
 }
 
 

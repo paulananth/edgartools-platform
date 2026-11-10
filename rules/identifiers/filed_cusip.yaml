@@ -1,0 +1,15 @@
+# A CUSIP as filed: the nine characters a filer wrote, the check digit not verified (operator, 2026-11-10: "if a
+# security is found in 13f or NPort we must have a mastered security"). The last resort for a real security whose CUSIP
+# fails its check digit and which states no other identifier: it is mastered by the value as filed, flagged by the
+# quality check, and never joins a Security by it (the CUSIP type, which verifies, does that).
+# A change to this file is a new version: its normalizer gets a new name.
+identifier: filed_cusip
+version: 1
+description: "Nine characters as filed: issuer (6), issue (2), a check digit not verified. Upper-cased."
+case: upper
+parts:
+  - length: 8
+    characters: [digits, letters, "*", "@", "#"]
+  - length: 1
+    characters: [digits, letters]
+refuse_one_repeated_character: true

@@ -459,6 +459,16 @@ automatic_rules:
   rule_version: 2026-10-26.2
   verdict: bind
   activation: deterministic
+# nport-security-filed-cusip (ticket 204): the CUSIP as filed creates the Security of a real N-PORT holding whose CUSIP
+# fails its check digit and which states no other identifier. Switched on under the operator's standing approval
+# ("Approved the rules always") and his ruling of 2026-11-10 ("Yes, the simple key, no type mapping (Recommended)"),
+# after the limited test (.scratch/rebuild-priorities/research/204_filed_cusip_limited_test.json).
+- kind: security
+  family: binding
+  rule_id: nport-security-filed-cusip
+  rule_version: 2026-11-10.last-resort
+  verdict: bind
+  activation: deterministic
 - kind: security
   family: binding
   rule_id: nport-security-isin
