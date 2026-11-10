@@ -5,11 +5,11 @@ version: 1
 approvals:
 - kind: merge
   name: platform
-  digest: ed683d87b18c1a87727ae610682be37f6573e9ab53e0030c5db3b2411a85821c
+  digest: 41d6e2b11618f67709e3ff50060dee8b09def59ca3293b3b56ba278ba8351b76
   by: Operator
   words: Approved the rules always
   at: '2026-11-10'
-  finalized: PR 1615
+  finalized: PR 1617
 - kind: pipeline
   name: sec.thirteenf.extract
   digest: 3b6cd24f69cd663835c0b19d2d0d15b05d2633bc0307e5c84eb0328ef93516c4

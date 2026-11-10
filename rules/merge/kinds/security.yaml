@@ -193,7 +193,7 @@ rules:
 # (openfigi-security-cusip 2026-10-23.1, openfigi-isin-security-cusip and
 # openfigi-security-isin 2026-10-24.1) and wait for their switch-on.
 - rule_id: openfigi-security-cusip
-  version: 2026-11-09.found-answers-only
+  version: 2026-11-10.source-v4
   family: binding
   source: openfigi.security.v4
   applies_to_verdict: security
@@ -211,7 +211,7 @@ rules:
     args:
       namespace: cusip
 - rule_id: openfigi-security-isin
-  version: 2026-11-09.found-answers-only
+  version: 2026-11-10.source-v4
   family: binding
   source: openfigi.security.v4
   applies_to_verdict: security
@@ -232,7 +232,7 @@ rules:
 # is equity then yes if not no"): the answer attaches to the Security that already holds that CUSIP or ISIN, and
 # creates nothing, since a not-found answer states no security type. With no holder it waits for a recorded reason.
 - rule_id: openfigi-not-found-cusip
-  version: 2026-11-09.1
+  version: 2026-11-10.source-v4
   family: binding
   source: openfigi.security.v4
   applies_to_verdict: security
@@ -251,7 +251,7 @@ rules:
     args:
       namespace: cusip
 - rule_id: openfigi-not-found-isin
-  version: 2026-11-09.1
+  version: 2026-11-10.source-v4
   family: binding
   source: openfigi.security.v4
   applies_to_verdict: security
@@ -274,7 +274,7 @@ rules:
   # Securities reached through a listing FIGI "consolidate them automatically,
   # the oldest id survives, then bind"; a pair a steward split stays apart,
   # "Steward splits + exclusion").
-  version: 2026-10-26.1
+  version: 2026-11-10.source-v4
   family: binding
   source: openfigi.security.v4
   applies_to_verdict: security
@@ -298,7 +298,7 @@ rules:
   # share class FIGI joins the Security that holds it, unless that Security holds another CUSIP or ISIN than the record
   # states. Then the record joins nothing and goes to review for a data steward (an old and a new CUSIP after a reverse
   # split, a redomicile, or two issuers that share a value). The share class never merges two Securities.
-  version: 2026-11-10.no-conflicting-identifier
+  version: 2026-11-10.source-v4
   family: binding
   source: openfigi.security.v4
   applies_to_verdict: security
