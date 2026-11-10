@@ -10,6 +10,8 @@ How does the Name Matching become a step of the GLEIF merge, with no separate jo
 
 ## Operator rulings
 
+- Way 2 chosen, twice (operator, 2026-11-10 08:15 ET: "Yes, drop it (Recommended)", then, after the cascade was explained step by step, "Way 2: golden-record search"): the strict-to-loose cascade and its one-to-one guard (ticket 21) are replaced by a search of the mastered Companies. A GLEIF entity binds only when exactly one mastered Company holds its name and place, or its former name and place; several go to review. What is given up, read to the operator before the choice: the cascade proved "that entity matches exactly one filer" over both whole sources; the search sees only mastered Companies, and phase 1 masters listed companies only. Its approved proof no longer applies, so a new proof is needed and a replay check comes first, with the pair differences shown to the operator before anything is deleted.
+
 - The Name Count is dropped (operator, 2026-11-10 07:55 ET: "What is the downside of dropping it completely and matching using the rule already part of gleif matching on name and place, former name and place", then "Yes, drop it (Recommended)"). A name binds only when exactly one golden record holds it, found by searching the golden records for the name and place, or the former name and place: none waits or creates as the entity type's rule says, several go to review. No count file, no count table, no `mdm name-count`. First a replay check, counts only: the current GLEIF name bindings run both ways; the differences go to the operator before anything is deleted. Downsides accepted: a name unique today can be shared after a later load (an earlier binding stays, a data steward splits it); a name held by one mastered and one unmastered filer looks unique (phase 1 masters listed companies only); a scope-only GLEIF load does not see a same-name record outside its scope.
 
 - The Name Matching is part of mastering, not a separate job.
@@ -54,3 +56,10 @@ Until part 3 lands the SEC company load needs the file (ticket 201). Parts 1 to 
 - [ ] Move the count into the GLEIF merge, with a test: a name unique on both sides binds, a name shared on either side waits, and a scoped load counts the whole file.
 - [ ] Drop `edgar-warehouse mdm name-count` as a separate command once nothing uses it, and update `CONTEXT.md` ("Name Matching") and the load sequence's step 4.
 - [ ] Learning → skill: name the skill line this ticket changed, or write "none".
+
+## Parts under Way 2 (2026-11-10 08:15 ET)
+
+- [ ] Replay check, counts only: for every GLEIF record now attached to a Company, and every unattached one, the search's answer (same Company, another Company, several, none) against the cascade's; the differences go to the operator.
+- [ ] Build the search inside the GLEIF merge: name plus place, former name plus place, exactly one mastered Company; several go to review; the earlier binding stays when a later load makes the name shared.
+- [ ] New proof of the new rules (Wilson bound, adversarial cases, a cohort) and the approval line.
+- [ ] Remove the `name_count` step, the run file, `mdm name-count`, `name_count_file.py` and the cascade code once nothing uses them; update `CONTEXT.md` ("Name Matching") and the load sequence.
