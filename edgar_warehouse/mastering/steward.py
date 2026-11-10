@@ -70,6 +70,23 @@ def reached(store, settings, record: dict) -> dict:
     return found
 
 
+def apart_from(record: dict, others: dict) -> dict:
+    """The record as its own golden record holds it: without the identifier values the other golden records hold,
+    which stay beside it as `<identifier>_held_by_another` evidence."""
+    taken = {n: {v for held in others.values() for v in held.get(n, ())} for n in {n for held in others.values() for n in held}}
+    own, apart = {}, {}
+    for namespace, values in (record.get("identifiers") or {}).items():
+        values = values if isinstance(values, list) else [values]
+        kept = [v for v in values if v and v not in taken.get(namespace, ())]
+        if kept:
+            own[namespace] = kept
+        if len(kept) < len([v for v in values if v]):
+            apart[namespace] = values
+    return {**record, "identifiers": own,
+            "cross_references": {**(record.get("cross_references") or {}),
+                                 **{f"{n}_held_by_another": v for n, v in apart.items()}}}
+
+
 def _decision(operation: str, actor: str, reason: str, at: str, **values) -> dict:
     return decision(operation, actor=actor.strip(), reason=reason.strip(), at=at, **values)
 
@@ -113,14 +130,7 @@ def resolve(store, settings_of, *, subject: str, result: str, actor: str, reason
             entity, touched = keep, [keep]
         else:
             entity = str(uuid4())
-            taken = {n: {v for e in others.values() for v in e.get(n, ())} for n in {n for e in others.values() for n in e}}
-            own = {n: [v for v in (vs if isinstance(vs, list) else [vs]) if v not in taken.get(n, ())]
-                   for n, vs in (record.get("identifiers") or {}).items()}
-            apart = {n: vs for n, vs in (record.get("identifiers") or {}).items()
-                     if any(v in taken.get(n, ()) for v in (vs if isinstance(vs, list) else [vs]))}
-            changed = {**record, "identifiers": {n: vs for n, vs in own.items() if vs},
-                       "cross_references": {**(record.get("cross_references") or {}),
-                                            **{f"{n}_held_by_another": vs for n, vs in apart.items()}}}
+            changed = apart_from(record, others)
             store.bind_record(subject, entity, changed)
             for other in ordered:
                 store.add_decision(_decision("exclude", actor, reason, at, left=entity, right=other), entity, other)
