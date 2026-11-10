@@ -1,6 +1,8 @@
 """Step 4 of mastering, on each engine under the real rules, with invented records: one found joins, none found creates
 or waits as the entity type's rule says, and two found are merged with the older kept and nothing lost."""
 
+import json
+
 import pytest
 
 from edgar_warehouse.mastering import merge
@@ -52,3 +54,8 @@ def test_two_found_are_merged_the_older_kept_and_nothing_is_lost(database_factor
         bound = db.bound([first["subject"], second["subject"], both["subject"]])
         assert set(bound.values()) == {older}  # and every source record of both
         assert [m for m in masters(db).values() if m.get("status") == "alias"][0]["canonical_id"] == older  # the younger is an alias
+        # The matching rule ran first and left its decision: the history names the rule, the older (left) and the younger.
+        ((kept_column, gone_column, body),) = db.rows("select left_id,right_id,body from mastering_decision where operation='merge'")
+        said = json.loads(body)  # the row says which survived (left) and which became the alias (right)
+        assert said["actor"].startswith("rule:openfigi-security-figi@") and kept_column == older != gone_column
+        assert said["reason"] == "identifier_match figi"
