@@ -73,5 +73,6 @@ Measured references (counts of uses): `CONTEXT.md` 1 (removed now); skills 6 fil
 - [ ] Delete the job: `mdm name-count`, `name_count.py`, `name_count_file.py`, the `name_count` step and run file of `sec.company`, `--file name_count`, the `name_count` role of `mastering_name_key`, and what reads them (`name_census_match@1` and the readers in `crates`).
 - [ ] Rename the rule words that say cascade or count: the primitives and rules take the waterfall matching words; new rule versions; the approval line, Mapping Documents and pins that follow.
 - [ ] Update the skills, docs and the load sequence (step 4) so none names the job; a SEC company load no longer waits for a file.
-- [ ] Keep it out: an architecture test fails on `name count`, `name_count` or `name-count` in tracked code, rules, skills and docs (the tickets under `.scratch/` are history and stay).
+- [ ] Keep both words out: an architecture test fails on `name count`, `name_count`, `name-count` or `cascade` in tracked code, rules, skills and docs (the tickets under `.scratch/` are history and stay).
 
+- [ ] Remove "cascade" as a term and use waterfall (operator, 2026-11-10 12:12 ET: "Remove Cascade as a term and use waterfall"): `CONTEXT.md` has no "Cascade" now; the code, rule, test, skill and doc words (`cascade.py`, `cascade_pass@1`, 139 uses in 13 files of `edgar_warehouse`, 16 in `crates`, 226 in tests, 34 in 7 rules files, 24 in 5 skills, 10 in 5 docs) take the waterfall words in the build, with the rule versions, approval line, Mapping Documents and pins that follow.
