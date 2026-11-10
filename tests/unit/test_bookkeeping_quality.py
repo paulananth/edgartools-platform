@@ -40,12 +40,12 @@ def row(unit, attempt, uri):
             "receipt": {"uri": uri, "sha256": "a" * 64}}
 
 
-def receipt(unit, attempt, failed):
+def receipt(unit, attempt, failed, checked=10):
     return {"version": 2, "quality": {"run_id": "run-a", "step": "land",
             "work_unit_ref": quality.work_unit_reference("run-a", "land", unit),
             "table": "sample_table", "observed_at": "2026-11-06T12:00:00+00:00",
             "checks": {"valid_category": {"kind": "in_set", "failure_action": "flag",
-                                             "rows_checked": 10, "rows_failed": failed}}}}
+                                             "rows_checked": checked, "rows_failed": failed}}}}
 
 
 @pytest.fixture
@@ -130,3 +130,40 @@ def test_catalog_results_refuse_unknown_or_unsafe_counts():
               "failure_action": "flag", "rows_checked": 2**63, "rows_failed": 0}
     with pytest.raises(Blocked, match="invalid counts"):
         quality.catalog_results({"status": "passed", "units_unknown": 0, "results": [common]})
+
+
+@pytest.mark.parametrize("checked, failed", [(10.0, 0), (10.5, 1), (True, False)],
+                         ids=["whole float", "fraction", "bool"])
+def test_catalog_results_refuse_a_count_that_is_not_an_exact_integer(checked, failed):
+    """A count that arrived as a float or a bool is refused, not rounded into an integer."""
+    result = {"run_id": "run-a", "step": "land", "work_unit_ref": "ref", "attempt": "try",
+              "table": "sample_table", "check": "valid_category", "observed_at": "2026-11-06T12:00:00Z",
+              "failure_action": "flag", "rows_checked": checked, "rows_failed": failed}
+
+    with pytest.raises(Blocked, match="invalid counts"):
+        quality.catalog_results({"status": "passed", "units_unknown": 0, "results": [result]})
+
+
+def test_catalog_results_keep_the_largest_signed_64_bit_count_exact():
+    """The widest count a signed 64-bit column holds survives whole, not rounded."""
+    result = {"run_id": "run-a", "step": "land", "work_unit_ref": "ref", "attempt": "try",
+              "table": "sample_table", "check": "valid_category", "observed_at": "2026-11-06T12:00:00Z",
+              "failure_action": "flag", "rows_checked": 2**63 - 1, "rows_failed": 0}
+
+    entry = quality.catalog_results(
+        {"status": "passed", "units_unknown": 0, "results": [result]})["sample_table.valid_category"][0]
+
+    assert entry["rows_checked"] == 2**63 - 1
+    assert type(entry["rows_checked"]) is int
+
+
+def test_aggregation_refuses_a_sum_that_would_overflow_signed_64_bit_storage(storage_work):
+    """Two units whose counts together exceed a signed 64-bit column are refused."""
+    widest = 2**63 - 1
+    rows = [row("unit-a", "attempt-a", "memory://a"), row("unit-b", "attempt-b", "memory://b")]
+    storage_work.rows = rows
+    bookkeeping = Bookkeeping(rows, {"memory://a": receipt("unit-a", "attempt-a", 0, checked=widest),
+                                     "memory://b": receipt("unit-b", "attempt-b", 0, checked=1)})
+
+    with pytest.raises(Blocked, match="exceed signed 64-bit"):
+        quality.aggregate(bookkeeping, "run-a")
