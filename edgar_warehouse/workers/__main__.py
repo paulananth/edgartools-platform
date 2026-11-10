@@ -12,6 +12,7 @@ import hashlib
 import secrets
 import sys
 import threading
+import time
 from pathlib import Path
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
@@ -37,6 +38,7 @@ class Renewal:
 
     def __init__(self, envelope: dict):
         self.envelope, self.error, self.live = envelope, None, envelope
+        self.renewed, self.last = 0, time.monotonic()
         self.stop = threading.Event()
         self.thread = threading.Thread(target=self._run, daemon=True)
 
@@ -45,9 +47,16 @@ class Renewal:
             try:
                 self.envelope = control.renew(self.envelope)
                 self.live["claim"] = {**self.live["claim"], "proof": self.envelope["claim"]["proof"]}
+                self.renewed, self.last = self.renewed + 1, time.monotonic()
             except Exception as exc:  # the report then fails on the stale lease
                 self.error = exc
                 return
+
+    def state(self) -> str:
+        """What a refused lease needs to be told apart: did renewal fail, or did the work meet a stale lease."""
+        age = round(time.monotonic() - self.last)
+        return (f"renewal failed {age}s after its last success ({self.renewed} renewals)" if self.error is not None
+                else f"renewal ok: {self.renewed} renewals, last {age}s ago")
 
     def __enter__(self):
         self.thread.start()
@@ -74,6 +83,7 @@ def work(name: str, run_id: str, limit: int) -> int:
     module, artifacts, failed = load_profile(name), Artifacts(), 0
     digest = runtime(module)
     for envelope in one_at_a_time(lambda n: control.claim(run_id, name, n), limit):
+        renewal = None
         try:
             with Renewal(envelope) as renewal:
                 candidate = module.execute(envelope, artifacts)
@@ -82,7 +92,8 @@ def work(name: str, run_id: str, limit: int) -> int:
             control.report(renewal.envelope, candidate, digest)
         except Exception as exc:
             failed += 1
-            print(f"{envelope['claim']['step']}/{envelope['claim']['key']}: {exc}", file=sys.stderr)
+            state = renewal.state() if renewal is not None else "claimed, not started"
+            print(f"{envelope['claim']['step']}/{envelope['claim']['key']}: {exc} [{state}]", file=sys.stderr)
             try:
                 control.fail(envelope, type(exc).__name__)
             except control.ControlError:

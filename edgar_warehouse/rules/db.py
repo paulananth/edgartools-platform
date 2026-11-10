@@ -150,6 +150,17 @@ class Rules:
             conn.execute(update(table).where(storage.identity(table, conn.dialect.name, kind, name, version)).values(
                 status="proven" if proof["passed"] else "draft", proof=proof, batch_hash=proof["batch_hash"]))
 
+    def entity_types(self) -> list[dict]:
+        """Where each saved source version's records get their entity type (mastering step 0): one row per source
+        version and Dataset Contract. Read in code from the saved documents, so it is the same on every database."""
+        table = storage.versions(self.engine.dialect.name)
+        with self.engine.connect() as conn:
+            saved = storage.rows(conn, select(table.c.name, table.c.version, table.c.status, table.c.body).where(
+                table.c.kind == "source").order_by(table.c.name, table.c.created_at))
+        return [{"source": r["name"], "version": r["version"], "status": r["status"], "dataset_code": code,
+                 "origin": found["origin"], "entity_types": ",".join(found["types"]), "rule_id": found.get("rule_id")}
+                for r in saved for code, found in sorted(files.entity_types(json.loads(r["body"])).items())]
+
     def pending(self) -> list[dict]:
         """Every version with a recorded test run and no approval yet, with its
         evidence, the hash an approval of it must name, and what it changes

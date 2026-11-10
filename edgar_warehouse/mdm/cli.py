@@ -1,7 +1,7 @@
 """CLI subcommand: `edgar-warehouse mdm ...`, MDM only.
 
 Commands: migrate, check-connectivity, counts,
-prepare-capture, name-count, rebuild, rebuild-name-index and rebuild-detail-lookup. The legacy MDM commands and their tables are
+prepare-capture, name-count, reconcile, rebuild, rebuild-name-index and rebuild-detail-lookup. The legacy MDM commands and their tables are
 deleted (platform validation slice 2a).
 """
 from __future__ import annotations
@@ -60,6 +60,11 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     name_count.add_argument("--catalog", help="The capture's exchange ticker catalog, by receipt key: the cascade reads "
                                           "each filer's tickers, as the Company chain does")
     name_count.set_defaults(handler=_logged_handler("name-count", _command("name_count")))
+
+    reconcile = mdm_sub.add_parser("reconcile", help="Read-only: each source's records delivered to mastering and where "
+                                   "each stands (golden record, reviewed wait, set aside); exit 1 when one does not close")
+    reconcile.add_argument("--source", help="One source code (default every source)")
+    reconcile.set_defaults(handler=_logged_handler("reconcile", _command("reconcile")))
 
     replay = mdm_sub.add_parser("rebuild", help="Replay every stored record into the mastering tables; a stopped replay "
                                 "runs again and skips what is done")

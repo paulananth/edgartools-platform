@@ -114,6 +114,22 @@ def counts(args) -> int:
     return _print_mdm_report(report)
 
 
+def reconcile(args) -> int:
+    """Read-only: for each source, the records delivered to mastering and where each one stands. Exit 1 when one does not close."""
+    from edgar_warehouse.mastering import reconcile as mastering
+    from edgar_warehouse.mastering.store import open_store
+
+    engine = engine_from_env("MDM_DATABASE_URL", restricted=True)
+    db = open_store(engine)
+    try:
+        report = mastering.reconcile(db, args.source)
+    finally:
+        db.close()
+        engine.dispose()
+    print(json.dumps({"sources": report, "closes": bool(report) and all(row["closes"] for row in report)}, sort_keys=True))
+    return 0 if report and all(row["closes"] for row in report) else 1
+
+
 def rebuild_name_index(args) -> int:
     from .master_search import rebuild
 

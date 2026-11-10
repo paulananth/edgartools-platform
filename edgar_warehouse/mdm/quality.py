@@ -93,6 +93,15 @@ def _lei_check_digit(value, _args) -> bool:
     return True
 
 
+def _identifier_check_digit(value, args) -> bool:
+    """Passes unless the value fails its identifier type's check digit (an empty value passes: `present@1` asks for one)."""
+    from .identifier_types import TYPES
+
+    if value is None or not str(value).strip():
+        return True
+    return TYPES[args["identifier"]].refusal(value)[1] != TYPES[args["identifier"]].checksum_reason
+
+
 def _placeholder(value, args) -> bool:
     """Passes unless the value is a placeholder: "N/A", "NONE", "0000"."""
     if value is None:
@@ -165,6 +174,8 @@ CHECKS = {
     "in_set@1": (_in_set, {"values"}),
     "pattern@1": (_pattern, {"regex"}),
     "lei_check_digit@1": (_lei_check_digit, set()),
+    # An identifier's check digit, by its declared type (`identifier`: cusip, isin, sedol ...).
+    "identifier_check_digit@1": (_identifier_check_digit, {"identifier"}),
     "placeholder@1": (_placeholder, {"values"}),
     "registered_agent_address@1": (_registered_agent, {"markers"}),
     "in_reference@1": (_in_reference, {"table", "sha256"}),

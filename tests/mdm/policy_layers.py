@@ -9,6 +9,7 @@ still on; every pinned test reads the chain from here (`PINNED`).
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from edgar_warehouse.mdm.store import canonical, digest
 
@@ -459,6 +460,31 @@ def without_custodian_name_rule(policy: dict) -> dict:
     return body
 
 
+def without_custodian_name_creation(policy: dict) -> dict:
+    """The Form ADV custodian rules that create a Company by name, and by name and place (operator, 2026-11-09:
+    "master using name and company type", "Name plus place (Recommended)"), with their activations."""
+    body = _copy(policy)
+    gone = {"iapd-adv-custodian-name-form", "iapd-adv-custodian-name-place"}
+    body["kinds"]["company"]["rules"] = [r for r in body["kinds"]["company"]["rules"] if r["rule_id"] not in gone]
+    body["automatic_rules"] = [e for e in body["automatic_rules"] if e.get("rule_id") not in gone]
+    return body
+
+
+def without_phase_1_listed_operating(policy: dict) -> dict:
+    """Phase 1 (ticket 204; operator, 2026-11-09: "For phase 1 master only publically traded companies (filter)",
+    "Operating and listed a real company"): the Company classification rule and its measured proof of the version
+    before, held in `fixtures/company_classification_2026_09_25_13.json` as they were."""
+    body = _copy(policy)
+    held = json.loads((Path(__file__).parent / "fixtures/company_classification_2026_09_25_13.json").read_text())
+    rules = body["kinds"]["company"]["rules"]
+    # The rule keeps the source name the policy already uses (the SEC source was renamed after the lineage began).
+    body["kinds"]["company"]["rules"] = [{**held["rule"], "source": r["source"]} if r["rule_id"] == "sec-company-candidate" else r
+                                         for r in rules]
+    body["automatic_rules"] = [held["entry"] if e.get("rule_id") == "sec-company-candidate" else e
+                               for e in body["automatic_rules"]]
+    return body
+
+
 def without_related_person(policy: dict) -> dict:
     """Operator, 2026-11-08: "RELATED_PERSON (Recommended)": the relationship types pinned at version 4,
     which adds Form ADV's related person. Peeled, the pin is version 3."""
@@ -492,6 +518,10 @@ def without_adviser_cik(policy: dict) -> dict:
 # Newest first: each layer, and Company's policy digest with it and every
 # layer after it still on.
 LAYERS = [
+    # The custodian rules that create a Company by name, and by name and place (ticket 204, 2026-11-09).
+    (without_custodian_name_creation, "c66426dcb0e136b719cb5b6b4fc9a6d02e305c36683f17bef4a7a26f1417c627"),
+    # The Company classification: listed operating filers only (ticket 204, 2026-11-09).
+    (without_phase_1_listed_operating, "db8423032eb2c7824baf205df6fb768620c1b4c128d394df181e2d5a2b26bd45"),
     # Relationship types version 4, RELATED_PERSON: "RELATED_PERSON (Recommended)" (2026-11-08).
     (without_related_person, "eeaa64a8a8ffbf294c805f793900880051965e335a9884078edf14be8ec42f95"),
     # The Form ADV adviser CIK rule: "Both" (2026-11-08).

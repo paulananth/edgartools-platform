@@ -13,6 +13,7 @@ verification there. Invented values only.
 
 from __future__ import annotations
 
+from edgar_warehouse.mdm import adapters
 from edgar_warehouse.rules import files
 from tests.integration import test_mdm_postgres as core
 from tests.integration.test_openfigi_security import bound, securities
@@ -36,13 +37,14 @@ def policy_body() -> dict:
 def openfigi(cusip: str, ticker: str) -> dict:
     return core.source(key=cusip, source_code=OPENFIGI, kind="security",
                        fields={"name_of_issuer": "Example Corp."},
-                       identifiers={"cusip": cusip, "ticker": ticker})
+                       identifiers={"cusip": cusip, "ticker": ticker}, provenance={"matching": {"found": ["listed"]}})
 
 
-def form4(symbol: str, title: str = "Class A Common Stock") -> dict:
-    return core.source(key=f'["1234567","{symbol}","{title}"]', source_code=FORM4, kind="security",
+def form4(symbol: str, title: str = "Class A Common Stock", issuer: str = "1234567") -> dict:
+    return core.source(key=f'["{issuer}","{symbol}","{title}"]', source_code=FORM4, kind="security",
                        fields={},
-                       cross_references={"ticker": symbol})
+                       cross_references={"ticker": symbol,
+                                         "issuer_symbol_id": adapters._issuer_symbol_id({"issuer_cik": issuer, "symbol": symbol})})
 
 
 def load(database, openfigi_records: list[dict], form4_records: list[dict]):
@@ -61,12 +63,6 @@ def test_a_filed_symbol_finds_the_one_security_holding_its_ticker_and_makes_noth
     assert found[bound(database, FORM4, key)]["identifiers"] == {"cusip": [ONE], "ticker": ["EXA"]}
 
 
-def test_a_symbol_no_security_holds_waits_and_creates_no_security(database):
-    load(database, [openfigi(ONE, "EXA")], [form4("EXZ")])
-    assert len(securities(database)) == 1
-    assert bound(database, FORM4, '["1234567","EXZ","Class A Common Stock"]') is None
-
-
 def test_a_reused_ticker_held_by_two_securities_goes_to_review(database):
     load(database, [openfigi(ONE, "EXA"), openfigi(TWO, "EXA")], [form4("EXA")])
     assert len(securities(database)) == 2
@@ -74,3 +70,29 @@ def test_a_reused_ticker_held_by_two_securities_goes_to_review(database):
     # The symbol reaches two Securities: it waits for review.
     assert "conflicting_identifiers" in masters.reviews(database.application)
 
+
+
+def creating_policy() -> dict:
+    return policy_layers.with_rules_on(policy_body(), "security", "form4-security-issuer-symbol")
+
+
+def load_creating(database, openfigi_records: list[dict], form4_records: list[dict]):
+    policy = creating_policy()
+    masters.seed(database.application, openfigi_records, policy)
+    masters.seed(database.application, form4_records, policy)
+
+
+def test_a_symbol_no_security_holds_creates_one_security_for_the_issuer_and_symbol(database):
+    """Step 1: a record is never left without a golden record when a creation rule says create."""
+    load_creating(database, [openfigi(ONE, "EXA")],
+                  [form4("EXZ"), form4("EXZ", "Series B Preferred"), form4("EXZ", issuer="7654321")])
+    assert len(securities(database)) == 3  # the held Security, and one for each issuer's EXZ
+    same = {bound(database, FORM4, f'["1234567","EXZ","{t}"]') for t in ("Class A Common Stock", "Series B Preferred")}
+    other = bound(database, FORM4, '["7654321","EXZ","Class A Common Stock"]')
+    assert len(same) == 1 and None not in same and other is not None and other not in same  # one issuer, one Security
+
+
+def test_a_held_symbol_still_joins_its_security_and_creates_none(database):
+    load_creating(database, [openfigi(ONE, "EXA")], [form4("EXA")])
+    assert len(securities(database)) == 1
+    assert bound(database, FORM4, '["1234567","EXA","Class A Common Stock"]') == bound(database, OPENFIGI, ONE) is not None

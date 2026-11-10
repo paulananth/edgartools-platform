@@ -9,7 +9,7 @@ from pathlib import Path
 
 BLOCK = 2000
 LOCK = "merge"
-WRITTEN = ("master", "file", "identifier", "record", "name_key", "review", "withheld", "deferred",
+WRITTEN = ("master", "file", "delivery", "identifier", "record", "name_key", "review", "withheld", "deferred",
            "stage", "stage_key", "stage_bound", "lookup", "lookup_progress")
 
 
@@ -67,6 +67,22 @@ class Store:
             found.update(self.rows(f"select file_key,records from mastering_file where file_key in ({marks(block)})", block))
         return found
 
+    def known_assertions(self, ids) -> set:
+        """Which of these assertions the store already holds."""
+        found = set()
+        for block in blocks(sorted(set(ids))):
+            found.update(row[0] for row in self.rows(
+                f"select assertion_id from mastering_record where assertion_id in ({marks(block)})", block))
+        return found
+
+    def add_delivery(self, key: str, rows: list) -> None:
+        """What one file delivered, by source: its records, how many the store already held, and its set-asides.
+        A file delivered again keeps its first count."""
+        have = {row[0] for row in self.rows("select source_code from mastering_delivery where file_key=%s", [key])}
+        fresh = [(key, source, *counts) for source, *counts in rows if source not in have]
+        if fresh:
+            self.insert("mastering_delivery", ("file_key", "source_code", "records", "repeated", "deferred"), fresh)
+
     def finish_file(self, key: str, records: int) -> None:
         self.cursor.execute("insert into mastering_file(file_key,records) values (%s,%s)", [key, records])
 
@@ -85,6 +101,15 @@ class Store:
         self.bulk("mastering_stage_key", ("namespace", "value"), [(n, v) for n, values in wanted.items() for v in values])
         return self.rows("select distinct i.namespace,i.value,i.entity_id from mastering_identifier i "
                          "join mastering_stage_key s on s.namespace=i.namespace and s.value=i.value")
+
+    def kinds(self, entities) -> dict:
+        """The entity type of each golden record, read from its body."""
+        found = {}
+        for block in blocks(sorted(entities)):
+            for entity, body in self.rows(
+                    f"select entity_id,body from mastering_master where entity_id in ({marks(block)})", block):
+                found[entity] = json.loads(body).get("kind")
+        return found
 
     def add_identifiers(self, rows: list) -> None:
         if rows:
@@ -171,6 +196,13 @@ class Store:
         self.insert("mastering_decision", ("decision_id", "operation", "left_id", "right_id", "body"),
                     [(body["decision_id"], body["operation"], left, right, json.dumps(body))])
 
+    def add_binds(self, decisions: list[dict]) -> None:
+        """The bind decisions of a file: one row per source record bound, read as the decision at its time (a later
+        merge moves the record, and `mastering_record` holds where it is now). A replay writes nothing twice."""
+        self.insert("mastering_decision", ("decision_id", "operation", "left_id", "right_id", "body"),
+                    [(d["decision_id"], "bind", d["subject"], d["entity_id"], json.dumps(d, separators=(",", ":")))
+                     for d in decisions])
+
     def decisions_about(self, entities) -> list[dict]:
         return [json.loads(row[0]) for row in self.rows(
             "select body from mastering_decision where operation in ('merge','exclude','reverse') "
@@ -199,6 +231,16 @@ class Store:
                     f"select subject,namespace,raw from mastering_withheld where subject in ({marks(block)})", block):
                 found[subject].append({"namespace": namespace, "raw": raw})
         return dict(found)
+
+    def in_review(self, subjects, *, except_reason: str) -> set:
+        """The subjects with an open review for any reason but `except_reason`: a record an earlier rule sent to a
+        data steward is not joined or created for by a later one."""
+        found = set()
+        for block in blocks(subjects):
+            found.update(r[0] for r in self.rows(
+                f"select subject from mastering_review where open_review=1 and reason<>%s and subject in ({marks(block)})",
+                [except_reason, *block]))
+        return found
 
     def close_reviews(self, reason: str, subjects) -> None:
         for block in blocks(subjects):

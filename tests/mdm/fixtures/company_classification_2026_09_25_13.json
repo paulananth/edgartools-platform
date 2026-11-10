@@ -1,0 +1,391 @@
+{
+ "entry": {
+  "activation": "measured",
+  "family": "classification",
+  "kind": "company",
+  "proof": {
+   "adversarial": {
+    "fixture_sha256": "ebe220479915a56f86f5c57edc2665f5ad6d40f55d112b7849899941beed49f1",
+    "n": 328,
+    "violations": 0
+   },
+   "approved_at": "2026-09-25T17:09:33Z",
+   "approved_by": "operator",
+   "cohort": {
+    "by_step": {
+     "10": {
+      "correct": 300,
+      "lower_bound": 0.9910621278248719,
+      "n": 300
+     },
+     "8": {
+      "correct": 300,
+      "lower_bound": 0.9910621278248719,
+      "n": 300
+     }
+    },
+    "files": {
+     "12-13-adversarial.jsonl": "ebe220479915a56f86f5c57edc2665f5ad6d40f55d112b7849899941beed49f1",
+     "12-13-held.jsonl": "989057c5f33177c1a53c182a757d00b6909df61a852bf9e2b6b0bd746d345fcc",
+     "12-13-label.py": "3858117cf62df1de0d6adfac6cd348da5a36e4d9587bcf82b69f358a90ed9e12",
+     "12-13-population.json": "b6023c5ef814ff496137ddd51c395582d07d316038ad23eb40a96bf64a741a49",
+     "12-13-sample.jsonl": "d276df62557c30106d8f49c52f23c0ea72c4795c664e96983c7569f91dd6ad97",
+     "12-classify.py": "0a1bde95ebca00dbc6b6cda39827f5688e540cd2a35714c411162f69b0395c4a",
+     "12-measure-13.py": "6fc1e10772f89f369513d74d80927670dce71e7b937e149951a50311aaf66ceb"
+    },
+    "population_sha256": "395b7db4cfeb5ab0d4816ee4c0e68ca078b548fce3b8337c0ab671f0e0668600",
+    "ticker_catalog_sha256": "836140c5ca9817b673e76f4c4cf25dda6650215683c1705e9fbe00b2e8f16fbf"
+   },
+   "correct": 600,
+   "lower_bound": 0.995511,
+   "method": "wilson_lower_bound",
+   "n": 600,
+   "one_sided_confidence": 0.95,
+   "reason": "ticket 12 Proving Run, SEC Company classification, the Account hold-back: bronze-only hand review, each Company step clears 0.95, 0 adversarial violations"
+  },
+  "rule_id": "sec-company-candidate",
+  "rule_version": "2026-09-25.13",
+  "verdict": "company"
+ },
+ "rule": {
+  "emits": [
+   "company",
+   "deferred"
+  ],
+  "family": "classification",
+  "rule_id": "sec-company-candidate",
+  "source": "sec.company.v1",
+  "steps": [
+   {
+    "step": "1",
+    "verdict": "deferred",
+    "when": [
+     {
+      "args": {
+       "field": "sic",
+       "values": [
+        "6189"
+       ]
+      },
+      "primitive": "field_in_set@1"
+     }
+    ]
+   },
+   {
+    "probable_kind": "fund_structure",
+    "step": "2",
+    "verdict": "deferred",
+    "when": [
+     {
+      "args": {
+       "field": "sic",
+       "values": [
+        "6221"
+       ]
+      },
+      "primitive": "field_in_set@1"
+     }
+    ]
+   },
+   {
+    "probable_kind": "government",
+    "step": "3",
+    "verdict": "deferred",
+    "when": [
+     {
+      "args": {
+       "field": "sic",
+       "values": [
+        "8888"
+       ]
+      },
+      "primitive": "field_in_set@1"
+     }
+    ]
+   },
+   {
+    "probable_kind": "company",
+    "step": "4",
+    "verdict": "deferred",
+    "when": [
+     {
+      "args": {
+       "fields": "ticker"
+      },
+      "primitive": "fields_all_empty@1"
+     },
+     {
+      "args": {
+       "field": "category",
+       "min_count": 1,
+       "normalizer": "conformed",
+       "token_list": "emerging_growth"
+      },
+      "primitive": "token_match@2"
+     }
+    ]
+   },
+   {
+    "probable_kind": "fund_structure",
+    "step": "5",
+    "verdict": "deferred",
+    "when": [
+     {
+      "args": {
+       "field": "entity_type",
+       "values": [
+        "operating"
+       ]
+      },
+      "primitive": "field_in_set@1"
+     },
+     {
+      "args": {
+       "field": "entity_name",
+       "min_count": 1,
+       "normalizer": "conformed",
+       "token_list": "fund_name"
+      },
+      "primitive": "token_match@2"
+     }
+    ]
+   },
+   {
+    "probable_kind": "fund_structure",
+    "step": "6",
+    "verdict": "deferred",
+    "when": [
+     {
+      "args": {
+       "field": "entity_type",
+       "values": [
+        "operating"
+       ]
+      },
+      "primitive": "field_in_set@1"
+     },
+     {
+      "args": {
+       "field": "sic",
+       "values": [
+        "6199",
+        "6211",
+        "6282",
+        "6799",
+        "6798"
+       ]
+      },
+      "primitive": "field_in_set@1"
+     },
+     {
+      "args": {
+       "field": "category",
+       "values": [
+        "<br>Emerging growth company"
+       ]
+      },
+      "primitive": "field_in_set@1"
+     }
+    ]
+   },
+   {
+    "probable_kind": "company",
+    "step": "6b",
+    "verdict": "deferred",
+    "when": [
+     {
+      "args": {
+       "field": "entity_type",
+       "values": [
+        "operating"
+       ]
+      },
+      "primitive": "field_in_set@1"
+     },
+     {
+      "args": {
+       "field": "sic",
+       "values": [
+        "6798"
+       ]
+      },
+      "primitive": "field_in_set@1"
+     },
+     {
+      "args": {
+       "fields": "ticker"
+      },
+      "primitive": "fields_all_empty@1"
+     }
+    ]
+   },
+   {
+    "step": "7",
+    "verdict": "deferred",
+    "when": [
+     {
+      "args": {
+       "field": "entity_type",
+       "values": [
+        "operating"
+       ]
+      },
+      "primitive": "field_in_set@1"
+     },
+     {
+      "args": {
+       "fields": "industry_code"
+      },
+      "primitive": "fields_all_empty@1"
+     }
+    ]
+   },
+   {
+    "probable_kind": "fund_structure",
+    "step": "7a",
+    "verdict": "deferred",
+    "when": [
+     {
+      "args": {
+       "field": "entity_type",
+       "values": [
+        "operating"
+       ]
+      },
+      "primitive": "field_in_set@1"
+     },
+     {
+      "args": {
+       "field": "forms",
+       "min_count": 1,
+       "values": "fund_report"
+      },
+      "primitive": "values_overlap@1"
+     }
+    ]
+   },
+   {
+    "probable_kind": "company",
+    "step": "7b",
+    "verdict": "deferred",
+    "when": [
+     {
+      "args": {
+       "field": "entity_type",
+       "values": [
+        "operating"
+       ]
+      },
+      "primitive": "field_in_set@1"
+     },
+     {
+      "args": {
+       "field": "forms",
+       "min_count": 1,
+       "values": "form_10"
+      },
+      "primitive": "values_overlap@1"
+     },
+     {
+      "args": {
+       "field": "forms",
+       "min_count": 1,
+       "values": "private_offering"
+      },
+      "primitive": "values_overlap@1"
+     },
+     {
+      "args": {
+       "field": "forms",
+       "max_count": 0,
+       "values": "bdc_election"
+      },
+      "primitive": "values_overlap@1"
+     }
+    ]
+   },
+   {
+    "step": "8",
+    "verdict": "company",
+    "when": [
+     {
+      "args": {
+       "field": "entity_type",
+       "values": [
+        "operating"
+       ]
+      },
+      "primitive": "field_in_set@1"
+     }
+    ]
+   },
+   {
+    "probable_kind": "person",
+    "step": "9",
+    "verdict": "deferred",
+    "when": [
+     {
+      "args": {
+       "field": "entity_type",
+       "values": [
+        "other"
+       ]
+      },
+      "primitive": "field_in_set@1"
+     },
+     {
+      "args": {
+       "field": "entity_name",
+       "min_count": 1,
+       "normalizer": "conformed",
+       "token_list": "person_suffix"
+      },
+      "primitive": "token_match@2"
+     }
+    ]
+   },
+   {
+    "step": "10",
+    "verdict": "company",
+    "when": [
+     {
+      "args": {
+       "field": "entity_type",
+       "values": [
+        "other"
+       ]
+      },
+      "primitive": "field_in_set@1"
+     },
+     {
+      "args": {
+       "document": "sic"
+      },
+      "primitive": "evidence_present@1"
+     },
+     {
+      "args": {
+       "document": "category"
+      },
+      "primitive": "evidence_present@1"
+     },
+     {
+      "args": {
+       "field": "entity_name",
+       "min_count": 1,
+       "normalizer": "conformed",
+       "token_list": "company_legal_form"
+      },
+      "primitive": "token_match@2"
+     }
+    ]
+   },
+   {
+    "otherwise": true,
+    "step": "11",
+    "verdict": "deferred"
+   }
+  ],
+  "version": "2026-09-25.13"
+ }
+}

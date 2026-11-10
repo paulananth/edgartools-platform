@@ -96,7 +96,10 @@ the whole list.
    whose source or policy is still a draft, or whose activation is refused,
    stays blocked. Record the refusal and go on to the next domain. Loading
    entities waits until that version is the active proven one.
-3. **RDM, per domain.** `edgar-warehouse rdm list`, then
+3. **RDM, per domain.** A new store's RDM is empty: restore every published code set from git with
+   `scripts/rdm_restore_published.py --by <name> --words "<their exact words>"` in this skill
+   (worker.env sourced; it drafts, approves in those words, publishes and checks each version's sha256
+   against its `pin.json`, and exits 1 naming any that differs). Then `edgar-warehouse rdm list`, then
    `edgar-warehouse rdm describe <code set>` for every code set that domain
    pins. A published version is operational. A missing or draft code set is a
    blocker for that domain: route it through data-profiling's RDM steps
@@ -191,7 +194,10 @@ submits one source.
    not install, approve or start a run. Detail is in
    `docs/specs/source-sequencing.md` in the repository.
 2. **Install that source only.** Save its document into the Rules database.
-   `rules load` saves every file under a root; do not use it here.
+   `rules load` saves every file under a root; do not use it for one source. A new store taking every
+   source (a go-live) needs nothing but git: `rules load --root rules --version <name>` saves each document
+   and approves it from `rules/approvals.yaml` with no test run, then `rules activate` each one (merge
+   policy first, then the pipeline, then the sources).
    ```bash
    edgar-warehouse rules save --source <name> --version <v> rules/sources/<name>/source.yaml
    ```
@@ -200,7 +206,9 @@ submits one source.
    proof forward when [mdm-engineering](../mdm-engineering/SKILL.md#choose-the-cheapest-proof)'s
    "Choose the cheapest proof" allows it, and run no new test. Otherwise data-onboarding's **test** step runs and records one (`rules
    test --version`). A test that stops is not a proof and is not recorded.
-3. **Enable it.** Follow [APPROVE](../data-onboarding/APPROVE.md). Activate
+3. **Enable it.** Follow [APPROVE](../data-onboarding/APPROVE.md). Source `governance.env` beside
+   `worker.env`: activation registers the version in MDM and stops with "MDM activation requires an
+   explicit destination connection" without it. Activate
    the merge policy this source depends on first, then this source:
    ```bash
    edgar-warehouse rules activate --source <name> --version <v>
@@ -236,9 +244,13 @@ edgar-warehouse load \
 ```
 
 - `--stores` is the folder holding the stores' `worker.env`, `verifier.env`
-  and `governance.env` (`infra/scripts/local-test-stores.py up <name>` writes
-  them). Each step runs under its own duty's login. Nothing is printed from
-  those files.
+  and `governance.env` (`uv run --extra mdm python infra/scripts/local-test-stores.py up <name>`
+  writes them, and initializes every store empty). Each step runs under its own duty's login.
+  Nothing is printed from those files.
+- **Create a store from an up-to-date checkout, and keep its lifecycle there.** `up` refuses a checkout
+  behind `origin/main`, and a store belongs to the checkout that created it: `up`, `stop`, `backup` and `copy`
+  from another checkout stop at "Environment belongs to another worktree". A stale untracked skill link
+  blocks fast-forwarding the main checkout; remove the link (not its target) first.
 - Add `--fact name=value` and `--file name=path` for each input the target's
   `run` declares; `scripts/run_inputs.py <source>` in the data-onboarding skill lists them.
 - **A target that lands silver registers its tables itself**, before it submits
@@ -251,7 +263,7 @@ edgar-warehouse load \
   `scripts/capture_receipts.py <capture folder>` once: it writes one receipt per
   file and never replaces a receipts file.
 - **A reload whose inputs changed needs `--revision N`** (default 0, the
-  first publication). A changed input (a new Name Count, say) changes a record under the
+  first publication). A changed input (a new Name Matching, say) changes a record under the
   same revision, and the Stage refuses it ("Source native revision has
   contradictory publications"): pass a revision higher than the last load's
   (the bundles all stopped at merge until it was raised).
@@ -416,7 +428,10 @@ Work it out from counts before starting:
   then requires exact timestamped OpenMetadata readback. Use
   `edgar-warehouse rules catalog check --bookkeeping-run <run-id>` for a
   read-only confirmation later. An incomplete run remains unknown and cannot
-  publish. Keep `SILVER_QUALITY_EVIDENCE_V2` unset until
+  publish. The publish reconciles the whole catalog plan, not only the quality
+  results: run it from a checkout at current `origin/main`, or it removes
+  catalog objects the current rules describe. The quality results themselves
+  are keyed by timestamp and survive that reconcile. Keep `SILVER_QUALITY_EVIDENCE_V2` unset until
   [Enable a new receipt format](../bookkeeping/RECOVERY.md#enable-a-new-receipt-format)
   is met. Catalog
   entries describe the load and its checks; OpenMetadata does not run or resume

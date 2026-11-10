@@ -460,6 +460,12 @@ missing, go on and log it.
 - `docs/specs/mdm/`: start with `source-evidence.md` and the policy
   spec of the kind you map onto.
 - MDM kinds: `KINDS` in `edgar_warehouse/mdm/evidence.py`.
+- **Declare the entity type first** (step 0 of mastering). Every Dataset Contract states where its records' entity
+  type comes from, in `adapter`: `kind` when the source states one type, `classification` when a measured rule
+  decides it, or `kind_field` with `kind_values` when the source's own category field does. A record whose type cannot
+  be decided is set aside, never mastered. `rules check` refuses a contract that states none; the Mapping Document's
+  `kind` row on the Source sheet shows each contract's entity type, and `RulesDatabase.entity_types()`
+  lists it per saved source version, the same on every database.
 - The fields MDM keeps for a kind: `edgar-warehouse context <kind> --search`
   shows a live record's fields; the kind's field list in code, or, for a kind
   with none, its consumer spec's projection. Use these names; a new field is
@@ -741,6 +747,15 @@ capture is enough for a source whose rules are already proved on real files
      checked by its worker's verifier, then `records`). The test keeps only
      what is its own: the files, each artifact's context and lookups, and the
      preparation keys. Never copy the chain into a test.
+   - **Reconcile the source's records before approval** (operator, 2026-11-09: the per-source accounting is part of
+     source onboarding). After the real-file run, `edgar-warehouse mdm reconcile --source <dataset code>` (read-only,
+     with the stores' `verifier.env`) must close: the records delivered and not already held equal the records stored;
+     each stored record has a golden record, or an open review that says why it waits; each set-aside record has its
+     reason. It exits 1 and names the source and the numbers that do not close. A difference is a defect to fix, never
+     a note, and `delivery_not_recorded` (a store merged before deliveries were tracked) is not closed.
+   - **Prove each relationship the source states.** On invented records through the real merge, a record that mentions a
+     party with no golden record makes only its own golden record and no link; when the mentioned party's own record is
+     mastered, the link resolves and both keep their own entity types. A relationship never creates a golden record.
    - Check the kind's merge rules accept the source. A source missing from
      `defaults.sources` fails its whole batch. Check `defaults.sources` (a
      kind with its own check in code, run it; see Examples). Adding a source to an
@@ -870,7 +885,7 @@ capture is enough for a source whose rules are already proved on real files
      `batch_hash`. For a bronze capture with a `receipts.jsonl` (one line
      per file: key, sha256, bytes), use the sha256 of that file.
      The manifest lists exactly the files the test read: the feed's own, and
-     a file another source captured when the reading joins it (a Name Count,
+     a file another source captured when the reading joins it (a Name Matching,
      another feed's catalog), since the counts depend on it. A
      `receipts.jsonl` that names a file the test did not read, or misses one
      it did, is then not the manifest: write one with exactly those files.
@@ -1006,7 +1021,7 @@ These name today's sources only as examples; nothing above depends on them.
   switched-on `sec-company-candidate` from the policy when it loads, so a
   proving run stamps it into its copy of the policy first (**test**); its
   preparation (`edgar-warehouse mdm prepare-capture --source sec.company`) reads the
-  Name Count file (`--file name_count=<path>`, built by `edgar-warehouse mdm name-count`,
+  Name Matching file (`--file name_count=<path>`, built by `edgar-warehouse mdm name-count`,
   with `--catalog` while a cascade pass is on) and the exchange catalog.
 - **Source checks in code:** for Company,
   `merge.check_company_sources(files.policy(), assertions)`.

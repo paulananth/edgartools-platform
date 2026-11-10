@@ -349,7 +349,7 @@ format handling as top-level calls. Literal const/default/reference data
 never enables a feature. Existing scalar `const` behavior is unchanged.
 
 Use `record_column: record` in `mdm.prepare` to send the constructed object
-unchanged. This does not supply a source's catalog or Name Count joins or qualify
+unchanged. This does not supply a source's catalog or Name Matching joins or qualify
 its full preparation; compare those operations and assertion identities before
 retiring a source's retained reader, where one exists. Prove it by assembling fixture records from
 explicit fields and verifying them through preparation and the kind's actual
@@ -549,11 +549,11 @@ Growth refuses with
 `text_transform_limit`. Contracts compile regexes once, including expressions
 in unselected branches. Literal reference rows and defaults remain data.
 
-For Name Count keys, start with each source's bundled `name-key.yaml`
+For Name Matching keys, start with each source's bundled `name-key.yaml`
 (see Examples). Run the recipes on authenticated captured
 current/former names; compare exact retained keys and prove a deliberate
 recipe fault changes them. Record capture, contract, oracle and actual native
-binary hashes. Recipe parity completes the name-key step only; the Name Count population,
+binary hashes. Recipe parity completes the name-key step only; the Name Matching population,
 classification, provenance, installed mastering/replay/recovery and active
 consumer replacement remain independent requirements.
 
@@ -885,7 +885,7 @@ a fallback.
 A configured address comparison can freeze place reference rows into the
 contract, preserve raw street and region text, derive country from the
 approved ISO reference and keep region only for subdivisions. This proves
-raw address derivation separately from Name Count, complete provenance, pagination
+raw address derivation separately from Name Matching, complete provenance, pagination
 and full mastering; those remain required before parser retirement.
 
 ### A main document with continuation pages
@@ -900,7 +900,7 @@ receipts. The context document binds explicit caller facts (the record key,
 capture run, raw object id, load mode, sync time, any item limit) to that exact
 input receipt; the worker verifies their binding and the native engine their
 types. An input hash does not independently prove a supplied capture identifier
-or observation time: the acquisition or Name Count provenance gates must prove those.
+or observation time: the acquisition or Name Matching provenance gates must prove those.
 
 Join the resulting tables with a declared `source.combine` contract, then use
 `mdm.prepare` to write immutable input batches. The read block alone is neither
@@ -1187,24 +1187,24 @@ Read the format's source structures as captured; XML and JSON may represent
 singleton lists or attributes differently, so do not infer cross-format raw
 record equality from their common member name.
 
-## Reuse an authenticated Name Count file
+## Reuse an authenticated Name Matching file
 
-To reuse a Name Count file, import the approved JSON through `Artifacts.put` so its
+To reuse a Name Matching file, import the approved JSON through `Artifacts.put` so its
 artifact SHA matches the canonical digest used in evidence. Bind that
-SHA to every placeholder in the source's Name Count contract before freezing it. Optional `execution.input_sha256s` pins every
+SHA to every placeholder in the source's Name Matching contract before freezing it. Optional `execution.input_sha256s` pins every
 input artifact in manifest order (one or two lowercase SHA-256 values).
 Both source.read worker and verifier check these pins before reading or
 publishing, including when the source yields no rows. The standalone native
 engine does not enforce execution pins.
 
 Read the captures through the source's main contract for it, then combine with
-its Name Count combine contract as described in COMBINING.md. The file's version,
+its Name Matching combine contract as described in COMBINING.md. The file's version,
 normalizers, FULL publication and optional cascade version must match the
 contract; unexpected reserved metadata collisions refuse. Constants are
 scalar values; use scalar assertions for metadata fields and `test`/`equal`
 for typed boolean conditions.
 
-This reuses approved global counts. Constructing the complete Name Count file,
+This reuses approved global counts. Constructing the complete Name Matching file,
 qualifying its current source population and proving installed mastering
 remain separate completion requirements.
 
@@ -1232,11 +1232,11 @@ nothing would be selected. `test.kind: text` tests the original JSON type
 without numeric or boolean coercion. Nested `choose` expressions can select
 an object's `$` text member or a scalar text value explicitly.
 
-Bundled Name Count contracts use these primitives for name extraction and
+Bundled Name Matching contracts use these primitives for name extraction and
 canonical keys: they project eligibility and legal keys selectively and read
 registration only for a wanted legal key. Preserve the caller's column order.
 Empty falsey containers yield no names; truthy non-object containers refuse.
-Skipped records must not evaluate name counts or registration. Qualification
+Skipped records must not evaluate name matching counts or registration. Qualification
 disables custom steps and includes paired faults that prove refusal order.
 Holder aggregation and cascade decisions may stay in a source's custom
 implementation. Remove it only after whole-source construction, complete source
@@ -1256,11 +1256,11 @@ The sources this repository reads today, and where each rule above is applied.
   an object; its place lookup converts the selected SEC code with Python text
   semantics, keeping the historical mapping of nontext codes to unknown places.
 - The Person source read block keeps the complete submissions document. Company
-  preparation reads the raw capture (`name-count-main.yaml`, the Name Count file
+  preparation reads the raw capture (`name-count-main.yaml`, the Name Matching file
   through `name-count.yaml`, `catalog.yaml`) and joins them with `combine-name-count.yaml`.
 - The installed object-records trial assembles the two raw Person fixture records
   and verifies them through preparation and the actual Person MDM contract.
-- Name Count keys: `sec.company/name-key.yaml` and
+- Name Matching keys: `sec.company/name-key.yaml` and
   `gleif/name-key.yaml` keep legal forms and unify their spelling; the SEC recipe
   removes the trailing state suffix before normalizing.
 - All 309 SEC place codes and their lowercase and whitespace variants are
@@ -1288,7 +1288,7 @@ receipts. The context document binds its values to that exact input receipt:
 (text), and `recent_limit` (integer or null). These are explicit caller facts;
 the worker verifies their binding and the native engine verifies their types.
 An input hash does not independently prove a supplied capture identifier or
-observation time: the acquisition/Name Count provenance gates must prove those.
+observation time: the acquisition/Name Matching provenance gates must prove those.
 
 Join the resulting tables with a declared `source.combine` contract, then use
 `mdm.prepare` to write immutable input batches. The read block alone is neither a source activation nor complete mastering.
@@ -1340,24 +1340,24 @@ belong to the approved scope. Scope selection makes no identity or binding
 decision and does not replace the later MDM checks.
 
 
-### Name Count contracts
+### Name Matching contracts
 
-- Name Count reuse binds the file's SHA into `sources/sec.company/name-count.yaml`;
+- Name Matching reuse binds the file's SHA into `sources/sec.company/name-count.yaml`;
   Company captures are read through `name-count-main.yaml` and combined with
   `combine-name-count.yaml`.
 
 The bundled `gleif/name-count-record.yaml` and
-`sec.company/name-count-filer.yaml` use these primitives for Name Count
+`sec.company/name-count-filer.yaml` use these primitives for Name Matching
 name extraction and canonical keys. `gleif/name-count-identity.yaml` projects
 eligibility and legal keys selectively; `gleif/name-count-update.yaml` reads
-registration only for a wanted legal key. Preserve the caller order: Name Count
+registration only for a wanted legal key. Preserve the caller order: Name Matching
 category, LEI, legal key, wanted-key timestamp, other names; cascade LEI,
 category, mapped quality, names. Empty falsey containers yield no names;
 truthy non-object containers refuse. Skipped records must not evaluate name
 counts or registration. Qualification disables custom steps and includes
 paired faults that prove refusal order. Holder aggregation and
 cascade decisions remain in `edgar_warehouse/mdm/name_count.py`, which
-Name Count and matching still import. Whole-source construction (#901) and
+Name Matching and matching still import. Whole-source construction (#901) and
 the installed population through the earlier in-process bundles (#905, #907)
 are qualified; the `mastering` target's installed proof masters the 6,414
 Companies on separate workers and verifiers (Issue 20 slice 20c part 4, #930).
@@ -1397,15 +1397,15 @@ An empty key list still validates document shape and assertions.
 runs it: registered workers read the receipt-bound raw capture's main
 documents through `name-count-main.yaml` (each row's bronze origin from the
 caller's `bronze_object` context) and their name and CIK keys through
-`name-count-keys.yaml`; the authenticated frozen Name Count file through
+`name-count-keys.yaml`; the authenticated frozen Name Matching file through
 `name-count.yaml`, narrowed by two lookup sets derived from the key readings (a
 version-3 request; one key reading of at most 512 documents a bundle); the
 exchange catalog through `catalog.yaml`; joined by
 `combine-name-count-captured.yaml` (`combine-name-count.yaml` with the sources a
 capture holds today); then `mdm.prepare` makes the bundle's rows one
-publication and `mastering.merge` merges it. The Name Count, combine and records inputs
+publication and `mastering.merge` merges it. The Name Matching, combine and records inputs
 are composed by Bookkeeping from the verified readings. `mdm name-count`
-builds the Name Count file from configured readings of the same capture
+builds the Name Matching file from configured readings of the same capture
 (#901, #905). The installed proofs #905 and #907 mastered the full population
 from the in-process bundles this target replaced; the target's own installed
 proof is Issue 20 slice 20c part 4.

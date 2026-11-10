@@ -25,13 +25,21 @@ defaults:
   allow_unknown_effective: true
 rules:
 - rule_id: sec-company-candidate
-  version: 2026-09-25.13
+  version: 2026-11-09.phase-1-listed-operating
   family: classification
   source: sec.company.v1
   emits:
   - company
   - deferred
   steps:
+  # Phase 1 (operator, 2026-11-09: "For phase 1 master only publically traded companies (filter)"; "Operating and
+  # listed a real company"): a filer with no ticker is not publicly traded and is set aside before any other test.
+  - step: "0"
+    verdict: deferred
+    when:
+    - primitive: fields_all_empty@1
+      args:
+        fields: ticker
   - step: "1"
     verdict: deferred
     when:
@@ -58,19 +66,6 @@ rules:
         field: sic
         values:
         - "8888"
-  - step: "4"
-    verdict: deferred
-    probable_kind: company
-    when:
-    - primitive: fields_all_empty@1
-      args:
-        fields: ticker
-    - primitive: token_match@2
-      args:
-        field: category
-        normalizer: conformed
-        token_list: emerging_growth
-        min_count: 1
   - step: "5"
     verdict: deferred
     probable_kind: fund_structure
@@ -86,95 +81,6 @@ rules:
         normalizer: conformed
         token_list: fund_name
         min_count: 1
-  - step: "6"
-    verdict: deferred
-    probable_kind: fund_structure
-    when:
-    - primitive: field_in_set@1
-      args:
-        field: entity_type
-        values:
-        - operating
-    - primitive: field_in_set@1
-      args:
-        field: sic
-        values:
-        - "6199"
-        - "6211"
-        - "6282"
-        - "6799"
-        - "6798"
-    - primitive: field_in_set@1
-      args:
-        field: category
-        values:
-        - <br>Emerging growth company
-  - step: 6b
-    verdict: deferred
-    probable_kind: company
-    when:
-    - primitive: field_in_set@1
-      args:
-        field: entity_type
-        values:
-        - operating
-    - primitive: field_in_set@1
-      args:
-        field: sic
-        values:
-        - "6798"
-    - primitive: fields_all_empty@1
-      args:
-        fields: ticker
-  - step: "7"
-    verdict: deferred
-    when:
-    - primitive: field_in_set@1
-      args:
-        field: entity_type
-        values:
-        - operating
-    - primitive: fields_all_empty@1
-      args:
-        fields: industry_code
-  - step: 7a
-    verdict: deferred
-    probable_kind: fund_structure
-    when:
-    - primitive: field_in_set@1
-      args:
-        field: entity_type
-        values:
-        - operating
-    - primitive: values_overlap@1
-      args:
-        field: forms
-        values: fund_report
-        min_count: 1
-  - step: 7b
-    verdict: deferred
-    probable_kind: company
-    when:
-    - primitive: field_in_set@1
-      args:
-        field: entity_type
-        values:
-        - operating
-    - primitive: values_overlap@1
-      args:
-        field: forms
-        values: form_10
-        min_count: 1
-    - primitive: values_overlap@1
-      args:
-        field: forms
-        values: private_offering
-        min_count: 1
-    - primitive: values_overlap@1
-      args:
-        field: forms
-        values: bdc_election
-        max_count: 0
   - step: "8"
     verdict: company
     when:
@@ -198,29 +104,10 @@ rules:
         normalizer: conformed
         token_list: person_suffix
         min_count: 1
-  - step: "10"
-    verdict: company
-    when:
-    - primitive: field_in_set@1
-      args:
-        field: entity_type
-        values:
-        - other
-    - primitive: evidence_present@1
-      args:
-        document: sic
-    - primitive: evidence_present@1
-      args:
-        document: category
-    - primitive: token_match@2
-      args:
-        field: entity_name
-        normalizer: conformed
-        token_list: company_legal_form
-        min_count: 1
   - step: "11"
     verdict: deferred
     otherwise: true
+
 # The CIK matching rule (company mastering tickets 04 and 15): an SEC record the
 # classification rule accepts joins the one Company that holds its CIK, or
 # creates it when none does. Only SEC's own record creates a Company from a CIK.
@@ -481,6 +368,35 @@ rules:
   - bind
   key: name_id@1
   on_no_match: wait
+  on_several: review
+# A custodian named only by its name that no other source's Company holds (operator, 2026-11-09: "master using name
+# and company type", then "Name plus place"): a name that ends in a legal form creates one Company for that name,
+# which the custodian's later records join; a name with no legal form creates one Company per place (name, city, state
+# and country). The rule above runs first, so an existing Company of the same name is joined, never doubled. Both rules
+# only act on the custodian's own records.
+- rule_id: iapd-adv-custodian-name-form
+  version: 2026-11-09.1
+  family: exact_name_binding
+  source: iapd.adv.custodians.v1
+  holder_sources: []
+  applies_to_verdict: company
+  emits:
+  - bind
+  key: name_id@1
+  cross_reference: name_form_id
+  on_no_match: mint
+  on_several: review
+- rule_id: iapd-adv-custodian-name-place
+  version: 2026-11-09.1
+  family: exact_name_binding
+  source: iapd.adv.custodians.v1
+  holder_sources: []
+  applies_to_verdict: company
+  emits:
+  - bind
+  key: name_place_id@1
+  cross_reference: name_place_id
+  on_no_match: mint
   on_several: review
 # A GLEIF record an N-PORT holding names as its issuer joins the one Company
 # that holds its LEI, and otherwise waits for the SEC-GLEIF name rules; it

@@ -46,6 +46,9 @@ def historical_assertion(assertion):
     from tests.support.name_count_words import without_name_id
 
     body = without_name_id(assertion)  # ticket 01: the name id came after
+    # Phase 1 (ticket 204) renamed the classification rule's version; the oracle holds the one before.
+    body["provenance"] = {**body["provenance"], "classification": {**body["provenance"]["classification"],
+                                                                     "version": "2026-09-25.13"}}
     body["source_code"] = "sec.submissions.company.v1"
     body["subject"] = digest([body["source_code"], body["record_key"]])
     body["assertion_id"] = digest({k: v for k, v in body.items() if k != "assertion_id"})

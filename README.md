@@ -156,7 +156,7 @@ without giving an agent authority to approve its own findings or activate rules.
 | [data-platform](skills/data-platform/SKILL.md) | Where do I start, and how do I run the whole flow? | Setup, reading, combining, mastering, recovery and links to specialist skills. |
 | [data-operations](skills/data-operations/SKILL.md) | How do agents manage recurring loads as deliveries and capacity change? | Delivery readiness, changed/renamed files, resource sizing, run monitoring, recovery and a maintained operational runbook using Bookkeeping and Change Journal. |
 | [data-profiling](skills/data-profiling/SKILL.md) | What is in this delivery, and how do its parts connect? | Human report, machine-readable findings, keys, quality requirements, code sets and silver specifications. Approved findings can produce a public catalog summary. |
-| [data-modeling](skills/data-modeling/SKILL.md) | What does each part mean in the model? | Evidence-based decisions about master kinds, identity identifiers, lookup-only references, relationships, code sets and time. |
+| [data-modeling](skills/data-modeling/SKILL.md) | What does each part mean in the model? | Evidence-based decisions about master kinds, identity identifiers, cross-references, relationships, code sets and time. |
 | [data-onboarding](skills/data-onboarding/SKILL.md) | How do we introduce a new feed or master kind? | Contracts, mappings, quality checks, generated metadata and test evidence, followed by operator approval and activation. Master parts first, then needed reference data, then silver. |
 | [data-quality](skills/data-quality/SKILL.md) | Which checks or fixes are needed, and what do they do? | Measured proposals and approved MDM input checks in `quality.yaml`; unresolved cases remain explicit. |
 | [refining-rules](skills/refining-rules/SKILL.md) | How do we safely change an existing feed? | Delivery comparison, measured mapping/quality/matching changes, regenerated metadata and a new tested Rules version. |
@@ -200,7 +200,7 @@ gets its own onboarding and source folder.
 3. **Name the feed and define its contracts.** Create
    `rules/sources/<source>/source.yaml`. Declare how to read the capture and
    how each record type maps to a master kind: record key, identity identifiers,
-   lookup-only references, fields, relationships and source time. State whether
+   cross-references, fields, relationships and source time. State whether
    the delivery is full or incremental; absence from a later file does not by
    itself retire an identity or close a relationship.
 4. **Define quality and mastering decisions.** Add the measured checks and
@@ -263,7 +263,7 @@ They answer different questions; one rule should not silently answer another.
 | What does a row mean? | Dataset Contracts under `dataset_contracts:` in `source.yaml` | Name its kind, record key, identifiers, fields, links and time. |
 | Is a value usable? | `quality.yaml` | Apply declared fixes, check the result and report what was set aside or withheld. |
 | Do records describe the same subject? | `rules/merge/kinds/<kind>.yaml` | Approved matching rules use identity evidence; lookup references alone do not join records. |
-| Which source supplies a field? | The kind's `defaults.sources` and `fields.<field>` | Rank eligible claims after identity has been resolved. |
+| Which source supplies a field? | The kind's `defaults.sources` and `fields.<field>` | Rank eligible source values after identity has been resolved. |
 | Is an identifier well formed, and may it decide identity? | `rules/identifiers/` and the kind's Identifier Contracts | Format validation and identity authority are separate requirements. |
 | What do codes and links mean? | `rules/reference/`, pinned reference versions, including the relationship types (RDM code set `mdm-relationship-types`) | Give values and relationship types a shared, explicit meaning. |
 | What runs, and when is it complete? | The source's `bookkeeping` section or `rules/pipelines/<pipeline>/pipeline.yaml` | Declare worker steps, dependencies, checks and completion requirements. |
@@ -338,7 +338,7 @@ mastering an identity are different operations.
 | --- | --- | --- |
 | **Source Record Binding** | Assign a source record to the identity it describes. | Two providers report the same approved legal-entity identifier, so their records can bind to one Company under its Identifier Contract. |
 | **Identity Consolidation** | Decide that two existing master identities represent the same subject. | A correction proposes combining two published Companies. This needs its own accepted decision; it is not implied by a field priority. |
-| **Field Survivorship** | Select an eligible value after identity is resolved. | One source supplies the preferred legal name; another supplies an address where the policy allows it. Losing claims remain evidence. |
+| **Field Survivorship** | Select an eligible value after identity is resolved. | One source supplies the preferred legal name; another supplies an address where the policy allows it. Values that lose remain evidence. |
 | **Relationship projection** | Create a typed link between accepted endpoints for the stated time. | A Company is an accounting subsidiary of another Company. This is different from a reported holding or beneficial ownership. |
 
 For example, suppose two captured sources call a fictitious business “Example
@@ -349,7 +349,7 @@ records and why each value won. Without sufficient identity evidence, the
 records remain separate even if their names look alike.
 
 An Identifier Contract states which identifiers may decide identity and the
-cardinality they must obey. **Cross-references are lookup only:** sharing one
+cardinality they must obey. **Every identifier is mastered:** an identifier with no matching rule is recorded on the golden record, and sharing one
 does not join records. A name rule can bind only with measured evidence and
 approval of that exact rule. Similar names alone are not a general merge rule.
 Ambiguous records stay unbound or go to a steward for review.

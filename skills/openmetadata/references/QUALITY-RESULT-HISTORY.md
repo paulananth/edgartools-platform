@@ -33,3 +33,28 @@ readback.
 This API behavior does not establish that the platform supplied complete,
 verified evidence for the load. Preserve an incomplete run as unknown, and
 publish only results backed by admitted load evidence.
+
+## What the shipped UI shows
+
+Verified in the browser against OpenMetadata 2.0.7 on 2026-11-09.
+
+- The Test Case Results tab shows the **newest** result's full text, so the
+  Bookkeeping run, step, work unit, attempt and observation time are readable
+  there. The publisher puts that load reference in the result detail, which is
+  what makes the newest load identifiable.
+- History is a **chart**, not a list: one point per result over a 30-day axis,
+  with `rowsChecked` and `rowsFailed` series. There is no per-point tooltip and
+  no result table, so an **older** load's result text is not readable in the
+  UI. Read it through
+  `GET /api/v1/dataQuality/testCases/testCaseResults/{caseFQN}`.
+- The states an operator can see are confirmed (`Last Run Success`), failed
+  (`Last Run Failed`, with the failed-row count and an incident), and never run
+  (`Last Run Not run yet`, an empty chart, and "We couldn't find any test
+  results from Last 30 days.").
+- The result status vocabulary is `Success`, `Failed` and `Aborted` only; the
+  server refuses `Pending` and `Unknown` with HTTP 400. A pending or
+  incomplete load therefore cannot be presented as confirmed publication, and
+  a publisher that refuses incomplete evidence leaves the published history
+  unchanged.
+- The Test Cases list, the Test Suites list and a table's Data Quality panel
+  show the last run or a summary only. None of them shows per-load history.

@@ -147,11 +147,11 @@ def read_pieces(store: Artifacts, piece_root: Path, combined: str, contract: str
         for p in pieces], 2)
 
 
-def prepared_records(root: Path, words: tuple[str, ...] = ("cusip", "isin"),
-                     listings: list | None = None) -> tuple[list[dict], dict[str, str]]:
-    """The records of one run over the answers of `words` (both kinds by
-    default, ticket 138), and each refused identifier with its reason;
-    `listings`, when given, also gets every listing row of the source extract."""
+def prepared_all(root: Path, words: tuple[str, ...] = ("cusip", "isin"),
+                 listings: list | None = None) -> tuple[list[dict], dict[str, str]]:
+    """Every record of one run over the answers of `words` (both kinds by default, ticket 138), found or not,
+    and each refused identifier with its reason; `listings`, when given, also gets every listing row of the
+    source extract."""
     store = Artifacts()
     readings = [reading for word in words for reading in answer_readings(store, root / word, word)]
     if listings is not None:
@@ -173,6 +173,23 @@ def prepared_records(root: Path, words: tuple[str, ...] = ("cusip", "isin"),
     out = chain.records(store, root / "mdm", prepared, CODE, files.source("openfigi")["dataset_contracts"][CODE]["contract"],
                         refused=refused, key="id")
     return out, refused
+
+
+def is_found(record: dict) -> bool:
+    return bool((record["provenance"].get("matching") or {}).get("found"))
+
+
+def prepared_records(root: Path, words: tuple[str, ...] = ("cusip", "isin"),
+                     listings: list | None = None) -> tuple[list[dict], dict[str, str]]:
+    """The records of the answers OpenFIGI found, and each identifier it did not find with its reason. A not-found
+    answer is a record too (operator, 2026-11-09): `unfound_records` returns those."""
+    records, refused = prepared_all(root, words, listings)
+    unfound = {r["provenance"]["record_key"]: "not_found_by_openfigi" for r in records if not is_found(r)}
+    return [r for r in records if is_found(r)], {**refused, **unfound}
+
+
+def unfound_records(root: Path, words: tuple[str, ...] = ("cusip", "isin")) -> list[dict]:
+    return [r for r in prepared_all(root, words)[0] if not is_found(r)]
 
 
 OPENFIGI = ("openfigi-security-cusip", "openfigi-security-isin", "openfigi-security-figi")
@@ -475,3 +492,21 @@ def test_a_listing_detail_row_keeps_every_field_the_source_extract_gives_it():
     kept = files.load(FOLDER / "listing.yaml")["read"]["tables"]["listings"]["columns"]["detail"]["object"]["fields"]
     assert set(kept) == set(given) | {"currency"}
     assert all(kept[name] == {"value": {"path": f"detail.{name}"}} for name in given)
+
+
+def test_an_answer_openfigi_did_not_find_is_a_record_with_its_identifier_and_no_security_data(tmp_path):
+    records = unfound_records(tmp_path, ("cusip",))
+    assert {r["provenance"]["record_key"] for r in records} == {MISSING, *OTHERS}
+    assert all(r["identifiers"] == {"cusip": r["provenance"]["record_key"]} for r in records)
+
+
+def test_an_answer_openfigi_did_not_find_attaches_to_the_security_holding_its_cusip_and_creates_none(database, tmp_path):
+    """Operator, 2026-11-09: "openfigi is currently creating only equity so if it is equity then yes if not no"."""
+    unfound = unfound_records(tmp_path, ("cusip",))
+    held, loose = unfound[0], unfound[1:]
+    thirteenf = core.source(key="held", source_code=THIRTEENF, kind="security", fields={"name_of_issuer": "Example Corp.",
+                            "title_of_class": "COM"}, identifiers={"cusip": held["provenance"]["record_key"]})
+    load(database, [[thirteenf], [held, *loose]])
+    assert len(securities(database)) == 1  # nothing created for the answers OpenFIGI did not find
+    assert bound(database, CODE, held["provenance"]["record_key"]) == bound(database, THIRTEENF, "held") is not None
+    assert all(bound(database, CODE, r["provenance"]["record_key"]) is None for r in loose)  # no holder: they wait

@@ -497,6 +497,28 @@ LAYOUT = {
 }
 
 
+def entity_types(body: dict) -> dict[str, dict]:
+    """Where each Dataset Contract of a source gets its records' entity type (mastering step 1, settled as a record
+    arrives): `fixed` (the contract names one kind), `rule` (a classification rule decides) or `source_field` (the
+    source's own category field, mapped by `kind_values`). A contract that states none is refused: no record of it
+    could be given its one entity type."""
+    found = {}
+    for code, spec in (body.get("dataset_contracts") or {}).items():
+        adapter = (spec.get("contract") or {}).get("adapter") or {}
+        if adapter.get("kind"):
+            found[code] = {"origin": "fixed", "types": [adapter["kind"]]}
+        elif adapter.get("classification"):
+            found[code] = {"origin": "rule", "types": [adapter["classification"]["kind"]],
+                           "rule_id": adapter["classification"].get("rule_id")}
+        elif adapter.get("kind_field") and adapter.get("kind_values"):
+            found[code] = {"origin": "source_field", "types": sorted(set(adapter["kind_values"].values())),
+                           "field": adapter["kind_field"]}
+        else:
+            raise RulesFileError(f"Dataset Contract {code} states no entity type: give it `kind`, a `classification` "
+                                 "rule or a `kind_field` with `kind_values`")
+    return found
+
+
 def check_document(kind: str, body: dict) -> None:
     """Refuse a Rules document that cannot be saved as it stands: the one list of
     checks `rules save` and `rules check` share. The body holds JSON values only (a
@@ -506,6 +528,8 @@ def check_document(kind: str, body: dict) -> None:
         raise RulesFileError("The document holds a value that is not JSON (a tuple, a number as a key)")
     if kind == "source":
         from edgar_warehouse.bookkeeping.clean.config import validate
+
+        entity_types(body)
 
         for target in ((body.get("bookkeeping") or {}).get("targets") or {}):
             validate(body, target)

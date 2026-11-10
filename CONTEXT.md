@@ -68,6 +68,16 @@ _Avoid_: A separate adviser identity, IS_ENTITY_OF, IS_PERSON_OF, the Fund Serie
 A Company that audits other Companies' statements, through its governed audit-firm registration. It shares that Company's identity.
 _Avoid_: Audit Firm Profile, A separate auditor identity, a permanent auditor field on the audited Company
 
+**Mastering**:
+The one process every source record goes through to find or create the golden record it describes. A golden record is what the rest of this file calls a master identity. No source writes a golden record directly, and no identifier skips mastering.
+1. Every source record goes through mastering. It arrives with its source, its entity type, its identifiers, its fields, its relationships and its source time. The first thing mastering settles is the entity type, once, as the record arrives: the source's own where it states one, otherwise decided by classification rules. Each source record has exactly one entity type. A record whose entity type cannot be decided waits, and no golden record is created for it. With its entity type settled, mastering decides which golden record the record belongs to, or creates one.
+2. Other things the record mentions are relationships to other golden records, resolved when those golden records exist. A relationship never creates a golden record, and never changes the entity type step 1 settled.
+3. Mastering searches the cross-reference table for all the identifiers the source record states, together, under each identifier's Identifier Contract: who issues the value, how many golden records one value may name, and how many values one golden record may carry. Where the record states no identifier, or none finds a golden record, the name rule applies as a last resort: name, former name and place, each an approved rule with its own proof, and a name binds only where it is unique on both sides.
+4. One golden record found: the source record joins it. None found by any identifier or by the name rule: the entity type's creation rule creates one golden record, or leaves the record waiting. Two golden records found: this is an error, a duplicate already in the store. Mastering runs its matching rules on the two golden records. If they match, the younger is decommissioned, and the older survivor keeps both golden records' identifiers, source records and history, and the source record joins the survivor. If they do not match, the source record stays unjoined with an exception status until a data steward resolves the duplicate. Every identifier the record states is recorded in the cross-reference table against the golden record it joins or creates.
+5. Field values are chosen by survivorship, one field at a time, after the golden record is settled. Source priority, declared per entity type in the mastering policy, decides which source's value survives. It plays no part in deciding which golden record a source record belongs to. Every source's value, including the ones that did not survive, is kept.
+6. Every decision is recorded with the rule and mastering policy version that made it, the source records and identifiers it used, and its outcome, so any golden record, and any value it shows, can be explained from its source records.
+_Avoid_: A source writing a golden record directly, an identifier class that skips mastering, settling the entity type after searching for a golden record, creating a golden record per identifier before searching the record's other identifiers, source priority as a reason to merge, a score that picks between two golden records
+
 **Merge Stage**:
 The common mastering stage that resolves identity before selecting identity and profile values, preserving source attribution, disagreement and the decisions that explain the resulting master state.
 _Avoid_: Field overwrite only, source-specific direct master writes, identity consolidation by field priority
@@ -165,12 +175,12 @@ The decision that two existing master identities describe the same subject and w
 _Avoid_: Source Record Binding, corporate acquisition, merging fields because their values are similar
 
 **Field Survivorship**:
-The rules that select a master field value from eligible source claims after identity has been resolved, while retaining the claims that were not selected.
+The rules that select a master field value from eligible source values after identity has been resolved, while retaining the values that were not selected.
 _Avoid_: Proof of identity, source rank as permission to merge identities
 
-**Name Count**:
-The pinned count, over one whole SEC capture and one full GLEIF Golden Copy, of how many SEC filers and how many GLEIF legal entities carry each name with its legal form kept. It proposes no binding. A name matching rule may bind only a name whose SEC count and GLEIF count are each exactly one.
-_Avoid_: Name Frequency, Name Census, Census, a matcher, a list of approved pairs, a count over the records a Stage happens to hold
+**Name Matching**:
+The last resort of mastering, and the counts it needs: how many SEC filers and how many GLEIF legal entities carry each name with its legal form kept, counted over one whole SEC capture and one whole GLEIF publication. It proposes no binding. A name rule may bind only a name whose SEC count and GLEIF count are each exactly one. It is part of the GLEIF merge, not a separate job.
+_Avoid_: Name Count, Name Frequency, Name Census, Census, a matcher, a list of approved pairs, a count over the records a Stage happens to hold
 
 **Match Exclusion**:
 An evidence-backed decision that specified source records or identities must not be combined while the decision remains in force.
@@ -182,11 +192,11 @@ _Avoid_: A per-source configuration table, a runtime switch, a place to store sa
 
 **Identifier Contract**:
 The declaration, per identifier namespace, of who issues the value, how many identities one value may name and how many values one identity may carry, the second handle used to detect a violation, and the measurement that verified the claim.
-_Avoid_: "The id is unique" as an unstated assumption, a name match as the claim, a contract without a measurement
+_Avoid_: "The id is unique" as an unstated assumption, a name match standing in for the identifier, a contract without a measurement
 
 **Cross-reference**:
-The one table of every identifier a master identity carries, each joined to its master id and marked as matching or lookup only. A matching identifier, declared by its kind's Identifier Contract, finds the identity a record joins. A lookup-only identifier only finds: it is never the identity's own, never creates one and never merges two. Records that share one stay separate, unless a matching rule lets a filer's copy of an identifier another source issues (a FIGI 13F files) find the identity that holds it.
-_Avoid_: A second identifiers table, a crosswalk, a name that creates an identity, merging identities on a lookup-only identifier
+The one table of every identifier a golden record carries, each joined to its golden record id. Every identifier goes through mastering: its entity type's Identifier Contract and matching rules decide whether it finds the golden record a source record joins, creates one, or leaves the record waiting. An identifier no matching rule covers is still recorded on the golden record, and records that share it stay separate until a rule binds them.
+_Avoid_: A second identifiers table, a crosswalk, a name that creates a golden record, merging golden records on an identifier no matching rule covers
 
 **Source Contract**:
 The one versioned file that declares everything about one source after its Bronze Artifacts exist: how they are read, the silver table they produce, the Dataset Contract that maps them into MDM, and the test cases and batch gate that prove it.
@@ -632,7 +642,7 @@ _Avoid_: Extracted temporary file as source authority, undocumented side file, p
 
 **GLEIF Candidate Backstop**:
 The weekly re-evaluation of unresolved, unmatched, newly eligible, or materially changed MDM entities against current captured GLEIF evidence.
-_Avoid_: Daily full-universe rematch, treating no candidate as a permanent no-LEI claim
+_Avoid_: Daily full-universe rematch, treating no candidate as a permanent no-LEI finding
 
 **GLEIF Full Reconciliation**:
 The monthly comparison of the complete captured GLEIF Golden Copy with all in-scope MDM enrichment state, including records missed or retired across delta processing.

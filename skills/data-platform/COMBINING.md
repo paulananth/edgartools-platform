@@ -329,17 +329,17 @@ capture must belong to its approved capture run.
 State what the blueprint keeps (sort order, distinctness, which value wins per
 key), which empty values it excludes, and what a missing collection becomes.
 Capture checks run before any row filtering or key skip. The composition is an
-input to the remaining Name Count, classification and provenance qualification;
+input to the remaining Name Matching, classification and provenance qualification;
 keep the active route until the installed population and replay/recovery gates
 pass.
 
-## Name Count evidence
+## Name Matching evidence
 
-Bind the approved Name Count file's canonical SHA into the source's combine
+Bind the approved Name Matching file's canonical SHA into the source's combine
 contract for it and use its matching source-extract contract; replace capture and
 catalog run placeholders with the approved runs. Supply the full source extracts the
-source's `combine.yaml` uses, plus a source-extract named `name_count`. Name Count groups use
-`one` and pin each row's Name Count digest. Name evidence joins by the configured
+source's `combine.yaml` uses, plus a source-extract named `name_count`. Name Matching groups use
+`one` and pin each row's Name Matching digest. Name evidence joins by the configured
 name key; optional cascade evidence joins by the record key. Missing name
 evidence yields null, while a cascade answer can create a cascade-only object.
 The helper name key is dropped before MDM preparation.
@@ -347,7 +347,7 @@ The helper name key is dropped before MDM preparation.
 Compare complete prepared rows with a reference result (the source's older
 reader or builder, while one exists), including missing/empty evidence and
 cascade-only cases.
-Authenticate the whole Name Count input even when its tables are empty.
+Authenticate the whole Name Matching input even when its tables are empty.
 Approval of its construction, complete mastering provenance, installed
 population, replay and recovery must be proved before retiring active
 semantic consumers.
@@ -359,7 +359,7 @@ semantic consumers.
 The shipped Company blueprint has raw-JSON fixture qualification for main
 records, continuation pages, both ticker-catalog shapes and business-address
 conversion, followed by independently verified combination and MDM preparation.
-Name Count lookup/composition has exact fixture and pinned-file qualification.
+Name Matching lookup/composition has exact fixture and pinned-file qualification.
 
 ### Qualification on 2026-10-11
 
@@ -408,24 +408,24 @@ address becomes null. Capture checks run before any row filtering or key skip.
 Those installed empty-store gates passed (#905, #907), and the older Company
 reader is deleted.
 
-### The SEC Company Name Count evidence
+### The SEC Company Name Matching evidence
 
-Bind the approved Name Count file's canonical SHA into `combine-name-count.yaml` and use
+Bind the approved Name Matching file's canonical SHA into `combine-name-count.yaml` and use
 its matching source-extract contract `name-count.yaml`; replace capture/catalog run
 placeholders with the approved runs. Supply the full main/page/catalog
 source extracts used by `combine.yaml`, with main captures read through
-`name-count-main.yaml`, plus a source-extract named `name_count`. Both Name Count groups use
-`one` and pin each row's Name Count digest. Name evidence joins by the configured
+`name-count-main.yaml`, plus a source-extract named `name_count`. Both Name Matching groups use
+`one` and pin each row's Name Matching digest. Name evidence joins by the configured
 SEC name key; optional cascade evidence joins by integer CIK under
 `name_count.cascade`. Missing name evidence yields null, while a cascade
 answer can create a cascade-only object. The helper name key is dropped
 before MDM preparation.
 
-Prepared rows were compared with the older Python Name Count builder and
+Prepared rows were compared with the older Python Name Matching builder and
 Company reader, including missing/empty evidence and cascade-only cases, before
 both were retired (#901, #905). The cascade itself stays in `name_count.py`.
 
-## Whole-source Name Count qualification
+## Whole-source Name Matching qualification
 
 Use the configured original-source projection and its bounded record
 projection for comparisons.

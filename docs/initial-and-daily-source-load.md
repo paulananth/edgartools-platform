@@ -24,14 +24,14 @@ inputs still block only the work that needs them.
 | 1 | Freeze a complete inventory of every retained SEC, GLEIF and OpenFIGI delivery, with its files, receipts, hashes, publication identity and time. | Every file accounted for. Full available capture and full provider coverage are separate claims; report missing pages, history or identifier coverage. |
 | 2 | Load committed Rules documents and restore already published RDM code sets with exact pin equality. | Rules versions retained; required reference versions published and verified. Saving Rules is not source activation. |
 | 3 | Complete supported source registration and run setup, using the existing approved mappings and matching rules. | Each source has real registration authority, supported targets, manifests, worker/verifier access and evidence. No test-helper registrations in shared stores. |
-| 4 | Read the full SEC submissions population, pinned ticker catalog and full GLEIF Level 1 publication to build or verify Name Count. | Name counts represent the whole selected populations, never only the current bundle or matched cohort. |
+| 4 | Read the full SEC submissions population, pinned ticker catalog and full GLEIF Level 1 publication to build or verify Name Matching. | Name Matching counts represent the whole selected populations, never only the current bundle or matched cohort. |
 | 5 | Master SEC Companies; load N-PORT registrants and applicable ADV Company evidence through their contracts. | One Company identity per accepted identity, with source records and disagreements retained. Distinct companies are not merged because their names look alike. |
 | 6 | Apply GLEIF Level 1 to Companies, then its relationship and reporting-exception members when endpoints are available. | Apply current matching rules. Unmatched issuers wait; unsupported kinds remain accounted for. A full GLEIF file does not imply every record becomes a Company. |
 | 7 | Master SEC Persons from all captured submissions. | Accepted people, deferred and non-Person records reconcile to the complete input. |
 | 8 | Master N-PORT Fund Structures after their registrants are available. | Fund Series and registrant Company remain distinct. Missing evidence of a subfund relationship's start is not invented. |
 | 9 | Read the complete retained OpenFIGI request/response set to build the approved CUSIP/ISIN agreement input; master all captured 13F Securities, then N-PORT CUSIP and ISIN-only Securities. | One identity per supported accepted identifier; ambiguous identifiers accounted for. N-PORT publications carry their quarter, publication key, revision and effective time. |
 | 10 | Apply approved ownership relationships, GLEIF relationships and Security issuer links after both endpoints exist; reconcile waiting links. | Dated links point to the right Company, Person, Fund Structure or Security. Unknown endpoints or dates stay explicit. No name-based issuer shortcut. |
-| 11 | Apply standalone OpenFIGI listing/ticker/exchange enrichment once its source contract is onboarded. | FIGI and ticker are cross-references/attributes under their approved mapping, not identity-matching keys. Current captured pair support is not this completed enrichment. |
+| 11 | Apply standalone OpenFIGI listing/ticker/exchange enrichment: ask OpenFIGI's mapping API (job type TICKER, exchange US) for the trading symbols the Form 4 securities state, keep the answers in an `id_ticker` capture folder, and master them. **Do this before the Form 4 securities (step 10), so each finds its Security by symbol**; a Form 4 record merged earlier is not re-run when its holder arrives and needs a replay. | FIGI and ticker are cross-references/attributes under their approved mapping, not identity-matching keys. Current captured pair support is not this completed enrichment. |
 | 12 | Finalize every declared run, verify all source totals and identity/link invariants, then retain a populated backup. | All declared work verified, pending Journal delivery zero, accepted/waiting/rejected totals reconciled, source and filing provenance retained. |
 
 Batch size affects how the work is scheduled, not population coverage. Enumerate
@@ -61,7 +61,7 @@ separate from local processing.
    processing. Reuse existing approved profiling evidence when applicable;
    compare new delivery shapes against it. A new shape or code meaning follows
    the appropriate rule/reference version lifecycle, not silent normalization.
-4. **Pin Rules, RDM and shared inputs.** Rebuild whole-population Name Count
+4. **Pin Rules, RDM and shared inputs.** Rebuild whole-population Name Matching
    when its underlying complete population changes. Preserve the exact version
    used by each run. Current Rules body and reference files do not replace the
    frozen inputs of an older interrupted run.
@@ -90,8 +90,8 @@ separate from local processing.
 The implemented selector in `edgar_warehouse/mdm/changed_files.py`
 uses the source, file key, content hash and processing identity. Company and
 Person call it before constructing their work manifests. Company includes the
-logical Name Count content and catalog hash as shared inputs: a new capture
-timestamp alone does not invalidate an unchanged Name Count result.
+logical Name Matching content and catalog hash as shared inputs: a new capture
+timestamp alone does not invalidate an unchanged Name Matching result.
 
 The comparison is **per file, not per row or field**. A changed multi-record
 file is selected as a whole; MDM still preserves identity and write idempotency.
@@ -110,7 +110,7 @@ many unchanged files for recomputation. Do not use `--all` for either normal run
 
 | Source | Each daily execution considers | Special treatment |
 | --- | --- | --- |
-| SEC submissions, Company and Person | Every document in the complete capture, with required catalog, filing/page and Name Count inputs. | Omit `--all` from both preparers. The Journal selects new/changed or invalidated files; unchanged files produce no work. |
+| SEC submissions, Company and Person | Every document in the complete capture, with required catalog, filing/page and Name Matching inputs. | Omit `--all` from both preparers. The Journal selects new/changed or invalidated files; unchanged files produce no work. |
 | SEC ownership and 13F | Every file/record in the complete declared retained scope. | Amendments and previously captured filings keep their real identities and provenance. No arbitrary first-N filing limit. |
 | N-PORT | Complete retained quarter publications selected for the run, including all rows of each selected source part. | New quarter: new revision/time as supported by the contract; replay of the same quarter: same source facts. Process registrants, funds and Securities in dependency order. |
 | GLEIF | The declared baseline and publication members required for complete source coverage. | Qualify publication continuity and Journal integration before daily execution. A changed bulk member may require processing all its records. Explicit deletion/status evidence controls retirement, not absence from a partial file. |

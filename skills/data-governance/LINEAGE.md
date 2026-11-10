@@ -69,12 +69,16 @@ same nodes. A passing API write is not that confirmation.
 
 SEC Company mastering:
 
-- Sources: SEC submissions and the ticker reference. The Name Count control is
+- Sources: SEC submissions and the ticker reference. The Name Matching control is
   built from SEC submissions and the GLEIF Golden Copy.
-- Steps that can fail, in order: name count, combine, records (prepare),
+- Steps that can fail, in order: name matching, combine, records (prepare),
   merge. Keys, main, catalog and processed are plumbing and are not drawn.
 - Records writes the prepared company dataset, which merge reads. Merge
   publishes the Company master and the last step records the Change Journal.
 - Domain: Company. Data product: Company master, made of the company domain.
+- On the three layers: the service layer is that source's pipeline service
+  and the database service; the domain layer is the subject of the master;
+  the data product layer is the legal-entity package. Name Matching, the ticker
+  reference, and the journal are not that product.
 - Capture is its own target: the submissions feed into the capture step.
   Merge-batch is its own target: its merge step publishes the Company master.

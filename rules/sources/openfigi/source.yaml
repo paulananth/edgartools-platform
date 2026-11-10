@@ -1287,11 +1287,6 @@ dataset_contracts:
             tables:
               mapped:
                 each: .
-                checks:
-                - check: required
-                  column: _found
-                  reason: not_found_by_openfigi
-                  on_fail: defer
                 columns:
                   _found:
                     text:
@@ -1324,9 +1319,13 @@ dataset_contracts:
                         # No share_class_figi field: it is the Security's
                         # cross-reference below (lookup only), one place, not
                         # two (ticket 129; operator, 2026-10-22: "Fix 4").
+                  # Present only when OpenFIGI found the identifier (operator, 2026-11-09: an identifier OpenFIGI does
+                  # not know attaches to the Security that holds it and creates nothing).
                   matching:
                     object:
-                      fields: {}
+                      fields:
+                        found: {value: {path: figis}}
+                      omit_nulls: true
                   # Every listing, one detail row per FIGI (ticket 120).
                   details:
                     object:

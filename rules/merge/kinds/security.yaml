@@ -193,7 +193,7 @@ rules:
 # (openfigi-security-cusip 2026-10-23.1, openfigi-isin-security-cusip and
 # openfigi-security-isin 2026-10-24.1) and wait for their switch-on.
 - rule_id: openfigi-security-cusip
-  version: 2026-10-25.1
+  version: 2026-11-09.found-answers-only
   family: binding
   source: openfigi.security.v3
   applies_to_verdict: security
@@ -201,6 +201,9 @@ rules:
   - bind
   on_no_match: mint
   when:
+  - primitive: evidence_present@1
+    args:
+      document: provenance.matching.found
   - primitive: identifier_match@1
     args:
       namespace: cusip
@@ -208,7 +211,7 @@ rules:
     args:
       namespace: cusip
 - rule_id: openfigi-security-isin
-  version: 2026-10-25.1
+  version: 2026-11-09.found-answers-only
   family: binding
   source: openfigi.security.v3
   applies_to_verdict: security
@@ -216,6 +219,50 @@ rules:
   - bind
   on_no_match: mint
   when:
+  - primitive: evidence_present@1
+    args:
+      document: provenance.matching.found
+  - primitive: identifier_match@1
+    args:
+      namespace: isin
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: isin
+# An identifier OpenFIGI did not find (operator, 2026-11-09: "openfigi is currently creating only equity so if it
+# is equity then yes if not no"): the answer attaches to the Security that already holds that CUSIP or ISIN, and
+# creates nothing, since a not-found answer states no security type. With no holder it waits for a recorded reason.
+- rule_id: openfigi-not-found-cusip
+  version: 2026-11-09.1
+  family: binding
+  source: openfigi.security.v3
+  applies_to_verdict: security
+  emits:
+  - bind
+  on_no_match: wait
+  when:
+  - primitive: evidence_present@1
+    args:
+      document: provenance.matching.found
+    negate: true
+  - primitive: identifier_match@1
+    args:
+      namespace: cusip
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: cusip
+- rule_id: openfigi-not-found-isin
+  version: 2026-11-09.1
+  family: binding
+  source: openfigi.security.v3
+  applies_to_verdict: security
+  emits:
+  - bind
+  on_no_match: wait
+  when:
+  - primitive: evidence_present@1
+    args:
+      document: provenance.matching.found
+    negate: true
   - primitive: identifier_match@1
     args:
       namespace: isin
@@ -264,6 +311,24 @@ rules:
     args:
       namespace: ticker
       max_per_10k: 5
+# A Form 4 security no Security holds (operator, 2026-11-09: "This is not following step 1" on a Form 4 security stored
+# without a golden record; then "Create by issuer and title (Recommended)"): the rule above finds the Security OpenFIGI
+# gave the symbol, and when none holds it this rule creates one for the issuer and its symbol, which the same issuer's
+# later filings join. The filing's issuer block states the issuer CIK and the symbol, not the security's title, so those
+# two identify it; the symbol alone is not used, since one ticker names two securities (17,941 ticker and exchange pairs
+# sit on two or more CUSIPs). The rule above runs first.
+- rule_id: form4-security-issuer-symbol
+  version: 2026-11-09.1
+  family: exact_name_binding
+  source: sec.ownership.security.v2
+  holder_sources: []
+  applies_to_verdict: security
+  emits:
+  - bind
+  key: issuer_symbol_id@1
+  cross_reference: issuer_symbol_id
+  on_no_match: mint
+  on_several: review
 identifiers:
   cusip:
     authority: CUSIP Global Services (ANSI X9.6)

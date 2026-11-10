@@ -5,7 +5,7 @@ source extracts (each file's month end in their context), combine.yaml,
 mdm.prepare (filings and custodians, dated by `published`; a custodian one
 record, restated by each file), the two Dataset Contracts, then the Merge Stage with the Form ADV
 matching rules switched on in a copy of the policy. A custodian named by its
-BD number or by its LEI is linked; one named only by name waits; a custodian
+BD number or by its LEI is linked; one named only by name is linked once its name makes its Company; a custodian
 named again in a later month keeps one link, its start at the first month and
 its `last_seen` at the later one. Invented values only.
 """
@@ -52,6 +52,17 @@ MONTHS = {
 }
 
 RELATED = {MAY: [["F1", "1", "900002"]]}
+JULY, AUGUST = "2026-07-31T00:00:00+00:00", "2026-08-31T00:00:00+00:00"
+def custody_in(filing_id: str, name: str, city: str) -> list[str]:
+    return [filing_id, name, "", city, "NY", "United States", "N", "", "", "1000"]
+
+
+MONTHS[AUGUST] = ([filing("F4")], [custody_in("F4", "EXAMPLE CAPITAL", "Example City"),
+                                   custody_in("F4", "EXAMPLE CAPITAL", "Other City"),
+                                   custody_in("F4", "EXAMPLE HOLDINGS INC", "Example City"),
+                                   custody_in("F4", "EXAMPLE HOLDINGS INC", "Other City")])
+MONTHS[JULY] = ([filing("F3")], [custody("F3", "EXAMPLE HOLDINGS INC"), custody("F3", "EXAMPLE CAPITAL"),
+                                 custody("F3", "EXAMPLE FUND N.A.")])
 
 
 def csv_text(header: list[str], rows: list[list[str]]) -> str:
@@ -128,9 +139,10 @@ def test_an_adviser_links_to_its_custodians_across_months(database, tmp_path):
         masters.seed(database.application, records)
     links = masters.links(database.application, of_type="CUSTODIAN")
     named = {name: entity for entity, name in masters.names(database.application).items()}
-    assert len(links) == 2  # BD and LEI custodians; the one named only by name waits
+    assert len(links) == 3  # BD, LEI and the custodian named only by name, whose legal form makes its Company (2026-11-09)
     by_target = {l["target_id"]: l for l in links}
     bd_link, lei_link = by_target[named["EXAMPLE CLEARING LLC"]], by_target[named["EXAMPLE BANK NA"]]
+    assert named["EXAMPLE TRUST CO"] in by_target  # named only by name, it still links once its Company exists
     assert {l["source_id"] for l in links} == {named["EXAMPLE ADVISERS LLC"]}
     assert [(p["valid_from"], p["valid_from_basis"]) for p in bd_link["periods"]] == [(MAY, "observed")]
     assert bd_link["last_seen"] == JUNE
@@ -146,3 +158,26 @@ def test_a_related_person_named_by_cik_links_to_secs_company_record(tmp_path):
     assert [l["target_subject"] for l in related] == [subject_key("sec.company.v1", "0000900002")]
     _, (june_filing,) = month(tmp_path / "june", JUNE)
     assert not [l for l in june_filing["relationships"] if l["type"] == "RELATED_PERSON"]  # June names none
+
+
+def test_a_custodian_named_only_by_name_carries_its_name_keys(tmp_path):
+    """Name only: the name id for every name, the legal-form key only for a name that ends in a legal form,
+    the name-and-place key for a name with a place (operator, 2026-11-09: the strict list, "Name plus place")."""
+    custodians, _ = month(tmp_path / "july", JULY)
+    by_name = {r["fields"]["name"]["value"]: r["cross_references"] for r in custodians}
+    assert set(by_name) == {"EXAMPLE HOLDINGS INC", "EXAMPLE CAPITAL", "EXAMPLE FUND N.A."}
+    assert all("name_id" in refs and "name_place_id" in refs for refs in by_name.values())
+    assert "name_form_id" in by_name["EXAMPLE HOLDINGS INC"] and "name_form_id" in by_name["EXAMPLE FUND N.A."]
+    assert "name_form_id" not in by_name["EXAMPLE CAPITAL"]  # no legal form: the name alone does not make a Company
+    assert by_name["EXAMPLE HOLDINGS INC"]["name_form_id"] == by_name["EXAMPLE HOLDINGS INC"]["name_id"]
+
+
+def test_a_name_with_no_legal_form_is_one_custodian_per_place_and_one_with_a_legal_form_is_one_whatever_the_place(tmp_path):
+    """Operator, 2026-11-09: "Name plus place". Two bare-name custodians in two cities are two records, so two
+    links; a legal-form name in two cities is one."""
+    custodians, (filing_record,) = month(tmp_path / "august", AUGUST)
+    keys = {r["provenance"]["record_key"] for r in custodians}
+    assert keys == {"name:EXAMPLE CAPITAL|EXAMPLE CITY|NY|UNITED STATES", "name:EXAMPLE CAPITAL|OTHER CITY|NY|UNITED STATES",
+                    "name:EXAMPLE HOLDINGS INC"}
+    targets = {l["target_subject"] for l in filing_record["relationships"] if l["type"] == "CUSTODIAN"}
+    assert targets == {subject_key(CUSTODIANS, key) for key in keys}

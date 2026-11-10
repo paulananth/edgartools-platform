@@ -20,43 +20,37 @@ automatic_rules:
 - kind: company
   family: classification
   rule_id: sec-company-candidate
-  rule_version: 2026-09-25.13
+  rule_version: 2026-11-09.phase-1-listed-operating
   verdict: company
   activation: measured
   proof:
     method: wilson_lower_bound
     one_sided_confidence: 0.95
-    n: 600
-    correct: 600
-    lower_bound: 0.995511
+    n: 523
+    correct: 523
+    lower_bound: 0.9948535002383295
     adversarial:
       fixture_sha256: ebe220479915a56f86f5c57edc2665f5ad6d40f55d112b7849899941beed49f1
       n: 328
       violations: 0
     cohort:
-      population_sha256: 395b7db4cfeb5ab0d4816ee4c0e68ca078b548fce3b8337c0ab671f0e0668600
-      ticker_catalog_sha256: 836140c5ca9817b673e76f4c4cf25dda6650215683c1705e9fbe00b2e8f16fbf
       by_step:
         "8":
-          n: 300
-          correct: 300
-          lower_bound: 0.9910621278248719
-        "10":
-          n: 300
-          correct: 300
-          lower_bound: 0.9910621278248719
+          n: 523
+          correct: 523
+          lower_bound: 0.9948535002383295
       files:
         12-13-adversarial.jsonl: ebe220479915a56f86f5c57edc2665f5ad6d40f55d112b7849899941beed49f1
-        12-13-held.jsonl: 989057c5f33177c1a53c182a757d00b6909df61a852bf9e2b6b0bd746d345fcc
         12-13-label.py: 3858117cf62df1de0d6adfac6cd348da5a36e4d9587bcf82b69f358a90ed9e12
-        12-13-population.json: b6023c5ef814ff496137ddd51c395582d07d316038ad23eb40a96bf64a741a49
         12-13-sample.jsonl: d276df62557c30106d8f49c52f23c0ea72c4795c664e96983c7569f91dd6ad97
-        12-classify.py: 0a1bde95ebca00dbc6b6cda39827f5688e540cd2a35714c411162f69b0395c4a
-        12-measure-13.py: 6fc1e10772f89f369513d74d80927670dce71e7b937e149951a50311aaf66ceb
+        phase1-measure.py: 0622c18ec98c11de868cdf58585769c658fbe20afc4ad1c83cea4c218772de21
     approved_by: operator
-    approved_at: "2026-09-25T17:09:33Z"
-    reason: 'ticket 12 Proving Run, SEC Company classification, the Account hold-back: bronze-only
-      hand review, each Company step clears 0.95, 0 adversarial violations'
+    approved_at: "2026-11-09T22:08:58Z"
+    reason: 'phase 1, listed operating filers only ("For phase 1 master only publically traded companies (filter)",
+      "Operating and listed a real company"; standing words "Approved the rules always"): the 279 listed filers
+      of the ticket 12 hand-labelled draw of old step 8 plus the 244 listed operating filers the old shell and
+      fund tests held back, 523 of 523 Companies, 0 of 328 adversarial draws wrongly classed; the step 10 of
+      type other (foreign issuers) is out of phase 1'
 # Company mastering ticket 15, the CIK matching rule: activates on its verified
 # Identifier Contract (kinds/company.yaml, identifiers.cik), not a measured bar.
 # The operator approved the switched-off policy digest
@@ -319,6 +313,42 @@ automatic_rules:
     approved_by: operator
     approved_at: '2026-11-04T17:52:00-05:00'
     reason: 'Complete and then run and switch on (Form ADV); exact name only (Agreed); limited test on the real June 2026 names'
+# iapd-adv-custodian-name-form and iapd-adv-custodian-name-place (operator, 2026-11-09: "master using name and company
+# type if company type does not exist provide me option", then "Name plus place (Recommended)", "2 yes"; the strict
+# legal-form list accepted; standing words "Approved the rules always"): a custodian named only by its name creates its
+# Company, by the name when it ends in a legal form and by the name with its city, state and country when it does not.
+- kind: company
+  family: exact_name_binding
+  rule_id: iapd-adv-custodian-name-form
+  rule_version: 2026-11-09.1
+  verdict: bind
+  activation: exact_name
+  proof:
+    names: 477
+    attached: 102
+    review: 9
+    waiting: 10
+    created: 356
+    second_pass_changed_nothing: true
+    approved_by: operator
+    approved_at: '2026-11-09T23:22:22Z'
+    reason: 'Custodians named only by name create their Company by name when it ends in a legal form; limited test on the real Form ADV custodian files of March and June 2026 (custodians alone, in a throwaway PostgreSQL): 477 names, 102 attached to a Company the custodian source already made, 9 to review, 10 waiting, 356 created, second pass unchanged'
+- kind: company
+  family: exact_name_binding
+  rule_id: iapd-adv-custodian-name-place
+  rule_version: 2026-11-09.1
+  verdict: bind
+  activation: exact_name
+  proof:
+    names: 724
+    attached: 43
+    review: 1
+    waiting: 6
+    created: 674
+    second_pass_changed_nothing: true
+    approved_by: operator
+    approved_at: '2026-11-09T23:22:22Z'
+    reason: 'Custodians named only by name with no legal form create their Company by name and place; limited test on the real Form ADV custodian files of March and June 2026 (custodians alone, in a throwaway PostgreSQL): 724 names, 43 attached to a Company the custodian source already made, 1 to review, 6 waiting, 674 created, second pass unchanged'
 # openfigi-security-cusip, openfigi-isin-security-cusip, openfigi-security-isin
 # (version 2026-10-23.1, ticket 120, OpenFIGI first; operator, 2026-10-23:
 # "make the seurities run should process openfigi first", "agreed"): OpenFIGI's
@@ -381,13 +411,25 @@ automatic_rules:
 - kind: security
   family: binding
   rule_id: openfigi-security-cusip
-  rule_version: 2026-10-25.1
+  rule_version: 2026-11-09.found-answers-only
   verdict: bind
   activation: deterministic
 - kind: security
   family: binding
   rule_id: openfigi-security-isin
-  rule_version: 2026-10-25.1
+  rule_version: 2026-11-09.found-answers-only
+  verdict: bind
+  activation: deterministic
+- kind: security
+  family: binding
+  rule_id: openfigi-not-found-cusip
+  rule_version: 2026-11-09.1
+  verdict: bind
+  activation: deterministic
+- kind: security
+  family: binding
+  rule_id: openfigi-not-found-isin
+  rule_version: 2026-11-09.1
   verdict: bind
   activation: deterministic
 - kind: security
@@ -423,6 +465,27 @@ automatic_rules:
 # is keyed by its SEDOL, else its LoanX. Switched on under the operator's standing approval, 2026-11-04
 # (\"switch on for form 4 keep it standing approval for ticket 190 191\"), after the limited test
 # (.scratch/rebuild-priorities/research/190_limited_test.json, sha256 0c2be443...2555) passed.
+# form4-security-issuer-symbol (operator, 2026-11-09: "This is not following step 1" on a Form 4 security stored
+# without a golden record; "Create by issuer and title (Recommended)"; standing words "Approved the rules always"):
+# the limited test on the real Form 4 securities no Security held, 826 records, run through the mastering merge in a
+# throwaway PostgreSQL: 337 issuer-and-symbol keys, each one Security created, all 826 records bound, no review, and a
+# second pass changed nothing.
+- kind: security
+  family: exact_name_binding
+  rule_id: form4-security-issuer-symbol
+  rule_version: 2026-11-09.1
+  verdict: bind
+  activation: exact_name
+  proof:
+    names: 337
+    attached: 0
+    review: 0
+    waiting: 0
+    created: 337
+    second_pass_changed_nothing: true
+    approved_by: operator
+    approved_at: '2026-11-09T22:54:58Z'
+    reason: 'Form 4 securities no Security holds are created by issuer and symbol (Create by issuer and title, Recommended); limited test on the 826 real records: 337 created, 0 review, second pass unchanged'
 - kind: security
   family: binding
   rule_id: nport-security-sedol

@@ -415,7 +415,7 @@ from the installed bundle (ticket 48).
 
 ### Learned on a record that carries only a name (ticket 01, 2026-11-04)
 
-- **The name rules (`name_binding`) serve one pair of sources only**: they need a Name Count and a place test, so
+- **The name rules (`name_binding`) serve one pair of sources only**: they need a Name Matching and a place test, so
   a Form ADV custodian named only by its name cannot use them. The rule for it is the `exact_name_binding`
   family (`edgar_warehouse/mdm/exact_name.py`): a source, its `holder_sources`, `key: name_id@1`, finds
   and never creates (`on_no_match: wait`, `on_several: review`).

@@ -33,7 +33,7 @@ Change Journal processing identity must reflect the changed dependencies so
 affected files are reconsidered even when their bytes have not changed.
 
 Required versions include applicable source rules, Dataset Contracts, matching
-and merge policy, RDM versions, Name Count/catalog inputs and authenticated
+and merge policy, RDM versions, Name Matching/catalog inputs and authenticated
 lookup/producer receipts. Existing runtime pins remain in force. This does not
 freeze the shared MDM database: authoritative identity, constraints, leases and
 fencing still need validation at commit.
@@ -114,7 +114,7 @@ document on disk is not proof of runtime readiness.
 
 | Source | Current source-owned mastering target | Missing work or prerequisite |
 | --- | --- | --- |
-| `sec.company` | Read, prepare, merge, processed | Source-specific `prepare-clean-company` still constructs the manifest; capture/catalog/Name Count inputs need a common path. |
+| `sec.company` | Read, prepare, merge, processed | Source-specific `prepare-clean-company` still constructs the manifest; capture/catalog/Name Matching inputs need a common path. |
 | `sec.submissions.person` | Read, prepare, merge, processed | Separate `prepare-capture`. Reads the files Company's feed captures; switches on without a feed of its own. |
 | `gleif` | Merge only | Complete member read/combine/prepare/processed path; publication validation remains outside it. |
 | `iapd.adv` | None | Monthly context, grouping/joins and complete run wiring. |
@@ -140,7 +140,7 @@ ownership `source.yaml:1-15`, and N-PORT registrant `source.yaml:30-35`, fund
 | Source activation | A source with MDM contracts declares its acquisition feeds and activates on its test run over captured files and the operator's approval (`rules/db.py`, `Rules.activate`); live acquisition runs also need a real acquisition run's proof (`rules/acquisition_authority.py`, `frozen_authority`). | A source with no feed of its own (it reads files another source's feed captures) switches on its pipes and registers its datasets the same way. Do not bypass the checks with disposable-test helpers. |
 | Before reading bytes | Authenticates configured context and declared lookup receipts (`workers/source_read.py:102-115,309-315`). | Broader Dataset Contract/policy checks happen later, after extraction. |
 | RDM | Published canonical content must match explicit version/hash pins (`rules/files.py:350-376`). | Need consistent run-wide dependency selection and retained artifacts. |
-| Company preparation | Name Count must match capture/population; logical Name Count content and catalog hash enter processing identity (`mdm/company_prepare.py:186-208`). | Source-specific setup remains. |
+| Company preparation | Name Matching must match capture/population; logical Name Matching content and catalog hash enter processing identity (`mdm/company_prepare.py:186-208`). | Source-specific setup remains. |
 | Before normalization and merge | Registered dataset and qualified policy checked (`mdm/cli.py:137-168`); Merge Stage remains authoritative (`merge.py:214-232,425`). | Mapping is currently selected anew per batch; early readiness alone does not fix this. |
 | Relationships | Unresolved endpoints and invalid relationship evidence retain review reasons (`mdm/relationships.py:253-305`). | Reconciliation must preserve waiting evidence rather than silently dropping links. |
 | Verified processing | Company/Person declare `journal.record` after merge; file identity accounts for rules/policy/shared inputs (`changed_files.py:1-30`, source targets above). | Other sources need equivalent end-to-end wiring and qualification. |
