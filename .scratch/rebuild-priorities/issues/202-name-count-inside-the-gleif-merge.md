@@ -10,6 +10,8 @@ How does the Name Matching become a step of the GLEIF merge, with no separate jo
 
 ## Operator rulings
 
+- The Name Count is dropped (operator, 2026-11-10 07:55 ET: "What is the downside of dropping it completely and matching using the rule already part of gleif matching on name and place, former name and place", then "Yes, drop it (Recommended)"). A name binds only when exactly one golden record holds it, found by searching the golden records for the name and place, or the former name and place: none waits or creates as the entity type's rule says, several go to review. No count file, no count table, no `mdm name-count`. First a replay check, counts only: the current GLEIF name bindings run both ways; the differences go to the operator before anything is deleted. Downsides accepted: a name unique today can be shared after a later load (an earlier binding stays, a data steward splits it); a name held by one mastered and one unmastered filer looks unique (phase 1 masters listed companies only); a scope-only GLEIF load does not see a same-name record outside its scope.
+
 - The Name Matching is part of mastering, not a separate job.
 - It is a GLEIF load concern only. The SEC company run no longer reads it.
 - An earlier name binding stays when a later load makes the name shared (operator, 2026-11-10 06:13 ET: "2 agreed", on my recommendation). A data steward splits it; the shared name only stops new binds. The build plan below stands as written.
