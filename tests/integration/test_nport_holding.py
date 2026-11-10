@@ -112,7 +112,7 @@ def test_the_rows_fit_the_silver_spec():
     assert set(rows_contract["read"]["tables"]["holding"]["columns"]) == {c["name"] for c in spec["columns"]}
 
 
-SECURITY, FUND, REGISTRANT = "sec.nport.security.v2", "sec.nport.fund.v1", "sec.nport.registrant.v1"
+SECURITY, FUND, REGISTRANT = "sec.nport.security.v2", "sec.nport.fund.v1", "sec.nport.registrant.v2"
 
 
 def bound(database, source_code: str, key: str) -> str | None:

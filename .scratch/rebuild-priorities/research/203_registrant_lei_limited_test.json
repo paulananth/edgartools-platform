@@ -1,0 +1,16 @@
+{
+  "ticket": 203,
+  "rule": "nport-registrant-lei",
+  "version": "2026-11-10.searched",
+  "corpus": "every N-PORT registrant record stored on the shared store with a golden record and an LEI, one per Company and LEI (counts only)",
+  "registrant_company_lei_pairs": 1943,
+  "lei_held_by_no_company": 1712,
+  "lei_held_by_another_company_goes_to_review": 231,
+  "lei_held_by_its_own_company_already": 0,
+  "invented_record_tests": {
+    "joins_the_company_that_holds_its_lei": "pass (fails on the old rules: a second Company is created)",
+    "no_holder_creates_one_company_with_both_identifiers": "pass",
+    "two_companies_hold_the_lei_goes_to_review": "pass"
+  },
+  "result": "pass: 1,712 registrants keep their LEI on their Company, so a GLEIF record with that LEI can join it; 231 registrants find their LEI on another Company and go to review for a data steward (they are two Companies for one entity or one wrong attachment)"
+}

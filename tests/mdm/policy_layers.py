@@ -70,7 +70,7 @@ def without_form_adv(policy: dict) -> dict:
     return body
 
 
-NPORT_REGISTRANT = "sec.nport.registrant.v1"
+NPORT_REGISTRANT = "sec.nport.registrant.v2"
 
 
 def without_nport_registrant(policy: dict) -> dict:
@@ -80,9 +80,9 @@ def without_nport_registrant(policy: dict) -> dict:
     switched on). Peeled, the policy is the one before."""
     body = _copy(policy)
     company = body["kinds"]["company"]
-    company["defaults"]["sources"] = [s for s in company["defaults"]["sources"] if s != NPORT_REGISTRANT]
+    company["defaults"]["sources"] = [s for s in company["defaults"]["sources"] if s not in (NPORT_REGISTRANT, "sec.nport.registrant.v1")]
     cik = company["identifiers"]["cik"]
-    cik["sources"] = [s for s in cik["sources"] if s != NPORT_REGISTRANT]
+    cik["sources"] = [s for s in cik["sources"] if s not in (NPORT_REGISTRANT, "sec.nport.registrant.v1")]
     company["rules"] = [r for r in company["rules"] if r["rule_id"] != "nport-registrant-cik"]
     return body
 
@@ -460,6 +460,25 @@ def without_custodian_name_rule(policy: dict) -> dict:
     return body
 
 
+LEI_REASON = 'tickets 75 and 76: Form ADV run beside GLEIF and SEC, 13 months, 24,760 Companies, no CRD, LEI or BD number on two Companies, 15,339 custodian links, a third pass changed nothing'
+
+
+def without_registrant_lei(policy: dict) -> dict:
+    """The N-PORT registrant's LEI searched (ticket 203; operator, 2026-11-10: "Master it ;consider it a source"):
+    its matching rule and activation, the registrant among the LEI contract's sources, and the contract's
+    verification as it was (ticket 76's)."""
+    body = _copy(policy)
+    company = body["kinds"]["company"]
+    company["rules"] = [r for r in company["rules"] if r["rule_id"] != "nport-registrant-lei"]
+    body["automatic_rules"] = [e for e in body["automatic_rules"] if e.get("rule_id") != "nport-registrant-lei"]
+    lei = company["identifiers"]["lei"]
+    lei["sources"] = [x for x in lei["sources"] if x not in (NPORT_REGISTRANT, "sec.nport.registrant.v1")]
+    lei["verification"] = {
+        "corpus_sha256": "9a0a7bbe236126d31b0411cf2296ca25684bb0bbd1a971e65dc7966558d34d93",
+        "approved_by": "operator", "approved_at": "2026-10-17T12:31:29Z", "reason": LEI_REASON}
+    return body
+
+
 def without_custodian_name_creation(policy: dict) -> dict:
     """The Form ADV custodian rules that create a Company by name, and by name and place (operator, 2026-11-09:
     "master using name and company type", "Name plus place (Recommended)"), with their activations."""
@@ -518,6 +537,8 @@ def without_adviser_cik(policy: dict) -> dict:
 # Newest first: each layer, and Company's policy digest with it and every
 # layer after it still on.
 LAYERS = [
+    # The N-PORT registrant's LEI searched (ticket 203, 2026-11-10).
+    (without_registrant_lei, "5d55689332d36c4e29b44649752e839ab0dcc201dbf2618d17894de3e962b398"),
     # The custodian rules that create a Company by name, and by name and place (ticket 204, 2026-11-09).
     (without_custodian_name_creation, "c66426dcb0e136b719cb5b6b4fc9a6d02e305c36683f17bef4a7a26f1417c627"),
     # The Company classification: listed operating filers only (ticket 204, 2026-11-09).

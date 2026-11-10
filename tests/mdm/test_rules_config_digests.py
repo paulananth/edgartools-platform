@@ -155,7 +155,8 @@ def _restore_company_identity(value):
     if isinstance(value, list):
         return [_restore_company_identity(item) for item in value]
     if isinstance(value, str):
-        return {"sec.company.v1": HISTORIC_SEC_CODE,
+        return {"sec.nport.registrant.v2": "sec.nport.registrant.v1",
+                "sec.company.v1": HISTORIC_SEC_CODE,
                 "sec.company": "sec.submissions.company",
                 "company-2026-10-31.sec-company-source-identity":
                     "company-2026-10-25.one-value-per-identifier",
