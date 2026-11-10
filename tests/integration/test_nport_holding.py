@@ -169,7 +169,7 @@ def test_a_link_pointed_at_another_dataset_contract_finds_nothing(database, tmp_
     spec = files.load(FOLDER / "silver-holding.yaml")
     for link in spec["links"]:
         if link["kind"] == "security":
-            link["source_code"] = "sec.thirteenf.securities.v1"
+            link["source_code"] = "sec.thirteenf.securities.v2"
     with silver_database(database.admin) as (owner, runtime):
         silver.migrate(owner, runtime_role=RUNTIME)
         assert silver.register(owner, silver_spec.check(spec), runtime_role=RUNTIME)["created"] is True

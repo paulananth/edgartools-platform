@@ -50,7 +50,7 @@ def test_the_mastering_target_has_the_steps_that_prepare_and_merge_the_securitie
     # Ticket 183: each information table lands its holdings in silver after the merge.
     assert steps["land_holding"][0]["keys"]["silver"] == "thirteenf_holding"
     assert steps["prepare"][0]["keys"]["table"] == "security"
-    assert steps["prepare"][0]["keys"]["dataset"] == "sec.thirteenf.securities.v1"
+    assert steps["prepare"][0]["keys"]["dataset"] == "sec.thirteenf.securities.v2"
     recorded_files = Artifacts().json(steps["processed"][0]["input"])["files"]
     assert [f["key"] for f in recorded_files] == [key(1), key(2)]
 

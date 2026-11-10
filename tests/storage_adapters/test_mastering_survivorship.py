@@ -12,7 +12,7 @@ from tests.storage_adapters.test_mastering import AS_OF, COMPANY, FIGI, NPORT, P
 ADV = "iapd.adv.filings.v2"
 PERSON = merge.Settings(POLICY, "invented-digest", "person", AS_OF)
 SUBMISSIONS, OWNER = "sec.submissions.person.v1", "sec.ownership.reporting_owner.v1"
-THIRTEENF = "sec.thirteenf.securities.v1"
+THIRTEENF = "sec.thirteenf.securities.v2"
 # (settings, field, identifiers shared by all, [(source, key, value)] in policy rank order)
 KINDS = {
     "company": (COMPANY, "name", {"cik": "0000000317"}, [(SEC, "a", "Sec Name"), (ADV, "b", "Adv Name")]),

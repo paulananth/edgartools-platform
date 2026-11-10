@@ -20,7 +20,7 @@ defaults:
   # openfigi priority 1 and 13f last" (2026-10-18).
   sources:
   - openfigi.security.v4
-  - sec.thirteenf.securities.v1
+  - sec.thirteenf.securities.v2
   - sec.nport.security.v2
   # Last, and it states no field: the Form 4 symbol only finds a Security (ticket 24).
   - sec.ownership.security.v2
@@ -32,9 +32,9 @@ rules:
 # "13F CUSIP binds first" (ticket 138, with the FIGI rule below): a filed CUSIP
 # and FIGI on two Securities bind by the CUSIP; the FIGI is never merged.
 - rule_id: security-cusip
-  version: 2026-10-27.1
+  version: 2026-11-10.source-v2
   family: binding
-  source: sec.thirteenf.securities.v1
+  source: sec.thirteenf.securities.v2
   applies_to_verdict: security
   emits:
   - bind
@@ -53,10 +53,28 @@ rules:
 # FIGIs, so the value is never that Security's; it creates nothing and merges
 # nothing. It needs OpenFIGI loaded first: a 13F record read before OpenFIGI
 # answers creates its own Security, which a later answer does not move.
-- rule_id: thirteenf-security-figi
-  version: 2026-10-26.1
+- rule_id: thirteenf-security-filed-cusip
+  # "A security found in 13F must be a mastered Security" (ticket 204; operator, 2026-11-10): a 13F holding whose CUSIP
+  # fails its check digit is keyed by the CUSIP as filed, flagged by `cusip_check_digit`. It creates; the value never
+  # joins a Security by itself.
+  version: 2026-11-10.last-resort
   family: binding
-  source: sec.thirteenf.securities.v1
+  source: sec.thirteenf.securities.v2
+  applies_to_verdict: security
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: filed_cusip
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: filed_cusip
+- rule_id: thirteenf-security-figi
+  version: 2026-11-10.source-v2
+  family: binding
+  source: sec.thirteenf.securities.v2
   applies_to_verdict: security
   emits:
   - bind
@@ -371,7 +389,7 @@ identifiers:
   cusip:
     authority: CUSIP Global Services (ANSI X9.6)
     sources:
-    - sec.thirteenf.securities.v1
+    - sec.thirteenf.securities.v2
     - sec.nport.security.v2
     - openfigi.security.v4
     # rules/identifiers/cusip.yaml (ticket 81): 9 characters, the check digit
@@ -532,6 +550,7 @@ identifiers:
     authority: the filer (a CUSIP as written, the check digit not verified)
     sources:
     - sec.nport.security.v2
+    - sec.thirteenf.securities.v2
     normalizer: normalize_identifier@filed_cusip-v1
     claim:
       forward: 1
@@ -540,10 +559,10 @@ identifiers:
       field: kind
       predicate: kind_equal@1
     verification:
-      corpus_sha256: 3226938eda11d1fec14f8b98291105e504ffcab55e79543a827d10654c807062
+      corpus_sha256: 31d9a237f3a180bd30a3d1b63fe359b4a979b8e797cd2ab6bd93b4f6744a713e
       approved_by: operator
       approved_at: "2026-11-10T19:00:00Z"
-      reason: "ticket 204 limited test (.scratch/rebuild-priorities/research/204_filed_cusip_limited_test.json), approved under the operator's standing approval (\"Approved the rules always\") and his ruling \"Yes, the simple key, no type mapping (Recommended)\" (2026-11-10). 1,033 real N-PORT securities set aside for a bad CUSIP: 591 have an ISIN and join by it, 442 create one Security each by the filed CUSIP, 0 join by a name match; derivative contracts stay set aside"
+      reason: "ticket 204 limited test (.scratch/rebuild-priorities/research/204_filed_cusip_limited_test.json), approved under the operator's standing approval (\"Approved the rules always\") and his ruling \"Yes, the simple key, no type mapping (Recommended)\" (2026-11-10). 1,033 real N-PORT securities set aside for a bad CUSIP: 591 have an ISIN and join by it, 442 create one Security each by the filed CUSIP, 0 join by a name match; derivative contracts stay set aside; the one 13F holding is keyed the same way (2026-11-10)"
     tolerance:
       unit: items
       warm_up_decisions: 10000

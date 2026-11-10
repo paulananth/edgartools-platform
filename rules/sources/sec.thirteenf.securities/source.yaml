@@ -186,7 +186,7 @@ bookkeeping:
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, mdm.prepared]
           input:
-            keys: {table: security, record_column: record, dataset: sec.thirteenf.securities.v1}
+            keys: {table: security, record_column: record, dataset: sec.thirteenf.securities.v2}
             readings: {record: {all: record}}
         - name: merge
           operation: mastering.merge
@@ -210,7 +210,7 @@ bookkeeping:
           checks: [input.hash, output.receipt, journal.recorded]
       checks: [manifest.hash, work.accounting, journal.delivered]
 dataset_contracts:
-  sec.thirteenf.securities.v1:
+  sec.thirteenf.securities.v2:
     contract:
       provider: SEC
       family: sec.thirteenf_infotable
@@ -259,6 +259,9 @@ dataset_contracts:
                         # that lists a Security they disagree on.
                         share_classes_filed:
                           join: {path: classes.class_sample, item_path: share_class, separator: "", max_items: 26}
+                        # The CUSIP as filed, for the check digit flag (operator, 2026-11-10).
+                        cusip_filed:
+                          value: {path: cusip}
           input_fields:
           - cusip
           - name
@@ -266,13 +269,19 @@ dataset_contracts:
           - class
           - classes
           - figi
-        version: sec-thirteenf-security-v1
+        version: sec-thirteenf-security-v2
         retain_deferred: true
         source_record_provenance: true
         kind: security
+        # The key is the CUSIP as filed (operator, 2026-11-10: "if a security is found in 13f or NPort we must have
+        # a mastered security"): one whose check digit fails is held back beside the record and flagged by the
+        # quality check `cusip_check_digit`, and with no other identifier it is mastered by the value as filed
+        # (`last_resort`). A value that is no CUSIP at all (one repeated character) is still set aside.
         record_key:
         - cusip
-        record_key_format: cusip
+        record_key_format: filed_cusip
+        set_aside_invalid: [cusip]
+        last_resort: {cusip: filed_cusip}
         identifiers:
           cusip: cusip
         identifier_formats:

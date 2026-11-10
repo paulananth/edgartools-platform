@@ -14,7 +14,13 @@
   "invented_record_tests": {
     "a_bad_cusip_alone_is_kept_as_filed_and_flagged": "pass (failed on the old code: the record was set aside)",
     "a_bad_cusip_alone_creates_a_flagged_security_and_never_joins_one_by_that_value": "pass on PostgreSQL 16 and MySQL; the same filed value from a later file is the same Security",
-    "a_value_that_is_no_cusip_at_all_is_still_set_aside": "pass"
+    "a_value_that_is_no_cusip_at_all_is_still_set_aside": "pass",
+    "a_thirteenf_holding_with_a_bad_cusip_creates_a_flagged_security": "pass on PostgreSQL 16 and MySQL (failed on the old code: the record was set aside)"
   },
-  "result": "pass: 442 real securities (420 and 22) become mastered Securities by their filed CUSIP, none merges, none joins by the filed value; 591 join OpenFIGI's Security by their ISIN"
+  "result": "pass: 442 real securities (420 and 22) become mastered Securities by their filed CUSIP, none merges, none joins by the filed value; 591 join OpenFIGI's Security by their ISIN; and the one 13F record becomes a mastered Security the same way",
+  "thirteenf": {
+    "set_aside_for_a_bad_cusip_on_the_shared_store": 1,
+    "records": 5758,
+    "result": "keyed by the CUSIP as filed under thirteenf-security-filed-cusip (2026-11-10.last-resort); sec.thirteenf.securities.v2"
+  }
 }
