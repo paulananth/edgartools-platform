@@ -53,6 +53,8 @@ Checklist for this section:
 - [ ] Records with an invalid check digit master by their other identifiers or name; the operator's word on the proposal.
 - [ ] Form 4 reporting owners follow the SEC filer ruling.
 - [ ] Look at the 98 missing-identity records, the 12 Form ADV filings v2 and the 6 N-PORT securities.
+  - [x] The 98 missing-identity records (2026-11-09 20:40 ET, counts only, read from `mastering_deferred` on the shared store): all 98 are Form 4 security records (15 under `sec.ownership.security.v1`, 83 under `v2`) that carry an issuer CIK and no trading symbol. A Form 4 Security is identified by its issuer and symbol, so with no symbol it has no identity; it stays set aside with the reason `missing_record_identity`, creates no golden record, and `mdm reconcile` counts it as set aside. No change needed: this is step 1 working (an unidentifiable record waits). Phase 1 masters publicly traded companies only, and an issuer with no symbol is outside it.
+  - [ ] The 12 Form ADV filings v2 and the 6 N-PORT securities.
 - [ ] Name "secondary source" in `CONTEXT.md` once the operator agrees the definition: a source that attaches to golden records others create and never creates one.
 
 ## Checklist
