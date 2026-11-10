@@ -399,8 +399,20 @@ def normalize(
     identifiers = _named_values(row, mapping.get("identifiers", {}), mapping.get("identifier_formats", {}),
                                 set_aside=set_aside, set_aside_invalid=tuple(mapping.get("set_aside_invalid", ())))
     if not identifiers and set_aside and mapping.get("set_aside_invalid"):
-        # Nothing is left to master the record by: it is set aside for the first identifier that failed.
-        raise UnsupportedRecord(set_aside[0]["reason"])
+        # Nothing is left to master the record by. A `last_resort` namespace states the value as filed (a real
+        # security must be a mastered Security: operator, 2026-11-10); with none, or a value that is no identifier
+        # at all, the record is set aside for the first identifier that failed.
+        for held in set_aside:
+            namespace = (mapping.get("last_resort") or {}).get(held["namespace"])
+            if namespace:
+                try:
+                    identifiers[namespace] = format_value(held["value"], mapping.get("identifier_formats", {}).get(namespace)
+                                                          or namespace)
+                    break
+                except UnsupportedRecord:
+                    continue
+        if not identifiers:
+            raise UnsupportedRecord(set_aside[0]["reason"])
     # Lookup-only ids (profiling ticket 03): kept with the record, never bound.
     cross_references = _named_values(
         row, mapping.get("cross_references", {}), mapping.get("cross_reference_formats", {})
