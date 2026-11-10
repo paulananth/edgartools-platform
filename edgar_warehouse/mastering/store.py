@@ -112,6 +112,22 @@ class Store:
                 found[entity][namespace].add(value)
         return found
 
+    def waiting_record(self, subject: str) -> dict | None:
+        """The stored body of a record that has no golden record yet (it waits in a review), or None."""
+        found = self.rows("select body from mastering_record where subject=%s and entity_id is null", [subject])
+        return json.loads(found[0][0]) if found else None
+
+    def has_open_review(self, subject: str, reason: str) -> bool:
+        return bool(self.rows("select 1 from mastering_review where subject=%s and reason=%s and open_review=1",
+                              [subject, reason]))
+
+    def bind_record(self, subject: str, entity: str, body: dict | None = None) -> None:
+        """Give a waiting record its golden record, and its body when a steward changed it."""
+        self.cursor.execute("update mastering_record set entity_id=%s,bound_id=%s where subject=%s and entity_id is null",
+                            [entity, entity, subject])
+        if body is not None:
+            self.cursor.execute("update mastering_record set body=%s where subject=%s", [json.dumps(body), subject])
+
     def kinds(self, entities) -> dict:
         """The entity type of each golden record, read from its body."""
         found = {}
