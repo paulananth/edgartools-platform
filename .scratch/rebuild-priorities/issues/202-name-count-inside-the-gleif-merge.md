@@ -43,6 +43,7 @@ Until part 3 lands the SEC company load needs the file (ticket 201). Parts 1 to 
 
 ## Checklist
 
+- [ ] Name, former name and place as separate approved rules, each with its own proof (moved from ticket 206, step 3, 2026-11-10 06:43 ET). Built inside the merge with parts 1 to 3 of the build plan; each rule is approved on its own measured evidence.
 - [x] Name the whole-publication GLEIF count's source (2026-11-09 13:54 ET, design from the structural consult; no code run). The count per name is built once per GLEIF publication from the captured file and stored under the publication's identity. A scoped load reads the stored counts and never recounts, so a name shared outside its scope waits, and no scope re-reads the 927 MB zip (about 45 min each in the local loads). A delta publication stays refused. The SEC side is counted from the stored SEC Company records when the GLEIF merge starts, and the count used is recorded on each decision. A later SEC load can make a bound name stop being unique: proposed, leave it bound and record the count it used; a duplicate found later goes through mastering again (step 4). Needs the operator's word on that proposal before the code.
   Why now: the SEC holder record carries GLEIF facts in `provenance.matching.name_count` (`matching.py:56-60`), so the SEC load cannot run before the separate command has read the full GLEIF zip.
 - [ ] Measure the SEC-side count from the stored SEC Company records against the file's count on the same data, and show they agree (counts only).
