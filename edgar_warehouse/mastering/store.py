@@ -271,6 +271,40 @@ class Store:
     def close_reviews(self, reason: str, subjects) -> None:
         for block in blocks(subjects):
             self.cursor.execute(f"update mastering_review set open_review=0 where reason=%s and subject in ({marks(block)})", [reason, *block])
+            self.cursor.execute(f"delete from mastering_name_key where role='waiting' and subject in ({marks(block)})", block)
+
+    # A record that waits is findable by the identifiers it states: role `waiting` of `mastering_name_key`, value
+    # `<namespace>:<value>`, and one `:` row for a record that states none (so it is indexed once).
+    def index_waiting(self, records: list[dict]) -> None:
+        rows = {("waiting", f"{ns}:{v}"[:64], r["subject"]) for r in records for ns, vs in (r.get("identifiers") or {}).items()
+                for v in (vs if isinstance(vs, list) else [vs]) if v}
+        rows |= {("waiting", ":", r["subject"]) for r in records}
+        if rows:
+            self.insert("mastering_name_key", ("role", "value", "subject"), sorted(rows))
+
+    def unindexed_waiting(self, reason: str, sources: list) -> list[dict]:
+        """Records that wait with no key yet (a store that held waiting records before keys existed)."""
+        found = []
+        for block in blocks(sources):
+            found += [json.loads(b) for (b,) in self.rows(
+                "select r.body from mastering_review v join mastering_record r on r.subject=v.subject "
+                "where v.reason=%s and v.open_review=1 and r.entity_id is null "
+                f"and r.source_code in ({marks(block)}) and not exists (select 1 from mastering_name_key k "
+                "where k.role='waiting' and k.subject=v.subject)", [reason, *block])]
+        return found
+
+    def waiting_for(self, arrived) -> list[dict]:
+        """The waiting records that state an identifier a golden record now holds: `arrived` is {(namespace, value)}."""
+        self.cursor.execute("delete from mastering_stage_key")
+        self.bulk("mastering_stage_key", ("namespace", "value"), sorted(arrived))
+        subjects = [r[0] for r in self.rows(
+            "select distinct k.subject from mastering_name_key k join mastering_stage_key s "
+            "on k.value=concat(s.namespace,':',s.value) where k.role='waiting'")]
+        found = []
+        for block in blocks(subjects):
+            found += [json.loads(b) for (b,) in self.rows(
+                f"select body from mastering_record where entity_id is null and subject in ({marks(block)})", block)]
+        return found
 
     def open_reviews(self, reason: str, rows: list) -> None:
         for block in blocks(rows):
