@@ -12,6 +12,7 @@ How does the Name Matching become a step of the GLEIF merge, with no separate jo
 
 - The Name Matching is part of mastering, not a separate job.
 - It is a GLEIF load concern only. The SEC company run no longer reads it.
+- An earlier name binding stays when a later load makes the name shared (operator, 2026-11-10 06:13 ET: "2 agreed", on my recommendation). A data steward splits it; the shared name only stops new binds. The build plan below stands as written.
 
 ## What exists today
 
