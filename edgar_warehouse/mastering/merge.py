@@ -85,7 +85,9 @@ def merge_file(store, settings: Settings, records: list[dict], *, again: bool = 
             return {"file": key, "skipped": True}
         delivery = _delivery(store, records, deferred)
         set_aside(store, list(deferred), quiet or {})
-        counts = _merge(store, settings, records, key, again) if records else {"records": 0}
+        arrived: set = set()
+        counts = _merge(store, settings, records, key, again, arrived) if records else {"records": 0}
+        counts["released"] = _release_waiting(store, settings, arrived)
         store.add_delivery(key, delivery)
         if not records:
             store.finish_file(key, 0)
@@ -94,6 +96,27 @@ def merge_file(store, settings: Settings, records: list[dict], *, again: bool = 
     except BaseException:
         store.rollback()
         raise
+
+
+def _release_waiting(store, settings: Settings, arrived: set) -> int:
+    """A record that waits for a golden record to hold an identifier moves to it when this file gives one. Nothing waits
+    forever for what has arrived (operator, 2026-11-10): the records that state an arrived identifier are merged again,
+    each once, and what that gives its golden records releases the next, until none is left to try."""
+    waits = sorted(_waiting_sources(settings))
+    if not waits:
+        return 0
+    store.index_waiting(store.unindexed_waiting(WAITING, waits))  # a store that held waiting records before keys
+    tried, released = set(), 0
+    while arrived:
+        ready = [r for r in store.waiting_for(arrived) if r["subject"] not in tried and r["source_code"] in waits
+                 and r["kind"] == settings.kind]
+        if not ready:
+            break
+        tried.update(r["subject"] for r in ready)
+        arrived = set()
+        _merge(store, settings, ready, file_key(ready), True, arrived)
+        released += len(store.bound([r["subject"] for r in ready]))
+    return released
 
 
 def _delivery(store, records: list[dict], deferred) -> list[tuple]:
@@ -147,7 +170,8 @@ def split_merge(store, settings: Settings, keep: str, gone: str, verdict: dict) 
         raise
 
 
-def _merge(store, settings: Settings, records: list[dict], key: str, again: bool) -> dict:
+def _merge(store, settings: Settings, records: list[dict], key: str, again: bool, arrived: set | None = None) -> dict:
+    """One file of records into golden records. `arrived` collects the identifiers its golden records now hold."""
     check_source_priorities(settings.policy, records)
     file_no = store.last_file() + 1
     store.load_stage([(r["assertion_id"], r["subject"], r["source_code"], first(r["identifiers"].get("lei")),
@@ -164,15 +188,18 @@ def _merge(store, settings: Settings, records: list[dict], key: str, again: bool
     bound.update(exact)
     named |= exact
     waits = _waiting_sources(settings)
-    store.open_reviews(WAITING, [(r["subject"], r["assertion_id"]) for r in records
-                                 if r["source_code"] in waits and r["subject"] not in bound])
-    store.close_reviews(WAITING, sorted(named))
+    waiting = [r for r in records if r["source_code"] in waits and r["subject"] not in bound]
+    store.open_reviews(WAITING, [(r["subject"], r["assertion_id"]) for r in waiting])
+    store.index_waiting(waiting)
     held = {s: bound[s] for s in subjects if s in bound} | named
+    store.close_reviews(WAITING, sorted(held))  # a record that found its golden record no longer waits
     store.save_records(held)
     store.add_binds(binds)
     touched = set(held.values()) | survivors
     if touched:
-        _write_masters(store, settings, sorted(touched), file_no, counts)
+        found = _write_masters(store, settings, sorted(touched), file_no, counts)
+        if arrived is not None:
+            arrived.update(found)
     if not (again and store.file_done(key)):
         store.finish_file(key, len(records))
     return {"records": len(records), **counts}
@@ -382,7 +409,7 @@ def _bind_decision(settings: Settings, rule: dict, subject: str, assertion_id, e
             "policy_digest": settings.policy_digest}
 
 
-def _write_masters(store, settings: Settings, entities: list, file_no: int, counts: Counter) -> None:
+def _write_masters(store, settings: Settings, entities: list, file_no: int, counts: Counter) -> set:
     records = [json.loads(body) for body in store.member_bodies(entities)]
     bindings = store.members_bound(entities)
     subjects = sorted({r["subject"] for r in records})
@@ -396,5 +423,7 @@ def _write_masters(store, settings: Settings, entities: list, file_no: int, coun
     for review in reviews:
         counts[str(review.get("reason"))] += 1
     store.write_masters([(e, json.dumps(body)) for e, body in masters.items()], file_no)
-    store.add_identifiers(sorted({(namespace, value, e) for e, body in masters.items()
-                                  for namespace, values in body["identifiers"].items() for value in values}))
+    held = sorted({(namespace, value, e) for e, body in masters.items()
+                   for namespace, values in body["identifiers"].items() for value in values})
+    store.add_identifiers(held)
+    return {(namespace, value) for namespace, value, _ in held}
