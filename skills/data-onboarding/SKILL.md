@@ -464,8 +464,8 @@ missing, go on and log it.
   type comes from, in `adapter`: `kind` when the source states one type, `classification` when a measured rule
   decides it, or `kind_field` with `kind_values` when the source's own category field does. A record whose type cannot
   be decided is set aside, never mastered. `rules check` refuses a contract that states none; the Mapping Document's
-  `kind` row on the Source sheet shows each contract's entity type, and the Rules Database view
-  `rules.source_entity_type` lists it per saved source version.
+  `kind` row on the Source sheet shows each contract's entity type, and `RulesDatabase.entity_types()`
+  lists it per saved source version, the same on every database.
 - The fields MDM keeps for a kind: `edgar-warehouse context <kind> --search`
   shows a live record's fields; the kind's field list in code, or, for a kind
   with none, its consumer spec's projection. Use these names; a new field is

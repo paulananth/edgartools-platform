@@ -90,7 +90,7 @@ def company_with_lei(lei):
 @pytest.mark.parametrize("relationship,source,source_kind,source_ids", GLEIF_TARGETS, ids=[c[0] for c in GLEIF_TARGETS])
 def test_a_relationship_to_a_gleif_record_resolves_once_a_company_holds_its_lei(
         database, relationship, source, source_kind, source_ids):
-    """GLEIF is a secondary source: its record attaches to the Company another source created, never creates one."""
+    """A relationship to a GLEIF record resolves once a Company holds its LEI; the mention creates no Company."""
     mention = {"type": relationship, "target_subject": subject_key(GLEIF, LEI_B), "scope": "", "valid_to": None,
                "properties": {}, "valid_from": AT, "valid_from_basis": "observed"}
     own = [record(source, source_kind, "own-1", source_ids, "Example Source", [mention])]
