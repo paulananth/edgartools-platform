@@ -231,7 +231,7 @@ SELECT COUNT(*) AS private_fund_count FROM sec_adv_private_fund;
 | Silver ownership backfill from bronze | Phase 5 (`parse-ownership-bronze`) |
 | MDM entity loads (all 5 domains) | Phase 5 (`mdm mastering`) |
 | Relationship derivation coverage | Phase 6 (`mdm derive-relationships`) |
-| Neo4j graph sync | Phase 7 (`mdm publish-relationships`, `mdm reconcile`) |
+| Neo4j graph sync | Phase 7 (`mdm publish-relationships`) |
 
 **Protected artifacts:** Generated deployment JSON (e.g., `infra/aws-dev-application.json`) and
 loader-fix workstream artifacts must not be edited during Phase 5 MDM operations. These are
@@ -272,7 +272,6 @@ sequence for the full-scale Phase 5 run is:
    ```bash
    edgar-warehouse mdm backfill-relationships
    edgar-warehouse mdm publish-relationships
-   edgar-warehouse mdm reconcile
    ```
 
 Phase 10 validated steps 1–4 on a single sample (1 adviser, 1 fund). Step 5 is the remaining
