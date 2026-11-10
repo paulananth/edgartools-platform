@@ -753,6 +753,9 @@ capture is enough for a source whose rules are already proved on real files
      each stored record has a golden record, or an open review that says why it waits; each set-aside record has its
      reason. It exits 1 and names the source and the numbers that do not close. A difference is a defect to fix, never
      a note, and `delivery_not_recorded` (a store merged before deliveries were tracked) is not closed.
+   - **Prove each relationship the source states.** On invented records through the real merge, a record that mentions a
+     party with no golden record makes only its own golden record and no link; when the mentioned party's own record is
+     mastered, the link resolves and both keep their own entity types. A relationship never creates a golden record.
    - Check the kind's merge rules accept the source. A source missing from
      `defaults.sources` fails its whole batch. Check `defaults.sources` (a
      kind with its own check in code, run it; see Examples). Adding a source to an
