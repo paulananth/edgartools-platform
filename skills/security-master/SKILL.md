@@ -19,7 +19,7 @@ Rules marked **live** are in `rules/` and proved. Rules marked **switched on
 in the files** are in `policy.yaml`; a new run uses them. Ticket 138 part B1
 replaced OpenFIGI's ticket 120 rules (switched on 2026-10-24 19:27 ET,
 "switch on ticket 120"; those switch-ons ended with them) with one dataset,
-`openfigi.security.v3`, and three rules that wait for their switch-on.
+`openfigi.security.v4`, and three rules that wait for their switch-on.
 
 ## The mastering process (decided 2026-10-25, ticket 138; being built)
 
@@ -143,7 +143,7 @@ CUSIP). Each source keeps its own record on it; MDM merges them.
 |---|---|---|---|
 | SEC N-PORT | `sec.nport.security.v2` | Yes (decided) | CUSIP, every ISIN filed with it (ticket 138), issuer name as filed, title of class, issuer LEI, "issued by" link |
 | SEC 13F | `sec.thirteenf.securities.v1` | Yes (live) | CUSIP, name and title as filed, a filed FIGI |
-| OpenFIGI | `openfigi.security.v3` (both kinds asked, ticket 138) | Yes, and first (on since 2026-10-26 12:24 ET) | All ten OpenFIGI fields and every listing; the CUSIP or ISIN asked and every listing's FIGI as identifiers |
+| OpenFIGI | `openfigi.security.v4` (both kinds asked, ticket 138) | Yes, and first (on since 2026-10-26 12:24 ET) | All ten OpenFIGI fields and every listing; the CUSIP or ISIN asked and every listing's FIGI as identifiers |
 
 The ranking that fills a field: OpenFIGI, then 13F, then N-PORT (operator,
 2026-10-25: "this should be second source", then "Load and priority"; it
@@ -232,7 +232,7 @@ it; the priority decides only where several give it. For each field
    `override_source_disagreement` review. Two overrides at once are refused.
 2. **Otherwise the highest-priority source wins**, in the order of
    `defaults.sources`:
-   1. `openfigi.security.v3`
+   1. `openfigi.security.v4`
    2. `sec.thirteenf.securities.v1`
    3. `sec.nport.security.v2`
 

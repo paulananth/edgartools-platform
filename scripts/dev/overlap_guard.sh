@@ -59,6 +59,8 @@ if grep -q '^rules/' "$tmp/mine"; then
   if [[ -x "$python" ]]; then
     PYTHONPATH=. "$python" -c 'from edgar_warehouse.cli import main; raise SystemExit(main())' rules approvals check >/dev/null \
       || { echo "overlap_guard: STOP. A changed rules document has no approval line (rules approvals write)."; exit 1; }
+    PYTHONPATH=. "$python" scripts/dev/dataset_identity.py "$base" \
+      || { echo "overlap_guard: STOP. A changed source moves a Dataset Contract's identity under the same dataset code."; exit 1; }
   else
     echo "overlap_guard: rules changed, approvals not checked: no $python (set TEST_PYTHON)" >&2
   fi

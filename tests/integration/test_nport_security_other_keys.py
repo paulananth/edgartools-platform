@@ -74,13 +74,13 @@ FIGI_HELD, FIGI_UNHELD = "BBGZ0000VS14", "BBGZ0000VS23"  # invented, check digit
 
 def test_a_figi_only_holding_finds_the_security_holding_its_figi_and_makes_nothing(database):
     """Ticket 139: find only. OpenFIGI's Security holds the FIGI; N-PORT's record binds to it; an unheld FIGI waits."""
-    openfigi = core.source(key=ONE, source_code="openfigi.security.v3", kind="security", fields={"name_of_issuer": "Example Corp."},
+    openfigi = core.source(key=ONE, source_code="openfigi.security.v4", kind="security", fields={"name_of_issuer": "Example Corp."},
                            identifiers={"cusip": ONE, "figi": [FIGI_HELD]}, provenance={"matching": {"found": ["listed"]}})
     keyed = [core.source(key=f, source_code=NPORT, kind="security", fields={}, cross_references={"figi": f},
                          provenance={"matching": {"key_class": "figi"}}) for f in (FIGI_HELD, FIGI_UNHELD)]
     load(database, [[openfigi], keyed])
     found = securities(database)
     assert len(found) == 1  # nothing was created
-    assert bound(database, NPORT, FIGI_HELD) == bound(database, "openfigi.security.v3", ONE) is not None
+    assert bound(database, NPORT, FIGI_HELD) == bound(database, "openfigi.security.v4", ONE) is not None
     assert bound(database, NPORT, FIGI_UNHELD) is None  # waits: no Security holds it
     assert found[bound(database, NPORT, FIGI_HELD)]["identifiers"]["figi"] == [FIGI_HELD]  # never given to it by N-PORT

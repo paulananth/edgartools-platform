@@ -102,7 +102,7 @@ def stores(postgres, database):
         yield owner, runtime, MdmIds(database.application), mastered
 
 
-MEMBERS = "openfigi.security.v3"
+MEMBERS = "openfigi.security.v4"
 
 
 def member(key: str, *figis: str) -> dict:
