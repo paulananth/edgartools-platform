@@ -342,6 +342,23 @@ Journal never recorded them): a blocked run frozen under a retired rules
 version, and an open run pinned to other worker code, which no later checkout
 can finish ("Pinned worker runtime changed; start a new run").
 
+### Restart one source from empty
+
+A source loaded under rules that no longer fit it (a Dataset Contract that got a new dataset code, a rule that
+changed what its records join) is cleared and loaded again. Never delete rows by hand.
+
+1. **Count first.** With the store's owner login (`connection.env`, the runtime role may not delete decisions):
+   `edgar-warehouse mdm clear-source --source <dataset code>`. It runs every delete and rolls back, and prints what
+   would go: the source's records, the golden records only it made (with the aliases of their merges) and what hangs
+   on them. It refuses, and clears nothing, when a golden record also holds another source's records: replay those
+   instead.
+2. **Say it to the operator, then `--confirm`.** It is one transaction; a second run removes nothing.
+3. **Load again.** Reload the rules under a new version label and activate them (merge policy first), then
+   `load` with a **new** `--capture-run`. Runs left open before are finished or left as they are (see "When it
+   stops"); their documents load again. Silver, Bookkeeping and the Change Journal need no clearing: a changed
+   dataset code or rules version is a new processing identity.
+4. **Reconcile** (`mdm reconcile --source <code>`) before the next source.
+
 ### Fit the load into the window
 
 The operator names the window. A plan that does not fit it is not the plan

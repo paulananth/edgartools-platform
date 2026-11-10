@@ -106,6 +106,12 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     resolve.add_argument("--confirm", action="store_true", help="Write the resolution (without it, only show it)")
     resolve.set_defaults(handler=_logged_handler("steward-resolve", _command("steward_resolve")))
 
+    clear = mdm_sub.add_parser("clear-source", help="Restart one source from empty: remove its source records and the golden "
+                               "records only it made. Shows the counts and rolls back; writes only with --confirm")
+    clear.add_argument("--source", required=True, help="The source's dataset code, e.g. openfigi.security.v4")
+    clear.add_argument("--confirm", action="store_true", help="Write the clearing (without it, only count it)")
+    clear.set_defaults(handler=_logged_handler("clear-source", _command("clear_source")))
+
     counts = mdm_sub.add_parser("counts", help="Print MDM entity and record counts")
     counts.set_defaults(handler=_logged_handler("counts", _command("counts")))
 
