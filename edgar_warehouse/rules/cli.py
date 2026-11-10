@@ -102,6 +102,9 @@ def _handle(args):
                 result = method(root, args.version)
                 print(json.dumps(result, default=str, indent=2, sort_keys=True))
                 return 0
+            if args.rules_command == "entity-types":
+                print(json.dumps(rules.entity_types(), default=str, indent=2, sort_keys=True))
+                return 0
             if args.rules_command == "pending":
                 print(json.dumps(rules.pending(), default=str, indent=2, sort_keys=True))
                 return 0
@@ -685,6 +688,8 @@ def register(subparsers):
         (print("write needs --by, --words, --finalized and --at", file=sys.stderr) or 2)))
     pending = commands.add_parser("pending", help="Versions with a test run and no approval yet: evidence and changes")
     pending.set_defaults(handler=_handle)
+    entity_types = commands.add_parser("entity-types", help="Where each saved source's records get their entity type")
+    entity_types.set_defaults(handler=_handle)
     for operation in ("save", "status", "export", "record-proof", "approve", "activate", "run"):
         command = commands.add_parser(operation)
         _selection(command)
