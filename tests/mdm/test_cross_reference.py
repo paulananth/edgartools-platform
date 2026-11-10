@@ -111,7 +111,7 @@ def test_the_13f_contract_s_filed_figi_passes_beside_the_committed_policy(monkey
     alone as issuing it, so registration's check lets it through."""
     from edgar_warehouse.rules import files
 
-    code = "sec.thirteenf.securities.v1"
+    code = "sec.thirteenf.securities.v2"
     body = files.mdm_contract("sec.thirteenf.securities", code)
     issued = frozenset(n for block in files.policy()["kinds"].values()
                        for n, c in (block.get("identifiers") or {}).items() if code in c.get("sources", ()))

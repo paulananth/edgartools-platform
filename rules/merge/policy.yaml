@@ -251,13 +251,13 @@ automatic_rules:
 - kind: security
   family: binding
   rule_id: security-cusip
-  rule_version: 2026-10-27.1
+  rule_version: 2026-11-10.source-v2
   verdict: bind
   activation: deterministic
 - kind: security
   family: binding
   rule_id: thirteenf-security-figi
-  rule_version: 2026-10-26.1
+  rule_version: 2026-11-10.source-v2
   verdict: bind
   activation: deterministic
 # iapd-adv-crd, iapd-adv-custodian-lei, iapd-adv-custodian-bd: switched on by
@@ -457,6 +457,13 @@ automatic_rules:
   family: binding
   rule_id: nport-security-cusip
   rule_version: 2026-10-26.2
+  verdict: bind
+  activation: deterministic
+# thirteenf-security-filed-cusip (ticket 204): the same last resort for a 13F holding, under the same words.
+- kind: security
+  family: binding
+  rule_id: thirteenf-security-filed-cusip
+  rule_version: 2026-11-10.last-resort
   verdict: bind
   activation: deterministic
 # nport-security-filed-cusip (ticket 204): the CUSIP as filed creates the Security of a real N-PORT holding whose CUSIP

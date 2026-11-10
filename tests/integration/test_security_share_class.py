@@ -59,7 +59,7 @@ def nport_records(root: Path, extra: list[list[str]] = (), pairs: list[list[str]
     return nport.security_records(store, root, holdings, issuers, batch_id="check-class")
 
 
-THIRTEENF, THIRTEENF_CODE = "sec.thirteenf.securities", "sec.thirteenf.securities.v1"
+THIRTEENF, THIRTEENF_CODE = "sec.thirteenf.securities", "sec.thirteenf.securities.v2"
 
 
 def thirteenf_records(root: Path, rows: str | None = None) -> list[dict]:

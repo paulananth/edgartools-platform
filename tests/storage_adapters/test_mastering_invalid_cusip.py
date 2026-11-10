@@ -3,6 +3,7 @@
 from edgar_warehouse.mastering import merge
 from tests.storage_adapters.test_mastering import NPORT, SECURITY, live, opened, record
 from tests.unit.test_invalid_cusip import BAD, GOOD, read
+from tests.unit.test_invalid_cusip_thirteenf import read as read_thirteenf
 
 ISIN = "US0378331005"
 
@@ -32,3 +33,12 @@ def test_a_bad_cusip_alone_creates_a_flagged_security_and_never_joins_one_by_tha
         again["subject"], again["assertion_id"] = alone["subject"] + "-2", alone["assertion_id"] + "-2"
         merge.merge_file(db, SECURITY, [again])
         assert len(live(db)) == 2 and db.bound([again["subject"]])[again["subject"]] == own
+
+
+def test_a_thirteenf_holding_with_a_bad_cusip_creates_a_flagged_security(database_factory):
+    with opened(database_factory) as db:
+        holding = read_thirteenf(BAD)
+        merge.merge_file(db, SECURITY, [holding])
+        (golden_id, body), = live(db).items()
+        assert set(body["identifiers"]["filed_cusip"]) == {BAD}
+        assert db.bound([holding["subject"]])[holding["subject"]] == golden_id
