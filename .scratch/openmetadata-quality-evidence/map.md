@@ -32,6 +32,7 @@ format disabled until its measured recovery is within an operator-set maximum.
 - [Restore Verified Per-Load Quality Evidence](issues/01-verified-per-load-quality-evidence.md): Implementation and package verification were restored and merged with CI passing.
 - [Land Per-Load Guidance and Work Map](issues/02-land-quality-history-and-recovery-guidance.md): Guidance merged with the current 12 CI checks passing; legacy results remain latest-only and version-2 recovery remains a manual opt-in.
 - [Prove Atomic Attempt Supersession](issues/03-prove-atomic-attempt-supersession.md): PostgreSQL rejects stale completion after precheck and preserves a replacement's evidence.
+- [Set and Prove the Recovery Maximum](issues/04-set-and-prove-recovery-maximum.md): The recovery proof found and fixed a defect that made the resume impossible — the version-2 receipt named the attempt and a wall-clock time, so a re-executed unit wrote different bytes to the same immutable output. The receipt now names the work unit and reuses its observation time. Both interruption shapes resume over invented data in a disposable PostgreSQL 16 container, measured at 0.146 s to 0.263 s over nine runs, against the operator's 5-minute maximum. The feature stays disabled pending an enablement decision.
 
 ## Not yet specified
 

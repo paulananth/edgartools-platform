@@ -2,7 +2,7 @@
 
 Type: task
 Status: open
-Blocked by: 03, 04
+Blocked by: none
 Blocks: 06, 07
 Labels: wayfinder:task
 
