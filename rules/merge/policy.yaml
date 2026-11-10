@@ -440,6 +440,12 @@ automatic_rules:
   activation: deterministic
 - kind: security
   family: binding
+  rule_id: openfigi-security-share-class-figi
+  rule_version: 2026-11-10.no-conflicting-identifier
+  verdict: bind
+  activation: deterministic
+- kind: security
+  family: binding
   rule_id: nport-security-cusip
   rule_version: 2026-10-26.2
   verdict: bind

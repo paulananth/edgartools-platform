@@ -1254,7 +1254,7 @@ dataset_contracts:
     contract:
       provider: OpenFIGI
       family: openfigi
-      schema_version: openfigi-security-v4
+      schema_version: openfigi-security-v5
       record_key: the CUSIP or ISIN asked, upper-cased; one record per identifier asked
       publication_key: the capture's mapping answer files and the reduce, combine and record
         contracts
@@ -1317,8 +1317,9 @@ dataset_contracts:
                           value:
                             path: market_sector
                         # No share_class_figi field: it is the Security's
-                        # cross-reference below (lookup only), one place, not
-                        # two (ticket 129; operator, 2026-10-22: "Fix 4").
+                        # identifier below, one place, not two (ticket 129;
+                        # operator, 2026-10-22: "Fix 4"; searched from
+                        # 2026-11-10, ticket 206).
                   # Present only when OpenFIGI found the identifier (operator, 2026-11-09: an identifier OpenFIGI does
                   # not know attaches to the Security that holds it and creates nothing).
                   matching:
@@ -1347,7 +1348,7 @@ dataset_contracts:
           - security_type2
           - market_sector
           - listings
-        version: openfigi-security-v4
+        version: openfigi-security-v5
         retain_deferred: true
         source_record_provenance: true
         kind: security
@@ -1359,16 +1360,17 @@ dataset_contracts:
           cusip: cusip
           isin: isin
           figi: figis
+          share_class_figi: share_class_figi
           ticker: ticker
         identifier_formats:
           cusip: cusip
           isin: isin
           figi: figi
+          share_class_figi: figi
           ticker: ticker
         detail_keys:
           listings: figi
-        # Lookup only (operator, 2026-10-25: composite and share-class FIGI
-        # "Lookup only"); the listing FIGIs are identifiers above.
+        # Lookup only (operator, 2026-10-25: the composite FIGI "Lookup only"); the listing FIGIs and, from
+        # 2026-11-10 ("step 3 agreed"), the share class FIGI are identifiers above.
         cross_references:
           composite_figi: composite_figi
-          share_class_figi: share_class_figi

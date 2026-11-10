@@ -200,6 +200,7 @@ def _match_identifiers(store, settings: Settings, records, bound: dict, counts: 
     for namespace, value, entity in held:
         if kinds.get(entity) == settings.kind:  # a record joins only golden records of its own entity type
             found[(namespace, value)][entity] = settings.kind
+    counts.update(_hold_conflicts(store, settings, plan, records, found))
     reached = set()
     for items in plan["applicable"].values():
         hit = {e for item in items for e in found.get((item["namespace"], item["value"]), {})}
@@ -246,6 +247,33 @@ def _match_identifiers(store, settings: Settings, records, bound: dict, counts: 
         if review.get("subject"):
             store.open_reviews(review["reason"], [(review["subject"], review.get("assertion_id"))])
     return survivors
+
+
+def _hold_conflicts(store, settings: Settings, plan: dict, records, found: dict) -> Counter:
+    """A record whose identifier finds a golden record that holds another value of an identifier its contract says
+    must agree (a share class FIGI whose Security holds another CUSIP) joins nothing and goes to review (step 4)."""
+    contracts = ((settings.policy.get("kinds") or {}).get(settings.kind) or {}).get("identifiers") or {}
+    agree = {namespace: contract["conflicts_with"] for namespace, contract in contracts.items() if contract.get("conflicts_with")}
+    held_by = {}
+    if agree:
+        wanted = {entity for (namespace, _), holders in found.items() if namespace in agree for entity in holders}
+        held_by = store.identifiers_of(wanted, sorted({n for names in agree.values() for n in names}))
+    stated = {r["subject"]: r for r in records}
+    values = lambda ids: {str(v).upper() for v in (ids if isinstance(ids, list) else [ids]) if v}
+    seen, counts = defaultdict(list), Counter()  # what the records of this file that went on already state, per value
+    for subject in sorted(plan["applicable"]):
+        mine = {n: values(stated[subject]["identifiers"].get(n)) for names in agree.values() for n in names}
+        keys = [(item["namespace"], item["value"]) for item in plan["applicable"][subject] if item["namespace"] in agree]
+        peers = {key: [held_by.get(entity, {}) for entity in found.get(key, {})] + seen[key] for key in keys}
+        if any(mine[n] and peer.get(n) and not mine[n] & peer[n]
+               for key in keys for peer in peers[key] for n in agree[key[0]]):
+            store.open_reviews("conflicting_identifiers", [(subject, stated[subject]["assertion_id"])])
+            counts["conflicting_identifiers"] += 1
+            del plan["applicable"][subject]
+        else:
+            for key in keys:
+                seen[key].append(mine)
+    return counts
 
 
 def _match_names(store, settings: Settings, records, bound: dict, counts: Counter, binds: list) -> dict:

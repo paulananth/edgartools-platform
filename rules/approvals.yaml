@@ -5,11 +5,11 @@ version: 1
 approvals:
 - kind: merge
   name: platform
-  digest: 5817f4fbbd3f63be55d6dfa450558bae3f9ecf8f9456f784775c36dfff043739
+  digest: e15887b5623c156719cb20a4718dad9ca9f13f6c89e0b660fe50878859e9b7eb
   by: Operator
   words: Approved the rules always
-  at: '2026-11-09'
-  finalized: PR 1586
+  at: '2026-11-10'
+  finalized: PR 1608
 - kind: pipeline
   name: sec.thirteenf.extract
   digest: 3b6cd24f69cd663835c0b19d2d0d15b05d2633bc0307e5c84eb0328ef93516c4
@@ -33,11 +33,11 @@ approvals:
   finalized: PR 1566
 - kind: source
   name: openfigi
-  digest: e515d7079afdc837d27230d161ddcc700fdc91b983aacafc16b86b1796a20230
+  digest: 09a9f18f2db356932ebdf5713440237128a2b4ca83a53911668b54003526ec49
   by: Operator
   words: Approved the rules always
-  at: '2026-11-09'
-  finalized: PR 1570
+  at: '2026-11-10'
+  finalized: PR 1608
 - kind: source
   name: sec.company
   digest: 568f3077f8d62ee126f13324d10c0d348060a45f5804a53421a423ccd9211277
