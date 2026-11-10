@@ -100,8 +100,7 @@ merged migration file. A read-only check during this review found PostgreSQL
 16.15, 27 `public` tables and 13 `mdm_v2` tables in local `mdm`, zero clean
 batches, and migration 027’s deferred table not installed. These are local
 observations, not hosted deployment evidence.
-(Superseded: the current table list, 20 `mdm_v2` tables through migration
-042, is in `docs/specs/database-design-review-2026-09-30.md`.)
+(Superseded: the tables are now the `mdm` schema, re-baselined as one migration, `001_mdm.sql`.)
 
 ## Reconciled implementation order after design gate 08
 

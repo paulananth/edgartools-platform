@@ -231,7 +231,6 @@ edgar-warehouse mdm mastering --entity-type all
 edgar-warehouse mdm derive-relationships   # or backfill / load variants
 edgar-warehouse mdm publish
 edgar-warehouse mdm publish-relationships
-edgar-warehouse mdm reconcile
 ```
 
 ---

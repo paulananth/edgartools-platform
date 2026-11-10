@@ -77,7 +77,6 @@ edgar-warehouse context <kind> --search "<words>"      # a master already held
 edgar-warehouse context <code set> --search "<words>"  # a code already held
 edgar-warehouse rdm list                                 # every code set
 edgar-warehouse rdm describe <code set>                  # its meaning, version, where used, hints
-edgar-warehouse mdm counts                               # how many entities exist
 ```
 
 ## Decision rules

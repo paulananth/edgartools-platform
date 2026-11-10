@@ -146,14 +146,6 @@ def _inspection_adapter(conn):
     return for_connection(conn).adapter
 
 
-def counts(args) -> int:
-    def report(conn):
-        result = _inspection_adapter(conn).count_types(
-            ("entity", "relationship", "review"), connection=conn
-        )
-        return {kind: count for kind, count in result.items() if kind == "entity" or count}
-
-    return _print_mdm_report(report)
 
 
 def rebuild_name_index(args) -> int:
