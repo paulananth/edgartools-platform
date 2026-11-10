@@ -10,6 +10,8 @@ import pytest
 
 from edgar_warehouse.mdm.evidence import subject_key
 from tests.integration import test_mdm_postgres as core
+from tests.mdm import policy_layers
+from edgar_warehouse.rules import files
 from tests.support import masters
 
 AT = "2026-06-01T00:00:00+00:00"
@@ -55,4 +57,50 @@ def test_a_mentioned_party_is_a_relationship_until_its_own_record_is_mastered(
     masters.seed(database.application, [record(target, target_kind, target_key, target_ids, "Example Target")])
     assert sorted(b["kind"] for b in masters.bodies(database.application).values()) == sorted([source_kind, target_kind])
     (link,) = masters.links(database.application, of_type=relationship)
+    assert link["source_id"] != link["target_id"]
+
+
+GLEIF = "gleif.level1.v1"
+LEI_A, LEI_B = "9999000000EXAMPLE016", "9999000000EXAMPLE024"  # invented
+GLEIF_TARGETS = [
+    # (relationship type, the source record's code, kind and identifiers; the mentioned LEI is LEI_B's GLEIF record)
+    ("SUCCESSOR_ENTITY", GLEIF, "company", {"lei": LEI_A}),
+    ("IS_DIRECTLY_CONSOLIDATED_BY", GLEIF, "company", {"lei": LEI_A}),
+    ("IS_ULTIMATELY_CONSOLIDATED_BY", GLEIF, "company", {"lei": LEI_A}),
+    ("ISSUED_BY", "sec.nport.security.v2", "security", {"cusip": "ZZ0000013"}),
+]
+
+
+def policy():
+    """The LEI rule for GLEIF records is declared and not switched on in the repo policy (ticket 203), so it is on in a copy."""
+    return policy_layers.with_rules_on(files.policy(), "company", "gleif-issuer-lei")
+
+
+def gleif(lei, relationships=()):
+    return core.source(key=lei, source_code=GLEIF, kind="company", fields={"name": "Example Target"},
+                       identifiers={"lei": lei}, relationships=list(relationships),
+                       provenance={"matching": {"nport_issuer": ["held"]}})
+
+
+def company_with_lei(lei):
+    """The Company a GLEIF record attaches to: GLEIF never creates one, so another source's record holds the LEI."""
+    return record("iapd.adv.custodians.v1", "company", f"lei:{lei}", {"lei": lei}, "Example Company")
+
+
+@pytest.mark.parametrize("relationship,source,source_kind,source_ids", GLEIF_TARGETS, ids=[c[0] for c in GLEIF_TARGETS])
+def test_a_relationship_to_a_gleif_record_resolves_once_a_company_holds_its_lei(
+        database, relationship, source, source_kind, source_ids):
+    """GLEIF is a secondary source: its record attaches to the Company another source created, never creates one."""
+    mention = {"type": relationship, "target_subject": subject_key(GLEIF, LEI_B), "scope": "", "valid_to": None,
+               "properties": {}, "valid_from": AT, "valid_from_basis": "observed"}
+    own = [record(source, source_kind, "own-1", source_ids, "Example Source", [mention])]
+    if source == GLEIF:  # the mentioning GLEIF record attaches to the Company holding its LEI
+        own = [company_with_lei(LEI_A), gleif(LEI_A, [mention])]
+    masters.seed(database.application, own, policy())
+    before = len(masters.bodies(database.application))
+    assert before == 1  # its own golden record only: the mentioned LEI's party was not created
+    assert masters.links(database.application, policy(), of_type=relationship) == []
+    masters.seed(database.application, [company_with_lei(LEI_B), gleif(LEI_B)], policy())
+    assert len(masters.bodies(database.application)) == 2  # the target Company exists once; GLEIF's record joined it
+    (link,) = masters.links(database.application, policy(), of_type=relationship)
     assert link["source_id"] != link["target_id"]
