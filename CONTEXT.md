@@ -179,8 +179,12 @@ The rules that select a master field value from eligible source values after ide
 _Avoid_: Proof of identity, source rank as permission to merge identities
 
 **Name Matching**:
-The last resort of mastering, and the counts it needs: how many SEC filers and how many GLEIF legal entities carry each name with its legal form kept, counted over one whole SEC capture and one whole GLEIF publication. It proposes no binding. A name rule may bind only a name whose SEC count and GLEIF count are each exactly one. It is part of the GLEIF merge, not a separate job.
-_Avoid_: Name Count, Name Frequency, Name Census, Census, a matcher, a list of approved pairs, a count over the records a Stage happens to hold
+The last resort of mastering: a record that no identifier finds is matched by its name and its place. It is done by Waterfall Matching, as the last pass of the GLEIF load. It proposes no binding by itself: a name rule may bind only a pair that is one to one in its pass. It is part of the GLEIF merge, not a separate job.
+_Avoid_: Name Frequency, Name Census, Census, a matcher, a list of approved pairs, a count over the records a Stage happens to hold
+
+**Waterfall Matching**:
+The passes of Name Matching, run from strict to loose. Pass 1 needs the name and the full address to agree; each later pass compares fewer address parts and takes only the SEC filers and GLEIF entities no earlier pass bound. A pair binds only one to one in its pass: the filer agrees with exactly one entity, and that entity with exactly one filer. It runs once, as the last pass of the GLEIF load, over the SEC Companies and the GLEIF records in the store, so the load order cannot change a result.
+_Avoid_: a pass over the records one file happens to hold, a separate job run before the merge
 
 **Match Exclusion**:
 An evidence-backed decision that specified source records or identities must not be combined while the decision remains in force.
