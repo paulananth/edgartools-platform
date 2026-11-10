@@ -25,7 +25,7 @@ What is the one order in which a Company is matched, and which rules sit in it?
 
 ## Checklist
 
-- [ ] Operator's word on reversing "lookup only" for the N-PORT registrant LEI (proposal item 2).
+- [x] Operator's word on reversing "lookup only" for the N-PORT registrant LEI (proposal item 2): given 2026-11-10 07:55 ET ("Master it ;consider it a source"), read as: the registrant LEI is searched like any source's identifier. Built under the remaining parts.
 - [ ] Count the registrant LEIs against the full GLEIF file, from a scope of those 1,939 LEIs: how many equal a GLEIF LEI, and how many are the same entity by name and place (counts only).
 - [ ] Write the LEI rule, declared and not switched on, in a copy of the policy; test both source orders and a second pass; the limited test is the proof.
 - [ ] State "no other identifier available" as one precondition shared by every name rule (it exists today as `holds_no_other_lei@1` for LEI only), and add former name to the name rule family with its own proof.
