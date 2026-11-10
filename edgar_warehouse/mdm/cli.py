@@ -1,6 +1,6 @@
 """CLI subcommand: `edgar-warehouse mdm ...`, MDM only.
 
-Commands: migrate, check-connectivity, counts,
+Commands: migrate, check-connectivity,
 prepare-capture, name-count, rebuild, rebuild-name-index and rebuild-detail-lookup. The legacy MDM commands and their tables are
 deleted (platform validation slice 2a).
 """
@@ -106,9 +106,6 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     clear.add_argument("--source", required=True, help="The source's dataset code, e.g. openfigi.security.v4")
     clear.add_argument("--confirm", action="store_true", help="Write the clearing (without it, only count it)")
     clear.set_defaults(handler=_logged_handler("clear-source", _command("clear_source")))
-
-    counts = mdm_sub.add_parser("counts", help="Print MDM entity and record counts")
-    counts.set_defaults(handler=_logged_handler("counts", _command("counts")))
 
     check = mdm_sub.add_parser("check-connectivity", help="Check the MDM database connection and schema")
     check.set_defaults(handler=_logged_handler("check-connectivity", _command("check_connectivity")))

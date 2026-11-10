@@ -11,7 +11,6 @@ NAME_COUNT = ["--capture", "c", "--population", "p", "--gleif-reading", "a",
           "--gleif-reading-sha256", "s", "--gleif-metadata", "x", "--output", "o"]
 
 @pytest.mark.parametrize("argv,function", [
-    (["mdm", "counts"], "counts"),
     (["mdm", "check-connectivity"], "check_connectivity"),
     (["mdm", "name-count", *NAME_COUNT], "name_count"),
     (["mdm", "rebuild-name-index", "--limit", "1"], "rebuild_name_index"),
@@ -66,7 +65,7 @@ def test_clearing_a_source_previews_unless_confirmed_and_needs_the_source():
 
 def test_retired_commands_stay_unavailable():
     parser = build_parser()
-    for retired in ("mastering", "apply-decisions", "bronze-receipts", "correction-batch", "export", "force-publish", "reconcile"):
+    for retired in ("mastering", "apply-decisions", "bronze-receipts", "correction-batch", "export", "force-publish", "reconcile", "counts"):
         with pytest.raises(SystemExit):
             parser.parse_args(["mdm", retired])
     with pytest.raises(SystemExit):

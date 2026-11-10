@@ -334,7 +334,7 @@ The audit fails if:
 - the MDM DSN secret does not resolve to a Snowflake Postgres host.
 - warehouse or MDM task definitions do not inject the same `MDM_DATABASE_URL` secret ARN.
 - deployed state machines reference stale task definition revisions.
-- `mdm check-connectivity`, `mdm counts`, representative `mdm mastering`, or the warehouse tracked-CIK read smoke fails.
+- `mdm check-connectivity`, representative `mdm mastering`, or the warehouse tracked-CIK read smoke fails.
 
 ## 6. Remove AWS RDS
 

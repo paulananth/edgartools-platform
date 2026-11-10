@@ -304,7 +304,6 @@ unset WAREHOUSE_STORAGE_ROOT
 Local verification:
 
 ```bash
-uv run --extra mdm-runtime --extra s3 edgar-warehouse mdm counts
 uv run --extra mdm-runtime --extra s3 edgar-warehouse mdm coverage-report
 ```
 
