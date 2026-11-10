@@ -378,7 +378,7 @@ automatic_rules:
 - kind: company
   family: binding
   rule_id: nport-registrant-cik
-  rule_version: 2026-10-15.1
+  rule_version: 2026-11-10.registrant-v2
   verdict: bind
   activation: deterministic
 # nport-registrant-lei (ticket 203): an N-PORT registrant's LEI finds the Company that holds it. Switched on under the
@@ -420,37 +420,37 @@ automatic_rules:
 - kind: security
   family: binding
   rule_id: openfigi-security-cusip
-  rule_version: 2026-11-09.found-answers-only
+  rule_version: 2026-11-10.source-v4
   verdict: bind
   activation: deterministic
 - kind: security
   family: binding
   rule_id: openfigi-security-isin
-  rule_version: 2026-11-09.found-answers-only
+  rule_version: 2026-11-10.source-v4
   verdict: bind
   activation: deterministic
 - kind: security
   family: binding
   rule_id: openfigi-not-found-cusip
-  rule_version: 2026-11-09.1
+  rule_version: 2026-11-10.source-v4
   verdict: bind
   activation: deterministic
 - kind: security
   family: binding
   rule_id: openfigi-not-found-isin
-  rule_version: 2026-11-09.1
+  rule_version: 2026-11-10.source-v4
   verdict: bind
   activation: deterministic
 - kind: security
   family: binding
   rule_id: openfigi-security-figi
-  rule_version: 2026-10-26.1
+  rule_version: 2026-11-10.source-v4
   verdict: bind
   activation: deterministic
 - kind: security
   family: binding
   rule_id: openfigi-security-share-class-figi
-  rule_version: 2026-11-10.no-conflicting-identifier
+  rule_version: 2026-11-10.source-v4
   verdict: bind
   activation: deterministic
 - kind: security

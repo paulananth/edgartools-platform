@@ -687,6 +687,7 @@ def _historic_company_identity(value):
         return [_historic_company_identity(item) for item in value]
     if isinstance(value, str):
         return {"sec.nport.registrant.v2": "sec.nport.registrant.v1",
+                "2026-11-10.registrant-v2": "2026-10-15.1",
                 "sec.company.v1": "sec.submissions.company.v1",
                 "sec.company": "sec.submissions.company",
                 "company-2026-10-31.sec-company-source-identity":

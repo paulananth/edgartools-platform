@@ -135,7 +135,7 @@ rules:
 # "Switch on all six (Recommended)"): it activates on the CIK Identifier
 # Contract, re-verified with this source on the registrant Proving Run.
 - rule_id: nport-registrant-cik
-  version: 2026-10-15.1
+  version: 2026-11-10.registrant-v2
   family: binding
   source: sec.nport.registrant.v2
   applies_to_verdict: company

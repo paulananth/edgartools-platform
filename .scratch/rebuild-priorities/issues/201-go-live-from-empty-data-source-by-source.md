@@ -61,3 +61,6 @@ From [the initial load sequence](../../../docs/initial-and-daily-source-load.md)
 - [x] Environment: `local-staging`, a new store (see Init, decided). Backup of the current stores: not needed.
 - [ ] Whether a source that cannot yet load (ticket 79 N-PORT run builder, ticket 80 OpenFIGI listing enrichment, ADV and 13F mastering targets) is deferred or loaded as far as its path supports. The load sequence says to report the missing source and stage, not to omit it.
 - [ ] Learning → skill: name the skill line this ticket changed, or write "none".
+
+- [x] FOUND at the go-live (2026-11-10 10:44 ET): activating the merge policy on `local-staging` was refused: "Rule version already registered with different steps" for 7 rules (`nport-registrant-cik` and six OpenFIGI rules), because their source codes moved (`openfigi.security.v4`, `sec.nport.registrant.v2`) under the same rule versions. A rule version is immutable once registered. Fixed: each has a new descriptive version (`2026-11-10.source-v4`, `2026-11-10.registrant-v2`), approval line finalized as PR 1617. The guard check `scripts/dev/dataset_identity.py` now compares each merge rule with its version at the base; on PR 1613 against its parent it names exactly the 6 security rules, on this change it passes.
+
