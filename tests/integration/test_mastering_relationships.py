@@ -1,6 +1,6 @@
 """Step 2 of mastering: what a record mentions is a relationship, resolved when both golden records exist.
 
-For each relationship kind that links two sources' records and states a start date, on invented records under the real
+For each relationship kind that links two sources' records (a start date, or a Person's capacity), on invented records under the real
 rules (PostgreSQL 16): a record that mentions a party no golden record exists for makes its own golden record and no
 other, so the mentioned party is never created from the mention and no link exists; when the mentioned party's own
 record is mastered, the link resolves and the golden records are still two, each of its own entity type.
@@ -32,12 +32,22 @@ def record(code, kind, key, identifiers, name, relationships=()):
                        relationships=list(relationships), profiles=fund)
 
 
-@pytest.mark.parametrize("relationship,source,source_kind,source_ids,target,target_kind,target_ids,target_key", CASES,
-                         ids=[c[0] for c in CASES])
+CAPACITIES = [
+    ("EMPLOYED_BY", "sec.ownership.reporting_owner.v1", "person", {"cik": "0000999005"},
+     "sec.company.v1", "company", {"cik": "0000999006"}, "0000999006", "officer"),
+    ("BENEFICIAL_OWNER_OF", "sec.ownership.reporting_owner.v1", "person", {"cik": "0000999007"},
+     "sec.company.v1", "company", {"cik": "0000999008"}, "0000999008", "ten_percent_owner"),
+]
+
+
+@pytest.mark.parametrize("relationship,source,source_kind,source_ids,target,target_kind,target_ids,target_key,capacity",
+                         [(*c, "") for c in CASES] + CAPACITIES, ids=[c[0] for c in CASES + CAPACITIES])
 def test_a_mentioned_party_is_a_relationship_until_its_own_record_is_mastered(
-        database, relationship, source, source_kind, source_ids, target, target_kind, target_ids, target_key):
+        database, relationship, source, source_kind, source_ids, target, target_kind, target_ids, target_key, capacity):
     mention = {"type": relationship, "target_subject": subject_key(target, target_key), "scope": "", "valid_to": None,
                "properties": {}, "valid_from": AT, "valid_from_basis": "observed"}
+    if capacity:  # a Person's link is a dated sighting of the capacity held (relationships.fold_sightings)
+        mention |= {"capacity": capacity, "on": AT, "held": True, "title": None}
     masters.seed(database.application, [record(source, source_kind, "own-1", source_ids, "Example Source", [mention])])
     assert {b["kind"] for b in masters.bodies(database.application).values()} == {source_kind}  # only its own
     assert len(masters.bodies(database.application)) == 1  # the mentioned party was not created
