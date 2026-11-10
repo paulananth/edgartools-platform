@@ -156,7 +156,7 @@ def _merge(store, settings: Settings, records: list[dict], key: str, again: bool
     subjects = sorted({r["subject"] for r in records})
     bound = store.bound(subjects)
     counts = Counter()
-    binds = []  # every bind decision of this file, whichever rule made it (step 6: every decision is recorded)
+    binds = []  # the judgements of this file: name matches (step 6); an identifier join writes none
     survivors = _match_identifiers(store, settings, records, bound, counts, file_no, binds)
     named = _match_names(store, settings, records, bound, counts, binds)
     bound.update(named)
@@ -245,8 +245,9 @@ def _match_identifiers(store, settings: Settings, records, bound: dict, counts: 
         bound[subject] = live(entity)
     for decision in made["decisions"]:
         if decision["operation"] == "bind":
+            # A join by an identifier is no judgement: the record's own `bound_id` says where it went (operator,
+            # 2026-11-10: "Yes, stop the plain ones"). Only name matches, conflicts and a steward's bind are decisions.
             bound[decision["subject"]] = live(decision["entity_id"])
-            binds.append({**decision, "policy_digest": settings.policy_digest})
             store.add_withheld([(decision["subject"], w["namespace"], w["raw"]) for w in decision.get("withheld") or ()])
     for review in made["reviews"]:
         counts[review["reason"]] += 1
