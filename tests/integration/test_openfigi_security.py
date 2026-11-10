@@ -211,14 +211,26 @@ def figis(word: str) -> list[str]:
     return sorted({row["figi"] for row in ANSWERS[word]["data"]})
 
 
+def classes(word: str) -> dict:
+    """The share class FIGI an answer states: an identifier of its Security (ticket 206), none when its listings state
+    none or several."""
+    found = sorted({row["shareClassFIGI"] for row in ANSWERS[word]["data"] if row.get("shareClassFIGI")})
+    return {"share_class_figi": found} if len(found) == 1 else {}
+
+
+def stated(word: str) -> dict:
+    """The same, as the record states it: one value."""
+    return {key: values[0] for key, values in classes(word).items()}
+
+
 def test_each_identifier_carries_only_its_single_levels(tmp_path):
     records, refused = prepared_records(tmp_path, ("cusip",))
     found = {r["provenance"]["record_key"]: r.get("cross_references", {}) for r in records}
     assert found == {
-        EQUITY: {"composite_figi": "BBGZ0000VS14", "share_class_figi": "BBGZ00000SC6"},
+        EQUITY: {"composite_figi": "BBGZ0000VS14"},
         BOND: {},
         UNHELD: {},
-        SOLE: {"composite_figi": "BBGZ0000VS23", "share_class_figi": "BBGZ0000SC22"},
+        SOLE: {"composite_figi": "BBGZ0000VS23"},
         DOUBLE: {},
         BROKEN: {"composite_figi": "BBGZ0000BK13"},
     }
@@ -229,7 +241,7 @@ def test_each_identifier_carries_only_its_single_levels(tmp_path):
     # once dropped) is no ticker and leaves the field empty, the record is kept.
     tickers = {EQUITY: "EXA", SOLE: "EXD"}
     assert {r["provenance"]["record_key"]: r["identifiers"] for r in records} == {
-        **{c: {"cusip": c, "figi": figis(c), **({"ticker": tickers[c]} if c in tickers else {})}
+        **{c: {"cusip": c, "figi": figis(c), **stated(c), **({"ticker": tickers[c]} if c in tickers else {})}
            for c in found if c != BROKEN},
         BROKEN: {"cusip": BROKEN, "figi": ["BBGZ0000BK13"], "ticker": "EXJ"}}
     assert {r["provenance"]["record_key"]: r["provenance"].get("identifiers_set_aside") for r in records}[BOND] is None
@@ -250,13 +262,13 @@ def test_an_isin_answer_carries_its_isin_and_every_listing_figi(tmp_path):
     records, refused = prepared_records(tmp_path, ("isin",))
     tickers = {ISIN: "EXG", HOME: "EXH", SHARED: "EXA"}
     assert {r["provenance"]["record_key"]: r["identifiers"] for r in records} == {
-        i: {"isin": i, "figi": figis(i), **({"ticker": tickers[i]} if i in tickers else {})}
+        i: {"isin": i, "figi": figis(i), **stated(i), **({"ticker": tickers[i]} if i in tickers else {})}
         for i in (ISIN, HOME, SHARED, TWICE)}
     assert refused == {isin: "not_found_by_openfigi" for isin in ISIN_OTHERS}
     assert {r["provenance"]["record_key"]: r["cross_references"] for r in records if r["provenance"]["record_key"] != TWICE} == {
-        ISIN: {"composite_figi": "BBGZ0000VS50", "share_class_figi": "BBGZ0000SC59"},
-        HOME: {"share_class_figi": "BBGZ0000SC68", "composite_figi": "BBGZ0000JP69"},
-        SHARED: {"share_class_figi": "BBGZ00000SC6", "composite_figi": "BBGZ0000VS14"}}
+        ISIN: {"composite_figi": "BBGZ0000VS50"},
+        HOME: {"composite_figi": "BBGZ0000JP69"},
+        SHARED: {"composite_figi": "BBGZ0000VS14"}}
 
 
 def bound(database, source_code: str, key: str) -> str | None:
@@ -293,7 +305,8 @@ def test_a_record_joins_the_security_holding_its_cusip_or_creates_it(database, t
     assert (joined["fields"]["name_of_issuer"]["value"], joined["fields"]["title_of_class"]["value"]) == (
         "EXAMPLE CORP", "COM")
     # The Security holds its CUSIP and every listing FIGI (no reverse limit).
-    assert joined["status"] == "accepted" and joined["identifiers"] == {"cusip": [EQUITY], "figi": figis(EQUITY), "ticker": ["EXA"]}
+    assert joined["status"] == "accepted" and joined["identifiers"] == {
+        "cusip": [EQUITY], "figi": figis(EQUITY), **classes(EQUITY), "ticker": ["EXA"]}
     assert masters.cross_referencing(database.application, "composite_figi", "BBGZ0000VS14") == [
         bound(database, CODE, EQUITY)]
 
@@ -314,7 +327,8 @@ def test_a_filed_figi_finds_its_security_and_never_becomes_one_of_its_identifier
          for cusip, filed in (("ZZ0000211", figis(EQUITY)[0]), ("ZZ0000229", unheld_figi))]])
     found = securities(database)[bound(database, THIRTEENF, "ZZ0000211")]
     assert bound(database, THIRTEENF, "ZZ0000211") == bound(database, CODE, EQUITY)
-    assert found["identifiers"] == {"cusip": sorted([EQUITY, "ZZ0000211"]), "figi": figis(EQUITY), "ticker": ["EXA"]}
+    assert found["identifiers"] == {"cusip": sorted([EQUITY, "ZZ0000211"]), "figi": figis(EQUITY),
+                                    **classes(EQUITY), "ticker": ["EXA"]}
     created = securities(database)[bound(database, THIRTEENF, "ZZ0000229")]
     assert created["identifiers"] == {"cusip": ["ZZ0000229"]}
 
@@ -363,10 +377,15 @@ def test_openfigi_answers_in_either_order_make_the_same_securities(database, tmp
     assert len(securities(database)) == 7
     equity = bound(database, CODE, EQUITY)
     assert securities(database)[equity]["identifiers"] == {
-        "cusip": [EQUITY], "isin": [SHARED], "figi": sorted({*figis(EQUITY), *figis(SHARED)}), "ticker": ["EXA"]}
+        "cusip": [EQUITY], "isin": [SHARED], "figi": sorted({*figis(EQUITY), *figis(SHARED)}),
+        "share_class_figi": sorted({*classes(EQUITY)["share_class_figi"], *classes(SHARED)["share_class_figi"]}),
+        "ticker": ["EXA"]}
     merged = securities(database)[bound(database, CODE, TWICE)]
     assert merged["identifiers"] == {"cusip": sorted([SOLE, DOUBLE]), "isin": [TWICE],
-                                     "figi": sorted({*figis(SOLE), *figis(DOUBLE)}), "ticker": ["EXD"]}
+                                     "figi": sorted({*figis(SOLE), *figis(DOUBLE)}),
+                                     "share_class_figi": sorted({*classes(SOLE)["share_class_figi"],
+                                                                 *classes(DOUBLE).get("share_class_figi", [])}),
+                                     "ticker": ["EXD"]}
     assert not masters.reviews(database.application)
     if order == "cusip_first":
         # The merged-away Security points at its survivor, the one created first.

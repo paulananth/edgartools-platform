@@ -102,6 +102,16 @@ class Store:
         return self.rows("select distinct i.namespace,i.value,i.entity_id from mastering_identifier i "
                          "join mastering_stage_key s on s.namespace=i.namespace and s.value=i.value")
 
+    def identifiers_of(self, entities, namespaces) -> dict:
+        """The values each golden record holds of the given identifiers: {entity: {namespace: {values}}}."""
+        found = defaultdict(lambda: defaultdict(set))
+        for block in blocks(sorted(entities)):
+            for entity, namespace, value in self.rows(
+                    "select entity_id,namespace,value from mastering_identifier "
+                    f"where namespace in ({marks(namespaces)}) and entity_id in ({marks(block)})", [*namespaces, *block]):
+                found[entity][namespace].add(value)
+        return found
+
     def kinds(self, entities) -> dict:
         """The entity type of each golden record, read from its body."""
         found = {}

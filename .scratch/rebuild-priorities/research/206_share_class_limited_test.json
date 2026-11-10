@@ -1,0 +1,16 @@
+{
+  "ticket": 206,
+  "rule": "openfigi-security-share-class-figi",
+  "version": "2026-11-10.no-conflicting-identifier",
+  "ran": "2026-11-10 07:06 ET",
+  "corpus": "every stored OpenFIGI record of the 25 share class FIGI values that two Securities held on the shared store (counts only)",
+  "share_class_values_held_by_two_securities": 25,
+  "records": 72,
+  "securities_before": 50,
+  "securities_after": 25,
+  "pairs_joined_no_identifier_conflict": 8,
+  "pairs_left_for_review_identifier_conflict": 17,
+  "records_waiting_in_review": 27,
+  "checked_on_all_share_and_composite_figi_values": {"values": 65578, "failing_shape_or_check_digit": 0},
+  "result": "pass: the 8 pairs with no conflicting CUSIP or ISIN joined one Security each; each of the 17 pairs with a conflict kept the first record's Security and sent the other records to review; none merged"
+}

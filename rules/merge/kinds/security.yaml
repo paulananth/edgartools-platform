@@ -293,6 +293,25 @@ rules:
 # only"): the trading symbol an issuer files with an insider filing, a cross-reference, finds
 # the Security OpenFIGI gave that ticker to. The filing does not issue tickers, so the value is
 # never that Security's: the rule creates nothing, merges nothing, waits when no Security holds
+- rule_id: openfigi-security-share-class-figi
+  # "Share class FIGI finds its Security" (ticket 206; operator, 2026-11-10: "step 3 agreed"): a record that states a
+  # share class FIGI joins the Security that holds it, unless that Security holds another CUSIP or ISIN than the record
+  # states. Then the record joins nothing and goes to review for a data steward (an old and a new CUSIP after a reverse
+  # split, a redomicile, or two issuers that share a value). The share class never merges two Securities.
+  version: 2026-11-10.no-conflicting-identifier
+  family: binding
+  source: openfigi.security.v3
+  applies_to_verdict: security
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: share_class_figi
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: share_class_figi
 # the ticker and sends several Securities (a reused ticker) to review. It needs OpenFIGI first.
 - rule_id: form4-security-ticker
   version: 2026-11-07.one-record-per-filing
@@ -458,6 +477,32 @@ identifiers:
       approved_by: operator
       approved_at: "2026-10-26T16:24:52Z"
       reason: "ticket 138 limited test (.scratch/rebuild-priorities/research/138_switch_on_limited_test.json), approved in the operator's words: Do limited testing and switch on. 30 OpenFIGI CUSIP answer files and the 40 ISIN files sharing their FIGIs, with N-PORT's 3,000 CUSIPs: in both load orders 4,250 Securities, the same records each, 1 merge by a shared FIGI, 0 identifiers on two Securities, 0 open reviews, a second pass changed nothing"
+    tolerance:
+      unit: items
+      warm_up_decisions: 10000
+      max_per_10k: 5
+  # A share class FIGI (ticket 206; operator, 2026-11-10: "step 3 agreed"): one value for every listing of a share
+  # class in the world. It finds the Security that holds it, never merges two, and a Security that holds another
+  # CUSIP or ISIN than the record states is a conflict for a data steward (`conflicts_with`).
+  share_class_figi:
+    authority: FIGI (Object Management Group standard), issued by Bloomberg as its Registration Authority
+    sources:
+    - openfigi.security.v3
+    normalizer: normalize_identifier@figi-v2
+    conflicts_with:
+    - cusip
+    - isin
+    claim:
+      forward: 1
+      reverse: null
+    compatibility:
+      field: kind
+      predicate: kind_equal@1
+    verification:
+      corpus_sha256: 2c696d2f2d469bb915c42561fb9dad1751255298728de35947a498c50e48d377
+      approved_by: operator
+      approved_at: "2026-11-10T12:10:00Z"
+      reason: "ticket 206 limited test (.scratch/rebuild-priorities/research/206_share_class_limited_test.json), approved under the operator's standing approval (2026-10-15: \"Approved the rules always\") and his ruling \"step 3 agreed\" (2026-11-10). The 72 stored OpenFIGI records of the 25 share class values two Securities held: 50 Securities became 25, the 8 pairs with no conflicting CUSIP or ISIN joined, the 17 with a conflict sent their other 27 records to review, none merged"
     tolerance:
       unit: items
       warm_up_decisions: 10000
