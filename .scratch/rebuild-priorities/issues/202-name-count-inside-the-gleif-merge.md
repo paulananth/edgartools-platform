@@ -65,3 +65,13 @@ Until part 3 lands the SEC company load needs the file (ticket 201). Parts 1 to 
 - [ ] Build the search inside the GLEIF merge: name plus place, former name plus place, exactly one mastered Company; several go to review; the earlier binding stays when a later load makes the name shared.
 - [ ] New proof of the new rules (Wilson bound, adversarial cases, a cohort) and the approval line.
 - [ ] Remove the `name_count` step, the run file, `mdm name-count`, `name_count_file.py` and the cascade code once nothing uses them; update `CONTEXT.md` ("Name Matching") and the load sequence.
+
+## Remove "Name Count" completely (2026-11-10 12:04 ET; operator: "Remove name count as a term and any reference")
+
+Measured references (counts of uses): `CONTEXT.md` 1 (removed now); skills 6 files with `name_count` and 4 with `name-count`; docs 2 and 4 files; rules 12, 7 and 8 files; `edgar_warehouse` 12, 11 and 3 files; `crates` 3, 3 and 2 files; tests 14, 28 and 11 files (about 460 uses in code, rules and tests); `scripts` 1 file. They go with the build, since each names the job being removed:
+
+- [ ] Delete the job: `mdm name-count`, `name_count.py`, `name_count_file.py`, the `name_count` step and run file of `sec.company`, `--file name_count`, the `name_count` role of `mastering_name_key`, and what reads them (`name_census_match@1` and the readers in `crates`).
+- [ ] Rename the rule words that say cascade or count: the primitives and rules take the waterfall matching words; new rule versions; the approval line, Mapping Documents and pins that follow.
+- [ ] Update the skills, docs and the load sequence (step 4) so none names the job; a SEC company load no longer waits for a file.
+- [ ] Keep it out: an architecture test fails on `name count`, `name_count` or `name-count` in tracked code, rules, skills and docs (the tickets under `.scratch/` are history and stay).
+
