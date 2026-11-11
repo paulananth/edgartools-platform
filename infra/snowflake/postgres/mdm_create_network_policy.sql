@@ -23,13 +23,13 @@
 -- network_rule_name, network_policy_name.
 --
 -- Run with (dev):
---   snow sql --connection snowconn --filename infra/snowflake/postgres/mdm_create_network_policy.sql \
+--   snow sql --connection snowconn --enable-templating JINJA --filename infra/snowflake/postgres/mdm_create_network_policy.sql \
 --     -D "schema=EDGARTOOLS_DEV.MDM" \
 --     -D "network_rule_name=mdm_postgres_ingress_all" \
 --     -D "network_policy_name=edgartools_dev_mdm_postgres_policy"
 --
 -- Run with (prod):
---   snow sql --connection edgartools-prod --filename infra/snowflake/postgres/mdm_create_network_policy.sql \
+--   snow sql --connection edgartools-prod --enable-templating JINJA --filename infra/snowflake/postgres/mdm_create_network_policy.sql \
 --     -D "schema=EDGARTOOLS_PROD.MDM" \
 --     -D "network_rule_name=mdm_postgres_ingress_all" \
 --     -D "network_policy_name=edgartools_prod_mdm_postgres_policy"

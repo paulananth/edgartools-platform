@@ -38,7 +38,7 @@ By the time this Snowflake decommission ran, the `edgartools-dev-tfstate` bucket
 existed — so `terraform destroy` was **not** viable for either
 `infra/terraform/snowflake/accounts/dev` or `infra/terraform/access/snowflake/accounts/dev`
 (no remote state to read). Decommissioned instead via a direct live-object sweep against
-Snowflake account `xcpclkf-kb19989` (same account prod lives in — dev/prod are separate
+the Snowflake account prod lived in then (dev/prod were separate
 **databases**, not separate accounts): `EDGARTOOLS_DEV` database (dropped CASCADE — all 8
 schemas: `EDGARTOOLS_GOLD`, `EDGARTOOLS_SOURCE`, `EDGARTOOLS_DASHBOARD`, `MDM`,
 `MDM_GRAPH_REVIEW`, `NEO4J_GRAPH_MIGRATION`, `PUBLIC`, plus `INFORMATION_SCHEMA`), both
@@ -124,6 +124,25 @@ teardown.
 - Snowflake-hosted Postgres re-grants `snowflake_write`'s baseline DML as a platform side effect of
   `ALTER POSTGRES INSTANCE ... RESET ACCESS FOR '<role>'` for *either* role, so `bootstrap-prod-mdm.sh`
   runs `mdm migrate` as its true last database-mutating step.
+
+### Creating the hosted store in an empty account
+
+Check the account first: `snow sql --connection <name> -q "SHOW DATABASES"` and `"SHOW POSTGRES INSTANCES"`.
+A rebuilt account holds neither the `EDGARTOOLS_<ENV>` database nor an instance, and the account named in older
+notes is not the live one. The order:
+
+1. The database and its `MDM` schema (the network rule and policy live in that schema).
+2. `infra/snowflake/postgres/mdm_create_network_policy.sql`, then `mdm_create_instance.sql`.
+3. `bootstrap-prod-mdm.sh`, which rotates both credentials and runs `mdm migrate` last.
+
+- Every `snow sql --filename ... -D name=value` run of those two files needs `--enable-templating JINJA`. Without
+  it the CLI leaves `{{ name }}` unreplaced and fails with `syntax error ... unexpected '{'`.
+- `CREATE POSTGRES INSTANCE` returns the generated admin and application credentials once, inside the `access_roles`
+  value. Send its output to a private file (`umask 077`, a folder outside the repository) and never to the terminal.
+  The instance stays `CREATING` for a short while; wait for `state` to read `READY` before connecting.
+- A Snowflake CLI result with a credential in it is redacted by key *and by value*: print only the named keys
+  you know are public (`state`, `host`, `compute_family`), never a slice of a value, since a slice of a password is a
+  leak.
 
 ## Pipeline and runtime rules
 
