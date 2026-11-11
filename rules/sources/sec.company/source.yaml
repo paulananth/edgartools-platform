@@ -58,6 +58,9 @@ bookkeeping:
     #   observed_at: the observation time (an ISO instant), stamped on each record as its last synced time.
     #   load_mode: how the pages were loaded, stamped on each page receipt.
     mastering:
+      # Source read and combine run in the loader's process (no claim, lease or verifier); the run in the
+      # database starts at records (ticket 210).
+      local: true
       run:
         facts: [capture_run, catalog_run, observed_at, load_mode]
       steps:

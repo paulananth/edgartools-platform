@@ -40,11 +40,11 @@ approvals:
   finalized: PR 1663
 - kind: source
   name: sec.company
-  digest: 41cd6899fa19fe9c7d7fe4e6c7c66b6050b4119f2b5e3b437a7473e7684d972c
+  digest: 081aa0924ecd2688f2c0a85bb5940f9f8dc2c6383816b8fee2031aa6257f03b7
   by: operator
   words: Approved the rules always
   at: '2026-11-11'
-  finalized: PR 1666
+  finalized: PR 1670
 - kind: source
   name: sec.company-facts
   digest: 2749248cfc53cd409637ab9c080a5566f849d4a46e232a0cf1eabb00ab990bfa
