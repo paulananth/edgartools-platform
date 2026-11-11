@@ -6,13 +6,13 @@
 -- mdm_create_network_policy.sql) before this script runs.
 --
 -- Run with (dev):
---   snow sql --connection snowconn --filename infra/snowflake/postgres/mdm_create_instance.sql \
+--   snow sql --connection snowconn --enable-templating JINJA --filename infra/snowflake/postgres/mdm_create_instance.sql \
 --     -D "instance_name=EDGARTOOLS_DEV_MDM" \
 --     -D "network_policy=edgartools_dev_mdm_postgres_policy" \
 --     -D "comment_env=dev"
 --
 -- Run with (prod):
---   snow sql --connection edgartools-prod --filename infra/snowflake/postgres/mdm_create_instance.sql \
+--   snow sql --connection edgartools-prod --enable-templating JINJA --filename infra/snowflake/postgres/mdm_create_instance.sql \
 --     -D "instance_name=EDGARTOOLS_PROD_MDM" \
 --     -D "network_policy=edgartools_prod_mdm_postgres_policy" \
 --     -D "comment_env=prod"
