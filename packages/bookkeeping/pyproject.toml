@@ -32,6 +32,7 @@ bypass-selection = true
 "../../edgar_warehouse/bookkeeping/clean/artifacts.py" = "edgar_warehouse/bookkeeping/clean/artifacts.py"
 "../../edgar_warehouse/bookkeeping/clean/cli.py" = "edgar_warehouse/bookkeeping/clean/cli.py"
 "../../edgar_warehouse/bookkeeping/clean/config.py" = "edgar_warehouse/bookkeeping/clean/config.py"
+"../../edgar_warehouse/bookkeeping/clean/compose.py" = "edgar_warehouse/bookkeeping/clean/compose.py"
 "../../edgar_warehouse/bookkeeping/clean/database.py" = "edgar_warehouse/bookkeeping/clean/database.py"
 "../../edgar_warehouse/bookkeeping/clean/destinations.py" = "edgar_warehouse/bookkeeping/clean/destinations.py"
 "../../edgar_warehouse/bookkeeping/clean/engine.py" = "edgar_warehouse/bookkeeping/clean/engine.py"

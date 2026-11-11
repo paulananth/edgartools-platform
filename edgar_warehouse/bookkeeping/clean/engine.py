@@ -21,6 +21,7 @@ from . import storage, lifecycle
 from .artifacts import Artifacts
 from .config import (RUN_CHECKS, STEP_CHECKS, Blocked, canonical, digest, generated_worklist, reference,
                      validate, worklist)
+from .compose import compose_document
 
 PROTOCOL = 1
 # Units a claim looks over: one another attempt holds is passed for the next.
@@ -317,24 +318,12 @@ class Bookkeeping:
                 seen[unit] = self._receipt(item, dependency, context, others)
             return seen[unit]
 
-        filled = {}
-        for name, value in body["slots"].items():
-            if isinstance(value, list):
-                filled[name] = [receipt(dependency) for dependency in value]
-            elif set(value) == {"compose"}:
-                filled[name] = self._compose(item, value["compose"], context, store, seen, others)
-            else:
-                filled[name] = receipt(value)
-
-        def fill(node):
-            if isinstance(node, dict):
-                return filled[node["slot"]] if set(node) == {"slot"} else {k: fill(v) for k, v in node.items()}
-            return [fill(value) for value in node] if isinstance(node, list) else node
-
-        document = fill(body["document"])
         # Beside the unit's output, named by content: a resume writes the same object.
         root = item["unit"]["output"].rsplit("/", 1)[0] + "/inputs"
-        return self.artifacts.put(root, document) if store else reference(self.artifacts.address(root, document))
+
+        def place(document):
+            return self.artifacts.put(root, document) if store else reference(self.artifacts.address(root, document))
+        return compose_document(body, receipt, place)
 
     def _row(self, run_id: str, step: str, key: str) -> dict:
         found = storage.work(self.engine, run_id, step=step, key=key)
