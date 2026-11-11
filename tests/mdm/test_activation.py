@@ -419,7 +419,7 @@ class TestAnIdentifierRule:
             ),
             (
                 {"when": [{"primitive": "identifier_match@1", "args": {"namespace": "cik"}},
-                          {"primitive": "postal_agrees@1", "args": {}}]},
+                          {"primitive": "gleif_entity_eligible@1", "args": {}}]},
                 "neither a binding test nor a record test",
             ),
             (

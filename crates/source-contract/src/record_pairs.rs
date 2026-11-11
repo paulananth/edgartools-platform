@@ -16,7 +16,6 @@ struct Command {
     right: Object,
     #[serde(default)]
     pairs: Option<Vec<[Object; 2]>>,
-    code_tables: IndexMap<String, IndexMap<String, String>>,
     normalizers: IndexMap<String, bool>,
     cascade_version: String,
     pair_comparison: PairComparison,
@@ -115,24 +114,6 @@ fn value_matches_rule(
 }
 fn read_optional_text(raw: Document) -> Result<Option<String>, String> {
     values::read_value(&raw)
-}
-fn reference_place(
-    args: &Object,
-    left: &Object,
-    command: &Command,
-) -> Result<Option<String>, String> {
-    let name = values::read_text(args, "sec_codes")?;
-    let table = command
-        .code_tables
-        .get(&name)
-        .ok_or_else(|| format!("Name binding names an unknown code table: {name}"))?;
-    let code = display_text(&read_matching_field(
-        left,
-        &values::read_text(args, "sec_field")?,
-    )?)?;
-    let code =
-        matching_values::prepare_uppercase(code.trim_matches(crate::text_transform::whitespace));
-    Ok(table.get(&code).cloned())
 }
 fn prepared_address(record: &Object, names: &[String]) -> Result<Object, String> {
     let matching = read_matching_values(record)?;
@@ -262,49 +243,6 @@ fn test_record_pair(
                 && contains("entity_statuses", &status)?
                 && !contains("refused_registration_statuses", &registration)?)
         }
-        "jurisdiction_agrees@1" | "jurisdictions_do_not_conflict@1" => {
-            let left = reference_place(args, left, command)?;
-            let right = read_optional_text(read_matching_field(
-                right,
-                &values::read_text(args, "gleif_field")?,
-            )?)?;
-            if name == "jurisdiction_agrees@1" {
-                Ok(matching_values::places_agree(
-                    left.as_deref(),
-                    right.as_deref(),
-                ))
-            } else {
-                let country = read_optional_text(read_matching_field(
-                    &command.left,
-                    &values::read_text(args, "sec_business_country")?,
-                )?)?;
-                Ok(!matching_values::places_conflict(
-                    left.as_deref(),
-                    right.as_deref(),
-                    country.as_deref(),
-                ))
-            }
-        }
-        "postal_agrees@1" => Ok(matching_values::postal_codes_agree(
-            &display_text(&read_matching_field(
-                left,
-                &values::read_text(args, "sec_code")?,
-            )?)?,
-            read_optional_text(read_matching_field(
-                left,
-                &values::read_text(args, "sec_country")?,
-            )?)?
-            .as_deref(),
-            &display_text(&read_matching_field(
-                right,
-                &values::read_text(args, "gleif_code")?,
-            )?)?,
-            read_optional_text(read_matching_field(
-                right,
-                &values::read_text(args, "gleif_country")?,
-            )?)?
-            .as_deref(),
-        )),
         "cascade_pass@1" => {
             let answer = values::read_object(
                 &values::read_object(&read_matching_values(left)?, &shape.name_count_field)?,
