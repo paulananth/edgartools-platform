@@ -19,11 +19,11 @@ approvals:
   finalized: PR 1428
 - kind: source
   name: gleif
-  digest: 701a2cd0abc15af4ceddefc2306b44b2676c81325795437eb26658d54d203213
-  by: Operator
+  digest: a6473dcd814cf14ca11b51cb7c0dd6794ea0624ae16bd6cb00e807944ff47b18
+  by: operator
   words: Approved the rules always
-  at: '2026-11-06'
-  finalized: PR 1481
+  at: '2026-11-11'
+  finalized: PR 1680
 - kind: source
   name: iapd.adv
   digest: 6feddb708c30e4f93c4944cfe4ed22ffa8783cfef75bb182e8cfa6c0c1fef907
