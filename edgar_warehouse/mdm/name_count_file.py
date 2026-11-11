@@ -38,6 +38,7 @@ from edgar_warehouse.workers import source_combine, source_readings
 
 from . import adapters, raw_capture
 from . import cascade as cascaded
+from . import waterfall
 from . import name_count
 from .gleif_publication import validate_metadata
 from .matching import active_rules
@@ -283,7 +284,7 @@ def write_name_count(*, capture: str, population: str, gleif_reading: dict, glei
         cascade, entities, counts = None, (), None
         if runs:
             counts = cascaded.count_addresses(f.place for f in cascade_filers)
-            _, _, entities = name_count.fold_reading(
+            _, _, entities = waterfall.fold_reading(
                 chunks, cascade_wanted={f.key for f in cascade_filers} - {""}, address_counts=counts)
             cascade = {"spec": spec, "filers": cascade_filers}
     counted = name_count.counted_document(sec_population=sec, gleif=gleif, wanted=wanted, held=held, legal=legal,
