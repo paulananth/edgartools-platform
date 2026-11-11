@@ -1,6 +1,6 @@
 {
   "_comment": [
-    "Environment config consumed by infra/scripts/generate-snowflake-env.py.",
+    "Environment config consumed by the Snowflake Terraform roots.",
     "Copy to <slug>.json and fill in. Real configs are gitignored because they",
     "carry Snowflake account identifiers, which this repo never commits (see",
     "CLAUDE.md, 'SnowCLI connection naming').",

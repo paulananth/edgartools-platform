@@ -122,8 +122,8 @@ teardown.
   as incomplete until it has been re-run explicitly — "the image is current" and "the migration was
   applied" are separate facts.
 - Snowflake-hosted Postgres re-grants `snowflake_write`'s baseline DML as a platform side effect of
-  `ALTER POSTGRES INSTANCE ... RESET ACCESS FOR '<role>'` for *either* role, so `bootstrap-prod-mdm.sh`
-  runs `mdm migrate` as its true last database-mutating step.
+  `ALTER POSTGRES INSTANCE ... RESET ACCESS FOR '<role>'` for *either* role, so run `mdm migrate` as the last
+  database-mutating step after any reset. A reset also replaces that role's password, so it needs the operator's word.
 
 ## Pipeline and runtime rules
 
@@ -186,7 +186,7 @@ What it left in Snowflake is live:
   `GRAPH_ACTIVE_POINTER`. There is no `NEO4J_URI` and no Bolt connection.
   Grants: `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql`.
 - **MDM's hosted store is Snowflake Postgres**, not AWS RDS
-  (`infra/scripts/bootstrap-prod-mdm.sh` provisions the instance; it connects
+  (`infra/snowflake/postgres/mdm_create_instance.sql` creates the instance; the owner connects
   as `snowflake_admin`). It is a PostgreSQL-protocol address
   (`MDM_DATABASE_URL`, port 5432), separate from the Snowflake SQL connection
   used for dbt and gold: one account and governance boundary, two protocols.
@@ -299,17 +299,11 @@ export DBT_SNOWFLAKE_WAREHOUSE=EDGARTOOLS_DEV_REFRESH_WH
 this repo (always a placeholder like `<account_locator.region.cloud>` above) — the only
 project-level convention is the **connection name**, resolved from
 `~/.snowflake/config.toml`. **`--snow-connection` is required and never derived** from the
-environment name — as of wayfinder ticket 03 (snowflake-env-provisioning map), both
-`install.sh` (renamed from `go-live.sh` per the snowflake-account-cutover map's Ticket 05)
-and `deploy-snowflake-stack.sh` fail closed without it. This replaced two
-*disagreeing* derivations of the same default (`install.sh` mapped dev to `snowconn`,
-while `deploy-snowflake-stack.sh` string-built `edgartools-${ENVIRONMENT}`, i.e.
-`edgartools-dev`), which is why neither derives one now. Prod's connection is
+environment name — as of wayfinder ticket 03 (snowflake-env-provisioning map), `deploy-snowflake-stack.sh` fails closed without it, and no script derives one from the environment. Prod's connection is
 `edgartools-prod`; pass it explicitly.
 
 **Environment identifier.** The same ticket replaced `--env <dev|prod>` with
-`--env-name <slug>` across `install.sh`, `deploy-snowflake-stack.sh`,
-`bootstrap-prod-mdm.sh`, `bootstrap-aws-mdm-secrets.sh`, and `create-deployer.sh`
+`--env-name <slug>` across `deploy-snowflake-stack.sh` and `create-deployer.sh`
 (positional). A slug is lowercase letters/digits in hyphen-separated words
 (`prod`, `eu-prod`); hyphens map to underscores for Snowflake identifiers
 (`eu-prod` → `EDGARTOOLS_EU_PROD`). There is **no `--env` back-compat alias** — the
