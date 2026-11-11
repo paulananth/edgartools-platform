@@ -76,3 +76,18 @@ def test_every_bound_record_is_explained_and_one_moved_by_hand_is_not(database_f
         moved = reads.explained(db)
 
         assert moved["unexplained"] >= 1 and SEC in moved["unexplained_by_source"]
+
+
+def test_a_file_of_only_set_aside_records_is_merged_with_nothing_released(database_factory):
+    """A bundle whose every document is set aside (not a listed operating company) has no kind: the merge records the
+    set-aside records and the file is done. It raised KeyError('') on the empty kind (hosted SEC company load)."""
+    from edgar_warehouse.mastering import merge as merge_module
+    from tests.storage_adapters.test_mastering import AS_OF, POLICY, SEC
+
+    aside = {"deferred_id": "d1", "source_code": SEC, "reason": "not_listed_operating", "record_locator": "x:1"}
+    with opened(database_factory) as db:
+        done = merge_module.merge_file(db, merge_module.Settings(POLICY, "invented-digest", "", AS_OF), [],
+                                       deferred=[aside], quiet={})
+
+        assert done["skipped"] is False and done["released"] == 0 and done["records"] == 0
+        assert db.rows("select count(*) from mastering_deferred") == [(1,)]

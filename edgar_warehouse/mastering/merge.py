@@ -113,7 +113,8 @@ def merge_file(store, settings: Settings, records: list[dict], *, again: bool = 
         set_aside(store, list(deferred), quiet or {})
         arrived: set = set()
         counts = _merge(store, settings, records, key, again, arrived) if records else {"records": 0}
-        counts["released"] = _release_waiting(store, settings, arrived)
+        # A file of only set-aside records has no kind and nothing arrived: nothing waits for it.
+        counts["released"] = _release_waiting(store, settings, arrived) if records else 0
         store.add_delivery(key, delivery)
         if not records:
             store.finish_file(key, 0)
