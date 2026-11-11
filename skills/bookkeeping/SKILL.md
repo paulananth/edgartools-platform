@@ -164,6 +164,14 @@ report as a proof. Bookkeeping pins the worker's runtime per run and hashes
 the input and output. A streamed source extract and every other profile are
 always redone or read back (ticket 72).
 
+A target marked `local: true` runs its `source.read` and `source.combine` steps in the loader's own process
+(`rules/local.py`, called by `rules run`). They take no claim, lease, heartbeat or verifier and write files with
+receipts, and the content hash is their proof. The run in the database starts at the first later step
+(`config.staged`), with those receipts as its inputs, and Bookkeeping holds no record of the local steps. The
+verifier paragraph above applies to targets not marked `local`. Every step that writes a destination
+(`mastering.merge`, `silver.land`, `silver.derive`) is still verified. A local step requires only local steps, and a
+local step that generates work is refused until a source needs it.
+
 ## Init and migrate modes
 
 Use `init` for an empty Bookkeeping database on PostgreSQL 16 or MySQL 8;
