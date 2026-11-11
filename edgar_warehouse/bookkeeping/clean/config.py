@@ -216,12 +216,15 @@ def validate(document: dict, target: str) -> dict:
             raise Blocked("Unsupported bookkeeping configuration")
         planned = body["version"] == 2
         selected = body["targets"][target]
-        if set(selected) - {"steps", "lease_seconds", "heartbeat_seconds", "retry", "allow_zero_work", "checks"} - (
+        if set(selected) - {"steps", "lease_seconds", "heartbeat_seconds", "retry", "allow_zero_work", "checks",
+                            "local"} - (
                 {"run"} if planned else set()):
             raise Blocked("Unknown target option")
         declared = run_inputs(selected) if planned else {"facts": [], "files": []}
         if type(selected.get("allow_zero_work", False)) is not bool:
             raise Blocked("allow_zero_work must be boolean")
+        if type(selected.get("local", False)) is not bool:
+            raise Blocked("local must be boolean")
         duration = _integer(selected.get("lease_seconds", 120), 2, 86400, "lease_seconds")
         heartbeat = _integer(selected.get("heartbeat_seconds", 30), 1, duration - 1, "heartbeat_seconds")
         retry = selected.get("retry", {})
@@ -278,6 +281,10 @@ def validate(document: dict, target: str) -> dict:
             if not step["checks"]:
                 raise Blocked("Every step requires a check")
             seen.add(name)
+        if selected.get("local"):
+            local = {step["name"] for step in steps if step["operation"] in LOCAL_OPERATIONS}
+            if any(not set(step["requires"]) <= local for step in steps if step["name"] in local):
+                raise Blocked("A local step requires only local steps")
         checks = selected.get("checks", [])
         if (not isinstance(checks, list) or not checks or len(set(checks)) != len(checks)
                 or any(c not in RUN_CHECKS for c in checks)):
@@ -289,6 +296,21 @@ def validate(document: dict, target: str) -> dict:
         raise
     except (KeyError, TypeError, AttributeError, ValueError) as exc:
         raise Blocked("Malformed bookkeeping configuration") from exc
+
+
+# The operations a target marked `local: true` runs in the loader's own process: they turn captured files into
+# extracts and write files with receipts, so they need no claim, lease or verifier (ticket 210).
+LOCAL_OPERATIONS = frozenset({"source.read", "source.combine"})
+
+
+def staged(config: dict) -> dict:
+    """The steps of a run in the database: a target marked `local` has its local steps run by the loader, so the
+    run starts at the first step after them and no step waits on one of them."""
+    if not config.get("local"):
+        return config
+    local = {step["name"] for step in config["steps"] if step["operation"] in LOCAL_OPERATIONS}
+    return {**config, "steps": [{**step, "requires": [name for name in step["requires"] if name not in local]}
+                                for step in config["steps"] if step["name"] not in local]}
 
 
 # A composed input (to-do 20c): a frozen document whose slots each name verified
