@@ -1148,6 +1148,9 @@ bookkeeping:
     # and the ISIN answers are read together, every bundle in parallel, with
     # no order between them; `id_type` is the folder, OpenFIGI's own idType.
     mastering:
+      # Source read and combine run in the loader's process (no claim, lease or
+      # verifier); the run in the database starts at prepare.
+      local: true
       steps:
         # Each request file alone, read beside its answer (its sha256 is in the
         # answer's receipt), so each answer's pair set comes from its own request.

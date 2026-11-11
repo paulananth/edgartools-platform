@@ -87,6 +87,7 @@ def run_target(databases, tmp_path, body, target=TARGET):
     for profile in WORKERS:
         grant_profile(databases.admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")
     declared_target = copy.deepcopy(body["bookkeeping"]["targets"][target])
+    declared_target.pop("local", None)  # this test runs every step in the database; a local target's run starts at prepare
     declared_target["steps"] = declared_target["steps"][:-2]  # no MDM here: the merge and the journal are Person's tests'
     rules_body = {"source": "openfigi", "bookkeeping": {"version": 2, "targets": {target: declared_target}}}
     steps = book.artifacts.json(report["manifest"])["steps"]

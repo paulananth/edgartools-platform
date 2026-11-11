@@ -132,3 +132,11 @@ class Commands:
             else:
                 raise RunStopped(f"step {step['name']} did not finish before the deadline; drive run {run_id} again")
         return json.loads(self("worker", "bookkeeping", "finalize", run_id))
+
+
+def run_steps(document: dict, target: str) -> list[dict]:
+    """The steps a run of the target holds in the database: a target marked `local` has its source read and combine
+    steps run by the loader (ticket 210), so a driver that waited on them would wait for ever."""
+    from edgar_warehouse.bookkeeping.clean.config import staged
+
+    return staged(document["bookkeeping"]["targets"][target])["steps"]

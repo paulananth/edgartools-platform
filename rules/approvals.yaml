@@ -33,11 +33,11 @@ approvals:
   finalized: PR 1566
 - kind: source
   name: openfigi
-  digest: cdbc8e17b46db654857f2ebc8d61947d3c169b80d519e028098dcedf5a4e826f
-  by: Operator
+  digest: b7b2913e30df218943bec6bfbb8a8c743bef777ff550f8e38778b75152e5bf53
+  by: operator
   words: Approved the rules always
-  at: '2026-11-10'
-  finalized: PR 1613
+  at: '2026-11-11'
+  finalized: PR 1663
 - kind: source
   name: sec.company
   digest: 568f3077f8d62ee126f13324d10c0d348060a45f5804a53421a423ccd9211277

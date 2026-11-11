@@ -34,7 +34,7 @@ from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.mdm import raw_capture
 
 from . import files
-from .driving import Commands, RunStopped, duties, manifest_root
+from .driving import Commands, RunStopped, duties, manifest_root, run_steps
 
 OPEN = ("running", "waiting")
 
@@ -174,7 +174,7 @@ class Loader:
     def drive(self, run_id: str) -> dict:
         """Drive a run by the steps it was frozen with, which a later rules version cannot change."""
         submission = self.commands.status(run_id)["run"]["submission"]
-        frozen = Artifacts().json(submission["rules"])["body"]["bookkeeping"]["targets"][self.target]["steps"]
+        frozen = run_steps(Artifacts().json(submission["rules"])["body"], self.target)
         began = time.monotonic()
         final = self.commands.drive(run_id, frozen)
         state = final["run"]["state"]
