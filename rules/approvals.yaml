@@ -5,11 +5,11 @@ version: 1
 approvals:
 - kind: merge
   name: platform
-  digest: db9134657d1268e35217f46854d5d8156f0b7c8c9428aaf6888627d7b9b0f5c9
-  by: Operator
-  words: Approved the rules always
-  at: '2026-11-10'
-  finalized: PR 1628
+  digest: 84b5031d333dc90664e875c32c4c715ece10155253bd3c9ed9ac7767d8ff9dbb
+  by: operator
+  words: Retire both (Recommended)
+  at: '2026-11-11'
+  finalized: PR 1667
 - kind: pipeline
   name: sec.thirteenf.extract
   digest: 3b6cd24f69cd663835c0b19d2d0d15b05d2633bc0307e5c84eb0328ef93516c4
@@ -19,11 +19,11 @@ approvals:
   finalized: PR 1428
 - kind: source
   name: gleif
-  digest: 701a2cd0abc15af4ceddefc2306b44b2676c81325795437eb26658d54d203213
-  by: Operator
+  digest: a6473dcd814cf14ca11b51cb7c0dd6794ea0624ae16bd6cb00e807944ff47b18
+  by: operator
   words: Approved the rules always
-  at: '2026-11-06'
-  finalized: PR 1481
+  at: '2026-11-11'
+  finalized: PR 1680
 - kind: source
   name: iapd.adv
   digest: 6feddb708c30e4f93c4944cfe4ed22ffa8783cfef75bb182e8cfa6c0c1fef907
@@ -33,18 +33,18 @@ approvals:
   finalized: PR 1566
 - kind: source
   name: openfigi
-  digest: cdbc8e17b46db654857f2ebc8d61947d3c169b80d519e028098dcedf5a4e826f
-  by: Operator
+  digest: b7b2913e30df218943bec6bfbb8a8c743bef777ff550f8e38778b75152e5bf53
+  by: operator
   words: Approved the rules always
-  at: '2026-11-10'
-  finalized: PR 1613
+  at: '2026-11-11'
+  finalized: PR 1663
 - kind: source
   name: sec.company
-  digest: 568f3077f8d62ee126f13324d10c0d348060a45f5804a53421a423ccd9211277
-  by: Operator
+  digest: 081aa0924ecd2688f2c0a85bb5940f9f8dc2c6383816b8fee2031aa6257f03b7
+  by: operator
   words: Approved the rules always
-  at: '2026-11-09'
-  finalized: PR 1571
+  at: '2026-11-11'
+  finalized: PR 1670
 - kind: source
   name: sec.company-facts
   digest: 2749248cfc53cd409637ab9c080a5566f849d4a46e232a0cf1eabb00ab990bfa

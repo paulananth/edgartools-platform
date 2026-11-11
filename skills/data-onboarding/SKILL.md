@@ -999,9 +999,8 @@ These name today's sources only as examples; nothing above depends on them.
   its consumer spec (`docs/specs/person/consumer.md`, "The Person
   projection") holds them. A list-shaped field: Person's `name_variants[]`.
 - **Another kind's value:** a ticker belongs to Security, not Company.
-- **Joining identifiers:** today `cik` (the one Identifier Contract); the SEC-to-GLEIF name rules
-  (`sec-gleif-name-jurisdiction`, `sec-gleif-name-postal`) bind by name with
-  their proofs.
+- **Joining identifiers:** today `cik` (the one Identifier Contract); the SEC-to-GLEIF waterfall
+  passes (`sec-gleif-name-city-or-postcode`) bind by name with their proofs.
 - **Classification:** SEC types people and firms alike as `other`; the SEC
   Company contract names its rule under `adapter.classification`; a
   `company` verdict in a Person rule is deferred with `probable_kind`
@@ -1015,8 +1014,8 @@ These name today's sources only as examples; nothing above depends on them.
   switched-on `sec-company-candidate` from the policy when it loads, so a
   proving run stamps it into its copy of the policy first (**test**); its
   preparation (`edgar-warehouse mdm prepare-capture --source sec.company`) reads the
-  Name Matching file (`--file name_count=<path>`, built by `edgar-warehouse mdm name-count`,
-  with `--catalog` while a cascade pass is on) and the exchange catalog.
+  main documents and the exchange catalog; no file is needed (the waterfall pass pairs the stored
+  Companies with GLEIF after the load).
 - **Source checks in code:** for Company,
   `merge.check_company_sources(files.policy(), assertions)`.
 - **Pinned digests:** `tests/mdm/` (757 tests, under a minute) holds them;

@@ -11,7 +11,6 @@ import pytest
 
 from edgar_warehouse.mastering import links, lookups, merge, reads, rebuild, store as stores
 from edgar_warehouse.mdm.evidence import assertion, decision, subject_key
-from edgar_warehouse.mdm.name_count import VERSION as NAME_COUNT_VERSION
 from edgar_warehouse.rules import files
 from edgar_warehouse.mastering.store import open_store
 from tests.support.masters import figi
@@ -260,35 +259,10 @@ def test_the_runtime_login_cannot_erase_a_decision_or_change_a_table(database_fa
 LEI = "INVENTEDLEI000000017"
 
 
-def sec_holder():
-    return assertion(source_code=SEC, record_key="0000000017", publication_key="invented", revision=1, effective_at=None,
-                     kind="company", identifiers={"cik": "0000000017"},
-                     fields={"name": "INVENTED CO", "state_of_incorporation": "CA"},
-                     provenance={"matching": {"business_postal_code": "90000", "business_country": "US", "name_count": {
-                         "version": NAME_COUNT_VERSION, "key": "INVENTED CO", "ciks": ["0000000017"], "cik_count": 1,
-                         "leis": [[LEI, "2026-09-01T00:00:00Z"]], "lei_count": 1, "other_name_holders": 0}}})
 
 
-def gleif_record():
-    return assertion(source_code=GLEIF, record_key=LEI, publication_key="invented", revision=1,
-                     effective_at="2026-09-01T00:00:00+00:00", kind="company", identifiers={"lei": LEI},
-                     fields={"name": "Invented Co.", "jurisdiction": "US-CA", "gleif_entity_status": "ACTIVE",
-                             "gleif_registration_status": "ISSUED"},
-                     provenance={"matching": {"headquarters_postal_code": "90000", "headquarters_country": "US"}})
 
 
-@pytest.mark.parametrize("gleif_first", [False, True])
-def test_a_name_match_joins_the_master_in_either_order_and_closes_the_wait(database_factory, gleif_first):
-    with opened(database_factory) as db:
-        holder, candidate = sec_holder(), gleif_record()
-        for record_ in ([candidate, holder] if gleif_first else [holder, candidate]):
-            merge.merge_file(db, COMPANY, [record_])
-        found = live(db)
-        assert len(found) == 1
-        master = next(iter(found.values()))
-        assert sorted(master["subjects"]) == sorted([holder["subject"], candidate["subject"]])
-        assert master["identifiers"]["lei"] == [LEI]
-        assert db.rows("select count(*) from mastering_review where open_review=1") == [(0,)]
 
 
 def test_a_replay_masters_every_source_and_a_second_run_changes_nothing(database_factory):
@@ -400,3 +374,89 @@ def test_person_and_fund_join_by_their_identifier_and_a_rerun_changes_nothing(da
         merge.merge_file(db, PERSON, people, again=True)
         merge.merge_file(db, FUND, funds, again=True)
         assert masters(db) == before
+
+
+def sec_filer_without_a_pass():
+    return assertion(source_code=SEC, record_key="0000000017", publication_key="invented", revision=1, effective_at=None,
+                     kind="company", identifiers={"cik": "0000000017"},
+                     fields={"name": "INVENTED CO", "state_of_incorporation": "CA"},
+                     provenance={"matching": {"business_postal_code": "90000", "business_country": "US"}})
+
+
+def test_the_waterfall_pairs_reach_the_merge_as_cascade_name_keys_and_a_second_call_changes_nothing(database_factory):
+    pair = {"lei": LEI, "pass": "name and city or postcode"}
+    with opened(database_factory) as db:
+        filer = sec_filer_without_a_pass()
+        merge.merge_file(db, COMPANY, [filer])
+        keys = "select value,subject from mastering_name_key where role='cascade'"
+        assert db.rows(keys) == []
+
+        counts = merge.apply_pairs(db, COMPANY, SEC, {"0000000017": pair, "0000000099": pair})
+
+        assert counts["records"] == 1  # the pair of a CIK the store does not hold is no record
+        assert db.rows(keys) == [(LEI, filer["subject"])]
+        stored = {e: b for e, b in masters(db).items() if b.get("status") != "alias"}
+        assert merge.apply_pairs(db, COMPANY, SEC, {"0000000017": pair}) == {"records": 0}
+        assert {e: b for e, b in masters(db).items() if b.get("status") != "alias"} == stored
+
+
+ADDRESS = {"street": "1 EXAMPLE WAY", "city": "ANYTOWN", "postcode": "12345", "country": "US"}
+
+
+def placed_filer():
+    return assertion(source_code=SEC, record_key="0000000017", publication_key="invented", revision=1, effective_at=None,
+                     kind="company", identifiers={"cik": "0000000017"},
+                     fields={"name": "INVENTED CO", "state_of_incorporation": "CA"},
+                     provenance={"matching": {"address": ADDRESS, "business_country": "US"}})
+
+
+def placed_entity():
+    return assertion(source_code=GLEIF, record_key=LEI, publication_key="invented", revision=1,
+                     effective_at="2026-09-01T00:00:00+00:00", kind="company", identifiers={"lei": LEI},
+                     fields={"name": "Invented Co.", "jurisdiction": "US-CA", "gleif_entity_status": "ACTIVE",
+                             "gleif_registration_status": "ISSUED", "gleif_last_update": "2026-09-01T00:00:00Z"},
+                     provenance={"matching": {"headquarters_address": ADDRESS}})
+
+
+def joined(db, *, gleif_first=False):
+    """Merge the invented filer and GLEIF entity, then give the merge the waterfall pass's pair: the two records
+    are one golden record. Answers (filer, entity)."""
+    from collections import Counter
+    from edgar_warehouse.mdm import cascade, waterfall
+
+    spec = cascade.spec(POLICY)
+    filer, entity = placed_filer(), placed_entity()
+    for record_ in ([entity, filer] if gleif_first else [filer, entity]):
+        merge.merge_file(db, COMPANY, [record_])
+    found = waterfall.assignments(
+        waterfall.stored_filers(db, SEC), [cascade.entity_of(entity, frozenset({"INVENTED CO"}), eligible=True)],
+        spec["passes"], gleif_addresses=Counter(), over_shared=spec["over_shared"])
+    merge.apply_pairs(db, COMPANY, SEC, found)
+    return filer, entity
+
+
+@pytest.mark.parametrize("gleif_first", [False, True])
+def test_the_pass_pairs_and_the_merge_joins_the_company_in_either_order_and_a_second_pass_changes_nothing(
+        database_factory, gleif_first):
+    from collections import Counter
+    from edgar_warehouse.mdm import cascade, waterfall
+
+    spec = cascade.spec(POLICY)
+    with opened(database_factory) as db:
+        filer, entity = placed_filer(), placed_entity()
+        for record_ in ([entity, filer] if gleif_first else [filer, entity]):
+            merge.merge_file(db, COMPANY, [record_])
+        assert len(live(db)) == 1 and len(next(iter(live(db).values()))["subjects"]) == 1  # no pass yet: the GLEIF record waits
+
+        found = waterfall.assignments(
+            waterfall.stored_filers(db, SEC), [cascade.entity_of(entity, frozenset({"INVENTED CO"}), eligible=True)],
+            spec["passes"], gleif_addresses=Counter(), over_shared=spec["over_shared"])
+        assert set(found) == {"0000000017"}
+        merge.apply_pairs(db, COMPANY, SEC, found)
+
+        (master,) = live(db).values()
+        assert sorted(master["subjects"]) == sorted([filer["subject"], entity["subject"]])
+        assert master["identifiers"]["lei"] == [LEI]
+        assert db.rows("select count(*) from mastering_review where open_review=1") == [(0,)]
+        before = live(db)
+        assert merge.apply_pairs(db, COMPANY, SEC, found) == {"records": 0} and live(db) == before

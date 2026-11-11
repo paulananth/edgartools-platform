@@ -11,14 +11,14 @@ from edgar_warehouse.mdm.store import Conflict
 from edgar_warehouse.rules import files
 from edgar_warehouse.rules.cli import register
 
-RULE = "sec-gleif-name-jurisdiction"
+RULE = "sec-person-candidate"
 AT = "2026-09-29T23:30:00Z"
 
 
 @pytest.fixture
 def root(tmp_path):
-    """A copy of the rules before the name rules were switched on (company
-    mastering ticket 25): `approve_rule` appended them, with a comment first."""
+    """A copy of the rules before the person rule was switched on: `approve_rule` appended it, with a comment
+    first (the vehicle was the company name rules until ticket 202 retired them)."""
     shutil.copytree(files.ROOT, tmp_path / "rules")
     path = tmp_path / "rules" / "merge" / "policy.yaml"
     text = path.read_text()
@@ -31,7 +31,7 @@ def root(tmp_path):
 
 def test_a_rule_is_switched_on_with_its_proof_and_the_operator_words(root):
     before = (root / "merge" / "policy.yaml").read_text()
-    entry = files.approve_rule(RULE, by="Operator", words="Yes, switch the name-and-state rule on", at=AT, root=root)
+    entry = files.approve_rule(RULE, by="Operator", words="Yes, switch the person rule on", at=AT, root=root)
     after = (root / "merge" / "policy.yaml").read_text()
     assert after.startswith(before.rstrip("\n"))  # comments kept, nothing rewritten
     assert f"# {RULE}: switched on by Operator, {AT}" in after
@@ -39,9 +39,10 @@ def test_a_rule_is_switched_on_with_its_proof_and_the_operator_words(root):
     check_policy(body)
     assert body["automatic_rules"][-1] == entry
     assert entry["proof"] == {**files.pending_proofs(root)[RULE], "approved_by": "Operator", "approved_at": AT,
-                              "approved_words": "Yes, switch the name-and-state rule on"}
-    rule = next(r for r in body["kinds"]["company"]["rules"] if r["rule_id"] == RULE)
-    assert activated(body, "company", rule, "bind")
+                              "approved_words": "Yes, switch the person rule on"}
+    kind, rule = next((k, r) for k, found in body["kinds"].items() for r in found.get("rules") or []
+                      if r["rule_id"] == RULE)
+    assert activated(body, kind, rule, entry["verdict"])
     with pytest.raises(files.RulesFileError, match="already switched on"):
         files.approve_rule(RULE, by="Operator", words="again", at=AT, root=root)
 
@@ -93,9 +94,9 @@ def declare_name_rule_not_on(root):
     """A name rule that is declared and not switched on: every live name rule is switched on now."""
     path = root / "merge" / "kinds" / "company.yaml"
     text = path.read_text()
-    start = text.index("- rule_id: sec-gleif-name-postal")
+    start = text.index("- rule_id: sec-gleif-name-city-or-postcode")
     end = text.index("\n- rule_id: ", start + 5) + 1
-    path.write_text(text[:end] + text[start:end].replace("sec-gleif-name-postal", NAME_RULE_NOT_ON) + text[end:])
+    path.write_text(text[:end] + text[start:end].replace("sec-gleif-name-city-or-postcode", NAME_RULE_NOT_ON) + text[end:])
 
 
 @pytest.fixture

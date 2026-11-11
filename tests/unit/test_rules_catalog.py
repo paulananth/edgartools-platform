@@ -460,14 +460,10 @@ def test_company_mastering_graph_is_steps_with_their_feeds_reference_control_and
     graph = _target_graph(plan, "sec.company", "mastering")
     submissions, ticker = 'sources."sec.company".submissions', 'sources."sec.company".company_tickers_exchange'
     dataset = 'sources."sec.company"."sec.company.v1"'
-    assert graph["reads"] == {("combine", submissions), ("combine", ticker), ("name_count", submissions),
-                              ("name_count", 'sources."sec.company".name_count'), ("merge", dataset)}
+    assert graph["reads"] == {("combine", submissions), ("combine", ticker), ("merge", dataset)}
     assert graph["writes"] == {("records", dataset), ("merge", "mdm.master_records.company"),
                                ("merge", "journal.change_journal.processed_files")}
-    assert graph["next"] == {("name_count", "combine"), ("combine", "records")}
-    built = {edge["from"][len(catalog.SERVICE) + 1:] for edge in plan["lineage"]
-             if edge["to"] == catalog.fqn(catalog.SERVICE, catalog.SOURCES, "sec.company", "name_count")}
-    assert built == {'sources.gleif.golden_copy', 'sources."sec.company".submissions'}
+    assert graph["next"] == {("combine", "records")}
 
 
 def test_plumbing_steps_and_the_target_pipeline_itself_carry_no_lineage():
@@ -477,7 +473,7 @@ def test_plumbing_steps_and_the_target_pipeline_itself_carry_no_lineage():
     assert on_graph and not on_graph & targets
     steps = {p["name"].rsplit(":", 1)[-1] for p in plan["pipelines"] if catalog._is_step(p)}
     assert not {"keys", "main", "catalog", "processed"} & steps
-    assert {"capture", "name_count", "combine", "records", "merge"} <= steps
+    assert {"capture", "combine", "records", "merge"} <= steps
 
 
 def test_a_target_that_only_merges_publishes_its_master_and_reads_nothing():

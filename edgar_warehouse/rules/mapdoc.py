@@ -80,8 +80,6 @@ CONDITION_WORDS = {
                     "no digits or forbidden characters (suffixes from {suffix_list} allowed)",
     "values_overlap@1": "{field} holds {count} of the list {values}",
     "evidence_present@1": "The record has {document}",
-    "name_census_match@1": "The names are equal, legal form kept, and exactly one SEC filer and one GLEIF "
-                           "entity carry that name",
     "cascade_pass@1": "Pass {pass}: the names are equal, legal form kept (GLEIF's other names count), and, "
                       "of what earlier passes left, exactly one SEC company and one GLEIF entity agree on "
                       "{compare}. An address more than {over_shared} entities share counts by its country only. "
@@ -89,9 +87,6 @@ CONDITION_WORDS = {
     "gleif_entity_eligible@1": "The GLEIF entity is {categories}, {entity_statuses}, and not "
                                "{refused_registration_statuses}",
     "holds_no_other_lei@1": "The SEC company is not already linked to another LEI",
-    "jurisdiction_agrees@1": "SEC's {sec_field} names the same place as GLEIF's {gleif_field}",
-    "jurisdictions_do_not_conflict@1": "SEC's {sec_field} and GLEIF's {gleif_field} do not name different places",
-    "postal_agrees@1": "SEC's business postcode equals GLEIF's headquarters postcode, in the same country",
     "identifier_match@1": "The record's {namespace} is the one a {holder} holds",
     "identifier_cardinality@1": "Exactly one {holder} holds that {namespace}, or none",
 }

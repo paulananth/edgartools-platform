@@ -16,9 +16,7 @@ struct Command {
     right: Object,
     #[serde(default)]
     pairs: Option<Vec<[Object; 2]>>,
-    code_tables: IndexMap<String, IndexMap<String, String>>,
     normalizers: IndexMap<String, bool>,
-    name_count_version: String,
     cascade_version: String,
     pair_comparison: PairComparison,
 }
@@ -28,11 +26,6 @@ struct PairComparison {
     name_field: String,
     identifier_namespace: String,
     name_count_field: String,
-    name_count_entries_field: String,
-    name_count_holder_keys_field: String,
-    name_count_holder_count_field: String,
-    name_count_identifier_count_field: String,
-    name_count_other_holders_field: String,
     cascade_field: String,
     cascade_identifier_field: String,
     eligibility_kind: String,
@@ -121,24 +114,6 @@ fn value_matches_rule(
 }
 fn read_optional_text(raw: Document) -> Result<Option<String>, String> {
     values::read_value(&raw)
-}
-fn reference_place(
-    args: &Object,
-    left: &Object,
-    command: &Command,
-) -> Result<Option<String>, String> {
-    let name = values::read_text(args, "sec_codes")?;
-    let table = command
-        .code_tables
-        .get(&name)
-        .ok_or_else(|| format!("Name binding names an unknown code table: {name}"))?;
-    let code = display_text(&read_matching_field(
-        left,
-        &values::read_text(args, "sec_field")?,
-    )?)?;
-    let code =
-        matching_values::prepare_uppercase(code.trim_matches(crate::text_transform::whitespace));
-    Ok(table.get(&code).cloned())
 }
 fn prepared_address(record: &Object, names: &[String]) -> Result<Object, String> {
     let matching = read_matching_values(record)?;
@@ -246,34 +221,6 @@ fn test_record_pair(
     let shape = &command.pair_comparison;
     match name {
         "holds_no_other_lei@1" => Ok(true),
-        "name_census_match@1" => {
-            let entry = values::read_object(&read_matching_values(left)?, &shape.name_count_field)?;
-            let identifier = values::read_optional_value(
-                &values::read_object(right, "identifiers")?,
-                &shape.identifier_namespace,
-            )?;
-            let key = read_name(args, left, "sec_normalizer", command)?;
-            let leis = values::read_array(&entry, &shape.name_count_entries_field)?;
-            let held = match leis.as_slice() {
-                [only] => values::read_value::<(Option<String>, String)>(only).ok(),
-                _ => None,
-            };
-            Ok(held.is_some_and(|(lei, updated)| {
-                values::read_value::<Option<String>>(&identifier).ok() == Some(lei)
-                    && same_update(&updated, right)
-            }) && value_matches_rule(&entry, "version", &command.name_count_version)?
-                && value_matches_rule(&entry, &shape.name_count_holder_count_field, &1)?
-                && value_matches_rule(
-                    &entry,
-                    &shape.name_count_holder_keys_field,
-                    &vec![values::read_optional_value(left, "record_key")?],
-                )?
-                && value_matches_rule(&entry, &shape.name_count_identifier_count_field, &1)?
-                && value_matches_rule(&entry, &shape.name_count_other_holders_field, &0)?
-                && !key.is_empty()
-                && value_matches_rule(&entry, "key", &key)?
-                && key == read_name(args, right, "gleif_normalizer", command)?)
-        }
         "gleif_entity_eligible@1" => {
             if !value_matches_rule(args, "categories", &shape.eligibility_categories)? {
                 return Err(format!(
@@ -296,49 +243,6 @@ fn test_record_pair(
                 && contains("entity_statuses", &status)?
                 && !contains("refused_registration_statuses", &registration)?)
         }
-        "jurisdiction_agrees@1" | "jurisdictions_do_not_conflict@1" => {
-            let left = reference_place(args, left, command)?;
-            let right = read_optional_text(read_matching_field(
-                right,
-                &values::read_text(args, "gleif_field")?,
-            )?)?;
-            if name == "jurisdiction_agrees@1" {
-                Ok(matching_values::places_agree(
-                    left.as_deref(),
-                    right.as_deref(),
-                ))
-            } else {
-                let country = read_optional_text(read_matching_field(
-                    &command.left,
-                    &values::read_text(args, "sec_business_country")?,
-                )?)?;
-                Ok(!matching_values::places_conflict(
-                    left.as_deref(),
-                    right.as_deref(),
-                    country.as_deref(),
-                ))
-            }
-        }
-        "postal_agrees@1" => Ok(matching_values::postal_codes_agree(
-            &display_text(&read_matching_field(
-                left,
-                &values::read_text(args, "sec_code")?,
-            )?)?,
-            read_optional_text(read_matching_field(
-                left,
-                &values::read_text(args, "sec_country")?,
-            )?)?
-            .as_deref(),
-            &display_text(&read_matching_field(
-                right,
-                &values::read_text(args, "gleif_code")?,
-            )?)?,
-            read_optional_text(read_matching_field(
-                right,
-                &values::read_text(args, "gleif_country")?,
-            )?)?
-            .as_deref(),
-        )),
         "cascade_pass@1" => {
             let answer = values::read_object(
                 &values::read_object(&read_matching_values(left)?, &shape.name_count_field)?,

@@ -292,12 +292,8 @@ pub(crate) fn evaluate_record_test(
         "identifier_match@1"
         | "identifier_cardinality@1"
         | "kind_equal@1"
-        | "name_census_match@1"
         | "gleif_entity_eligible@1"
         | "holds_no_other_lei@1"
-        | "jurisdiction_agrees@1"
-        | "jurisdictions_do_not_conflict@1"
-        | "postal_agrees@1"
         | "cascade_pass@1" => Err("Binding and compatibility tests run in the Merge Stage".into()),
         _ => Err(format!("Policy names an unknown primitive: {name}")),
     }

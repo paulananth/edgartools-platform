@@ -200,10 +200,11 @@ def test_the_company_configuration_is_unchanged():
     held = json.loads((Path(__file__).parent / "fixtures/company_classification_2026_09_25_13.json").read_text())
     assert digest(held["entry"]["proof"]) == BEFORE["proof"]
     assert digest(held["entry"]) == BEFORE["approved_activation"]
-    assert digest(policy_layers.company_proofs(sec_company.NAME_PROOFS, COMPANY)) == BEFORE["name_proofs"]
+    restored = policy_layers.without_name_census_retired(COMPANY)  # the two name rules, retired in ticket 202
+    assert digest(policy_layers.company_proofs(sec_company.NAME_PROOFS, restored)) == BEFORE["name_proofs"]
     # Each switched-on name rule carries its measured proof, unchanged, with
     # the operator's approval added.
-    for entry in COMPANY["automatic_rules"]:
+    for entry in restored["automatic_rules"]:
         if entry["rule_id"] in policy_layers.NAME_RULES:
             stamped = {"approved_by", "approved_at", "approved_words"}
             measured = sec_company.NAME_PROOFS[entry["rule_id"]]

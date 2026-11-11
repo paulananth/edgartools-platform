@@ -58,6 +58,63 @@ def splits_of(store, entity: str) -> list[dict]:
     return sorted(found, key=lambda item: (item["at"], item["merge"]))
 
 
+def explained(store, *, page: int = 20_000) -> dict:
+    """Counts only (ticket 209): how each stored source record that has a golden record is explained, for every
+    source and kind at once. A record is explained by a bind decision (a name match, an exact-name creation, a
+    steward), by being the one record of its golden record that joined nothing (it created it), or by an identifier it shares with
+    another record of the same golden record (a plain identifier join writes no decision). The rest is
+    `unexplained`, and its count per source is named: it must be none."""
+    decided, made = set(), set()  # subjects a bind decision names, and those it says created their golden record
+    for subject, body in store.rows("select left_id,body from mastering_decision where operation='bind'"):
+        decided.add(subject)
+        if json.loads(body).get("reason", "").endswith(" created"):
+            made.add(subject)
+    total, by_source, last = Counter(), defaultdict(Counter), ""
+    while True:
+        rows = store.rows("select entity_id,subject,source_code,body from mastering_record where entity_id is not null "
+                          "and entity_id > %s order by entity_id limit %s", [last, page])
+        if not rows:
+            break
+        # A golden record's records are read together: stop the page at a whole group, and read the group at the next one.
+        edge = rows[-1][0]
+        if len(rows) == page:
+            rows = [row for row in rows if row[0] != edge]
+            last = rows[-1][0] if rows else edge
+            if not rows:  # one golden record holds a whole page: read it by itself
+                rows = store.rows("select entity_id,subject,source_code,body from mastering_record where entity_id=%s",
+                                  [edge])
+                last = edge
+        else:
+            last = edge
+        groups = defaultdict(list)
+        for entity, subject, source, body in rows:
+            found = (json.loads(body).get("identifiers") or {}).items()
+            groups[entity].append((subject, source, {(ns, v) for ns, vs in found
+                                                     for v in (vs if isinstance(vs, list) else [vs]) if v}))
+        for members in groups.values():
+            anchors = []
+            for number, (subject, source, identifiers) in enumerate(members):
+                total["records_bound"] += 1
+                if subject in decided:
+                    total["by_decision"] += 1
+                    by_source[source]["by_decision"] += 1
+                elif any(identifiers & other for at, (_, _, other) in enumerate(members) if at != number):
+                    total["by_identifier"] += 1
+                    by_source[source]["by_identifier"] += 1
+                else:
+                    anchors.append(source)
+            # One record of a golden record has nothing to join by: the one that created it, unless a decision says
+            # another record did.
+            creator = any(subject in made for subject, _, _ in members)
+            for position, source in enumerate(anchors):
+                how = "created" if position == 0 and not creator else "unexplained"
+                total[how] += 1
+                by_source[source][how] += 1
+    return {**{key: total[key] for key in ("records_bound", "by_decision", "created", "by_identifier", "unexplained")},
+            "unexplained_by_source": {source: found["unexplained"] for source, found in sorted(by_source.items())
+                                      if found["unexplained"]}}
+
+
 def counts(store) -> dict:
     """What a store holds, in counts and one digest: `rules test` compares two passes with it."""
     masters, holders, digest = Counter(), defaultdict(set), hashlib.sha256()
@@ -76,4 +133,4 @@ def counts(store) -> dict:
         ("decisions", "select operation,count(*) from mastering_decision group by operation"))}
     on_two = Counter(namespace for (namespace, _), owners in holders.items() if len(owners) > 1)
     return {"masters": dict(masters), **grouped, "identifiers_on_two_masters": dict(on_two),
-            "current_records_sha256": digest.hexdigest()}
+            "explained": explained(store), "current_records_sha256": digest.hexdigest()}

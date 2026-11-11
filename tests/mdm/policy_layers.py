@@ -534,9 +534,24 @@ def without_adviser_cik(policy: dict) -> dict:
     return body
 
 
+def without_name_census_retired(policy: dict) -> dict:
+    """Ticket 202 (operator, 2026-11-11: "Retire both"): the two switched-on rules that read a record's Name Count
+    entry are retired with the Name Count; the waterfall passes replace them. Peeled, the two rules and their
+    activations are back where they were (`fixtures/name-census-rules.json`)."""
+    kept = json.loads((Path(__file__).parent / "fixtures" / "name-census-rules.json").read_text())
+    body = _copy(policy)
+    rules = body["kinds"]["company"]["rules"]
+    rules[[r["rule_id"] for r in rules].index(kept["after_rule"]) + 1:0] = kept["rules"]
+    active = body["automatic_rules"]
+    active[[r.get("rule_id") for r in active].index(kept["after_automatic"]) + 1:0] = kept["automatic"]
+    return body
+
+
 # Newest first: each layer, and Company's policy digest with it and every
 # layer after it still on.
 LAYERS = [
+    # The two name rules that read the Name Count entry, retired (ticket 202, 2026-11-11).
+    (without_name_census_retired, "2e37fe4eed49e10d21264ca6445a2a138650b025632e4cdc1352d9fcadca14ac"),
     # The N-PORT registrant's LEI searched (ticket 203, 2026-11-10).
     (without_registrant_lei, "5d55689332d36c4e29b44649752e839ab0dcc201dbf2618d17894de3e962b398"),
     # The custodian rules that create a Company by name, and by name and place (ticket 204, 2026-11-09).

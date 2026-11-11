@@ -69,6 +69,21 @@ bookkeeping:
       run:
         facts: [publication_count]
         files: [approved_scope, nport_issuers]
+        # Both files are built from the store on every load (the loader derives them; nobody is asked).
+        derived:
+          approved_scope:
+            method: lei_scope
+            purpose: "The LEIs this load masters out of the whole publication: every LEI a record in the store holds
+              (an identifier, or the LEI an adviser states) and every LEI the waterfall pass paired with a company."
+            why: "GLEIF finds Companies and never creates one, so it masters only the entities another source already
+              names; a scope of the whole publication would add millions of entities nothing refers to. The scope is
+              rebuilt on each load, so a Company that arrives later enters it on the next run."
+          nport_issuers:
+            method: none_flagged
+            purpose: "No LEI is flagged as an N-PORT issuer."
+            why: "The flag only marks entities that N-PORT holdings name as issuers; the issuer LEI is not held on a
+              stored record, and an issuer that is not a Company already waits, never created, so nothing needs
+              flagging."
       steps:
         - name: read
           operation: source.read

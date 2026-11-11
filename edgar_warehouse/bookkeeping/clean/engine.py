@@ -20,7 +20,8 @@ from sqlalchemy.exc import DBAPIError
 from . import storage, lifecycle
 from .artifacts import Artifacts
 from .config import (RUN_CHECKS, STEP_CHECKS, Blocked, canonical, digest, generated_worklist, reference,
-                     validate, worklist)
+                     staged, validate, worklist)
+from .compose import compose_document
 
 PROTOCOL = 1
 # Units a claim looks over: one another attempt holds is passed for the next.
@@ -99,7 +100,7 @@ class Bookkeeping:
                 raise Blocked("Rules reference disagrees with submission")
             if "acquisition" in export["body"]:
                 _authority(export, submission["scope"], self.artifacts)
-            config = validate(export["body"], submission["target"])
+            config = staged(validate(export["body"], submission["target"]))
             if submission.get("profiles") != {step["name"]: step["operation"] for step in config["steps"]}:
                 raise Blocked("Frozen worker profiles differ from the Rules export")
             manifest = self.artifacts.json(submission["inputs"])
@@ -172,7 +173,7 @@ class Bookkeeping:
                 or not (silver_only or finalized_holds(export) or (isinstance(proof, dict) and proof_holds(export)))):
             raise Blocked("Submission requires an active Rules export that is proven or finalized")
         reference({"uri": rules_ref["uri"], "sha256": (proof or {}).get("batch_hash") or export["digest"]})
-        config = validate(export["body"], target)
+        config = staged(validate(export["body"], target))
         if scope.get("feed") and "acquisition" not in export["body"]:
             raise Blocked("Retired acquisition feed cannot be submitted")
         if "acquisition" in export["body"]:
@@ -317,24 +318,12 @@ class Bookkeeping:
                 seen[unit] = self._receipt(item, dependency, context, others)
             return seen[unit]
 
-        filled = {}
-        for name, value in body["slots"].items():
-            if isinstance(value, list):
-                filled[name] = [receipt(dependency) for dependency in value]
-            elif set(value) == {"compose"}:
-                filled[name] = self._compose(item, value["compose"], context, store, seen, others)
-            else:
-                filled[name] = receipt(value)
-
-        def fill(node):
-            if isinstance(node, dict):
-                return filled[node["slot"]] if set(node) == {"slot"} else {k: fill(v) for k, v in node.items()}
-            return [fill(value) for value in node] if isinstance(node, list) else node
-
-        document = fill(body["document"])
         # Beside the unit's output, named by content: a resume writes the same object.
         root = item["unit"]["output"].rsplit("/", 1)[0] + "/inputs"
-        return self.artifacts.put(root, document) if store else reference(self.artifacts.address(root, document))
+
+        def place(document):
+            return self.artifacts.put(root, document) if store else reference(self.artifacts.address(root, document))
+        return compose_document(body, receipt, place)
 
     def _row(self, run_id: str, step: str, key: str) -> dict:
         found = storage.work(self.engine, run_id, step=step, key=key)

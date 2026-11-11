@@ -68,11 +68,6 @@ pair_comparisons:
     name_field: name
     identifier_namespace: lei
     name_count_field: name_count
-    name_count_entries_field: leis
-    name_count_holder_keys_field: ciks
-    name_count_holder_count_field: cik_count
-    name_count_identifier_count_field: lei_count
-    name_count_other_holders_field: other_name_holders
     cascade_field: cascade
     cascade_identifier_field: lei
     eligibility_kind: company

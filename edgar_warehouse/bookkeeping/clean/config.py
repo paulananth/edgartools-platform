@@ -44,7 +44,11 @@ RUN_KEYS = frozenset({"facts", "files"})
 # `matches` ties a run file to the capture it is run over: its part at a dotted `path` must equal the named
 # property of the capture (`receipts_sha256`: the sha256 of its receipts file), so a Name Count built from
 # another capture is refused before any unit is written (ticket 177, slice 5d).
-RUN_DECLARED = RUN_KEYS | {"projections", "matches"}
+# `derived` names, per run file, how the loader builds it when the caller gives none (a set the store decides:
+# a scope, the names a reading keeps): a registered `method`, and the `purpose` and `why` that make the rule explain
+# itself. A derived file is built on every load, so a daily run and a go-live run get the same answer from the
+# store; the operator is asked only when neither the rules nor the store can decide.
+RUN_DECLARED = RUN_KEYS | {"projections", "matches", "derived"}
 MATCH_PROPERTIES = frozenset({"receipts_sha256"})
 PROJECTION_PARTS = 16
 NAME = r"[a-z][a-z0-9_]*"
@@ -119,6 +123,14 @@ def run_inputs(selected: dict) -> dict:
         raise Blocked("A run file's matches each name a declared file, a dotted path in it and a property of the "
                       f"capture ({sorted(MATCH_PROPERTIES)}): {{file, path, to}}")
     found["matches"] = [dict(m) for m in matches]
+    derived = declared.get("derived", {})
+    if (not isinstance(derived, dict) or any(
+            name not in found["files"] or not isinstance(how, dict) or set(how) != {"method", "purpose", "why"}
+            or not isinstance(how["method"], str) or not re.fullmatch(NAME, how["method"])
+            or any(not isinstance(how[k], str) or not how[k].strip() for k in ("purpose", "why"))
+            for name, how in derived.items())):
+        raise Blocked("A derived run file names a declared file and its {method, purpose, why}, each text")
+    found["derived"] = {name: dict(how) for name, how in sorted(derived.items())}
     return found
 
 
@@ -216,12 +228,15 @@ def validate(document: dict, target: str) -> dict:
             raise Blocked("Unsupported bookkeeping configuration")
         planned = body["version"] == 2
         selected = body["targets"][target]
-        if set(selected) - {"steps", "lease_seconds", "heartbeat_seconds", "retry", "allow_zero_work", "checks"} - (
+        if set(selected) - {"steps", "lease_seconds", "heartbeat_seconds", "retry", "allow_zero_work", "checks",
+                            "local"} - (
                 {"run"} if planned else set()):
             raise Blocked("Unknown target option")
         declared = run_inputs(selected) if planned else {"facts": [], "files": []}
         if type(selected.get("allow_zero_work", False)) is not bool:
             raise Blocked("allow_zero_work must be boolean")
+        if type(selected.get("local", False)) is not bool:
+            raise Blocked("local must be boolean")
         duration = _integer(selected.get("lease_seconds", 120), 2, 86400, "lease_seconds")
         heartbeat = _integer(selected.get("heartbeat_seconds", 30), 1, duration - 1, "heartbeat_seconds")
         retry = selected.get("retry", {})
@@ -278,6 +293,10 @@ def validate(document: dict, target: str) -> dict:
             if not step["checks"]:
                 raise Blocked("Every step requires a check")
             seen.add(name)
+        if selected.get("local"):
+            local = {step["name"] for step in steps if step["operation"] in LOCAL_OPERATIONS}
+            if any(not set(step["requires"]) <= local for step in steps if step["name"] in local):
+                raise Blocked("A local step requires only local steps")
         checks = selected.get("checks", [])
         if (not isinstance(checks, list) or not checks or len(set(checks)) != len(checks)
                 or any(c not in RUN_CHECKS for c in checks)):
@@ -289,6 +308,21 @@ def validate(document: dict, target: str) -> dict:
         raise
     except (KeyError, TypeError, AttributeError, ValueError) as exc:
         raise Blocked("Malformed bookkeeping configuration") from exc
+
+
+# The operations a target marked `local: true` runs in the loader's own process: they turn captured files into
+# extracts and write files with receipts, so they need no claim, lease or verifier (ticket 210).
+LOCAL_OPERATIONS = frozenset({"source.read", "source.combine"})
+
+
+def staged(config: dict) -> dict:
+    """The steps of a run in the database: a target marked `local` has its local steps run by the loader, so the
+    run starts at the first step after them and no step waits on one of them."""
+    if not config.get("local"):
+        return config
+    local = {step["name"] for step in config["steps"] if step["operation"] in LOCAL_OPERATIONS}
+    return {**config, "steps": [{**step, "requires": [name for name in step["requires"] if name not in local]}
+                                for step in config["steps"] if step["name"] not in local]}
 
 
 # A composed input (to-do 20c): a frozen document whose slots each name verified

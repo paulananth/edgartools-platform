@@ -1,8 +1,5 @@
-# combine-name-count.yaml for what a Company capture holds today: main documents
-# and the exchange catalog (L4: continuation pages and the second catalog are
-# not captured). Equal to combine-name-count.yaml but for the forms and tickers
-# sources (a test holds them equal). Bind approved Company/catalog run IDs and
-# the canonical name count digest, as there.
+# Company records from a captured submissions reading and the exchange catalog: main documents, forms,
+# tickers and the business address.
 execution:
   profile: source.combine
 combine:
@@ -51,30 +48,6 @@ combine:
       checks:
         last_sync_run_id: APPROVED_COMPANY_CAPTURE_RUN
       where: {}
-    name_count_names:
-      source: name_count
-      table: names
-      key: name_key
-      value: name_evidence
-      mode: one
-      order_by: []
-      distinct: false
-      skip_null_values: true
-      checks:
-        name_count_digest: '0000000000000000000000000000000000000000000000000000000000000000'
-      where: {}
-    name_count_cascade:
-      source: name_count
-      table: cascade
-      key: cik
-      value: cascade_evidence
-      mode: one
-      order_by: []
-      distinct: false
-      skip_null_values: true
-      checks:
-        name_count_digest: '0000000000000000000000000000000000000000000000000000000000000000'
-      where: {}
   tables:
     company:
       source: main
@@ -98,18 +71,5 @@ combine:
           key: cik
           on_missing: empty
           replace: false
-        name_count:
-          group: name_count_names
-          key: _name_key
-          on_missing: empty
-          replace: false
-        cascade_evidence:
-          group: name_count_cascade
-          key: cik
-          on_missing: skip
-          replace: false
-          path:
-          - name_count
-          - cascade
       drop:
       - _name_key

@@ -10,7 +10,6 @@ The merge step needs a registered MDM; the installed proof covers it.
 The target is planned by the generic `write_manifest` (ticket 177, slice 5): the same rules, run facts and
 Name Count file the dedicated writer took, with no Company-specific code.
 """
-import hashlib
 import json
 import pytest
 from copy import deepcopy
@@ -24,13 +23,12 @@ from edgar_warehouse.rules import files
 from edgar_warehouse.workers import mdm_prepare, source_combine, source_read
 from tests.integration.test_configured_bookkeeping_postgres import databases  # noqa: F401
 from edgar_warehouse.mdm import limits
-from edgar_warehouse.mdm.store import canonical
-from tests.mdm.test_mdm_company_preparation import ACME, APPLE, CATALOG_ROWS, MSFT, PINS, name_count_capture, documents
+from tests.mdm.test_mdm_company_preparation import ACME, APPLE, CATALOG_ROWS, MSFT, PINS, company_capture, documents
 from tests.support.memory_journal import MemoryJournal
 from tests.support.bookkeeping_protocol import drive
 from tests.support.sec_capture import CATALOG, document, key
 
-def plan(tmp_path, folder, name_count, output="bundle", slice_bytes=None):
+def plan(tmp_path, folder, output="bundle", slice_bytes=None):
     """The Company target's input manifest, planned by the generic writer over the capture's documents and catalog."""
     listed = tmp_path / f"documents-{output}.json"
     listed.write_text(json.dumps([key(c) for c in CIKS] + [CATALOG]))
@@ -49,8 +47,7 @@ def plan(tmp_path, folder, name_count, output="bundle", slice_bytes=None):
             capture_run=PINS["capture_run"], output=str(tmp_path / output), as_of=PINS["as_of"],
             revision=PINS["revision"], journal=MemoryJournal(),
             facts={"capture_run": PINS["capture_run"], "catalog_run": PINS["catalog_run"],
-                   "observed_at": PINS["observed_at"], "load_mode": "default"},
-            run_files={"name_count": str(name_count)})
+                   "observed_at": PINS["observed_at"], "load_mode": "default"})
     return report
 
 
@@ -64,6 +61,7 @@ def run_without_merge(databases, tmp_path, book, report):
     for profile in WORKERS:
         grant_profile(databases.admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")
     target = deepcopy(files.source("sec.company")["bookkeeping"]["targets"]["mastering"])
+    target.pop("local", None)  # this test runs every step in the database; a local target's run starts at records
     assert [step["name"] for step in target["steps"][-2:]] == ["merge", "processed"]
     target["steps"] = target["steps"][:-2]
     body = {"source": f"company-{uuid4().hex}", "bookkeeping": {"version": 2, "targets": {"mastering": target}}}
@@ -79,23 +77,19 @@ def run_without_merge(databases, tmp_path, book, report):
 
 
 def test_the_mastering_target_prepares_what_the_in_process_preparation_did(databases, tmp_path):
-    capture = name_count_capture(tmp_path, documents(), CATALOG_ROWS)
-    folder, population, name_count = capture
-    report = plan(tmp_path, folder, name_count)
+    folder, population = company_capture(tmp_path, documents(), CATALOG_ROWS)
+    report = plan(tmp_path, folder)
     book = Bookkeeping(databases.runtime)
     book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)
     rid = run_without_merge(databases, tmp_path, book, report)
     state = drive(book, rid, databases.ledger, workers=WORKERS)
-    # One main unit (3 small documents, under the byte budget), one key reading, catalog, name count, combine, records.
-    assert state["run"]["state"] == "complete" and state["counts"] == {"verified": 6}
+    # One main unit (3 small documents, under the byte budget), catalog, combine, records.
+    assert state["run"]["state"] == "complete" and state["counts"] == {"verified": 4}
 
     prepared = json.loads((tmp_path / "bundle/records/manifest.json").read_bytes())
     root = tmp_path / "bundle/records"
     # What MDM reads: each batch's records bytes, count and publication (ids aside).
-    # The name count's digest (`NAME_COUNT` in the answers) is the canonical name count's; its GLEIF zip
-    # carries today's time, so the digest is computed here.
-    name_count_hash = hashlib.sha256(canonical(json.loads(name_count.read_bytes())).encode()).hexdigest()
-    expected = json.loads(json.dumps(EXPECTED).replace("NAME_COUNT", name_count_hash))
+    expected = EXPECTED
     got = [{"records_jsonl": (root / b["input"]["path"]).read_text(), "record_count": b["input"]["record_count"],
              "publication": {k: v for k, v in b["input"]["publication"].items() if k != "publication_key"},
              "source_code": b["input"]["source_code"], "expected_checkpoint": b["expected_checkpoint"],
@@ -117,19 +111,16 @@ def test_the_mastering_target_prepares_what_the_in_process_preparation_did(datab
     assert [b["consumer"] for b in prepared["batches"]] == [report["publication"]["consumer"]]
 
     book.resume(rid)  # nothing is redone: every receipt and composed input is reverified
-    assert drive(book, rid, databases.ledger, workers=WORKERS)["counts"] == {"verified": 6}
+    assert drive(book, rid, databases.ledger, workers=WORKERS)["counts"] == {"verified": 4}
 
 
-def test_the_manifest_freezes_documents_by_receipt_and_composes_name_count_and_combine(tmp_path):
-    folder, population, name_count = name_count_capture(tmp_path, documents(), CATALOG_ROWS)
-    report = plan(tmp_path, folder, name_count, output="b")
+def test_the_manifest_freezes_documents_by_receipt_and_composes_combine(tmp_path):
+    folder, population = company_capture(tmp_path, documents(), CATALOG_ROWS)
+    report = plan(tmp_path, folder, output="b")
     steps = json.loads(Path(report["manifest"]["uri"].removeprefix("file://")).read_bytes())["steps"]
     assert {name: len(units) for name, units in steps.items()} == {
-        "main": 1, "keys": 1, "catalog": 1, "name_count": 1, "combine": 1, "records": 1, "merge": 1, "processed": 1}
-    lookups = steps["name_count"][0]["input"]["compose"]
-    (slot,) = lookups["slots"]  # the one artifact's lookups, composed of the bundle's key reading
-    assert lookups["slots"][slot]["compose"]["slots"]["names"] == [{"step": "keys", "key": "keys"}]
-    assert set(steps["combine"][0]["input"]["compose"]["slots"]) == {"main", "name_count", "catalog_exchange"}
+        "main": 1, "catalog": 1, "combine": 1, "records": 1, "merge": 1, "processed": 1}
+    assert set(steps["combine"][0]["input"]["compose"]["slots"]) == {"main", "catalog_exchange"}
     assert steps["merge"][0]["input"] == {"from": {"step": "records", "key": "records"}}
     assert steps["records"][0]["keys"]["revision"] == str(PINS["revision"])
     assert not list((tmp_path / "b").rglob("*.jsonl"))  # documents stay in the capture, by receipt
@@ -137,8 +128,8 @@ def test_the_manifest_freezes_documents_by_receipt_and_composes_name_count_and_c
 
 def mastered(databases, tmp_path, found=None, slice_bytes=None):
     """The records the target prepares for a capture of `found` documents, by CIK, and the manifest."""
-    folder, population, name_count = name_count_capture(tmp_path, found or documents(), CATALOG_ROWS)
-    report = plan(tmp_path, folder, name_count, slice_bytes=slice_bytes)
+    folder, population = company_capture(tmp_path, found or documents(), CATALOG_ROWS)
+    report = plan(tmp_path, folder, slice_bytes=slice_bytes)
     book = Bookkeeping(databases.runtime)
     book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)
     assert drive(book, run_without_merge(databases, tmp_path, book, report), databases.ledger,
@@ -150,7 +141,7 @@ def mastered(databases, tmp_path, found=None, slice_bytes=None):
     return found, manifest, folder
 
 
-def test_forms_tickers_address_origin_and_name_count_entry_come_from_configured_readings(databases, tmp_path):
+def test_forms_tickers_address_and_origin_come_from_configured_readings(databases, tmp_path):
     found, _, folder = mastered(databases, tmp_path)
     assert found[APPLE]["forms"] == ["10-K", "10-Q"]
     assert found[APPLE]["tickers"] == ["AAPL", "APLE"]  # catalog rank order, listed once
@@ -162,7 +153,6 @@ def test_forms_tickers_address_origin_and_name_count_entry_come_from_configured_
     for cik, record in found.items():
         assert record["_origin"]["bronze"] == {"object": key(cik), "sha256": receipts[key(cik)], "locator": "$"}
         assert record["raw_object_id"] == receipts[key(cik)]
-    assert found[APPLE]["name_count"]["leis"][0][0] == "HWUPKR0MPOU8FGXBT394"
     assert "_name_key" not in found[APPLE]
 
 
@@ -170,7 +160,7 @@ def test_main_units_are_cut_by_document_bytes_and_still_prepare_the_same_records
     found, _, folder = mastered(databases, tmp_path, slice_bytes=1)  # every document its own main unit
     (manifest,) = [p for p in (tmp_path / "bundle").glob("*.json") if len(p.stem) == 64]  # the input manifest
     steps = json.loads(manifest.read_bytes())["steps"]
-    assert (len(steps["main"]), len(steps["combine"]), len(steps["keys"])) == (3, 3, 1)
+    assert (len(steps["main"]), len(steps["combine"])) == (3, 3)
     assert set(found) == set(CIKS) and found[APPLE]["tickers"] == ["AAPL", "APLE"]
 
 

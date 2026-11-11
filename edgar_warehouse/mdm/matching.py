@@ -16,8 +16,6 @@ from .activation import activated
 from .catalog import CATALOG, assert_current
 from .binding import bound, in_review, nothing, survivors
 from .evidence import decision
-from .name_count import VERSION as NAME_COUNT_VERSION
-from .names import REFERENCE_TABLES
 from .store import Conflict
 
 FAMILY = "name_binding"
@@ -56,7 +54,6 @@ def candidate_paths(rule: dict) -> dict[str, tuple]:
     name_count = ("provenance", "matching", profile["name_count_field"])
     return {
         "identifier": ("identifiers", profile["identifier_namespace"]),
-        "name_count": (*name_count, profile["name_count_entries_field"], 0, 0),
         "cascade": (*name_count, profile["cascade_field"], profile["cascade_identifier_field"]),
     }
 
@@ -99,9 +96,8 @@ def compare_candidate_records(rule: dict, pairs: list[tuple[dict, dict]]) -> lis
     try:
         return compare_record_pairs({
             "rule": rule, "pairs": pairs,
-            "code_tables": REFERENCE_TABLES,
             "normalizers": {kind.normalizer_name: kind.upper for kind in TYPES.values()},
-            "name_count_version": NAME_COUNT_VERSION, "cascade_version": cascade.VERSION,
+            "cascade_version": cascade.VERSION,
             "pair_comparison": profile,
         })
     except ValueError as error:
@@ -115,8 +111,7 @@ def compare_pair_test(name: str, left: dict, right: dict, args: dict) -> bool:
 HELD_LEI_TEST = "holds_no_other_lei@1"
 PAIR_TESTS = {
     name: partial(compare_pair_test, name) for name in (
-        "name_census_match@1", "gleif_entity_eligible@1", "jurisdiction_agrees@1",
-        "jurisdictions_do_not_conflict@1", "postal_agrees@1", cascade.TEST,
+        "gleif_entity_eligible@1", cascade.TEST,
     )
 }
 
@@ -217,7 +212,7 @@ def propose(
         holders_here = [a for a in batch.values() if a["source_code"] == holder]
         paths = candidate_paths(rule)
         namespace = comparison_profile(rule)["identifier_namespace"]
-        lookup = paths["cascade" if any(t["primitive"] == cascade.TEST for t in rule["when"]) else "name_count"]
+        lookup = paths["cascade"]
         def value_of(record):
             return candidate_value(record, lookup)
         # Each side of a pair: from this batch, or the latest stored version.

@@ -118,42 +118,6 @@ Snapshot generation and each object's projection as-of are distinct: an object
 may have been last projected before the selected global generation. Future or
 missing generations return 404. An unconfigured v2 API has no v2 routes.
 
-## Build the Name Matching
-
-The SEC-to-GLEIF matching rules (ticket 08) bind only a name no other SEC
-filer or GLEIF legal entity carries. The Name Matching counts that once, over the
-whole SEC population (each filer's current and former names) and a full GLEIF
-Level 1 Golden Copy (legal and other names, branches excluded). It refuses a
-delta. The population file lists the receipt keys of the main submissions
-documents counted; each is read from the capture folder (`receipts.jsonl` and
-`bronze/`) through `rules/sources/sec.company/name-count-sec-names.yaml` by the
-`source.read` worker and its verifier, up to 256 documents a unit, and must match its
-receipt; `name-count-sec-reduction.yaml` counts it. With a cascade pass switched on, the Name Matching also runs the cascade
-through the Company chain's own readings (`--catalog`, below). The Golden Copy arrives as
-one verified `source.read` reading of `rules/sources/gleif/name-count-complete-stream.yaml`
-(about an hour for 3.4 million records); the command checks that the reading
-projected exactly the names this population holds. It needs local files only:
-
-```bash
-edgar-warehouse mdm name-count \
-  --capture "$SEC_SUBMISSIONS_CAPTURE" \
-  --population "$SEC_POPULATION_JSON" \
-  --gleif-reading "$GLEIF_NAME_COUNT_READING_JSON" \
-  --gleif-reading-sha256 "$GLEIF_NAME_COUNT_READING_SHA256" \
-  --gleif-metadata "$GLEIF_LEVEL1_METADATA_JSON" \
-  --catalog "$SEC_EXCHANGE_CATALOG_KEY" \
-  --output "$NAME_COUNT_JSON"
-```
-
-`--catalog` names the capture's exchange catalog. It is required while a
-cascade pass is switched on ("name and city or postcode" since ticket 09): the Name Matching then runs the
-cascade, which reads each filer's tickers, and refuses to run without it.
-
-The metadata file holds the archive's verified publication metadata
-(`format`, `cdf_version`, `content_date`, `file_content`, `record_count`); its
-record count must equal the reading's. Rebuild the Name Matching for each full Golden
-Copy: a Name Matching counted before a new GLEIF entity took a name cannot see it.
-
 ## Prepare a native Company sample
 
 This command needs local files and no database credentials:
@@ -162,11 +126,9 @@ This command needs local files and no database credentials:
 edgar-warehouse mdm prepare-clean-company \
   --capture "$SEC_SUBMISSIONS_CAPTURE" \
   --documents "$BUNDLE_DOCUMENTS_JSON" \
-  --population "$SEC_POPULATION_JSON" \
   --catalog warehouse/bronze/reference/sec/company_tickers_exchange/2026/09/02/company_tickers_exchange.json \
   --capture-run "$CAPTURE_RUN_ID" --catalog-run "$CATALOG_RUN_ID" \
   --observed-at 2026-09-30T02:20:28+00:00 \
-  --name-count "$NAME_COUNT_JSON" \
   --output "$CLEAN_MDM_INPUT_DIRECTORY" \
   --as-of 2026-09-19T00:00:00Z --revision 0
 ```
@@ -176,24 +138,20 @@ its report (`manifest`, `publication`, `scope`); `rules run --source
 sec.company --target mastering --input-manifest <uri>
 --input-sha256 <sha>` then runs it (`docs/company-only-acquisition.md`). The
 manifest names each main submissions document in `--documents` (at most 512
-receipt keys, all in the population the Name Matching counted) by its receipt
+receipt keys) by its receipt
 in `receipts.jsonl`, in place, and SEC's exchange ticker catalog
 (`--catalog`, a receipt key). The target's workers read the documents in
-units of at most 8 MiB (`name-count-main.yaml`) and once more for their name keys
-and CIKs only (`name-count-keys.yaml`, one reading of the bundle), read the Name Matching
-once narrowed to the bundle's names and CIKs (`name-count.yaml`, bound to the
-Name Matching's digest; its two lookup sets are derived from the key reading, so a
-bundle names at most 512 documents), read the catalog once (`catalog.yaml`), combine them per unit
+units of at most 8 MiB (`name-count-main.yaml`), read the catalog once (`catalog.yaml`), combine them per unit
 (`combine-name-count-captured.yaml`): forms from the document's recent filings,
-tickers from the catalog in rank order, the business address and the Name Matching
-entry; prepare the bundle's rows as one publication (`mdm.prepare`) and merge
+tickers from the catalog in rank order and the business address;
+prepare the bundle's rows as one publication (`mdm.prepare`) and merge
 it (`mastering.merge`). Every step is executed by a worker and checked by a
 verifier; Bookkeeping keeps each receipt. The capture and catalog run IDs and
 the observation time are the caller's facts, bound into every row. Each
 record names its bronze document (`_origin.bronze`: `object`, the receipt key; `sha256`; `locator`),
 from the main reading. The publication key names the capture run, the
-documents' digest, the catalog run and receipt, and the Name Matching digest; a
-different catalog or Name Matching is a different publication. Every frozen input
+documents' digest and the catalog run and receipt; a
+different catalog is a different publication. Every frozen input
 is named by its content, so identical preparation is idempotent.
 The explicit revision is source-publication order, not ingestion order. Only
 SEC `operating` filers and qualifying `other` filers can become Companies;

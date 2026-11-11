@@ -58,14 +58,40 @@ def exact_namespaces(settings: "Settings") -> list[str]:
 
 
 def name_keys(record: dict, namespaces=(NAME_ID,)) -> list[tuple]:
-    """The LEIs the record's Name Count pass found, so a name match is a lookup."""
+    """The LEI the waterfall pass paired the record with, and its exact name ids, so a name match is a lookup."""
     found = ((record.get("provenance") or {}).get("matching") or {}).get("name_count") or {}
     cascade = (found.get("cascade") or {}).get("lei")
-    entries = found.get("leis") or []
-    named = entries[0][0] if entries and entries[0] else None
     exact = [(role_of(ns), reference_of(record, ns)) for ns in namespaces]
-    return [(role, value, record["subject"]) for role, value in (("cascade", cascade), ("name_count", named), *exact)
+    return [(role, value, record["subject"]) for role, value in (("cascade", cascade), *exact)
             if isinstance(value, str) and value]
+
+
+def apply_pairs(store, settings: Settings, source_code: str, pairs: dict[str, dict]) -> dict:
+    """The waterfall pass's answer (CIK -> pair, `waterfall.pairs`) reaches the merge: each stored record of the
+    source whose pair is not yet a `cascade` name key is merged again with the pair as its key, so a name match is
+    the same lookup as before, and a second call with the same pairs finds nothing to do."""
+    held = {(subject, value) for value, subject in store.rows("select value,subject from mastering_name_key where role='cascade'")}
+    changed = []
+    for (text,) in store.rows("select body from mastering_record where source_code=%s", [source_code]):
+        record = json.loads(text) if isinstance(text, str) else text
+        pair = pairs.get(record["record_key"])
+        if pair and (record["subject"], pair["lei"]) not in held:
+            matching_ = record.setdefault("provenance", {}).setdefault("matching", {})
+            found = matching_.get("name_count") or {}
+            matching_["name_count"] = {**found, "cascade": {"version": matching.cascade.VERSION, **pair}}
+            changed.append(record)
+    if not changed:
+        return {"records": 0}
+    counts = merge_file(store, settings, changed, again=True)
+    try:  # a record that waited for one of these LEIs moves to its golden record now
+        store.take_lock()
+        counts["released"] = counts.get("released", 0) + _release_waiting(
+            store, settings, {("lei", pairs[r["record_key"]]["lei"]) for r in changed})
+        store.commit()
+    except BaseException:
+        store.rollback()
+        raise
+    return counts
 
 
 def set_aside(store, records: list[dict], quiet: dict) -> None:
@@ -87,7 +113,8 @@ def merge_file(store, settings: Settings, records: list[dict], *, again: bool = 
         set_aside(store, list(deferred), quiet or {})
         arrived: set = set()
         counts = _merge(store, settings, records, key, again, arrived) if records else {"records": 0}
-        counts["released"] = _release_waiting(store, settings, arrived)
+        # A file of only set-aside records has no kind and nothing arrived: nothing waits for it.
+        counts["released"] = _release_waiting(store, settings, arrived) if records else 0
         store.add_delivery(key, delivery)
         if not records:
             store.finish_file(key, 0)
@@ -313,10 +340,9 @@ def _hold_conflicts(store, settings: Settings, plan: dict, records, found: dict)
 def _match_names(store, settings: Settings, records, bound: dict, counts: Counter, binds: list) -> dict:
     named, values = {}, {}
     for rule in _rules(settings):
-        cascade = any(test["primitive"] == matching.cascade.TEST for test in rule["when"])
         holders = sorted(r["subject"] for r in records if r["source_code"] == rule["holder_source"])
         pairs = [(json.loads(c), json.loads(h)) for c, h in store.name_pairs(
-            "cascade" if cascade else "name_count", rule["holder_source"], rule["source"], holders)]
+            "cascade", rule["holder_source"], rule["source"], holders)]
         involved = {side["subject"] for pair in pairs for side in pair}
         bound.update(store.bound(sorted(involved - set(bound))))
         pairs = [(c, h) for c, h in pairs if c["subject"] not in bound and c["subject"] not in named and h["subject"] in bound]

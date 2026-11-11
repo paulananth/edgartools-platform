@@ -272,9 +272,9 @@ filled document's reference fills it:
 ```json
 {"compose": {
   "document": {"version": 1, "contract": {"uri": "...", "sha256": "..."},
-               "readings": {"main": {"slot": "main"}, "name_count": {"slot": "name_count"}}},
+               "readings": {"main": {"slot": "main"}, "catalog": {"slot": "catalog"}}},
   "slots": {"main": {"step": "read_main", "key": "unit-0"},
-            "name_count": {"step": "read_name_count", "key": "bundle"}}
+            "catalog": {"step": "read_catalog", "key": "bundle"}}
 }}
 ```
 

@@ -175,13 +175,6 @@ from edgar_warehouse.mdm.names import REFERENCE_TABLES, edgar_jurisdiction
 from edgar_warehouse.mdm.matching import compare_candidate_records
 assert REFERENCE_TABLES == {"invented-alias": {"SYNTHETIC": "ZZ-Q"}}
 assert edgar_jurisdiction("synthetic") == "ZZ-Q"
-rule = {"when": [{"primitive": "jurisdiction_agrees@1", "args": {
-    "sec_codes": "invented-alias", "sec_field": "invented_origin", "gleif_field": "invented_place"}}]}
-left = {"fields": {"invented_origin": {"op": "value", "value": "synthetic"}}}
-right = {"fields": {"invented_place": {"op": "value", "value": "ZZ-Q"}}}
-assert compare_candidate_records(rule, [(left, right)]) == [[True, False]]
-right["fields"]["invented_place"]["value"] = "YY-Q"
-assert compare_candidate_records(rule, [(left, right)]) == [[False, False]]
 '''
     result = subprocess.run([sys.executable, "-c", program],
         env={**os.environ, "EDGAR_RULES_ROOT": str(tmp_path)}, capture_output=True, text=True, timeout=30)

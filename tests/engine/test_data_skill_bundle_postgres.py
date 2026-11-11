@@ -214,7 +214,7 @@ profile.update(eligibility_kind="bundle-invented-kind", eligibility_categories=[
                name_field="invented_name", status_field="invented_status",
                registration_status_field="invented_registration",
                identifier_namespace="invented_namespace", name_count_field="invented_name_count",
-               name_count_entries_field="invented_entries", cascade_field="invented_cascade",
+               cascade_field="invented_cascade",
                cascade_identifier_field="invented_target")
 body["pair_comparisons"]["bundle-invented"] = profile
 (folder / catalog.RELATIVE).write_text(files.dumps(body))
@@ -230,7 +230,6 @@ right = {"kind": "bundle-invented-kind", "fields": {
 assert compare_candidate_records(rule, [({}, right)]) == [[True, False]]
 paths = candidate_paths(rule)
 assert paths["identifier"] == ("identifiers", "invented_namespace")
-assert paths["name_count"] == ("provenance", "matching", "invented_name_count", "invented_entries", 0, 0)
 assert paths["cascade"] == ("provenance", "matching", "invented_name_count", "invented_cascade", "invented_target")
 assert candidate_value({"identifiers":{"invented_namespace":"invented-value"}}, paths["identifier"]) == "invented-value"
 from edgar_warehouse.mdm.matching import candidate_routes
@@ -1126,8 +1125,7 @@ print("six installed GLEIF member contracts passed")
     assert result.stdout.strip() == 'six installed GLEIF member contracts passed'
 
 
-@pytest.mark.parametrize("with_name_count", [False, True])
-def test_company_combination_blueprint_runs_from_installed_bundle(installed, with_name_count):
+def test_company_combination_blueprint_runs_from_installed_bundle(installed):
     """Installed raw readings compose/prepare without retained Company loaders."""
     python, root = installed
     result = _run(python, '-c', '''
@@ -1137,8 +1135,7 @@ from edgar_warehouse.rules import files
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.workers import source_read, source_combine, mdm_prepare
 store = Artifacts()
-with_name_count = WITH_NAME_COUNT
-folder = Path("company-composition-name-count" if with_name_count else "company-composition").resolve()
+folder = Path("company-composition").resolve()
 folder.mkdir()
 blueprints = files.ROOT / "sources/sec.company"
 date = "2026-10-04T00:00:00Z"
@@ -1154,38 +1151,17 @@ def read(name, template, payload, context):
     receipt = source_read.execute(task,store)
     assert source_read.verify({**task,"candidate":receipt},store) == ({"source.output":True},[])
     return receipt
-main = read("main","name-count-main.yaml" if with_name_count else "source.yaml",{"name":"Example","filings":{"recent":{
+main = read("main","source.yaml",{"name":"Example","filings":{"recent":{
     "accessionNumber":["r1","r2"],"form":["8-K","10-K"]}},
     "addresses":{"business":{"street1":"Raw","stateOrCountry":"X0"}}},
-    {**context,"recent_limit":None,"last_synced_at":date,**({"bronze_object":"bronze/main.json"} if with_name_count else {})})
+    {**context,"recent_limit":None,"last_synced_at":date})
 pages = read("pages","pagination.yaml",{"accessionNumber":["p1","p2"],"form":["20-F","10-K"]},context)
 catalog_context = {"sync_run_id":"catalog","last_synced_at":date,"source_name":"exchange"}
 exchange = read("catalog-exchange","catalog.yaml",{"fields":["cik","ticker"],"data":[[1,"B"],[1,"A"]]},catalog_context)
 tickers = read("catalog-tickers","catalog.yaml",{"0":{"cik_str":1,"ticker":"A"},"1":{"cik_str":1,"ticker":"C"}},
     {**catalog_context,"source_name":"tickers"})
 refs = {"main":main,"pages":pages,"catalog_exchange":exchange,"catalog_tickers":tickers}
-rules = files.load(blueprints / ("combine-name-count.yaml" if with_name_count else "combine.yaml"))
-if with_name_count:
-    name_count = {"version":"sec-gleif-name-count-v1","sec":{"filers":1},
-        "gleif":{"file_content":"GLEIF_FULL_PUBLISHED"},
-        "normalizers":{"sec":"normalize_text@sec-legal-form-kept-v1","gleif":"normalize_text@legal-form-kept-v1"},
-        "entries":{"EXAMPLE":{"cik_count":1,"lei_count":1,"ciks":["0000000001"],"leis":[["L1","2026-09-11"]]}},
-        "cascade":{"version":"sec-gleif-cascade-v1","assignments":{"0000000001":{"lei":"L1","pass":"name and full address"}}}}
-    raw = store.put(folder.as_uri(),name_count)
-    def bind(value):
-        if isinstance(value,str): return raw["sha256"] if value == "0"*64 else value
-        if isinstance(value,list): return [bind(item) for item in value]
-        if isinstance(value,dict): return {key:bind(item) for key,item in value.items()}
-        return value
-    config = bind(files.load(blueprints / "name-count.yaml"))
-    # Narrowed to the bundle's name and CIK keys (20c): a version-3 request with its lookup sets.
-    entry = {"input":raw,"context":store.put(folder.as_uri(),{"version":1,"input":raw,"values":{}}),
-             "lookups":store.put(folder.as_uri(),{"version":1,"input":raw,"sets":{"names":["EXAMPLE"],"ciks":["1"]}})}
-    scope = store.put(folder.as_uri(),{"version":3,"contract":store.put(folder.as_uri(),config),"artifacts":[entry]})
-    task = {"input":scope,"output":(folder / "name_count-reading.json").as_uri(),"checks":["source.output"]}
-    refs["name_count"] = source_read.execute(task,store)
-    assert source_read.verify({**task,"candidate":refs["name_count"]},store) == ({"source.output":True},[])
-    rules = bind(rules)
+rules = files.load(blueprints / "combine.yaml")
 for spec in [*rules["combine"]["groups"].values(),*rules["combine"]["tables"].values()]:
     spec["checks"] = {key:{"APPROVED_COMPANY_CAPTURE_RUN":"capture","APPROVED_CATALOG_CAPTURE_RUN":"catalog"}.get(value,value)
         for key,value in spec["checks"].items()}
@@ -1200,10 +1176,6 @@ row = artifact["tables"]["company"][0]
 assert row["forms"] == ["10-K","20-F","8-K"]
 assert row["tickers"] == ["A","B","C"]
 assert row["business_address"]["country"] == "GB" and row["business_address"]["street"] == "Raw"
-if with_name_count:
-    expected = {"name_count":raw["sha256"],"version":name_count["version"],"key":"EXAMPLE",**name_count["entries"]["EXAMPLE"],
-        "cascade":{"name_count":raw["sha256"],"version":name_count["cascade"]["version"],"lei":"L1","pass":"name and full address"}}
-    assert row["name_count"] == expected and "_name_key" not in row
 prepare = {"input":combined,"output":(folder / "mdm/manifest.json").as_uri(),"checks":["mdm.prepared"],
     "keys":{"table":"company","dataset":"sec.company.v1","policy":"0"*64,
         "consumer":"trial","batch_id":"composition","as_of":date}}
@@ -1212,217 +1184,29 @@ assert mdm_prepare.verify({**prepare,"candidate":prepared},store) == ({"mdm.prep
 batch = store.json(prepared)["batches"][0]
 assert json.loads((folder / "mdm" / batch["input"]["path"]).read_bytes()) == row
 print("installed Company raw combination and preparation passed")
-'''.replace('WITH_NAME_COUNT', repr(with_name_count)), cwd=root)
+''', cwd=root)
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == 'installed Company raw combination and preparation passed'
-
-
-def test_gleif_configured_mapping_merges_from_installed_bundle(installed, databases, tmp_path):
-    """Restricted PG16, installed native GLEIF fields, exact replay and lost ACK.
-
-    Bounded fixture qualification; retained release semantics remain in use.
-    This does not qualify the full captured Company/GLEIF population.
-    """
-    from sqlalchemy import create_engine
-    from edgar_warehouse.mdm.store import migrate, digest
-    from tests.support.fresh_mastering import cohort, FIXTURE, CHILD_LEI, PARENT_LEI
-
-    python, root = installed
-    name = f"gleif_installed_{uuid4().hex[:8]}"
-    with databases.admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-        conn.exec_driver_sql(f"CREATE DATABASE {name}")
-    admin = create_engine(databases.admin.url.set(database=name))
-    app = create_engine(admin.url.set(username="clean_application", password="test"))
-    try:
-        migrate(admin, application_role="clean_application")
-        policy, contracts, readings = cohort()
-        rows = [row for row in json.loads(FIXTURE.read_text())["gleif"]
-                if row["LEI"]["$"] in {CHILD_LEI, PARENT_LEI}]
-        assert len(rows) == 2
-        sec_records = [
-            {"source": "sec.company", "row": row}
-            for row in json.loads(FIXTURE.read_text())["sec"] if row["entity_type"] == "operating"
-        ] + [
-            {"source": "sec.submissions.person", "row": json.loads(line)}
-            for line in FIXTURE.with_name("person_raw.jsonl").read_text().splitlines() if line.strip()
-        ]
-        from edgar_warehouse.mdm.adapters import normalize
-        for record in sec_records:
-            if record["source"]=="sec.company":  # a Delaware business address, as SEC writes it
-                record["row"]["business_address"]={"street":"  Source Street  ","street2":None,"city":"City",
-                                                   "region":" de ","postal_code":"12345","country":"US"}
-                # Phase 1 (ticket 204) masters listed operating filers only; the pinned fixture states no tickers.
-                record["row"]["tickers"]={320193:["AAPL"],789019:["MSFT"]}[record["row"]["cik"]]
-        readings=[]
-        for record in sec_records:
-            row=record["row"];code=f"{record['source']}.v1"
-            readings.append(normalize(row,source_code=code,contract=contracts[code],policy=policy,
-                publication={"publication_key":f"offline-cohort/{row['cik']}@{digest(row)}",
-                             "revision":1,"artifact_sha256":digest(row),
-                             "member":"four_companies_v1.json","record_locator":str(row["cik"])}))
-        from tests.mdm.test_name_count import archive, configured, metadata
-        from edgar_warehouse.mdm import name_count
-        name_count_archive = archive(rows)
-        name_count_filers = [(f"{r['row']['cik']:010d}", r['row']['entity_name'], [])
-                         for r in sec_records if r['source'] == 'sec.company']
-        name_count_arguments = {"filers": name_count_filers,
-                            "sec_population": {"capture_run_id": "installed-name-count", "filers": len(name_count_filers)},
-                            "gleif_metadata": metadata(len(rows)),
-                            "gleif_sha256": hashlib.sha256(name_count_archive).hexdigest()}
-        # The checkout's name count over the same inputs; the installed bundle must write the same.
-        checkout_name_count = configured(name_count_filers, rows, population=name_count_arguments["sec_population"],
-                                     archive_sha256=name_count_arguments["gleif_sha256"])
-        done = _run(python, "-c", r'''
-import copy, hashlib, json, sys
-from pathlib import Path
-from uuid import uuid4
-from sqlalchemy import create_engine, text
-from edgar_warehouse.rules import files, source_engine
-from edgar_warehouse.mdm import adapters, sec_company
-from edgar_warehouse.mastering import merge, reads
-from edgar_warehouse.mastering.store import open_store
-from edgar_warehouse.mdm.store import digest
-from edgar_warehouse.workers import source_mapping
-body=json.load(sys.stdin)
-assert files.ROOT == files.BUNDLED
-source_engine.STEPS = {}
-engine=create_engine(body["dsn"])
-with engine.connect() as conn:
-    assert conn.scalar(text("SHOW server_version_num")) >= "160000"
-    assert conn.scalar(text("SELECT rolsuper FROM pg_roles WHERE rolname=current_user")) is False
-for member in ("level1","relationships","reporting_exceptions"):
-    mapping=files.mdm_contract("gleif",f"gleif.{member}.v1")["adapter"]
-    recipe=files.load(files.ROOT/"sources/gleif"/f"{member.replace('_','-')}-fields.yaml")
-    assert digest(mapping["reading"]) == digest(recipe)
-    assert isinstance(source_mapping.project_record({},mapping["reading"],column="fields"),dict)
-# Rebuild SEC assertions from raw fixture documents inside the installation.
-# Host-built assertions are only an oracle, never publication input.
-sec_readings=[]
-for record in body["sec_records"]:
-    source=record["source"]; row=record["row"]; code=f"{source}.v1"
-    contract=files.mdm_contract(source,code)
-    recipe=files.load(files.ROOT/"sources"/source/"fields.yaml")
-    assert digest(contract["adapter"]["reading"])==digest(recipe)
-    publication={"publication_key":f"offline-cohort/{row['cik']}@{digest(row)}",
-                 "revision":1,"artifact_sha256":digest(row),
-                 "member":"four_companies_v1.json","record_locator":str(row["cik"])}
-    kwargs={"source_code":code,"publication":publication,"policy":files.policy()}
-    sec_readings.append(adapters.normalize(row,contract=contract,**kwargs))
-assert digest(sec_readings)==digest(body["readings"])
-contract=files.mdm_contract("gleif","gleif.level1.v1")
-assertions=[]
-for row in body["rows"]:
-    publication={"publication_key":"installed-gleif-fixture","revision":1,
-                 "artifact_sha256":digest(row),"member":"level1","effective_at":None}
-    kwargs={"source_code":"gleif.level1.v1","publication":publication}
-    assertions.append(adapters.normalize(row,contract=contract,**kwargs))
-db=open_store(engine)
-def merged(records):
-    by_kind={}
-    for record in records: by_kind.setdefault(record["kind"],[]).append(record)
-    return [merge.merge_file(db,merge.Settings(files.policy(),"installed-gleif-qualification",kind,body["as_of"]),found)
-            for kind,found in sorted(by_kind.items())]
-first_records=[*sec_readings,*assertions]
-merged(first_records)
-counts=reads.counts(db)["masters"]
-assert counts=={"company":2,"person":2},counts
-# The two GLEIF records wait for a binding: no approved rule joins them to SEC.
-assert not db.bound([row["subject"] for row in assertions])
-# Build a fresh name count inside the installation and carry its exact evidence
-# through actual SEC normalization, Merge Stage and publication/recovery.
-import io, base64
-import zipfile
-from edgar_warehouse.mdm import name_count
-from edgar_warehouse.workers.source_traversal import Traversal
-assert not any(hasattr(name_count,name) for name in ("_text","_other_names","sec_keys","build","cascade_entity"))
-packed=base64.b64decode(body["name_count_archive"],validate=True)
-name_count_arguments=body["name_count_arguments"]
-assert hashlib.sha256(packed).hexdigest()==name_count_arguments["gleif_sha256"]
-# The Golden Copy through the installed configured complete reading, folded as `mdm name-count` folds it.
-held,wanted=name_count._sec_population(name_count_arguments["filers"])
-traversal=Traversal(files.load(files.ROOT/"sources/gleif/name-count-complete-stream.yaml"),archive_policy="configured")
-tables=[]
-traversal.scan(io.BytesIO(packed),lookups={"wanted":sorted(wanted)},
-    context={"publication_count":name_count_arguments["gleif_metadata"]["record_count"]},
-    on_reading=lambda reading,_:tables.append(reading.tables))
-meta=name_count_arguments["gleif_metadata"]
-counted=name_count.from_readings(sec_population=name_count_arguments["sec_population"],
-    gleif={"archive_sha256":name_count_arguments["gleif_sha256"],"content_date":meta["content_date"],
-           "file_content":meta["file_content"],"record_count":meta["record_count"]},
-    held=held,wanted=wanted,readings=tables)
-expected=body["checkout_name_count"]
-assert counted==expected
-name_count_assertions=[]
-for record in body["sec_records"]:
-    if record["source"]!="sec.company":continue
-    row=copy.deepcopy(record["row"])
-    row["name_count"]=name_count.entry(counted,row["entity_name"],name_count_digest=digest(counted))
-    old_row=copy.deepcopy(row)
-    old_row["name_count"]=body["checkout_entries"][str(row["cik"])]
-    kwargs={"source_code":"sec.company.v1","contract":files.mdm_contract("sec.company","sec.company.v1"),
-            "policy":files.policy(),"publication":{"publication_key":f"installed-name-count/{row['cik']}","revision":2,
-            "artifact_sha256":digest(row),"member":"four_companies_v1.json","record_locator":str(row["cik"])}}
-    actual=adapters.normalize(row,**kwargs)
-    assert digest(actual)==digest(adapters.normalize(old_row,**kwargs))
-    name_count_assertions.append(actual)
-merged(name_count_assertions)
-for assertion in name_count_assertions:
-    (stored,)=[json.loads(row[0]) for row in db.rows("select body from mastering_record where assertion_id=%s",[assertion["assertion_id"]])]
-    assert digest(stored)==digest(assertion)
-    assert stored["provenance"]["matching"]["name_count"]["name_count"]==digest(counted)
-assert all(done["skipped"] for done in merged(first_records)+merged(name_count_assertions))  # a second delivery changes nothing
-assert sum(reads.counts(db)["masters"].values())==4
-for sql in ("delete from mastering_decision","update mastering_decision set operation='x'","drop table mastering_master"):
-    try:
-        db.rows(sql)
-    except Exception as error: assert "denied" in str(error).lower() or "owner" in str(error).lower(), error
-    else: raise AssertionError("restricted operation accepted")
-    db.rollback()
-pins={str(path):hashlib.sha256(Path(path).read_bytes()).hexdigest()
-      for path in [*source_engine.runtime_files(),Path(source_mapping.__file__),Path(adapters.__file__),
-                   files.ROOT/"sources/gleif/source.yaml",
-                   files.ROOT/"sources/sec.company/source.yaml",
-                   files.ROOT/"sources/sec.submissions.person/source.yaml",Path(sec_company.__file__),
-                   Path(name_count.__file__),
-                   files.ROOT/"sources/gleif/name-count-complete-stream.yaml",
-                   files.ROOT/"sources/sec.company/name-count-filer.yaml"]}
-print(json.dumps({"pins":pins,"counts":counts,
-                  "installed_gleif_mapping":True,"installed_sec_mapping":True,"installed_name_count_caller":True,"name_count_digest":digest(counted),"full_population":False}))
-engine.dispose()
-''', cwd=root, document={"dsn": app.url.render_as_string(hide_password=False),
-                         "readings": readings, "rows": rows, "sec_records": sec_records,
-                         "name_count_arguments": name_count_arguments,
-                         "checkout_name_count": checkout_name_count,
-                         "name_count_archive": base64.b64encode(name_count_archive).decode(),
-                         "checkout_entries": {str(r['row']['cik']): name_count.entry(checkout_name_count,r['row']['entity_name'],name_count_digest=digest(checkout_name_count))
-                                                for r in sec_records if r['source']=='sec.company'}, "leis": [CHILD_LEI, PARENT_LEI], "as_of": "2026-01-01T00:00:00+00:00"})
-        assert done.returncode == 0, done.stderr
-        proof = json.loads(done.stdout)
-        assert proof["installed_gleif_mapping"] and proof["installed_sec_mapping"] and proof["installed_name_count_caller"]
-        (root / "installed-gleif-mapping-proof.json").write_text(json.dumps(proof, indent=2)+"\n")
-    finally:
-        admin.dispose()
-        app.dispose()
 
 
 def test_active_company_preparation_caller_runs_from_installed_bundle(installed, tmp_path):
     """The installed CLI (`mdm prepare-capture`) writes the Company `mastering` target's input manifest from a raw capture,
     as the checkout does, and the installed Bookkeeping control freezes it against the installed
     target; neither can use the checkout (Issue 20 slice 20c)."""
-    from tests.mdm.test_mdm_company_preparation import CATALOG_ROWS, PINS, name_count_capture, documents, prepare
+    from tests.mdm.test_mdm_company_preparation import CATALOG_ROWS, PINS, company_capture, documents, prepare
     from tests.support.sec_capture import CATALOG
     python, root = installed
-    capture = name_count_capture(tmp_path, documents(), CATALOG_ROWS)
+    capture = company_capture(tmp_path, documents(), CATALOG_ROWS)
     # --all: this test has no Change Journal; it names every document, as the checkout's does (ticket 22).
     original, _ = prepare(tmp_path, capture, output="checkout", force=True)
-    folder, population, name_count = capture
+    folder, population = capture
     listed = tmp_path / "documents-checkout.json"
     arguments = ["mdm", "prepare-capture", "--source", "sec.company", "--capture", str(folder),
                  "--documents", str(listed), "--capture-run", PINS["capture_run"],
                  "--output", str(tmp_path / "pinned"), "--as-of", PINS["as_of"], "--revision", str(PINS["revision"]),
                  "--fact", f"capture_run={PINS['capture_run']}", "--fact", f"catalog_run={PINS['catalog_run']}",
                  "--fact", f"observed_at={PINS['observed_at']}", "--fact", "load_mode=default",
-                 "--file", f"name_count={name_count}", "--all"]
+                 "--all"]
     run = _run(python, "-c", """
 import sys
 from edgar_warehouse.rules import source_engine
@@ -1449,7 +1233,7 @@ items = worklist(Artifacts().json(json.load(sys.stdin)["manifest"]), config)
 print(json.dumps(sorted({i["step"] for i in items})))
 """, cwd=root, document=report)
     assert frozen.returncode == 0, frozen.stderr
-    assert json.loads(frozen.stdout) == ["catalog", "combine", "keys", "main", "merge", "name_count", "processed", "records"]
+    assert json.loads(frozen.stdout) == ["catalog", "combine", "main", "merge", "processed", "records"]
     repeated = _run(python,"-m","edgar_warehouse.cli",*arguments,cwd=root)
     assert repeated.returncode == 0,repeated.stderr
     assert json.loads(repeated.stdout)==report
@@ -1459,180 +1243,6 @@ from urllib.parse import urlparse
 from edgar_warehouse.control_contract import canonical
 from edgar_warehouse.workers import source_read
 from tests.engine.test_artifact_context import task, VALUES
-
-def _name_count_derived(tmp_path):
-    store, work = task(tmp_path)
-    manifest = store.json(work["input"])
-    entry = manifest["artifacts"][0]
-    source = entry["input"]
-    metadata = {**VALUES, "source_uri": source["uri"], "source_sha": source["sha256"], "full": True}
-    producer_raw = store.put(tmp_path.as_uri(), {"capture": "pinned"})
-    producer = store.put(tmp_path.as_uri(), {"version": 1, "artifacts": [{
-        "input": producer_raw, "tables": {"metadata": [metadata]}, "deferred": []}]})
-    context = {"version": 2, "input": source, "reading": producer, "table": "metadata",
-               "columns": {key: key for key in VALUES}, "checks": {
-                   "source_uri": {"input": "uri"}, "source_sha": {"input": "sha256"}, "full": True},
-               "max_rows": 100, "max_bytes": 1024**2}
-    return store, work, manifest, context
-
-
-def _name_count_bind(store, root, work, manifest, context):
-    manifest = copy.deepcopy(manifest)
-    manifest["artifacts"][0]["context"] = store.put(root.as_uri(), context)
-    return {**work, "input": store.put(root.as_uri(), manifest)}
-
-
-def test_name_count_actual_worker_derived_context_retry_and_dependency_verification(tmp_path):
-    store, work, manifest, context = _name_count_derived(tmp_path)
-    original = source_read.execute(work, store)
-    work = _name_count_bind(store, tmp_path, {**work, "output": (tmp_path / "derived.json").as_uri()}, manifest, context)
-    candidate = source_read.execute(work, store)
-    assert source_read.execute(work, store) == candidate
-    assert source_read.verify({**work, "candidate": candidate}, store) == ({"source.output": True}, [])
-    actual = store.json(candidate)["artifacts"][0]
-    assert actual["tables"] == store.json(original)["artifacts"][0]["tables"]
-    assert actual["input"] == context["input"]
-    assert store.json(actual["context"])["reading"] == context["reading"]
-    # Mutate only the upstream producer after publication. The target source,
-    # bound context receipt and candidate remain unchanged; verifier still fails.
-    Path(urlparse(context["reading"]["uri"]).path).write_bytes(b"{}")
-    with pytest.raises(ValueError, match="hash mismatch"):
-        source_read.verify({**work, "candidate": candidate}, store)
-
-
-@pytest.mark.parametrize("fault", ["input_uri", "input_sha", "missing_uri_check", "missing_sha_check",
-    "bad_input_operand", "boolean_check", "missing_column", "structured_value", "duplicate_row",
-    "empty_rows", "missing_table", "deferred", "unknown_field", "bool_bound", "bytes_bound",
-    "row_bound", "empty_columns", "large_value", "float_check", "wrong_version", "column_mismatch",
-    "column_missing", "column_structured"])
-def test_name_count_derivation_faults_refuse_before_target_open_or_output(tmp_path, fault):
-    store, work, manifest, context = _name_count_derived(tmp_path)
-    producer = store.json(context["reading"])
-    artifact = producer["artifacts"][0]
-    row = artifact["tables"]["metadata"][0]
-    if fault == "input_uri": row["source_uri"] += ".other"
-    if fault == "input_sha": row["source_sha"] = "0"*64
-    if fault == "missing_uri_check": del context["checks"]["source_uri"]
-    if fault == "missing_sha_check": del context["checks"]["source_sha"]
-    if fault == "bad_input_operand": context["checks"]["source_sha"] = {"input": "other"}
-    if fault == "boolean_check": row["full"] = 1
-    if fault == "missing_column": del row["cik"]
-    if fault == "structured_value": row["cik"] = {"id": 7}
-    if fault == "duplicate_row": artifact["tables"]["metadata"].append(copy.deepcopy(row))
-    if fault == "empty_rows": artifact["tables"]["metadata"] = []
-    if fault == "missing_table": context["table"] = "missing"
-    if fault == "deferred": artifact["deferred"] = [{"unresolved": True}]
-    if fault == "unknown_field": context["values"] = VALUES
-    if fault == "bool_bound": context["max_rows"] = True
-    if fault == "bytes_bound": context["max_bytes"] = 1
-    if fault == "row_bound": context["max_rows"] = 1; artifact["tables"]["unused"] = [{"a": 1}]
-    if fault == "empty_columns": context["columns"] = {}
-    if fault == "large_value": row["sync_run_id"] = "é" * 20000
-    if fault == "float_check": context["checks"]["full"] = 1.0
-    if fault == "wrong_version": context["version"] = True
-    if fault.startswith("column_"):
-        context["checks"]["full"] = {"column": "comparison"}
-        if fault == "column_mismatch": row["comparison"] = False
-        if fault == "column_structured": row["comparison"] = {}; row["full"] = {}
-    context["reading"] = store.put(tmp_path.as_uri(), producer)
-    work = _name_count_bind(store, tmp_path, work, manifest, context)
-    reads, verified = [], store.verified
-    def observed(ref, **bounds):
-        reads.append(ref)
-        return verified(ref, **bounds)
-    store.verified = observed
-    with pytest.raises(ValueError):
-        source_read.execute(work, store)
-    assert context["input"] not in reads
-    assert not Path(urlparse(work["output"]).path).exists()
-
-
-def test_name_count_selected_metadata_prefix_needs_late_partition_authentication(tmp_path):
-    store, work, manifest, context = _name_count_derived(tmp_path)
-    producer = store.json(context["reading"])
-    metadata = producer["artifacts"][0]["tables"]["metadata"]
-    chunks = [{"version": 1, "tables": {"metadata": metadata, "unused": []}, "deferred": []},
-              {"version": 1, "tables": {"metadata": [], "unused": [{"a": 1}]}, "deferred": []}]
-    parts = []
-    for index, chunk in enumerate(chunks):
-        ref = store.put(tmp_path.as_uri(), chunk)
-        parts.append({"receipt": ref, "bytes": len(canonical(chunk).encode()),
-                      "first_ordinal": index+1, "record_count": 1})
-    context["reading"] = store.put(tmp_path.as_uri(), {"version": 2, "contract": work["input"],
-        "artifacts": [{"input": producer["artifacts"][0]["input"], "table_names": ["metadata", "unused"],
-                       "record_count": 2, "expanded_bytes": 1000, "partitions": parts}]})
-    work = _name_count_bind(store, tmp_path, work, manifest, context)
-    candidate = source_read.execute(work, store)
-    assert source_read.verify({**work, "candidate": candidate}, store) == ({"source.output": True}, [])
-    Path(urlparse(parts[1]["receipt"]["uri"]).path).write_bytes(b"{}")
-    with pytest.raises(ValueError, match="hash mismatch"):
-        source_read.verify({**work, "candidate": candidate}, store)
-    second = {**work, "output": (tmp_path / "second.json").as_uri()}
-    with pytest.raises(ValueError, match="hash mismatch"):
-        source_read.execute(second, store)
-    assert not (tmp_path / "second.json").exists()
-
-
-def test_name_count_producer_columns_compare_exact_scalars_with_full_identity(tmp_path):
-    store, work, manifest, context = _name_count_derived(tmp_path)
-    context["checks"]["cik"] = {"column": "cik"}
-    work = _name_count_bind(store, tmp_path, work, manifest, context)
-    candidate = source_read.execute(work, store)
-    assert source_read.verify({**work, "candidate": candidate}, store) == ({"source.output": True}, [])
-
-
-
-
-@pytest.mark.parametrize("fault", [None, "late_corruption", "duplicate_bound", "wrong_type", "missing_column", "deferred", "missing_table", "bool_bound", "input_mismatch", "bytes_bound", "rows_bound"])
-def test_name_count_derived_wanted_scope_exhausts_authenticated_inputs_before_source(tmp_path, fault):
-    from edgar_warehouse.workers import source_read
-    from tests.engine.test_source_lookup_receipts import lookup_task
-    store = Artifacts()
-    work, manifest = lookup_task(tmp_path, store)
-    entry = manifest["artifacts"][0]
-    upstream = store.put(tmp_path.as_uri(), {"captured": "complete"})
-    rows = [{"key": "A"}, {"key": "B"}]
-    if fault == "duplicate_bound": rows = [{"key": "A"}]*4
-    if fault == "wrong_type": rows[0]["key"] = True
-    if fault == "missing_column": rows[0] = {}
-    chunks = [{"version": 1, "tables": {"keys": rows}, "deferred": []},
-              {"version": 1, "tables": {"keys": []}, "deferred": []}]
-    if fault == "deferred": chunks[1]["deferred"] = [{"unresolved": True}]
-    parts = []
-    for index, chunk in enumerate(chunks):
-        receipt = store.put(tmp_path.as_uri(), chunk)
-        parts.append({"receipt": receipt, "bytes": len(canonical(chunk).encode()),
-                      "first_ordinal": index+1, "record_count": 1})
-    reading = store.put(tmp_path.as_uri(), {"version": 2, "contract": work["input"], "artifacts": [{
-        "input": upstream, "record_count": 2, "expanded_bytes": 100,
-        "table_names": ["keys"], "partitions": parts}]})
-    spec = {"readings": [reading], "table": "keys", "column": "key", "max_input_bytes": 1024**2, "max_input_rows": 100}
-    if fault == "missing_table": spec["table"] = "absent"
-    if fault == "bool_bound": spec["max_input_rows"] = True
-    if fault == "bytes_bound": spec["max_input_bytes"] = 1
-    if fault == "rows_bound": spec["max_input_rows"] = 1
-    bound = {"version": 2, "input": entry["input"], "sets": {"wanted": spec}}
-    if fault == "input_mismatch": bound["input"] = upstream
-    entry["lookups"] = store.put(tmp_path.as_uri(), bound)
-    work["input"] = store.put(tmp_path.as_uri(), manifest)
-    if fault == "late_corruption": Path(urlparse(parts[1]["receipt"]["uri"]).path).write_bytes(b"{}")
-    if fault:
-        opened, verified_stream = [], store.verified_stream
-        def observed(ref, **bounds):
-            opened.append(ref)
-            return verified_stream(ref, **bounds)
-        store.verified_stream = observed
-        with pytest.raises(ValueError): source_read.execute(work, store)
-        assert entry["input"] not in opened
-        assert not (tmp_path / "reading.json").exists()
-    else:
-        result = source_read.execute(work, store)
-        assert source_read.verify({**work, "candidate": result}, store) == ({"source.output": True}, [])
-        assert source_read.execute(work, store) == result
-        from edgar_warehouse.workers import source_readings
-        body, _ = source_readings.load(result, store, max_bytes=1024**2, max_rows=100, allow_lookup_receipts=True)
-        assert [row["n"] for row in body["artifacts"][0]["tables"]["rows"]] == ["A", "B", "A"]
-        assert store.json(body["artifacts"][0]["lookups"])["sets"]["wanted"]["readings"] == [reading]
 
 
 def test_complete_name_count_projection_keeps_global_duplicates_and_pair_scoped_last_updates():
