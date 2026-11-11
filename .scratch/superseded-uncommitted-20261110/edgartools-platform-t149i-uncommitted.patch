@@ -1,0 +1,455 @@
+diff --git a/crates/source-contract/src/context.rs b/crates/source-contract/src/context.rs
+index 7a8b9b84..1ebd3809 100644
+--- a/crates/source-contract/src/context.rs
++++ b/crates/source-contract/src/context.rs
+@@ -9,7 +9,7 @@ pub(crate) fn validate(read: &Value) -> Result<(), String> {
+             let name = name.as_str().filter(|s| !s.is_empty() && s.len() <= 64 && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+                 .ok_or("context names use at most 64 letters, digits or underscores")?;
+             let args = spec.as_mapping().ok_or(format!("context {name} must declare its type"))?;
+-            if args.keys().any(|k| !matches!(k.as_str(), Some("type" | "nullable" | "max_bytes" | "sgml_header"))) {
++            if args.keys().any(|k| !matches!(k.as_str(), Some("type" | "nullable" | "max_bytes" | "sgml_header" | "zip_json"))) {
+                 return Err(format!("context {name} has an unknown argument"));
+             }
+             if let Some(line) = spec.get("sgml_header") {
+@@ -19,6 +19,16 @@ pub(crate) fn validate(read: &Value) -> Result<(), String> {
+                     return Err(format!("context {name} sgml_header names a header line (text, without its colon) of an SGML container"));
+                 }
+             }
++            if let Some(source) = spec.get("zip_json") {
++                // Filled from a JSON member of the ZIP the page came in (a capture's metadata), never by the caller.
++                let member = setting(source, "member").filter(|m| !m.is_empty() && m.len() <= 128);
++                let path = setting(source, "path").filter(|p| !p.is_empty() && p.len() <= 128
++                    && p.split('.').all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')));
++                if setting(read, "container") != Some("zip") || setting(spec, "type") != Some("text")
++                    || source.as_mapping().is_none_or(|m| m.len() != 2) || member.is_none() || path.is_none() {
++                    return Err(format!("context {name} zip_json names a member and a dotted path of a zip container (text)"));
++                }
++            }
+             if !matches!(setting(spec, "type"), Some("text" | "integer" | "boolean")) {
+                 return Err(format!("context {name} type is text, integer or boolean"));
+             }
+@@ -81,13 +91,49 @@ pub(crate) fn from_header(read: &Value) -> Vec<(String, String)> {
+         .collect()
+ }
+ 
+-/// The caller's facts: every declared field but those a header fills.
++/// The context fields a ZIP's JSON member fills: (field, member, dotted path).
++pub(crate) fn from_zip(read: &Value) -> Vec<(String, String, String)> {
++    read.get("context").and_then(Value::as_mapping).into_iter().flatten()
++        .filter_map(|(name, spec)| {
++            let source = spec.get("zip_json")?;
++            Some((name.as_str()?.to_string(), setting(source, "member")?.to_string(), setting(source, "path")?.to_string()))
++        })
++        .collect()
++}
++
++/// The caller's facts: every declared field but those a header or a zip member fills.
+ pub(crate) fn check(read: &Value, values: &Row) -> Result<(), Rejected> {
+     let filled = from_header(read);
+-    if filled.iter().any(|(name, _)| values.contains_key(name)) {
+-        return Err(Rejected::new("invalid_context", "a header field is filled from the submission, not by the caller"));
++    let zipped = from_zip(read);
++    if filled.iter().any(|(name, _)| values.contains_key(name)) || zipped.iter().any(|(name, _, _)| values.contains_key(name)) {
++        return Err(Rejected::new("invalid_context", "a header or zip field is filled from the submission, not by the caller"));
+     }
+-    typed(read, values, filled.len())
++    typed(read, values, filled.len() + zipped.len())
++}
++
++/// The caller's facts with the fields a ZIP's JSON member fills, each from the text at its dotted path.
++/// A member that is missing, not JSON, or lacks the path, or a value that is not text of at most 4096
++/// bytes, is the archive's fault (`zip_json`), not the caller's.
++pub(crate) fn fill_from_zip(read: &Value, context: &Row, bytes: &[u8], max_member_bytes: u64) -> Result<Row, Rejected> {
++    let mut filled = context.clone();
++    for (name, member, path) in from_zip(read) {
++        let raw = crate::formats::zip_member(bytes, max_member_bytes.min(1 << 20), Some(&member))?;
++        let mut node: serde_json::Value = serde_json::from_slice(&raw)
++            .map_err(|e| Rejected::new("zip_json", format!("{member} is not JSON: {e}")))?;
++        for part in path.split('.') {
++            node = match node {
++                serde_json::Value::Object(mut map) => map.remove(part).unwrap_or(serde_json::Value::Null),
++                _ => serde_json::Value::Null,
++            };
++        }
++        let serde_json::Value::String(text) = node else {
++            return Err(Rejected::new("zip_json", format!("{member} holds no text at {path}")));
++        };
++        if text.len() > 4096 { return Err(Rejected::new("zip_json", format!("{member} {path} is over 4096 bytes"))); }
++        filled.insert(name, Val::Str(text));
++    }
++    typed(read, &filled, from_header(read).len())?;
++    Ok(filled)
+ }
+ 
+ /// The caller's facts with the fields an SGML header fills, each from the
+diff --git a/crates/source-contract/src/html.rs b/crates/source-contract/src/html.rs
+index 7c1019f4..c74b1cae 100644
+--- a/crates/source-contract/src/html.rs
++++ b/crates/source-contract/src/html.rs
+@@ -243,6 +243,14 @@ pub fn html(bytes: &[u8], max_records: usize) -> Result<El, Rejected> {
+     // The blocks just above a table say what it is (a statement's title, its unit): each row carries the
+     // three nearest, `@above` the nearest.
+     let mut above: Vec<String> = Vec::new();
++    // And the first two rows of its table, whose cells (joined by " | ") hold the column headings.
++    let mut heads: std::collections::HashMap<usize, [String; 2]> = std::collections::HashMap::new();
++    for record in &walk.records {
++        if let Some((table, number @ 1..=2)) = record.table {
++            let cells: Vec<&str> = record.texts.iter().map(String::as_str).filter(|cell| !cell.is_empty()).collect();
++            heads.entry(table).or_default()[number - 1] = tail(&cells.join(" | "), MAX_ABOVE);
++        }
++    }
+     for record in walk.records {
+         match record.table {
+             None => {
+@@ -258,6 +266,15 @@ pub fn html(bytes: &[u8], max_records: usize) -> Result<El, Rejected> {
+                 for (name, text) in ["above", "above2", "above3"].iter().zip(above.iter().rev()) {
+                     row.attrs.insert(format!("@{name}"), text.clone());
+                 }
++                for (name, text) in ["head", "head2"].iter().zip(heads.get(&table).into_iter().flatten()) {
++                    if !text.is_empty() {
++                        row.attrs.insert(format!("@{name}"), text.clone());
++                    }
++                }
++                // All the row's filled cells in one text, " | " between them, so a number can be found by
++                // its place among the cells whatever symbol cells sit between.
++                let filled: Vec<&str> = record.texts.iter().map(String::as_str).filter(|cell| !cell.is_empty()).collect();
++                row.attrs.insert("@cells".into(), filled.join(" | "));
+                 row.text = None;
+                 for (position, cell) in record.texts.into_iter().enumerate() {
+                     row.add_child(format!("c{}", position + 1), El { text: Some(cell), ..El::default() });
+@@ -336,6 +353,10 @@ mod tests {
+         let named = |row: &El| ["@above", "@above2", "@above3"].map(|k| row.attrs.get(k).cloned().unwrap_or_default());
+         assert_eq!(named(rows[0]), ["(in thousands)", "BALANCE SHEETS", "Invented Co."]);
+         assert_eq!(named(rows[1]), ["after", "(in thousands)", "BALANCE SHEETS"]);
++        assert_eq!(rows[0].attrs["@cells"], "Total assets | 5");
++        // The table's first two rows say its column headings, on every row of the table.
++        let heads = [rows[0].attrs.get("@head"), rows[0].attrs.get("@head2")];
++        assert_eq!(heads, [Some(&"Total assets | 5".to_string()), None]);
+         let long = format!("<p>{}</p><table><tr><td>x</td></tr></table>", "é".repeat(400));
+         let cut = html(long.as_bytes(), 100).unwrap();
+         let above = &all(&cut, "row")[0].attrs["@above"];
+diff --git a/crates/source-contract/src/lib.rs b/crates/source-contract/src/lib.rs
+index 10cdd88c..1cc3baf2 100644
+--- a/crates/source-contract/src/lib.rs
++++ b/crates/source-contract/src/lib.rs
+@@ -128,7 +128,7 @@ pub struct Reading {
+ }
+ 
+ const FORMATS: [&str; 6] = ["xml", "json", "jsonl", "csv", "tsv", "html"];
+-const PRIMITIVES: [&str; 26] = ["ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object", "coalesce", "choose", "test", "equal", "overlap", "join", "member", "member_value", "project", "recover", "transform", "sequence", "concat", "pluck"];
++const PRIMITIVES: [&str; 28] = ["found", "first_found", "ordinal", "text", "number", "integer", "date", "const", "steps", "custom", "context", "lookup", "value", "object", "coalesce", "choose", "test", "equal", "overlap", "join", "member", "member_value", "project", "recover", "transform", "sequence", "concat", "pluck"];
+ const CHECKS: [&str; 7] = ["required", "in_set", "in_lookup", "absent", "count", "before", "lei"];
+ 
+ struct Limits {
+@@ -197,7 +197,7 @@ impl Engine {
+         fn collect(expr: &Value, recipes: &mut Vec<text_transform::Recipe>,
+                    unique: &mut std::collections::HashMap<Value, usize>,
+                    indices: &mut std::collections::HashMap<usize, usize>) -> Result<(), Rejected> {
+-            if let Some(transforms) = expr.get("text").or_else(|| expr.get("transform")).and_then(|args| args.get("transforms")) {
++            if let Some(transforms) = expr.get("text").or_else(|| expr.get("transform")).or_else(|| expr.get("found")).or_else(|| expr.get("first_found")).and_then(|args| args.get("transforms")) {
+                 let index = if let Some(index) = unique.get(transforms) { *index } else {
+                     let mut operations = 0;
+                     let mut regexes = 0;
+@@ -206,8 +206,8 @@ impl Engine {
+                         operations += count;
+                         regexes += regex_count;
+                     }
+-                    if unique.len() >= 128 || operations > 1024 || regexes > 32 {
+-                        return Err(contract_error("text transforms contract exceeds 128 recipes, 1024 operations or 32 regexes"));
++                    if unique.len() >= 128 || operations > 1024 || regexes > 128 {
++                        return Err(contract_error("text transforms contract exceeds 128 recipes, 1024 operations or 128 regexes"));
+                     }
+                     let index = recipes.len();
+                     recipes.push(text_transform::Recipe::compile(transforms).map_err(contract_error)?);
+@@ -253,7 +253,11 @@ impl Engine {
+             return Err(Rejected::new("limit_exceeded", format!("the artifact is over {} bytes", self.limits.max_bytes)));
+         }
+         let (member, filled) = match setting(&self.read, "container") {
+-            Some("zip") => (formats::zip_member(bytes, self.limits.max_member_bytes, setting(&self.read, "member"))?, None),
++            Some("zip") => {
++                let member = formats::zip_member(bytes, self.limits.max_member_bytes, setting(&self.read, "member"))?;
++                let zipped = !context::from_zip(&self.read).is_empty();
++                (member, if zipped { Some(context::fill_from_zip(&self.read, context, bytes, self.limits.max_member_bytes)?) } else { None })
++            }
+             Some("sgml") => {
+                 let (xml, header) = formats::sgml_document(bytes, self.limits.max_member_bytes, setting(&self.read, "member"))?;
+                 (xml, Some(context::fill_from_header(&self.read, context, &header)?))
+@@ -742,6 +746,17 @@ fn validate_expr(expr: &Value, steps: &Steps) -> Result<(), String> {
+                 validate_expr(input, steps)?;
+             }
+         }
++        "found" | "first_found" => {
++            let map = args.as_mapping().ok_or(format!("{name} takes a mapping"))?;
++            let allowed: &[&str] = if name == "found" { &["path", "from", "transforms"] } else { &["path", "from", "transforms", "within"] };
++            if map.keys().any(|k| !k.as_str().is_some_and(|k| allowed.contains(&k))) { return Err(format!("{name} has an unknown argument")); }
++            if args.get("from").is_some_and(|v| !matches!(v.as_str(), Some("document" | "item"))) { return Err(format!("{name} from is document or item")); }
++            check_path(setting(args, "path").ok_or(format!("{name} names no path"))?)?;
++            if args.get("transforms").and_then(Value::as_sequence).is_none() { return Err(format!("{name} requires transforms")); }
++            if args.get("within").is_some_and(|v| !v.as_u64().is_some_and(|n| (1..=10_000).contains(&n))) {
++                return Err("first_found within is 1 to 10000".into());
++            }
++        }
+         "text" => {
+             validate_coerce(args)?;
+             if args.get("case").is_some_and(|v| !matches!(v.as_str(), Some("upper" | "lower" | "preserve"))) {
+@@ -1333,6 +1348,34 @@ fn eval(engine: &Engine, context: &Row, lookups: &Lookups, document: &El, item:
+             lookup_sets::member_value(lookups, setting(args,"lookup").unwrap(), &key, setting(args,"on_many").unwrap())
+         }
+         "ordinal" => Ok(Val::Int(ordinal)),
++        // Whether the text at a path, run through the transforms, is not empty.
++        "found" => {
++            let recipe = engine.text_recipe(&args["transforms"]);
++            Ok(Val::Bool(match text_at(scope(document, item, args), args)? {
++                Some(text) => !recipe.apply(text.trim().to_string())?.is_empty(),
++                None => false,
++            }))
++        }
++        // The first nonempty result of the transforms over the texts at a path, in order (at most `within`
++        // of them): one value from many blocks of a page.
++        "first_found" => {
++            let recipe = engine.text_recipe(&args["transforms"]);
++            let within = args.get("within").and_then(Value::as_u64).unwrap_or(10_000) as usize;
++            let start = scope(document, item, args);
++            let path = setting(args, "path").unwrap_or_default();
++            let found = lookup(start, path)?;
++            let texts: Vec<&str> = match &found {
++                Found::List(rows) => rows.iter().filter_map(|el| el.text.as_deref()).collect(),
++                Found::El(el) => el.text.as_deref().into_iter().collect(),
++                Found::Text(text, _, _) => vec![text.as_str()],
++                Found::Missing => Vec::new(),
++            };
++            for text in texts.into_iter().take(within) {
++                let result = recipe.apply(text.trim().to_string())?;
++                if !result.is_empty() { return Ok(Val::Str(result)); }
++            }
++            Ok(Val::Null)
++        }
+         "test" => predicate::read(if setting(args, "from") == Some("document") { document } else { item }, args),
+         "context" => Ok(context.get(setting(args, "name").unwrap()).unwrap().clone()),
+         "const" => Ok(yaml_val(args.get("value"))),
+diff --git a/crates/source-contract/src/text_transform.rs b/crates/source-contract/src/text_transform.rs
+index 1e2c45b0..4d20b6b3 100644
+--- a/crates/source-contract/src/text_transform.rs
++++ b/crates/source-contract/src/text_transform.rs
+@@ -16,6 +16,7 @@ enum Operation {
+     Trim,
+     Replace(String, String),
+     RegexReplace(Regex, String),
++    RegexExtract(Regex, usize),
+     Pad(String, String),
+     RemovePrefix(String),
+     Lines(Recipe),
+@@ -29,13 +30,13 @@ pub(crate) fn cost(value: &Value) -> (usize, usize) {
+     let mut result = (0, 0);
+     for op in value.as_sequence().into_iter().flatten() {
+         result.0 += 1;
+-        result.1 += usize::from(op.get("regex_replace").is_some());
++        result.1 += usize::from(op.get("regex_replace").is_some() || op.get("regex_extract").is_some());
+         if let Some(inner) = op.get("lines") {
+             // Nested lines are rejected by compile. Inspect one bounded level
+             // here rather than recursively visiting malformed recipes.
+             if let Some(ops) = inner.as_sequence() {
+                 result.0 += ops.len();
+-                result.1 += ops.iter().filter(|op| op.get("regex_replace").is_some()).count();
++                result.1 += ops.iter().filter(|op| op.get("regex_replace").is_some() || op.get("regex_extract").is_some()).count();
+             }
+         }
+     }
+@@ -95,6 +96,17 @@ impl Recipe {
+                         .nest_limit(32).build().map_err(|e| format!("text transform regex: {e}"))?;
+                     Operation::RegexReplace(regex, replacement)
+                 }
++                Some("regex_extract") => {
++                    let map = args.as_mapping().filter(|m| m.len() == 2)
++                        .ok_or("regex_extract requires exactly pattern and group")?;
++                    let pattern = text(map.get(Value::String("pattern".into())).ok_or("regex_extract requires a pattern")?)?;
++                    let group = map.get(Value::String("group".into())).and_then(Value::as_u64)
++                        .filter(|group| *group <= 32).ok_or("regex_extract group is a capture number from 0 to 32")? as usize;
++                    let regex = RegexBuilder::new(&pattern).size_limit(MAX_TEXT).dfa_size_limit(MAX_TEXT)
++                        .nest_limit(32).build().map_err(|e| format!("text transform regex: {e}"))?;
++                    if group >= regex.captures_len() { return Err("regex_extract group is not in the pattern".into()); }
++                    Operation::RegexExtract(regex, group)
++                }
+                 Some("pad") => { let (left, right) = pair(args, "left", "right")?; Operation::Pad(left, right) }
+                 Some("remove_prefix") => Operation::RemovePrefix(text(args)?),
+                 Some("lines") => {
+@@ -178,6 +190,14 @@ impl Recipe {
+                     bounded_push(&mut out, &value[cursor..])?;
+                     out
+                 }
++                // The first match's capture group, or nothing: a text with no match becomes empty, so
++                // a column can be null when the pattern is absent.
++                Operation::RegexExtract(regex, group) => {
++                    if value.len() + 1 > MAX_SEARCH_BYTES {
++                        return Err(Rejected::new("text_transform_work_limit", "regex extraction exceeds 8388608 search-window bytes"));
++                    }
++                    regex.captures(&value).and_then(|found| found.get(*group)).map_or(String::new(), |m| m.as_str().to_owned())
++                }
+                 Operation::Tokens(replacements) => {
+                     let mut out = String::new();
+                     for token in value.split(whitespace).filter(|token| !token.is_empty()) {
+diff --git a/crates/source-contract/tests/text_transform.rs b/crates/source-contract/tests/text_transform.rs
+index 5c35aa80..7cb00ac9 100644
+--- a/crates/source-contract/tests/text_transform.rs
++++ b/crates/source-contract/tests/text_transform.rs
+@@ -44,9 +44,9 @@ fn repeated_regex_searches_refuse_before_quadratic_scan_cost() {
+ }
+ #[test]
+ fn aggregate_regex_compilation_is_bounded_before_more_recipes_are_allocated() {
+-    let columns=(0..33).map(|n| format!("v{n}: {{text: {{path: name, transforms: [{{regex_replace: {{pattern: 'x{n}', with: ''}}}}]}}}}" )).collect::<Vec<_>>().join(",");
++    let columns=(0..129).map(|n| format!("v{n}: {{text: {{path: name, transforms: [{{regex_replace: {{pattern: 'x{n}', with: ''}}}}]}}}}" )).collect::<Vec<_>>().join(",");
+     let yaml=format!("read: {{format: json, tables: {{rows: {{each: '.', columns: {{{columns}}}}}}}}}");
+-    assert!(Engine::from_yaml(&yaml,Steps::new()).err().unwrap().detail.contains("32 regexes"));
++    assert!(Engine::from_yaml(&yaml,Steps::new()).err().unwrap().detail.contains("128 regexes"));
+ }
+ #[test]
+ fn literal_data_that_looks_like_a_transform_is_never_compiled() {
+diff --git a/rules/source-sequence.yaml b/rules/source-sequence.yaml
+index 0c1a7b80..d576a137 100644
+--- a/rules/source-sequence.yaml
++++ b/rules/source-sequence.yaml
+@@ -69,9 +69,9 @@ sources:
+     target: silver
+     requires: []
+     after: [sec.company, sec.thirteenf.securities]
+-  # Registration statements (ticket 149): captured first; the reading, and the
+-  # links to the Company by CIK, come with onboarding.
++  # Registration statements (ticket 149): captured by the `capture` target, then read and landed in
++  # silver by `silver`, linked to the Company by CIK.
+   sec.registration:
+-    target: null
++    target: silver
+     requires: []
+     after: [sec.company]
+diff --git a/rules/sources/sec.registration/MAPPING.xlsx b/rules/sources/sec.registration/MAPPING.xlsx
+index d780102de9583afbffa4a227510ed9194246a563..e3edd056d0d67c9a73e86151592672c9d45bea2d 100644
+GIT binary patch
+delta 1710
+zcmV;f22uHsSF~BMo)rrD$GyW|0ssIE2a^sB8Gkn}cx`O0mD_TgFc5}cMWgEs*f{PX
+z1D<J|bkdo0#uN8&EyH3|3yDfgo%HFu64-T8Om2E(>#*Oi-5<21dt-O50zmdyEA28~
+zAvRZW?D7g~;Ud$3rk&E*S|CmBHg=5#Q3R+~aWa{_iEAM>U!-AeWf!SwQArIe%UoO6
+z!hb$pgEIS!Px)ctL2fJb3-Kat#1__oUz?SsS$tF}WDVL$qnU*=;~%D1w=*9f0=`Mu
+zyOS~Vm28aJ`N^ju;}h<cHL$03qhvUXp=s`+#3d+2dI@JDNBIj@6qfOgK{U1Brz}w*
+zEtS^%1|7}>1r$rUH2(y5BE6_D@n@eeKYy0vlR6zAGXEHSC7(9J!P2PjvcM|i?>H-<
+z6s^Jsv%iDhtGU<9jdJ0a?Yr11m65lOvgu*Upq9G(7mvNiC%}Aq21t4!c>&PD!@#Tu
+zW-o#FXMoEdxO@R5=YV++gwo@#_F&wNK(R=z*)!{-NzD&}``weyxYYg~T%)C3Nq-zJ
+zz6iSoOk*T1zY^y?cRkKMw3^X<$aijlU5>N&Ku?xA$c-+B@SAb`4ur)G2po~PeJy(h
+zj$T`=p0hEzceF4$T9^c}<cwG@8f+~Lc{mQ%Ldy~yMwM{YMYyez$aB+blzMx?ewfy3
+zp`rp5T_y{~kk#Wy%qEi|gI|M&9Df~We4E(;G?aLR;hl2PpfS%Zo*gZojjB7T$bcb-
+z$GQLF@VO)Y+WBh4?Rc6)<_(qHc^9ADcK@CDOoY^qDeAn`<D<9KA#B$ly9u@Ua22`+
+z9flQsuE6>L+Aod4!^HQL;|Fl@2T)4`1QY-O00;m803lpD9B2TR0{{SQ5R(oK8Iv#=
+z1%IWOYj4{&6o&tbpwEG1%a;U(ZJ>41W>|*>NxOY0hJcZdEH)CUl2qI@*ni)lBrAzW
+z9SiA~SQkDoZ;wPV%bisBIs-7?k0KX(<!8o}i!ju21_jfBEJ5I%RH}j*JXPCJmkL-?
+zLq#4&qtQGp7#IF}Szo(S>!qwr&IMd4Pk&cM!PMh>$mMS3kNy3HYrf5ly%4UKCELOc
+zm@nm(!n3eTNq7N5b16Ip>B@gMUR=&?`MSVg9CrG}v1fa7C*{38`7K%bBi|+q@E&i<
+zoY!@EMwXu-H5<rt%!_=F#fCq?6&73hchVSH*!$Q@!wg<ZmHY{!t`l;=ve=gLe}9FW
+zkT%qI@q61|zw3@|)XU?2%RkiPisN+0G;C!4H&0Bq^3QxPfs|Fbxt6<2Xvb=1^J1Cn
+z`meWZ%8s!caiy^}EsQNFxM+Uak9Le-0MWPyh*}^z0LEuMz@!Bx2f$?B158_Bdf22<
+z4=`(i+0Yv1EigX-rhUL^3!EO-(0|wIvlck3XSbP-dM?kIVe6%mJ5Sltm}U=ZAsYEs
+zJ{R_}xG@Uva^%eVGgDhI%g|t!y%NSP_nzi%43rLPLsNg2pqRDTfu7UoHGHqQ0_`9#
+zX!3V>bU+_y=o8=r;i~K-&22J>?_J#Gk?vJFXneL!_L>cGKD$Ycx=D@duz#p0EM}#t
+z6u4&ft>A_ROC=w80xIZFIPXh%o=3WlCl<$`?fdvvRK*>re_hi$tep!D@rj4aL|K`|
+zQv%v>QH$xy{77eVfgwT0bhb|n6vV(wbK<qb5j=q6DTl-*2Ayt~lzV`Zi)~=)hgI(f
+zInekJ>aU}J2xTUnG83{I&3|)jqsthYvrDl{mm{^wO2rWLz~_DNvnh1^Qzf`@+Cg(n
+z8J^;5dfW&)hccq=dUM&O10C(sp_#iOHcUGkrf;-?=5i*ITbZV4yV$z47*cIuQ(Rim
+zaF0wEG}W)lkftu4nqQ|QbO7nd^EkL)8FchfN5+&Rv(Ay(8y%s!+JBMy`xd{h&8@xd
+zGG$2Ry{6D`pD8reZ_1FSlBUoBzhnv>ebkhQGG*SGGJm5fG>40|UGSY9+tBDYe9H=!
+z+kukGsR+%#dXb%Y!<@aKGy4Uix#6o4okMx_dc52!(dkE3nmAPoUu<3MKKu_vxzJvY
+zJ6qgC2d5~oYWAPa2_0^s>#yi$16&_w_&kHM1@L|<rP-g@4N~_HhV_55%Nnu{3i-#q
+z!(IXa01O9{hbcT9Ivi*KmID9)Y!Cnd7ytkO0000000000fB_^JlYuA|lQ0+slldts
+z0`MD?fhZM|Iw~&$DIk+;Dmen=B9o>nHv-Kgliw;k0<a~M94kfw#U_(vD<uXnC;$Ke
+E0PZs}SpWb4
+
+delta 1415
+zcmV;21$g?jS&vt+o)rnLswMF`0ssKelMM|Te>X08ZES^<ZExBz5XZlY<=0gLq3oeb
+zkXG8MlR62NZhLK#3-NI5%)X3vpMGa2AjU%a2K;cpzwiFBFWnova}@xxms)9;@d~lI
+ziDQ>nPzx8C1~l!I#?}I9YPYd#EQlgNwThF;<Xv0~sre!eYb(1*O^ZruSXt)Ux)%2J
+ze-@P4XMD;J3r})ep<jp>X(P6<2K?5nEY0GhN+D~|P8!WDlo|gty}3_(d<gh1Ved}H
+z%vZ88X6Gkgii}UVSJuE@*Nu|lEQY3egc6sa6zL_Li5%r`SW#HUHwMwvexI^LfwWXw
+z^9OV|6BJM^<<k5Y+==v}zQkXBzWi8@e^2Uke8~KB@RfYp2nS1}e#io=jDO&)fKs#y
+zpUnONdaveQFE`4CU$*aJr&LDXI?ASpDT7+-?q9t09-jd7=>;I^f#eLJgNK1x56sSi
+zj~9UJ9=JXOl1sq62SVv_S9>t-PM}z%*6f+}(WK@F!Ts(_XIyH32iIt6R}zPde`jI0
+zfN6}R<yYdo=WfTjr&cq15Bbgwu*-4w5$MY@2f5M35Pmm~KY*~f0f8eD_itsdz|pnE
+z>R&b{_l_1OM+=i6mRu0aMT4z{ArHsFT4-5<!>AIjx(cr~5_xV~jZ$x~*iX}1EmTy1
+zqQ_*R7_xf&h}mQ^Wbj+ikfY;_T5mHufQAx}Fx)8@4I0x~9G~1+-|M~-BDG_Rx(D^C
+z=sn$X+r9B_LTxI1&aTOXVMQ$$tPi05(il8U{JS_d@x@<IO9KQH000080000XTnUUc
+z#g+m90L2HB4h<Q9I4*c?Y@L;DPunmM$G=LH*Hcmgl&WefjWS>w(<-`$7t=Jk$+fYX
+z*v7t47}|H=*>OA8B^lbA#1HrT`|LaWCR?dDrU1a;p(=$*!vax_<Je>cRLn$DfuNa{
+z)D=VO>UC_C29`UhD&u4@7{(RjBAia#*j!I1vc{4NnCrlQ)K$gw<2jUan}$c>Zs3-$
+z3$z3AbfVZA7J#4BTvIRJtK_@_VYn25hE*EAJ{n&q*4`O>=CC!-+JW84Qp%0(yv@^a
+z5L#sc!Q(=e+^rR$R5!4~8I&dIC1Joa<o7Tqvou^vL|NH+@)8-+&`Qf6Al#Zz0@;!;
+z>M!F)#EaU0E#7&5!~J%wQ_tHw&oAA%(m5@eftf77@EnUY9ECv+D^{0yE4SC+&+63b
+zWwJEx8*CffBicq*8}i1(<Uz$n^JfqKj9&sI9!L&>Q3r7Bf#a91aN>cJ10Wf60H+=}
+zJphh}9l+27!vo-?3pn$@+2IOZn;v;!<f7Yz!^QG{f+3quwA=>TT9cY>xP)kuFAce{
+z*J6R1W;t;<{mAqha1tYF*^xN&+<8B@Ku|5zte^UzKr@@gE$Br*dJA_o*I-)6H~r*0
+zcx-_#`=J}43(>aNRX;Z?AltNY*Z<gFU4o&zjm4jAO!3?YHQ5I>abih_SjH6A8rq`z
+zzu>HYA5>c2^Bi>4t#Hw$@H>wEYdo<m17qLg@1m}jpntZ7^<{pJ4P>tZDif;4@ly^4
+zxp0Zurg_z`$pwi-1vAA?G18C$SNJOM#}VCw<|__)TVnL9+mf;YP+Y7dbeGla4mmP(
+z3C-8Rx3-jtpS=mTz`ZAy3lo%7GN?F3XY{ln>E>Z?I#iondN!5CH4Cb<psfMTucX9X
+z$G$xK%02xBv+x_T4hpTRCGj}|007VhldLK{90`mx#g+m90L2FY02lxO0000000000
+z0DuAi7n4938j~I?Dgw(IlRy|1lV2+@0t6qEkSjR?zaf*$D>nkDB9jCxI|7R&lR+#-
+V0-z<6;U*Q6o-7as3nu^o007jEqc8vf
+
+diff --git a/rules/sources/sec.registration/source.yaml b/rules/sources/sec.registration/source.yaml
+index 535fb852..b5267a73 100644
+--- a/rules/sources/sec.registration/source.yaml
++++ b/rules/sources/sec.registration/source.yaml
+@@ -12,7 +12,10 @@
+ # both from the submissions index; one unit per accession number (a filing listed
+ # under two co-registrants is asked once). The bound is the transport's 128 MiB
+ # ceiling: the index gives the whole filing's size, not the main document's.
+-# No dataset yet: the reading and its Dataset Contract come with onboarding.
++# The pages are read by registration-page.yaml (the engine's HTML reading with text operations: no custom
++# code, operator, 2026-11-04: "write it in rust why python?") into two silver tables, the offering terms
++# the cover states and the statement lines a valuation needs (operator, 2026-11-04: Damodaran's valuation
++# tools). Nothing goes to MDM: a row finds its Company by CIK. Ticket 149.
+ source: sec.registration
+ bronze:
+   family: sec.registration
+@@ -38,7 +41,7 @@ acquisition:
+       url_prefixes:
+       - https://www.sec.gov/Archives/edgar/data/
+ bookkeeping:
+-  version: 1
++  version: 2
+   targets:
+     capture:
+       lease_seconds: 300
+@@ -51,3 +54,37 @@ bookkeeping:
+           leases: ["provider:sec", "output:{destination}"]
+           checks: [input.hash, output.receipt, capture.verified]
+       checks: [manifest.hash, work.accounting, journal.delivered]
++    # The captured pages, read and landed in silver (the Company is mastered by sec.company, which runs first).
++    silver:
++      steps:
++        - name: read
++          operation: source.read
++          requires: []
++          key: "{unit}"
++          leases: ["artifact:{destination}"]
++          checks: [input.hash, output.receipt, source.output]
++          units: {slices: {bytes: 33554432}}
++          input:
++            contract: registration-page.yaml
++            files: "*.capture.zip"
++        - name: land_offering
++          operation: silver.land
++          requires: [read]
++          key: "{unit}"
++          leases: ["silver:{silver}"]
++          checks: [input.hash, output.receipt, silver.landed]
++          input: {keys: {table: offering, silver: registration_offering}}
++        - name: land_statement_line
++          operation: silver.land
++          requires: [read]
++          key: "{unit}"
++          leases: ["silver:{silver}"]
++          checks: [input.hash, output.receipt, silver.landed]
++          input: {keys: {table: statement_line, silver: registration_statement_line}}
++        - name: processed
++          operation: journal.record
++          requires: [land_offering, land_statement_line]
++          key: "{unit}"
++          leases: ["artifact:{destination}"]
++          checks: [input.hash, output.receipt, journal.recorded]
++      checks: [manifest.hash, work.accounting, journal.delivered]

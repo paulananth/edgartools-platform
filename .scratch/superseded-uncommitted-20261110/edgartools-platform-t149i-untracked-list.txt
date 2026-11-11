@@ -1,0 +1,4 @@
+crates/source-contract/tests/page_terms.rs
+rules/sources/sec.registration/registration-page.yaml
+rules/sources/sec.registration/silver-offering.yaml
+rules/sources/sec.registration/silver-statement-line.yaml
