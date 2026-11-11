@@ -63,7 +63,9 @@ by value before showing any of it.
    store's owner URL (`<STORE>_MIGRATION_DATABASE_URL`) and runtime URL (`<STORE>_DATABASE_URL`), `sslmode=require`.
 3. **Schemas.** The commands of "Apply store DDL", each with its owner connection: `mdm migrate` reads
    `MDM_DATABASE_URL` as the owner and refuses when owner and runtime role are the same login, so set it to the
-   owner for that one run; `bookkeeping init` and `migrate` read `BOOKKEEPING_DATABASE_URL` as the owner;
+   owner for that one run; `bookkeeping init` and `migrate` read `BOOKKEEPING_DATABASE_URL` as the owner and take the group role
+   `bookkeeping_control` as `--runtime-role` (create it, and add the runtime and verifier logins to it, first:
+   a verifier login that is not in the group cannot read the schema);
    `rdm`, `change-journal`, `silver` and `rules` read their `*_MIGRATION_DATABASE_URL`. Read each command's
    `--help` first. Done when every migration file prints with its checksum.
 4. **RDM codes.** `scripts/rdm_restore_published.py` in this skill, with the operator's exact words; every pin
@@ -85,7 +87,8 @@ by value before showing any of it.
    verifier `bookkeeping_verifier`) and refuse when a login holds both duties of one profile. Set the MDM guard
    (`migrate_guard`, runtime role `mdm_runtime`) and give `mdm_verifier` `USAGE` on schema `mdm` and `SELECT` on
    every table, the prepared tables and the mastering tables. Write `worker.env` (every store's runtime URL,
-   `MDM_APPLICATION_ROLE`, and `BOOKKEEPING_MANIFEST_ROOT`, a local folder) and `verifier.env` (the same, with the
+   `MDM_APPLICATION_ROLE`, and `BOOKKEEPING_MANIFEST_ROOT`, a local folder written as a `file://` address: a plain path is refused with
+   "Unsupported manifest store") and `verifier.env` (the same, with the
    two verifier logins for Bookkeeping and MDM) beside `connection.env` and `governance.env`. That folder is what
    `load --stores` takes. Done when `doctor` prints `"ok": true` with the worker file and `load --plan` reads the
    capture.
