@@ -231,7 +231,6 @@ SELECT COUNT(*) AS private_fund_count FROM sec_adv_private_fund;
 | Silver ownership backfill from bronze | Phase 5 (`parse-ownership-bronze`) |
 | MDM entity loads (all 5 domains) | Phase 5 (`mdm mastering`) |
 | Relationship derivation coverage | Phase 6 (`mdm derive-relationships`) |
-| Neo4j graph sync | Phase 7 (`mdm publish-relationships`) |
 
 **Protected artifacts:** Generated deployment JSON (e.g., `infra/aws-dev-application.json`) and
 loader-fix workstream artifacts must not be edited during Phase 5 MDM operations. These are
@@ -268,14 +267,7 @@ sequence for the full-scale Phase 5 run is:
    edgar-warehouse mdm mastering --entity-type fund
    ```
 
-5. **Run the graph pipeline** (Phase 5 full-scale graph sync — Phase 10 deferred this step):
-   ```bash
-   edgar-warehouse mdm backfill-relationships
-   edgar-warehouse mdm publish-relationships
-   ```
-
-Phase 10 validated steps 1–4 on a single sample (1 adviser, 1 fund). Step 5 is the remaining
-Phase 5 scope and requires Neo4j to be running.
+Phase 10 validated steps 1–4 on a single sample (1 adviser, 1 fund).
 
 ## Live E2E Run - Phase 5 Closeout
 
@@ -316,23 +308,6 @@ Coverage result:
 | advisers | 1 | 1 | 0 |
 | funds | 1 | 1 | 0 |
 
-Snowflake mirror and graph sync:
-
-```bash
-# Read-only Snowflake CLI verification must use snowconn in dev.
-SNOW_CONNECTION=snowconn snow sql --connection snowconn \
-  -q "SELECT CURRENT_ACCOUNT(), CURRENT_ROLE(), CURRENT_WAREHOUSE()"
-
-# Connector env vars were sourced from the local snowconn definition without printing secrets.
-export MDM_SNOWFLAKE_DATABASE="EDGARTOOLS_DEV"
-export MDM_SNOWFLAKE_SCHEMA="MDM"
-
-uv run --extra mdm-runtime --extra snowflake edgar-warehouse mdm publish-relationships \
-  --target-database EDGARTOOLS_DEV \
-  --target-schema NEO4J_GRAPH_MIGRATION \
-  --mdm-database EDGARTOOLS_DEV \
-  --mdm-schema MDM
-```
 
 `sync-graph` result:
 
