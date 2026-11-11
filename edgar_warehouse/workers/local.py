@@ -9,7 +9,24 @@ from __future__ import annotations
 from collections import defaultdict
 
 from edgar_warehouse.bookkeeping.clean.compose import compose_document
-from edgar_warehouse.bookkeeping.clean.config import LOCAL_OPERATIONS, STEP_CHECKS, Blocked, reference
+from edgar_warehouse.bookkeeping.clean.config import (LOCAL_OPERATIONS, STEP_CHECKS, Blocked, reference,
+                                                     validate, worklist)
+
+
+def staged_inputs(artifacts, export_body: dict, target: str, inputs: dict, modules: dict | None = None) -> dict:
+    """The manifest reference a run takes. A target not marked `local` keeps the one it was given. A local
+    target has its source read and combine steps run here, and the run takes the staged manifest."""
+    config = validate(export_body, target)
+    if not config.get("local"):
+        return inputs
+    from . import profile
+
+    manifest = artifacts.json(inputs)
+    items = worklist(manifest, config)
+    modules = modules or {operation: profile(operation) for operation in LOCAL_OPERATIONS}
+    done = run_local(config["steps"], items, modules, artifacts)
+    return artifacts.put(inputs["uri"].rsplit("/", 1)[0] + "/staged",
+                         stage_manifest(manifest, config["steps"], items, done, artifacts))
 
 
 def run_local(steps: list[dict], items: list[dict], modules: dict, artifacts) -> dict[tuple[str, str], dict]:

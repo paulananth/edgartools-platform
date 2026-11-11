@@ -167,7 +167,12 @@ def _handle(args):
                         if not args.input_manifest or not args.input_sha256:
                             raise Blocked("Submission requires an exact input manifest URI and hash")
                         ref = rules.resolve(kind, name, root=os.environ["BOOKKEEPING_MANIFEST_ROOT"], artifacts=book.artifacts)
-                        run_id = book.start(rules_ref=ref, inputs_ref={"uri": args.input_manifest, "sha256": args.input_sha256},
+                        from edgar_warehouse.workers.local import staged_inputs
+
+                        # A target marked `local` has its source read and combine steps run here first (ticket 210).
+                        inputs = staged_inputs(book.artifacts, book.artifacts.json(ref)["body"], args.target,
+                                               {"uri": args.input_manifest, "sha256": args.input_sha256})
+                        run_id = book.start(rules_ref=ref, inputs_ref=inputs,
                                             target=args.target, scope={"kind": kind, "name": name, "target": args.target,
                                                                      **({"source": name} if kind == "source" else {}),
                                                                      **({"feed": args.feed} if args.feed else {})})

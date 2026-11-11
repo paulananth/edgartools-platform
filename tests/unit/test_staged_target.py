@@ -81,3 +81,45 @@ def test_a_composed_input_that_mixes_local_and_database_units_is_refused():
 
     with pytest.raises(Blocked, match="mixes"):
         local.stage_manifest(manifest, STEPS, items, {("combine", "c"): REF}, artifacts=None)
+
+
+class Artifacts:
+    def __init__(self, manifest):
+        self.manifest, self.placed = manifest, []
+
+    def json(self, ref):
+        return self.manifest
+
+    def put(self, root, document):
+        self.placed.append((root, document))
+        return {"uri": f"{root}/staged.json", "sha256": "9" * 64}
+
+
+class Reader:
+    def execute(self, envelope, artifacts):
+        return {"uri": envelope["output"], "sha256": "3" * 64}
+
+
+def test_a_local_target_is_staged_and_the_staged_manifest_is_what_the_run_takes(monkeypatch):
+    manifest = {"version": 2, "steps": {"read": [unit("r", REF)], "prepare": [unit("p", {"from": {"step": "read", "key": "r"}})]}}
+    config = {"local": True, "steps": STEPS[:1] + STEPS[2:3]}
+    config["steps"][1] = {**STEPS[2], "requires": ["read"]}
+    items = [{"step": s, "key": u["keys"]["k"], "ordinal": 0, "unit": u} for s, us in manifest["steps"].items() for u in us]
+    monkeypatch.setattr(local, "validate", lambda body, target: config)
+    monkeypatch.setattr(local, "worklist", lambda m, c: items)
+    store = Artifacts(manifest)
+
+    ref = local.staged_inputs(store, {"bookkeeping": {}}, "mastering", {"uri": "file:///m/manifest.json", "sha256": "0" * 64},
+                              modules={"source.read": Reader()})
+
+    assert ref == {"uri": "file:///m/staged/staged.json", "sha256": "9" * 64}
+    root, staged_manifest = store.placed[0]
+    assert root == "file:///m/staged" and set(staged_manifest["steps"]) == {"prepare"}
+    assert staged_manifest["steps"]["prepare"][0]["input"] == {"uri": "file:///out/r", "sha256": "3" * 64}
+
+
+def test_a_target_not_marked_local_keeps_its_manifest(monkeypatch):
+    monkeypatch.setattr(local, "validate", lambda body, target: {"steps": STEPS})
+    inputs = {"uri": "file:///m/manifest.json", "sha256": "0" * 64}
+
+    assert local.staged_inputs(Artifacts({}), {"bookkeeping": {}}, "mastering", inputs) is inputs
