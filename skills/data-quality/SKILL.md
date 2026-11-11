@@ -1,6 +1,6 @@
 ---
 name: data-quality
-description: Turn the defects found while profiling a data set into data quality checks and fixes the engine runs on every load, measure them on the records, mark each invalid hierarchy row with an evidence-backed fix or "needs steward", and write the feed's quality.yaml after the operator decides each check. Use from data-onboarding's quality step (a new feed) and refining-rules' change-quality step (a live feed), or when the operator asks about a feed's data quality.
+description: Analyze data quality defects, including tracing a mastered entity through every downstream field, and turn approved findings into checks the engine runs on every load. Use when profiling a feed, changing live quality rules, or auditing existing entity data across connected stores.
 ---
 
 # Data Quality
@@ -8,7 +8,7 @@ description: Turn the defects found while profiling a data set into data quality
 Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#the-seven-wastes) and drop what adds no value.
 
 > Part of the **data-platform** skill set. data-onboarding and refining-rules
-> call it; it writes only `rules/sources/<source>/quality.yaml`.
+> call it; remediation writes only `rules/sources/<source>/quality.yaml`.
 
 It answers: **which rules does this part need, which defects does it have,
 which check or fix carries each, and what does each one do on the records?**
@@ -18,7 +18,9 @@ the clean data passes, which still runs on every load), and marks invalid
 hierarchy rows (`invalid_rows.jsonl` beside it). The Data Catalog shows the
 same rules beside each silver field (data-profiling `catalog`).
 This skill turns them into the engine's checks and fixes, measures them, and
-writes them once the operator decides.
+writes them once the operator decides. For an existing-data audit, it can also
+produce a read-only analysis of a mastered entity and its downstream fields;
+that analysis does not itself change quality configuration.
 
 **A part that goes to silver** (transaction or event data, published
 reference data) has no `quality.yaml`: those checks read MDM records only.
@@ -40,6 +42,41 @@ log it for a ticket.
 **Use the other skill when:**
 - there are no approved findings yet: use **data-profiling** first;
 - you are changing a live feed's mapping or matching: use **refining-rules**.
+
+## Trace a mastered entity through downstream data
+
+Use this mode when the operator asks to follow a known entity from its master
+record through all downstream fields, then repeat that review for a population.
+Treat the previously reviewed entity as a method example, not as proof that
+other entities have the same values or defects.
+
+1. Start from the authoritative master key and a fixed, read-only snapshot.
+   Follow only declared identifiers, foreign keys, contracts, and configured
+   transformations; record the exact key used at each join.
+2. Discover every in-scope downstream table from the live schema, contracts,
+   rules, and reader/writer paths. Include every field carried for the entity,
+   including nested fields, derived values, typed relationship edges, and
+   identifier cross-references. Verify relationship direction and both
+   endpoint kinds, and trace cross-references through their configured
+   identifier path. Follow the operator's layer boundary; do not add analytics
+   or other destinations that were not requested.
+3. For every entity and downstream field, measure whether it is present,
+   absent by design, unresolved, duplicated, stale, malformed, or in conflict.
+   Compare values only with the configured source, mapping, survivorship, or
+   derivation rule that governs that field. A difference is not a defect until
+   the governing meaning is established.
+4. Cover the full named population. A single entity can prove the trace path,
+   but cannot establish population-wide coverage or quality. Report a count and
+   denominator for each result, including zero counts; identify any record or
+   field the available stores could not trace.
+5. Group issue candidates by one evidenced failure pattern. For each, state
+   the affected layer, table and field; population count and denominator; the
+   expected and observed behavior; impact; the evidence snapshot and rule
+   version; and a root-cause hypothesis clearly marked as unconfirmed. Keep
+   examples masked and separate measured facts from interpretation.
+6. Deliver issue-ready analysis only. Do not alter stores, mappings, rules,
+   quality configuration, catalogs, or create tickets as part of this audit.
+   Convert an agreed finding into a ticket only when the operator asks.
 
 ## Hard stops
 
