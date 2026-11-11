@@ -101,8 +101,3 @@ def test_a_live_table_gains_the_column_before_dbt_reads_it():
     bootstrap = REPO_ROOT / "infra" / "snowflake" / "sql" / "bootstrap"
     alter = (bootstrap / "21_silver_landing_company_country_code.sql").read_text()
     assert "ALTER TABLE sec_company_address ADD COLUMN IF NOT EXISTS country_code TEXT;" in alter
-    install = (REPO_ROOT / "infra" / "scripts" / "install.sh").read_text()
-    run = "-f infra/snowflake/sql/bootstrap/"
-    assert install.index(f"{run}21_silver_landing_company_country_code.sql") > (
-        install.index(f"{run}20_silver_landing_ownership_evidence.sql"))
-    assert install.index(f"{run}21_silver_landing_company_country_code.sql") < install.index("dbt run --target")

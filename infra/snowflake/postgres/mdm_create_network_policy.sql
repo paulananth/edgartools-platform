@@ -14,7 +14,7 @@
 -- decision, out of scope here). This policy is intentionally permissive
 -- (Snowflake's own docs recommend against 0.0.0.0/0 for Postgres instances)
 -- and instead relies on snowflake_admin/application credentials plus
--- sslmode=require (enforced by bootstrap-aws-mdm-secrets.sh) for protection.
+-- sslmode=require (set in the connection string) for protection.
 -- This applies equally to prod today; revisit if/when a NAT Gateway + EIP is
 -- added to network_runtime.
 --

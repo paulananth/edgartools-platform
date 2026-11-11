@@ -64,16 +64,9 @@ uv run --extra mdm-runtime python infra/scripts/compare-mdm-postgres-databases.p
 
 Write the Snowflake Postgres `application` role DSN to the existing AWS secret. Use `sslmode=require`.
 
-```bash
-printf '%s' "$SNOWFLAKE_APPLICATION_MDM_DSN" | \
-  bash infra/scripts/bootstrap-aws-mdm-secrets.sh \
-    --env dev \
-    --aws-profile aws-admin-dev \
-    --aws-region us-east-1 \
-    --dsn-stdin
-```
+Write it to the secret `<prefix>/mdm/postgres_dsn` with `aws secretsmanager put-secret-value`, the value read from stdin and never printed.
 
-The helper validates the host suffix, database name, and `sslmode=require`, then writes only the secret value. It logs a masked DSN.
+Check the host suffix, the database name and `sslmode=require` before writing.
 
 ## 4. Redeploy AWS Runtime
 
