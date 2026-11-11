@@ -6,14 +6,13 @@
 -- still creates them until the live-AWS/Snowflake teardown decides their fate.
 --
 -- Root cause this file exists to fix: EDGARTOOLS_PROD.MDM (the mirror
--- edgar_warehouse.mdm.export._build_snowflake_mirror_writer writes to, and
--- mdm publish-relationships reads from -- see docs/prod-mdm-snowflake-graph-first-load.md)
+-- edgar_warehouse.mdm.export._build_snowflake_mirror_writer wrote to)
 -- was originally created by a one-off, uncommitted manual shell session on
 -- 2026-06-22. It had no script, so when the platform's Snowflake account was
 -- rebuilt for the go-live cutover, this step -- unlike every other piece
 -- (gold, source, loader role, dashboards, Neo4j app), all Terraform/scripted
 -- -- had nothing to re-run. The schema came back empty (created 2026-08-07 by
--- ACCOUNTADMIN, zero tables) and `mdm publish` failed with "Object
+-- ACCOUNTADMIN, zero tables) and the mirror export failed with "Object
 -- 'EDGARTOOLS_PROD.MDM.MDM_ENTITY' does not exist or not authorized."
 --
 -- Run once per environment (idempotent, safe to re-run):

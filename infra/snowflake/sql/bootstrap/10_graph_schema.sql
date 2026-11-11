@@ -2,9 +2,8 @@
 --
 -- Root cause this file exists to fix: identical failure class to
 -- 09_mdm_mirror_schema.sql, one step further down the pipeline. The graph
--- destination schema (`mdm publish-relationships`'s target -- see
--- docs/prod-mdm-snowflake-graph-first-load.md) was never re-provisioned
--- after the Snowflake account cutover, so `mdm publish-relationships` failed:
+-- destination schema was never re-provisioned
+-- after the Snowflake account cutover, so the graph sync failed:
 --   "SQL compilation error: Insufficient privileges to operate on database
 --   'EDGARTOOLS_PROD'. Your primary role EDGARTOOLS_PROD_LOADER must have
 --   CREATE SCHEMA granted on DATABASE EDGARTOOLS_PROD."
@@ -20,15 +19,6 @@
 --      database-level grant is required even once the schema exists.
 --   2. USAGE/CREATE TABLE/CREATE VIEW + DML grants on the schema itself,
 --      for the same reason 09_mdm_mirror_schema.sql needs them on MDM.
---
--- `docs/prod-mdm-snowflake-graph-first-load.md`'s original "Required
--- Production Objects" section documented the sync-graph/verify-graph
--- runtime role as EDGARTOOLS_PROD_DEPLOYER. That was never actually true in
--- this account -- edgar_warehouse/mdm/snowflake_graph.py's
--- SnowflakeGraphSyncExecutor.from_env() reads the exact same
--- MDM_SNOWFLAKE_SECRET_JSON secret (and its ROLE field) as
--- edgar_warehouse/mdm/export.py's mirror writer, so both commands run as
--- whatever role that one secret specifies -- currently EDGARTOOLS_PROD_LOADER.
 --
 -- Run once per environment (idempotent, safe to re-run):
 --   snow sql --connection edgartools-prod -f infra/snowflake/sql/bootstrap/10_graph_schema.sql
