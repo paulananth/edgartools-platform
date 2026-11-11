@@ -10,7 +10,18 @@ from collections import Counter, defaultdict
 from collections.abc import Iterable
 from dataclasses import replace
 
+from edgar_warehouse.rules import files as rules_files
+from edgar_warehouse.workers import source_readings
+
 from . import cascade
+from .gleif_publication import validate_metadata
+from .store import Conflict
+
+GLEIF_READING = rules_files.ROOT / "sources/gleif/name-count-complete-stream.yaml"
+# The recipe's own spool and output limits: 13.25 GB expanded projects to about 211 MB and 3.3 million rows.
+GLEIF_BYTES = 1024**3
+GLEIF_ROWS = 10_000_000
+CONTRACT_BYTES = 1024**2
 
 
 def filers_from_records(records: Iterable[dict]) -> list[cascade.Filer]:
@@ -95,3 +106,32 @@ def over_publication(filers: Iterable[cascade.Filer], readings, passes: list[dic
     gleif_addresses: Counter = Counter()
     _, _, entities = fold_reading(readings, cascade_wanted=wanted_names(filers), address_counts=gleif_addresses)
     return assignments(filers, entities, passes, gleif_addresses=gleif_addresses, over_shared=over_shared)
+
+
+def publication_chunks(reading: dict, artifacts, metadata: dict, wanted: set) -> tuple[dict, object]:
+    """The verified Golden Copy reading, bound to its recipe, the full publication and the names asked for: the
+    publication's identity and its tables in source order. The reading's `wanted` lookup must equal the names the
+    pass uses, or its entities are another population's."""
+    validate_metadata("level1", metadata)
+    if metadata["file_content"] != "GLEIF_FULL_PUBLISHED":
+        raise Conflict("The waterfall pass reads a full Golden Copy, never a delta")
+    opened = source_readings.OpenedExtract(reading, artifacts, max_bytes=GLEIF_BYTES, max_rows=GLEIF_ROWS,
+                                          max_contract_bytes=CONTRACT_BYTES, allow_lookup_receipts=True)
+    if opened.contract != rules_files.load(GLEIF_READING):
+        raise Conflict("The Golden Copy reading was not made by name-count-complete-stream.yaml")
+    (artifact,) = opened.artifacts
+    if artifact["record_count"] != metadata["record_count"]:
+        raise Conflict("The Golden Copy reading and its publication disagree on the record count")
+    if set(opened.lookup_sets(0)["wanted"]) != wanted:
+        raise Conflict("The Golden Copy reading projected other names than the filers in the store hold")
+    publication = {"archive_sha256": artifact["input"]["sha256"], "content_date": metadata["content_date"],
+                   "file_content": metadata["file_content"], "record_count": artifact["record_count"]}
+    return publication, (chunk["tables"] for _, _, chunk, _ in opened.chunks())
+
+
+def pairs(filers: Iterable[cascade.Filer], reading: dict, artifacts, metadata: dict, passes: list[dict], *,
+          over_shared: int) -> tuple[dict, dict]:
+    """The publication's identity and the CIK -> pair answer of the whole publication, for the filers in hand."""
+    filers = list(filers)
+    publication, chunks = publication_chunks(reading, artifacts, metadata, wanted_names(filers))
+    return publication, over_publication(filers, chunks, passes, over_shared=over_shared)
