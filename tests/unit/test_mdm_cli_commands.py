@@ -7,12 +7,8 @@ import pytest
 from edgar_warehouse.cli import build_parser
 from edgar_warehouse.mdm import commands as commands
 
-NAME_COUNT = ["--capture", "c", "--population", "p", "--gleif-reading", "a",
-          "--gleif-reading-sha256", "s", "--gleif-metadata", "x", "--output", "o"]
-
 @pytest.mark.parametrize("argv,function", [
     (["mdm", "check-connectivity"], "check_connectivity"),
-    (["mdm", "name-count", *NAME_COUNT], "name_count"),
     (["mdm", "rebuild-name-index", "--limit", "1"], "rebuild_name_index"),
     (["mdm", "rebuild-detail-lookup", "--limit", "1"], "rebuild_detail_lookup"),
     (["mdm", "steward", "split", "--merge", "m", "--by", "Sam", "--reason", "wrong", "--policy-digest", "d"], "steward_split"),
@@ -25,6 +21,11 @@ def test_each_command_runs_its_function(monkeypatch, argv, function):
     monkeypatch.setattr(commands, function, lambda args: called.append(args.mdm_command) or 0)
     args = build_parser().parse_args(argv)
     assert args.handler(args) == 0 and called == [argv[1]]
+
+
+def test_the_name_count_command_is_gone():
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["mdm", "name-count"])
 
 
 def test_a_split_previews_unless_confirmed_and_needs_who_and_why():

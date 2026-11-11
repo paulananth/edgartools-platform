@@ -45,15 +45,6 @@ def assignments(filers: Iterable[cascade.Filer], entities: Iterable[cascade.Enti
     return cascade.assign(filers, entities, passes, address_counts=counts, over_shared=over_shared)
 
 
-def differences(new: dict, stored: dict) -> dict[str, int]:
-    """Counts only: how a new answer differs from the one a record already carries (by CIK). A comparison for
-    the move away from the old file: it is deleted with that file in step C."""
-    both = new.keys() & stored.keys()
-    same = sum(new[cik]["lei"] == stored[cik]["lei"] for cik in both)
-    return {"same": same, "other_lei": len(both) - same, "only_new": len(new.keys() - stored.keys()),
-            "only_stored": len(stored.keys() - new.keys())}
-
-
 def fold_reading(readings, *, cascade_wanted: set, address_counts) -> tuple[dict, dict, list]:
     """What the configured complete reading of the Golden Copy counted.
 

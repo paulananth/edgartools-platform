@@ -13,7 +13,7 @@ The CLI entry is `edgar_warehouse/cli.py`; configured execution is
 | Person | Raw SEC individual-filer submissions; `sec.submissions.person.v1` and `rules/merge/kinds/person.yaml` | The approved feed covers individual filers. Forms 3/4/5 owners, 8-K officers, DEF 14A and ADV people require their own onboarding. |
 | Relationships | GLEIF relationship records with explicit child/parent subjects, plus the typed projection engine | A relationship needs accepted canonical endpoints, compatible kinds and valid periods. Missing or conflicting endpoints produce reviews. |
 
-`mdm` exposes migrate, check-connectivity, counts, name-count and
+`mdm` exposes migrate, check-connectivity, counts and
 prepare-clean-company. Mastering work is submitted through configured
 Bookkeeping capabilities (`mdm.prepare`, `mastering.merge`).
 Do not revive retired `mdm mastering`, warehouse batch commands, or parsers

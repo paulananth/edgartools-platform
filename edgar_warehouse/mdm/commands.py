@@ -33,22 +33,6 @@ def prepare_capture(args) -> int:
     return 0
 
 
-def name_count(args) -> int:
-    from .name_count_file import write_name_count
-
-    report = write_name_count(
-        capture=args.capture,
-        population=args.population,
-        gleif_reading={"uri": Path(args.gleif_reading).resolve().as_uri(), "sha256": args.gleif_reading_sha256},
-        gleif_metadata=args.gleif_metadata,
-        output=args.output,
-        cascade=args.cascade,
-        catalog=args.catalog,
-    )
-    print(json.dumps(report, sort_keys=True))
-    return 0
-
-
 def steward_split(args) -> int:
     """Split a consolidation a rule made (ticket 142): previews unless `--confirm`."""
     from functools import cache

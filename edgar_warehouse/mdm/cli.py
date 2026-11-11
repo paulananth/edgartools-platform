@@ -1,7 +1,7 @@
 """CLI subcommand: `edgar-warehouse mdm ...`, MDM only.
 
 Commands: migrate, check-connectivity,
-prepare-capture, name-count, rebuild, rebuild-name-index and rebuild-detail-lookup. The legacy MDM commands and their tables are
+prepare-capture, rebuild, rebuild-name-index and rebuild-detail-lookup. The legacy MDM commands and their tables are
 deleted (platform validation slice 2a).
 """
 from __future__ import annotations
@@ -40,26 +40,6 @@ def register_mdm_subparser(subparsers: argparse._SubParsersAction) -> None:
     capture.add_argument("--all", action="store_true", help="Name every document, processed or not (a forced run); "
                      "by default only documents the Change Journal does not record as processed under these rules")
     capture.set_defaults(handler=_logged_handler("prepare-capture", _command("prepare_capture")))
-
-    name_count = mdm_sub.add_parser("name-count", help="Count an SEC population and one configured full GLEIF Golden Copy "
-                                "reading into a Name Count file")
-    name_count.add_argument("--capture", required=True,
-                        help="An SEC submissions capture folder: receipts.jsonl and the bronze/ documents it names")
-    name_count.add_argument("--population", required=True,
-                        help="JSON file: the receipt keys of the main submissions documents counted, which together "
-                             "must be every SEC filer")
-    name_count.add_argument("--gleif-reading", required=True,
-                        help="The verified source.read output of rules/sources/gleif/name-count-complete-stream.yaml "
-                             "over a full Golden Copy (its reading.json)")
-    name_count.add_argument("--gleif-reading-sha256", required=True)
-    name_count.add_argument("--gleif-metadata", required=True, help="JSON file: the archive's verified publication metadata")
-    name_count.add_argument("--output", required=True)
-    name_count.add_argument("--cascade", action="store_true",
-                        help="Also run the Company rules' matching cascade over both sources (always, once a pass "
-                             "is switched on); the name count then holds its answers")
-    name_count.add_argument("--catalog", help="The capture's exchange ticker catalog, by receipt key: the cascade reads "
-                                          "each filer's tickers, as the Company chain does")
-    name_count.set_defaults(handler=_logged_handler("name-count", _command("name_count")))
 
     replay = mdm_sub.add_parser("rebuild", help="Replay every stored record into the mastering tables; a stopped replay "
                                 "runs again and skips what is done")

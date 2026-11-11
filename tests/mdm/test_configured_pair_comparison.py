@@ -43,7 +43,7 @@ def configured_root(tmp_path):
 PROGRAM = '''
 import copy
 from edgar_warehouse.mdm.matching import compare_candidate_records
-from edgar_warehouse.mdm.name_count import VERSION
+from edgar_warehouse.mdm.matching import NAME_COUNT_VERSION as VERSION
 from edgar_warehouse.mdm.cascade import VERSION as CASCADE
 from edgar_warehouse.mdm.store import Conflict
 

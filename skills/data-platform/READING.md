@@ -363,11 +363,11 @@ refuses with `object_base`, and a field collision refuses with
 unselected branches.
 
 ```yaml
-name_evidence:
+evidence:
   object:
     base: {value: {path: entry}}
     fields:
-      name_count: {const: {value: APPROVED_CANONICAL_NAME_COUNT_SHA256}}
+      source_digest: {const: {value: APPROVED_SOURCE_SHA256}}
 ```
 
 ## Parallel arrays
@@ -1256,8 +1256,8 @@ The sources this repository reads today, and where each rule above is applied.
   an object; its place lookup converts the selected SEC code with Python text
   semantics, keeping the historical mapping of nontext codes to unknown places.
 - The Person source read block keeps the complete submissions document. Company
-  preparation reads the raw capture (`name-count-main.yaml`, the Name Matching file
-  through `name-count.yaml`, `catalog.yaml`) and joins them with `combine-name-count.yaml`.
+  preparation reads the raw capture (`name-count-main.yaml`, `catalog.yaml`) and joins them with
+  `combine-name-count-captured.yaml`.
 - The installed object-records trial assembles the two raw Person fixture records
   and verifies them through preparation and the actual Person MDM contract.
 - Name Matching keys: `sec.company/name-key.yaml` and
@@ -1340,27 +1340,14 @@ belong to the approved scope. Scope selection makes no identity or binding
 decision and does not replace the later MDM checks.
 
 
-### Name Matching contracts
+### Whole-publication GLEIF contracts
 
-- Name Matching reuse binds the file's SHA into `sources/sec.company/name-count.yaml`;
-  Company captures are read through `name-count-main.yaml` and combined with
-  `combine-name-count.yaml`.
-
-The bundled `gleif/name-count-record.yaml` and
-`sec.company/name-count-filer.yaml` use these primitives for Name Matching
-name extraction and canonical keys. `gleif/name-count-identity.yaml` projects
-eligibility and legal keys selectively; `gleif/name-count-update.yaml` reads
-registration only for a wanted legal key. Preserve the caller order: Name Matching
-category, LEI, legal key, wanted-key timestamp, other names; cascade LEI,
-category, mapped quality, names. Empty falsey containers yield no names;
-truthy non-object containers refuse. Skipped records must not evaluate name
-counts or registration. Qualification disables custom steps and includes
-paired faults that prove refusal order. Holder aggregation and
-cascade decisions remain in `edgar_warehouse/mdm/name_count.py`, which
-Name Matching and matching still import. Whole-source construction (#901) and
-the installed population through the earlier in-process bundles (#905, #907)
-are qualified; the `mastering` target's installed proof masters the 6,414
-Companies on separate workers and verifiers (Issue 20 slice 20c part 4, #930).
+The waterfall pass reads the full Golden Copy through `gleif/name-count-complete-stream.yaml`,
+projected to the names of the SEC Companies in the store, and `gleif/name-count-cascade-record.yaml`
+projects one record for bounded comparisons. Preserve the caller order: category, LEI, legal key,
+wanted-key timestamp, other names. Empty falsey containers yield no names; truthy non-object
+containers refuse. Skipped records must not evaluate names or registration. The passes and the fold of
+the reading are in `edgar_warehouse/mdm/waterfall.py` and `cascade.py`.
 
 ## Bounded Parquet framing and sparse object entries
 
@@ -1396,19 +1383,10 @@ An empty key list still validates document shape and assertions.
 `mastering` target (Issue 20 slice 20c; ticket 177: the generic planner), and `rules run --target mastering`
 runs it: registered workers read the receipt-bound raw capture's main
 documents through `name-count-main.yaml` (each row's bronze origin from the
-caller's `bronze_object` context) and their name and CIK keys through
-`name-count-keys.yaml`; the authenticated frozen Name Matching file through
-`name-count.yaml`, narrowed by two lookup sets derived from the key readings (a
-version-3 request; one key reading of at most 512 documents a bundle); the
-exchange catalog through `catalog.yaml`; joined by
-`combine-name-count-captured.yaml` (`combine-name-count.yaml` with the sources a
-capture holds today); then `mdm.prepare` makes the bundle's rows one
-publication and `mastering.merge` merges it. The Name Matching, combine and records inputs
-are composed by Bookkeeping from the verified readings. `mdm name-count`
-builds the Name Matching file from configured readings of the same capture
-(#901, #905). The installed proofs #905 and #907 mastered the full population
-from the in-process bundles this target replaced; the target's own installed
-proof is Issue 20 slice 20c part 4.
+caller's `bronze_object` context) and the exchange catalog through `catalog.yaml`;
+`combine-name-count-captured.yaml` joins them; then `mdm.prepare` makes the bundle's rows one
+publication and `mastering.merge` merges it. The combine and records inputs
+are composed by Bookkeeping from the verified readings.
 
 ## Derived scopes from authenticated source extracts
 
