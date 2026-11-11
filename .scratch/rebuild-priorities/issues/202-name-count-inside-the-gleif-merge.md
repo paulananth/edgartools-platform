@@ -2,7 +2,7 @@
 
 Priority: 202. Map: [Rebuild priorities](../map.md). Opened 2026-11-09 11:25 ET (operator: "This should be part of the mastering process not a separate job functionality required but it is part of GLEIF load only").
 
-Type: task. Status: parked as clean-up (2026-11-10 13:18 ET; operator: "Park This ticket as clean-up"). Labels: clean-up. Blocked by: none.
+Type: task. Status: open, taken up again (2026-11-11 07:05 ET; operator: "Name Count file was dropped long time back why do you need it", then "first find the name count removal and execute that parked ticket"). It was parked as clean-up on 2026-11-10 13:18 ET (operator: "Park This ticket as clean-up"). Labels: clean-up. Blocked by: none.
 
 ## Question
 
@@ -93,4 +93,12 @@ Operator: "Park This ticket as clean-up". Nothing here is on the path to the go-
 - **What is kept:** the replay result (the golden-record search reproduces 1,208 of 6,251 GLEIF attachments, with no disagreement, so it cannot replace the passes), Way 1 and the words **waterfall matching** (`CONTEXT.md`, which no longer names a Name Count or a cascade), the measured size of the removal and its three steps (A, B, C above), and the parts under "Remove \"Name Count\" completely".
 - **What waits with it:** the part of ticket 204 that proves a name binds only on exactly one golden record (it is built here), and the removal of the words from the skills, docs and code.
 - **To take it up again:** start at step A, with the proof that the waterfall pass gives the same pairs as the old file.
+
+## Taken up again (2026-11-11 07:05 ET)
+
+Operator: "Name Count file was dropped long time back why do you need it", then "first find the name count removal and execute that parked ticket". Why it came back: on `main` the `sec.company` target still lists `files: [name_count]`, so a SEC company load is refused without `--file name_count`, and every proof or hosted load of the company source waits on it (tickets 201 and 210). Start at step A above, with the proof that the waterfall pass gives the same pairs as the old file.
+
+- FINDING (2026-11-11 07:07 ET, read-only): step A is feasible without the file. The cascade's `Filer` (`cascade.py:84`) is built by `filer_of(record)` from an SEC Company record **as the Stage holds it**: its `name`, `state_of_incorporation`, and the `matching` values (business address, business country). The SEC Companies are already staged in the store when the GLEIF merge runs, so the filers can come from the store. The `Entity` side (`entity_of`) needs the GLEIF legal and other names and the fit address, which only the whole GLEIF publication holds. So the file's job reduces to one whole-publication pass over GLEIF, run once and stored under the publication's identity, plus the filers read from the store. What `name_count_file.py` rebuilds today by re-reading the 76,230 SEC submissions (`_cascade_filers`, about 1,900 lines of `name-count-*` rules) is then not needed.
+- FINDING (2026-11-11 07:07 ET): the open design question for step A is where the GLEIF whole-publication pass runs and what it writes, since the merge reads its answer per record (`merge.py:62-67`, roles `cascade` and `name_count`). Recommendation, from the ticket's own earlier decision: a pre-step of the GLEIF load reads the whole publication once, runs `cascade.assign` with the filers from the store, and writes the pairs to a table keyed by the publication; the merge reads that table. A scoped load never recounts.
+- FINDING (2026-11-11 07:08 ET, counts only, `local-staging`): confirmed, with a correction. The staged records are in `mastering_record` (`body`), not the empty `mdm.stage_record` table. A `sec.company.v1` record's `body` holds `fields` (`name`, `state_of_incorporation`, `address`, and others) and `provenance.matching` (`address`, `business_country`, `business_postal_code`, `name_count`), which is exactly what `cascade.filer_of` reads. So the filers come from the store with no re-read of the submissions. `local-staging` holds 5,091 SEC company records (a partial load), so the proof on it is a sample, and the full proof needs the full company load.
 
