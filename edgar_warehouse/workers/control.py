@@ -5,21 +5,69 @@ import json
 import re
 import subprocess
 import sys
+import threading
 
 
 class ControlError(RuntimeError):
     pass
 
 
-def call(*arguments: str, document: dict | None = None):
-    """Run one Bookkeeping command; a document goes in through stdin."""
-    command = [sys.executable, "-m", "edgar_warehouse.bookkeeping", *arguments]
-    # Bounded: a hung control call must not outlive the lease it serves.
-    done = subprocess.run(command, input=None if document is None else json.dumps(document),
-                          capture_output=True, text=True, timeout=300)
-    if done.returncode != 0:
-        raise ControlError(_reason(done.stderr) or f"exit {done.returncode}")
-    return json.loads(done.stdout)
+class Session:
+    """One long-lived `bookkeeping serve` child, so a worker pays for a process and a connection once, not
+    per command (a hosted store: about 2 s a command became about 0.3 s). Commands go one at a time, under a
+    lock. A thread that must not wait on another's command (the lease renewal) takes its own Session."""
+
+    def __init__(self, command: list[str] | None = None):
+        self.command = command or [sys.executable, "-m", "edgar_warehouse.bookkeeping", "serve"]
+        self.child, self.lock = None, threading.Lock()
+
+    def _start(self):
+        self.child = subprocess.Popen(self.command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                      stderr=subprocess.DEVNULL, text=True)
+
+    def close(self):
+        with self.lock:
+            self._stop()
+
+    def _stop(self):
+        child, self.child = self.child, None
+        if child is not None:
+            child.kill()
+            child.wait()
+
+    def ask(self, arguments: tuple[str, ...], document: dict | None = None):
+        request = json.dumps({"argv": list(arguments), "document": document})
+        with self.lock:
+            if self.child is None or self.child.poll() is not None:
+                self._start()
+            # Bounded: a hung control call must not outlive the lease it serves; kill it, the next ask starts anew.
+            timer = threading.Timer(TIMEOUT, self.child.kill)
+            timer.start()
+            try:
+                self.child.stdin.write(request + "\n")
+                self.child.stdin.flush()
+                line = self.child.stdout.readline()
+            except (BrokenPipeError, OSError):
+                line = ""
+            finally:
+                timer.cancel()
+            if not line:
+                self._stop()
+                raise ControlError("Bookkeeping session ended or timed out")
+        reply = json.loads(line)
+        if "error" in reply:
+            raise ControlError(_reason(reply["error"]) or "Bookkeeping command failed")
+        return reply["result"]
+
+
+TIMEOUT = 300
+# The lease renewal never waits behind another command: it has its own session, kept for every unit of the run.
+_sessions = {"commands": Session(), "renewals": Session()}
+
+
+def call(*arguments: str, document: dict | None = None, session: str = "commands"):
+    """Run one Bookkeeping command through a session; a document goes in with the command."""
+    return _sessions[session].ask(arguments, document)
 
 
 def _reason(stderr: str) -> str:
@@ -49,7 +97,7 @@ def verifications(run_id: str, profile: str, limit: int) -> list[dict]:
 
 
 def renew(envelope: dict) -> dict:
-    return call("renew", "--envelope", "-", document=envelope)
+    return call("renew", "--envelope", "-", document=envelope, session="renewals")
 
 
 def report(envelope: dict, candidate: dict, runtime: str) -> dict:
