@@ -400,3 +400,72 @@ def test_person_and_fund_join_by_their_identifier_and_a_rerun_changes_nothing(da
         merge.merge_file(db, PERSON, people, again=True)
         merge.merge_file(db, FUND, funds, again=True)
         assert masters(db) == before
+
+
+def sec_filer_without_a_pass():
+    return assertion(source_code=SEC, record_key="0000000017", publication_key="invented", revision=1, effective_at=None,
+                     kind="company", identifiers={"cik": "0000000017"},
+                     fields={"name": "INVENTED CO", "state_of_incorporation": "CA"},
+                     provenance={"matching": {"business_postal_code": "90000", "business_country": "US"}})
+
+
+def test_the_waterfall_pairs_reach_the_merge_as_cascade_name_keys_and_a_second_call_changes_nothing(database_factory):
+    pair = {"lei": LEI, "pass": "name and city or postcode"}
+    with opened(database_factory) as db:
+        filer = sec_filer_without_a_pass()
+        merge.merge_file(db, COMPANY, [filer])
+        keys = "select value,subject from mastering_name_key where role='cascade'"
+        assert db.rows(keys) == []
+
+        counts = merge.apply_pairs(db, COMPANY, SEC, {"0000000017": pair, "0000000099": pair})
+
+        assert counts["records"] == 1  # the pair of a CIK the store does not hold is no record
+        assert db.rows(keys) == [(LEI, filer["subject"])]
+        stored = {e: b for e, b in masters(db).items() if b.get("status") != "alias"}
+        assert merge.apply_pairs(db, COMPANY, SEC, {"0000000017": pair}) == {"records": 0}
+        assert {e: b for e, b in masters(db).items() if b.get("status") != "alias"} == stored
+
+
+ADDRESS = {"street": "1 EXAMPLE WAY", "city": "ANYTOWN", "postcode": "12345", "country": "US"}
+
+
+def placed_filer():
+    return assertion(source_code=SEC, record_key="0000000017", publication_key="invented", revision=1, effective_at=None,
+                     kind="company", identifiers={"cik": "0000000017"},
+                     fields={"name": "INVENTED CO", "state_of_incorporation": "CA"},
+                     provenance={"matching": {"address": ADDRESS, "business_country": "US"}})
+
+
+def placed_entity():
+    return assertion(source_code=GLEIF, record_key=LEI, publication_key="invented", revision=1,
+                     effective_at="2026-09-01T00:00:00+00:00", kind="company", identifiers={"lei": LEI},
+                     fields={"name": "Invented Co.", "jurisdiction": "US-CA", "gleif_entity_status": "ACTIVE",
+                             "gleif_registration_status": "ISSUED", "gleif_last_update": "2026-09-01T00:00:00Z"},
+                     provenance={"matching": {"headquarters_address": ADDRESS}})
+
+
+@pytest.mark.parametrize("gleif_first", [False, True])
+def test_the_pass_pairs_and_the_merge_joins_the_company_in_either_order_and_a_second_pass_changes_nothing(
+        database_factory, gleif_first):
+    from collections import Counter
+    from edgar_warehouse.mdm import cascade, waterfall
+
+    spec = cascade.spec(POLICY)
+    with opened(database_factory) as db:
+        filer, entity = placed_filer(), placed_entity()
+        for record_ in ([entity, filer] if gleif_first else [filer, entity]):
+            merge.merge_file(db, COMPANY, [record_])
+        assert len(live(db)) == 1 and len(next(iter(live(db).values()))["subjects"]) == 1  # no pass yet: the GLEIF record waits
+
+        found = waterfall.assignments(
+            waterfall.stored_filers(db, SEC), [cascade.entity_of(entity, frozenset({"INVENTED CO"}), eligible=True)],
+            spec["passes"], gleif_addresses=Counter(), over_shared=spec["over_shared"])
+        assert set(found) == {"0000000017"}
+        merge.apply_pairs(db, COMPANY, SEC, found)
+
+        (master,) = live(db).values()
+        assert sorted(master["subjects"]) == sorted([filer["subject"], entity["subject"]])
+        assert master["identifiers"]["lei"] == [LEI]
+        assert db.rows("select count(*) from mastering_review where open_review=1") == [(0,)]
+        before = live(db)
+        assert merge.apply_pairs(db, COMPANY, SEC, found) == {"records": 0} and live(db) == before
