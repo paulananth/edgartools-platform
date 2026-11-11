@@ -58,13 +58,11 @@ def exact_namespaces(settings: "Settings") -> list[str]:
 
 
 def name_keys(record: dict, namespaces=(NAME_ID,)) -> list[tuple]:
-    """The LEIs the record's Name Count pass found, so a name match is a lookup."""
+    """The LEI the waterfall pass paired the record with, and its exact name ids, so a name match is a lookup."""
     found = ((record.get("provenance") or {}).get("matching") or {}).get("name_count") or {}
     cascade = (found.get("cascade") or {}).get("lei")
-    entries = found.get("leis") or []
-    named = entries[0][0] if entries and entries[0] else None
     exact = [(role_of(ns), reference_of(record, ns)) for ns in namespaces]
-    return [(role, value, record["subject"]) for role, value in (("cascade", cascade), ("name_count", named), *exact)
+    return [(role, value, record["subject"]) for role, value in (("cascade", cascade), *exact)
             if isinstance(value, str) and value]
 
 
@@ -341,10 +339,9 @@ def _hold_conflicts(store, settings: Settings, plan: dict, records, found: dict)
 def _match_names(store, settings: Settings, records, bound: dict, counts: Counter, binds: list) -> dict:
     named, values = {}, {}
     for rule in _rules(settings):
-        cascade = any(test["primitive"] == matching.cascade.TEST for test in rule["when"])
         holders = sorted(r["subject"] for r in records if r["source_code"] == rule["holder_source"])
         pairs = [(json.loads(c), json.loads(h)) for c, h in store.name_pairs(
-            "cascade" if cascade else "name_count", rule["holder_source"], rule["source"], holders)]
+            "cascade", rule["holder_source"], rule["source"], holders)]
         involved = {side["subject"] for pair in pairs for side in pair}
         bound.update(store.bound(sorted(involved - set(bound))))
         pairs = [(c, h) for c, h in pairs if c["subject"] not in bound and c["subject"] not in named and h["subject"] in bound]
