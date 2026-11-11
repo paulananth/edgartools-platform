@@ -23,10 +23,81 @@ def _document(path: str) -> dict:
     return json.loads(text)
 
 
+def run_command(book, operation: str, args, read=None):
+    """One command against an open Bookkeeping: the one-shot CLI and `serve` both run it. `read` takes an
+    envelope or verification argument (a file, or `-` for stdin) and returns its document."""
+    read = read or _document
+    if operation == "runs":
+        result = book.runs(limit=args.limit, state=args.state)
+    elif operation == "status":
+        result = book.status(args.run_id, limit=args.limit, step=args.step)
+    elif operation == "checks":
+        result = book.check(args.run_id)
+    elif operation == "leases":
+        result = book.status(args.run_id, limit=args.limit)["leases"]
+    elif operation == "resume":
+        result = book.resume(args.run_id)
+    elif operation == "claim":
+        result = book.tasks(args.run_id, args.profile, limit=args.limit)
+    elif operation == "verifications":
+        result = book.verifications(args.run_id, args.profile, limit=args.limit)
+    elif operation == "renew":
+        result = book.renew(read(args.envelope))
+    elif operation == "report":
+        result = book.report(read(args.envelope), {"uri": args.candidate, "sha256": args.sha256},
+                             args.runtime)
+    elif operation == "fail":
+        book.fail(read(args.envelope), args.message)
+        result = {"failed": True}
+    elif operation == "admit":
+        result = book.admit(read(args.verification), {"uri": args.report, "sha256": args.sha256})
+    else:  # finalize: deliver every control event, `--limit` a batch, then record the run's checks
+        from edgar_warehouse.change_journal.store import ChangeJournal, get_engine as journal_engine
+        ledger = journal_engine()
+        try:
+            book.deliver_all(ChangeJournal(ledger), args.run_id, limit=args.limit)
+        finally:
+            ledger.dispose()
+        result = book.finalize(args.run_id)
+    return result
+
+
+def serve(book, lines, out) -> None:
+    """Answer commands until `lines` ends: each line is `{"argv": [...], "document": {...}}`, each answer one line,
+    `{"result": ...}` or `{"error": message}`. One engine and its memo serve every command, so a worker pays
+    for a process and a connection once (a hosted store: 2 s a command became about 0.3 s). Only the task
+    protocol's commands are served; a worker never reaches another."""
+    import argparse
+    parser = argparse.ArgumentParser(prog="edgar-bookkeeping", exit_on_error=False)
+    register(parser.add_subparsers(dest="command", required=True))
+    for line in lines:
+        try:
+            request = json.loads(line)
+            args = parser.parse_args(["bookkeeping", *request["argv"]])
+            if args.bookkeeping_command not in TASK_COMMANDS:
+                raise ValueError("Not a task protocol command")
+            reply = {"result": run_command(book, args.bookkeeping_command, args,
+                                           lambda _path, document=request.get("document"): document)}
+        except (Exception, SystemExit) as exc:
+            reply = {"error": str(exc) or type(exc).__name__}
+        out.write(json.dumps(reply, default=str, sort_keys=True) + "\n")
+        out.flush()
+
+
+TASK_COMMANDS = frozenset({"claim", "verifications", "renew", "report", "fail", "admit"})
+
+
 def _handle(args):
     from .database import get_engine, migrate
     from .destinations import migrate_guard
     operation = args.bookkeeping_command
+    if operation == "serve":
+        book = configured_bookkeeping()
+        try:
+            serve(book, sys.stdin, sys.stdout)
+        finally:
+            book.close()
+        return 0
     if operation in {"init", "migrate"}:
         owner = get_engine()
         try:
@@ -52,38 +123,7 @@ def _handle(args):
     else:
         book = configured_bookkeeping()
         try:
-            if operation == "runs":
-                result = book.runs(limit=args.limit, state=args.state)
-            elif operation == "status":
-                result = book.status(args.run_id, limit=args.limit, step=args.step)
-            elif operation == "checks":
-                result = book.check(args.run_id)
-            elif operation == "leases":
-                result = book.status(args.run_id, limit=args.limit)["leases"]
-            elif operation == "resume":
-                result = book.resume(args.run_id)
-            elif operation == "claim":
-                result = book.tasks(args.run_id, args.profile, limit=args.limit)
-            elif operation == "verifications":
-                result = book.verifications(args.run_id, args.profile, limit=args.limit)
-            elif operation == "renew":
-                result = book.renew(_document(args.envelope))
-            elif operation == "report":
-                result = book.report(_document(args.envelope), {"uri": args.candidate, "sha256": args.sha256},
-                                     args.runtime)
-            elif operation == "fail":
-                book.fail(_document(args.envelope), args.message)
-                result = {"failed": True}
-            elif operation == "admit":
-                result = book.admit(_document(args.verification), {"uri": args.report, "sha256": args.sha256})
-            else:  # finalize: deliver every control event, `--limit` a batch, then record the run's checks
-                from edgar_warehouse.change_journal.store import ChangeJournal, get_engine as journal_engine
-                ledger = journal_engine()
-                try:
-                    book.deliver_all(ChangeJournal(ledger), args.run_id, limit=args.limit)
-                finally:
-                    ledger.dispose()
-                result = book.finalize(args.run_id)
+            result = run_command(book, operation, args)
         finally:
             book.close()
     print(json.dumps(result, default=str, sort_keys=True, indent=2))
@@ -99,6 +139,8 @@ def register(subparsers):
         if name != "init-guard":
             command.add_argument("--database-name", default="bookkeeping", help="The configured isolated control database")
         command.set_defaults(handler=_handle)
+    commands.add_parser("serve", help="Answer task protocol commands, one JSON line each, until stdin ends"
+                        ).set_defaults(handler=_handle)
     grant = commands.add_parser("grant-profile", help="Let one login report a profile's work and another verify it")
     grant.add_argument("--profile", required=True)
     grant.add_argument("--worker", required=True, help="The worker's database login")

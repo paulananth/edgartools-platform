@@ -64,6 +64,7 @@ class Bookkeeping:
         self.engine = engine
         self.artifacts = artifacts or Artifacts()
         self.additional_engines = []
+        self._frozen_static: dict = {}
 
     def close(self):
         for engine in self.additional_engines:
@@ -83,17 +84,13 @@ class Bookkeeping:
             raise Blocked("Unknown run; legacy runs cannot be resumed")
         return result[0]
 
-    def _frozen(self, run_id: str):
-        runs, stored = storage.frozen(self.engine, run_id)
-        if not runs:
-            raise Blocked("Unknown run; legacy runs cannot be resumed")
-        run = runs[0]
-        if run["submission"].get("journal") != "change-journal-v1" or run["submission"].get("protocol") != PROTOCOL:
-            raise Blocked("Legacy runs and deliveries must finish on their original stack")
-        try:
-            submission = run["submission"]
-            if digest(submission) != run["submission_hash"]:
-                raise Blocked("Frozen submission hash mismatch")
+    def _static(self, submission: dict):
+        """What a frozen submission fixes for good, read and checked once per submission (its hash names it):
+        the rules export, the run's configuration, the manifest and its worklist. A persistent control
+        session asks for it on every command; a rerun of all of it cost 0.6 s a command on a hosted store."""
+        key = digest(submission)
+        found = self._frozen_static.get(key)
+        if found is None:
             export = self.artifacts.json(submission["rules"])
             if digest(export["body"]) != export["digest"]:
                 raise Blocked("Rules document hash mismatch")
@@ -109,6 +106,22 @@ class Bookkeeping:
             items = worklist(manifest, config)
             if digest(items) != submission["worklist_hash"]:
                 raise Blocked("Frozen work accounting changed")
+            found = self._frozen_static[key] = (export, config, manifest, items)
+        export, config, manifest, items = found
+        return export, config, manifest, list(items)  # a run adds its generated work to its own copy
+
+    def _frozen(self, run_id: str):
+        runs, stored = storage.frozen(self.engine, run_id)
+        if not runs:
+            raise Blocked("Unknown run; legacy runs cannot be resumed")
+        run = runs[0]
+        if run["submission"].get("journal") != "change-journal-v1" or run["submission"].get("protocol") != PROTOCOL:
+            raise Blocked("Legacy runs and deliveries must finish on their original stack")
+        try:
+            submission = run["submission"]
+            if digest(submission) != run["submission_hash"]:
+                raise Blocked("Frozen submission hash mismatch")
+            export, config, manifest, items = self._static(submission)
             expected = {(entry["step"], entry["key"]): entry for entry in items}
             for row in stored:
                 cursor = row["unit"].get("cursor")
