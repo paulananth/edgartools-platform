@@ -21,7 +21,7 @@ catalog publication.
   report as history, omit the stale operator guide, and carry only the full
   instance rebuild procedure after checking the current Compose project and
   volumes. See `RESEARCH.md`. {{now}}
-- [ ] Commit and publish this closeout on the fresh branch; verify checks on its
-  final PR head.
+- [ ] Rebase this closeout onto current `origin/main`, publish the refreshed
+  head, and verify CI on the final PR head.
 - [x] Learning → skill: none; this is a one-off closeout of a superseded branch.
   {{now}}

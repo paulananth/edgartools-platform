@@ -2,7 +2,7 @@
 
 ## Decision
 
-Do not reopen or republish PR [#1418](https://github.com/paulaananth/edgartools-platform/pull/1418) as-is. It was closed by operator request without merging, and its nine-commit diff is not in current `origin/main` (`32cd4d727`). The branch mixes a dated OpenMetadata 2.0.2 catalog/reset observation, general operator guidance, and an unresolved per-load progress reporting follow-up. Later merged work supersedes the per-load quality-result and UI parts, while continuous reporting remains unimplemented beyond the explicit latest-status command.
+Do not reopen or republish PR [#1418](https://github.com/paulaananth/edgartools-platform/pull/1418) as-is. It was closed by operator request without merging, and its nine-commit diff is not in current `origin/main` (`c3e009b0`). The branch mixes a dated OpenMetadata 2.0.2 catalog/reset observation, general operator guidance, and an unresolved per-load progress reporting follow-up. Later merged work supersedes the per-load quality-result and UI parts, while continuous reporting remains unimplemented beyond the explicit latest-status command.
 
 The completed per-load quality path is distinct from continuous progress reporting: [#1588](https://github.com/paulaananth/edgartools-platform/pull/1588) proves publication from a completed Bookkeeping run, [#1599](https://github.com/paulaananth/edgartools-platform/pull/1599) records the shipped 2.0.7 UI observation, and [#1601](https://github.com/paulaananth/edgartools-platform/pull/1601) closes the remaining precision boundary. Current `skills/openmetadata/SKILL.md` also provides `rules catalog status --bookkeeping-run RUN_ID`; this is an explicit latest-status publication with readback, not a Bookkeeping callback or a full progress reporter.
 
@@ -17,7 +17,7 @@ The completed per-load quality path is distinct from continuous progress reporti
 
 ## Evidence and limits
 
-- PR #1418 was closed as a draft at operator request; its comment says the branch and commits were retained. Its recorded CI passed on the old head, but the branch is now behind current main and has no validation against current `origin/main` (`32cd4d727`).
+- PR #1418 was closed as a draft at operator request; its comment says the branch and commits were retained. Its recorded CI passed on the old head, but the branch is now behind current main and has no validation against current `origin/main` (`c3e009b0`).
 - [#1500](https://github.com/paulaananth/edgartools-platform/pull/1500) upgraded the local OpenMetadata stack to 2.0.7. Current `skills/openmetadata/SKILL.md` identifies 2.0.7 as the deployed version and says its schemas are versioned.
 - [#1507](https://github.com/paulaananth/edgartools-platform/pull/1507) added Bookkeeping run-status availability. The current skill describes the exact status publication and readback and states that it is neither an automatic callback nor a pipeline trigger.
 - `infra/openmetadata/docker-compose.yml` declares project `edgartools-catalog` with `db-data` and `es-data` volumes. The carried-forward rebuild guide requires checking resolved names, labels, and consumers before using `down -v`; it does not perform any reset.
