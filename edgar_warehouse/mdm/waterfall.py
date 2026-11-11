@@ -5,6 +5,7 @@ separate file once put on each SEC record. Its inputs are the SEC Company record
 whole GLEIF publication, counted once. Nothing here reads a capture or a file."""
 from __future__ import annotations
 
+import json
 from collections import Counter
 from collections.abc import Iterable
 
@@ -14,6 +15,13 @@ from . import cascade
 def filers_from_records(records: Iterable[dict]) -> list[cascade.Filer]:
     """The SEC Company records as the store holds them, each as the passes read a filer."""
     return [cascade.filer_of(record) for record in records]
+
+
+def stored_filers(store, source_code: str) -> list[cascade.Filer]:
+    """Every SEC Company record the store holds for `source_code`, each as a filer. The store keeps a record's
+    body as text; one already parsed is read as it is."""
+    bodies = store.rows("select body from mastering_record where source_code=%s", [source_code])
+    return filers_from_records(json.loads(body) if isinstance(body, str) else body for (body,) in bodies)
 
 
 def assignments(filers: Iterable[cascade.Filer], entities: Iterable[cascade.Entity], passes: list[dict], *,
