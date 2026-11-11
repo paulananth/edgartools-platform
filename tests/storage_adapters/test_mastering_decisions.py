@@ -8,7 +8,7 @@ import json
 from edgar_warehouse.mastering import merge
 from edgar_warehouse.mdm import adapters
 from edgar_warehouse.mdm.evidence import assertion
-from tests.storage_adapters.test_mastering import COMPANY, SECURITY, gleif_record, live, opened, sec_holder
+from tests.storage_adapters.test_mastering import SECURITY, joined, live, opened
 
 FORM4 = "sec.ownership.security.v2"
 
@@ -26,8 +26,7 @@ def form4(key, issuer="1234567", symbol="EXZ"):
 
 def test_a_name_match_is_recorded_with_what_it_used_and_an_identifier_join_is_not(database_factory):
     with opened(database_factory) as db:
-        holder, candidate = sec_holder(), gleif_record()
-        merge.merge_file(db, COMPANY, [holder, candidate])
+        holder, candidate = joined(db)
         (golden_id, golden), = live(db).items()
         (decision,) = binds(db)  # the name rule's, and only it: the CIK rule's join writes none
         assert decision["subject"] == candidate["subject"] and decision["rule_id"].startswith("sec-gleif-name")
@@ -51,8 +50,7 @@ def test_a_creation_by_a_name_rule_is_recorded_and_a_replay_writes_nothing_twice
 
 def test_a_surviving_value_traces_to_the_source_record_that_supplied_it(database_factory):
     with opened(database_factory) as db:
-        holder, candidate = sec_holder(), gleif_record()
-        merge.merge_file(db, COMPANY, [holder, candidate])
+        holder, candidate = joined(db)
         (golden_id, golden), = live(db).items()
         winner = golden["fields"]["name"]["winner"]
         assert winner["assertion_id"] == holder["assertion_id"]

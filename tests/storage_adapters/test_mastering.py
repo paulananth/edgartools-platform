@@ -418,6 +418,23 @@ def placed_entity():
                      provenance={"matching": {"headquarters_address": ADDRESS}})
 
 
+def joined(db, *, gleif_first=False):
+    """Merge the invented filer and GLEIF entity, then give the merge the waterfall pass's pair: the two records
+    are one golden record. Answers (filer, entity)."""
+    from collections import Counter
+    from edgar_warehouse.mdm import cascade, waterfall
+
+    spec = cascade.spec(POLICY)
+    filer, entity = placed_filer(), placed_entity()
+    for record_ in ([entity, filer] if gleif_first else [filer, entity]):
+        merge.merge_file(db, COMPANY, [record_])
+    found = waterfall.assignments(
+        waterfall.stored_filers(db, SEC), [cascade.entity_of(entity, frozenset({"INVENTED CO"}), eligible=True)],
+        spec["passes"], gleif_addresses=Counter(), over_shared=spec["over_shared"])
+    merge.apply_pairs(db, COMPANY, SEC, found)
+    return filer, entity
+
+
 @pytest.mark.parametrize("gleif_first", [False, True])
 def test_the_pass_pairs_and_the_merge_joins_the_company_in_either_order_and_a_second_pass_changes_nothing(
         database_factory, gleif_first):
