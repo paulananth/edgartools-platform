@@ -2,7 +2,7 @@
 
 These steps turn captured files into extracts and write files with receipts. They need no claim, lease,
 heartbeat or verifier, so they never reach the database: the content hash is their proof. Inputs resolve from
-the receipts of earlier local units, through the same `compose_document` the engine uses. A run in the database
+the receipts of earlier local units, through `compose_document`. A run in the database
 then opens at the first step that writes the destination, with these receipts as its inputs."""
 from __future__ import annotations
 
@@ -25,7 +25,8 @@ def staged_inputs(artifacts, export_body: dict, target: str, inputs: dict, modul
     items = worklist(manifest, config)
     modules = modules or {operation: profile(operation) for operation in LOCAL_OPERATIONS}
     done = run_local(config["steps"], items, modules, artifacts)
-    return artifacts.put(inputs["uri"].rsplit("/", 1)[0] + "/staged",
+    # Named by the input manifest's hash, so two bundles beside each other never write one address.
+    return artifacts.put(inputs["uri"].rsplit("/", 1)[0] + "/staged-" + inputs["sha256"][:12],
                          stage_manifest(manifest, config["steps"], items, done, artifacts))
 
 
@@ -93,7 +94,8 @@ def stage_manifest(manifest: dict, steps: list[dict], items: list[dict], done: d
 
 def _staged_input(unit: dict, local: set, done: dict, artifacts):
     source = unit["input"]
-    if isinstance(source, dict) and set(source) == {"from"} and source["from"].get("step") in local:
+    if (isinstance(source, dict) and set(source) == {"from"} and "run" not in source["from"]
+            and source["from"].get("step") in local):
         return _input(unit, lambda dependency: _receipt(done, dependency), artifacts)
     if isinstance(source, dict) and set(source) == {"compose"}:
         slots = _compose_steps(source["compose"])
@@ -104,15 +106,18 @@ def _staged_input(unit: dict, local: set, done: dict, artifacts):
     return source
 
 
+OTHER_RUN = "<another run>"  # a unit of another run is never a local unit of this one
+
+
 def _compose_steps(body: dict) -> set:
     found = set()
     for value in body["slots"].values():
         if isinstance(value, list):
-            found |= {dependency["step"] for dependency in value}
+            found |= {OTHER_RUN if "run" in dependency else dependency["step"] for dependency in value}
         elif set(value) == {"compose"}:
             found |= _compose_steps(value["compose"])
         else:
-            found.add(value["step"])
+            found.add(OTHER_RUN if "run" in value else value["step"])
     return found
 
 

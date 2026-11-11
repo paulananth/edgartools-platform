@@ -112,9 +112,9 @@ def test_a_local_target_is_staged_and_the_staged_manifest_is_what_the_run_takes(
     ref = local.staged_inputs(store, {"bookkeeping": {}}, "mastering", {"uri": "file:///m/manifest.json", "sha256": "0" * 64},
                               modules={"source.read": Reader()})
 
-    assert ref == {"uri": "file:///m/staged/staged.json", "sha256": "9" * 64}
+    assert ref == {"uri": "file:///m/staged-000000000000/staged.json", "sha256": "9" * 64}
     root, staged_manifest = store.placed[0]
-    assert root == "file:///m/staged" and set(staged_manifest["steps"]) == {"prepare"}
+    assert root == "file:///m/staged-000000000000" and set(staged_manifest["steps"]) == {"prepare"}
     assert staged_manifest["steps"]["prepare"][0]["input"] == {"uri": "file:///out/r", "sha256": "3" * 64}
 
 
@@ -123,3 +123,30 @@ def test_a_target_not_marked_local_keeps_its_manifest(monkeypatch):
     inputs = {"uri": "file:///m/manifest.json", "sha256": "0" * 64}
 
     assert local.staged_inputs(Artifacts({}), {"bookkeeping": {}}, "mastering", inputs) is inputs
+
+
+def test_an_input_that_reads_another_run_is_a_database_input_even_when_a_local_step_has_the_name():
+    other = {"from": {"run": "11111111-1111-1111-1111-111111111111", "step": "read", "key": "r"}}
+    mixed = {"compose": {"slots": {"a": {"step": "combine", "key": "c"},
+                                   "b": {"run": "11111111-1111-1111-1111-111111111111", "step": "read", "key": "r"}},
+                         "document": {"a": {"slot": "a"}, "b": {"slot": "b"}}}}
+    items = [{"step": "prepare", "key": "p", "ordinal": 0, "unit": unit("p", other)},
+             {"step": "merge", "key": "m", "ordinal": 0, "unit": unit("m", mixed)}]
+    manifest = {"version": 2, "steps": {}}
+
+    with pytest.raises(Blocked, match="mixes"):
+        local.stage_manifest(manifest, STEPS, items, {("read", "r"): REF, ("combine", "c"): REF}, artifacts=None)
+    kept = local.stage_manifest(manifest, STEPS, items[:1], {("read", "r"): REF}, artifacts=None)
+    assert kept["steps"]["prepare"][0]["input"] == other  # not resolved to this run's own local receipt
+
+
+def test_a_local_step_that_requires_a_database_step_is_refused_by_the_configuration():
+    body = deepcopy(source("openfigi"))
+    target = body["bookkeeping"]["targets"]["mastering"]
+    target["local"] = True
+    gate = {**next(s for s in target["steps"] if s["operation"] == "journal.record"), "name": "gate", "requires": []}
+    target["steps"].insert(0, gate)  # a database step before the first read, which then requires it
+    next(s for s in target["steps"] if s["name"] == "requests")["requires"] = ["gate"]
+
+    with pytest.raises(Blocked, match="local step requires only local steps"):
+        validate(body, "mastering")

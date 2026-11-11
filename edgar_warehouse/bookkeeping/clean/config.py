@@ -281,6 +281,10 @@ def validate(document: dict, target: str) -> dict:
             if not step["checks"]:
                 raise Blocked("Every step requires a check")
             seen.add(name)
+        if selected.get("local"):
+            local = {step["name"] for step in steps if step["operation"] in LOCAL_OPERATIONS}
+            if any(not set(step["requires"]) <= local for step in steps if step["name"] in local):
+                raise Blocked("A local step requires only local steps")
         checks = selected.get("checks", [])
         if (not isinstance(checks, list) or not checks or len(set(checks)) != len(checks)
                 or any(c not in RUN_CHECKS for c in checks)):
