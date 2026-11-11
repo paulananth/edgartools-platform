@@ -104,9 +104,14 @@ Operator: "Name Count file was dropped long time back why do you need it", then 
 
 ## Step A, first seam built (2026-11-11 07:40 ET)
 
-- [x] The pure pass: `edgar_warehouse/mdm/waterfall.py` reads filers from stored SEC Company records (`filers_from_records`), pairs them with GLEIF entities through the existing `cascade.assign` (`assignments`, with the whole publication's address counts passed in) and counts how an answer differs from the one a record carries (`differences`). Verified by `tests/unit/test_waterfall_pass.py` (5 tests, written first; they failed on the missing module) and 36 nearby tests (cascade, name count file).
+- [x] (2026-11-11 07:41 ET) The pure pass: `edgar_warehouse/mdm/waterfall.py` reads filers from stored SEC Company records (`filers_from_records`), pairs them with GLEIF entities through the existing `cascade.assign` (`assignments`, with the whole publication's address counts passed in) and counts how an answer differs from the one a record carries (`differences`). Verified by `tests/unit/test_waterfall_pass.py` (5 tests, written first; they failed on the missing module) and 36 nearby tests of the existing passes and the old file.
 - [ ] The whole-publication GLEIF reader: the legal and other names, the fit address and the address counts of every GLEIF entity, read once from the captured publication and stored under its identity.
 - [ ] Read the SEC Company records from the store (`mastering_record`, source `sec.company`) into `filers_from_records`.
 - [ ] The counts-only comparison on real data against the answer the records carry (`provenance.matching.name_count`), through `differences`: same, other LEI, only new, only stored. `local-staging` holds 5,091 SEC company records, so a full proof needs the full company load.
-- [ ] Steps B and C as written above.
+- [x] (2026-11-11 07:41 ET) A regression test at the seam (`test_it_gives_the_pairs_the_existing_name_count_document_gives_on_the_same_inputs`): `assignments` equals the cascade answer of `name_count.counted_document` on the same invented filers, entities and address counts, so the wrapper cannot drift from the old document while both exist.
+- [ ] Write the answer where the merge reads it: a table keyed by the publication (the merge reads `found["cascade"]["lei"]`, `merge.py:63`, and the record's answer is `cascade.entry`, `cascade.py:186`). Not built.
+- [ ] Read the stored answer for the comparison through the profile's cascade fields (`matching.py:56-60`): `differences` expects `{cik: {"lei": ...}}`, and a record holds its entry at `provenance.matching.name_count.<cascade_field>` with the LEI at `<cascade_identifier_field>`, so an adapter is needed.
+- [ ] The GLEIF reader must build each entity's keys (legal name plus other names a filer wants) and its address count over every supported GENERAL entity, as `name_count.fold_reading` does, and say where the passes and `over_shared` come from (the Company rules' `cascade.spec`).
+- [ ] The proof the step names: through the engine, in both orders, and a second pass changing nothing.
+- [ ] Steps B and C as written above; `differences` is deleted with the old file in step C.
 

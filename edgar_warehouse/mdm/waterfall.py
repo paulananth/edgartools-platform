@@ -1,8 +1,8 @@
 """The waterfall pass: pair SEC filers with GLEIF entities, strictest comparison first (ticket 202, step A).
 
-It pairs the same way the cascade does (`cascade.assign`), over the same two whole sources, and replaces the
-answer the Name Count file carried on each SEC record. Its inputs are the SEC Company records already in the
-store and the whole GLEIF publication, counted once. Nothing here reads a capture or a file."""
+It runs the existing passes (`cascade.assign`) over the same two whole sources. It replaces the answer that a
+separate file once put on each SEC record. Its inputs are the SEC Company records already in the store and the
+whole GLEIF publication, counted once. Nothing here reads a capture or a file."""
 from __future__ import annotations
 
 from collections import Counter
@@ -26,7 +26,8 @@ def assignments(filers: Iterable[cascade.Filer], entities: Iterable[cascade.Enti
 
 
 def differences(new: dict, stored: dict) -> dict[str, int]:
-    """Counts only: how a new answer differs from the one a record already carries (by CIK)."""
+    """Counts only: how a new answer differs from the one a record already carries (by CIK). A comparison for
+    the move away from the old file: it is deleted with that file in step C."""
     both = new.keys() & stored.keys()
     same = sum(new[cik]["lei"] == stored[cik]["lei"] for cik in both)
     return {"same": same, "other_lei": len(both) - same, "only_new": len(new.keys() - stored.keys()),

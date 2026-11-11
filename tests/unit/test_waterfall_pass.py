@@ -1,6 +1,6 @@
 """The waterfall pass: SEC filers read from the stored company records, GLEIF entities from the whole
-publication, paired one to one pass by pass. The pairs replace the answer the Name Count file carried
-(ticket 202, step A). Invented names only."""
+publication, paired one to one pass by pass. The pairs replace the answer a separate file put on each
+SEC record (ticket 202, step A). Invented names only."""
 from collections import Counter
 
 from edgar_warehouse.mdm import cascade, waterfall
@@ -66,3 +66,29 @@ def test_differences_count_each_kind_of_disagreement_with_the_stored_answer():
     stored = {"1": {"lei": "A"}, "2": {"lei": "X"}, "4": {"lei": "D"}}
 
     assert waterfall.differences(new, stored) == {"same": 1, "other_lei": 1, "only_new": 1, "only_stored": 1}
+
+
+def test_it_gives_the_pairs_the_existing_name_count_document_gives_on_the_same_inputs():
+    # While both exist, they must agree: the document's address counts are the filers' places plus the
+    # GLEIF addresses, and `assignments` forms the same counts.
+    from edgar_warehouse.mdm import name_count
+
+    filers = waterfall.filers_from_records([
+        sec_record("0000000001", "Alpha Widgets Inc"),
+        sec_record("0000000002", "Beta Gadgets Inc", {**ADDRESS, "street": "2 Other Street"}),
+        sec_record("0000000003", "Gamma Tools Inc"),
+        sec_record("0000000004", "Gamma Tools Inc")])
+    entities = [entity("LEI-A", "Alpha Widgets Inc"), entity("LEI-B", "Beta Gadgets Inc"),
+                entity("LEI-G", "Gamma Tools Inc")]
+    gleif = Counter({("1 Example Way", "12345", "US"): 4})
+    counts = cascade.count_addresses(f.place for f in filers) + gleif
+
+    document = name_count.counted_document(
+        sec_population={}, gleif={}, wanted=set(), held={}, legal={}, other={},
+        cascade={"spec": {"version": "v", "passes": PASSES, "over_shared": 10}, "filers": filers},
+        entities=entities, address_counts=counts)
+
+    new = waterfall.assignments(filers, entities, PASSES, gleif_addresses=gleif, over_shared=10)
+
+    assert new == document["cascade"]["assignments"]
+    assert set(new) == {"0000000001", "0000000002"}  # the shared name binds neither of its filers
