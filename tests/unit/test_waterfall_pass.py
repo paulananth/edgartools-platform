@@ -92,3 +92,23 @@ def test_it_gives_the_pairs_the_existing_name_count_document_gives_on_the_same_i
 
     assert new == document["cascade"]["assignments"]
     assert set(new) == {"0000000001", "0000000002"}  # the shared name binds neither of its filers
+
+
+class FakeStore:
+    def __init__(self, rows):
+        self.rows_given, self.asked = rows, []
+
+    def rows(self, sql, values=()):
+        self.asked.append((sql, list(values)))
+        return self.rows_given
+
+
+def test_the_stored_company_records_become_filers_whether_the_body_is_text_or_already_parsed():
+    import json
+    store = FakeStore([(json.dumps(sec_record("0000000001", "Alpha Widgets Inc")),),
+                       (sec_record("0000000002", "Beta Gadgets Inc"),)])
+
+    filers = waterfall.stored_filers(store, "sec.company.v1")
+
+    assert [f.cik for f in filers] == ["0000000001", "0000000002"]
+    assert store.asked == [("select body from mastering_record where source_code=%s", ["sec.company.v1"])]
