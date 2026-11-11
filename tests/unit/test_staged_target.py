@@ -19,11 +19,18 @@ STEPS = [
 
 
 def test_a_target_may_declare_itself_local_and_nothing_else_changes():
-    body = deepcopy(source("openfigi"))
+    body = deepcopy(source("sec.nport.registrant"))
     body["bookkeeping"]["targets"]["mastering"]["local"] = True
 
     assert validate(body, "mastering")["local"] is True
-    assert "local" not in validate(source("openfigi"), "mastering")
+    assert "local" not in validate(source("sec.nport.registrant"), "mastering")
+
+
+def test_openfigi_mastering_is_local_and_its_run_starts_at_prepare():
+    config = validate(source("openfigi"), "mastering")
+
+    assert config["local"] is True
+    assert [step["name"] for step in staged(config)["steps"]] == ["prepare", "merge", "processed"]
 
 
 def test_local_must_be_a_boolean():
