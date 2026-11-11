@@ -7,7 +7,7 @@ import pytest
 
 from edgar_warehouse.bookkeeping.clean.config import Blocked, staged, validate
 from edgar_warehouse.rules.files import source
-from edgar_warehouse.workers import local
+from edgar_warehouse.rules import local
 
 REF = {"uri": "file:///captured/a.json", "sha256": "a" * 64}
 STEPS = [

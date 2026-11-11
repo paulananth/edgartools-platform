@@ -4,7 +4,7 @@ worker module's `execute` with the three fields it reads, and returns every unit
 import pytest
 
 from edgar_warehouse.control_contract import Blocked
-from edgar_warehouse.workers import local
+from edgar_warehouse.rules import local
 
 REF = {"uri": "file:///captured/a.json", "sha256": "a" * 64}
 

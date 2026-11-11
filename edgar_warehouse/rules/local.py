@@ -19,7 +19,7 @@ def staged_inputs(artifacts, export_body: dict, target: str, inputs: dict, modul
     config = validate(export_body, target)
     if not config.get("local"):
         return inputs
-    from . import profile
+    from edgar_warehouse.workers import profile
 
     manifest = artifacts.json(inputs)
     items = worklist(manifest, config)
