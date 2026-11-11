@@ -133,7 +133,9 @@ notes is not the live one. The order:
 
 1. The database and its `MDM` schema (the network rule and policy live in that schema).
 2. `infra/snowflake/postgres/mdm_create_network_policy.sql`, then `mdm_create_instance.sql`.
-3. `bootstrap-prod-mdm.sh`, which rotates both credentials and runs `mdm migrate` last.
+3. `bootstrap-prod-mdm.sh`, which rotates both credentials and runs `mdm migrate` last. It rotates on every run
+   with no way to skip it, and a rotation needs the operator's word; without it, build the connection file from the
+   instance's saved credentials and run `mdm migrate` directly.
 
 - Every `snow sql --filename ... -D name=value` run of those two files needs `--enable-templating JINJA`. Without
   it the CLI leaves `{{ name }}` unreplaced and fails with `syntax error ... unexpected '{'`.
