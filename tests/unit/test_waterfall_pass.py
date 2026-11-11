@@ -3,7 +3,10 @@ publication, paired one to one pass by pass. The pairs replace the answer a sepa
 SEC record (ticket 202, step A). Invented names only."""
 from collections import Counter
 
+import pytest
+
 from edgar_warehouse.mdm import cascade, waterfall
+from edgar_warehouse.mdm.store import Conflict
 
 ADDRESS = {"street": "1 Example Way", "city": "Exampleton", "postcode": "12345", "country": "US"}
 PASSES = [{"pass": "name and street", "compare": ["street", "city", "postcode"], "rule_id": "r1"},
@@ -149,3 +152,54 @@ def test_the_pass_over_a_publication_pairs_the_stored_filers_with_its_entities()
                                        over_shared=10)
 
     assert {cik: pair["lei"] for cik, pair in pairs.items()} == {"0000000001": "LEI-0", "0000000002": "LEI-1"}
+
+
+class FakeOpened:
+    """Stands for `source_readings.OpenedExtract`: one archive, a `wanted` lookup and the tables of one chunk."""
+
+    def __init__(self, tables, wanted, records=1, contract=None):
+        self.contract, self.artifacts = contract, [{"record_count": records, "input": {"sha256": "a" * 64}}]
+        self._tables, self._wanted = tables, wanted
+
+    def lookup_sets(self, _):
+        return {"wanted": self._wanted}
+
+    def chunks(self):
+        yield 0, 0, {"tables": self._tables}, 0
+
+
+METADATA = {"file_content": "GLEIF_FULL_PUBLISHED", "record_count": 1, "content_date": "2026-01-01"}
+
+
+def serve(monkeypatch, wanted, records=1):
+    from edgar_warehouse.rules import files as rules_files
+    tables = gleif_tables("Alpha Widgets Inc")
+    monkeypatch.setattr(waterfall.source_readings, "OpenedExtract",
+                        lambda *a, **k: FakeOpened(tables, wanted, records, rules_files.load(waterfall.GLEIF_READING)))
+    monkeypatch.setattr(waterfall, "validate_metadata", lambda kind, metadata: None)
+
+
+def test_pairs_reads_the_publication_for_the_names_of_the_stored_filers(monkeypatch):
+    filers = waterfall.filers_from_records([sec_record("0000000001", "Alpha Widgets Inc")])
+    serve(monkeypatch, waterfall.wanted_names(filers))
+
+    publication, found = waterfall.pairs(filers, {}, None, METADATA, PASSES, over_shared=10)
+
+    assert publication["record_count"] == 1 and publication["archive_sha256"] == "a" * 64
+    assert {cik: pair["lei"] for cik, pair in found.items()} == {"0000000001": "LEI-0"}
+
+
+def test_a_reading_that_projected_other_names_is_refused(monkeypatch):
+    filers = waterfall.filers_from_records([sec_record("0000000001", "Alpha Widgets Inc")])
+    serve(monkeypatch, {"someone else"})
+
+    with pytest.raises(Conflict, match="other names"):
+        waterfall.pairs(filers, {}, None, METADATA, PASSES, over_shared=10)
+
+
+def test_a_delta_publication_is_refused(monkeypatch):
+    filers = waterfall.filers_from_records([sec_record("0000000001", "Alpha Widgets Inc")])
+    serve(monkeypatch, waterfall.wanted_names(filers))
+
+    with pytest.raises(Conflict, match="never a delta"):
+        waterfall.pairs(filers, {}, None, {**METADATA, "file_content": "GLEIF_DELTA"}, PASSES, over_shared=10)
