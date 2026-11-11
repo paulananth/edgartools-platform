@@ -137,14 +137,7 @@ its apply mode requires reconciled Terraform state and live no-use evidence.
 
 Populate the MDM PostgreSQL DSN with the Snowflake Postgres `application` role DSN:
 
-```bash
-printf '%s' "$SNOWFLAKE_APPLICATION_MDM_DSN" | \
-  bash infra/scripts/bootstrap-aws-mdm-secrets.sh \
-    --env dev \
-    --aws-profile aws-admin-dev \
-    --aws-region us-east-1 \
-    --dsn-stdin
-```
+Write it to the secret `<prefix>/mdm/postgres_dsn` with `aws secretsmanager put-secret-value`, the value read from stdin and never printed.
 
 Snowflake Postgres cutover and RDS removal runbook:
 

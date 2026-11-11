@@ -465,8 +465,8 @@ Start with the [data-platform setup guide](skills/data-platform/SKILL.md#0-setup
 for the packaged `edgartools-data` CLI, Rust engine, skills and pinned rules.
 Python 3.12+, Rust tooling and the appropriate PostgreSQL 16 stores are needed.
 Credentials and database addresses are supplied through the environment,
-outside Git and chat. The [installation script](infra/scripts/install.sh)
-offers an ordered infrastructure/install plan; applying it is an operator action.
+outside Git and chat. The [aws-snowflake-operations](skills/aws-snowflake-operations/SKILL.md) skill
+holds the infrastructure install steps; applying them is an operator action.
 
 Once installed, these commands let you inspect the interface and metadata plan:
 

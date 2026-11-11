@@ -35,7 +35,7 @@ Checkpoint B: keep source buckets read-only and intact. Roll back runtime roots 
 
 Inventory `EDGARTOOLS_PRODB` and any pre-existing `EDGARTOOLS_PROD` collision. Rename only where Snowflake supports it and ownership is unambiguous; otherwise provision `EDGARTOOLS_PROD` with the maintained stack and migrate data using zero-copy clones or controlled `INSERT ... SELECT` operations. Recreate and validate `EDGARTOOLS_PROD_{DEPLOYER,REFRESHER,READER}`, refresh/reader warehouses, storage integration, stage, pipe, stream, procedures, tasks, and grants against canonical S3 URLs.
 
-Create or migrate the Snowflake Postgres instance `EDGARTOOLS_PROD_MDM`; use `bootstrap-prod-mdm.sh` for database migration, role ownership, credential rotation, and AWS secret writes. Parameterize the Neo4j Native App grants with `database=EDGARTOOLS_PROD`, verify application callbacks/compute pools, and migrate graph schemas. Run dbt compile/run/test with `EDGARTOOLS_PROD*` environment values, then upload Streamlit with `DASHBOARD_DATABASE=EDGARTOOLS_PROD`.
+Create or migrate the Snowflake Postgres instance `EDGARTOOLS_PROD_MDM`; use the `aws-snowflake-operations` skill for database migration and role ownership; a credential rotation needs the operator's word. Parameterize the Neo4j Native App grants with `database=EDGARTOOLS_PROD`, verify application callbacks/compute pools, and migrate graph schemas. Run dbt compile/run/test with `EDGARTOOLS_PROD*` environment values, then upload Streamlit with `DASHBOARD_DATABASE=EDGARTOOLS_PROD`.
 
 Checkpoint C: retain the former database and Postgres instance without writes. Roll back application configuration, roles, and dashboard consumers before dropping any canonical replacement.
 

@@ -234,7 +234,7 @@ checks and points to the repository lifecycle script.
    `RULES_DATABASE_URL`, `BOOKKEEPING_DATABASE_URL`,
    `CHANGE_JOURNAL_DATABASE_URL`, `MDM_DATABASE_URL`,
    `RDM_DATABASE_URL`, and `SILVER_DATABASE_URL`.
-   `BOOKKEEPING_MANIFEST_ROOT` is the local folder (`file://` or a path) where
+   `BOOKKEEPING_MANIFEST_ROOT` is the local folder, as a `file://` address (a plain path is refused), where
    Rules freezes run configuration; `local-test-stores.py` writes it into
    `worker.env`.
 
