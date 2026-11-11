@@ -112,7 +112,6 @@ REGISTRY = MappingProxyType(
         **{
             name: Primitive(partial(apply_record_test, name), "name_binding")
             for name in (
-                "name_census_match@1",
                 "gleif_entity_eligible@1",
                 "holds_no_other_lei@1",
                 "jurisdiction_agrees@1",

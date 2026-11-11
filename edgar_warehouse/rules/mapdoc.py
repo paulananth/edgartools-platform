@@ -80,8 +80,6 @@ CONDITION_WORDS = {
                     "no digits or forbidden characters (suffixes from {suffix_list} allowed)",
     "values_overlap@1": "{field} holds {count} of the list {values}",
     "evidence_present@1": "The record has {document}",
-    "name_census_match@1": "The names are equal, legal form kept, and exactly one SEC filer and one GLEIF "
-                           "entity carry that name",
     "cascade_pass@1": "Pass {pass}: the names are equal, legal form kept (GLEIF's other names count), and, "
                       "of what earlier passes left, exactly one SEC company and one GLEIF entity agree on "
                       "{compare}. An address more than {over_shared} entities share counts by its country only. "

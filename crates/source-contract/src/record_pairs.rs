@@ -18,7 +18,6 @@ struct Command {
     pairs: Option<Vec<[Object; 2]>>,
     code_tables: IndexMap<String, IndexMap<String, String>>,
     normalizers: IndexMap<String, bool>,
-    name_count_version: String,
     cascade_version: String,
     pair_comparison: PairComparison,
 }
@@ -28,11 +27,6 @@ struct PairComparison {
     name_field: String,
     identifier_namespace: String,
     name_count_field: String,
-    name_count_entries_field: String,
-    name_count_holder_keys_field: String,
-    name_count_holder_count_field: String,
-    name_count_identifier_count_field: String,
-    name_count_other_holders_field: String,
     cascade_field: String,
     cascade_identifier_field: String,
     eligibility_kind: String,
@@ -246,34 +240,6 @@ fn test_record_pair(
     let shape = &command.pair_comparison;
     match name {
         "holds_no_other_lei@1" => Ok(true),
-        "name_census_match@1" => {
-            let entry = values::read_object(&read_matching_values(left)?, &shape.name_count_field)?;
-            let identifier = values::read_optional_value(
-                &values::read_object(right, "identifiers")?,
-                &shape.identifier_namespace,
-            )?;
-            let key = read_name(args, left, "sec_normalizer", command)?;
-            let leis = values::read_array(&entry, &shape.name_count_entries_field)?;
-            let held = match leis.as_slice() {
-                [only] => values::read_value::<(Option<String>, String)>(only).ok(),
-                _ => None,
-            };
-            Ok(held.is_some_and(|(lei, updated)| {
-                values::read_value::<Option<String>>(&identifier).ok() == Some(lei)
-                    && same_update(&updated, right)
-            }) && value_matches_rule(&entry, "version", &command.name_count_version)?
-                && value_matches_rule(&entry, &shape.name_count_holder_count_field, &1)?
-                && value_matches_rule(
-                    &entry,
-                    &shape.name_count_holder_keys_field,
-                    &vec![values::read_optional_value(left, "record_key")?],
-                )?
-                && value_matches_rule(&entry, &shape.name_count_identifier_count_field, &1)?
-                && value_matches_rule(&entry, &shape.name_count_other_holders_field, &0)?
-                && !key.is_empty()
-                && value_matches_rule(&entry, "key", &key)?
-                && key == read_name(args, right, "gleif_normalizer", command)?)
-        }
         "gleif_entity_eligible@1" => {
             if !value_matches_rule(args, "categories", &shape.eligibility_categories)? {
                 return Err(format!(

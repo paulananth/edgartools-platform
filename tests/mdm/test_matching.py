@@ -11,10 +11,8 @@ import pytest
 from edgar_warehouse.mdm import cascade as _cascade
 from edgar_warehouse.mdm.sec_company import POLICY as _POLICY
 from edgar_warehouse.mdm.matching import HELD_LEI_TEST, PAIR_TESTS, _passes, _refused_by_flag
-from edgar_warehouse.mdm.matching import NAME_COUNT_VERSION as VERSION
 from edgar_warehouse.mdm.primitives import REGISTRY
 from edgar_warehouse.mdm.store import Conflict
-from tests.mdm.test_activation import NAME_POSTCODE, NAME_STATE
 
 
 def value(v):
@@ -29,15 +27,7 @@ def sec(state="CA", postal="95014", country="US"):
             "matching": {
                 "business_postal_code": postal,
                 "business_country": country,
-                "name_count": {
-                    "version": VERSION,
-                    "key": "APPLE INC",
-                    "ciks": ["0000320193"],
-                    "cik_count": 1,
-                    "leis": [["HWUPKR0MPOU8FGXBT394", "2026-09-01T00:00:00Z"]],
-                    "lei_count": 1,
-                    "other_name_holders": 0,
-                },
+                "name_count": {},
             }
         },
     }
@@ -78,70 +68,10 @@ def test_every_registered_name_binding_test_is_implemented():
     assert registered == set(PAIR_TESTS) | {HELD_LEI_TEST}
 
 
-def test_both_measured_rules_pass_a_matching_pair():
-    assert _passes(NAME_STATE, sec(), gleif())
-    assert _passes(NAME_POSTCODE, sec(), gleif())
 
 
-def test_the_name_count_names_the_gleif_version_the_stage_holds_by_its_effective_time():
-    # GLEIF's spelling and the Stage's UTC form are one instant.
-    assert _passes(NAME_STATE, sec(), gleif(effective_at="2026-09-01T02:00:00+02:00"))
-    # A later GLEIF version than the one the name count saw is not the name count's answer.
-    assert not _passes(NAME_STATE, sec(), gleif(effective_at="2026-09-02T00:00:00+00:00"))
-    # A record with no stated time matches only a name count that saw none.
-    assert not _passes(NAME_STATE, sec(), gleif(effective_at=None))
-    record = sec()
-    record["provenance"]["matching"]["name_count"]["leis"] = [["HWUPKR0MPOU8FGXBT394", ""]]
-    assert _passes(NAME_STATE, record, gleif(effective_at=None))
-    assert not _passes(NAME_STATE, record, gleif())
 
 
-@pytest.mark.parametrize(
-    "case,expected",
-    [
-        ("ambiguous_candidates", (False, False)),
-        ("ambiguous_holders", (False, False)),
-        ("stale_name_count", (False, False)),
-        ("different_legal_form", (False, False)),
-        ("inactive_candidate", (False, False)),
-        ("different_places", (False, False)),
-        ("conflicting_jurisdictions", (False, False)),
-        ("foreign_business_country", (False, True)),
-    ],
-)
-def test_pair_policy_without_storage(case, expected):
-    """Calculation matrix retired from PostgreSQL integration; fixtures are invented."""
-    record, other = sec(), gleif()
-    record["record_key"] = "9999999999"
-    record["fields"]["name"] = value("INVENTED GROUP INC")
-    other["fields"]["name"] = value("Invented Group Inc.")
-    other["identifiers"] = {"lei": "9999000000EXAMPLE113"}
-    entry = record["provenance"]["matching"]["name_count"]
-    entry.update(key="INVENTED GROUP INC", ciks=[record["record_key"]],
-                 leis=[[other["identifiers"]["lei"], "2026-09-01T00:00:00Z"]])
-    assert all(_passes(rule, record, other) for rule in (NAME_STATE, NAME_POSTCODE))
-    if case == "ambiguous_candidates":
-        entry["leis"].append(["9999000000EXAMPLE114", "2026-09-01T00:00:00Z"])
-        entry["lei_count"] = 2
-    elif case == "ambiguous_holders":
-        entry["ciks"].append("9999999998")
-        entry["cik_count"] = 2
-    elif case == "stale_name_count":
-        other["effective_at"] = "2026-09-20T00:00:00Z"
-    elif case == "different_legal_form":
-        other["fields"]["name"] = value("Invented Group LLC")
-    elif case == "inactive_candidate":
-        other["fields"]["gleif_entity_status"] = value("INACTIVE")
-    elif case == "different_places":
-        other["fields"]["jurisdiction"] = value("US-NV")
-        other["provenance"]["matching"]["headquarters_postal_code"] = "89501"
-    elif case == "conflicting_jurisdictions":
-        other["fields"]["jurisdiction"] = value("US-NV")
-    elif case == "foreign_business_country":
-        record["provenance"]["matching"]["business_country"] = "GB"
-        other["fields"]["jurisdiction"] = value("GB")
-        other["provenance"]["matching"]["headquarters_country"] = "GB"
-    assert tuple(_passes(rule, record, other) for rule in (NAME_STATE, NAME_POSTCODE)) == expected
 
 
 def test_a_cascade_pass_checks_the_gleif_version_by_its_effective_time():
@@ -151,32 +81,10 @@ def test_a_cascade_pass_checks_the_gleif_version_by_its_effective_time():
         assert _passes(_pass(CITY_OR_POSTCODE), record, other) is passes, effective_at
 
 
-def test_a_field_path_is_read_from_the_rule():
-    # Point the SEC side at a field that holds no state: the rule no longer holds.
-    moved = with_args(NAME_STATE, "jurisdiction_agrees@1", sec_field="sic")
-    assert not _passes(moved, sec(), gleif())
 
 
-def test_a_matching_path_is_read_from_the_rule():
-    moved = with_args(NAME_POSTCODE, "postal_agrees@1", gleif_code="matching.nothing")
-    assert not _passes(moved, sec(), gleif())
 
 
-@pytest.mark.parametrize(
-    ("primitive", "changes", "reason"),
-    [
-        ("jurisdiction_agrees@1", {"sec_codes": "edgar-iso-v2"}, "unknown code table"),
-        (
-            "name_census_match@1",
-            {"sec_normalizer": "normalize_text@x"},
-            "unknown normalizer",
-        ),
-        ("gleif_entity_eligible@1", {"categories": ["FUND"]}, "only the GENERAL"),
-    ],
-)
-def test_an_argument_the_test_cannot_honour_is_refused(primitive, changes, reason):
-    with pytest.raises(Conflict, match=reason):
-        _passes(with_args(NAME_STATE, primitive, **changes), sec(), gleif())
 
 
 # Ticket 21: a cascade pass re-checks the name count's answer on the Stage rows.

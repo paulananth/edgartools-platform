@@ -182,7 +182,7 @@ Evidence: [research 03](../../../.scratch/mastering-policy-language/research/03-
 | binding | `identifier_cardinality` | `namespace` (contract in §7.2) | veto or pass |
 | binding | `compound_key_equal` | `components[] {field, normalizer, comparison ∈ exact|consistent}` | bool |
 | binding | `name_similarity` | `left`, `right`, `normalizer`, `method@version`, `min_score` | bool |
-| name_binding | `name_census_match` | `sec_normalizer`, `gleif_normalizer` | bool: the SEC record's Name Matching entry names exactly its own CIK and this LEI at the GLEIF record's last update, and both keys (legal form kept) agree |
+| name_binding | `cascade_pass` | `pass`, `compare`, `over_shared`, `refused_flags`, `sec_normalizer`, `gleif_normalizer` | bool: the waterfall pass paired this SEC record with this LEI and its entry says so |
 | name_binding | `gleif_entity_eligible` | `categories`, `entity_statuses`, `refused_registration_statuses` | bool |
 | name_binding | `holds_no_other_lei` | — | veto: the Company already holds another LEI |
 | name_binding | `jurisdiction_agrees` | `sec_field`, `sec_codes`, `gleif_field` | bool |
@@ -368,7 +368,7 @@ Its decision and measurement:
 - A `name_binding` rule (company mastering ticket 08) is measured, not
   deterministic: it only joins a waiting record to the Company another
   source's record holds (`source`, `holder_source`, `on_no_match: wait`),
-  must call `name_census_match` and a place test, and activates with a proof
+  must be one waterfall pass (`cascade_pass`) with the eligibility test and the one-LEI veto, and activates with a proof
   at its kind's `name_binding` bar.
 - An `exact_name_binding` rule (ticket 01) joins a record that carries only a name to the one
   Company other sources' records hold under the same name id (`key: name_id@1`, a

@@ -650,20 +650,8 @@ class TestEachStepClearsTheBar:
         _check_proof("company", COMPANY_BAR, approved, ["8"])
 
 
-def _name_rules():
-    import json as _json
-    from pathlib import Path as _Path
-
-    frozen = _json.loads(
-        (
-            _Path(__file__).resolve().parents[2]
-            / ".scratch/company-mastering/research/08-rules.json"
-        ).read_text()
-    )["rules"]
-    return {(r["rule_id"], r["version"]): r for r in frozen}
 
 
-NAME_RULES = _name_rules()
 
 
 def _current_company_identity(value):
@@ -695,154 +683,15 @@ def _historic_company_identity(value):
     return value
 
 
-NAME_STATE = _current_company_identity(NAME_RULES[("sec-gleif-name-jurisdiction", "2026-09-25.1")])
-NAME_POSTCODE = _current_company_identity(NAME_RULES[("sec-gleif-name-postal", "2026-09-25.2")])
 
 
-def name_policy(rule=None, activate=True, bar=True):
-    rule = rule or NAME_STATE
-    body = policy(
-        rules=[RULE, rule],
-        bars={"classification": BAR, **({"name_binding": COMPANY_BAR} if bar else {})},
-    )
-    if activate:
-        body["automatic_rules"] = [
-            {
-                "kind": "company",
-                "family": "name_binding",
-                "rule_id": rule["rule_id"],
-                "rule_version": rule["version"],
-                "verdict": "bind",
-                "activation": "measured",
-                "proof": proof(n=300, correct=300),
-            }
-        ]
-    return body
 
 
-class TestANameBindingRule:
-    """Ticket 08: the SEC-to-GLEIF matching rules activate by measurement."""
-
-    @pytest.mark.parametrize("rule", [NAME_STATE, NAME_POSTCODE])
-    def test_the_frozen_rules_are_well_formed_and_activate_at_95(self, rule):
-        body = name_policy(rule)
-        check_policy(body)
-        assert activated(body, "company", rule, "bind")
-
-    def test_a_bar_below_95_is_refused(self):
-        body = name_policy()
-        body["kinds"]["company"]["bars"]["name_binding"] = {
-            **COMPANY_BAR,
-            "min_precision": 0.9,
-        }
-        with pytest.raises(Conflict, match="below the accepted"):
-            check_policy(body)
-
-    def test_a_proof_below_the_bar_is_refused(self):
-        body = name_policy()
-        body["automatic_rules"][0]["proof"] = proof(n=100, correct=94)
-        with pytest.raises(Conflict, match="below the company bar"):
-            check_policy(body)
-
-    @pytest.mark.parametrize(
-        ("changes", "reason"),
-        [
-            ({"on_no_match": "mint"}, "never creates a Company"),
-            ({"emits": ["bind", "review"]}, "exactly bind"),
-            ({"holder_source": None}, "holds the Company"),
-            (
-                {"when": [{"primitive": "name_census_match@1", "args": {}}]},
-                "never the name alone",
-            ),
-            (
-                {"when": [{"primitive": "identifier_match@1", "args": {}}]},
-                "not a name binding test",
-            ),
-        ],
-    )
-    def test_a_malformed_rule_is_refused(self, changes, reason):
-        with pytest.raises(Conflict, match=reason):
-            check_policy(name_policy({**NAME_STATE, **changes}, activate=False))
-
-    def test_a_kind_verdict_cannot_be_measured_for_a_name_binding(self):
-        body = name_policy()
-        body["automatic_rules"][0]["verdict"] = "company"
-        with pytest.raises(Conflict, match="does not emit|cannot prove"):
-            check_policy(body)
 
 
 CASCADE_RULES = {"sec-gleif-name-city-or-postcode"}
 
 
-class TestTheNameMatchingRules:
-    """Ticket 08: the matching rules are declared in the live policy, not active."""
-
-    ROOT = Path(__file__).parents[2] / ".scratch/company-mastering/research"
-
-    def test_the_declared_rules_are_the_measured_rules_unchanged(self):
-        declared = [
-            r
-            for r in POLICY["kinds"]["company"]["rules"]
-            if r["family"] == "name_binding"
-            and r["rule_id"] not in CASCADE_RULES  # ticket 21
-        ]
-        assert declared == [NAME_STATE, NAME_POSTCODE]
-        assert POLICY["kinds"]["company"]["bars"]["name_binding"] == COMPANY_BAR
-
-    def test_both_name_matching_rules_are_on_by_the_operators_approval(self):
-        # The classification rule, the CIK matching rule (ticket 15), and the
-        # two name matching rules (ticket 25, "yes", 2026-09-29 21:04 ET),
-        # then the three Form ADV matching rules (rebuild priorities ticket
-        # 76, "Switch on all three (Recommended)", 2026-10-17 08:31 ET), then
-        # the N-PORT registrant's (ticket 79, "Switch on all six (Recommended)",
-        # 2026-10-17 21:03 ET), then the cascade pass "name and city or postcode" (ticket 09, operator
-        # words "P5 now, hold P1/P4/P6 (Recommended)", 2026-10-30 18:20 ET).
-        company = policy_layers.company_part(POLICY)["automatic_rules"]
-        assert company[:2] == [APPROVED_ACTIVATION, CIK_ACTIVATION]
-        assert [e["rule_id"] for e in company[2:]] == [
-            "sec-gleif-name-jurisdiction", "sec-gleif-name-postal", "iapd-adv-crd", "iapd-adv-cik",
-            "iapd-adv-custodian-lei", "iapd-adv-custodian-bd",
-            "iapd-adv-custodian-name", "iapd-adv-custodian-name-form", "iapd-adv-custodian-name-place",
-            "nport-registrant-cik", "nport-registrant-lei",
-            "sec-gleif-name-city-or-postcode"]  # the two creating custodian rules: 2026-11-09; the registrant LEI: 2026-11-10
-        check_policy(POLICY)
-
-    def test_an_activation_needs_the_operators_approval(self):
-        unapproved = copy.deepcopy(POLICY)
-        # Every measured activation: both name rules and Person's classification.
-        for entry in unapproved["automatic_rules"]:
-            if entry["activation"] == "measured" and entry["rule_id"] != "sec-company-candidate":
-                entry["proof"] = {**entry["proof"], "approved_by": None}
-        with pytest.raises(Conflict, match="lacks its approval"):
-            check_policy(unapproved)
-
-    @pytest.mark.parametrize(
-        "rule_id", ["sec-gleif-name-jurisdiction", "sec-gleif-name-postal"]
-    )
-    def test_the_proof_files_match_and_re_score(self, rule_id):
-        from edgar_warehouse.mdm.sec_company import NAME_PROOFS
-
-        proof_body = NAME_PROOFS[rule_id]
-        for name, expected in proof_body["cohort"]["files"].items():
-            assert (
-                hashlib.sha256((self.ROOT / name).read_bytes()).hexdigest() == expected
-            )
-        draw = "08-1" if rule_id == "sec-gleif-name-jurisdiction" else "08-2"
-        rule = NAME_STATE if draw == "08-1" else NAME_POSTCODE
-        tag = rule_id if draw == "08-1" else f"{rule_id}@{rule['version']}"
-
-        def rows(name):
-            return [
-                json.loads(line) for line in (self.ROOT / name).read_text().splitlines()
-            ]
-
-        sample = [r for r in rows(f"{draw}-sample.jsonl") if tag in r["drawn_for"]]
-        arms = [r for r in rows(f"{draw}-adversarial.jsonl") if tag in r["rules"]]
-        assert len(sample) == proof_body["n"]
-        assert sum(r["final"] == "same" for r in sample) == proof_body["correct"]
-        assert len(arms) == proof_body["adversarial"]["n"]
-        assert sum(r["final"] != "same" for r in arms) == 0
-        assert wilson_lower_bound(proof_body["correct"], proof_body["n"], 0.95) >= 0.95
 
 
 @pytest.mark.parametrize("changes", [

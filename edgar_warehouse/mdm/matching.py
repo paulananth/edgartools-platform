@@ -20,7 +20,6 @@ from .names import REFERENCE_TABLES
 from .store import Conflict
 
 FAMILY = "name_binding"
-NAME_COUNT_VERSION = "sec-gleif-name-count-v1"  # the version a stored name-count entry names, until its primitive is retired
 EXACT_NAME_FAMILY = "exact_name_binding"  # keyed by the name id both sides carry (ticket 01)
 
 
@@ -101,7 +100,7 @@ def compare_candidate_records(rule: dict, pairs: list[tuple[dict, dict]]) -> lis
             "rule": rule, "pairs": pairs,
             "code_tables": REFERENCE_TABLES,
             "normalizers": {kind.normalizer_name: kind.upper for kind in TYPES.values()},
-            "name_count_version": NAME_COUNT_VERSION, "cascade_version": cascade.VERSION,
+            "cascade_version": cascade.VERSION,
             "pair_comparison": profile,
         })
     except ValueError as error:
@@ -115,7 +114,7 @@ def compare_pair_test(name: str, left: dict, right: dict, args: dict) -> bool:
 HELD_LEI_TEST = "holds_no_other_lei@1"
 PAIR_TESTS = {
     name: partial(compare_pair_test, name) for name in (
-        "name_census_match@1", "gleif_entity_eligible@1", "jurisdiction_agrees@1",
+        "gleif_entity_eligible@1", "jurisdiction_agrees@1",
         "jurisdictions_do_not_conflict@1", "postal_agrees@1", cascade.TEST,
     )
 }

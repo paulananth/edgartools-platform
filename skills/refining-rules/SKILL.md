@@ -301,8 +301,7 @@ Never invent a command.
   Examples, "Unfinished live pipelines" (one list, kept there).
 - Name matching across two sources: SEC Company to GLEIF. The waterfall pass
   (`waterfall.py`, from the SEC Companies in the store and the whole GLEIF publication; its answer
-  reaches the merge through `merge.apply_pairs`); the name rules `sec-gleif-name-jurisdiction` and
-  `sec-gleif-name-postal`; the cascade pass `sec-gleif-name-city-or-postcode` (the passes that compared less are deleted)
+  reaches the merge through `merge.apply_pairs`); the pass `sec-gleif-name-city-or-postcode` (the older name rules and the passes that compared less are deleted)
   (`cascade_pass@1`; "name and city or postcode" compares `[[city, postcode]]`); the code in
   `edgar_warehouse/mdm/waterfall.py` and `cascade.py`
   (ticket 09). Name a matching rule by what it compares, never by a pass
