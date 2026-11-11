@@ -157,3 +157,12 @@ def test_a_local_step_that_requires_a_database_step_is_refused_by_the_configurat
 
     with pytest.raises(Blocked, match="local step requires only local steps"):
         validate(body, "mastering")
+
+
+def test_the_driver_waits_only_for_the_steps_the_database_run_holds():
+    from edgar_warehouse.rules.driving import run_steps
+
+    assert [step["name"] for step in run_steps(source("openfigi"), "mastering")] == ["prepare", "merge", "processed"]
+    unmarked = source("sec.nport.registrant")
+    assert [s["name"] for s in run_steps(unmarked, "mastering")] == [
+        s["name"] for s in validate(unmarked, "mastering")["steps"]]

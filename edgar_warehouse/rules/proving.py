@@ -33,7 +33,7 @@ from sqlalchemy import create_engine
 from edgar_warehouse.mdm.store import digest
 
 from . import files
-from .driving import Commands, RunStopped, duties, manifest_root
+from .driving import Commands, RunStopped, duties, manifest_root, run_steps
 
 TARGET = "mastering"
 
@@ -213,7 +213,7 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
                               "--input-manifest", report["manifest"]["uri"],
                               "--input-sha256", report["manifest"]["sha256"])
             run_id = str(json.loads(output)["run"]["run_id"])
-            final = commands.drive(run_id, declared["steps"])
+            final = commands.drive(run_id, run_steps(document, target))
             if final["run"]["state"] != "complete":
                 raise TestRunError(f"pass {number} ended {final['run']['state']}, not complete")
             held = counts(mdm)
