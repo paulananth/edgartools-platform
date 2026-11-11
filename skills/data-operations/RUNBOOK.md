@@ -46,6 +46,40 @@ The skill's maintained source is `skills/data-operations/` in the repository;
 the data-platform package ships it to the installed agent skill folders. A
 source runbook references the release and its active environment/run IDs.
 
+## Initialize a hosted store
+
+A hosted PostgreSQL 16 instance (Snowflake Postgres) is initialized with the same commands as the local store,
+in this order, by skills and their own commands only. No script installs it end to end. Credentials live in
+private files (`umask 077`, a folder outside the repository) and are never printed; redact a result by key and
+by value before showing any of it.
+
+1. **Instance.** [aws-snowflake-operations](../aws-snowflake-operations/SKILL.md) creates it. Its one-time admin
+   and application credentials go straight to a private file. A password rotation needs the operator's word.
+   Wait for `state` to read `READY`.
+2. **Databases and logins.** As the admin login, create `rules`, `bookkeeping`, `change_journal`, `mdm`, `rdm`
+   and `silver` ([data-platform](../data-platform/SKILL.md), Databases). Each store gets a login without
+   administrative rights (`<store>_runtime`; the rules store's is `rules_agent`, beside the role
+   `rules_approver`). The admin login is every store's owner. Write a private `connection.env` holding each
+   store's owner URL (`<STORE>_MIGRATION_DATABASE_URL`) and runtime URL (`<STORE>_DATABASE_URL`), `sslmode=require`.
+3. **Schemas.** The commands of "Apply store DDL", each with its owner connection: `mdm migrate` reads
+   `MDM_DATABASE_URL` as the owner and refuses when owner and runtime role are the same login, so set it to the
+   owner for that one run; `bookkeeping init` and `migrate` read `BOOKKEEPING_DATABASE_URL` as the owner;
+   `rdm`, `change-journal`, `silver` and `rules` read their `*_MIGRATION_DATABASE_URL`. Read each command's
+   `--help` first. Done when every migration file prints with its checksum.
+4. **RDM codes.** `scripts/rdm_restore_published.py` in this skill, with the operator's exact words; every pin
+   must read `pin ok`, then `rdm list`.
+5. **Governance logins.** Activation needs `mdm_governance` (connect to `mdm`, `USAGE` on schema `mdm`, `SELECT`
+   on every table and on the prepared and mastering tables, `INSERT` on `mdm.policy`, `mdm.dataset` and
+   `mdm.dataset_mapping`, and the registration grant) and `rules_governance` (a member of the rules agent and
+   `rules_approver` roles). Write them, with `RULES_MDM_ACTIVATION_DATABASE_URL`, into a private `governance.env`.
+6. **Source configurations.** `rules load --root rules --version <name>` with the runtime env (approvals kept in
+   git are imported), `rules pending` empty, then `rules activate` with `governance.env`: the merge policy, then
+   pipelines, then sources. Take the list from the load's own result and iterate it in code: a list file without
+   a final newline loses its last line to a `while read` loop, and that source then stays unactivated.
+   Done when `rules status` shows every version `active`.
+
+A missing grant or login that a command names is a gap to fix in this section, not to work around.
+
 ## Delivery availability
 
 AWS acquisition or Step Functions supplies the files and completion evidence.
