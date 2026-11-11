@@ -80,6 +80,7 @@ Thumbs.db
 # Local go-live wizard state and sanitized reports
 .edgartools-go-live/
 infra/aws-*-application.json
+infra/aws-*-application.json.bak-*
 infra/aws-*-image-ref.txt
 infra/snowflake/sql/*_native_pull_handshake.json
 .gstack/
@@ -98,3 +99,10 @@ infra/.bronze-historic-delete-evidence/
 # but not meant to be version-controlled; the live record is the JSON PUT to
 # the Snowflake stage alongside each release.
 infra/snowflake/streamlit/.evidence/
+
+# Local agent tool output: diagram/HTML artifacts and ratchet state. These are
+# working files an agent produces locally; the checked record is the repo.
+.archify/
+.lavish/
+.omp/ratchet/
+eval/
