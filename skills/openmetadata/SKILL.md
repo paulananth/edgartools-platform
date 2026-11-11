@@ -803,3 +803,49 @@ forbidden shared object. A zero-removal publish after the rebuild is expected;
 it means the fresh catalog already matches the plan. Report deletion counts
 separately from publication counts. A catalog reset does not reset the
 OpenMetadata server or prove that metadata ingestion or data pipelines ran.
+
+## Full local instance rebuild
+
+This is separate from a catalog-only clean rebuild. It removes the local
+OpenMetadata PostgreSQL and Elasticsearch volumes, including the catalog,
+users, workflows, roles, and instance settings. Use it only when the operator
+explicitly requests a full local instance reset. A catalog reset must preserve
+both volumes.
+
+Before stopping the stack, confirm the active Docker context and inspect the
+Compose project:
+
+```bash
+docker compose -f infra/openmetadata/docker-compose.yml ps
+```
+
+The current Compose file declares project `edgartools-catalog` and volumes
+`db-data` and `es-data`. Confirm their resolved names and project labels; verify
+that only those two volumes are in scope and no unrelated container uses them.
+List volumes with the Compose project label, inspect each resolved volume, and
+check consumers with `docker ps -a --filter volume=<resolved-volume-name>`.
+If names, labels, project ownership, or consumers differ, stop and report them
+before deleting anything.
+
+After that scope is confirmed, stop the project and remove only its declared
+volumes:
+
+```bash
+docker compose -f infra/openmetadata/docker-compose.yml down -v
+```
+
+Verify the two project volumes are absent, then redeploy:
+
+```bash
+docker compose -f infra/openmetadata/docker-compose.yml up -d
+```
+
+Wait for PostgreSQL, Elasticsearch, migrations, and `openmetadata-server` to
+report healthy. Read `GET /api/v1/system/version` and require the configured
+version. Create a fresh local administrator token only after the deployment is
+healthy. Then follow the catalog-only workflow above: read the side-effect-free
+Rules plan, publish the configured catalog, require publisher readback, run the
+independent read-only check, and verify the exact domain and glossary inventory
+plus the absence of any forbidden shared object. Report the server rebuild
+separately from catalog publication. Do not remove images, other projects'
+containers, or any other volumes.
