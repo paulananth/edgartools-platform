@@ -13,7 +13,7 @@ Every part still open in the Rebuild priorities map, in one list, ordered by wha
 ### 1. The go-live path (do these first, in this order)
 
 **[211](../issues/211-finish-the-go-live-the-remaining-sources-and-the-hosted-store.md) 211: Finish the go-live: the remaining sources and the hosted store** (open)
-- [ ] Hosted SEC company load (76,231 documents in 150 bundles, the target marked local): running since 13:32 ET, 64 of 150 bundles at 14:32 ET, no failure; about a minute a bundle.
+- [x] (2026-11-11 16:45 ET) [211] Hosted SEC company load: 76,380 documents in 150 bundles, 2 at a time, the target marked local (read and combine on the Mac, database writes only for records, merge and processed), finished 16:43 ET after about 3 hours with two stops. First pass 13:32 to 15:55 ET: 128 bundles, about a minute a bundle, then 22 bundles failed at `mastering.merge`. Cause (traceback, then fixed in PR 1677 with a test that fails on the old code): a bundle whose every document is set aside (not a listed operating company) has no records and so no kind, and `merge_file` raised `KeyError('')` looking up the empty kind in the release step; the `local-staging` load of 11-10 predates that step. After the fix the rerun finished the leftover runs (44 runs, 0.8 to 1.3 min each) and reported "0 documents loaded, 76380 already loaded before". The store holds 5,091 company records (the listed operating filers), the same count as `local-staging`.
 - [ ] GLEIF Level 1 (finds Companies, never creates), then GLEIF relationships
 - [ ] OpenFIGI, then 13F securities and N-PORT security (Securities)
 - [ ] SEC ownership (Form 4 relationships)
@@ -26,7 +26,7 @@ Every part still open in the Rebuild priorities map, in one list, ordered by wha
 - [ ] Whether a source that cannot yet load (ticket 79 N-PORT run builder, ticket 80 OpenFIGI listing enrichment, ADV and 13F mastering targets) is deferred or loaded as far as its path supports. The load sequence says to report the missing source and stage, not...
 - [ ] Learning → skill: name the skill line this ticket changed, or write "none".
 - [ ] Load each source into the hosted store from the local captures, no AWS (2026-11-11 06:02 ET; operator: "after init load each source in snowflake from local no aws"). Done so far on the hosted store: GLEIF subfund pairs (1 document), N-PORT registrants (1),...
-- [ ] Hosted counts: ticket 209's count of records explained, and each source's stored and set-aside counts, on the hosted store once its loads finish.
+- [ ] Hosted counts, first part done (2026-11-11 16:45 ET): ticket 209's count on the hosted store after the SEC company load (read-only, 102 s): 446,704 records with a golden record, 393,459 explained as creators, 53,245 by an identifier, 0 by a decision (the waterfall pass has not run there yet), **0 unexplained**, none for any source; 415,730 golden records. Still to record: each source's stored and set-aside counts, and the count again after the remaining sources load.
 - [ ] Learning → skill: name the skill line this ticket changed, or write "none".
 
 **[210](../issues/210-only-mastering-and-silver-touch-the-database.md) 210: Only mastering and silver touch the database** (open)
