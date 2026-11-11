@@ -14,6 +14,7 @@ On the hosted store each control call costs about 2 s (a first connection 0.9 s,
 
 ## Parts
 
+- [ ] Cheapest check first, no code: keep the control stores (Bookkeeping, Change Journal, Rules) on the local server and point only MDM and silver at the hosted store. Then only mastering and silver cross the network. Open question to settle by reading `destination_guard.sql` and running one small source: does the destination guard accept a lease held in another database?
 - [ ] Design: a step marked local runs in the loader's own process, writes its output files and receipt, and records no database row; the database run starts at the Source Stage step with the receipts as its inputs. Consult `/gof-refactor-reviewer` first.
 - [ ] Rule: the bookkeeping skill names which operations are verified (destination writers: mastering merge, silver land and derive) and which are not (source read, source combine). Verified by the skill lint.
 - [ ] Build it, with a test that fails before the change (a read and combine of N units issue no database call).
