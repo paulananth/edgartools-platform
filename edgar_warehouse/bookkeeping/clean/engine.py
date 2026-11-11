@@ -20,7 +20,7 @@ from sqlalchemy.exc import DBAPIError
 from . import storage, lifecycle
 from .artifacts import Artifacts
 from .config import (RUN_CHECKS, STEP_CHECKS, Blocked, canonical, digest, generated_worklist, reference,
-                     validate, worklist)
+                     staged, validate, worklist)
 from .compose import compose_document
 
 PROTOCOL = 1
@@ -100,7 +100,7 @@ class Bookkeeping:
                 raise Blocked("Rules reference disagrees with submission")
             if "acquisition" in export["body"]:
                 _authority(export, submission["scope"], self.artifacts)
-            config = validate(export["body"], submission["target"])
+            config = staged(validate(export["body"], submission["target"]))
             if submission.get("profiles") != {step["name"]: step["operation"] for step in config["steps"]}:
                 raise Blocked("Frozen worker profiles differ from the Rules export")
             manifest = self.artifacts.json(submission["inputs"])
@@ -173,7 +173,7 @@ class Bookkeeping:
                 or not (silver_only or finalized_holds(export) or (isinstance(proof, dict) and proof_holds(export)))):
             raise Blocked("Submission requires an active Rules export that is proven or finalized")
         reference({"uri": rules_ref["uri"], "sha256": (proof or {}).get("batch_hash") or export["digest"]})
-        config = validate(export["body"], target)
+        config = staged(validate(export["body"], target))
         if scope.get("feed") and "acquisition" not in export["body"]:
             raise Blocked("Retired acquisition feed cannot be submitted")
         if "acquisition" in export["body"]:
