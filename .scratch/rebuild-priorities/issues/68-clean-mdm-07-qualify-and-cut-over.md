@@ -22,5 +22,5 @@ Source/consumer integration gates must finish before any consumer cutover.
 
 ## Checklist
 
-- [ ] Run `mdm migrate` on the hosted store once it exists: it carries every migration the local store has, including 005–007 (ticket 18) and 010 (ticket 19), moved here 2026-10-18 12:25 ET
-- [ ] Learning → skill
+- [ ] ~~Run `mdm migrate` on the hosted store once it exists: it carries every migration the local store has, including 005–007 (ticket 18) and 010 (ticket 19), moved here 2026-10-18 12:25 ET~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
+- [ ] ~~Learning → skill~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
