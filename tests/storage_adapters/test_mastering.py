@@ -400,3 +400,27 @@ def test_person_and_fund_join_by_their_identifier_and_a_rerun_changes_nothing(da
         merge.merge_file(db, PERSON, people, again=True)
         merge.merge_file(db, FUND, funds, again=True)
         assert masters(db) == before
+
+
+def sec_filer_without_a_pass():
+    return assertion(source_code=SEC, record_key="0000000017", publication_key="invented", revision=1, effective_at=None,
+                     kind="company", identifiers={"cik": "0000000017"},
+                     fields={"name": "INVENTED CO", "state_of_incorporation": "CA"},
+                     provenance={"matching": {"business_postal_code": "90000", "business_country": "US"}})
+
+
+def test_the_waterfall_pairs_reach_the_merge_as_cascade_name_keys_and_a_second_call_changes_nothing(database_factory):
+    pair = {"lei": LEI, "pass": "name and city or postcode"}
+    with opened(database_factory) as db:
+        filer = sec_filer_without_a_pass()
+        merge.merge_file(db, COMPANY, [filer])
+        keys = "select value,subject from mastering_name_key where role='cascade'"
+        assert db.rows(keys) == []
+
+        counts = merge.apply_pairs(db, COMPANY, SEC, {"0000000017": pair, "0000000099": pair})
+
+        assert counts["records"] == 1  # the pair of a CIK the store does not hold is no record
+        assert db.rows(keys) == [(LEI, filer["subject"])]
+        stored = {e: b for e, b in masters(db).items() if b.get("status") != "alias"}
+        assert merge.apply_pairs(db, COMPANY, SEC, {"0000000017": pair}) == {"records": 0}
+        assert {e: b for e, b in masters(db).items() if b.get("status") != "alias"} == stored

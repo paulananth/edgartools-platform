@@ -68,6 +68,34 @@ def name_keys(record: dict, namespaces=(NAME_ID,)) -> list[tuple]:
             if isinstance(value, str) and value]
 
 
+def apply_pairs(store, settings: Settings, source_code: str, pairs: dict[str, dict]) -> dict:
+    """The waterfall pass's answer (CIK -> pair, `waterfall.pairs`) reaches the merge: each stored record of the
+    source whose pair is not yet a `cascade` name key is merged again with the pair as its key, so a name match is
+    the same lookup as before, and a second call with the same pairs finds nothing to do."""
+    held = {(subject, value) for value, subject in store.rows("select value,subject from mastering_name_key where role='cascade'")}
+    changed = []
+    for (text,) in store.rows("select body from mastering_record where source_code=%s", [source_code]):
+        record = json.loads(text) if isinstance(text, str) else text
+        pair = pairs.get(record["record_key"])
+        if pair and (record["subject"], pair["lei"]) not in held:
+            matching_ = record.setdefault("provenance", {}).setdefault("matching", {})
+            found = matching_.get("name_count") or {}
+            matching_["name_count"] = {**found, "cascade": {"version": matching.cascade.VERSION, **pair}}
+            changed.append(record)
+    if not changed:
+        return {"records": 0}
+    counts = merge_file(store, settings, changed, again=True)
+    try:  # a record that waited for one of these LEIs moves to its golden record now
+        store.take_lock()
+        counts["released"] = counts.get("released", 0) + _release_waiting(
+            store, settings, {("lei", pairs[r["record_key"]]["lei"]) for r in changed})
+        store.commit()
+    except BaseException:
+        store.rollback()
+        raise
+    return counts
+
+
 def set_aside(store, records: list[dict], quiet: dict) -> None:
     """Records no rule may master: kept with their review, blocking unless the source says otherwise."""
     store.add_deferred([(r["deferred_id"], r["source_code"], r["reason"],
