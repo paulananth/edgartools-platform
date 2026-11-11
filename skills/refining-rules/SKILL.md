@@ -299,14 +299,12 @@ Never invent a command.
   about 3 minutes per 1,000 documents on a laptop.
 - Open work on the live SEC Company and GLEIF pipelines: see data-onboarding's
   Examples, "Unfinished live pipelines" (one list, kept there).
-- Name matching across two sources: SEC Company to GLEIF. The Name Matching is
-  `edgar-warehouse mdm name-count` (readings in
-  `rules/sources/sec.company/name-count-*.yaml` and
-  `rules/sources/gleif/name-count-*.yaml`; about 11 minutes over the whole
-  population); the name rules `sec-gleif-name-jurisdiction` and
+- Name matching across two sources: SEC Company to GLEIF. The waterfall pass
+  (`waterfall.py`, from the SEC Companies in the store and the whole GLEIF publication; its answer
+  reaches the merge through `merge.apply_pairs`); the name rules `sec-gleif-name-jurisdiction` and
   `sec-gleif-name-postal`; the cascade pass `sec-gleif-name-city-or-postcode` (the passes that compared less are deleted)
   (`cascade_pass@1`; "name and city or postcode" compares `[[city, postcode]]`); the code in
-  `edgar_warehouse/mdm/name_count.py` and `cascade.py`
+  `edgar_warehouse/mdm/waterfall.py` and `cascade.py`
   (ticket 09). Name a matching rule by what it compares, never by a pass
   number (operator, 2026-11-03). A rename or a deletion moves the policy
   digest: add a policy layer in `tests/mdm/policy_layers.py` that restores the

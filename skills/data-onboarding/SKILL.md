@@ -1015,8 +1015,8 @@ These name today's sources only as examples; nothing above depends on them.
   switched-on `sec-company-candidate` from the policy when it loads, so a
   proving run stamps it into its copy of the policy first (**test**); its
   preparation (`edgar-warehouse mdm prepare-capture --source sec.company`) reads the
-  Name Matching file (`--file name_count=<path>`, built by `edgar-warehouse mdm name-count`,
-  with `--catalog` while a cascade pass is on) and the exchange catalog.
+  main documents and the exchange catalog; no file is needed (the waterfall pass pairs the stored
+  Companies with GLEIF after the load).
 - **Source checks in code:** for Company,
   `merge.check_company_sources(files.policy(), assertions)`.
 - **Pinned digests:** `tests/mdm/` (757 tests, under a minute) holds them;

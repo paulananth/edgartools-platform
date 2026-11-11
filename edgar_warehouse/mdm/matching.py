@@ -16,11 +16,11 @@ from .activation import activated
 from .catalog import CATALOG, assert_current
 from .binding import bound, in_review, nothing, survivors
 from .evidence import decision
-from .name_count import VERSION as NAME_COUNT_VERSION
 from .names import REFERENCE_TABLES
 from .store import Conflict
 
 FAMILY = "name_binding"
+NAME_COUNT_VERSION = "sec-gleif-name-count-v1"  # the version a stored name-count entry names, until its primitive is retired
 EXACT_NAME_FAMILY = "exact_name_binding"  # keyed by the name id both sides carry (ticket 01)
 
 

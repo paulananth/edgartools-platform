@@ -11,7 +11,7 @@ import pytest
 
 from edgar_warehouse.mastering import links, lookups, merge, reads, rebuild, store as stores
 from edgar_warehouse.mdm.evidence import assertion, decision, subject_key
-from edgar_warehouse.mdm.name_count import VERSION as NAME_COUNT_VERSION
+from edgar_warehouse.mdm.matching import NAME_COUNT_VERSION
 from edgar_warehouse.rules import files
 from edgar_warehouse.mastering.store import open_store
 from tests.support.masters import figi

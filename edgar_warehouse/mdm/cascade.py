@@ -183,14 +183,6 @@ def eligible(values: dict, cascade: dict) -> bool:
             and values.get("gleif_registration_status") not in cascade["refused_registration_statuses"])
 
 
-def entry(name_count: dict, cik: str, *, name_count_digest: str) -> dict | None:
-    """What one SEC record carries: the name count's cascade answer for its CIK."""
-    found = ((name_count.get("cascade") or {}).get("assignments") or {}).get(cik)
-    if found is None:
-        return None
-    return {"name_count": name_count_digest, "version": name_count["cascade"]["version"], **found}
-
-
 def count_addresses(places: Iterable[Place]) -> Counter:
     return Counter(p.key for p in places if p.key)
 

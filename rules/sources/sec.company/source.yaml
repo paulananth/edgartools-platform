@@ -57,16 +57,9 @@ bookkeeping:
     #   catalog_run: the run id of the approved exchange ticker catalog capture, bound the same way.
     #   observed_at: the observation time (an ISO instant), stamped on each record as its last synced time.
     #   load_mode: how the pages were loaded, stamped on each page receipt.
-    #   name_count: the Name Count file, built from the same capture by `edgar-warehouse mdm name-count`
-    #     and given with `--file name_count=<path>`; the load refuses one that counted another capture.
     mastering:
       run:
         facts: [capture_run, catalog_run, observed_at, load_mode]
-        files: [name_count]
-        # The Name Count counts by its entries, normalizers and version, not by the capture it was built from.
-        projections: {name_count: [entries, normalizers, version]}
-        # The Name Count must have counted the capture the run is over (its receipts file's digest).
-        matches: [{file: name_count, path: sec.receipts_sha256, to: receipts_sha256}]
       steps:
         - name: main
           operation: source.read
@@ -86,13 +79,6 @@ bookkeeping:
               recent_limit: null
               last_synced_at: {fact: observed_at}
               bronze_object: "{dir}/{name}"
-        - name: keys
-          operation: source.read
-          requires: []
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          input: {contract: name-count-keys.yaml, files: "*/submissions/sec/cik=*/main/*"}
         - name: catalog
           operation: source.read
           requires: []
@@ -107,33 +93,19 @@ bookkeeping:
               sync_run_id: {fact: catalog_run}
               last_synced_at: {fact: observed_at}
               source_name: catalog_exchange
-        - name: name_count
-          operation: source.read
-          requires: [keys]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          input:
-            contract: name-count.yaml
-            runfile: name_count
-            bind: {"0000000000000000000000000000000000000000000000000000000000000000": {digest: name_count}}
-            lookups:
-              names: {from: keys, over: all, table: keys, column: _name_key, max_input_bytes: 16777216, max_input_rows: 512}
-              ciks: {from: keys, over: all, table: keys, column: _cik_key, max_input_bytes: 16777216, max_input_rows: 512}
         - name: combine
           operation: source.combine
-          requires: [main, catalog, name_count]
+          requires: [main, catalog]
           key: "{unit}"
           leases: ["artifact:{destination}"]
           checks: [input.hash, output.receipt, source.combined]
           units: {each: main}
           input:
             contract: combine-name-count-captured.yaml
-            readings: {main: {step: main}, name_count: {all: name_count}, catalog_exchange: {all: catalog}}
+            readings: {main: {step: main}, catalog_exchange: {all: catalog}}
             bind:
               APPROVED_COMPANY_CAPTURE_RUN: {fact: capture_run}
               APPROVED_CATALOG_CAPTURE_RUN: {fact: catalog_run}
-              "0000000000000000000000000000000000000000000000000000000000000000": {digest: name_count}
         - name: records
           operation: mdm.prepare
           requires: [combine]

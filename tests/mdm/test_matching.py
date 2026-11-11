@@ -11,7 +11,7 @@ import pytest
 from edgar_warehouse.mdm import cascade as _cascade
 from edgar_warehouse.mdm.sec_company import POLICY as _POLICY
 from edgar_warehouse.mdm.matching import HELD_LEI_TEST, PAIR_TESTS, _passes, _refused_by_flag
-from edgar_warehouse.mdm.name_count import VERSION
+from edgar_warehouse.mdm.matching import NAME_COUNT_VERSION as VERSION
 from edgar_warehouse.mdm.primitives import REGISTRY
 from edgar_warehouse.mdm.store import Conflict
 from tests.mdm.test_activation import NAME_POSTCODE, NAME_STATE
