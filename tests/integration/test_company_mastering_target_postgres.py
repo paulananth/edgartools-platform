@@ -61,6 +61,7 @@ def run_without_merge(databases, tmp_path, book, report):
     for profile in WORKERS:
         grant_profile(databases.admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")
     target = deepcopy(files.source("sec.company")["bookkeeping"]["targets"]["mastering"])
+    target.pop("local", None)  # this test runs every step in the database; a local target's run starts at records
     assert [step["name"] for step in target["steps"][-2:]] == ["merge", "processed"]
     target["steps"] = target["steps"][:-2]
     body = {"source": f"company-{uuid4().hex}", "bookkeeping": {"version": 2, "targets": {"mastering": target}}}

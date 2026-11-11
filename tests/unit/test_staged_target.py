@@ -166,3 +166,10 @@ def test_the_driver_waits_only_for_the_steps_the_database_run_holds():
     unmarked = source("sec.nport.registrant")
     assert [s["name"] for s in run_steps(unmarked, "mastering")] == [
         s["name"] for s in validate(unmarked, "mastering")["steps"]]
+
+
+def test_company_mastering_is_local_and_its_run_starts_at_records():
+    config = validate(source("sec.company"), "mastering")
+
+    assert config["local"] is True
+    assert [step["name"] for step in staged(config)["steps"]] == ["records", "merge", "processed"]
