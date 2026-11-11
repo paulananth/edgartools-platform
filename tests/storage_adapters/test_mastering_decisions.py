@@ -8,7 +8,7 @@ import json
 from edgar_warehouse.mastering import merge
 from edgar_warehouse.mdm import adapters
 from edgar_warehouse.mdm.evidence import assertion
-from tests.storage_adapters.test_mastering import SECURITY, joined, live, opened
+from tests.storage_adapters.test_mastering import SEC, SECURITY, joined, live, opened
 
 FORM4 = "sec.ownership.security.v2"
 
@@ -55,3 +55,24 @@ def test_a_surviving_value_traces_to_the_source_record_that_supplied_it(database
         winner = golden["fields"]["name"]["winner"]
         assert winner["assertion_id"] == holder["assertion_id"]
         assert (winner["source_code"], winner["record_key"]) == ("sec.company.v1", holder["record_key"])
+
+
+def test_every_bound_record_is_explained_and_one_moved_by_hand_is_not(database_factory):
+    from edgar_warehouse.mastering import reads
+
+    with opened(database_factory) as db:
+        joined(db)  # a creation, and a name match with its decision
+        merge.merge_file(db, SECURITY, [form4("one"), form4("two")])  # a creation, and a join by the same name rule
+        found = reads.explained(db)
+
+        assert found["unexplained"] == 0 and found["unexplained_by_source"] == {}
+        assert found["records_bound"] == found["by_decision"] + found["created"] + found["by_identifier"] == 4
+
+        # A record moved by hand to another golden record, with no decision and no identifier in common, is unexplained.
+        stray = next(s for (s,) in db.rows("select subject from mastering_record where source_code=%s", [SEC]))
+        other = next(e for (e,) in db.rows("select distinct entity_id from mastering_record where source_code=%s", [FORM4]))
+        db.cursor.execute("update mastering_record set entity_id=%s where subject=%s", [other, stray])
+        db.commit()
+        moved = reads.explained(db)
+
+        assert moved["unexplained"] >= 1 and SEC in moved["unexplained_by_source"]

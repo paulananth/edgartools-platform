@@ -238,10 +238,12 @@ def run(*, source: str, capture: Path, documents: Path, capture_run: str, as_of:
                         "capture_run": capture_run},
             "passes": passes,
             "second_pass_changed_nothing": passes[0]["mdm"] == passes[1]["mdm"],
-            # Passed: records reached MDM, no identifier sits on two masters, and the second
+            # Passed: records reached MDM, no identifier sits on two masters, every golden record is explained
+            # (ticket 209), and the second
             # pass changed nothing. How many bind or wait is the evidence the operator reads.
             "passed": passes[0]["records_in_mdm"] > 0 and passes[0]["mdm"] == passes[1]["mdm"]
-                      and not any(passes[0]["mdm"]["identifiers_on_two_masters"].values()),
+                      and not any(passes[0]["mdm"]["identifiers_on_two_masters"].values())
+                      and passes[0]["mdm"]["explained"]["unexplained"] == 0,
         }
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(result, indent=1, sort_keys=True) + "\n")  # the evidence first, recorded or not
