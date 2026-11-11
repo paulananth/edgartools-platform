@@ -2,7 +2,7 @@
 
 Priority: 202. Map: [Rebuild priorities](../map.md). Opened 2026-11-09 11:25 ET (operator: "This should be part of the mastering process not a separate job functionality required but it is part of GLEIF load only").
 
-Type: task. Status: parked as clean-up (2026-11-10 13:18 ET; operator: "Park This ticket as clean-up"). Labels: clean-up. Blocked by: none.
+Type: task. Status: open, taken up again (2026-11-11 07:05 ET; operator: "Name Count file was dropped long time back why do you need it", then "first find the name count removal and execute that parked ticket"). It was parked as clean-up on 2026-11-10 13:18 ET (operator: "Park This ticket as clean-up"). Labels: clean-up. Blocked by: none.
 
 ## Question
 
@@ -93,4 +93,8 @@ Operator: "Park This ticket as clean-up". Nothing here is on the path to the go-
 - **What is kept:** the replay result (the golden-record search reproduces 1,208 of 6,251 GLEIF attachments, with no disagreement, so it cannot replace the passes), Way 1 and the words **waterfall matching** (`CONTEXT.md`, which no longer names a Name Count or a cascade), the measured size of the removal and its three steps (A, B, C above), and the parts under "Remove \"Name Count\" completely".
 - **What waits with it:** the part of ticket 204 that proves a name binds only on exactly one golden record (it is built here), and the removal of the words from the skills, docs and code.
 - **To take it up again:** start at step A, with the proof that the waterfall pass gives the same pairs as the old file.
+
+## Taken up again (2026-11-11 07:05 ET)
+
+Operator: "Name Count file was dropped long time back why do you need it", then "first find the name count removal and execute that parked ticket". Why it came back: on `main` the `sec.company` target still lists `files: [name_count]`, so a SEC company load is refused without `--file name_count`, and every proof or hosted load of the company source waits on it (tickets 201 and 210). Start at step A above, with the proof that the waterfall pass gives the same pairs as the old file.
 
