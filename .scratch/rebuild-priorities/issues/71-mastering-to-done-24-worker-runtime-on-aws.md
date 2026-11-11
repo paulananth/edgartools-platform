@@ -2,7 +2,7 @@
 
 Priority: 71, tier 5, needs SEC requests or AWS. Map: [Rebuild priorities](../map.md). Moved from `.scratch/mastering-to-done/issues/24-worker-runtime-on-aws.md` on 2026-10-13 after #953 merged.
 
-Status: open, waits for the operator's AWS destinations. Raised by the operator, 2026-10-13 ("update ... step functions"); split from ticket 23 the same day ("README + install.sh now (Recommended)").
+Status: closed (2026-11-11 15:02 ET, operator: "Close all tickets"): its open parts are ticket 212's
 
 ## Question
 
@@ -10,16 +10,16 @@ The old pipeline's ECS task definitions and Step Functions were retired with its
 
 ## Checklist
 
-- [ ] The operator names the AWS destinations, stores and roles (Codex's go-live review, items 2 and 4): where consumers are delivered, which PostgreSQL hosts each store, the worker and verifier logins
-- [ ] Design: one state machine shape for any target (submit, per step: work and verify until verified, finalize), its timeouts and retries; GoF consult
-- [ ] Task definitions for the worker and verifier images; the image build (needs a container runtime)
-- [ ] install.sh deploy stages for them; tests; review; PR; deploy only on the operator's word
+- [ ] ~~The operator names the AWS destinations, stores and roles (Codex's go-live review, items 2 and 4): where consumers are delivered, which PostgreSQL hosts each store, the worker and verifier logins~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
+- [ ] ~~Design: one state machine shape for any target (submit, per step: work and verify until verified, finalize), its timeouts and retries; GoF consult~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
+- [ ] ~~Task definitions for the worker and verifier images; the image build (needs a container runtime)~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
+- [ ] ~~install.sh deploy stages for them; tests; review; PR; deploy only on the operator's word~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
 
 ## Moved here (2026-10-14)
 
-- [ ] Source activation of SEC Company and GLEIF for live acquisition (the local switch-on over captured files is done: SEC Company by ticket 114; from ticket 02; operator, 2026-10-14: "Move to ticket 71 (Recommended)"): an acquisition proof from a real acquisition run (manifest, producer counts, checks); GLEIF's `source.yaml` declares an `acquisition` first
-- [ ] Source activation of `sec.submissions.person` (from ticket 11): the same acquisition proof
-- [ ] `rules run --target mdm` end to end (from ticket 02)
-- [ ] The live SEC Company qualification (from ticket 03, L8; parked by the operator until AWS: `.planning/workstreams/sec-company-live-qualification-20261013/TICKET.md`)
-- [ ] The run report's row-count change from the last run (from ticket 10, part 2): compare each Bookkeeping run of a target with the last complete run of the same pipeline and target; the per-run counts are each MDM run's `checks` in `mdm.run.report`; a Bookkeeping run of a target spans one MDM run per unit, so it sums its units' checks first
-- [ ] GLEIF Level 1's records step passes `record_extras: [nport_issuer]` to `mdm.prepare` and fills the reading's `nport_issuers` reference from the N-PORT issuer reduction (tickets 22 and 97; noted 2026-10-16 13:16 ET)
+- [ ] ~~Source activation of SEC Company and GLEIF for live acquisition (the local switch-on over captured files is done: SEC Company by ticket 114; from ticket 02; operator, 2026-10-14: "Move to ticket 71 (Recommended)"): an acquisition proof from a real acquisition run (manifest, producer counts, checks); GLEIF's `source.yaml` declares an `acquisition` first~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
+- [ ] ~~Source activation of `sec.submissions.person` (from ticket 11): the same acquisition proof~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
+- [ ] ~~`rules run --target mdm` end to end (from ticket 02)~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
+- [ ] ~~The live SEC Company qualification (from ticket 03, L8; parked by the operator until AWS: `.planning/workstreams/sec-company-live-qualification-20261013/TICKET.md`)~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
+- [ ] ~~The run report's row-count change from the last run (from ticket 10, part 2): compare each Bookkeeping run of a target with the last complete run of the same pipeline and target; the per-run counts are each MDM run's `checks` in `mdm.run.report`; a Bookkeeping run of a target spans one MDM run per unit, so it sums its units' checks first~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
+- [ ] ~~GLEIF Level 1's records step passes `record_extras: [nport_issuer]` to `mdm.prepare` and fills the reading's `nport_issuers` reference from the N-PORT issuer reduction (tickets 22 and 97; noted 2026-10-16 13:16 ET)~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").

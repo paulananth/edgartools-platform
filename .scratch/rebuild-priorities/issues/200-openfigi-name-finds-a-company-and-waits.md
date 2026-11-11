@@ -2,7 +2,7 @@
 
 Priority: 200. Map: [Rebuild priorities](../map.md). Opened 2026-11-09 08:28 ET (operator: "Agreed create a ticket", after the question whether OpenFIGI should be part of Company mastering).
 
-Type: grilling, with a measurement first. Status: open. Blocked by: none.
+Type: grilling, with a measurement first. Status: closed (2026-11-11 15:02 ET, operator: "Close all tickets"): its open parts are ticket 212's. Blocked by: none.
 
 ## Question
 
@@ -23,7 +23,7 @@ The operator's word is needed to switch any rule on.
 
 ## Checklist
 
-- [ ] Take the operator's decision: leave OpenFIGI out (the current rule), or measure the match rate first.
-- [ ] If measured: choose a sample by kind and count right, wrong and ambiguous matches.
-- [ ] If the rate is good enough: write the find-and-wait rule in a copy of the policy and test both source orders and a second pass.
-- [ ] Learning → skill: name the skill line this ticket changed, or write "none".
+- [ ] ~~Take the operator's decision: leave OpenFIGI out (the current rule), or measure the match rate first.~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
+- [ ] ~~If measured: choose a sample by kind and count right, wrong and ambiguous matches.~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
+- [ ] ~~If the rate is good enough: write the find-and-wait rule in a copy of the policy and test both source orders and a second pass.~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
+- [ ] ~~Learning → skill: name the skill line this ticket changed, or write "none".~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").

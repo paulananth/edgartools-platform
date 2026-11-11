@@ -2,7 +2,7 @@
 
 Priority: 174. Map: [Rebuild priorities](../map.md). Opened 2026-11-02 17:33 ET (operator, 2026-11-02: "Have a ticket to capture this", "Look-up on mdm then silver").
 
-Type: task. Status: open, not started. Blocked by: the operator's permission for the SEC requests (below). Related: [149](149-s1-registration-statements.md) (`sec.registration`, the S-1 and F-1 originals; the name stays, 2026-11-02: "Agreed").
+Type: task. Status: closed (2026-11-11 15:02 ET, operator: "Close all tickets"): its open parts are ticket 212's. Blocked by: the operator's permission for the SEC requests (below). Related: [149](149-s1-registration-statements.md) (`sec.registration`, the S-1 and F-1 originals; the name stays, 2026-11-02: "Agreed").
 
 ## Question
 
@@ -21,14 +21,14 @@ Type: task. Status: open, not started. Blocked by: the operator's permission for
 
 ## Parts
 
-- [ ] The operator's permission for the SEC requests of this feed, with the forms and the scope (nothing is requested before it)
-- [ ] Count the 424B1, 424B2 and 424B5 filings from the captured submissions (no request), and the size of their main documents
-- [ ] Decide with the operator which forms and which facts: the offer terms (price, shares, underwriters, exchange), or the document kept unread first, as for `sec.registration`
-- [ ] Outside standards first (the research skill): how a 424B prospectus is structured and which parts are tagged
-- [ ] Capture: a source `sec.prospectus` with its `acquisition` feed, a Bookkeeping capture target and the Change Journal, shaped like `sec.registration`
-- [ ] The look-up: each filing's filer found in MDM by CIK; a filer MDM does not hold is set aside with its reason, never created here
-- [ ] The silver table (the Silver Spec, its grain and key, the link to the Company), landed through the `silver.land` step, with its first quality checks (the operator decides the checks)
-- [ ] A limited proof only: a few invented documents, a second pass that changes nothing, an unchanged file skipped
-- [ ] The Mapping Document and the Data Catalog entry are regenerated; tests that pin the source order are run before the first push
-- [ ] Stores and containers a test run leaves are removed
-- [ ] Learning → skill: the `data-onboarding` and `company-financials` skills name this feed and its look-up, or "none"
+- [ ] ~~The operator's permission for the SEC requests of this feed, with the forms and the scope (nothing is requested before it)~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
+- [ ] ~~Count the 424B1, 424B2 and 424B5 filings from the captured submissions (no request), and the size of their main documents~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
+- [ ] ~~Decide with the operator which forms and which facts: the offer terms (price, shares, underwriters, exchange), or the document kept unread first, as for `sec.registration`~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
+- [ ] ~~Outside standards first (the research skill): how a 424B prospectus is structured and which parts are tagged~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
+- [ ] ~~Capture: a source `sec.prospectus` with its `acquisition` feed, a Bookkeeping capture target and the Change Journal, shaped like `sec.registration`~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
+- [ ] ~~The look-up: each filing's filer found in MDM by CIK; a filer MDM does not hold is set aside with its reason, never created here~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
+- [ ] ~~The silver table (the Silver Spec, its grain and key, the link to the Company), landed through the `silver.land` step, with its first quality checks (the operator decides the checks)~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
+- [ ] ~~A limited proof only: a few invented documents, a second pass that changes nothing, an unchanged file skipped~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
+- [ ] ~~The Mapping Document and the Data Catalog entry are regenerated; tests that pin the source order are run before the first push~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
+- [ ] ~~Stores and containers a test run leaves are removed~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
+- [ ] ~~Learning → skill: the `data-onboarding` and `company-financials` skills name this feed and its look-up, or "none"~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").

@@ -2,7 +2,7 @@
 
 Priority: 170. Map: [Rebuild priorities](../map.md). Opened 2026-11-02 09:12 ET (operator, 2026-11-02: "Park a question or a ticket how many workers and its architecture").
 
-Type: question (parked; nothing is worked until the operator unparks it). Status: parked. Blocked by: none. Related: [169](169-company-financials-run-through-bookkeeping-and-the-change-journal.md) adds the first silver worker.
+Type: question (parked; nothing is worked until the operator unparks it). Status: closed (2026-11-11 15:02 ET, operator: "Close all tickets"): its open parts are ticket 212's. Blocked by: none. Related: [169](169-company-financials-run-through-bookkeeping-and-the-change-journal.md) adds the first silver worker.
 
 ## Question
 
@@ -17,8 +17,8 @@ How many workers should a load run, and what is the architecture around them (pr
 
 ## Parts (nothing started)
 
-- [ ] Measure: what limits a load today (reader count, Postgres connections, the Merge Stage, memory); one measured run per limit, not a sweep
-- [ ] Decide the default worker counts per operation (`source.read`, `mdm.prepare`, `mdm.merge`, `silver.land`) and whether they are rules, flags or sizing from the measured time
-- [ ] Decide where each kind runs (local processes, containers, the hosted target) and how leases and logins scale with the count
-- [ ] Write the architecture in one page and the numbers in the `data-operations` skill
-- [ ] Learning → skill: `data-operations` and `bookkeeping` name the worker counts and the sizing rule
+- [ ] ~~Measure: what limits a load today (reader count, Postgres connections, the Merge Stage, memory); one measured run per limit, not a sweep~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
+- [ ] ~~Decide the default worker counts per operation (`source.read`, `mdm.prepare`, `mdm.merge`, `silver.land`) and whether they are rules, flags or sizing from the measured time~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
+- [ ] ~~Decide where each kind runs (local processes, containers, the hosted target) and how leases and logins scale with the count~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
+- [ ] ~~Write the architecture in one page and the numbers in the `data-operations` skill~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
+- [ ] ~~Learning → skill: `data-operations` and `bookkeeping` name the worker counts and the sizing rule~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
