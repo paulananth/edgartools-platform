@@ -75,6 +75,22 @@ uv run --with dbt-snowflake dbt run --target prod
 uv run --with dbt-snowflake dbt test --target prod
 ```
 
+Validation checks after a deploy (moved from AGENTS.md, ticket 213):
+
+```bash
+edgar-warehouse --help
+python -c "from edgar_warehouse.cli import main; print('OK')"
+uv run --with dbt-snowflake dbt test --target prod
+```
+
+Snowflake status query:
+
+```sql
+SELECT *
+FROM EDGARTOOLS_PROD.EDGARTOOLS_GOLD.EDGARTOOLS_GOLD_STATUS
+LIMIT 10;
+```
+
 Dashboard artifact upload:
 
 ```bash
