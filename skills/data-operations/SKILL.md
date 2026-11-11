@@ -314,6 +314,28 @@ counts.
 the run resumable. Run the same command again. It finishes the open run
 first and never loads a document twice.
 
+### An entity type is complete when all its sources are mastered
+
+A golden record of an entity type comes from every source whose records name one, not from a single source. So
+one source's load is that source's part of the entity, never the entity.
+
+- **Report a load as a contribution.** Say which source loaded, how many of its records were mastered and how many
+  its classification set aside (counted apart, never as mastered), and which sources of that entity type are still
+  missing. "The entity is loaded" is true only when every source of the kind has loaded.
+- **The entity is done when** each source of its kind has loaded, the links between them have run (identifier
+  joins as records arrive; name pairing through its pass where the rules declare one), and the explained count
+  finds no record unexplained, counted for every source at once.
+- **Do not size the entity by its first source.** The count after one source is what that source's classification
+  passes, not the entity.
+
+### Examples: an entity from several sources
+
+The Company entity is mastered from the SEC company filers, the N-PORT registrants, Form ADV advisers and
+custodians and GLEIF. After the SEC company source alone, the count is the listed operating filers it passes (the
+rest are set aside by its classification), not the Companies; GLEIF finds Companies and never creates one, and
+the SEC Companies pair with GLEIF through the waterfall pass. A Security is mastered from OpenFIGI, N-PORT
+securities and 13F securities in the same way.
+
 ### Examples: where retained files are
 
 Under `~/.local/share/edgartools/mdm/`, `captures/` holds whole deliveries and `proving/` holds cohorts:
