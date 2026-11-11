@@ -38,7 +38,7 @@ By the time this Snowflake decommission ran, the `edgartools-dev-tfstate` bucket
 existed — so `terraform destroy` was **not** viable for either
 `infra/terraform/snowflake/accounts/dev` or `infra/terraform/access/snowflake/accounts/dev`
 (no remote state to read). Decommissioned instead via a direct live-object sweep against
-Snowflake account `xcpclkf-kb19989` (same account prod lives in — dev/prod are separate
+the Snowflake account prod lived in then (dev/prod were separate
 **databases**, not separate accounts): `EDGARTOOLS_DEV` database (dropped CASCADE — all 8
 schemas: `EDGARTOOLS_GOLD`, `EDGARTOOLS_SOURCE`, `EDGARTOOLS_DASHBOARD`, `MDM`,
 `MDM_GRAPH_REVIEW`, `NEO4J_GRAPH_MIGRATION`, `PUBLIC`, plus `INFORMATION_SCHEMA`), both
@@ -122,8 +122,29 @@ teardown.
   as incomplete until it has been re-run explicitly — "the image is current" and "the migration was
   applied" are separate facts.
 - Snowflake-hosted Postgres re-grants `snowflake_write`'s baseline DML as a platform side effect of
-  `ALTER POSTGRES INSTANCE ... RESET ACCESS FOR '<role>'` for *either* role, so `bootstrap-prod-mdm.sh`
-  runs `mdm migrate` as its true last database-mutating step.
+  `ALTER POSTGRES INSTANCE ... RESET ACCESS FOR '<role>'` for *either* role, so run `mdm migrate` as the last
+  database-mutating step after any reset. A reset also replaces that role's password, so it needs the operator's word.
+
+### Creating the hosted store in an empty account
+
+Check the account first: `snow sql --connection <name> -q "SHOW DATABASES"` and `"SHOW POSTGRES INSTANCES"`.
+A rebuilt account holds neither the `EDGARTOOLS_<ENV>` database nor an instance, and the account named in older
+notes is not the live one. The order:
+
+1. The database and its `MDM` schema (the network rule and policy live in that schema).
+2. `infra/snowflake/postgres/mdm_create_network_policy.sql`, then `mdm_create_instance.sql`.
+3. `bootstrap-prod-mdm.sh`, which rotates both credentials and runs `mdm migrate` last. It rotates on every run
+   with no way to skip it, and a rotation needs the operator's word; without it, build the connection file from the
+   instance's saved credentials and run `mdm migrate` directly.
+
+- Every `snow sql --filename ... -D name=value` run of those two files needs `--enable-templating JINJA`. Without
+  it the CLI leaves `{{ name }}` unreplaced and fails with `syntax error ... unexpected '{'`.
+- `CREATE POSTGRES INSTANCE` returns the generated admin and application credentials once, inside the `access_roles`
+  value. Send its output to a private file (`umask 077`, a folder outside the repository) and never to the terminal.
+  The instance stays `CREATING` for a short while; wait for `state` to read `READY` before connecting.
+- A Snowflake CLI result with a credential in it is redacted by key *and by value*: print only the named keys
+  you know are public (`state`, `host`, `compute_family`), never a slice of a value, since a slice of a password is a
+  leak.
 
 ## Pipeline and runtime rules
 
@@ -186,7 +207,7 @@ What it left in Snowflake is live:
   `GRAPH_ACTIVE_POINTER`. There is no `NEO4J_URI` and no Bolt connection.
   Grants: `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql`.
 - **MDM's hosted store is Snowflake Postgres**, not AWS RDS
-  (`infra/scripts/bootstrap-prod-mdm.sh` provisions the instance; it connects
+  (`infra/snowflake/postgres/mdm_create_instance.sql` creates the instance; the owner connects
   as `snowflake_admin`). It is a PostgreSQL-protocol address
   (`MDM_DATABASE_URL`, port 5432), separate from the Snowflake SQL connection
   used for dbt and gold: one account and governance boundary, two protocols.
@@ -299,17 +320,11 @@ export DBT_SNOWFLAKE_WAREHOUSE=EDGARTOOLS_DEV_REFRESH_WH
 this repo (always a placeholder like `<account_locator.region.cloud>` above) — the only
 project-level convention is the **connection name**, resolved from
 `~/.snowflake/config.toml`. **`--snow-connection` is required and never derived** from the
-environment name — as of wayfinder ticket 03 (snowflake-env-provisioning map), both
-`install.sh` (renamed from `go-live.sh` per the snowflake-account-cutover map's Ticket 05)
-and `deploy-snowflake-stack.sh` fail closed without it. This replaced two
-*disagreeing* derivations of the same default (`install.sh` mapped dev to `snowconn`,
-while `deploy-snowflake-stack.sh` string-built `edgartools-${ENVIRONMENT}`, i.e.
-`edgartools-dev`), which is why neither derives one now. Prod's connection is
+environment name — as of wayfinder ticket 03 (snowflake-env-provisioning map), `deploy-snowflake-stack.sh` fails closed without it, and no script derives one from the environment. Prod's connection is
 `edgartools-prod`; pass it explicitly.
 
 **Environment identifier.** The same ticket replaced `--env <dev|prod>` with
-`--env-name <slug>` across `install.sh`, `deploy-snowflake-stack.sh`,
-`bootstrap-prod-mdm.sh`, `bootstrap-aws-mdm-secrets.sh`, and `create-deployer.sh`
+`--env-name <slug>` across `deploy-snowflake-stack.sh` and `create-deployer.sh`
 (positional). A slug is lowercase letters/digits in hyphen-separated words
 (`prod`, `eu-prod`); hyphens map to underscores for Snowflake identifiers
 (`eu-prod` → `EDGARTOOLS_EU_PROD`). There is **no `--env` back-compat alias** — the

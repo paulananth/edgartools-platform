@@ -164,14 +164,13 @@ VALIDATION_ARTIFACT="${REPO_ROOT}/infra/snowflake/sql/${ENVIRONMENT}_native_pull
 # never requires editing this script again. Each root is checked separately and
 # named in its own error: they do not all come from the same place.
 #
-# The two Snowflake roots are what infra/scripts/generate-snowflake-env.py emits
-# (wayfinder ticket 01). The AWS access root is NOT -- it is the AWS-side
+# The two Snowflake roots are the Terraform roots under infra/terraform/snowflake. The AWS access root is NOT -- it is the AWS-side
 # precondition (wayfinder ticket 04), stood up separately. Checking it here, by
 # name, is the point: a shared "Snowflake roots exist" check would pass and then
 # die inside terraform with something far less obvious.
 for _root_spec in \
-  "${SNOWFLAKE_ROOT}|Snowflake provisioning root|generate-snowflake-env.py (wayfinder ticket 01)" \
-  "${SNOWFLAKE_ACCESS_ROOT}|Snowflake access root|generate-snowflake-env.py (wayfinder ticket 01)" \
+  "${SNOWFLAKE_ROOT}|Snowflake provisioning root|infra/terraform/snowflake" \
+  "${SNOWFLAKE_ACCESS_ROOT}|Snowflake access root|infra/terraform/access/snowflake" \
   "${AWS_ROOT}|AWS access root|the AWS side, which is a precondition this script does not create (wayfinder ticket 04)"
 do
   _root_path="${_root_spec%%|*}"

@@ -22,7 +22,6 @@ Moved out of AGENTS.md (ticket 63) unchanged: the files an agent reads to find i
 | Snowflake access Terraform | `infra/terraform/access/snowflake/accounts/{dev,prod}/` |
 | dbt gold models | `infra/snowflake/dbt/edgartools_gold/` |
 | AWS image publish script | `infra/scripts/publish-warehouse-image.sh` |
-| AWS MDM scripts | `infra/scripts/bootstrap-aws-mdm-secrets.sh` |
 | Docker images | `Dockerfile`, `Dockerfile.warehouse-deps`, `Dockerfile.mdm-deps`, `Dockerfile.mdm-neo4j` |
 | Shared local PostgreSQL | `docs/local-agent-testing.md`, `infra/scripts/local-test-stores.py` |
 

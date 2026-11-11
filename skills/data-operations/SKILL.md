@@ -49,6 +49,8 @@ merge capability. Preserve the selected engine when a command refuses it;
 route the missing implementation to its owning engineering work instead of
 substituting PostgreSQL.
 
+A hosted instance is initialized by [the runbook](RUNBOOK.md#initialize-a-hosted-store).
+
 Apply these five schemas into databases that
 [data-platform](../data-platform/SKILL.md) already created: `mdm`, `rdm`,
 `bookkeeping`, `change_journal`, and `silver`. This skill does not create

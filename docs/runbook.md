@@ -2,58 +2,9 @@
 
 This guide walks from zero to the AWS/Snowflake gold layer.
 
-## Quick Path — install.sh (recommended)
+## Setup
 
-`infra/scripts/install.sh` (renamed from `go-live.sh`; wayfinder
-snowflake-account-cutover map, Ticket 05) is the maintained, stage-driven
-wizard that runs everything below in the correct order, with preview-first
-safety and per-stage confirmation. Prefer this over the manual walkthrough
-further down — the manual section exists for troubleshooting a specific
-stage, not as the primary path, and can silently drift from what the
-script actually does (this repo has been bitten by that kind of drift more
-than once; see CLAUDE.md's manifest-pipeline and bootstrap-SQL 5-whys
-sections).
-
-```bash
-# Read-only environment checks (AWS CLI, SnowCLI, Terraform, Docker, config)
-bash infra/scripts/install.sh doctor --env-name prod --snow-connection edgartools-prod \
-  --aws-account-id <12-digit-account-id>
-
-# Print the ordered stage plan and exact commands, preview-only -- nothing runs
-bash infra/scripts/install.sh plan --env-name prod --snow-connection edgartools-prod \
-  --aws-account-id <12-digit-account-id>
-
-# Interactive TUI wizard (default command) -- prompts for environment/connection,
-# then walks every stage with a yes/no confirmation before each real command
-bash infra/scripts/install.sh
-
-# Non-interactive: preview only, or add --apply to enable per-stage confirmation and execution
-bash infra/scripts/install.sh deploy --env-name prod --snow-connection edgartools-prod \
-  --aws-account-id <12-digit-account-id> [--apply]
-
-# Write a sanitized report of what ran (or would run)
-bash infra/scripts/install.sh report --env-name prod --snow-connection edgartools-prod \
-  --aws-account-id <12-digit-account-id>
-```
-
-The stage sequence (18 stages as of the snowflake-account-cutover map):
-AWS Terraform state bucket → Neo4j Native App install → AWS passive
-infrastructure → AWS access roles/policies → ECR image publish → ECS task
-definitions/Step Functions → Snowflake native-pull foundation → an
-unscoped `seed-universe` run → Snowflake MDM export targets → dbt gold →
-Snowflake loader role ownership → Streamlit dashboard → Snowflake Postgres
-/ graph prerequisites → `one_click_data_refresh` → standalone gold-refresh
-(with an automated `gold-verify-live` row-count gate) → MDM+graph
-connectivity/sync/verification → AWS MDM E2E checks → a bounded data
-smoke test. Run `bash infra/scripts/install.sh plan --env-name <slug>
---snow-connection <name> --aws-account-id <id>` against your target
-environment for the exact, current commands — the list above is a
-summary, not a substitute for the live plan output.
-
-`--env-name` is a free-form operator-chosen slug (e.g. `prod`, `eu-prod`),
-not a closed `dev`/`prod` enum, and `--snow-connection` is always required
-explicitly (never derived from `--env-name` — see CLAUDE.md's "SnowCLI
-connection naming" note for why).
+Install and initialize through the skills: [aws-snowflake-operations](../skills/aws-snowflake-operations/SKILL.md) for Snowflake and AWS, and [data-platform](../skills/data-platform/SKILL.md) with [data-operations](../skills/data-operations/SKILL.md) for the databases and their schemas. No script runs an install end to end.
 
 ## Architecture Overview
 
@@ -146,8 +97,7 @@ AWS uses a split-principal model:
   Use an app/operator name and monitored email, for example
   `EdgarTools Platform data-ops@example.com`.
 - **MDM secrets**: Operators store `MDM_DATABASE_URL`, `MDM_API_KEYS`, and Snowflake
-  graph-sync settings under `edgartools-<env>/mdm/*` with
-  `infra/scripts/bootstrap-aws-mdm-secrets.sh`.
+  graph-sync settings under `edgartools-<env>/mdm/*` (names in `infra/scripts/secrets-manifest.json`).
 
 ### Select and verify the admin profile
 
@@ -174,11 +124,7 @@ Use the same verified profile for the environment's state bootstrap, passive-inf
 
 ## Manual / Under the Hood
 
-Everything from here down is the same procedure `install.sh` runs for you,
-broken out stage by stage as raw commands. Reach for this section when a
-specific `install.sh` stage fails and you need to run its underlying
-commands by hand to diagnose or retry it — not as the primary path for a
-new environment.
+Everything from here down is the procedure, stage by stage, as raw commands.
 
 ## Step 1 — Terraform: Bootstrap State Bucket
 
