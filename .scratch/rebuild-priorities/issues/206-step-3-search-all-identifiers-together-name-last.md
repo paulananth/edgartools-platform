@@ -2,7 +2,7 @@
 
 Priority: 206. Map: [Rebuild priorities](../map.md). Opened 2026-11-09 14:34 ET (operator: "Create ticket for each step and prove it to me that it works start with step 1").
 
-Type: task, with a proof. Status: open. Blocked by: none.
+Type: task, with a proof. Status: resolved (2026-11-11 14:33 ET): every part is done or moved (the two struck parts live in tickets 204 and 202). Blocked by: none.
 
 ## Question
 
