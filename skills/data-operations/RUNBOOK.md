@@ -78,6 +78,18 @@ by value before showing any of it.
    a final newline loses its last line to a `while read` loop, and that source then stays unactivated.
    Done when `rules status` shows every version `active`.
 
+7. **Worker and verifier logins.** Create `bookkeeping_verifier` and `mdm_verifier` (logins without administrative
+   rights, `CONNECT` on their database) and the group role `bookkeeping_control`, granted to `bookkeeping_runtime`
+   and `bookkeeping_verifier`. As the owner, give every worker profile its two duties the way the local store does
+   (`grant_profile` for each profile in `edgar_warehouse.workers.PROFILES`, the worker `bookkeeping_runtime`, the
+   verifier `bookkeeping_verifier`) and refuse when a login holds both duties of one profile. Set the MDM guard
+   (`migrate_guard`, runtime role `mdm_runtime`) and give `mdm_verifier` `USAGE` on schema `mdm` and `SELECT` on
+   every table, the prepared tables and the mastering tables. Write `worker.env` (every store's runtime URL,
+   `MDM_APPLICATION_ROLE`, and `BOOKKEEPING_MANIFEST_ROOT`, a local folder) and `verifier.env` (the same, with the
+   two verifier logins for Bookkeeping and MDM) beside `connection.env` and `governance.env`. That folder is what
+   `load --stores` takes. Done when `doctor` prints `"ok": true` with the worker file and `load --plan` reads the
+   capture.
+
 A missing grant or login that a command names is a gap to fix in this section, not to work around.
 
 ## Delivery availability
