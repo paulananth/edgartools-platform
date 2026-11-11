@@ -78,17 +78,17 @@ Every part still open in the Rebuild priorities map, in one list, ordered by wha
 ### 2. Mastering correctness the go-live depends on
 
 **[203](../issues/203-company-matching-identifiers-first-name-last.md) 203: Company matching, identifiers first and name last** (open)
-- [ ] Count the registrant LEIs against the full GLEIF file, from a scope of those 1,939 LEIs: how many equal a GLEIF LEI, and how many are the same entity by name and place (counts only).
-- [ ] Write the LEI rule, declared and not switched on, in a copy of the policy; test both source orders and a second pass; the limited test is the proof.
+- [x] (2026-11-11 16:08 ET) [203] Registrant LEIs against the whole GLEIF Golden Copy (read-only, counts only, 62 s, local-staging registrants against the 2026-09-11 file): 1,947 registrants, 1,938 with a LEI, 1,934 distinct LEIs; **all 1,934 equal a GLEIF LEI** (0 not found). Of the 9 registrants with no LEI, 6 have a name equal (case, punctuation and spacing folded) to a GLEIF legal name. Place not measured.
+- [x] (2026-11-11 16:08 ET) [203] The registrant LEI rule `nport-registrant-lei` is declared, switched on by the operator ("Master it ;consider it a source") and proved by its limited test in both source orders and a second pass (ticket 203's own parts).
 - [ ] State "no other identifier available" as one precondition shared by every name rule (it exists today as `holds_no_other_lei@1` for LEI only), and add former name to the name rule family with its own proof.
-- [ ] Decide whether the adviser's stated LEI (Form ADV filings, 7,246 records) and the N-PORT fund series LEI (25,848 records) join the GLEIF record with the same LEI, as the registrant LEI does. Found by ticket 204's list of keys stored and never searched, 2026...
+- [x] (2026-11-11 16:08 ET) [203] Decided 2026-11-10 13:23 ET with no change (operator, "Yes, no change (Recommended)"): the adviser's LEI and the fund series LEI stay lookups.
 - [ ] Learning → skill: name the skill line this ticket changed, or write "none".
 
 **[200](../issues/200-openfigi-name-finds-a-company-and-waits.md) 200: May an OpenFIGI name find a Company and wait?** (open)
-- [ ] Take the operator's decision: leave OpenFIGI out (the current rule), or measure the match rate first.
-- [ ] If measured: choose a sample by kind and count right, wrong and ambiguous matches.
-- [ ] If the rate is good enough: write the find-and-wait rule in a copy of the policy and test both source orders and a second pass.
-- [ ] Learning → skill: name the skill line this ticket changed, or write "none".
+- [x] (2026-11-11 16:08 ET) [200] Decision (operator, 2026-11-11, asked one question with the evidence): "Leave OpenFIGI out (Recommended)". An OpenFIGI answer joins a Security by its identifiers only and never looks for a Company by name; the current rule stands.
+- [x] (2026-11-11 16:08 ET) [200] Not needed: the operator chose to leave OpenFIGI out, so there is no match rate to measure.
+- [x] (2026-11-11 16:08 ET) [200] Not needed (same decision): no find-and-wait rule is written.
+- [x] (2026-11-11 16:08 ET) [200] Learning → skill: none (a decision to keep the current rule).
 
 **[199](../issues/199-rebuild-mastering-on-three-operations.md) 199: Rebuild mastering on three operations** (open)
 - [ ] Stage 4, then: 13F, ownership and ADV from the existing files; the Apple chain from adviser to holding to AAPL.
@@ -102,9 +102,9 @@ Every part still open in the Rebuild priorities map, in one list, ordered by wha
 - [ ] Two deadlocks in claims at 3 bundles at once: Bookkeeping's claim path is unchanged; not re-measured. RE-MEASURED (2026-11-10 05:12 ET): on the go-live SEC person load (149 bundles, `local-staging`), 2 bundles at once left 7 bundles stopped (`DeadlockDetect...
 
 **[153](../issues/153-reload-the-security-loads-on-current-code.md) 153: Reload the Security loads on current code** (open)
-- [ ] The reload of the OpenFIGI bundles on current code, one bundle at a time, or the reason it is not needed
-- [ ] The N-PORT Security load (2026 Q2)
-- [ ] Counts; no identifier on two masters
+- [x] (2026-11-11 16:08 ET) [153] Not needed as a separate reload: the go-live loaded OpenFIGI on current code from empty (`local-staging`: 771,554 `openfigi.security.v4` records and 335 `v3`; the hosted store holds 335 so far).
+- [x] (2026-11-11 16:08 ET) [153] Done by the go-live: 420,690 N-PORT security records stored of the archive's 420,691 (1 set aside), on `local-staging` and on the hosted store.
+- [ ] [153] Counts (`local-staging`, read-only, 2026-11-11): 395,838 Security, 22,766 Company, 12,937 Fund Structure and 31,097 Person golden records; 1,271,374 source records, 0 unexplained. **Not true that no identifier sits on two masters:** 13 SEDOLs and 1 LOANX are each held by two Security masters (14 pairs), 364 tickers by two to four Securities, 231 LEIs by both a Company and a Fund Structure, and 1 CIK by both a Company and a Person. To decide: whether each of the 14 Security pairs is one security (merge) or two (the identifier is wrong on one), whether a ticker may sit on several Securities (it is a lookup, not a join key), and whether one LEI may name a Company and a Fund Structure.
 - [ ] "Destination authority expired before save": measure one bundle that has never been merged, per batch (moved from 150)
 - [ ] Learning → skill
 
