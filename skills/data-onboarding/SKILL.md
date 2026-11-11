@@ -999,9 +999,8 @@ These name today's sources only as examples; nothing above depends on them.
   its consumer spec (`docs/specs/person/consumer.md`, "The Person
   projection") holds them. A list-shaped field: Person's `name_variants[]`.
 - **Another kind's value:** a ticker belongs to Security, not Company.
-- **Joining identifiers:** today `cik` (the one Identifier Contract); the SEC-to-GLEIF name rules
-  (`sec-gleif-name-jurisdiction`, `sec-gleif-name-postal`) bind by name with
-  their proofs.
+- **Joining identifiers:** today `cik` (the one Identifier Contract); the SEC-to-GLEIF waterfall
+  passes (`sec-gleif-name-city-or-postcode`) bind by name with their proofs.
 - **Classification:** SEC types people and firms alike as `other`; the SEC
   Company contract names its rule under `adapter.classification`; a
   `company` verdict in a Person rule is deferred with `probable_kind`

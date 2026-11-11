@@ -43,13 +43,12 @@ def configured_root(tmp_path):
 PROGRAM = '''
 import copy
 from edgar_warehouse.mdm.matching import compare_candidate_records
-from edgar_warehouse.mdm.matching import NAME_COUNT_VERSION as VERSION
 from edgar_warehouse.mdm.cascade import VERSION as CASCADE
 from edgar_warehouse.mdm.store import Conflict
 
 def field(value): return {"op": "value", "value": value}
 place = {"street": "1 INVENTED WAY", "city": "EXAMPLE", "postcode": "11111", "country": "ZZ"}
-entry = {"version": VERSION, "key": "INVENTED LAB INC", "invented_keys": ["origin-1"],
+entry = {"key": "INVENTED LAB INC", "invented_keys": ["origin-1"],
          "invented_key_count": 1, "invented_matches": [["target-1", "2026-01-01T00:00:00Z"]],
          "invented_match_count": 1, "invented_other_count": 0,
          "invented_assignment": {"version": CASCADE, "pass": "name and full address", "invented_target": "target-1",
@@ -65,7 +64,6 @@ eligibility = {"categories": ["INVENTED"], "entity_statuses": ["ACCEPTED"],
                "refused_registration_statuses": ["REFUSED"]}
 def compare(primitive, args):
     return compare_candidate_records({"when": [{"primitive": primitive, "args": args}]}, [(left, right)])
-def name_count(): return compare("name_census_match@1", names)
 def eligible(): return compare("gleif_entity_eligible@1", eligibility)
 def cascade(): return compare("cascade_pass@1", {**names, "pass": "name and full address", "compare": ["street", "city", "postcode"], "refused_flags": []})
 def either(**changes):  # the shape of "name and city or postcode": the city or the postcode
@@ -75,11 +73,6 @@ def either(**changes):  # the shape of "name and city or postcode": the city or 
 
 
 SCENARIOS = {
-    "name_count": 'assert name_count() == [[True, False]]',
-    "name_count_wrong_namespace": 'right["identifiers"] = {"other": "target-1"}; assert name_count() == [[False, False]]',
-    "name_count_ambiguous": 'entry["invented_matches"] *= 2; assert name_count() == [[False, False]]',
-    "name_count_stale_version": 'right["effective_at"] = "2026-02-01T00:00:00Z"; assert name_count() == [[False, False]]',
-    "name_count_withheld_name": 'left["provenance"]["quality"] = {"withheld": ["fields.invented_name"]}; assert name_count() == [[False, False]]',
     "eligibility": 'assert eligible() == [[True, False]]',
     "eligibility_wrong_kind": 'right["kind"] = "other-kind"; assert eligible() == [[False, False]]',
     "eligibility_refused": 'right["fields"]["invented_registration"] = field("REFUSED"); assert eligible() == [[False, False]]',
@@ -122,15 +115,16 @@ def test_rule_selects_another_profile_without_changing_the_legacy_default(config
 def compare(primitive, args):
     return compare_candidate_records({"pair_comparison": "invented-comparison",
         "when": [{"primitive": primitive, "args": args}]}, [(left, right)])
-assert name_count() == [[True, False]]
 assert eligible() == [[True, False]]
 assert cascade() == [[True, False]]
 from edgar_warehouse.mdm.activation import check_name_binding_rule
 rule = {"rule_id": "invented-rule", "pair_comparison": "invented-comparison",
     "applies_to_verdict": "invented-kind", "emits": ["bind"], "on_no_match": "wait",
     "source": "invented-right", "holder_source": "invented-left", "when": [
-        {"primitive": "name_census_match@1", "args": names},
-        {"primitive": "postal_agrees@1", "args": {}}]}
+        {"primitive": "cascade_pass@1", "args": {**names, "pass": "name only", "compare": None, "over_shared": 25,
+                                                 "refused_flags": []}},
+        {"primitive": "gleif_entity_eligible@1", "args": eligibility},
+        {"primitive": "holds_no_other_lei@1", "args": {}}]}
 check_name_binding_rule("invented-kind", rule, {})
 for changed in ({**rule, "pair_comparison": "missing"},
                 {**rule, "pair_comparison": "existing-name-binding"}):

@@ -11,7 +11,6 @@ import pytest
 
 from edgar_warehouse.mastering import links, lookups, merge, reads, rebuild, store as stores
 from edgar_warehouse.mdm.evidence import assertion, decision, subject_key
-from edgar_warehouse.mdm.matching import NAME_COUNT_VERSION
 from edgar_warehouse.rules import files
 from edgar_warehouse.mastering.store import open_store
 from tests.support.masters import figi
@@ -260,35 +259,10 @@ def test_the_runtime_login_cannot_erase_a_decision_or_change_a_table(database_fa
 LEI = "INVENTEDLEI000000017"
 
 
-def sec_holder():
-    return assertion(source_code=SEC, record_key="0000000017", publication_key="invented", revision=1, effective_at=None,
-                     kind="company", identifiers={"cik": "0000000017"},
-                     fields={"name": "INVENTED CO", "state_of_incorporation": "CA"},
-                     provenance={"matching": {"business_postal_code": "90000", "business_country": "US", "name_count": {
-                         "version": NAME_COUNT_VERSION, "key": "INVENTED CO", "ciks": ["0000000017"], "cik_count": 1,
-                         "leis": [[LEI, "2026-09-01T00:00:00Z"]], "lei_count": 1, "other_name_holders": 0}}})
 
 
-def gleif_record():
-    return assertion(source_code=GLEIF, record_key=LEI, publication_key="invented", revision=1,
-                     effective_at="2026-09-01T00:00:00+00:00", kind="company", identifiers={"lei": LEI},
-                     fields={"name": "Invented Co.", "jurisdiction": "US-CA", "gleif_entity_status": "ACTIVE",
-                             "gleif_registration_status": "ISSUED"},
-                     provenance={"matching": {"headquarters_postal_code": "90000", "headquarters_country": "US"}})
 
 
-@pytest.mark.parametrize("gleif_first", [False, True])
-def test_a_name_match_joins_the_master_in_either_order_and_closes_the_wait(database_factory, gleif_first):
-    with opened(database_factory) as db:
-        holder, candidate = sec_holder(), gleif_record()
-        for record_ in ([candidate, holder] if gleif_first else [holder, candidate]):
-            merge.merge_file(db, COMPANY, [record_])
-        found = live(db)
-        assert len(found) == 1
-        master = next(iter(found.values()))
-        assert sorted(master["subjects"]) == sorted([holder["subject"], candidate["subject"]])
-        assert master["identifiers"]["lei"] == [LEI]
-        assert db.rows("select count(*) from mastering_review where open_review=1") == [(0,)]
 
 
 def test_a_replay_masters_every_source_and_a_second_run_changes_nothing(database_factory):

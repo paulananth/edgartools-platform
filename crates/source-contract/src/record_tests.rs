@@ -292,7 +292,6 @@ pub(crate) fn evaluate_record_test(
         "identifier_match@1"
         | "identifier_cardinality@1"
         | "kind_equal@1"
-        | "name_census_match@1"
         | "gleif_entity_eligible@1"
         | "holds_no_other_lei@1"
         | "jurisdiction_agrees@1"
