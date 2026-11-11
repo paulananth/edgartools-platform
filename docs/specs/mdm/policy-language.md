@@ -185,9 +185,6 @@ Evidence: [research 03](../../../.scratch/mastering-policy-language/research/03-
 | name_binding | `cascade_pass` | `pass`, `compare`, `over_shared`, `refused_flags`, `sec_normalizer`, `gleif_normalizer` | bool: the waterfall pass paired this SEC record with this LEI and its entry says so |
 | name_binding | `gleif_entity_eligible` | `categories`, `entity_statuses`, `refused_registration_statuses` | bool |
 | name_binding | `holds_no_other_lei` | — | veto: the Company already holds another LEI |
-| name_binding | `jurisdiction_agrees` | `sec_field`, `sec_codes`, `gleif_field` | bool |
-| name_binding | `jurisdictions_do_not_conflict` | `sec_field`, `sec_codes`, `gleif_field`, `sec_business_country` | bool |
-| name_binding | `postal_agrees` | `sec_code`, `sec_country`, `gleif_code`, `gleif_country` | bool |
 | survivorship | `select_by_source_rank` | `sources[]` (ordered), `clear_sources[]`, `allow_unknown_effective`, `max_age_days` | winner + retained conflicts |
 
 Why the line sits here: the same words (`TRUST`, `FUND`, `CO`, `HOLDINGS`)

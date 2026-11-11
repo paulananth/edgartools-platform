@@ -16,7 +16,6 @@ from .activation import activated
 from .catalog import CATALOG, assert_current
 from .binding import bound, in_review, nothing, survivors
 from .evidence import decision
-from .names import REFERENCE_TABLES
 from .store import Conflict
 
 FAMILY = "name_binding"
@@ -97,7 +96,6 @@ def compare_candidate_records(rule: dict, pairs: list[tuple[dict, dict]]) -> lis
     try:
         return compare_record_pairs({
             "rule": rule, "pairs": pairs,
-            "code_tables": REFERENCE_TABLES,
             "normalizers": {kind.normalizer_name: kind.upper for kind in TYPES.values()},
             "cascade_version": cascade.VERSION,
             "pair_comparison": profile,
@@ -113,8 +111,7 @@ def compare_pair_test(name: str, left: dict, right: dict, args: dict) -> bool:
 HELD_LEI_TEST = "holds_no_other_lei@1"
 PAIR_TESTS = {
     name: partial(compare_pair_test, name) for name in (
-        "gleif_entity_eligible@1", "jurisdiction_agrees@1",
-        "jurisdictions_do_not_conflict@1", "postal_agrees@1", cascade.TEST,
+        "gleif_entity_eligible@1", cascade.TEST,
     )
 }
 

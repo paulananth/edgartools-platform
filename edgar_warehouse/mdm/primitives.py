@@ -114,9 +114,6 @@ REGISTRY = MappingProxyType(
             for name in (
                 "gleif_entity_eligible@1",
                 "holds_no_other_lei@1",
-                "jurisdiction_agrees@1",
-                "jurisdictions_do_not_conflict@1",
-                "postal_agrees@1",
                 # Ticket 21: one pass of the cascade the name count ran.
                 "cascade_pass@1",
             )

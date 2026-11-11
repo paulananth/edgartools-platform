@@ -87,9 +87,6 @@ CONDITION_WORDS = {
     "gleif_entity_eligible@1": "The GLEIF entity is {categories}, {entity_statuses}, and not "
                                "{refused_registration_statuses}",
     "holds_no_other_lei@1": "The SEC company is not already linked to another LEI",
-    "jurisdiction_agrees@1": "SEC's {sec_field} names the same place as GLEIF's {gleif_field}",
-    "jurisdictions_do_not_conflict@1": "SEC's {sec_field} and GLEIF's {gleif_field} do not name different places",
-    "postal_agrees@1": "SEC's business postcode equals GLEIF's headquarters postcode, in the same country",
     "identifier_match@1": "The record's {namespace} is the one a {holder} holds",
     "identifier_cardinality@1": "Exactly one {holder} holds that {namespace}, or none",
 }
