@@ -106,18 +106,24 @@ def publication_chunks(reading: dict, artifacts, metadata: dict, wanted: set) ->
     validate_metadata("level1", metadata)
     if metadata["file_content"] != "GLEIF_FULL_PUBLISHED":
         raise Conflict("The waterfall pass reads a full Golden Copy, never a delta")
+    artifact, chunks = _publication_projection(reading, artifacts, metadata["record_count"], wanted)
+    publication = {"archive_sha256": artifact["input"]["sha256"], "content_date": metadata["content_date"],
+                   "file_content": metadata["file_content"], "record_count": artifact["record_count"]}
+    return publication, chunks
+
+
+def _publication_projection(reading, artifacts, expected_records, wanted):
+    """The recipe, count, lookup and complete traversal checks shared by both authority paths."""
     opened = source_readings.OpenedExtract(reading, artifacts, max_bytes=GLEIF_BYTES, max_rows=GLEIF_ROWS,
                                           max_contract_bytes=CONTRACT_BYTES, allow_lookup_receipts=True)
     if opened.contract != rules_files.load(GLEIF_READING):
         raise Conflict("The Golden Copy reading was not made by name-count-complete-stream.yaml")
     (artifact,) = opened.artifacts
-    if artifact["record_count"] != metadata["record_count"]:
+    if artifact["record_count"] != expected_records:
         raise Conflict("The Golden Copy reading and its publication disagree on the record count")
     if set(opened.lookup_sets(0)["wanted"]) != wanted:
         raise Conflict("The Golden Copy reading projected other names than the filers in the store hold")
-    publication = {"archive_sha256": artifact["input"]["sha256"], "content_date": metadata["content_date"],
-                   "file_content": metadata["file_content"], "record_count": artifact["record_count"]}
-    return publication, (chunk["tables"] for _, _, chunk, _ in opened.chunks())
+    return artifact, (chunk["tables"] for _, _, chunk, _ in opened.chunks())
 
 
 def pairs(filers: Iterable[cascade.Filer], reading: dict, artifacts, metadata: dict, passes: list[dict], *,
@@ -125,4 +131,21 @@ def pairs(filers: Iterable[cascade.Filer], reading: dict, artifacts, metadata: d
     """The publication's identity and the CIK -> pair answer of the whole publication, for the filers in hand."""
     filers = list(filers)
     publication, chunks = publication_chunks(reading, artifacts, metadata, wanted_names(filers))
+    return publication, over_publication(filers, chunks, passes, over_shared=over_shared)
+
+
+def declared_pairs(filers: Iterable[cascade.Filer], reading: dict, artifacts, expected_records: int,
+                   passes: list[dict], *, over_shared: int) -> tuple[dict, dict]:
+    """A source-declared complete capture, without independent publisher metadata.
+
+    Preserve the pinned recipe, EOF/count and population checks. The receipt deliberately
+    makes no publisher-time or provider-completeness claim; callers with that authority
+    continue to use `pairs` and its metadata validation.
+    """
+    if type(expected_records) is not int or not 0 <= expected_records <= GLEIF_ROWS:
+        raise Conflict("Invalid complete-capture record count")
+    filers = list(filers)
+    artifact, chunks = _publication_projection(reading, artifacts, expected_records, wanted_names(filers))
+    publication = {"archive_sha256": artifact["input"]["sha256"], "record_count": expected_records,
+                   "evidence": "source-declared-complete-capture"}
     return publication, over_publication(filers, chunks, passes, over_shared=over_shared)

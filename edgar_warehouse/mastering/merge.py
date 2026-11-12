@@ -13,6 +13,7 @@ from edgar_warehouse.mdm import matching
 from edgar_warehouse.mdm.evidence import PROFILE_KINDS
 from edgar_warehouse.mdm.identifier_types import TYPES
 from edgar_warehouse.rules.source_engine import (
+    current_record_views,
     link_matching_records,
     plan_record_matches,
     prepare_current_records,
@@ -66,32 +67,38 @@ def name_keys(record: dict, namespaces=(NAME_ID,)) -> list[tuple]:
             if isinstance(value, str) and value]
 
 
-def apply_pairs(store, settings: Settings, source_code: str, pairs: dict[str, dict]) -> dict:
-    """The waterfall pass's answer (CIK -> pair, `waterfall.pairs`) reaches the merge: each stored record of the
-    source whose pair is not yet a `cascade` name key is merged again with the pair as its key, so a name match is
-    the same lookup as before, and a second call with the same pairs finds nothing to do."""
+def apply_pairs(store, settings: Settings, source_code: str, pairs: dict[str, dict], *, source_records=None) -> dict:
+    """Retain the waterfall answer on the selected original assertions and merge its lookup keys.
+
+    An unchanged pair and its evidence need no replay; a later publication's changed evidence
+    is retained even when its lookup key is already present.
+    """
     held = {(subject, value) for value, subject in store.rows("select value,subject from mastering_name_key where role='cascade'")}
     changed = []
-    for (text,) in store.rows("select body from mastering_record where source_code=%s", [source_code]):
-        record = json.loads(text) if isinstance(text, str) else text
+    if source_records is None:
+        source_records = [json.loads(text) if isinstance(text, str) else text for (text,) in
+                          store.rows("select body from mastering_record where source_code=%s", [source_code])]
+        selected = {r["assertion_id"] for r in current_record_views(source_records, settings.as_of).values()}
+        source_records = [r for r in source_records if r["assertion_id"] in selected]
+    for record in source_records:
+        if record["source_code"] != source_code or record["kind"] != settings.kind:
+            raise ValueError("A pair application uses only the selected source and identity kind")
         pair = pairs.get(record["record_key"])
-        if pair and (record["subject"], pair["lei"]) not in held:
+        if pair:
+            expected = {"version": matching.cascade.VERSION, **pair}
+            existing = (((record.get("provenance") or {}).get("matching") or {}).get("name_count") or {}).get("cascade")
+            if (record["subject"], pair["lei"]) in held and existing == expected:
+                continue
             matching_ = record.setdefault("provenance", {}).setdefault("matching", {})
             found = matching_.get("name_count") or {}
-            matching_["name_count"] = {**found, "cascade": {"version": matching.cascade.VERSION, **pair}}
+            matching_["name_count"] = {**found, "cascade": expected}
             changed.append(record)
     if not changed:
         return {"records": 0}
-    counts = merge_file(store, settings, changed, again=True)
-    try:  # a record that waited for one of these LEIs moves to its golden record now
-        store.take_lock()
-        counts["released"] = counts.get("released", 0) + _release_waiting(
-            store, settings, {("lei", pairs[r["record_key"]]["lei"]) for r in changed})
-        store.commit()
-    except BaseException:
-        store.rollback()
-        raise
-    return counts
+    # Pair evidence, lookup keys and released waiters are one transaction. A retry must never
+    # see a finished pair whose waiting-record release failed after a separate commit.
+    return merge_file(store, settings, changed, again=True, record_updates=changed,
+                      release_identifiers={("lei", pairs[r["record_key"]]["lei"]) for r in changed})
 
 
 def set_aside(store, records: list[dict], quiet: dict) -> None:
@@ -101,7 +108,7 @@ def set_aside(store, records: list[dict], quiet: dict) -> None:
 
 
 def merge_file(store, settings: Settings, records: list[dict], *, again: bool = False,
-               deferred: list[dict] = (), quiet: dict | None = None) -> dict:
+               deferred: list[dict] = (), quiet: dict | None = None, record_updates=(), release_identifiers=()) -> dict:
     """Merge one file, or nothing if it is done. `again` delivers a finished file a second time."""
     key = file_key([*records, *({"assertion_id": r["deferred_id"]} for r in deferred)])
     try:
@@ -109,9 +116,13 @@ def merge_file(store, settings: Settings, records: list[dict], *, again: bool = 
         if store.file_done(key) and not again:
             store.commit()
             return {"file": key, "skipped": True}
+        # A derived pair must remain on the stored holder when its other end arrives in a later file.
+        # Keep its evidence and the resulting lookup keys in the same locked transaction.
+        if record_updates:
+            store.update_records([(r["assertion_id"], json.dumps(r, separators=(",", ":"))) for r in record_updates])
         delivery = _delivery(store, records, deferred)
         set_aside(store, list(deferred), quiet or {})
-        arrived: set = set()
+        arrived: set = set(release_identifiers)
         counts = _merge(store, settings, records, key, again, arrived) if records else {"records": 0}
         # A file of only set-aside records has no kind and nothing arrived: nothing waits for it.
         counts["released"] = _release_waiting(store, settings, arrived) if records else 0
@@ -343,6 +354,9 @@ def _match_names(store, settings: Settings, records, bound: dict, counts: Counte
         holders = sorted(r["subject"] for r in records if r["source_code"] == rule["holder_source"])
         pairs = [(json.loads(c), json.loads(h)) for c, h in store.name_pairs(
             "cascade", rule["holder_source"], rule["source"], holders)]
+        current = current_record_views([side for pair in pairs for side in pair], settings.as_of)
+        pairs = list({(c["subject"], h["subject"]): (current[c["subject"]], current[h["subject"]])
+                      for c, h in pairs if c["subject"] in current and h["subject"] in current}.values())
         involved = {side["subject"] for pair in pairs for side in pair}
         bound.update(store.bound(sorted(involved - set(bound))))
         pairs = [(c, h) for c, h in pairs if c["subject"] not in bound and c["subject"] not in named and h["subject"] in bound]

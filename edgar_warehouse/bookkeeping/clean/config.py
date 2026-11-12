@@ -229,10 +229,16 @@ def validate(document: dict, target: str) -> dict:
         planned = body["version"] == 2
         selected = body["targets"][target]
         if set(selected) - {"steps", "lease_seconds", "heartbeat_seconds", "retry", "allow_zero_work", "checks",
-                            "local"} - (
+                            "local", "preparation"} - (
                 {"run"} if planned else set()):
             raise Blocked("Unknown target option")
         declared = run_inputs(selected) if planned else {"facts": [], "files": []}
+        preparation = selected.get("preparation", [])
+        if (not isinstance(preparation, list) or any(
+                not isinstance(p, dict) or set(p) != {"method", "options"}
+                or not isinstance(p["method"], str) or not re.fullmatch(NAME, p["method"])
+                or not isinstance(p["options"], dict) for p in preparation)):
+            raise Blocked("Target preparation is a list of {method, options}")
         if type(selected.get("allow_zero_work", False)) is not bool:
             raise Blocked("allow_zero_work must be boolean")
         if type(selected.get("local", False)) is not bool:
