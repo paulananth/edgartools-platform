@@ -293,7 +293,7 @@ changed what its records join) is cleared and loaded again. Never delete rows by
 ### Fit the load into the window
 
 The operator names the window. A plan that does not fit it is not the plan
-(operator, 2026-10-24: "10 hours will never fly must be within 1-2 hours").
+(operator: "10 hours will never fly must be within 1-2 hours").
 Work it out from counts before starting:
 
 1. **Documents and bundles.** Count the documents not yet loaded, and divide
@@ -302,9 +302,8 @@ Work it out from counts before starting:
    (`source.read`). A narrow step is one unit per bundle (`mastering.merge`,
    `mdm.prepare`). Only more bundles at once shorten narrow steps in total.
 3. **Bundles and readers.** One verifier checks a run's units one at a
-   time, so a run's wide step goes no faster than its verifier: measured
-   2026-10-25, 512 request units took 14 minutes, about 1.6 s each, with 6
-   workers. Spread the work over runs: `--bundles` runs at once, each with
+   time, so a run's wide step goes no faster than its verifier, however many
+   workers it has. Spread the work over runs: `--bundles` runs at once, each with
    its own verifier. `--workers` is per run, and 1 or 2 is enough when many
    bundles run together. Keep `--bundles` × (`--workers` + 1) near the
    core count. `load` never starts more workers than a step has units left.
@@ -314,18 +313,15 @@ Work it out from counts before starting:
    Expect each bundle to run slower when the cores are shared. A target that
    reads another target's runs waits for that target. If the total does not
    fit the window, say so and do not start. Never drop files to make it fit.
-   Measured 2026-11-03: one source's bundle of 511 filers and the shared reference file ran 1.1 to 1.2
-   minutes with `--workers 4` (a 600 s window finished 5 of 150 bundles, the driver's peak memory 0.57 GB, about
-   0.85 cores busy), so 150 bundles one at a time take about 3 hours; time the first bundle of every source the same way.
-   Keep the machine for the load: the same load stopped on three bundles (a deadlock, a closed connection, a failed read) while
-   several hundred integration tests ran on the same Docker, and finished 2 h 23 min instead of about 2 h 10; a stopped
+   Time the first bundle of every source this way.
+   Keep the machine for the load: a load sharing its Docker with a large test run stops bundles (a deadlock, a closed
+   connection, a failed read) and finishes late; a stopped
    bundle is resumed by running the same command again.
 5. **Memory and shared masters, not only cores.** Bundles of one target
-   that merge into the same masters collide: measured 2026-10-29, one source's
-   load with 4 bundles at once on an 8 GB machine (Docker's VM 4 GB), 10 of 16
-   merges stopped "Prepared state changed; re-assess" and 4 were killed for
-   memory (status -9). Even one at a time, 6 of its 15 merges were
-   killed for memory and one took 39 minutes. Run such merges one bundle at
+   that merge into the same masters collide: with several bundles at once
+   on a small machine, most merges stop "Prepared state changed; re-assess"
+   and others are killed for memory (status -9). Even one at a time, a merge
+   can be killed for memory. Run such merges one bundle at
    a time, and measure one merge's peak memory against the free memory
    before choosing `--bundles`.
 
@@ -356,7 +352,7 @@ Work it out from counts before starting:
 - **A long run shows its progress.** Sample any run over ten minutes in its first two minutes with
   `scripts/dev/run_sample.py`. Send its output to a file, unpiped: a `| tail` hides a slow page until the run ends. A
   build with no progress line gets one before it starts.
-- **Check every 30 minutes, not in a tight loop** (operator, 2026-10-24).
+- **Check every 30 minutes, not in a tight loop** (operator).
   A check that finds nothing changed sends no message. Report a failure, a
   finished bundle or the end.
 - **Keep the machine awake and on power.** Sleep stops the workers. Their
