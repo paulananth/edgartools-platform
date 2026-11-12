@@ -12,9 +12,6 @@ def installed(conn):
     """Select governed storage only when its complete marker is present."""
     adapter = storage_ready(conn)
     if adapter is not None and conn.dialect.name == "postgresql":
-        from .retirement import require_retired
-
-        require_retired(conn)
         from .registration import require_installed
         require_installed(conn)
     return adapter
@@ -31,7 +28,7 @@ def require_installed(conn):
 
 
 def storage_ready(conn):
-    """Owner installation readiness, before its routine retirement finishes."""
+    """Owner installation readiness."""
     api = storage_adapter()
     version = api.storage_version(conn, prefix=PREFIX)
     if version < 5:
@@ -89,9 +86,6 @@ def initialize(engine, *, application_role, application_host="%"):
     with engine.begin() as conn:
         adapter.activate(conn, {"catalog": digest(catalog.CATALOG)}, exclusive=("catalog",))
     finish_indexes(engine)
-    from .retirement import retire
-
-    retire(engine)
     from .registration import install
     install(engine)
     adapter.enable_runtime(application_role, runtime_host=application_host)

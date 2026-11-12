@@ -296,8 +296,8 @@ print(json.dumps({{"shipped": shipped, "modules": modules, "absent": absent, "ru
     assert any(p.endswith("bundle_data/skills/data-onboarding/SKILL.md") for p in found["shipped"])
     assert any(p.endswith("mastering/schema/postgresql.sql") for p in found["shipped"])
     assert any(p.endswith("mastering/schema/mysql.sql") for p in found["shipped"])
-    assert any(p.endswith("mdm/migrations/024_configured_kinds.sql") for p in found["shipped"])
-    assert any(p.endswith("mdm/migrations/025_kind_descriptions.sql") for p in found["shipped"])
+    assert any(p.endswith("mdm/migrations/schema.sql") for p in found["shipped"])
+    assert any(p.endswith("mdm/migrations/registration_authority.sql") for p in found["shipped"])
 
 
 def _stores(databases):
@@ -339,7 +339,7 @@ from edgar_warehouse.rules import source_engine
 from edgar_warehouse.mdm import store
 raw = source_engine.postgres_jsonb_text('{"a":1e-7,"bbb":1.2300}')
 assert raw == '{"a": 0.0000001, "bbb": 1.2300}'
-assert (Path(store.__file__).parent/"migrations/016_publication_inputs.sql").is_file()
+assert (Path(store.__file__).parent/"migrations"/store.BASELINE).is_file()
 assert all((Path(store.__file__).parent/"migrations"/name).is_file() for name in store.MIGRATIONS)
 print("publication preparation installed")
 ''', cwd=root)

@@ -15,7 +15,7 @@ CONTENT = ("code", "code_label", "level", "crosswalk_row", "code_set_usage", "co
 
 
 def migrate(engine, *, runtime_role: str, existing_only: bool = False, database_name: str | None = None) -> dict:
-    """Apply the numbered migrations not yet installed, then grant the runtime
+    """Create the schema, or apply the numbered changes not yet installed, then grant the runtime
     role what drafting, recording an approval and publishing need, and no more."""
     if engine.dialect.name == "mysql":
         from .mysql_migration import migrate as migrate_mysql
@@ -23,7 +23,8 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False, database_
         return migrate_mysql(engine, runtime_role=runtime_role, existing_only=existing_only, database_name=database_name)
     if engine.dialect.name != "postgresql":
         raise Blocked("RDM currently supports PostgreSQL and MySQL; other engines are deferred")
-    paths = sorted(MIGRATIONS.glob("[0-9]*.sql"))
+    # The current schema, then any numbered change made after it.
+    paths = [MIGRATIONS / "schema.sql", *sorted(MIGRATIONS.glob("[0-9]*.sql"))]
     quote = engine.dialect.identifier_preparer.quote
     with engine.begin() as conn:
         if (conn.scalar(text("SELECT current_database()")) != (database_name or "rdm")
@@ -42,6 +43,8 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False, database_
         if exists and not saved:
             raise Blocked("Refusing to adopt an untracked rdm schema")
         checksums = json.loads(saved) if saved else {}
+        if checksums and "schema.sql" not in checksums:
+            raise Blocked("This RDM store has an earlier schema; rebuild the store")
         if set(checksums) - {p.name for p in paths}:
             raise Blocked("Installed RDM migration is absent from this build")
         for path in paths:
@@ -51,7 +54,7 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False, database_
                 if checksums[path.name] != checksum:
                     raise Blocked("Installed RDM migration checksum differs")
             else:
-                conn.execute(text(source))
+                conn.exec_driver_sql(source.replace("%", "%%"))
                 checksums[path.name] = checksum
         comment = canonical(checksums).replace("'", "''")
         conn.exec_driver_sql(f"COMMENT ON SCHEMA rdm IS '{comment}'")

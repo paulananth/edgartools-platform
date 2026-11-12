@@ -18,7 +18,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError
 
 from edgar_warehouse.control_contract import Blocked
-from edgar_warehouse.rdm import cli, database, store
+from edgar_warehouse.rdm import cli, store
 from edgar_warehouse.rdm.database import migrate
 from edgar_warehouse.rdm.store import RDM
 from edgar_warehouse.rules import files
@@ -323,60 +323,3 @@ def test_a_code_carries_named_properties(rdm, tmp_path):
     rdm.approve("test-links", "bad", **OPERATOR)
     with pytest.raises(Blocked, match="properties"):
         rdm.publish("test-links", "bad", out=tmp_path)
-
-
-def test_the_value_migration_keeps_every_published_pin(tmp_path, monkeypatch):
-    """A store published before 004 reads back the same bytes after it."""
-    early = tmp_path / "migrations"
-    early.mkdir()
-    for path in sorted(database.MIGRATIONS.glob("00[1-3]_*.sql")):
-        (early / path.name).write_text(path.read_text())
-    with server() as engine:
-        owner = engine("rdm")
-        monkeypatch.setattr(database, "MIGRATIONS", early)
-        assert "004_code_value.sql" not in migrate(owner, runtime_role="rdm_runtime")
-        with owner.begin() as conn:
-            assert "value" not in set(conn.scalars(text(
-                "SELECT column_name FROM information_schema.columns WHERE table_schema='rdm' AND table_name='code'")))
-        _industry_before_values(engine)
-        before = _runtime_sha(engine)
-        monkeypatch.undo()
-        assert "004_code_value.sql" in migrate(owner, runtime_role="rdm_runtime")
-        after = RDM(engine("rdm", "rdm_runtime"))
-        assert after.verify("test-industry", "1") == {"code_set": "test-industry", "version": "1",
-                                                      "stored": before, "computed": before, "matches": True}
-        assert {r["code"]: (r["value"], r["unit"]) for r in after.codes("test-industry", "1")} == \
-            {"A": (None, None), "A1": (None, None), "B": (None, None), "C": (None, None)}
-
-
-def _industry_before_values(engine):
-    """Publish a version through SQL written for the store before 004 (no value columns)."""
-    with engine("rdm", "rdm_runtime").begin() as conn:
-        conn.execute(text("INSERT INTO rdm.code_set(code_set,name,definition,authority,steward) "
-                          "VALUES ('test-industry','Test industry hierarchy','','','')"))
-        conn.execute(text("INSERT INTO rdm.code_set_version(code_set,version,created_by,evidence) "
-                          "VALUES ('test-industry','1','test','{}')"))
-        for code, label, parent in (("A", "Finance", None), ("B", "Mining", None), ("A1", "Depository", "A"),
-                                    ("C", "Banks", "A1")):
-            conn.execute(text("INSERT INTO rdm.code(code_set,version,code,label,parent_code) "
-                              "VALUES ('test-industry','1',:c,:l,:p)"), {"c": code, "l": label, "p": parent})
-            conn.execute(text("INSERT INTO rdm.code_label(code_set,version,code,language,label,kind,source) "
-                              "VALUES ('test-industry','1',:c,'en',:l,'preferred','code label')"), {"c": code, "l": label})
-        conn.execute(text("UPDATE rdm.code_set_version SET status='approved', approved_by='operator', "
-                          "approved_words='approved' WHERE code_set='test-industry' AND version='1'"))
-    codes = [{"code": c, "label": l, "definition": "", "parent_code": p, "valid_from": None, "valid_to": None,
-              "status": "valid", "invalid_reason": None,
-              "labels": [{"language": "en", "kind": "preferred", "label": l}], "crosswalk": []}
-             for c, l, p in (("A", "Finance", None), ("A1", "Depository", "A"), ("B", "Mining", None), ("C", "Banks", "A1"))]
-    prepared = store._prepare(codes, {})
-    with engine("rdm", "rdm_runtime").begin() as conn:
-        for p in prepared["paths"]:
-            conn.execute(text("INSERT INTO rdm.code_path(code_set,version,code,path,label_path,level,depth) "
-                              "VALUES ('test-industry','1',:code,:path,:label_path,:level,:depth)"), p)
-        conn.execute(text("UPDATE rdm.code_set_version SET status='published', sha256=:s, valid_from=clock_timestamp() "
-                          "WHERE code_set='test-industry' AND version='1'"), {"s": prepared["sha256"]})
-
-
-def _runtime_sha(engine):
-    with engine("rdm", "rdm_runtime").connect() as conn:
-        return conn.scalar(text("SELECT sha256 FROM rdm.code_set_version WHERE code_set='test-industry' AND version='1'"))

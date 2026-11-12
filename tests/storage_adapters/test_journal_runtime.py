@@ -175,7 +175,7 @@ def test_populated_migration_drift_interruption_and_recovery(journal):
         select_saved="SELECT obj_description(oid,'pg_namespace') FROM pg_namespace WHERE nspname='journal'"
         with owner.begin() as conn:
             saved=conn.scalar(text(select_saved))
-            conn.exec_driver_sql("COMMENT ON SCHEMA journal IS '{\"001_event.sql\":\"bad\"}'")
+            conn.exec_driver_sql("COMMENT ON SCHEMA journal IS '{\"schema.sql\":\"bad\"}'")
         try:
             with pytest.raises(Blocked):migrate(owner,runtime_role=role,database_name=owner.url.database)
         finally:

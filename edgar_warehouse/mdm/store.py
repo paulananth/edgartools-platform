@@ -52,38 +52,10 @@ def rows(conn: Connection, sql: str, **params: Any) -> list[dict]:
     return [dict(r) for r in conn.execute(text(sql), params).mappings()]
 
 
-# The schema's first file, then each later file once, in order, by checksum.
-# A later change to the schema is a new file added to MIGRATIONS.
-BASELINE = "001_mdm.sql"
-MIGRATIONS: tuple[str, ...] = (
-    "002_link_start.sql",
-    "003_lookup_indexes.sql",
-    "004_is_insider.sql",
-    "005_cross_reference.sql",
-    "006_relationship_context.sql",
-    "007_entity_context.sql",
-    "008_relationship_names.sql",
-    "009_parent_history.sql",
-    "010_relationship_version.sql",
-    "011_key_list_plans.sql",
-    "012_key_join_lookups.sql",
-    "013_proposal_effects_hash.sql",
-    "014_outbox_names_batch.sql",
-    "015_company_fields_once.sql",
-    "016_publication_inputs.sql",
-    "017_unchanged_batch_no_outbox.sql",
-    "018_publish_changed_records.sql",
-    "019_merge_stage_no_limit.sql",
-    "020_merge_record_by_record.sql",
-    "021_identifier_index_no_pending_list.sql",
-    "022_detail_version.sql",
-    "023_stage_details.sql",
-    "024_configured_kinds.sql",
-    "025_kind_descriptions.sql",
-    "026_company_fields_out.sql",
-    "027_candidate_routes.sql",
-    "030_name_count_index.sql",
-)
+# The current schema, then each later file once, in order, by checksum.
+# A later change to the schema is a new numbered file added to MIGRATIONS.
+BASELINE = "schema.sql"
+MIGRATIONS: tuple[str, ...] = ()
 
 
 def migrate(
@@ -171,11 +143,15 @@ def _migrate(
                 text("SELECT checksum FROM mdm.migration WHERE name=:name"),
                 {"name": path.name},
             )
+            if saved is None:
+                raise Conflict("This MDM store has an earlier schema; rebuild the store")
             if saved != checksum:
                 raise Conflict("Installed migration checksum differs")
         else:
+            if conn.scalar(text("SELECT to_regnamespace('mdm')")):
+                raise Conflict("This MDM store has an earlier schema; rebuild the store")
             # Execute the real SQL file, including PL/pgSQL bodies, atomically.
-            conn.execute(text(source))
+            conn.exec_driver_sql(source.replace("%", "%%"))
             conn.execute(
                 text("INSERT INTO mdm.migration(name,checksum) VALUES(:name,:checksum)"),
                 {"name": path.name, "checksum": checksum},
@@ -196,10 +172,9 @@ def _migrate(
                 )
             elif saved != extra_hash:
                 raise Conflict("Installed migration checksum differs")
-        if "024_configured_kinds.sql" in MIGRATIONS:
-            from .schema import configure_kinds
-            configure_kinds(conn)
-            storage_adapter().verify_native_registry(conn)
+        from .schema import configure_kinds
+        configure_kinds(conn)
+        storage_adapter().verify_native_registry(conn)
         for inherited in ("PUBLIC", application_role, "snowflake_write"):
             if inherited == "PUBLIC" or conn.scalar(
                 text("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=:r)"),
