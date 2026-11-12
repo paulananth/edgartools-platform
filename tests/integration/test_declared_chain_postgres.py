@@ -1,7 +1,5 @@
 """A declared chain on real PG16 (ticket 14, slice 2c): requests read each file
 alone beside their answers, answers read in groups with each file's pair set
-from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.rules import frozen
 from its own request reading, a reduce over every answers reading, the
 Listing currency's line counts, lines and listing read (ticket 138 part B3),
 a combine, the record read over the combine's pieces, and the preparation, all formed by
@@ -15,6 +13,8 @@ from uuid import uuid4
 
 import pytest
 
+from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from edgar_warehouse.rules import frozen
 from edgar_warehouse.bookkeeping.clean.database import grant_profile
 from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
 from edgar_warehouse.mdm.target_manifest import write_manifest

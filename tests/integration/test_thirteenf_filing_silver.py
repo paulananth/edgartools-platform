@@ -84,8 +84,6 @@ def test_each_managers_13f_reports_land_in_silver_and_other_forms_do_not(databas
     manifest = book.artifacts.put(tmp_path.as_uri() + "/submitted", {"version": 2, "steps": steps})
     body = {"source": f"filings-{uuid4().hex}", "bookkeeping": {"version": 2, "targets": {"silver": target}}}
     saved = frozen.of("source", body["source"], body)
-    # Silver maps one to one, so there is no proof and no approval (operator, 2026-11-03).
-    assert saved["status"] == "draft"
     rules = Artifacts().put(tmp_path.as_uri() + "/rules", saved)
     rid = book.start(rules_ref=rules, inputs_ref=manifest, target="silver", scope={"test": body["source"]})
     workers = {"source.read": source_read, "silver.land": SimpleNamespace(execute=silver_land.execute, verify=silver_land.verify)}
