@@ -44,7 +44,6 @@ current interview questions. Research completion is not policy acceptance.
 ## Existing decisions carried forward
 
 - [Independent domain publication authority](../../adr/0010-independent-source-grained-mdm-enrichment-consumers.md).
-- [Commit evidence bound to its originating run](../../adr/0007-bind-mdm-commit-evidence-to-originating-run.md).
 - [Run, transaction, and artifact-transition ownership](../../../.scratch/mdm-enrichment-program/issues/08-set-run-transaction-and-artifact-transition-authority.md).
 - [Existing SEC Bronze migration is deferred](../../../.scratch/mdm-enrichment-program/issues/09-defer-existing-sec-bronze-migration.md).
 - [Approved GLEIF publication and mapping families](../../../.scratch/mdm-enrichment-program/source-file-pipeline-catalog.md).

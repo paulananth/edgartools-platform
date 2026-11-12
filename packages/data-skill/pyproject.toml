@@ -43,7 +43,6 @@ bypass-selection = true
 "../../edgar_warehouse/context.py" = "edgar_warehouse/context.py"
 "../../edgar_warehouse/database_connections.py" = "edgar_warehouse/database_connections.py"
 "../../edgar_warehouse/database_types.py" = "edgar_warehouse/database_types.py"
-"../../edgar_warehouse/snowflake_settings.py" = "edgar_warehouse/snowflake_settings.py"
 "../../edgar_warehouse/application" = "edgar_warehouse/application"
 "../../edgar_warehouse/financials" = "edgar_warehouse/financials"
 "../../edgar_warehouse/mastering" = "edgar_warehouse/mastering"

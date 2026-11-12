@@ -1,9 +1,9 @@
 # EdgarTools Platform
 
 The data platform for SEC EDGAR and other provider data: a Rust source engine
-reads captured files, MDM (PostgreSQL) masters them, silver lands them and
-Snowflake serves gold (operator, 2026-10-14: "Snowflake is still the target
-platform"; MDM's hosted target is Snowflake Postgres or Databricks Lakebase).
+reads captured files, MDM (PostgreSQL) masters them, codes go to RDM and silver
+lands every detail. The platform ends at silver; gold and dashboards come later
+(operator, 2026-11-12). MDM's hosted target is Snowflake Postgres or Databricks Lakebase.
 
 ## What belongs in this file (operator, 2026-10-28)
 
@@ -22,10 +22,9 @@ never copies a rule, since copies drift (ticket 63, 2026-11-03; ticket 213).
 
 ## Skills and guides: when to open each
 
-- **Before any AWS, Snowflake, dbt, Terraform, image or deploy command**:
+- **Before any AWS, Snowflake, Terraform, image or deploy command**:
   [aws-snowflake-operations](skills/aws-snowflake-operations/SKILL.md) (the one
-  live AWS account, the decommissioned dev environments, the Snowflake rules
-  and the deploy recipes).
+  live AWS account, the hosted MDM store and the deploy recipes).
 - **Before a load, or for delivery readiness, file changes, resource sizing and
   run recovery**: [data-operations](skills/data-operations/SKILL.md); before
   SEC, GLEIF or OpenFIGI loads also [the load sequence](docs/initial-and-daily-source-load.md).
@@ -219,8 +218,7 @@ Learned the hard way; each is a standing operator rule.
   converting it through floating point.
 - Captured SEC files are additive and immutable; reprocessing retained bytes is
   not a provider re-fetch, which needs its own authorization.
-- Writes into Snowflake's SQL layer go through dbt. MDM's own Postgres store
-  is written by its own code (SQLAlchemy), not dbt.
+- Each store is written by its own code (SQLAlchemy).
 
 **Debugging**
 - Root cause first: ask "why" until the cause is not just the trigger, and fix
@@ -280,4 +278,4 @@ Learned the hard way; each is a standing operator rule.
   allowed. Never stop, restore or replace shared data while others use it.
 - This shared-server default supersedes the per-agent-copy default in local
   testing guides and skills. Their backup and copy procedures remain available
-  for isolated tests. Local testing does not qualify a Snowflake deployment.
+  for isolated tests.

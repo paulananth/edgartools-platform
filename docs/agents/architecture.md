@@ -18,11 +18,9 @@ Moved out of AGENTS.md (ticket 63) unchanged: the files an agent reads to find i
 | AWS account Terraform | `infra/terraform/accounts/{dev,prod}/` |
 | AWS access Terraform | `infra/terraform/access/aws/accounts/{dev,prod}/` |
 | AWS Terraform modules | `infra/terraform/modules/` |
-| Snowflake AWS native-pull Terraform | `infra/terraform/snowflake/accounts/{dev,prod}/` |
-| Snowflake access Terraform | `infra/terraform/access/snowflake/accounts/{dev,prod}/` |
-| dbt gold models | `infra/snowflake/dbt/edgartools_gold/` |
+| Hosted MDM store (Snowflake Postgres) | `infra/snowflake/postgres/` |
 | AWS image publish script | `infra/scripts/publish-warehouse-image.sh` |
-| Docker images | `Dockerfile`, `Dockerfile.warehouse-deps`, `Dockerfile.mdm-deps`, `Dockerfile.mdm-neo4j` |
+| Docker images | `Dockerfile`, `Dockerfile.warehouse-deps`, `Dockerfile.mdm-deps`, `Dockerfile.mdm` |
 | Shared local PostgreSQL | `docs/local-agent-testing.md`, `infra/scripts/local-test-stores.py` |
 
 Large files should be read in chunks before editing: `edgar_warehouse/mastering/merge.py`, `skills/data-platform/READING.md` and `skills/data-onboarding/SKILL.md`.

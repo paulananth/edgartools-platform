@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "edgartools-platform"
 version = "0.1.0"
-description = "Data platform for SEC EDGAR: warehouse ETL, Snowflake dbt gold layer, dashboards"
+description = "Data platform for SEC EDGAR and other provider data: source extract, MDM, RDM and silver"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
@@ -26,9 +26,6 @@ dependencies = [
 [project.optional-dependencies]
 s3 = [
     "boto3>=1.42.91",
-]
-snowflake = [
-    "snowflake-connector-python>=3.7",
 ]
 mdm = [
     "source-contract",

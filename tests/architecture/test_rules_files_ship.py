@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_both_images_copy_the_rules_folder():
-    for dockerfile in ("Dockerfile", "Dockerfile.mdm-neo4j"):
+    for dockerfile in ("Dockerfile", "Dockerfile.mdm"):
         assert "COPY rules /app/rules\n" in (ROOT / dockerfile).read_text(), dockerfile
 
 

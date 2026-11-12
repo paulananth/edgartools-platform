@@ -33,18 +33,6 @@ infra/terraform/**/tfplan
 infra/terraform/**/backend.hcl
 !infra/terraform/**/backend.hcl.example
 
-# Generated-environment configs carry Snowflake account identifiers, which this
-# repo never commits. Only the template is tracked.
-infra/terraform/environments/*.json
-!infra/terraform/environments/*.json.example
-
-# dbt profiles contain Snowflake credentials
-infra/snowflake/dbt/**/profiles.yml
-!infra/snowflake/dbt/**/profiles.yml.example
-infra/snowflake/dbt/**/.user.yml
-infra/snowflake/dbt/**/logs/
-infra/snowflake/dbt/**/target/
-
 # Environment files
 .env
 .env.*
@@ -82,7 +70,6 @@ Thumbs.db
 infra/aws-*-application.json
 infra/aws-*-application.json.bak-*
 infra/aws-*-image-ref.txt
-infra/snowflake/sql/*_native_pull_handshake.json
 .gstack/
 
 # Agent worktrees
@@ -94,11 +81,6 @@ infra/.s3-staging-cleanup-evidence/
 infra/.warehouse-duplicate-reclaim-evidence/
 infra/.bronze-historic-review-manifests/
 infra/.bronze-historic-delete-evidence/
-
-# GH-247: local dashboard-release evidence artifacts (deploy.sh) — secret-free
-# but not meant to be version-controlled; the live record is the JSON PUT to
-# the Snowflake stage alongside each release.
-infra/snowflake/streamlit/.evidence/
 
 # Local agent tool output: diagram/HTML artifacts and ratchet state. These are
 # working files an agent produces locally; the checked record is the repo.

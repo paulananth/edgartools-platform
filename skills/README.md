@@ -29,7 +29,7 @@ copies them instead: `edgar-warehouse skill install`.
 | Make the stores operational, run and monitor loads | [data-operations](data-operations/SKILL.md) |
 | Timers, sequences and start or stop of a pipeline | [pipeline-orchestration](pipeline-orchestration/SKILL.md) |
 | A failed run, a telemetry gap, wasted resources | [production-support](production-support/SKILL.md) |
-| Any AWS, Snowflake, dbt, Terraform, image or deploy command | [aws-snowflake-operations](aws-snowflake-operations/SKILL.md) |
+| Any AWS, Snowflake, Terraform, image or deploy command | [aws-snowflake-operations](aws-snowflake-operations/SKILL.md) |
 | **Govern and catalog** | |
 | What counts as governed data, and what belongs on a lineage graph | [data-governance](data-governance/SKILL.md) |
 | Business domains, glossaries, assets and lineage in a catalog | [data-catalog](data-catalog/SKILL.md) |

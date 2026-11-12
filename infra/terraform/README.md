@@ -1,14 +1,11 @@
 # Terraform Layout
 
-This directory contains passive cloud-infrastructure Terraform roots for AWS,
-plus separate Snowflake Terraform trees for analytics/database-object
-provisioning and access control.
+This directory contains passive cloud-infrastructure Terraform roots for AWS.
 
 AWS account roots are infra-only. They may create networks, storage,
 registries, databases, logs, and empty secret containers. They
 must not create runnable application jobs/services, schedules, workflow engines,
-SQL procedures/tasks, dashboard apps, access-control bindings, or runtime secret
-values.
+SQL procedures/tasks, access-control bindings, or runtime secret values.
 
 ## Structure
 
@@ -16,18 +13,9 @@ values.
 bootstrap-state/
 access/
   aws/accounts/{dev,prod}/        # IAM, SNS trust policies, ECS task roles
-  snowflake/accounts/{dev,prod}/  # roles and grants
 accounts/
   dev/
   prod/
-snowflake/
-  accounts/
-    dev/
-    prod/
-  modules/
-    account_baseline/
-    dashboard/
-    native_pull/
 modules/
   network_runtime/
   storage_buckets/
@@ -61,9 +49,7 @@ modules/
 6. Populate runtime secrets out-of-band if an operator workflow needs them:
    - `edgartools-<env>-edgar-identity`
    - `edgartools-<env>/mdm/postgres_dsn` for the operational store
-   - `edgartools-<env>/mdm/snowflake` for graph/export settings
-7. The AWS application deploy script was retired (platform validation 2b,
-   2026-09-30); publish images with `infra/scripts/publish-warehouse-image.sh`.
+7. Publish images with `infra/scripts/publish-warehouse-image.sh`.
 
 AWS Terraform no longer accepts warehouse image, workflow schedule, app command,
 Snowflake trust principal, IAM role, or EDGAR identity value inputs.
@@ -72,35 +58,6 @@ removed from Terraform state without destroying them. Schedule their recoverable
 deletion only with `scripts/ops/delete_unused_aws_secrets.py` after applying this
 root and its matching access root.
 
-## Snowflake Apply
-
-1. Apply Snowflake provisioning from `infra/terraform/snowflake/accounts/<env>`
-   to create database objects, schemas, warehouses, native-pull objects, and the
-   dashboard shell.
-2. Apply Snowflake access from `infra/terraform/access/snowflake/accounts/<env>`
-   to create roles and grants.
-3. For native-pull AWS trust, use `infra/scripts/deploy-snowflake-stack.sh`; it
-   bootstraps AWS access trust, applies Snowflake provisioning, narrows AWS trust
-   to the emitted Snowflake principal, and then applies Snowflake access grants.
-
-## State Migration
-
-For environments where IAM/RBAC/Snowflake grant resources already exist in the
-old provisioning states, migrate state before applying the new access roots:
-
-- Move AWS IAM role and SNS topic policy resources from
-  `infra/terraform/accounts/<env>` to `infra/terraform/access/aws/accounts/<env>`.
-  Retire any old `edgartools-<env>-runner` IAM user after its access keys have
-  been deleted; the new runner model is service-role based.
-- Move Snowflake account role and grant resources from
-  `infra/terraform/snowflake/accounts/<env>` to
-  `infra/terraform/access/snowflake/accounts/<env>`.
-
-Use `terraform state mv` when source and destination addresses are known, or
-`terraform import` into the access root before removing the old state entry.
-Do this first in `dev`; do not apply `prod` until plans show no replacement for
-buckets, databases, or Snowflake database objects.
-
 ## Post-Infra Operators
 
 Run workload actions explicitly after infra has been applied:
@@ -108,10 +65,6 @@ Run workload actions explicitly after infra has been applied:
 - Publish AWS images with `infra/scripts/publish-warehouse-image.sh`.
 - Run MDM migrations/pipelines only from operator-owned jobs or local operator
   commands, not from Terraform.
-- Provision Snowflake database objects from `infra/terraform/snowflake/` and
-  Snowflake access from `infra/terraform/access/snowflake/`.
-- Upload Snowflake Streamlit dashboard artifacts with the Snowflake operator
-  scripts, not as part of AWS infra apply.
 
 ## Notes
 
@@ -120,5 +73,3 @@ Run workload actions explicitly after infra has been applied:
 - State bootstrap derives the bucket suffix from the authenticated AWS account and refuses retired accounts or stale account-ID overrides.
 - S3 backend state locking uses `use_lockfile = true`.
 - Bronze and warehouse data use separate buckets.
-- Snowflake Terraform uses separate state keys and is not part of the AWS
-  infra-only guarantee.
