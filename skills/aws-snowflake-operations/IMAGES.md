@@ -39,7 +39,7 @@ rollback archive; nothing pushes to them anymore.)
 Publish with `docker build` and `docker push` through
 `infra/scripts/publish-warehouse-image.sh --mode docker`.
 Prod promotion (build/push under `edgartools-prod-images`) is manual; the AWS
-pipeline deploy script was retired (platform validation 2b, 2026-09-30).
+pipeline deploy script was retired (platform validation 2b).
 Use the steps below for prod promotion and ad-hoc builds.
 
 ```bash

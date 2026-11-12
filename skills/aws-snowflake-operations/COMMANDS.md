@@ -120,4 +120,4 @@ environment name — `deploy-snowflake-stack.sh` fails closed without it, and no
 (`eu-prod` → `EDGARTOOLS_EU_PROD`). There is **no `--env` back-compat alias** — the
 rename was clean, since dev is decommissioned and prod was the only live caller.
 The AWS-side scripts that took `--env` (`deploy-aws-application.sh`, `run-aws-mdm-e2e.sh`)
-were retired (platform validation 2b, 2026-09-30).
+were retired (platform validation 2b).
