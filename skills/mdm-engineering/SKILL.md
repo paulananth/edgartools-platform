@@ -133,6 +133,11 @@ authoritative content before approval freezes it.
 
 ## Cross-reference completion
 
+**Retain computed matching evidence with its lookup keys.** A later source arrival must find both the key and
+the evidence the matching rule reads on the stored holder. Write that evidence, keys, merges and waiting-record
+release in one locked transaction. Prove a fault at release rolls them all back, then retry and repeat unchanged;
+a committed key must never make a retry skip an unfinished release.
+
 Read [CROSS-REFERENCE.md](CROSS-REFERENCE.md) before changing how identifiers are stored or looked up, qualifying native cross-reference lookup, or touching a rule that binds or consolidates by an identifier.
 
 ## The Merge Stage: each batch costs only what its records touch

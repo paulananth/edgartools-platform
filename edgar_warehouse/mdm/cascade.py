@@ -153,11 +153,11 @@ def record(key: str, fields: dict, matching: dict, quality: dict | None, identif
             "provenance": {"matching": matching, "quality": quality or {}}}
 
 
-def spec(policy: dict) -> dict:
+def spec(policy: dict, kind: str = "company") -> dict:
     """The passes, in the order the Company rules declare them, with the one
     over-shared threshold and eligibility they all state."""
     passes, shared, eligibility = [], set(), set()
-    for rule in (policy.get("kinds") or {}).get("company", {}).get("rules") or []:
+    for rule in (policy.get("kinds") or {}).get(kind, {}).get("rules") or []:
         tests = {t["primitive"]: t.get("args") or {} for t in rule.get("when") or []}
         if TEST not in tests:
             continue

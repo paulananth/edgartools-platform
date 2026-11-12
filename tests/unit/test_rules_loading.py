@@ -108,6 +108,36 @@ def test_each_new_bundle_is_prepared_submitted_and_driven(tmp_path, monkeypatch)
     assert (tmp_path / "m" / "load" / "example" / "by_letter" / "2026-10-25T000000Z" / "bundle-002").is_dir()
 
 
+def test_automatic_preparation_finishes_before_scope_files_and_bundles(tmp_path, monkeypatch):
+    commands = Recorded()
+    found = loader(tmp_path, monkeypatch, commands)
+    order = []
+    monkeypatch.setattr(loading, "prepare_load", lambda **kw: order.append("pairs") or [{"pairs": 1}], raising=False)
+    monkeypatch.setattr(found, "derived_files", lambda *a, **k: order.append("scope") or [])
+    drive = commands.drive
+    commands.drive = lambda *a: order.append("merge") or drive(*a)
+
+    result = found.load(capture=capture(tmp_path / "c", "letters/a.json"), capture_run="capture-1",
+                        as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
+
+    assert order == ["pairs", "scope", "merge"]
+    assert result["preparation"] == [{"pairs": 1}]
+
+
+def test_failed_automatic_preparation_submits_no_bundle(tmp_path, monkeypatch):
+    commands = Recorded()
+    found = loader(tmp_path, monkeypatch, commands)
+
+    def fail(**kw):
+        raise driving.RunStopped("The complete input differs from its receipt")
+
+    monkeypatch.setattr(loading, "prepare_load", fail, raising=False)
+    with pytest.raises(driving.RunStopped, match="differs from its receipt"):
+        found.load(capture=capture(tmp_path / "c", "letters/a.json"), capture_run="capture-1",
+                   as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
+    assert not commands.prepared
+
+
 def test_a_load_names_the_publication_revision_and_defaults_to_the_first(tmp_path, monkeypatch):
     folder = capture(tmp_path / "c", "letters/a.json")
     named, plain = Recorded(), Recorded()

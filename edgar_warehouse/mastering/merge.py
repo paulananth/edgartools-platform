@@ -82,16 +82,10 @@ def apply_pairs(store, settings: Settings, source_code: str, pairs: dict[str, di
             changed.append(record)
     if not changed:
         return {"records": 0}
-    counts = merge_file(store, settings, changed, again=True)
-    try:  # a record that waited for one of these LEIs moves to its golden record now
-        store.take_lock()
-        counts["released"] = counts.get("released", 0) + _release_waiting(
-            store, settings, {("lei", pairs[r["record_key"]]["lei"]) for r in changed})
-        store.commit()
-    except BaseException:
-        store.rollback()
-        raise
-    return counts
+    # Pair evidence, lookup keys and released waiters are one transaction. A retry must never
+    # see a finished pair whose waiting-record release failed after a separate commit.
+    return merge_file(store, settings, changed, again=True, record_updates=changed,
+                      release_identifiers={("lei", pairs[r["record_key"]]["lei"]) for r in changed})
 
 
 def set_aside(store, records: list[dict], quiet: dict) -> None:
@@ -101,7 +95,7 @@ def set_aside(store, records: list[dict], quiet: dict) -> None:
 
 
 def merge_file(store, settings: Settings, records: list[dict], *, again: bool = False,
-               deferred: list[dict] = (), quiet: dict | None = None) -> dict:
+               deferred: list[dict] = (), quiet: dict | None = None, record_updates=(), release_identifiers=()) -> dict:
     """Merge one file, or nothing if it is done. `again` delivers a finished file a second time."""
     key = file_key([*records, *({"assertion_id": r["deferred_id"]} for r in deferred)])
     try:
@@ -109,9 +103,13 @@ def merge_file(store, settings: Settings, records: list[dict], *, again: bool = 
         if store.file_done(key) and not again:
             store.commit()
             return {"file": key, "skipped": True}
+        # A derived pair must remain on the stored holder when its other end arrives in a later file.
+        # Keep its evidence and the resulting lookup keys in the same locked transaction.
+        if record_updates:
+            store.update_records([(r["assertion_id"], json.dumps(r, separators=(",", ":"))) for r in record_updates])
         delivery = _delivery(store, records, deferred)
         set_aside(store, list(deferred), quiet or {})
-        arrived: set = set()
+        arrived: set = set(release_identifiers)
         counts = _merge(store, settings, records, key, again, arrived) if records else {"records": 0}
         # A file of only set-aside records has no kind and nothing arrived: nothing waits for it.
         counts["released"] = _release_waiting(store, settings, arrived) if records else 0
