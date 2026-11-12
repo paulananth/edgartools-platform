@@ -2,8 +2,7 @@
 
 Current acquisition status: the active feeds are those a source document
 declares under `acquisition.feeds` (`edgar-warehouse plan resolve-feed`). Retired
-acquisition callers keep their historical audit stores separate. See Examples
-for the state recorded on 2026-09-29.
+acquisition callers keep their historical audit stores separate. See Examples.
 
 Change Propagation is the canonical name for diff processing. Historical
 artifacts retain their original paths and terminology. Current ownership is:
@@ -17,7 +16,7 @@ artifacts retain their original paths and terminology. Current ownership is:
 
 ## Empty journal and receipts
 
-### Independent implementation boundary (2026-10-02)
+### Independent implementation boundary
 
 The journal core contains only `store.py`, `database.py`, `cli.py`, exports and
 checksummed SQL migrations. Its warehouse dependency is the pure
@@ -271,9 +270,9 @@ remains separate and legacy audit retention is indefinite by default.
 
 ## Examples
 
-- Acquisition on 2026-09-29: the Company submissions feed was the sole
+- Acquisition, at first: the Company submissions feed was the sole
   active feed. The other SEC and GLEIF acquisition callers were retired. Its
-  Company target was removed on 2026-10-11, unrun (Issue 20 20c); capture
+  Company target was removed, unrun; capture
   returns with the configured capture worker (L8). Today's Company route, from
   a raw capture, is in `docs/company-only-acquisition.md`.
 - Ungated provider transport refused by the marker: SEC transport.

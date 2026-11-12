@@ -7,7 +7,7 @@ so it can be restored. This is local testing, not a production deployment.
 ## Agent rules
 
 - Work automatically within the assigned task. The operator authorized no
-  intermediate approval prompts for this local testing work on 2026-10-16.
+  intermediate approval prompts for this local testing work.
   Ask only when agents would overlap or the requested scope is unclear.
 - Use a dedicated worktree for code. The data-platform skill starts a test
   container or a production container. A production container stays. Do not

@@ -22,7 +22,7 @@ question at a time, with your recommendation.
 
 ## The seven wastes
 
-Every skill works lean (operator, 2026-10-19: "make all skills understand 7
+Every skill works lean (operator: "make all skills understand 7
 wastes and eliminate any of the waste from each skill"). Before a step, check
 it against the seven, and drop what adds no value:
 
@@ -63,8 +63,7 @@ retain their own gates.
 
 ## Source readiness
 
-When running, recovering or qualifying a source, apply these operator requirements
-(2026-10-17). They are acceptance rules; identify missing runtime enforcement as
+When running, recovering or qualifying a source, apply these operator requirements. They are acceptance rules; identify missing runtime enforcement as
 an implementation gap before calling a source ready.
 
 - Qualify retained local captures through genuine provenance, completeness
@@ -395,8 +394,8 @@ MDM never merges or publishes a batch twice. After a stop, run the same
 
 ### Examples: current source qualification
 
-Company's last installed proof (6,414 Companies, 3,052 GLEIF bindings, a
-killed worker resumed, a second pass changed nothing; #905, #930) and
+Company's last installed proof (a killed worker
+resumed, a second pass changed nothing) and
 Person's installed trial are the evidence their versions carry forward. Use
 only pipelines whose every profile resolves with `workers describe`.
 
@@ -404,7 +403,7 @@ only pipelines whose every profile resolves with `workers describe`.
 
 Only when the engine cannot state what a field needs. First check
 [REFERENCE](../data-onboarding/REFERENCE.md) and the engine's primitives; a
-custom step is the last resort (operator, 2026-10-03: "Write a step, then
+custom step is the last resort (operator: "Write a step, then
 stop").
 
 This mode needs a checkout of the repository on your own branch, since a step

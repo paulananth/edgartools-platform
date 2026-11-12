@@ -335,26 +335,21 @@ pass.
 
 ## Examples
 
-### Qualification on 2026-10-02
+### The blueprint's fixture qualification
 
 The shipped Company blueprint has raw-JSON fixture qualification for main
 records, continuation pages, both ticker-catalog shapes and business-address
 conversion, followed by independently verified combination and MDM preparation.
 Name Matching lookup/composition has exact fixture and pinned-file qualification.
 
-### Qualification on 2026-10-11
+### The installed proof
 
 The installed proof qualifies the full Company population from the raw capture,
-replay and recovery: 6,414 Companies and 3,052 CIK+LEI bindings, a killed worker
-resumed, and a second pass that changes nothing (#905, #907). The older Company
-and GLEIF readers are deleted (#904, #905). Activating a source Rules version
+replay and recovery: a killed worker
+resumed, and a second pass that changes nothing. The older Company
+and GLEIF readers are deleted. Activating a source Rules version
 still needs the operator's approval.
 
-Offline evidence in [PR #819](https://github.com/paulananth/edgartools-platform/pull/819)
-records exact recent-form comparisons on 1,000 distinct receipt-pinned main
-captures (107,197 filing rows). This exercised source.read and source.combine
-workers/verifiers directly, not the installed full Company pipeline. Its
-`pagination_qualified` and `full_company_mastering` flags remain false.
 
 ### The SEC Company preparation blueprint
 

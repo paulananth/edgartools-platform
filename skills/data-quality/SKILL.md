@@ -32,7 +32,7 @@ type it in its silver spec. Every other rule goes in the spec's `checks`
 identifier type), `in_set`, `one_value` (one value per group, which carries
 a reference hierarchy's rule), `not_after` (a start is not after its end) and
 `reason_if_empty` (a value is empty exactly when its reason column is filled). A row failing a `flag` check lands with the
-check's id in its `quality` column (operator, 2026-10-17: "Flag, land the
+check's id in its `quality` column (operator: "Flag, land the
 row"); `exception` keeps it out. Measure each check on the delivery first,
 with the writer's own code (`edgar_warehouse.silver_writer.checks.run`), and
 write each count in the check's comment; a check that flags rows the source
@@ -229,7 +229,7 @@ or a planted record does not fire). Read the counts carefully:
 
 Pick each `on_fail` from the table below, with its count and examples.
 Where the table decides, record it under the operator's standing rule
-approval with those counts (operator, 2026-10-15: "Approved the rules
+approval with those counts (operator: "Approved the rules
 always"); ask one question only where it does not, or where a count disagrees
 with profiling's:
 

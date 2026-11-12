@@ -15,7 +15,7 @@ own the work itself. `edgar-warehouse rules run` submits the approved versions;
 workers then pull the work (`edgar-warehouse workers work`), separate
 verifiers check it (`… verify`), and `edgar-warehouse bookkeeping finalize`
 delivers control's events and records the run's checks. There is no
-`bookkeeping run` command (operator, 2026-10-02: "Keep `rules run`"). Plan,
+`bookkeeping run` command (operator: "Keep `rules run`"). Plan,
 validate and recover are steps you follow with the existing commands; they are
 not commands of their own.
 

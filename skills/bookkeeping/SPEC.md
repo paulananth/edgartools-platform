@@ -2,8 +2,7 @@
 
 Current acquisition status: the active feeds are those a source document
 declares under `acquisition.feeds` (`edgar-warehouse plan resolve-feed`); see
-Examples for the state recorded on 2026-09-29. Feed suites and test counts
-below record the earlier implementation state.
+Examples.
 
 The complete supplied plan is the objective. **The current implementation does not yet replace every
 legacy caller or qualify a production cutover.**
@@ -185,7 +184,7 @@ publication (no `mdm.prepare`). The target is part of what each file is
 processed under, so two targets over the same files (a source's two Dataset
 Contracts) each process them.
 
-**Which runs, over time** (operator, 2026-10-20: "All runs of
+**Which runs, over time** (operator: "All runs of
 latest capture (Recommended)"). A manifest written from a capture names it
 (`capture`, the capture's run id); the run's submission keeps it. A reading
 takes only the runs of the capture the newest complete run was written from,
@@ -409,23 +408,6 @@ owners. Its control schema has five tables and zero runs; Rules has zero
 versions. Acceptance fixtures use separate disposable containers, not these
 stores. No AWS state, old Bookkeeping data or active Rules versions were changed.
 
-Verification recorded during implementation:
-
-- Complete configured control acceptance with stage worklists: 42 passed in
-  99.96 seconds, no skips. Covers invalid-proof/approval rejection, the operator
-  CLI, transformed output chains, different stage counts, lost acknowledgements,
-  corrupt prerequisite evidence, and real MDM merge/publication stage order.
-- Contract, CLI inventory, Rules files and every existing source's suites:
-  168 passed in 25.23 seconds.
-- Existing complete MDM PostgreSQL suite: 56 passed. After adding
-  assessment authorization, its eight assessment tests passed again.
-- The complete unit/architecture follow-up passed 2,020 tests and 27 subtests
-  in 188.28 seconds, with eight existing optional skips. This includes the
-  corrected standalone CLI inventory classifications and version 2 contracts.
-- Targeted Rules files, CLI inventory and source regressions:
-  149 passed in 23.79 seconds.
-- Wheel build and migration packaging succeeded; `git diff --check` passed.
-
 New submissions print their durable run id on stderr before execution while
 leaving result stdout as JSON. `bookkeeping runs` is bounded and also lets an
 operator find the root after a lost submission acknowledgement.
@@ -458,11 +440,11 @@ No AWS rollout, legacy database reset or retirement is performed here.
 
 ## Examples
 
-- Acquisition on 2026-09-29: only the Company submissions feed was
-  active. Its Company target was removed on 2026-10-11, unrun (Issue 20 20c);
+- Acquisition, at first: only the Company submissions feed was
+  active. Its Company target was removed, unrun;
   capture returns with the configured capture worker (L8). Today's Company
   route is in `docs/company-only-acquisition.md`.
-- Workers on 2026-10-02: `artifact.copy`, `jsonl.count`, `source.read`,
+- Workers, at first: `artifact.copy`, `jsonl.count`, `source.read`,
   and the MDM merge and publish workers, since replaced by `mastering.merge`; the SEC Company and acquisition workers were
   mastering to-do 20c, Person 20d.
 - A manifest consumer key: `"consumer": "mastering/company"`.

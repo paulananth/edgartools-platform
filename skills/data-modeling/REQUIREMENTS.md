@@ -6,7 +6,7 @@ Identifier Contracts (`rules/merge/kinds/`), the relationship types
 (RDM code set `mdm-relationship-types`), and the approved specs
 (`docs/specs/rdm/spec.md`, `docs/specs/agent-context/spec.md`,
 `docs/specs/profiling/`). First written by Grok; handed to Claude by
-the operator on 2026-10-07 ("I am handing it to you"), after a review found
+the operator ("I am handing it to you"), after a review found
 it out of date and without a method for reference data.
 
 ## Scope
@@ -65,7 +65,7 @@ approved findings exist, or to say that they do not.
 
 ## Settled since the first version
 
-- The RDM spec is approved (2026-10-05) and built: the `rdm`
+- The RDM spec is approved and built: the `rdm`
   database, the policy's pin of its reference data.
 - `edgar-warehouse context <code set>` reads `rdm.code_context`;
   `edgar-warehouse rdm list` and `rdm describe` give a code set's meaning,
@@ -77,5 +77,5 @@ approved findings exist, or to say that they do not.
 
 1. `silver.table_context` is specified but not built; until then
    the silver spec is read from the findings.
-2. The review of 2026-10-07 found two pairs of overlapping parent types and
+2. A review found two pairs of overlapping parent types and
    unnoted inverse fund types (the skill's Examples): rulings for the operator.
