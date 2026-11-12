@@ -221,7 +221,7 @@ class TestResolvingTheRuleADatasetContractNames:
             resolve_rule(self.policy(), named)
 
     def test_a_named_version_that_is_absent_is_refused(self):
-        """A rule edit mints a new version; it never inherits the old proof."""
+        """A rule edit mints a new version; the entry for the old one does not switch it on."""
         named = {"kind": "person", "rule_id": "C-J", "version": "2026-09-21"}
         with pytest.raises(Conflict, match="2026-09-21"):
             resolve_rule(self.policy(), named)
@@ -257,8 +257,6 @@ class TestTheReadPathRunsTheNamedRule:
     }
 
     def policy(self, active=False):
-        from tests.mdm.test_activation import BAR, proof
-
         automatic = []
         if active:
             automatic = [
@@ -268,8 +266,6 @@ class TestTheReadPathRunsTheNamedRule:
                     "rule_id": "sec-company-candidate",
                     "rule_version": "2026-09-24",
                     "verdict": "company",
-                    "activation": "measured",
-                    "proof": proof(),
                 }
             ]
         return {
@@ -279,7 +275,6 @@ class TestTheReadPathRunsTheNamedRule:
                 "company": {
                     "version": "company-test",
                     "rules": [self.COMPANY_RULE],
-                    "bars": {"classification": BAR},
                 }
             },
         }

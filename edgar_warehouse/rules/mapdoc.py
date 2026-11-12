@@ -369,7 +369,7 @@ def _kind_sheets(kind: str, rules: dict, by_field: dict[str, list[str]]) -> dict
                              _text(rule.get("source")), _text(rule.get("holder_source")),
                              _conditions(rule.get("when") or [], kind), _text(rule.get("on_no_match")), at])
     about = [["What", "Value"], ["How to change this", HOW_TO_CHANGE], ["Kind", kind],
-             ["Rules version", _text(rules.get("version"))], ["Proof bar", _text(rules.get("bars"))]]
+             ["Rules version", _text(rules.get("version"))]]
     return {"Kind": about, "Preferred sources": preferred, "Who wins each field": per_field,
             "Classification": classification, "Matching rules": matching}
 

@@ -13,10 +13,7 @@ from edgar_warehouse.mdm.sec_company import (
     SOURCE_CODE,
 )
 
-from tests.mdm.test_activation import proof
-
-# Field and identity tests need an active rule; this synthetic proof belongs
-# only to the fixture. The standard POLICY deliberately stays inactive.
+# Field and identity tests run with only the classification rule on.
 TEST_POLICY = copy.deepcopy(POLICY)
 TEST_POLICY["automatic_rules"] = [
     {
@@ -25,8 +22,6 @@ TEST_POLICY["automatic_rules"] = [
         "rule_id": "sec-company-candidate",
         "rule_version": "2026-11-09.phase-1-listed-operating",
         "verdict": "company",
-        "activation": "measured",
-        "proof": proof(),
     }
 ]
 

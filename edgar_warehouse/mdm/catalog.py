@@ -21,7 +21,7 @@ def load(root=None):
 
 
 def _validate(body):
-    expected = {"version", "kinds", "profiles", "accepted_bars",
+    expected = {"version", "kinds", "profiles",
                 "reference_tables", "legacy_jurisdiction_table", "pair_comparisons", "legacy_pair_comparison"}
     if (not isinstance(body, dict) or not expected <= set(body)
         or set(body) - expected - {"master_search", "detail_lookups"}
@@ -60,17 +60,6 @@ def _validate(body):
         or not allowed or not all(isinstance(k, str) for k in allowed) or set(allowed) - set(kinds)
         or len(set(allowed)) != len(allowed) for role, allowed in profiles.items())):
         raise ValueError("Mastering profile eligibility names configured kinds")
-    bars = body["accepted_bars"]
-    if not isinstance(bars, dict) or set(bars) - set(kinds):
-        raise ValueError("Mastering accepted bars name configured kinds")
-    for families in bars.values():
-        if not isinstance(families, dict): raise ValueError("Mastering accepted bars name decision families")
-        for family, bar in families.items():
-            if (not isinstance(family, str) or not family or not isinstance(bar, dict)
-                or set(bar) != {"min_precision", "one_sided_confidence"}
-                or any(type(v) not in (int, float) or not math.isfinite(v) or not 0 < v < 1 for v in bar.values())
-                or bar["one_sided_confidence"] <= 0.5):
-                raise ValueError("Mastering accepted bar is invalid")
     references = body["reference_tables"]
     if (not isinstance(references, dict) or not references
         or any(not isinstance(alias, str) or not alias or not isinstance(spec, dict)

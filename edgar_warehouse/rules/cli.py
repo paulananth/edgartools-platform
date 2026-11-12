@@ -17,39 +17,10 @@ def _selection(parser):
     choice.add_argument("--merge")
 
 
-def _approve_rule(args):
-    """One merge rule, switched on in the files on the operator's words. It
-    only edits `merge/policy.yaml`: the merge version that carries it is a
-    separate save, test run and approval (the Approve steps, skills/data-onboarding/APPROVE.md)."""
-    from datetime import datetime, timezone
-
-    if args.merge != "platform":
-        print("--rule switches one rule of the platform merge rules on: use --merge platform", file=sys.stderr)
-        return 2
-    at = args.at or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    try:
-        if args.proof:  # an identifier matching rule, on its Proving Run report
-            entry = files.approve_identifier_rule(args.rule, proof=Path(args.proof), reason=args.reason or "",
-                                                  by=args.by, words=args.words, at=at,
-                                                  root=files.writable(args.root))
-        else:
-            entry = files.approve_rule(args.rule, by=args.by, words=args.words, at=at,
-                                       root=files.writable(args.root))
-    except ValueError as error:  # the refusal and its reason, not a traceback
-        print(f"Not approved: {error}", file=sys.stderr)
-        return 1
-    print(json.dumps({"switched_on": entry["rule_id"], "rule_version": entry["rule_version"],
-                      "approved_by": args.by, "approved_at": at, "file": str(Path(args.root) / "merge" / "policy.yaml")},
-                     indent=2, sort_keys=True))
-    return 0
-
-
 def _handle(args):
     from . import frozen
     from .db import Rules, get_engine, migrate
 
-    if args.rules_command == "approve":
-        return _approve_rule(args)
     if args.rules_command in ("init", "migrate"):
         owner = get_engine(os.environ["RULES_MIGRATION_DATABASE_URL"])
         try:
@@ -596,19 +567,10 @@ def register(subparsers):
     check.set_defaults(handler=_check)
     entity_types = commands.add_parser("entity-types", help="Where each source's records get their entity type")
     entity_types.set_defaults(handler=_handle)
-    for operation in ("status", "approve", "run"):
+    for operation in ("status", "run"):
         command = commands.add_parser(operation)
         _selection(command)
-        if operation == "approve":
-            command.add_argument("--by", required=True, help="Who approved: the operator's or steward's name")
-            command.add_argument("--words", required=True, help="Their exact words of approval")
-            command.add_argument("--rule", required=True, help="Switch one merge rule on, in the files, on its proof")
-            command.add_argument("--root", default=str(files.ROOT), help="The rules folder")
-            command.add_argument("--proof", help="An identifier matching rule's Proving Run report")
-            command.add_argument("--reason", help="With --proof: one line of what the Proving Run showed")
-            command.add_argument("--at", help="When the operator gave their words, UTC (YYYY-MM-DDTHH:MM:SSZ); "
-                                              "default now")
-        elif operation == "run":
+        if operation == "run":
             command.add_argument("--target", required=True)
             command.add_argument("--root", default=str(files.ROOT), help="The rules folder the run freezes")
             command.add_argument("--feed", help="Exact acquisition feed identity")

@@ -1,34 +1,23 @@
 """Which rules a Mastering Policy may hold, and which verdicts may act alone.
 
-A rule in a policy is **declared** until an `automatic_rules` entry makes one
-of its verdicts **active** (`policy-language.md` §9). This module is the check
-that replaces the blanket refusal: a body is refused, by name and with its
-reason, unless every rule is well formed (§10) and every activation carries a
-proof whose arithmetic holds against the kind's accepted bar (§9.2).
-
-What it verifies is arithmetic, not truth: a fabricated `n: 1000, correct:
-1000` passes. Attribution and an outside re-score are the defences (§9.2).
+A rule in a policy is **declared** until an `automatic_rules` entry lists one
+of its verdicts: listed is on. A body is refused, by name and with its reason,
+unless every rule is well formed and every entry names a rule version and
+verdict the policy holds.
 """
 
 from __future__ import annotations
 
 import copy
-import hashlib
-import json
-import math
-from pathlib import Path
 
 import pytest
 
 from edgar_warehouse.mdm.activation import (
-    _check_proof,
     activated,
     check_policy,
     rule_version_conflicts,
-    wilson_lower_bound,
 )
-from edgar_warehouse.mdm.classification import fired
-from edgar_warehouse.mdm.sec_company import APPROVED_ACTIVATION, POLICY, PROOF
+from edgar_warehouse.mdm.sec_company import POLICY
 from edgar_warehouse.mdm.primitives import UnknownPrimitive
 from edgar_warehouse.mdm.store import Conflict, digest
 from tests.mdm import policy_layers
@@ -53,58 +42,13 @@ RULE = {
     ],
 }
 
-BAR = {
-    "min_precision": 0.999,
-    "method": "wilson_lower_bound",
-    "one_sided_confidence": 0.95,
-}
-
-
-
-
-# The operator switched on the CIK matching rule on 2026-09-29 (ticket 15).
 CIK_ACTIVATION = {
     "kind": "company",
     "family": "binding",
     "rule_id": "company-cik",
     "rule_version": "2026-09-24",
     "verdict": "bind",
-    "activation": "deterministic",
 }
-
-def proof(n=3000, correct=3000, confidence=0.95, **changes):
-    if "lower_bound" not in changes and 0 <= correct <= n:
-        # Rounded down: a stated bound may never exceed its sample.
-        changes["lower_bound"] = (
-            math.floor(wilson_lower_bound(correct, n, confidence) * 1e6) / 1e6
-        )
-    body = {
-        "method": "wilson_lower_bound",
-        "one_sided_confidence": confidence,
-        "n": n,
-        "correct": correct,
-        "lower_bound": None,
-        "adversarial": {"fixture_sha256": "a" * 64, "violations": 0},
-        "cohort": {
-            "files": {"sample.jsonl": "b" * 64},
-            # One sample per rule step, for every step id a test rule or the
-            # Company policy uses ("0" to "10").
-            "by_step": {
-                str(step): {
-                    "n": n,
-                    "correct": correct,
-                    "lower_bound": changes.get("lower_bound"),
-                }
-                for step in range(11)
-            },
-        },
-        "approved_by": "operator",
-        "approved_at": "2026-09-24T12:00:00Z",
-        "reason": "fixture proof: arithmetic only, not a measurement",
-    }
-    body.update(changes)
-    return body
-
 
 def entry(**changes):
     body = {
@@ -113,14 +57,12 @@ def entry(**changes):
         "rule_id": "sec-company",
         "rule_version": "2026-09-24",
         "verdict": "company",
-        "activation": "measured",
-        "proof": proof(),
     }
     body.update(changes)
     return body
 
 
-def policy(rules=None, automatic=None, bars=None):
+def policy(rules=None, automatic=None):
     return {
         "version": "test",
         "required_consumers": ["journal"],
@@ -129,64 +71,9 @@ def policy(rules=None, automatic=None, bars=None):
             "company": {
                 "version": "company-test",
                 "rules": rules if rules is not None else [RULE],
-                "bars": bars if bars is not None else {"classification": BAR},
             }
         },
     }
-
-
-class TestTheArithmetic:
-    def test_a_perfect_sample_reproduces_the_spec_example(self):
-        """`policy-language.md` §9.2: n 841, all correct, 97.5% -> 0.99545."""
-        assert round(wilson_lower_bound(841, 841, 0.975), 5) == 0.99545
-
-    def test_the_spec_example_passes_the_check_as_written(self):
-        """§9.2's own entry states 0.99545, five decimals of 0.9954530."""
-        body = {
-            "required_consumers": ["journal"],
-            "kinds": {
-                "person": {
-                    "rules": [
-                        {
-                            **RULE,
-                            "emits": ["person", "deferred"],
-                            "steps": [
-                                {**RULE["steps"][0], "verdict": "person"},
-                                RULE["steps"][1],
-                            ],
-                        }
-                    ],
-                    "bars": {
-                        "classification": {
-                            "min_precision": 0.99,
-                            "method": "wilson_lower_bound",
-                            "one_sided_confidence": 0.975,
-                        }
-                    },
-                }
-            },
-            "automatic_rules": [
-                entry(
-                    kind="person",
-                    verdict="person",
-                    proof=proof(
-                        n=841, correct=841, confidence=0.975, lower_bound=0.99545
-                    ),
-                )
-            ],
-        }
-        check_policy(body)
-
-    def test_a_bound_rounded_up_past_its_sample_is_refused(self):
-        with pytest.raises(Conflict, match="does not reproduce"):
-            check_policy(policy(automatic=[entry(proof=proof(lower_bound=0.99910))]))
-
-    def test_a_perfect_sample_of_3000_clears_the_company_bar(self):
-        assert wilson_lower_bound(3000, 3000, 0.95) >= 0.999
-
-    def test_a_perfect_sample_of_1000_does_not(self):
-        """Company's 99.9% bar needs a sample, not a clean streak of any size."""
-        assert wilson_lower_bound(1000, 1000, 0.95) < 0.999
 
 
 class TestADeclaredRuleIsWellFormed:
@@ -254,8 +141,8 @@ class TestARuleVersionNamesOneSetOfSteps:
         assert rule_version_conflicts(policy(), [{"fields": {}}]) == []
 
 
-class TestAnActivationCarriesItsProof:
-    def test_a_measured_activation_that_clears_the_bar_passes(self):
+class TestAListedVerdictIsOn:
+    def test_a_listed_verdict_acts_alone(self):
         body = policy(automatic=[entry()])
         check_policy(body)
         assert activated(body, "company", RULE, "company")
@@ -265,7 +152,7 @@ class TestAnActivationCarriesItsProof:
         assert not activated(policy(), "company", RULE, "company")
 
     def test_an_entry_for_another_rule_version_does_not_activate_this_one(self):
-        """A rule edited after its proof is orphaned (§9.2)."""
+        """An edited rule is a new version; the entry names the one that is on."""
         body = policy(automatic=[entry()])
         assert not activated(body, "company", {**RULE, "version": "x"}, "company")
 
@@ -275,67 +162,17 @@ class TestAnActivationCarriesItsProof:
             ({"rule_id": "absent"}, "absent"),
             ({"rule_version": "2026-09-23"}, "2026-09-23"),
             ({"verdict": "person"}, "person"),
-            ({"verdict": "deferred"}, "deferred"),
-            ({"activation": "deterministic"}, "deterministic"),
             ({"family": "binding"}, "binding"),
             ({"kind": "fund"}, "fund"),
-            ({"proof": proof(n=1000, correct=1000)}, "below the company bar"),
-            ({"proof": proof(lower_bound=0.9995)}, "does not reproduce"),
-            ({"proof": proof(confidence=0.9)}, "confidence"),
-            ({"proof": proof(method="point_estimate")}, "method"),
-            (
-                {
-                    "proof": proof(
-                        adversarial={"fixture_sha256": "a" * 64, "violations": 1}
-                    )
-                },
-                "adversarial",
-            ),
-            ({"proof": proof(cohort={**proof()["cohort"], "files": {}})}, "cohort"),
-            ({"proof": proof(approved_by="")}, "approval"),
-            ({"proof": proof(correct=3001)}, "sample"),
+            ({"proof": {"n": 1}}, "names exactly"),
+            ({"activation": "measured"}, "names exactly"),
         ],
     )
-    def test_an_activation_that_does_not_hold_is_refused(self, changes, reason):
+    def test_an_entry_that_does_not_hold_is_refused(self, changes, reason):
         with pytest.raises(Conflict, match=reason):
             check_policy(policy(automatic=[entry(**changes)]))
 
-    def test_a_bar_the_document_lowers_below_the_accepted_one_is_refused(self):
-        """The document may raise its bar, never lower it (ticket 02, decision 4)."""
-        lowered = {**BAR, "min_precision": 0.9}
-        with pytest.raises(Conflict, match="accepted"):
-            check_policy(policy(bars={"classification": lowered}))
-
-    def test_company_classification_acts_at_95_percent(self):
-        """Confidence bands (company-policy.md): 95% acts, at 95% confidence."""
-        bar = {**BAR, "min_precision": 0.95}
-        body = policy(
-            automatic=[entry(proof=proof(n=60, correct=60))],
-            bars={"classification": bar},
-        )
-        check_policy(body)
-        assert activated(body, "company", RULE, "company")
-
-    def test_a_company_proof_below_95_percent_is_refused(self):
-        bar = {**BAR, "min_precision": 0.95}
-        body = policy(
-            automatic=[entry(proof=proof(n=60, correct=58))],
-            bars={"classification": bar},
-        )
-        with pytest.raises(Conflict, match="below the company bar"):
-            check_policy(body)
-
-    def test_lowering_classification_never_lowers_consolidation(self):
-        """Merging two published Company IDs keeps 99.9% (Q10/Q11): it has no
-        accepted bar here, so a document may not declare one at all."""
-        with pytest.raises(Conflict, match="no accepted bar"):
-            check_policy(policy(bars={"classification": BAR, "consolidation": BAR}))
-
-    def test_a_kind_with_no_bar_for_the_family_cannot_activate(self):
-        with pytest.raises(Conflict, match="no bar"):
-            check_policy(policy(automatic=[entry()], bars={}))
-
-    def test_one_verdict_is_activated_once(self):
+    def test_one_verdict_is_listed_once(self):
         """§10 check 6: no duplicate (kind, family, rule_id, verdict)."""
         with pytest.raises(Conflict, match="twice"):
             check_policy(policy(automatic=[entry(), entry()]))
@@ -364,13 +201,6 @@ CIK_CONTRACT = {
     "normalizer": "normalize_identifier@sec-cik-v1",
     "claim": {"forward": 1, "reverse": 1},
     "compatibility": {"field": "kind", "predicate": "kind_equal@1"},
-    "verification": {
-        "corpus_sha256": "c" * 64,
-        "approved_by": "operator",
-        "approved_at": "2026-09-24T12:00:00Z",
-        "reason": "fixture verification: shape only, not a measurement",
-    },
-    "tolerance": {"unit": "items", "warm_up_decisions": 10000, "max_per_10k": 5},
 }
 
 
@@ -386,16 +216,15 @@ def binding_policy(rule=None, contract=None, activate=True):
                 "rule_id": "company-cik",
                 "rule_version": "2026-09-24",
                 "verdict": "bind",
-                "activation": "deterministic",
             }
         ]
     return body
 
 
 class TestAnIdentifierRule:
-    """Ticket 04: identifier-only binding activates on a verified contract."""
+    """An identifier matching rule is on when listed and its Identifier Contract is complete."""
 
-    def test_a_verified_contract_activates_the_rule(self):
+    def test_a_listed_rule_with_a_complete_contract_is_on(self):
         body = binding_policy()
         check_policy(body)
         assert activated(body, "company", CIK_RULE, "bind")
@@ -496,7 +325,7 @@ class TestAnIdentifierRule:
             check_policy(binding_policy(rule={**CIK_RULE, "when": [
                 {**t, "args": {"namespace": "crd"}} for t in CIK_RULE["when"]]}, activate=False))
 
-    def test_no_contract_means_no_activation(self):
+    def test_a_listed_rule_needs_its_contract(self):
         with pytest.raises(Conflict, match="no Identifier Contract"):
             check_policy(binding_policy(contract=False))
 
@@ -511,45 +340,14 @@ class TestAnIdentifierRule:
                 {"compatibility": {"field": "kind", "predicate": "token_match@1"}},
                 "compatibility",
             ),
-            ({"verification": {"corpus_sha256": "short"}}, "not verified"),
-            ({"tolerance": {"unit": "items"}}, "tolerance"),
         ],
     )
     def test_an_incomplete_contract_is_refused(self, changes, reason):
         with pytest.raises(Conflict, match=reason):
             check_policy(binding_policy(contract={**CIK_CONTRACT, **changes}))
 
-    def test_a_deterministic_activation_of_a_classification_rule_is_refused(self):
-        body = policy(
-            automatic=[entry(activation="deterministic", family="classification")]
-        )
-        with pytest.raises(Conflict, match="applies to binding rules"):
-            check_policy(body)
-
-    def test_a_binding_rule_cannot_be_measured_into_activity_here(self):
-        body = binding_policy(activate=False)
-        body["automatic_rules"] = [
-            {
-                "kind": "company",
-                "family": "binding",
-                "rule_id": "company-cik",
-                "rule_version": "2026-09-24",
-                "verdict": "bind",
-                "activation": "measured",
-                "proof": proof(),
-            }
-        ]
-        with pytest.raises(
-            Conflict,
-            match="applies to classification and name_binding rules, not binding",
-        ):
-            check_policy(body)
-
-
 class TestTheCompanyPolicy:
-    """Ticket 12: the approved Account hold-back acts alone."""
-
-    def test_the_approved_rule_activates_only_its_company_verdict(self):
+    def test_the_company_rule_acts_alone_only_on_its_company_verdict(self):
         check_policy(POLICY)
         (rule,) = [
             r
@@ -558,140 +356,7 @@ class TestTheCompanyPolicy:
         ]
         assert activated(POLICY, "company", rule, "company")
         assert not activated(POLICY, "company", rule, "deferred")
-        assert all(
-            step["lower_bound"] >= 0.95 for step in PROOF["cohort"]["by_step"].values()
-        )
-        assert PROOF["adversarial"]["violations"] == 0
-        assert PROOF["approved_at"] == "2026-11-09T22:08:58Z"  # phase 1, ticket 204
-        assert PROOF["approved_by"] == "operator"
-        # Ticket 15 switched on the CIK matching rule beside it, and ticket 25
-        # the two name matching rules after it.
-        assert POLICY["automatic_rules"][:2] == [APPROVED_ACTIVATION, CIK_ACTIVATION]
-        assert APPROVED_ACTIVATION["proof"] is PROOF
-        # The pending policy the operator approved, before rules skill ticket
-        # 08 added the SEC place-code table to the body.
-        pending = policy_layers.peel(policy_layers.company_part(POLICY))
-        pending["automatic_rules"] = []
-        assert digest(_historic_company_identity(pending)) == (
-            "cbee08506a55c299a7a1d4b5c43f21ee1007181566b500f07fb28072e32d97cf"
-        )
-
-    def test_the_proof_files_match_the_pinned_hashes(self):
-        root = Path(__file__).parents[2] / ".scratch/company-mastering/research"
-        for name, expected in PROOF["cohort"]["files"].items():
-            assert hashlib.sha256((root / name).read_bytes()).hexdigest() == expected
-
-    def test_the_phase_1_rule_re_scores_from_the_frozen_labels(self):
-        """Phase 1 (ticket 204; operator: "Operating and listed a real company"): the hand-labelled draws of ticket 12
-        re-scored under the new rule. A listed operating filer is a Company at step 8; any other is set aside."""
-        root = Path(__file__).parents[2] / ".scratch/company-mastering/research"
-        block = POLICY["kinds"]["company"]
-        (rule,) = [r for r in block["rules"] if r["rule_id"] == "sec-company-candidate"]
-
-        def rows(name):
-            return [json.loads(line) for line in (root / name).read_text().splitlines()]
-
-        sample, adversarial = rows("12-13-sample.jsonl"), rows("12-13-adversarial.jsonl")
-        listed = 0
-
-        def tickers(record):  # the filer's own tickers, else the catalog's (`phase1-measure.py`)
-            return record["own_tickers"] or record["catalog_tickers"]
-
-        for record in sample + adversarial:
-            verdict, step = fired(
-                rule,
-                {"entity_type": record["entity_type"], "sic": record["sic"], "category": record["category"],
-                 "entity_name": record["name"], "tickers": tickers(record), "forms": record["forms"]},
-                block,
-            )
-            if tickers(record) and record["entity_type"] == "operating":
-                assert (verdict, step) == ("company", "8")
-                assert record["final"] == "company"
-            else:
-                assert verdict == "deferred" and step in {"0", "11"}
-            listed += verdict == "company"
-        old_step_8_listed = sum(1 for r in sample if r["step"] == "8" and tickers(r))
-        assert old_step_8_listed == 279  # the retained part of the proof's sample
-        assert listed == 279 + sum(1 for r in adversarial if tickers(r) and r["entity_type"] == "operating")
-        # The proof adds the 244 listed operating filers the retired shell and fund tests held back
-        # (`phase1-measure.py` counts them on the set-aside records), each a real company.
-        assert PROOF["n"] == PROOF["correct"] == old_step_8_listed + 244
-        assert math.isclose(wilson_lower_bound(PROOF["correct"], PROOF["n"], 0.95), PROOF["lower_bound"], abs_tol=1e-6)
-        assert PROOF["cohort"]["by_step"] == {"8": {"n": 523, "correct": 523, "lower_bound": PROOF["lower_bound"]}}
-        assert len(adversarial) == PROOF["adversarial"]["n"]
-        assert sum(record["final"] != "company" for record in adversarial) == PROOF["adversarial"]["violations"]
-
-
-COMPANY_BAR = {**BAR, "min_precision": 0.95}
-
-
-class TestEachStepClearsTheBar:
-    """The bar is per rule step, not per pooled sample (`company-policy.md`)."""
-
-    def test_a_failing_step_cannot_hide_behind_a_passing_one(self):
-        body = proof(n=600, correct=582)
-        # Pooled 582/600 clears 0.95; step 4 alone (282/300) does not.
-        body["cohort"]["by_step"]["4"] = {
-            "n": 300,
-            "correct": 282,
-            "lower_bound": math.floor(wilson_lower_bound(282, 300, 0.95) * 1e6) / 1e6,
-        }
-        with pytest.raises(Conflict, match="Proof step 4 lower bound .* below"):
-            _check_proof("company", COMPANY_BAR, body, ["2", "4"])
-
-    def test_a_step_with_no_sample_of_its_own_is_refused(self):
-        body = proof()
-        del body["cohort"]["by_step"]["4"]
-        with pytest.raises(Conflict, match="no sample of its own for step 4"):
-            _check_proof("company", COMPANY_BAR, body, ["2", "4"])
-
-    def test_the_measured_sec_rule_clears_the_bar_at_every_company_step(self):
-        approved = {**PROOF, "approved_by": "x", "approved_at": "y"}
-        _check_proof("company", COMPANY_BAR, approved, ["8"])
-
-
-
-
-
-
-def _current_company_identity(value):
-    """Apply the Company source rename to frozen, pre-rename policy evidence."""
-    if isinstance(value, dict):
-        return {_current_company_identity(key): _current_company_identity(item)
-                for key, item in value.items()}
-    if isinstance(value, list):
-        return [_current_company_identity(item) for item in value]
-    if isinstance(value, str):
-        return {"sec.submissions.company.v1": "sec.company.v1",
-                "sec.submissions.company": "sec.company"}.get(value, value)
-    return value
-
-
-def _historic_company_identity(value):
-    if isinstance(value, dict):
-        return {_historic_company_identity(key): _historic_company_identity(item)
-                for key, item in value.items()}
-    if isinstance(value, list):
-        return [_historic_company_identity(item) for item in value]
-    if isinstance(value, str):
-        return {"sec.nport.registrant.v2": "sec.nport.registrant.v1",
-                "2026-11-10.registrant-v2": "2026-10-15.1",
-                "sec.company.v1": "sec.submissions.company.v1",
-                "sec.company": "sec.submissions.company",
-                "company-2026-10-31.sec-company-source-identity":
-                    "company-2026-10-25.one-value-per-identifier"}.get(value, value)
-    return value
-
-
-
-
-
-
-
-
-CASCADE_RULES = {"sec-gleif-name-city-or-postcode"}
-
-
+        assert POLICY["automatic_rules"][1] == CIK_ACTIVATION
 
 
 @pytest.mark.parametrize("changes", [
@@ -754,9 +419,7 @@ EXACT_RULE = {"rule_id": "name-finds-master", "version": "v1", "family": "exact_
               "holder_sources": ["b.v1"], "applies_to_verdict": "company", "emits": ["bind"], "key": "name_id@1",
               "on_no_match": "wait", "on_several": "review"}
 EXACT_ENTRY = {"kind": "company", "family": "exact_name_binding", "rule_id": "name-finds-master", "rule_version": "v1",
-               "verdict": "bind", "activation": "exact_name",
-               "proof": {"names": 10, "attached": 6, "review": 1, "waiting": 3, "second_pass_changed_nothing": True,
-                         "approved_by": "t", "approved_at": "2026-11-04T00:00:00Z", "reason": "r"}}
+               "verdict": "bind"}
 
 
 def exact_policy(**rule_changes) -> dict:
@@ -773,9 +436,7 @@ def test_an_exact_name_rule_that_finds_and_never_creates_is_accepted():
 
 def test_an_exact_name_rule_that_mints_when_no_master_holds_the_name_is_accepted():
     body = exact_policy(on_no_match="mint")
-    entry = copy.deepcopy(EXACT_ENTRY)
-    entry["proof"] = {**entry["proof"], "names": entry["proof"]["names"] + 3, "created": 3}
-    body["automatic_rules"].append(entry)
+    body["automatic_rules"].append(copy.deepcopy(EXACT_ENTRY))
     check_policy(body)
 
 
@@ -787,15 +448,3 @@ def test_an_exact_name_rule_that_mints_when_no_master_holds_the_name_is_accepted
 def test_an_exact_name_rule_that_could_guess_is_refused(change):
     with pytest.raises(Conflict):
         check_policy(exact_policy(**change))
-
-
-@pytest.mark.parametrize("proof", [
-    {"attached": 0, "waiting": 9}, {"names": 11}, {"second_pass_changed_nothing": False}, {"approved_by": ""},
-])
-def test_an_exact_name_activation_without_its_limited_test_is_refused(proof):
-    body = exact_policy()
-    entry = copy.deepcopy(EXACT_ENTRY)
-    entry["proof"].update(proof)
-    body["automatic_rules"].append(entry)
-    with pytest.raises(Conflict):
-        check_policy(body)

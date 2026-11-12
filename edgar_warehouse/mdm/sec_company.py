@@ -11,6 +11,3 @@ from edgar_warehouse.rules import files as rules_files
 SOURCE_CODE = "sec.company.v1"
 CONTRACT = rules_files.mdm_contract("sec.company", SOURCE_CODE)
 POLICY = rules_files.policy()
-APPROVED_ACTIVATION = next(rule for rule in POLICY["automatic_rules"] if rule["rule_id"] == "sec-company-candidate")
-PROOF = APPROVED_ACTIVATION["proof"]
-NAME_PROOFS = rules_files.pending_proofs()
