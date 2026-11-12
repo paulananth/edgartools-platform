@@ -13,6 +13,8 @@ FILES = [
     SKILLS / "data-onboarding" / "SKILL.md",
     SKILLS / "data-onboarding" / "APPROVE.md",
     SKILLS / "refining-rules" / "SKILL.md",
+    SKILLS / "data-onboarding" / "MAP.md",
+    SKILLS / "data-onboarding" / "TEST.md",
 ]
 
 def _built():
