@@ -2,7 +2,7 @@
 
 Priority: 214, housekeeping. Map: [Rebuild priorities](../map.md). Opened 2026-11-11 19:22 ET (operator: "now review the skills and organize them too").
 
-Type: task. Status: open.
+Type: task. Status: resolved (2026-11-12 06:13 ET).
 
 ## What the review found (21 skills, about 23,800 lines)
 
@@ -21,9 +21,11 @@ Type: task. Status: open.
 - [x] (2026-11-11 19:22 ET) The lint counts the 25 citations that remain, file by file, so a new one fails and a removed one lowers the count (20 after the bookkeeping part below)
 - [x] (2026-11-11 19:22 ET) `mdm-engineering` points to `CLAUDE.md`, "Tests"; `change-journal`'s spec names the one link script; `CLAUDE.md` points to the skills index
 - [x] (2026-11-11 19:22 ET) Lints pass: ticket citations, genericity and guide paths (99 passed); every relative link in a skill resolves
-- [ ] `security-master` (12) and `company-financials` (8): the remaining citations sit in sentences that say what is live and what waits for a switch-on, or point to evidence. Rewriting them needs a check of each against the rules as they are now
+- [x] (2026-11-12 06:13 ET) `security-master` (12) and `company-financials` (8): the last citations are gone and the lint allows none: [228](228-rulings-skills-hold-no-ticket-date-or-run-count.md), PR #1699
 - [x] (2026-11-11 19:23 ET) `bookkeeping` (5 citations removed) and `openmetadata` taken over on the operator's word (2026-11-11 19:23 ET: "take over bookkeeping and openmetadata skill files tool"). The overlap guard stops on `skills/bookkeeping/SKILL.md`, held by the worktree of `codex/bookkeeping-openmetadata-20261105` (last commit 2026-11-05); the commit goes ahead under that word. `openmetadata` cites no ticket and needs no edit here; the lint now covers both
-- [ ] `openmetadata/SKILL.md` is 851 lines: move its local-server and rebuild sections behind pointers after open PR #1684 merges, since that PR adds 248 lines to the same file
-- [ ] Dates and run figures: about 200 dates remain in the skills, most inside an operator's quoted ruling. Decide whether the rule covers those
-- [ ] `data-onboarding/SKILL.md` is 1,032 lines; five more are over 500. Move reference tables behind a pointer, one skill per PR
-- [ ] Learning → skill: `skills/README.md`, "What a skill holds"
+- [x] (2026-11-12 06:13 ET) `openmetadata/SKILL.md` split after PR #1684 merged, 942 to 479 lines: [221](221-split-the-openmetadata-skill.md), PR #1692
+- [x] (2026-11-12 06:13 ET) Dates and run figures removed from every skill (operator, 2026-11-12 06:13 ET: "remove the dates and run figures from the skills too also make skills focused on the task or the function it is created for"): tickets 222 to 228 and 230, PRs #1693 to #1699 and #1705; the profiling scripts' eight ruling dates in this PR. Three dates stay and are counted by the lint: two folder names in a path, one example of a refused value
+- [x] (2026-11-12 06:13 ET) The seven skills over 500 lines are split, one per PR: tickets 215 to 221, PRs #1686 to #1692. The longest `SKILL.md` is now 491 lines
+- [x] (2026-11-12 06:13 ET) Focus: every section of every skill was read against the purpose its description states. Nothing needed to move between skills; what was off a skill's function was history, removed in the PRs above, and two backlogs, now tickets [227](227-aws-snowflake-operations-holds-rules-not-history.md) and [229](229-live-acquisition-waits-for-the-worker-runtime.md), both open
+- [x] (2026-11-12 06:13 ET) Lints that keep it so, in `tests/unit/test_skills_cite_no_ticket.py`: no ticket citation, only the three counted dates, every `SKILL.md` under 500 lines. Each failed when its rule was broken once (a date added; 450 lines added) and passes restored. `scripts/dev/move_skill_section.py` is the committed tool for the next split
+- [x] (2026-11-12 06:13 ET) Learning → skill: `skills/README.md`, "What a skill holds": no ticket, pull request, date or run figure; a limit is a rule; `SKILL.md` under 500 lines, sections moved whole behind a pointer

@@ -41,7 +41,11 @@ copies them instead: `edgar-warehouse skill install`.
 ## What a skill holds
 
 - The rule and the method, written for any reader. A ticket number, a pull
-  request number or one run's figures belongs in the ticket.
+  request number, the date of a ruling or a run, and one run's counts or
+  timings belong in the ticket. A limit the engine enforces is a rule and stays.
+- A `SKILL.md` under 500 lines. A section only some tasks need moves whole to
+  a sibling file, and its heading stays with one line saying when to read it:
+  `python3 scripts/dev/move_skill_section.py`.
 - A source, kind or identifier is named only under a heading that contains
   "Examples", except in the skills whose purpose is one domain or deployment.
 - A new skill is a folder with a `SKILL.md`; add its row to the table above.
