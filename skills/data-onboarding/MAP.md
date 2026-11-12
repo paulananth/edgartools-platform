@@ -53,7 +53,7 @@ missing, go on and log it.
   The order is part of each record's identity.
   - **No publication time in a record key.** A delivery's date belongs in its
     publication, not the key, or each delivery makes a new record of the same
-    entity (operator, 2026-10-22: "Fix 5"). A feed that restates its records
+    entity (operator: "Fix 5"). A feed that restates its records
     in every delivery gives each delivery its own `publication_key` and a
     rising `revision` (its period, for example YYYYMM) in `mdm.prepare`, with
     `effective_at` its period end; a restatement left at revision 1 is
@@ -66,10 +66,10 @@ missing, go on and log it.
     `rules/identifiers/<name>.yaml` from its profiling finding
     ([REFERENCE.md](REFERENCE.md), "Identifier types").
   - Recommend keeping a cross-reference identifier as lookup-only, under its
-    own name (operator, 2026-09-26): map it under `cross_references`
+    own name (operator): map it under `cross_references`
     ([REFERENCE.md](REFERENCE.md)).
   - Only an identifier a binding rule matches on joins two records into one;
-    a name joins only through a proven name rule (operator, 2026-10-08:
+    a name joins only through a proven name rule (operator:
     "Proven name rules may bind"), and a name id stays lookup only. Adding a
     joining identifier is a merge-rule change for the operator.
   - An identifier another authority issues is named for who stated it
@@ -86,7 +86,7 @@ missing, go on and log it.
 - **Fields:** use the kind's names. A list-shaped field has no contract
   syntax yet: leave it out, say so, and log a ticket.
   - **A date that usually changes stays out of MDM** unless it adds meaning
-    to the entity or switches it on or off (operator, 2026-10-22: "date that
+    to the entity or switches it on or off (operator: "date that
     changes usually should not be in MDM unless it adds meaning to the entity
     or turn on or off"). A source's record-keeping dates (last updated, next
     renewal) change the master's version without changing the entity: keep
@@ -94,7 +94,7 @@ missing, go on and log it.
     a status change with its date, stays.
   - **Evidence about a link stays on the silver row**, not on the master: the
     issuer's identifier a holding names is the holding's, while the held
-    entity reaches its issuer by the link (operator, 2026-10-22: "Fix 1").
+    entity reaches its issuer by the link (operator: "Fix 1").
 - **Relationships:** type, the other end's key, the source it lives in,
   start and end. List every type the source carries. Label each mapped one's
   `scope` `<Provider> <relationship family>`.
@@ -102,8 +102,7 @@ missing, go on and log it.
     parent, an issuer, a role, a fund's adviser, which change rarely. A
     position or an event (a holding, a transaction), restated in every report
     with its amount, is a silver row carrying the MDM ids of both ends and
-    its as-of date, the date it holds at, beside the date it was reported (operator,
-    2026-10-22: "Agreed Remove HOLDS from MDM's relationship types", "Don't
+    its as-of date, the date it holds at, beside the date it was reported (operator: "Agreed Remove HOLDS from MDM's relationship types", "Don't
     we need a as of date for holdings").
     When a source states two report dates, tell them apart by their values
     before choosing: the as-of date falls just before the delivery, while a
@@ -129,7 +128,7 @@ missing, go on and log it.
   a task. Never decide from the row alone.
 - **A value of another kind** (an identifier of a different kind of entity)
   stays out of this kind; log it for that kind.
-- **Provenance:** trace stays beside the record (operator, 2026-09-27).
+- **Provenance:** trace stays beside the record (operator).
   Capture hashes, run ids and sync times never go into `provenance`. Only
   the source's own record may, when the reader keeps it (`native_record`).
 - **An unmapped source value:** first test whether configured `value`, paths,

@@ -9,9 +9,9 @@ change) approves by saying so, and you record their words.
 The version is saved and has a test run: `rules save`, then `rules
 record-proof` (the skill's **test** mode). A version with no test run cannot
 be approved. The operator may overrule a *failing* run, never a *missing*
-one (operator, 2026-09-29).
+one (operator).
 
-**Except rules finalized on main** (operator, 2026-11-04: "you dont need proof to activate once the rules are
+**Except rules finalized on main** (operator: "you dont need proof to activate once the rules are
 finalized"; asked: "Rules merged on main"). Rules whose change merged on `main` passed review and CI; the
 test run was done while building them. They are approved on that merge, with no test run in this store:
 
@@ -25,7 +25,7 @@ edgar-warehouse rules activate --source <name> --version <v>
 The approval records the operator's words and the merge. It is for the exact version saved from `main`'s files.
 Rules not yet merged still need their test run.
 
-**The approvals are in git** (operator, 2026-11-04: "the rules must also be in git"). `rules/approvals.yaml` lists
+**The approvals are in git** (operator: "the rules must also be in git"). `rules/approvals.yaml` lists
 each rules document's digest with the operator's exact words, their name, the day and the merge. `rules load`
 approves every saved version whose digest is listed, so a new store needs nothing but git: load, then
 `rules activate`. A rules change is a new digest and gets its own line, written after the operator's words:
@@ -58,7 +58,7 @@ Never write a line in words the operator did not say.
    what it is (its name, never a digest), what it changes, and what the test
    run showed.
 3. **Record the approval.** A version whose test run passed is approved
-   under the operator's standing approval (2026-10-15: "Approved the rules
+   under the operator's standing approval ("Approved the rules
    always"), with that test run as its evidence: record those words, no
    question. Ask, and wait for their words, only for a failing run (step 4)
    or a new kind of decision; switching on (below) always waits for them:
@@ -154,8 +154,7 @@ operator's to drop.
 - **Worked:** `rules status --source <name>` shows the version `active`.
 - **Refused:** there is no approval, or neither a proof nor a finalized merge. Go back one step.
 
-Switching on the pipes and switching on live data are apart (operator,
-2026-10-19). A source version proven on its test run over captured files and
+Switching on the pipes and switching on live data are apart (operator). A source version proven on its test run over captured files and
 approved activates: Bookkeeping then runs its targets over captured files.
 Live acquisition (a run with a feed, the capture worker) also needs an
 acquisition proof: the receipts of a real acquisition run of that source, not
