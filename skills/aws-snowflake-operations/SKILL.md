@@ -5,58 +5,27 @@ description: This platform's AWS and Snowflake operations - the one live AWS acc
 
 # AWS and Snowflake Operations
 
-Read before any AWS, Snowflake, dbt, Terraform, image or deploy command. Moved
-from CLAUDE.md on 2026-10-28 (operator, 2026-10-28: "specific occasional tasks
-move it to a skill or rules file"); the rules are unchanged and live.
+Read before any AWS, Snowflake, dbt, Terraform, image or deploy command.
 
 ## AWS account map (READ THIS before running any AWS command)
 
 **The platform lives in AWS account `690839588395` (current/active).** All `edgartools-*`
 resources, ECR images, ECS clusters, and Terraform state should target `690839588395`.
 
-**Account `077127448006` is DECOMMISSIONED (emptied 2026-07-11, `claude/destroy-old-account`).**
-Everything was migrated to `690839588395` first, then the old account was torn down with
-`infra/scripts/destroy-aws-complete.sh --env all` plus an all-regions + tagging-API sweep:
-all S3 buckets (incl. the 198 GB warehouse and both `*-tfstate` buckets), 45 Step Functions,
-ECS, ECR, 13 secrets, all IAM roles, dev+prod VPCs, 17 default VPCs, and 280 ECS task
-definitions. Verified zero billable resources remaining.
+**Account `077127448006` is DECOMMISSIONED and empty.** Everything was migrated to
+`690839588395` first, then the old account was torn down.
 - **Final closure is a ROOT action.** The `cli-access` IAM user in `077127448006` *cannot*
-  close the account — closure/suspension must be done via root sign-in or the AWS
-  Organizations management account. `cli-access`, 2 `PendingDeletion` KMS keys (auto-delete
-  2026-07-18), INACTIVE ECS cluster tombstones, and the payment-instrument were left in place
-  and are reaped automatically when the account is closed.
+  close the account: closure or suspension is done through root sign-in or the AWS
+  Organizations management account. What was left in place is reaped when the account is closed.
 - **State backups** (the only surviving record of the destroyed account) live at
   `~/edgartools-077-tfstate-backups-FINAL` and `infra/.aws-tfstate-backups/`.
 - Do NOT reprovision anything into `077127448006`. If an old ARN/bucket/`aws-prod-application.json`
   still references `077127448006`, it is stale — the live target is `690839588395`.
 
-## Snowflake DEV is DECOMMISSIONED (2026-07-29) — READ THIS before running any `snowconn`/dev Snowflake command
+## Snowflake DEV is DECOMMISSIONED — READ THIS before running any `snowconn`/dev Snowflake command
 
-**AWS-side dev (`edgartools-dev-*` S3/ECS/Step Functions, incl. the `edgartools-dev-tfstate`
-Terraform state bucket) was decommissioned first, separately from this Snowflake teardown.**
-By the time this Snowflake decommission ran, the `edgartools-dev-tfstate` bucket no longer
-existed — so `terraform destroy` was **not** viable for either
-`infra/terraform/snowflake/accounts/dev` or `infra/terraform/access/snowflake/accounts/dev`
-(no remote state to read). Decommissioned instead via a direct live-object sweep against
-the Snowflake account prod lived in then (dev/prod were separate
-**databases**, not separate accounts): `EDGARTOOLS_DEV` database (dropped CASCADE — all 8
-schemas: `EDGARTOOLS_GOLD`, `EDGARTOOLS_SOURCE`, `EDGARTOOLS_DASHBOARD`, `MDM`,
-`MDM_GRAPH_REVIEW`, `NEO4J_GRAPH_MIGRATION`, `PUBLIC`, plus `INFORMATION_SCHEMA`), both
-warehouses (`EDGARTOOLS_DEV_READER_WH`, `EDGARTOOLS_DEV_REFRESH_WH`), all 4 roles
-(`EDGARTOOLS_DEV_LOADER`, `EDGARTOOLS_DEV_DASHBOARD_OWNER`, `EDGARTOOLS_DEV_DEPLOYER`,
-`EDGARTOOLS_DEV_READER`), the `EDGARTOOLS_DEV_EXPORT_INTEGRATION` storage integration, and
-the account-level `EDGARTOOLS_DEV_MDM` Snowflake Postgres instance (MDM's dev operational
-store — a distinct object type from the database, `retention_time=0`, no undrop safety net;
-its `EDGARTOOLS_DEV_MDM_POSTGRES_POLICY` network policy had to be dropped first since a
-network rule inside `EDGARTOOLS_DEV.MDM` was bound to it, which otherwise blocks
-`DROP DATABASE ... CASCADE` with "includes network rule - policy associations"). Verified
-live afterward: zero `EDGARTOOLS_DEV%`-named objects of any kind remain in the account.
-
-**No state backup exists for this teardown** — unlike the AWS `077127448006` decommission,
-which had `~/edgartools-077-tfstate-backups-FINAL`, dev Snowflake's Terraform backend was
-already gone before this ran, so there was nothing to pull. The live-object inventory
-gathered immediately before the drop (captured in this session's transcript) is the only
-record of what existed.
+**There is no dev environment, on AWS or on Snowflake.** Dev was removed by a direct sweep of
+live objects, with no Terraform state and no backup, so it can only be reprovisioned from scratch.
 
 **Anything that still references dev Snowflake is stale**, including but
 not limited to: the `snowconn` SnowCLI connection convention,
@@ -172,23 +141,6 @@ notes is not the live one. The order:
   key presence) *inside* that script. This leaked a live plaintext password into a transcript twice in one
   session.
 
-## Known open items
-
-Deploy status below is as last recorded on each item's own date — re-check against the running image
-before trusting it.
-
-- **The `EDGARTOOLS_DECISION` schema does not exist**, leaving 5 Terraform-managed grants unapplied.
-  `infra/snowflake/sql/decision_contract/01_subject_feature_screen.sql`'s "MDM active-company universe"
-  join is an explicit placeholder that self-joins `COMPANY`, and
-  `infra/snowflake/sql/decision_contract/02_subject_bundle_read_issuer.sql`'s `BUNDLE_AUDITOR` references
-  `EDGARTOOLS_GOLD.SEC_AUDITOR_REPORT_EVIDENCE`, which exists only in `EDGARTOOLS_SOURCE`. The real
-  blocker behind both: no Snowflake-side source has been chosen for "MDM active company universe" (MDM's
-  authority is Postgres; the closest reflection is `NEO4J_GRAPH_MIGRATION.MDM_GRAPH_NODES`).
-- **The original `EDGARTOOLS_DASHBOARD` Streamlit app is still ACCOUNTADMIN-owned** — the same gap already
-  fixed for `MDM_GRAPH_DASHBOARD`, with the same drop/recreate-as-target-role recipe.
-- **Stale bronze objects:** repairing the two known stale accessions, and a proactive
-  scan for other pre-2026-07-31 stale bronze objects.
-
 ## Snowflake-side facts from the old pipeline (still live)
 
 The old AWS pipeline (`load_history`, `daily_incremental`, `targeted_resync`,
@@ -224,15 +176,12 @@ Read [COMMANDS.md](COMMANDS.md), "dbt gold model SQL changes", before changing a
 
 Read [IMAGES.md](IMAGES.md) before building, tagging, publishing or pruning a container image, or changing an ECR repository.
 
-## ECS cost sizing (old pipeline)
+## Sizing a worker runtime
 
-The ECS sizing study (2026-08-30) measured MDM commands of the old
-pipeline, since deleted; its method stays valid for a future worker runtime:
-judge a cheaper profile on validated output (correctness, completeness,
+Judge a cheaper profile on validated output (correctness, completeness,
 idempotency across reruns, a matched control on the same input), never on
-memory use or an exit code. Evidence:
-`.scratch/ecs-cost-sizing/issues/28-run-mdm-residual-security-medium-canaries-and-unbounded-graph-sync-canary.md`,
-`.scratch/ecs-cost-sizing/evidence/ticket28/`.
+memory use or an exit code. The method and its evidence are in
+`.scratch/ecs-cost-sizing/`.
 
 ## Setup
 
