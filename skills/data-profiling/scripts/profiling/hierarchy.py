@@ -29,7 +29,7 @@ A dependency failing either is reported as coincidental, with its evidence,
 never as a hierarchy, and the child gets no coarser parent in its place (that
 would skip a level).
 
-A yes/no flag is never a level (operator, 2026-10-08: "Flag is not a level
+A yes/no flag is never a level (operator: "Flag is not a level
 (Recommended)"): a code that determines a flag is reported as a flag
 dependency, and the code's search goes on to a real parent. A flag may be
 written several ways in one column (0, false, 1, true). A two-valued category

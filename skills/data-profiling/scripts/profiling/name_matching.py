@@ -1,6 +1,6 @@
 """What a name rule must respect, learnt from the data.
 
-A name rule needs more than a fixed precision bar (operator, 2026-10-06: "name
+A name rule needs more than a fixed precision bar (operator: "name
 with class A is completely different from class C"). The data says which parts
 of a name matter:
 
@@ -19,8 +19,8 @@ of a name matter:
 - **Homonym risk.** How many folded names more than one entity holds.
 
 Every count comes from the data with examples; nothing here names a source,
-a kind or a language's legal forms. A name is the last resort (operator,
-2026-10-06): used only where no id exists, as an id made from it.
+a kind or a language's legal forms. A name is the last resort (operator): used only
+where no id exists, as an id made from it.
 """
 
 from __future__ import annotations
@@ -239,7 +239,7 @@ def proposal(apart: Evidence, alike: Evidence, clashes: list[dict], attributes: 
 
 # -- An id made from a name, for records that carry no id at all ---------------
 #
-# Operator, 2026-10-06: "Use name matching only when every thing else is not an
+# Operator: "Use name matching only when every thing else is not an
 # option no id exists you just need to create a id using name". `name_id@1`
 # keeps every token and folds nothing: the variants the data shows on one
 # entity, and never apart, are reported as evidence for a later version.

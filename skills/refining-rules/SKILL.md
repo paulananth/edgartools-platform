@@ -294,8 +294,6 @@ Never invent a command.
 ## Examples (this repo's sources)
 
 - A provider ruled out: `sec.gov`.
-- Open work on the live SEC Company and GLEIF pipelines: see data-onboarding's
-  Examples, "Unfinished live pipelines" (one list, kept there).
 - Name matching across two sources: SEC Company to GLEIF. The waterfall pass
   (`waterfall.py`, from the SEC Companies in the store and the whole GLEIF publication; its answer
   reaches the merge through `merge.apply_pairs`); the pass `sec-gleif-name-city-or-postcode` (the older name rules and the passes that compared less are deleted)

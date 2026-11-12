@@ -1,4 +1,4 @@
-"""A name as the basis of a designed record key (research note 02; operator ruling 2026-10-05).
+"""A name as the basis of a designed record key (research note 02; operator ruling).
 
 A name is never a found key: it is renamed, varies, is shared by different
 things and is reused. When it is a part's only unique column, the record key is

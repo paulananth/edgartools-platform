@@ -48,6 +48,51 @@ teardown.
 
 ## Snowflake rules learned from incidents
 
+### Checking account credit usage
+
+For total account consumption over a rolling 48-hour window, query
+`SNOWFLAKE.ACCOUNT_USAGE.METERING_HISTORY` and group by `SERVICE_TYPE`. This
+view includes non-warehouse services as well as warehouse cloud-services
+usage; use `WAREHOUSE_METERING_HISTORY` only when the question is specifically
+warehouse attribution.
+
+Use the production SnowCLI connection `edgartools-prod`. Named connections may
+be in `~/.snowflake/connections.toml` even when `~/.snowflake/config.toml`
+selects a different default. Inspect connection names without printing the
+configuration or credentials; `snowconn` is the decommissioned dev connection.
+
+```sql
+SELECT
+    CONVERT_TIMEZONE('America/New_York', CURRENT_TIMESTAMP()) AS AS_OF_ET,
+    CONVERT_TIMEZONE(
+        'America/New_York', DATEADD(HOUR, -48, CURRENT_TIMESTAMP())
+    ) AS WINDOW_START_ET,
+    SERVICE_TYPE,
+    ROUND(SUM(CREDITS_USED), 6) AS TOTAL_CREDITS,
+    ROUND(SUM(CREDITS_USED_COMPUTE), 6) AS COMPUTE_CREDITS,
+    ROUND(SUM(CREDITS_USED_CLOUD_SERVICES), 6) AS CLOUD_SERVICES_CREDITS,
+    CONVERT_TIMEZONE('America/New_York', MIN(START_TIME)) AS FIRST_METERED_START_ET,
+    CONVERT_TIMEZONE('America/New_York', MAX(START_TIME)) AS LAST_METERED_START_ET
+FROM SNOWFLAKE.ACCOUNT_USAGE.METERING_HISTORY
+WHERE START_TIME >= DATEADD(HOUR, -48, CURRENT_TIMESTAMP())
+  AND START_TIME < CURRENT_TIMESTAMP()
+GROUP BY SERVICE_TYPE
+ORDER BY TOTAL_CREDITS DESC;
+```
+
+Sum `TOTAL_CREDITS` across service rows for the account total. Report the
+observation time and rolling-window start in `America/New_York`; account-usage
+data can lag, and the newest hourly interval may be incomplete. Treat recent
+usage as provisional and recheck after it catches up before billing
+reconciliation. If a selected column fails compilation, inspect the live view
+with `DESC VIEW SNOWFLAKE.ACCOUNT_USAGE.METERING_HISTORY` rather than assuming
+an adjustment column exists. Avoid ordering by `SUM(CREDITS_USED)` when the
+selected alias is also named `CREDITS_USED`; Snowflake can resolve the alias
+inside the aggregate and report a nested-aggregate error. Use an unambiguous
+alias and order by that alias. Ordinal ordering (`ORDER BY 2 DESC`) only works
+while the credit column is the second selected column: adding a column in
+front of it silently orders by the wrong one, so order by the alias instead.
+
 - Do not use the shorthand multi-column `FOR row IN (SELECT a, b, ...) DO` cursor form in this account —
   it fails with `Unsupported: Scalar subquery with multi-column SELECT clause`. Use an explicit
   `DECLARE ... CURSOR ... OPEN ... FOR i IN 1 TO <precomputed COUNT(*)> DO FETCH ... END FOR` (a "loop

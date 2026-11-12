@@ -482,7 +482,3 @@ These name today's sources only as examples; nothing above depends on them.
   (`candidate()` stamps the copied policy);
   `.scratch/company-mastering/research/27_proving_run.py` (a second pass
   that changes nothing).
-- **Unfinished live pipelines** (the one list; other skills point here):
-  live acquisition (`provider.capture`,
-  qualified offline) waits for the worker runtime on AWS.
-  A source's pipes switch on over captured files without it.

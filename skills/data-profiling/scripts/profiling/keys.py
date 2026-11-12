@@ -278,7 +278,7 @@ def choose_record_key(part: str, keys: list[list[str]], columns: list[dict], inc
         return {"columns": ["record_id"], "found": False, "design": "surrogate", "basis": [name["column"]],
                 "rule": f"a durable id given when a record first appears, kept in a key map looked up by "
                         f"sha256(part, 0x1F, normalized {name['column']}); a rename or variant is kept as an alias of "
-                        f"the same id, so the key never changes (operator, 2026-10-05: same record: durable key). "
+                        f"the same id, so the key never changes (operator: same record: durable key). "
                         f"{NORMALIZATION}",
                 "alternatives": [], "evidence_extra": name["evidence"]}
     usable = [c["name"] for c in _candidates(columns)]

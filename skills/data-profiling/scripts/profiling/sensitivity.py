@@ -9,7 +9,7 @@ names holds mostly people's names (one field holding a whole name, as a filer
 or signer): at least half its distinct sampled values are two to five words of
 letters with no legal form or organisation word.
 Sensitive personal means GDPR Article 9 special categories, government
-identifiers and financial account numbers (operator ruling, 2026-10-05).
+identifiers and financial account numbers (operator ruling).
 
 Samples written anywhere keep their shape only (`Aaaa Aaaaa`, `999-99-9999`).
 """
