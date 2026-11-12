@@ -4,7 +4,7 @@ Part of the `security-master` skill: [SKILL.md](SKILL.md) says when to read this
 
 ## Every OpenFIGI field (decided)
 
-Operator, 2026-10-20: "all fields from open figi must be in the security
+Operator: "all fields from open figi must be in the security
 master figi pipeline is the closest to a real security master". An answer
 gives, for each listing: name, FIGI, composite FIGI, share-class FIGI,
 ticker, exchange code, security type, security type 2, market sector,
@@ -17,54 +17,53 @@ security description.
 | Cross-references | every FIGI, composite FIGI, share-class FIGI and ticker |
 
 **The primary listing** fills a security-level field the listings disagree
-on (operator, 2026-10-20: "Use the primary exchange listing", then "US, else
+on (operator: "Use the primary exchange listing", then "US, else
 the ISIN's country"). OpenFIGI marks no primary listing, so:
 
 1. the one US composite (exchange code `US`, its own composite) decides,
    a blank value too;
 2. only without one, the composite listing of the country in the ISIN's
    first two letters, from the RDM code set `openfigi-country-composite`
-   version 1 (11 countries, approved 2026-10-20: "Only the 11 countries seen
+   version 1 (11 countries, approved: "Only the 11 countries seen
    (Recommended)"), embedded in the answers reading as `read.references` and
    held equal to the published set by a test;
 3. else blank: the listings table still holds every value.
 
-Measured on 2026 Q2 (733,538 found Securities): 11,727 disagree on a
-security-level field; the US composite settles 8,951, the country step 690,
-and 2,086 stay blank. OpenFIGI's exchange-code list (1,109 codes) names no
-countries, and for 25 of 36 countries tried the home composite never appears
-in the answers, which is why the code set holds 11. A Security OpenFIGI did
-not find (5%) keeps its N-PORT and 13F fields only.
+Few found Securities disagree on a security-level field; the US composite
+settles most of those, the country step some, and the rest stay blank.
+OpenFIGI's exchange-code list names no countries, and for most countries tried
+the home composite never appears in the answers, which is why the code set is
+short. A Security OpenFIGI did not find keeps its N-PORT and 13F fields only.
 
 ## The listings detail table (decided)
 
-Operator, 2026-10-25: "changing my mind need a separate table for listing
+Operator: "changing my mind need a separate table for listing
 ie figi, exchange, ticker, exchange" (replacing "we don't need this table").
 One row per trading line, keyed by its listing FIGI, with its master id,
 exchange code, currency, ticker and composite FIGI. A security is listed once
 per exchange, but OpenFIGI gives a FIGI per trading line: on multi-currency
 venues one stock has a line per currency, its ticker the same root plus a
-currency code (90% of 292,567 same-exchange groups). OpenFIGI states no
+currency code (most same-exchange groups). OpenFIGI states no
 currency, so it is read from the ticker's suffix (blank where none); (master
-id, exchange, currency) still repeats on 71,974 of 2,184,699 lines, so it is
+id, exchange, currency) still repeats on some lines, so it is
 an index, not the key ("Listing FIGI as key; exchange + currency as
-columns", 2026-10-25). The listing FIGI also matches through the
+columns"). The listing FIGI also matches through the
 Cross-reference; ticker and ticker + exchange are lookup only there.
 
 **The currency rule (built, part B3).** The codes are the RDM code set
 `nport-filed-currencies` (the 80 three-letter codes N-PORT holdings file,
-"N-PORT's filed codes (Recommended)", 2026-10-26), embedded in OpenFIGI's
+"N-PORT's filed codes (Recommended)"), embedded in OpenFIGI's
 source extract. A line's code is its ticker's last three letters when they
 are one of those codes and something is left before them; its root is the
 rest, else the whole ticker. A line gets its code as its currency only where
 its exchange gives the identifier two or more lines, one root and every
 ticker different: so the root alone as a line beside coded lines gets none,
 and a repeated code, two roots or a single line give none (a single line's
-ticker ends in a code by chance 121,414 times). Lines without an exchange
+ticker often ends in a code by chance). Lines without an exchange
 code form one group. Steps: `line-counts.yaml`, `lines.yaml`, `listing.yaml`.
 
-**What listings are for: resolving a venue's key to its Security (decided
-2026-10-26; being built).** Operator, 18:58 ET: "Listing table is
+**What listings are for: resolving a venue's key to its Security (decided;
+being built).** Operator: "Listing table is
 inside mdm primary use is the resolution of securities trading in different
 exchanges or venues". So the lookups run from a venue's key to the Security,
 never from a Security to its listings; the (master id, exchange, currency)
@@ -89,18 +88,17 @@ index is dropped.
   `iso-10383-mic` (every active MIC, segments under their operating MIC; its
   crosswalk gives 246 MICs their OpenFIGI code), embedded in OpenFIGI's
   source extract as `read.references.mic`; London's LN to XLON was set by
-  hand (2026-10-27: no code holds a majority of XLON's answers). A composite (US, GR, CN) is no
+  hand (no code holds a majority of XLON's answers). A composite (US, GR, CN) is no
   venue and has no MIC; it is found by its exchange code. The code set is
   OpenFIGI's own: one filter request per active MIC, recording the exchange
   codes each answer gives ("Ask OpenFIGI by MIC", 19:20 ET); no vendor's
   table is used.
 - **A listing FIGI** finds its Security through the identifier index, since
   every listing FIGI is the Security's identifier (part A2a); no second lookup.
-- **Every match, never one picked.** On OpenFIGI's 2026 Q2 answers, 1,073,151
-  (exchange code, ticker) pairs over 1,392,524 listings reach one Security
-  each, but 7 reach two or more (the market sector separates none of them),
-  1,815 reach two or more listings, and 317,558 listings have no exchange
-  code or ticker. The answer names every Security a pair reaches.
+- **Every match, never one picked.** Nearly every (exchange code, ticker) pair reaches
+  one Security, but a few reach two or more (the market sector separates none
+  of them), some reach two or more listings, and many listings have no
+  exchange code or ticker. The answer names every Security a pair reaches.
 - **Lookup only.** An exchange code and ticker never take part in matching:
   a reused ticker would merge two Securities.
 - **Security-only, by decision.** Operator, 19:10 ET: "this is not generic
@@ -108,14 +106,14 @@ index is dropped.
   venue lookup is the Security's own; it is documented here, not in the
   generic MDM skills.
 
-Operator, 2026-10-20: "Maybe create a security detail table and keep it in
+Operator: "Maybe create a security detail table and keep it in
 the mdm", then "Detail rows set in config (Recommended)".
 
 - A Dataset Contract states its detail lists in configuration (OpenFIGI:
   `listings`, keyed by FIGI), and a master's record carries them. On
   installed stores no separate detail table is written (migration 028 retired
   what kept `mdm.detail_version`); the venue lookup above is the one
-  Security-only part (2026-10-26).
+  Security-only part.
 - A Security's CUSIP and ISIN answers make **one set of listings, joined by
   FIGI**; each row records which answer gave it ("One set, joined by FIGI").
 - Each load replaces a Security's listings. **A listing a later answer drops

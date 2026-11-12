@@ -1,7 +1,6 @@
 """A skill holds the rule and the method; a ticket number belongs in the ticket.
 
-The files in KNOWN still cite tickets and are counted exactly, so a new citation
-fails and a removed one is recorded by lowering the count here.
+KNOWN is empty: no skill file cites a ticket. A file added to it is counted exactly.
 """
 
 import re
@@ -9,10 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 TICKET = re.compile(r"\btickets? \d+", re.IGNORECASE)
-KNOWN = {
-    "skills/company-financials/SKILL.md": 8,
-    "skills/security-master/SKILL.md": 12,
-}
+KNOWN: dict[str, int] = {}
 
 
 def citations(text: str) -> int:
