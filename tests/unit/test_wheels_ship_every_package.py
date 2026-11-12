@@ -4,7 +4,7 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-NOT_SHIPPED = {"infrastructure", "serving"}  # An empty package, and dashboard helpers no bundle command reads.
+NOT_SHIPPED: set = set()
 
 
 def bundled() -> set:

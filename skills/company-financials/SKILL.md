@@ -106,8 +106,7 @@ Evidence and sources: `.scratch/company-financials/research/02-vendor-standards.
   and the silver writer lands the rows (operator: "SQL over silver
   (Recommended)", after the engine path proved to need a whole group and join
   language): `edgar_warehouse/financials/line_items.py`, run by
-  `edgar-warehouse silver line-items`. On Snowflake the same query becomes a
-  dbt model. It runs as steps, each a temporary table PostgreSQL has counted
+  `edgar-warehouse silver line-items`. It runs as steps, each a temporary table PostgreSQL has counted
   (`statements()`): as one statement the planner guessed hundreds of rows for
   millions and never finished; as steps the cohort builds in
   seconds. Never test its speed under `count(*)`, which skips the select list.

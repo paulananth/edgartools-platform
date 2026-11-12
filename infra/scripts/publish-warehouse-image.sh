@@ -356,7 +356,7 @@ role_defaults() {
             ROLE_PREFIX="warehouse"
             ;;
         mdm)
-            DOCKERFILE_PATH="${DOCKERFILE_PATH:-${REPO_ROOT}/Dockerfile.mdm-neo4j}"
+            DOCKERFILE_PATH="${DOCKERFILE_PATH:-${REPO_ROOT}/Dockerfile.mdm}"
             ROLE_PREFIX="mdm"
             ;;
         deps-warehouse)

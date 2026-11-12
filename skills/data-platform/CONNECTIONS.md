@@ -103,17 +103,12 @@ read-only connectivity command; report presence and outcomes, not addresses.
 Snowflake SQL uses the explicit named connection `edgartools-prod`; inspect
 connection names in `~/.snowflake/connections.toml` and defaults in
 `~/.snowflake/config.toml` without displaying credentials. Do not derive a
-connection name from the environment slug. `snowconn` is decommissioned.
-For dbt, retain the selected private profile or its configured
-`DBT_SNOWFLAKE_ACCOUNT`, `DBT_SNOWFLAKE_USER`, `DBT_SNOWFLAKE_PASSWORD` and
-`DBT_SNOWFLAKE_WAREHOUSE` values. Select the production target explicitly;
-do not inherit retired development defaults or copy credentials into examples.
+connection name from the environment slug.
 
 Snowflake-hosted MDM is PostgreSQL protocol on port `5432`, not the Snowflake
 SQL connection. Its complete authorized DSN belongs in private `.env` storage.
 Do not infer it from the SQL account, rotate access to discover it, or run a
-bootstrap/reset command as a URL lookup. Graph analytics lives inside
-Snowflake; there is no external `NEO4J_URI` or Bolt endpoint.
+bootstrap/reset command as a URL lookup.
 
 OpenMetadata uses `OPENMETADATA_URL` and `OPENMETADATA_TOKEN`, an authorized
 bot token from private configuration. The local server endpoint is

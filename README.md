@@ -9,8 +9,8 @@ The platform combines **master data management (MDM)**, **reference data
 management (RDM)**, source-shaped **silver tables**, and a **Data Catalog**.
 Source definitions cover SEC EDGAR, IAPD Form ADV and GLEIF, with captured
 OpenFIGI answers supporting security-identifier enrichment. The engine and
-workflows are configured through versioned rules. AWS S3 and Snowflake are
-the analytics deployment target.
+workflows are configured through versioned rules. The platform ends at
+silver; gold and dashboards are later work.
 
 ## For executives: what this delivers
 
@@ -28,8 +28,7 @@ the analytics deployment target.
 for qualification; hosted PostgreSQL is the operational store target. Source
 qualification, operator activation and cloud deployment are separate gates.
 The configured workers' AWS launch configuration and automated silver pipeline
-landing remain integration work. Existing Snowflake/dbt/dashboard assets do
-not establish that a new source is deployed end to end.
+landing remain integration work.
 
 **Reading paths:** [Sources](#sources-in-the-repository) · [Architecture](#architecture) · [Skills](#how-the-skills-work)
 · [Onboard a source](#onboard-a-brand-new-data-source) · [Rules guide](#rules-an-easy-guide)
@@ -73,18 +72,11 @@ test does not by itself establish a live deployment.
 The platform keeps three kinds of responsibility clear: **Rules describe what
 should happen; workers do the work; stores retain and enforce the result.**
 
-![Platform architecture: configured processing and the separate AWS analytics path](docs/diagrams/platform-architecture.svg)
+![Processing and durable data architecture](docs/diagrams/project-architecture/processing.svg)
 
-The configured processing path starts with captured files. The independent
-AWS analytics path shows the deployment target and its existing assets; the
-diagram leaves their rollout separate. It does not imply an automatic connection from every
-configured worker to Snowflake.
+The configured processing path starts with captured files.
 Destinations show responsibilities: RDM publication and silver landing are
 explicit workflows, not an automated branch from every reading.
-
-[PNG](docs/diagrams/platform-architecture.png) ·
-[Mermaid source](docs/diagrams/platform-architecture.mmd) ·
-[Editable Excalidraw](docs/diagrams/platform-architecture.excalidraw)
 
 ### Project architecture views
 
@@ -109,14 +101,6 @@ load preparation, Bookkeeping, independent workers and verifiers, and the Change
 [Interactive HTML](docs/diagrams/project-architecture/work-control.html) ·
 [Diagram source](docs/diagrams/project-architecture/work-control.json)
 
-**Delivery and configured serving** — container delivery, AWS infrastructure,
-Snowflake native pull, dbt and the dashboard example. The handoff from the current
-relational stores to serving exports remains unproven in this architecture trace.
-
-![Delivery and configured serving architecture](docs/diagrams/project-architecture/serving.svg)
-
-[Interactive HTML](docs/diagrams/project-architecture/serving.html) ·
-[Diagram source](docs/diagrams/project-architecture/serving.json) ·
 [Evidence and regeneration](docs/diagrams/project-architecture/README.md)
 
 ### Follow one source through the platform
@@ -170,7 +154,6 @@ A changed reading or shared input requires processing again; an explicit
 | **Python** | CLI, orchestration, integrations, database clients, retries, verification and custom functions. Some matching, relationship and value-materialization work remains Python; the responsibility map distinguishes current owners from proposed ports. |
 | **PostgreSQL** | Durable storage, indexed retrieval, constraints, transactions, lease/freshness checks and history. It validates conditions against authoritative shared state before committing. |
 | **AWS S3** | Immutable captured objects and warehouse/export objects for the AWS path. |
-| **Snowflake + dbt** | Analytics storage and warehouse-wide transformations; Streamlit presents the results. This SQL analytics layer is separate from Snowflake Postgres used for operational MDM. |
 
 The rule is **prepare in code; validate and commit at the destination**.
 See the [runtime responsibility map](docs/architecture/runtime-responsibilities.md)
@@ -482,7 +465,7 @@ See the [catalog implementation](edgar_warehouse/rules/catalog.py),
 
 ## Getting started
 
-For local development before Snowflake, use
+For local development, use
 [Shared PostgreSQL initialization](docs/local-agent-testing.md). Agents share
 one server containing MDM, RDM, Rules, Bookkeeping and the Change Journal.
 Initialization excludes silver by default and provisions worker/verifier
@@ -526,15 +509,12 @@ declared unit to be verified and the run finalized.
 | **Live capture** | `provider.capture` has offline HTTPS JSON qualification. Company still selects `artifact.copy`; live acquisition and continuation integration are separate work. See [configured capture](docs/configured-capture.md). |
 | **Silver landing** | Explicit local PostgreSQL registration, landing and MDM-ID refresh commands exist. Automated landing through a declared pipeline still requires a verified worker. |
 | **AWS execution** | Passive infrastructure, access control and image publishing assets exist. The retired ECS/Step Functions workload is not the configured workers' launch configuration. |
-| **Analytics** | S3 native pull, Snowflake, dbt gold and Streamlit assets are present. Source export integration, deployment and end-to-end verification require their own evidence. |
 
 Terraform separates passive infrastructure from access control. Administrators
 provision infrastructure; application rollout uses the deployer principal;
 runtime uses service-assumed roles. Passive roots do not create runnable
 workloads, schedules, image rollouts or runtime secret values. Publish images
-with [publish-warehouse-image.sh](infra/scripts/publish-warehouse-image.sh);
-the Snowflake operator wrapper is
-[deploy-snowflake-stack.sh](infra/scripts/deploy-snowflake-stack.sh).
+with [publish-warehouse-image.sh](infra/scripts/publish-warehouse-image.sh).
 
 ## Repository guide
 
@@ -551,8 +531,8 @@ the Snowflake operator wrapper is
 | [RDM specification](docs/specs/rdm/spec.md) | Code sets, approved versions, hierarchies and crosswalks. |
 | [edgar_warehouse/silver_writer](edgar_warehouse/silver_writer) | PostgreSQL silver landing and MDM-ID links. |
 | [packages](packages) | Separately owned data bundle, Bookkeeping and Change Journal distributions. |
-| [infra/terraform](infra/terraform) | AWS/Snowflake infrastructure and access roots. |
-| [infra/snowflake](infra/snowflake) | Native pull, dbt gold and Streamlit assets. |
+| [infra/terraform](infra/terraform) | AWS infrastructure and access roots. |
+| [infra/snowflake](infra/snowflake) | The hosted MDM store on Snowflake Postgres. |
 | [tests](tests) | Unit, architecture, MDM, engine and PostgreSQL acceptance evidence. |
 
 Before contributing, read [AGENTS.md](AGENTS.md). Use a dedicated runtime branch

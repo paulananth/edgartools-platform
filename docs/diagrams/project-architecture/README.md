@@ -1,6 +1,6 @@
 # Project architecture diagrams
 
-The three Archify views describe committed code and configuration at
+The two Archify views describe committed code and configuration at
 `8bbeb9981a695a8baea6cddd520cc6cbb78dd5e8`. Their source citations are pinned to
 that revision. This is an implementation snapshot, not a live readiness audit.
 
@@ -12,11 +12,9 @@ open it locally; GitHub renders the SVG previews in the repository README.
 | --- | --- | --- | --- |
 | Processing and durable data | [JSON](processing.json) | [HTML](processing.html) | [SVG](processing.svg) |
 | Rules, work control and verification | [JSON](work-control.json) | [HTML](work-control.html) | [SVG](work-control.svg) |
-| Delivery and configured serving | [JSON](serving.json) | [HTML](serving.html) | [SVG](serving.svg) |
 
-All three original deliveries passed Archify validation, provenance and browser
-checks. The publishing handoff from the current relational stores to serving
-exports was not established by the source trace and is explicitly called out.
+Both views passed Archify validation, provenance and browser checks. A third view, of Snowflake
+serving, was removed with the gold layer.
 
 To regenerate with Archify 3.2, run from the repository root, replacing
 `<archify>` with the installed package directory and `<view>` with a table entry:

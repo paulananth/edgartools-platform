@@ -151,4 +151,4 @@ Copy the reported bucket name into the matching environment's `backend.hcl`. Nev
 
 The bootstrap Terraform root rejects retired account `077127448006`. The deployment script contains no account IDs; it requires `--aws-account-id` and rejects any mismatch between that operator-supplied value and STS. Never pass a retired account as the expected deployment account. A mismatch is a credential-selection failure, not a reason to weaken the guard or edit an account ID into Terraform variables.
 
-If application deployment reports missing subnets, buckets, ECR repositories, or roles after the identity gate passes, apply the passive infrastructure and access roots first. See [AWS deployment runbook](runbook.md).
+If application deployment reports missing subnets, buckets, ECR repositories, or roles after the identity gate passes, apply the passive infrastructure and access roots first.

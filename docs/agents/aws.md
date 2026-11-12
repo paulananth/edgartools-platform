@@ -139,12 +139,6 @@ Populate the MDM PostgreSQL DSN with the Snowflake Postgres `application` role D
 
 Write it to the secret `<prefix>/mdm/postgres_dsn` with `aws secretsmanager put-secret-value`, the value read from stdin and never printed.
 
-Snowflake Postgres cutover and RDS removal runbook:
-
-```bash
-docs/aws-mdm-snowflake-postgres-cutover.md
-```
-
 MDM CLI commands (MDM only; the legacy MDM commands are deleted,
 platform validation slice 2a):
 

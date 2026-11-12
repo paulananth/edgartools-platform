@@ -21,8 +21,8 @@ Grok need beyond it.
 
 - Use the GitHub CLI (`gh`) for GitHub pull requests, issues, reviews and CI operations.
 - Before GitHub work, check `command -v gh`, `gh --version` and `gh auth status --hostname github.com`. Diagnose and repair executable, PATH, authentication or network failures. Report the exact failing command and error if `gh` remains blocked before using a fallback; attribute a failure to the sandbox only when the error establishes that cause.
-- Use `uv` for Python dependency management and Python command execution: `uv sync`, `uv pip install` for deliberate one-off installs, or `uv run --with <package>` for transient tools, never bare `pip`. Prefer `uv run --with dbt-snowflake dbt ...` over bare `dbt`.
-- Common setup: `uv sync --extra s3 --extra snowflake`; for MDM runtime or dev work, `uv sync --extra s3 --extra mdm-runtime`.
+- Use `uv` for Python dependency management and Python command execution: `uv sync`, `uv pip install` for deliberate one-off installs, or `uv run --with <package>` for transient tools, never bare `pip`.
+- Common setup: `uv sync --extra s3 --extra mdm-runtime`.
 - Project dependency source is PyPI. Declare only the libraries the code imports; `edgartools` is not a dependency (operator, 2026-10-28: "Remove it entirely").
 - Docker images use AWS ECR for deployable artifacts. Use the Docker context already configured on the machine. Leave `DOCKER_HOST` unset. Publish images with `docker build` and `docker push` through `infra/scripts/publish-warehouse-image.sh --mode docker`.
 - After a local image build, inspect `docker system df` and clear unused build cache with `docker builder prune`. Keep named volumes unless the operator names a volume to remove. If `docker info` cannot reach the daemon, report that blocker.
@@ -56,6 +56,5 @@ Grok need beyond it.
 ## Reference pages
 
 - [AWS: Terraform, principals, infra flow, image publish, MDM, runtime settings](docs/agents/aws.md)
-- [Snowflake native S3 pull, dbt, validation after a deploy and the dashboard](docs/agents/snowflake.md)
 - [High-value files](docs/agents/architecture.md)
 - [Watching runs and choosing tests](docs/agents/watching-and-testing.md)

@@ -23,7 +23,7 @@ rollback archive; nothing pushes to them anymore.)
 | warehouse deps | `warehouse-deps-*` | `Dockerfile.warehouse-deps` | locked `.[s3]` deps via `uv` | dependency base image |
 | warehouse final | `warehouse-*` | `Dockerfile` | source copy on warehouse deps | warehouse ECS tasks |
 | mdm deps | `mdm-deps-*` | `Dockerfile.mdm-deps` | locked `.[s3,mdm-runtime]` deps via `uv`; no API/admin packages | MDM Step Functions dependency base image |
-| mdm final | `mdm-*` | `Dockerfile.mdm-neo4j` | source copy on MDM deps | MDM ECS tasks/API |
+| mdm final | `mdm-*` | `Dockerfile.mdm` | source copy on MDM deps | MDM ECS tasks/API |
 
 **Tagging strategy**
 
@@ -116,7 +116,7 @@ docker push "${ECR}/${REPO}:warehouse-dev"
 docker pull "${ECR}/${REPO}:${MDM_DEPS}"
 docker build --platform linux/amd64 \
   --build-arg "DEPENDENCY_IMAGE=${ECR}/${REPO}:${MDM_DEPS}" \
-  -f Dockerfile.mdm-neo4j -t "${ECR}/${REPO}:mdm-${SHA_TAG}" -t "${ECR}/${REPO}:mdm-dev" .
+  -f Dockerfile.mdm -t "${ECR}/${REPO}:mdm-${SHA_TAG}" -t "${ECR}/${REPO}:mdm-dev" .
 docker push "${ECR}/${REPO}:mdm-${SHA_TAG}"
 docker push "${ECR}/${REPO}:mdm-dev"
 ```
@@ -130,7 +130,7 @@ docker push "${ECR}/${REPO}:mdm-dev"
 | `rules/**` or `edgar_warehouse/rules/**` | MDM (MDM loads its mappings and merge rules from `rules/`); both images copy `rules/`, so rebuild both to keep them equal |
 | Both (e.g. `orchestrator.py` + `mdm/cli.py`) | both |
 | `Dockerfile` / `Dockerfile.warehouse-deps` | warehouse (+ deps if lock changed) |
-| `Dockerfile.mdm-neo4j` / `Dockerfile.mdm-deps` | MDM (+ deps if lock changed) |
+| `Dockerfile.mdm` / `Dockerfile.mdm-deps` | MDM (+ deps if lock changed) |
 | `uv.lock` | deps images for both — run without `--skip-build` |
 | `crates/source-contract/**` (the source engine) | deps images for both: they build its wheel, and the deps tag hashes the crate |
 
