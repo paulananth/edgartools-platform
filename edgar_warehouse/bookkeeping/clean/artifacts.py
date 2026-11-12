@@ -36,6 +36,26 @@ def json_value(data: bytes):
                       parse_float=finite_float)
 
 
+def _read_bounded(stream, max_bytes: int, size: int | None = None) -> bytes:
+    if size is not None:
+        if size > max_bytes:
+            raise Blocked("Control document exceeds its bounded size")
+        data = stream.read(size + 1)
+        if len(data) != size:
+            raise Blocked("Artifact changed or ended while being read")
+        return data
+
+    data = bytearray()
+    while len(data) <= max_bytes:
+        chunk = stream.read(min(1024**2, max_bytes + 1 - len(data)))
+        if not chunk:
+            return bytes(data)
+        data.extend(chunk)
+        if len(data) > max_bytes:
+            raise Blocked("Control document exceeds its bounded size")
+    return bytes(data)
+
+
 class Artifacts:
     def __init__(self, s3=None):
         self._s3 = s3
@@ -51,9 +71,16 @@ class Artifacts:
         location = urlparse(uri)
         try:
             if location.scheme == "s3":
-                stream = self.s3.get_object(Bucket=location.netloc, Key=location.path.lstrip("/"))["Body"]
+                response = self.s3.get_object(Bucket=location.netloc, Key=location.path.lstrip("/"))
+                stream = response["Body"]
                 try:
-                    data = stream.read() if max_bytes is None else stream.read(max_bytes + 1)
+                    if max_bytes is None:
+                        data = stream.read()
+                    else:
+                        size = response.get("ContentLength")
+                        if type(size) is not int or size < 0:
+                            size = None
+                        data = _read_bounded(stream, max_bytes, size)
                 finally:
                     stream.close()
                 if max_bytes is not None and len(data) > max_bytes:
@@ -61,7 +88,11 @@ class Artifacts:
                 return data
             if location.scheme == "file" and location.netloc in ("", "localhost"):
                 with Path(unquote(location.path)).open("rb") as stream:
-                    data = stream.read() if max_bytes is None else stream.read(max_bytes + 1)
+                    if max_bytes is None:
+                        data = stream.read()
+                    else:
+                        size = os.fstat(stream.fileno()).st_size
+                        data = _read_bounded(stream, max_bytes, size)
                 if max_bytes is not None and len(data) > max_bytes:
                     raise Blocked("Control document exceeds its bounded size")
                 return data
