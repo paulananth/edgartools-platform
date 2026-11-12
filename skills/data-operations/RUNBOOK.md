@@ -26,7 +26,7 @@ and separate from that record. A release record is an index into existing
 evidence, not a second Rules database or a new status store.
 
 Promote the same content and applicable evidence to the destination. Recheck
-connectivity, roles, registered worker/verifier capabilities and delivery/dependency
+connectivity, roles, registered worker capabilities and delivery/dependency
 availability there. A new environment alone does not require repeating unchanged
 business-rule qualification. Exact hashes, retrievable genuine artifacts and
 the supported destination lifecycle must still validate. An older source's
@@ -67,9 +67,9 @@ for all private connection files, hosted roles, grants and credential handling.
 6. **Source configurations.** `rules check`, then `rules register` with the registration connection from the
    central section. Done when it prints a digest for the merge rules and for every Dataset Contract.
 
-7. **Worker and verifier logins.** Apply the hosted worker/verifier roles, profile grants and
+7. **Worker logins.** Apply the hosted worker roles, profile grants and
    MDM guard from [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
-   Keep each profile's worker and verifier duties separate. Done when `doctor` prints
+   Done when `doctor` prints
    `"ok": true` under the worker connection and `load --plan` reads the capture.
 
 A missing grant or login that a command names is a gap to fix through the central connection
@@ -124,7 +124,7 @@ container's allocation, and server connection limits do not describe its free
 budget. Read available resources and active runs before each new dispatch.
 
 Record the ready backlog's file count and compressed/expanded byte estimates,
-measured peak memory per unit, worker and verifier throughput, temporary/output
+measured peak memory per unit, worker throughput, temporary/output
 disk needs, connection consumption and other agents' reservations/current work.
 Use source/stage measurements from comparable verified runs; distinguish a
 measurement, estimate and unknown. Existing qualified early-unit measurements
@@ -186,7 +186,7 @@ when a run last completed.
 
 | Observation | Decision |
 | --- | --- |
-| Work reported but not admitted | Run the separate verifier under the current lease; after expiry use supported reclaim/reconciliation. Worker success is not completion. |
+| A worker's report is refused | The lease lapsed while it worked, so the unit waits again. Run the worker again; after expiry use supported reclaim/reconciliation. |
 | Worker failed, interrupted, or lost an acknowledgement | Inspect the retained run and destination effects; resume through the existing engine with original pins and idempotency keys. |
 | All work verified, Journal delivery pending | Recover delivery through its owning producer; retry the same event/envelope and verify the receipt. Do not rerun completed merges or declare the run complete. |
 | Explicitly invalidated required input | Stop affected work, preserve history/progress, and use the approved correction path. Ordinary supersession is different. Missing live enforcement is reported, never assumed. |
