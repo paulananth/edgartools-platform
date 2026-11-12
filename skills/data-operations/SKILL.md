@@ -179,8 +179,8 @@ What it does, in order:
    `execution.max_artifacts` documents.
 4. **Loads each bundle.** It prepares the bundle (`mdm prepare-capture`),
    submits it (`rules run`), works each step in its declared order and
-   finalizes. `--bundles N` loads N bundles at once. Each is its own run with
-   its own verifier, because bundles of one target are one wave, not a
+   finalizes. `--bundles N` loads N bundles at once. Each is its own run,
+   because bundles of one target are one wave, not a
    queue. A bundle that stops does not stop the others. Once `--minutes`
    has passed no new bundle starts, and every stop is named at the end. The Change Journal leaves out documents already loaded under
    these rules. Already-loaded documents are counted and skipped, and an
@@ -259,7 +259,7 @@ Under `~/.local/share/edgartools/mdm/`, `captures/` holds whole deliveries and `
 
 | You see | It means | Do this |
 | --- | --- | --- |
-| `workers work <operation> ... failed with status 1; its message is in <log>` | A worker or verifier could not finish a unit. | Read that log (`load-errors.log` in the stores folder), fix the cause, and run the same command again. The unit is tried again first. A transient database error (a deadlock, a closed connection) clears on that retry. A retry that fails the same way ("Artifact hash mismatch": an earlier run left a different file at the output path) cannot be resumed: `load` names that run, leaves it as it is and loads its documents again in a new run from the Change Journal. Give each load its own `--as-of` (the default is now), because the output folder is named by it and a reused one collides with an earlier run's files. |
+| `workers work <operation> ... failed with status 1; its message is in <log>` | A worker could not finish a unit. | Read that log (`load-errors.log` in the stores folder), fix the cause, and run the same command again. The unit is tried again first. A transient database error (a deadlock, a closed connection) clears on that retry. A retry that fails the same way ("Artifact hash mismatch": an earlier run left a different file at the output path) cannot be resumed: `load` names that run, leaves it as it is and loads its documents again in a new run from the Change Journal. Give each load its own `--as-of` (the default is now), because the output folder is named by it and a reused one collides with an earlier run's files. |
 | `step <s>: unit <u> failed (<error>)` | A unit failed and is still failing. | Run `bookkeeping status <run> --step <s>` to see its error, fix the cause, and run the same command again. |
 | `Run <id> of <source> <target> is blocked` | Bookkeeping stopped that run, frozen under the active rules version, on corrupt or missing evidence. `load` will not submit its documents again. | Read `bookkeeping status <id>` and recover it ([recovery](../bookkeeping/RECOVERY.md)), then run the same command again. |
 | `did not finish before the deadline` | `--minutes` ran out. | Run the same command again, or give a longer `--minutes`. |
@@ -309,11 +309,9 @@ Work it out from counts before starting:
 2. **Wide and narrow steps.** A wide step has one unit per file or group
    (`source.read`). A narrow step is one unit per bundle (`mastering.merge`,
    `mdm.prepare`). Only more bundles at once shorten narrow steps in total.
-3. **Bundles and readers.** One verifier checks a run's units one at a
-   time, so a run's wide step goes no faster than its verifier, however many
-   workers it has. Spread the work over runs: `--bundles` runs at once, each with
-   its own verifier. `--workers` is per run, and 1 or 2 is enough when many
-   bundles run together. Keep `--bundles` × (`--workers` + 1) near the
+3. **Bundles and readers.** `--bundles` is how many runs go at once and
+   `--workers` is the worker processes on each step of a run; each worker
+   checks its own units. Keep `--bundles` × `--workers` near the
    core count. `load` never starts more workers than a step has units left.
 4. **The bound.** Measure one bundle first (`load` prints each run's
    minutes). The load takes roughly (the number of bundles ÷ `--bundles`,
@@ -346,8 +344,8 @@ Work it out from counts before starting:
 ### While a load runs
 
 - **Finish open runs with `load`, never by hand.** `load` finishes what is
-  open, verifies each step and runs the later ones. Driving `workers work`
-  and `workers verify` yourself skips the later steps, and a bare `--reports`
+  open and runs the later steps. Driving `workers work`
+  yourself skips the later steps, and a bare `--reports`
   path (it needs a `file://` address) marks the unit `waiting`.
 
 - **Leave worker code alone** (`edgar_warehouse/workers/*`). A run pins its
@@ -406,7 +404,7 @@ Work it out from counts before starting:
 
 `load` runs the same steps you can run by hand when diagnosing: `mdm
 prepare-capture`, `rules run`, `workers work <operation> <run>` (several in
-parallel; a lease keeps two off the same unit), one `workers verify`, and
+parallel; a lease keeps two off the same unit), and
 `bookkeeping finalize <run>` ([Bookkeeping run](../bookkeeping/RUN.md)).
 Do not write a source-specific driver script. A missing step is a gap in `load`: fix it
 there.
@@ -430,7 +428,7 @@ there.
    and competing work at the actual execution host/container. Fit the load into
    the window (**Load a capture**) before choosing `--workers`. Use prior verified measurements and current supported bounds to choose
    concurrency and bundle size.
-   Account for verifier costs too. Unknown estimates start conservatively; exhausted
+   Unknown estimates start conservatively; exhausted
    resources wait. Size divides the whole backlog into work, never drops records.
    A proof is not this step: [Choose the cheapest proof](../mdm-engineering/SKILL.md#choose-the-cheapest-proof)
    stops once every new case is shown. A load still takes every file.
@@ -443,13 +441,13 @@ there.
    the task is one source at a time, follow **Install and enable one source**
    and finish that run before the next source. Missing common-command support
    remains a blocker, not permission to invent source-specific orchestration.
-5. **Work and verify.** Use separate worker and verifier duties. Adjust dispatch
+5. **Work.** Each worker checks its own units. Adjust dispatch
    between invocations within supported limits as capacity changes. Changing a
    frozen contract or input requires new work; preserve the existing run. Inspect
    progress, contention, failures and pending events with bounded queries. Use
    [Change Journal](../change-journal/SKILL.md) for receipts/delivery recovery through
    the producer that owns the outbox, never direct edits to journal or run state.
-6. **Close or hand off.** Finalize only after declared work is independently verified,
+6. **Close or hand off.** Finalize only after every declared unit is complete,
    source outcomes reconcile and required Journal deliveries are acknowledged. An
    unchanged repeat should select zero files and start no mastering work. Report a
    partial run honestly. Save the run ID, frozen evidence references, resource
