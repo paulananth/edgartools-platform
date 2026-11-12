@@ -1,6 +1,6 @@
 ---
 name: data-operations
-description: Operates every domain and applies the DDL for MDM, RDM, Bookkeeping, Change Journal and silver on PostgreSQL, MySQL or SQL Server Express. Use when making those stores operational, applying a schema or an approved silver spec, operating daily loads, checking source readiness, managing a backlog, monitoring a run or maintaining its operational runbook.
+description: Operates every domain and applies the DDL for MDM, RDM, Bookkeeping, Change Journal and silver on PostgreSQL, MySQL or SQL Server Express. Use when making those stores operational, applying a schema or an approved silver spec, operating daily loads, checking source readiness, reporting load timings, managing a backlog, monitoring a run or maintaining its operational runbook.
 ---
 
 # Data Operations
@@ -34,6 +34,64 @@ retained progress before making a new run.
 When deploying tested configuration to an environment, follow **Configuration
 promotion** in RUNBOOK.md. Reuse the existing Rules approval procedure and exact
 release evidence; distinguish an approved release from its active deployment.
+
+## Report load timings in minutes
+
+For retained load-time or initialization-to-entity reports, use a **five-minute
+wall-clock deadline**, not a new load campaign. Start the clock immediately.
+Reuse the current request, approved plan and retained evidence; history recovery
+is needed only when a decision is genuinely missing. Report generation has its
+own deadline, independent of the hours a production load may take.
+
+1. **Scope once (first minute).** Resolve the environment and private evidence
+   directory. Read the configured source/target inventory and dependency list
+   once; obtain the entity-kind map from active Dataset Contracts, not source
+   names. Check credential and hosted-qualification gates before live access.
+   An uncleared gate means retained-only evidence, not a reason to investigate
+   provisioning or rotate credentials. Keep every requested target in the report.
+2. **Reuse, then batch (next two minutes).** Read existing measurement JSON,
+   explicit load summaries and manifest indexes before raw logs. Reuse artifacts
+   from earlier work with their observation times and code/Rules versions.
+   Verify only missing or stale fields through supported read-only commands.
+   Prefer an existing supported batch reader; otherwise bound individual status
+   and profiler calls by the remaining deadline. For `profile_load.py steps`,
+   always pass the exact `--run`. Retain every bundle run ID, but do not launch
+   one process per bundle when a retained verified snapshot already covers them.
+   Search only the resolved evidence directories and aggregate metadata; read
+   large receipt bodies or failure logs only for a specific unresolved field.
+3. **Calculate once (fourth minute).** Group per-run evidence by source/target
+   and kind, preserving exact step names. Verify complete state, expected units
+   equal verified units and zero pending deliveries. A retained snapshot proves
+   its observation time, not current state; label unverified logs historical.
+   Reconcile `considered = selected + already_processed` per invocation without
+   adding overlapping attempts. Compute first contribution from the **earliest
+   verified run completion**, not the minimum of each target's final completion.
+   All-source completion requires every active contributing contract and required
+   link target; source records are not unique masters.
+4. **Write and check (by minute five).** Produce one private report and a reusable
+   structured evidence snapshot with observation time, environment label,
+   code/Rules versions, evidence references and explicit missing-field reasons.
+   Include each target's capture/run refs, receipt digest, counts, run IDs, exact
+   step intervals, verification state and timing basis; summarize sources and
+   entity contributions without double-counting targets. Convert timestamps to
+   `America/New_York` using `pytz`, never a fixed offset. Check arithmetic,
+   inventory coverage and sensitive-content exclusion, then return the path.
+
+At the deadline, finish the report from collected evidence and mark unresolved
+fields `unavailable` with the failed/missing evidence and observation time. This
+is an evidence-complete report, not a claim that unavailable timings were measured.
+Do not extend discovery with recursive archive searches, historical-session
+consults or repeated readiness checks. Further investigation is a separate task.
+
+**Timing basis:** `active_command_seconds` requires retained `time -p` real
+values; `target_wall_seconds` requires first invocation start and final verified
+completion. If only Bookkeeping creation/completion times exist, name that
+interval `retained_run_span_seconds`, not target wall time. Step intervals are
+event intervals, not CPU time, and their sum is not wall time. Initialization
+requires exact request and READY evidence; absent endpoints stay unavailable,
+never file modification times. Preserve raw timestamps and exact operation names.
+Report generation never resets, replays or starts production work for a sample.
+
 
 ## Apply store DDL
 
