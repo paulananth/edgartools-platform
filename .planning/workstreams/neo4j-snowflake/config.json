@@ -1,9 +1,0 @@
-{
-  "workflow": {
-    "research": false,
-    "text_mode": true,
-    "plan_review_convergence": true,
-    "_auto_chain_active": false,
-    "use_worktrees": false
-  }
-}

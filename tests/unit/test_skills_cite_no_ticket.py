@@ -14,7 +14,7 @@ KNOWN: dict[str, int] = {}
 # A calendar date, but not a rule version's name (`2026-10-25.1`, `security-2026-10-24.isin`).
 DATE = re.compile(r"(?<![\w.-])20\d\d-\d{2}-\d{2}(?!\.\d|[\w-])")
 DATES = {
-    "skills/change-journal/SPEC.md": 2,  # a folder name in two paths
+     # a folder name in two paths
     "skills/data-onboarding/REFERENCE.md": 1,  # an example of a refused value
 }
 MAX_LINES = 500
