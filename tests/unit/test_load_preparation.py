@@ -6,7 +6,7 @@ from contextlib import contextmanager
 
 import pytest
 
-from edgar_warehouse.mdm import cascade, waterfall
+from edgar_warehouse.mdm.evidence import assertion
 from edgar_warehouse.rules import files, preparation
 from edgar_warehouse.rules.driving import RunStopped
 from tests.support.waterfall import capture, native
@@ -19,9 +19,11 @@ ADDRESS = {"street": "1 Example Way", "city": "Exampleton", "postcode": "12345",
 AS_OF = "2026-11-11T12:00:00+00:00"
 
 
-def filer(key="0000000017", name="INVENTED CO"):
-    return cascade.record(key, {"name": name, "state_of_incorporation": "DE"},
-                          {"address": ADDRESS, "business_country": "US"}, None, {"cik": key})
+def filer(key="0000000017", name="INVENTED CO", revision=1, effective_at=None):
+    return assertion(source_code=OPTIONS["holder_source"], record_key=key, publication_key="invented",
+                     revision=revision, effective_at=effective_at, kind="company", identifiers={"cik": key},
+                     fields={"name": name, "state_of_incorporation": "DE"},
+                     provenance={"matching": {"address": ADDRESS, "business_country": "US"}})
 
 
 class Store:
@@ -41,7 +43,7 @@ def serve(monkeypatch, store):
     # The shared-engine database behavior is qualified separately by storage-adapter tests.
     from edgar_warehouse.mastering import merge
 
-    def apply(db, settings, source, pairs):
+    def apply(db, settings, source, pairs, **kwargs):
         changed = {k: p for k, p in pairs.items() if db.applied.get(k) != p}
         db.applied.update(changed)
         return {"records": len(changed)}
@@ -68,6 +70,34 @@ def test_complete_native_capture_prepares_a_unique_pair_and_unchanged_repeat_doe
     assert repeated["applied"] == 0
     assert repeated["publication"]["evidence"] == "source-declared-complete-capture"
     assert "content_date" not in repeated["publication"]
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_current_source_revision_is_selected_by_the_shared_kernel_not_sql_order(tmp_path, monkeypatch, reverse):
+    versions = [filer(name="RETIRED NAME", revision=1), filer(revision=2)]
+    if reverse:
+        versions.reverse()
+    db = Store(versions)
+    serve(monkeypatch, db)
+    result = run(capture(tmp_path / "capture", [native()]), tmp_path / "prepared")
+    assert (result["filers"], result["pairs"]) == (1, 1)
+
+
+def test_a_future_source_revision_is_not_a_current_pairing_input(tmp_path, monkeypatch):
+    db = Store([filer(), filer(name="FUTURE NAME", revision=2, effective_at="2027-01-01T00:00:00+00:00")])
+    serve(monkeypatch, db)
+    result = run(capture(tmp_path / "capture", [native()]), tmp_path / "prepared")
+    assert (result["filers"], result["pairs"]) == (1, 1)
+
+
+@pytest.mark.parametrize("name,pairs", [(None, 1), ({"op": "retract"}, 0)])
+def test_pairing_uses_folded_current_fields_without_rewriting_the_patch(tmp_path, monkeypatch, name, pairs):
+    db = Store([filer(), filer(name=name, revision=2)])
+    original_fields = copy.deepcopy(db.records[-1]["fields"])
+    serve(monkeypatch, db)
+    result = run(capture(tmp_path / "capture", [native()]), tmp_path / "prepared")
+    assert (result["filers"], result["pairs"]) == (1, pairs)
+    assert db.records[-1]["fields"] == original_fields
 
 
 def test_a_shared_name_on_either_side_prepares_no_binding(tmp_path, monkeypatch):
@@ -100,7 +130,7 @@ def test_cached_pairs_do_not_bypass_a_damaged_capture_receipt(tmp_path, monkeypa
     archive = next(folder.glob("*.zip"))
     archive.write_bytes(archive.read_bytes() + b"changed")
     from edgar_warehouse.mastering import merge
-    monkeypatch.setattr(merge, "apply_pairs", lambda *a: pytest.fail("damaged cached capture applied"))
+    monkeypatch.setattr(merge, "apply_pairs", lambda *a, **k: pytest.fail("damaged cached capture applied"))
     with pytest.raises(ValueError):
         run(folder, tmp_path / "prepared")
 
@@ -110,7 +140,7 @@ def test_interrupted_application_reuses_verified_input_and_applies_it_on_retry(t
     serve(monkeypatch, db)
     from edgar_warehouse.mastering import merge
     apply = merge.apply_pairs
-    monkeypatch.setattr(merge, "apply_pairs", lambda *a: (_ for _ in ()).throw(RuntimeError("interrupted")))
+    monkeypatch.setattr(merge, "apply_pairs", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("interrupted")))
     folder = capture(tmp_path / "capture", [native()])
     with pytest.raises(RuntimeError, match="interrupted"):
         run(folder, tmp_path / "prepared")

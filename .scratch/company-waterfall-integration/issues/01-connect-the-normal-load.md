@@ -14,6 +14,8 @@ pairs before the scoped read, keeping name binding after identifier matching.
 - [x] 2026-11-11 21:43 ET Review Standards, Spec and GoF; completeness and split-commit findings fixed and reviewed again. No remaining findings.
 - [x] 2026-11-11 22:04 ET Require the current active source Rules digest before automatic preparation; absent, mismatched and matching admission cases pass, with zero denied pair/submission effects.
 - [x] 2026-11-11 22:04 ET Repair installed wheel inclusion: preparation and derivation modules are present, and an isolated installed CLI imports them outside the checkout. Final focused gate/skill checks: 28 passed.
+- [x] 2026-11-12 06:20 ET Select current revisions and folded patch fields through the shared Rust kernel while retaining original assertions; 43 affected matching checks and 108 guide/skill checks passed. Three-axis focused reviews are clear.
+- [x] 2026-11-12 06:20 ET Prove partial patch inheritance, original-field preservation and changed same-key evidence on real stores; all 30 mastering adapter tests pass on PostgreSQL (47 s) and MySQL (179 s), with automatic container cleanup.
 - [ ] Publish the PR and verify its final head in CI.
 - [x] 2026-11-11 22:04 ET Update the architecture atlas: all nine revised native diagrams pass, connected-path screenshots inspected in light/dark, and the narrow review page contains all 13 sources without overflow. Source revision is pinned in the atlas.
 - [x] 2026-11-11 21:43 ET Learning → skill: `data-operations` names configured preparation before deriving scope; `mdm-engineering` requires durable pair evidence, lookup keys and waiter release in one transaction.
@@ -45,6 +47,13 @@ variation without source-name branches in the loader.
 - Cache identity contains the normalized facts the pass consumes, captured receipt, recipe, policy and runtime.
   Saving the derived answer does not invalidate its own cache. A cached projection still checks the compressed
   capture's hash; changed bytes with an unchanged receipt are refused before applying a pair.
+- Retained source rows include history. Selecting by SQL order could pair an obsolete or future revision.
+  The existing Rust current-record fold selects as-of revisions and folds partial source fields. Pairing and
+  name comparison use transient views of those fields with the selected original's matching provenance;
+  persistence keeps each original patch's fields unchanged. The new unknown-name patch test failed before
+  this repair with zero pairs instead of one; retracting the name still produces zero pairs.
+- A later publication can refresh pair evidence without changing its lookup key. The replay guard now compares
+  the complete answer, retaining the changed evidence and permitting the later record to pass the name rule.
 
 ## Review
 
@@ -86,4 +95,5 @@ directory, with no checkout on `sys.path`, and the installed `load --help` exits
 reuses already-built, unchanged native/dependency files; the existing full installed-bundle CI test is the
 authoritative clean-environment gate.
 **Regression test:** `tests/engine/test_data_skill_bundle_postgres.py::test_the_bundle_installs_whole_with_no_file_in_two_wheels`.
-**Status:** fixed locally; PR 1701 remains draft until final-head CI passes.
+**Status:** repaired head `6105c51e4aecfe9c91513d20b89fabee97b7c08b` passed full CI run `43145742578`.
+The subsequent history correction remains draft until its own final-head CI passes.

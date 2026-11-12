@@ -245,6 +245,16 @@ def prepare_current_records(readings: list[dict], as_of: str, retired: set[str])
         as_of, sorted(retired)))
 
 
+def current_record_views(readings: list[dict], as_of: str) -> dict:
+    """Compare folded current fields with the selected original's identity and matching provenance.
+
+    These are transient views, never replacement source assertions for persistence.
+    """
+    originals = {record["assertion_id"]: record for record in readings}
+    return {subject: {**originals[claim["assertion_id"]], "fields": claim["fields"]}
+            for subject, claim in prepare_current_records(readings, as_of, set()).items()}
+
+
 def identify_profile(profile: dict) -> str:
     """Use Rust's common profile identity across every storage engine."""
     return source_contract.identify_profile(

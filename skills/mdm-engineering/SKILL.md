@@ -355,6 +355,11 @@ from the installed bundle.
 
 ### Learned on a lookup-only route
 
+- **A retained source population includes history.** Use the shared current-record fold for revision and
+  as-of selection, and compare its folded fields with the selected original's matching provenance.
+  Keep that comparison view transient: save derived matching evidence on the original assertion,
+  without replacing a patch's original fields with an accumulated snapshot. Test an omitted current
+  field, a retraction, reversed row order and a future revision.
 - **An installed-bundle test reads the committed rules.** `tests/engine/test_data_skill_bundle_postgres.py`
   installs from the commit's HEAD, so uncommitted rules give a stale answer (its policy digest was the
   old one). Commit first, then `uv sync --all-extras --group dev --reinstall-package edgartools-platform`,

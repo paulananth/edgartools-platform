@@ -128,7 +128,11 @@ def _waterfall(*, options, capture, folder, facts, as_of, deadline, say, environ
     with registered_store(policy_digest, environment) as store:
         records = [json.loads(b) if isinstance(b, str) else b for (b,) in
                    store.rows("select body from mastering_record where source_code=%s", [options["holder_source"]])]
-        filers = waterfall.filers_from_records(records)
+        from edgar_warehouse.rules.source_engine import current_record_views
+        current = [r for r in current_record_views(records, as_of).values() if r["kind"] == kind]
+        selected = {r["assertion_id"] for r in current}
+        records = [r for r in records if r["assertion_id"] in selected]
+        filers = waterfall.filers_from_records(current)
         recipe = files.load(waterfall.GLEIF_READING)
         inputs = {"version": 1, "archive": archive, "records": count, "options": options, "recipe": recipe,
                   "filers": population(filers), "policy": policy_digest, "runtime": _runtime()}
@@ -168,7 +172,7 @@ def _waterfall(*, options, capture, folder, facts, as_of, deadline, say, environ
         if time.monotonic() >= deadline:
             raise RunStopped("Automatic preparation reached the load deadline before applying pairs")
         counts = merge.apply_pairs(store, merge.Settings(policy, policy_digest, kind, as_of),
-                                   options["holder_source"], result["pairs"])
+                                   options["holder_source"], result["pairs"], source_records=records)
     say(f"Automatic waterfall preparation: {len(filers)} source records, {count} publication records, "
         f"{len(result['pairs'])} pairs; applied {counts.get('records', 0)} records")
     return {"method": "waterfall", "input_digest": cache_key, "publication": result["publication"],
