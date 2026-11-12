@@ -56,7 +56,7 @@ The pinned domain types are `Source-aligned`, `Consumer-aligned` and `Aggregate`
 This required native attribute is not the logical subject identity.
 
 Master-data subject domains use `Source-aligned`. The operator approved that
-type on 2026-10-30 for every domain `CONTEXT.md` names as a master-data domain.
+type for every domain `CONTEXT.md` names as a master-data domain.
 Do not ask again for that type, and do not apply it to a source, a feed, a
 pipeline or a storage folder. Ask again only for a subject that is not one of
 those domains.
@@ -81,7 +81,7 @@ product exists. Input ports are a second assignment, not the asset list.
 Add them with `PUT /api/v1/dataProducts/{name}/inputPorts/add` and the same
 bulk asset body. Read them with `GET /api/v1/dataProducts/name/{fqn}/inputPorts`.
 A product carries its domain and the glossary term "<Domain> Identity" of that
-domain, as a `Glossary` tag in the `Suggested` state (operator, 2026-11-01: "update
+domain, as a `Glossary` tag in the `Suggested` state (operator: "update
 data products with domains and glossary"). The tag is on the product, not on its
 assets, and a product's domain still equals every asset's domain.
 A mastered package takes the source datasets that fill it as input ports.
@@ -188,7 +188,7 @@ Assets are a separate assignment. Read product membership with
 to more than one real product. "Data Product Domain Validation" stays enabled:
 a product on an asset must match that asset's domains. Do not disable it to
 force a product onto an asset in another domain. Do not invent owners. The
-local catalog had no native data products on 2026-10-30. The fundamental
+local catalog had no native data products at first. The fundamental
 analytics package in the data-catalog model is already three tables of that
 subject, not one of these native objects.
 
@@ -204,7 +204,7 @@ an asset is `Suggested`. Create no owners.
 Give each published subject domain its own glossary. Its native name is the
 domain name, and its display name is the domain's display name. A term whose
 heading is that display name, or that display name plus " Identity", goes in
-that glossary. There is no `shared` glossary (operator, 2026-11-01: "i dont
+that glossary. There is no `shared` glossary (operator: "i dont
 want any shared"), no domain named `Shared`, and no `Shared` tag. Place every
 other entity term by its kind:
 
@@ -216,7 +216,7 @@ other entity term by its kind:
   first in the pinned list. A type whose `from` list names several domains
   still has that one home.
 - A platform word is not a glossary term, and `CONTEXT.md` is its one home
-  (operator, 2026-11-01: "they are steps in the system and documentation, it
+  (operator: "they are steps in the system and documentation, it
   can be part of lineage, not in glossary"). That covers a pipeline step or
   stage, a rules file and its parts, a store or a file. The catalog shows the
   steps as pipeline tasks on lineage, so a term would repeat them. Do not
@@ -232,13 +232,13 @@ other entity term by its kind:
 - An umbrella word with no real instance of its own is not a term. Remove it
   from `CONTEXT.md` instead of publishing it.
 
-Publish a term only when real data backs it (operator, 2026-11-01: "the skill
+Publish a term only when real data backs it (operator: "the skill
 must be intelligent, can not create fake domains"). A domain is real when a
 rule reads it, an RDM code set holds it, or a mastered kind exists. A
 relationship type is a glossary term only when a file under `rules/sources/`
 uses its code. A type that `CONTEXT.md` or a ticket plans, with no rule that
 creates it, is not published (`HAS_MARKET_OPERATOR` and
-`IS_SEGMENT_OF_EXCHANGE`, removed 2026-11-01: no rule creates either link).
+`IS_SEGMENT_OF_EXCHANGE`, removed: no rule creates either link).
 Test a domain by its own data before ruling it out: the market/venue domain
 looked empty through those two links, but its MIC code set and the listing rules
 make it real. Create a subject domain, its glossary or a term in

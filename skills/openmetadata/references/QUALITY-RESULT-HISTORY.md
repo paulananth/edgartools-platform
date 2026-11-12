@@ -56,7 +56,7 @@ publish only results backed by admitted load evidence.
 
 ## What the shipped UI shows
 
-Verified in the browser against OpenMetadata 2.0.7 on 2026-11-09.
+Verified in the browser against OpenMetadata 2.0.7.
 
 - The Test Case Results tab shows the **newest** result's full text, so the
   Bookkeeping run, step, work unit, attempt and observation time are readable

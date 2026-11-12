@@ -8,7 +8,7 @@ OpenMetadata 2.0 replaced the Knowledge Center with the Context Center. A
 glossary holds entity terms and a `data_class` tag holds a data class; a
 platform word stays in `CONTEXT.md`. A process record that nothing else holds,
 or a how-to, is an Article.
-Articles are pages (found in the server's `/swagger.json`, tested 2026-11-01 on
+Articles are pages (found in the server's `/swagger.json`, tested on
 version 2.0.2):
 
 - Create with `POST /api/v1/contextCenter/pages`: `name`, `pageType`
@@ -54,7 +54,7 @@ The separate RDF glossary graph stays unused unless that service is enabled.
 
 `rules catalog publish` applies the built-in certification and the `data_class`
 tags below. It leaves each term's status to the server unless `--draft-terms` is given
-(operator, 2026-11-02: "stop forcing Draft on the local catalog"). It writes the terms, tags and
+(operator: "stop forcing Draft on the local catalog"). It writes the terms, tags and
 descriptions this section names. Use the scoped relationship repair above for
 unsupported edges; do not change business definitions in the live catalog.
 A second write of mention edges or endpoint domain links is how overstatement
@@ -64,7 +64,7 @@ description and no term. This configuration-derived suffix does not prove
 that no link is loaded; verify that claim against the authoritative store.
 Each data product carries the identity term of its
 domain, `Suggested`. The store of a table is its native Certification, not a custom
-tag (operator, 2026-11-02: "rdm = Gold, MDM = Gold, Silver = Silver"). `check`
+tag (operator: "rdm = Gold, MDM = Gold, Silver = Silver"). `check`
 reports a table whose class tag or certification is missing.
 
 - `data_class`. One tag for each class the data-modeling skill names and this

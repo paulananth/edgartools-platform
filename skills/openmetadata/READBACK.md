@@ -16,7 +16,7 @@ Part of the `openmetadata` skill: [SKILL.md](SKILL.md) says when to read this.
   `GET /api/v1/lineage/...`, never with the `PUT` that writes it.
   `PUT /api/v1/lineage/domain/name/{domain}/table/name/{table}` replaces the
   edge's description with whatever body it carries, so a probe that PUTs `{}`
-  blanks the description of every edge it touches (2026-11-11). A later
+  blanks the description of every edge it touches. A later
   `rules catalog publish` restores those descriptions from the plan; verify
   each affected edge's `lineageDetails.description` matches the plan
   afterwards.
@@ -65,7 +65,7 @@ Part of the `openmetadata` skill: [SKILL.md](SKILL.md) says when to read this.
 
 - A renamed source leaves its old tables behind. Such a table still holds its
   test cases, so `DELETE /tables/{id}?hardDelete=true` answers 400 "table is not
-  empty"; the publisher deletes with `recursive=true` (2026-11-01, a
+  empty"; the publisher deletes with `recursive=true` (a
   source ID rename). A publish that names a
   renamed source creates its new pipelines, schema, tables and test cases and
   removes the old ones in the same run; do not delete them by hand.
@@ -85,8 +85,7 @@ Part of the `openmetadata` skill: [SKILL.md](SKILL.md) says when to read this.
   `claim.reverse` of each identifier in `merge/kinds/<kind>.yaml`, none where the
   limit is null). The complete per-source `MAPPING.xlsx` remains the
   integration specification in the rules repository. The operator deferred
-  publishing the document itself as a Pipeline custom property (2026-11-08:
-  "defer document but publish lineage"). OpenMetadata 2.0.7 stores
+  publishing the document itself as a Pipeline custom property ("defer document but publish lineage"). OpenMetadata 2.0.7 stores
   `entity_extension.extension` in `VARCHAR(512)`, below the raw text length
   of every source workbook. Do not embed or truncate the workbook, alter the
   schema, or create a link property without a new operator request.

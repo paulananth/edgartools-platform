@@ -58,8 +58,7 @@ inside the skill directory is checkout-only and fails the installed-skill doctor
 A compose recreate can leave the server wedged: Docker reports "cannot stop
 container: ... tried to kill container, but did not receive an exit event" and
 leaves a `Created` replacement beside the running original, which then exits
-137 and leaves the port unbound while its logs still show healthy requests
-(2026-11-11). Recover by removing both the stale `Created` container and the
+137 and leaves the port unbound while its logs still show healthy requests. Recover by removing both the stale `Created` container and the
 wedged original, then bringing the stack up with
 `docker compose -f infra/openmetadata/docker-compose.yml up -d --wait`. The
 named `db-data` and `es-data` volumes carry the catalog, so remove the
@@ -74,8 +73,7 @@ Its result is counts only; a failed exclusion exits nonzero.
 A login token of the local account expires within the hour; a publish that
 answers 401 needs a new one. A token that worked for a read can still be
 expired, and the expiry shows up on the first write: a GET answers 200 while
-`PUT /api/v1/services/databaseServices` answers 401 "Expired token!"
-(2026-11-11). Refresh and retry the write; the publish is not the failing
+`PUT /api/v1/services/databaseServices` answers 401 "Expired token!". Refresh and retry the write; the publish is not the failing
 step. When the private credentials are already in the environment, refresh
 without the interactive prompt, base64-encoding the password and writing the
 token to the private token file with a restrictive mode, and print neither the
