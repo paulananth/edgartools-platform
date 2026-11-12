@@ -1,6 +1,6 @@
 ---
 name: data-operations
-description: Operates every domain and applies the DDL for MDM, RDM, Bookkeeping, Change Journal and silver on PostgreSQL, MySQL or SQL Server Express. Use when making those stores operational, applying a schema or an approved silver spec, operating daily loads, checking source readiness, managing a backlog, monitoring a run or maintaining its operational runbook.
+description: Operates every domain and applies the DDL for MDM, RDM, Bookkeeping, Change Journal and silver on PostgreSQL, MySQL or SQL Server Express. Use when making those stores operational, applying a schema or an approved silver spec, operating daily loads, checking source readiness, reporting load timings, managing a backlog, monitoring a run or maintaining its operational runbook.
 ---
 
 # Data Operations
@@ -34,6 +34,7 @@ retained progress before making a new run.
 When deploying tested configuration to an environment, follow **Configuration
 promotion** in RUNBOOK.md. Reuse the existing Rules approval procedure and exact
 release evidence; distinguish an approved release from its active deployment.
+For timing reports, use the [five-minute workflow](TIMING-REPORTS.md).
 
 ## Apply store DDL
 

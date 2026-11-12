@@ -1,5 +1,7 @@
 """Contract errors block before any database or destination mutation."""
 from copy import deepcopy
+import io
+from pathlib import Path
 
 import pytest
 
@@ -75,6 +77,58 @@ def test_offline_artifact_uris_preserve_encoded_path_characters(tmp_path):
     output = source.parent / "output.json"
     ref = artifacts.put_bytes(output.as_uri(), source.read_bytes())
     assert output.read_bytes() == source.read_bytes() and artifacts.json(ref) == {"version": 1}
+
+
+def test_bounded_read_of_small_file_does_not_reserve_the_entire_limit(tmp_path, monkeypatch):
+    source = tmp_path / "small.json"
+    body = b'{"ok":true}'
+    source.write_bytes(body)
+    original_open = Path.open
+
+    class MemoryLimitedFile:
+        def __init__(self, stream):
+            self.stream = stream
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            self.stream.close()
+
+        def fileno(self):
+            return self.stream.fileno()
+
+        def read(self, size=-1):
+            if size > 1024**2:
+                raise MemoryError("read request exceeds available memory")
+            return self.stream.read(size)
+
+    def open_with_limit(path, *args, **kwargs):
+        stream = original_open(path, *args, **kwargs)
+        return MemoryLimitedFile(stream) if Path(path) == source else stream
+
+    monkeypatch.setattr(Path, "open", open_with_limit)
+    assert Artifacts().read(source.as_uri(), max_bytes=16 * 1024**3) == body
+
+
+def test_bounded_read_of_small_s3_object_uses_content_length():
+    body = b'{"ok":true}'
+
+    class MemoryLimitedStream(io.BytesIO):
+        def read(self, size=-1):
+            if size > 1024**2:
+                raise MemoryError("read request exceeds available memory")
+            return super().read(size)
+
+    stream = MemoryLimitedStream(body)
+
+    class S3:
+        def get_object(self, **kwargs):
+            assert kwargs == {"Bucket": "captured", "Key": "input.json"}
+            return {"Body": stream, "ContentLength": len(body)}
+
+    assert Artifacts(S3()).read("s3://captured/input.json", max_bytes=16 * 1024**3) == body
+    assert stream.closed
 
 
 @pytest.mark.parametrize("payload", [b'{"version":1,"version":2}', b'{"bad":NaN}', b'{"bad":1e999}', b'[]'])
