@@ -57,8 +57,8 @@ so what would use one goes to review.
 A new capacity or type is a new published version (`rules/reference/published/<set>/<n>/`, the file's
 sha256 in its `pin.json`) and a new pin in `rules/merge/reference-pins.yaml`; the committed workbooks
 (`rules mapdoc write`) and the test fixture follow it. When a source field is not one of the
-vocabulary's words, count how many rows state it first: 7 of 3,570 owners did, each refining a capacity
-already held, so the form's own word became a capacity with the stated text as its title.
+vocabulary's words, count how many rows state it first: where a few do, each refining a capacity
+already held, the form's own word becomes a capacity with the stated text as its title.
 
 Storage adapters own connections, types, SQL compilation, indexed retrieval,
 schema migrations, grants and transaction/concurrency primitives. Use
@@ -295,7 +295,7 @@ location: `Path(__file__).parents[N]` and `.parent`. Before the move, grep `pare
 
 ## Choose the cheapest proof
 
-Name the claim in one sentence, then take the smallest cohort that can falsify it. The agent chooses that cohort; the operator does not pick a size each time (operator, 2026-10-24: "the skill must be intelligent and use the most optimal path"). A proof drops work that cannot change the claim. A recurring load is a different claim and still processes every file ([data-operations](../data-operations/SKILL.md), "Size the work").
+Name the claim in one sentence, then take the smallest cohort that can falsify it. The agent chooses that cohort; the operator does not pick a size each time (operator: "the skill must be intelligent and use the most optimal path"). A proof drops work that cannot change the claim. A recurring load is a different claim and still processes every file ([data-operations](../data-operations/SKILL.md), "Size the work").
 
 | The change | The proof |
 |---|---|
@@ -307,7 +307,7 @@ Name the claim in one sentence, then take the smallest cohort that can falsify i
 | The Merge Stage engine, a worker, Bookkeeping | A Proving Run on a pinned cohort, and the full installed proof on an empty store: every count as before, a killed worker resumes, the second pass changes nothing |
 | Matching rules, a Dataset Contract | The smallest cohort that contains each new case. One slice whose second pass changes nothing proves the path on real records. A case that slice did not contain is the one bundle that contains it, then stop. The whole delivery is the proof only when the claim is that delivery's totals, or switch-on |
 | A storage adapter or a change claimed to work across databases | The shared per-engine behavior checks above for every affected kind and source; preserve restricted-role, transaction and recovery guarantees |
-| Speed | Time per batch over a whole feed: flat, not growing with the store. Each worker's process time is in the run's progress lines; `mastering.merge` gives one total a file. Measured (installed proof, 2026-10-12, 6,726 source documents): `source.read` 0.10 s a document, `mdm.prepare` 13 ms a document, the old merge 25 ms a record |
+| Speed | Time per batch over a whole feed: flat, not growing with the store. Each worker's process time is in the run's progress lines; `mastering.merge` gives one total a file. |
 | A version whose rules moved since its last proof, each change proven by its own merged PR at the level this table names for it | No new run: carry the last proof forward. Write a proof file from the last one: its counts and `batch_hash`, `passed: true`, `digest` set to the new version's digest (`rules record-proof` refuses any other), its acquisition evidence if it had any, and under `evidence` and `note` the run it came from and each change since with its PR. Record it with `rules record-proof --proof-uri --proof-sha256`; `rules pending` then shows that evidence for approval. A change without such a proof gets its own row's proof first |
 
 Say the time of any proof over ten minutes before starting it. When a run
@@ -316,28 +316,26 @@ stays unchecked, including the delivery's totals until switch-on. A domain
 skill that names a whole-delivery test uses that test only when the claim is
 the delivery's totals or switch-on. So does a ticket's checklist: a line
 written as "proof on the capture" is met by the limited test that answers its
-claim, never by a multi-hour run that repeats it at scale (operator,
-2026-10-28: "Why do we need to run a 5-hour proving run this is a waste").
+claim, never by a multi-hour run that repeats it at scale (operator: "Why do we need to run a 5-hour proving run this is a waste").
 Stop the proof's containers when it ends,
 whatever the outcome.
 
-**A full-size proof runs once, with its final checks** (operator, 2026-10-30:
+**A full-size proof runs once, with its final checks** (operator:
 "stronger checks must run once with the appropriate checks"). Before it:
 review its checks (the Spec review included); run every step through the
 installed commands on a sample (the answer key's few records) until it
 passes; then run full size once. Each check states what it proves: the
 source record found is not a value equal to it. A failed run keeps its
 stores and restarts at the failed step; a rerun check (the second load
-changes nothing) runs on a slice, not the whole load. One ticket ran its
-45-minute proof four times: two installed-bundle faults a sample finds in
-2 minutes, then checks the review found too weak.
+changes nothing) runs on a slice, not the whole load. A sample finds an
+installed-bundle fault in minutes; a full proof run to find one is waste.
 
 **A module reads a rules file through `rules.files.ROOT`**, never a path
 beside a checkout (`Path(__file__).parents[n] / "rules"`): the installed
 bundle ships `rules/` elsewhere, and the bundle test loads each such file
 from the installed bundle.
 
-### Learned on a record that carries only a name (2026-11-04)
+### Learned on a record that carries only a name
 
 - **The name rules (`name_binding`) serve one pair of sources only**: they need a Name Matching and a place test, so
   a Form ADV custodian named only by its name cannot use them. The rule for it is the `exact_name_binding`
@@ -350,7 +348,7 @@ from the installed bundle.
 - **A new candidate route changes the routes digest** that every stored record is indexed under
   (`matching_routes_sha256`); stored records must be reindexed, a rebuild store simply loads again.
 
-### Learned on a lookup-only route (2026-11-04)
+### Learned on a lookup-only route
 
 - **An installed-bundle test reads the committed rules.** `tests/engine/test_data_skill_bundle_postgres.py`
   installs from the commit's HEAD, so uncommitted rules give a stale answer (its policy digest was the
@@ -390,7 +388,7 @@ expected engine/kind/case once and refuse missing or contradictory outcomes.
 
 **Count a store through its record reader, never its tables.** Governed
 storage keeps the records in its own tables, so a count of the old `mdm`
-tables reads an empty store whatever the run did (2026-10-29: a
+tables reads an empty store whatever the run did (a
 proof passed with every count 0). Count with `inspection.counts` and each
 source record's current pointer, and grant the verifier what the installed
 test grants. A proof whose counts are all zero proved nothing: treat it as
@@ -436,26 +434,25 @@ These name this repo's code and the failures each rule came from.
   `tests/architecture/test_mdm_routine_retirement.py` (retired calculation
   callers stay absent) and `tests/mdm/test_limits.py` (input batching keeps an
   oversized record).
-- **No size refusal**: a 10,000-record closure cap and a
-  16 MiB request cap, chosen for a local machine, stopped the ownership
+- **No size refusal**: a closure cap and a
+  request cap, chosen for a local machine, stopped the ownership
   Proving Run, whose insider network was one connected group.
 - **Record by record**: without the cap, every batch
-  replayed the whole insider network (23 batches in 60 minutes); merging only
+  replayed the whole insider network; merging only
   the masters a batch touches made batch times flat over the full Person feed.
-- **Join the keys**: at 2,229 keys a whole-list GIN
-  search took 12 to 21 s, and one key at a time 14 to 18 ms for all of them.
-  A generic plan took 5.2 s against 0.8 s for a custom one.
-- **Remove a layer** (operator, 2026-09-26): the Merge Stage writes and reads
+- **Join the keys**: over a few thousand keys a whole-list GIN
+  search took seconds, and one key at a time milliseconds for all of them.
+  A generic plan was several times slower than a custom one.
+- **Remove a layer** (operator): the Merge Stage writes and reads
   the dated master table directly, instead of copying rows between tables.
-- **Cheapest proof** (operator, 2026-10-13): a source extract column trim
-  already shown equal over 7,000 documents needed no 45-minute proof.
-- **Lean cohort** (operator, 2026-10-24). A slice of the
+- **Cheapest proof** (operator): a source extract column trim
+  already shown equal over the captured documents needed no full proof.
+- **Lean cohort** (operator). A slice of the
   Securities proof passed twice, and the CUSIP half of the quarter matched.
   The ISIN half's only new case was one CUSIP offered two ISINs that share a
   FIGI, inside the first bundle. The other seven bundles were the same join,
-  about 11 hours: over-processing. Stop after the bundle that holds the new
+  hours of over-processing. Stop after the bundle that holds the new
   case. The quarter's totals stay unchecked until switch-on.
 - **The full installed proof** for the Company population:
   `.planning/workstreams/whole-source-census/installed_proof.py` (its
-  docstring has the command; about 28 minutes; 6,414 Companies, 3,052 GLEIF
-  bindings).
+  docstring has the command).

@@ -4,10 +4,10 @@ Part of the `mdm-engineering` skill: [SKILL.md](SKILL.md) says when to read this
 
 ## Cross-reference completion
 
-Decided (operator, 2026-10-25): the cross-reference becomes the
+Decided (operator): the cross-reference becomes the
 one table of every identifier, each row the master id, the identifier kind,
 the value, matching or lookup only, the source, first and last seen. Built
-for one kind first (switched on 2026-10-26): a record may carry a list of values
+for one kind first (switched on): a record may carry a list of values
 for one kind; the Merge Stage looks up every matching value: none mints, one
 binds, two consolidate automatically where the rule says so (below). The one
 table for the other kinds is still to build; until then the rest of this
