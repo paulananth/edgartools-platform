@@ -84,9 +84,6 @@ def test_an_identifier_contract_may_name_a_declared_normalizer():
         "normalizer": "normalize_identifier@cusip-v1",
         "claim": {"forward": 1},
         "compatibility": {"field": "kind", "predicate": "kind_equal@1"},
-        "verification": {"corpus_sha256": "0" * 64, "approved_by": "operator",
-                         "approved_at": "2026-10-14", "reason": "test"},
-        "tolerance": {"unit": "decisions", "warm_up_decisions": 0, "max_per_10k": 0},
     }
     _check_contract("cusip", contract)
     with pytest.raises(Conflict, match="unknown normalizer"):

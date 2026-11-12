@@ -68,45 +68,31 @@ def test_detail_lookups_are_configured_and_validated(tmp_path, change):
             catalog.load(tmp_path)
 
 
-def test_invented_kind_profile_and_approval_floor_are_loaded_without_engine_edits(tmp_path):
+def test_invented_kind_and_profile_are_loaded_without_engine_edits(tmp_path):
     body = copy.deepcopy(catalog.CATALOG)
     body["kinds"].append("invented-kind")
     body["profiles"]["invented-profile"] = ["invented-kind"]
-    body["accepted_bars"]["invented-kind"] = {"classification": {
-        "min_precision": 0.97, "one_sided_confidence": 0.975}}
     shutil.copytree(files.ROOT, tmp_path, dirs_exist_ok=True)
     write(tmp_path, body)
     assert catalog.load(tmp_path) == body
     program = '''
 from edgar_warehouse.mdm.evidence import KINDS, PROFILE_KINDS, assertion, validate_assertion
-from edgar_warehouse.mdm.activation import check_policy
-from edgar_warehouse.mdm.store import Conflict
 assert "invented-kind" in KINDS
 assert PROFILE_KINDS["invented-profile"] == {"invented-kind"}
 body = assertion(source_code="invented-source", record_key="invented-key", publication_key="invented-delivery",
                  revision=1, effective_at=None, kind="invented-kind", fields={})
 validate_assertion(body)
-bar = {"method":"wilson_lower_bound", "min_precision":0.97,"one_sided_confidence":0.975}
-check_policy({"kinds":{"invented-kind":{"bars":{"classification":bar}}}})
-try:
-    check_policy({"kinds":{"invented-kind":{"bars":{"classification":{**bar,"min_precision":0.96}}}}})
-except Conflict:
-    pass
-else:
-    raise AssertionError("Configured approval floor was lowered")
 '''
     result = subprocess.run([sys.executable, "-c", program], env={**os.environ, "EDGAR_RULES_ROOT": str(tmp_path)},
                             capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
 
 
-@pytest.mark.parametrize("change", ["duplicate_kind", "unknown_profile_kind", "unknown_bar_kind", "bad_floor"])
+@pytest.mark.parametrize("change", ["duplicate_kind", "unknown_profile_kind"])
 def test_invalid_catalog_is_refused(tmp_path, change):
     body = copy.deepcopy(catalog.CATALOG)
     if change == "duplicate_kind": body["kinds"].append(body["kinds"][0])
-    elif change == "unknown_profile_kind": body["profiles"]["invented"] = ["absent-kind"]
-    elif change == "unknown_bar_kind": body["accepted_bars"]["absent-kind"] = {}
-    else: body["accepted_bars"][body["kinds"][0]] = {"classification": {"min_precision": 1, "one_sided_confidence": 0.95}}
+    else: body["profiles"]["invented"] = ["absent-kind"]
     write(tmp_path, body)
     with pytest.raises(ValueError): catalog.load(tmp_path)
 

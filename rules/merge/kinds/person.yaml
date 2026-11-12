@@ -1,9 +1,5 @@
-# Person merge rules (a new kind, person feed 1, 2026-10-01). Source: the SEC
-# submissions document of each filer, read for Person. Both rules below are switched
-# on in policy.yaml by the operator (2026-10-01: sec-person-candidate 09:39 ET,
-# person-cik 17:12 ET, each "Approved"). The classification rule's proof (in
-# policy.yaml and pending-proofs.yaml) is tied to this exact version, so any edit
-# to its steps or lists is a new version that must be measured again.
+# Person merge rules. Source: the SEC submissions document of each filer, read for Person.
+# An edit to a rule's steps or lists is a new version, listed anew in policy.yaml.
 version: person-2026-10-25.one-value-per-identifier
 defaults:
   sources:
@@ -105,9 +101,7 @@ rules:
   - step: "4"
     verdict: deferred
     otherwise: true
-# Tier A: the issued CIK, shaped like company-cik. Activates on its Identifier
-# Contract, verified on the Proving Run's cohort and approved by the operator
-# (2026-10-01 17:12 ET, "Approved"; see identifiers.cik.verification).
+# Tier A: the issued CIK, shaped like company-cik. Rests on its Identifier Contract.
 - rule_id: person-cik
   version: "2026-09-30"
   family: binding
@@ -128,9 +122,7 @@ rules:
 # it, and a person only when the filing names the owner a director or officer
 # (operator, 2026-10-13, "Persons by role first (Recommended)"). A Form 4 states no
 # entity type and none of the structural fields, so steps 1 and the structural test
-# have nothing to read; the role is the evidence instead. Measured on the local
-# ownership copies against sec-person-candidate on each owner's own submissions
-# document (all-76230): see pending-proofs.yaml.
+# have nothing to read; the role is the evidence instead.
 - rule_id: sec-ownership-person
   version: 2026-10-13.1
   family: classification
@@ -235,9 +227,8 @@ rules:
   - step: "4"
     verdict: deferred
     otherwise: true
-# The owner's issued CIK, as person-cik: one CIK, one Person. Activates on the CIK
-# Identifier Contract once its sources list this one and the operator approves it on
-# the Proving Run's cohort.
+# The owner's issued CIK, as person-cik: one CIK, one Person. Rests on the CIK
+# Identifier Contract, whose sources list this one.
 - rule_id: sec-ownership-person-cik
   version: 2026-10-13.1
   family: binding
@@ -449,24 +440,3 @@ identifiers:
     compatibility:
       field: kind
       predicate: kind_equal@1
-    verification:
-      # Re-verified when sec.ownership.reporting_owner.v1 joined the sources (ticket 01).
-      # The first verification: person feed 1, cohort-10000.json (cc9364f2...2dd3),
-      # operator 2026-10-01T21:12:53Z, "Approved".
-      corpus_sha256: e8df7616ce019967ceec9963328f578b4942228f4e5a6683ed3d2f7f10a71f2a
-      approved_by: operator
-      approved_at: "2026-10-14T16:26:29Z"
-      reason: "SEC ownership Proving Run (.scratch/onboarding/sec.ownership/proving-run.json),
-        approved in the operator's words: Approve both (Recommended). 8,723 filings and
-        1,706 issuers: 4,820 Persons by their CIK, 0 CIKs on two Persons, 0 CIKs both a
-        Person and a Company, a second pass changed nothing"
-    tolerance:
-      unit: items
-      warm_up_decisions: 10000
-      max_per_10k: 5
-# The accepted Person classification bar (activation.ACCEPTED_BARS; consumer.md).
-bars:
-  classification:
-    min_precision: 0.99
-    method: wilson_lower_bound
-    one_sided_confidence: 0.975

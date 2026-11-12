@@ -1,61 +1,28 @@
-"""Which rules a Mastering Policy may hold, and which verdicts may act alone.
+"""Which rules a Mastering Policy may hold, and which verdicts act alone.
 
 A rule in a policy is **declared**: it fires and its result goes to a Steward.
-An `automatic_rules` entry makes one of its verdicts **active**: the Merge
-Stage acts on it alone. Activation is per `(rule_id, rule_version, verdict)`,
-never per rule (`policy-language.md` §9).
+An `automatic_rules` entry switches one of its verdicts **on**: the Merge
+Stage acts on it alone. An entry names `(kind, family, rule_id, rule_version,
+verdict)` and nothing else: listed is on.
 
-This replaces the blanket refusal of every `automatic_rules` body. A body is
-refused, by name and with its reason, unless every rule is well formed (§10)
-and every activation carries a proof whose arithmetic holds against its kind's
-accepted bar (§9.2). The check runs at registration and again per batch, so a
-body that reached the store some other way is refused the same way.
-
-**It verifies arithmetic, not truth.** A fabricated `n: 3000, correct: 3000`
-passes. The defences are attribution — the proof travels inside the pinned
-body, next to the rule — and a re-score of the named files outside the Merge
-Stage (§9.2).
-
-Binding rules are identifier-only (company mastering ticket 04) and activate
-`deterministic`ally on a verified Identifier Contract (§9.3); fuzzy binding
-has its own statistical gate (ticket 08).
+`check_policy` refuses a body, by name and with its reason, unless every rule
+is well formed and every entry names a rule version and verdict the policy
+holds. An identifier matching rule that is on needs a complete Identifier
+Contract for its namespace.
 """
 
 from __future__ import annotations
 
-import math
 import re
 from collections.abc import Iterable
-from statistics import NormalDist
 
 from .classification import check_rule
-from .evidence import KINDS
 from .primitives import NORMALIZERS, primitive_family
 from .store import Conflict, canonical
 
-# Approval floors are configuration shipped with the engine, separate from a
-# document's own requested bar. A declared bar may raise a floor, never lower it.
 from .catalog import CATALOG, assert_current
-ACCEPTED_BARS = {(kind, family): bar for kind, families in CATALOG["accepted_bars"].items()
-                 for family, bar in families.items()}
 
-METHOD = "wilson_lower_bound"
-# A stated lower bound reproduces when it is no higher than the recomputed one
-# and within this of it: a bound written to five decimals, as the spec's own
-# example is (0.99545 for 0.9954530), passes; a bound rounded *up* never does,
-# because the bar is judged on the recomputed value, not the stated one.
-TOLERANCE = 1e-5
-
-
-def wilson_lower_bound(correct: int, n: int, confidence: float) -> float:
-    """One-sided Wilson score lower bound on a proportion."""
-    if type(n) is not int or type(correct) is not int or not 0 <= correct <= n or n < 1:
-        raise Conflict(f"Proof sample is invalid: {correct} correct of {n}")
-    z = NormalDist().inv_cdf(confidence)
-    p = correct / n
-    centre = p + z * z / (2 * n)
-    spread = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))
-    return (centre - spread) / (1 + z * z / n)
+ENTRY = frozenset({"kind", "family", "rule_id", "rule_version", "verdict"})
 
 
 def _rules(body: dict) -> Iterable[tuple[str, dict]]:
@@ -65,12 +32,9 @@ def _rules(body: dict) -> Iterable[tuple[str, dict]]:
 
 
 def check_policy(body: dict) -> None:
-    """Refuse a body whose rules or activations do not hold (§9.2, §10)."""
+    """Refuse a body whose rules or `automatic_rules` entries do not hold."""
     assert_current()
     kinds = body.get("kinds") or {}
-    for kind, block in sorted(kinds.items()):
-        for family, bar in sorted((block.get("bars") or {}).items()):
-            _check_bar(kind, family, bar)
     if "relationships" in body:
         from .relationships import types_of
 
@@ -111,17 +75,17 @@ def check_policy(body: dict) -> None:
             entry.get("verdict"),
         )
         if key in active:
-            raise Conflict(f"Verdict {key} is activated twice")
+            raise Conflict(f"Verdict {key} is listed twice")
         active.add(key)
-        _check_activation(kinds, entry)
+        _check_entry(kinds, entry)
 
 
 def _check_shared_namespaces(kinds: dict) -> None:
     """Kinds that each declare a namespace share its values: the Merge Stage
     looks one up across every kind's issuers (platform validation 05a). So
     their contracts must name one authority and one normalizer, or one value
-    could read as two. Each kind keeps its own sources, claim, compatibility
-    and verification: those are checked per kind when its rule activates."""
+    could read as two. Each kind keeps its own sources, claim and compatibility:
+    those are checked per kind when its rule is on."""
     found: dict[str, tuple[str, tuple]] = {}
     for kind, block in sorted(kinds.items()):
         for namespace, contract in sorted((block.get("identifiers") or {}).items()):
@@ -135,44 +99,25 @@ def _check_shared_namespaces(kinds: dict) -> None:
                 )
 
 
-def _check_bar(kind: str, family: str, bar: dict) -> None:
-    accepted = ACCEPTED_BARS.get((kind, family))
-    if accepted is None:
+def _check_entry(kinds: dict, entry: dict) -> None:
+    """A listed verdict is on. The entry names a rule version and verdict the
+    policy holds; an identifier matching rule also needs its namespace's
+    Identifier Contract complete, since a wrong contract is how it goes wrong."""
+    if set(entry) != ENTRY:
         raise Conflict(
-            f"{kind}/{family} has no accepted bar, so a document may declare none"
-        )
-    if bar.get("method") != METHOD:
-        raise Conflict(f"Bar for {kind}/{family} names an unsupported method")
-    for name in ("min_precision", "one_sided_confidence"):
-        if not isinstance(bar.get(name), (int, float)) or bar[name] < accepted[name]:
-            raise Conflict(
-                f"Bar for {kind}/{family} sets {name} {bar.get(name)}, below the "
-                f"accepted {accepted[name]}"
-            )
-
-
-def _check_activation(kinds: dict, entry: dict) -> None:
-    """One shared resolution, then the check its activation kind names.
-
-    Resolution is what every activation needs: the kind, the rule, its exact
-    version and a verdict it emits. What proves an activation differs:
-    a measured proof against a bar (§9.2), or a verified Identifier Contract
-    (§9.3). Kept as one table so a third way is one entry, not a branch.
-    """
-    how = entry.get("activation")
-    if how not in ACTIVATIONS:
-        raise Conflict(
-            f"Activation of {entry.get('rule_id')}: {how} activation is not a "
-            "supported kind of activation"
-        )
-    families, check = ACTIVATIONS[how]
-    if entry.get("family") not in families:
-        raise Conflict(
-            f"Activation of {entry.get('rule_id')}: {how} activation applies to "
-            f"{' and '.join(sorted(families))} rules, not {entry.get('family')}"
+            f"An automatic_rules entry for {entry.get('rule_id')} names exactly "
+            f"{sorted(ENTRY)}: {sorted(set(entry) ^ ENTRY)}"
         )
     block, rule = _resolve(kinds, entry)
-    check(entry["kind"], block, rule, entry)
+    if rule.get("family") == "binding":
+        for namespace in binding_namespaces(rule):
+            contract = (block.get("identifiers") or {}).get(namespace)
+            if not contract:
+                raise Conflict(
+                    f"Rule {rule['rule_id']} is on, but namespace {namespace} has no "
+                    "Identifier Contract"
+                )
+            _check_contract(namespace, contract)
 
 
 def _resolve(kinds: dict, entry: dict) -> tuple[dict, dict]:
@@ -182,124 +127,35 @@ def _resolve(kinds: dict, entry: dict) -> tuple[dict, dict]:
         entry.get("verdict"),
     )
     if kind not in kinds:
-        raise Conflict(f"Activation names kind {kind}, which the policy does not hold")
+        raise Conflict(f"automatic_rules names kind {kind}, which the policy does not hold")
     block = kinds[kind]
     rules = [r for r in block.get("rules") or [] if r.get("rule_id") == rule_id]
     if not rules:
-        raise Conflict(f"Activation names rule {rule_id}, which is absent from {kind}")
+        raise Conflict(f"automatic_rules names rule {rule_id}, which is absent from {kind}")
     rule = rules[0]
     if rule.get("family") != entry.get("family"):
         raise Conflict(
-            f"Activation names {rule_id} as {entry.get('family')}, but it is a "
+            f"automatic_rules names {rule_id} as {entry.get('family')}, but it is a "
             f"{rule.get('family')} rule"
         )
     if rule.get("version") != entry.get("rule_version"):
-        # A rule edited after its proof is orphaned, never re-proved by default.
+        # An edited rule is a new version; the entry names the one that is on.
         raise Conflict(
-            f"Activation names {rule_id} version {entry.get('rule_version')}, but "
+            f"automatic_rules names {rule_id} version {entry.get('rule_version')}, but "
             f"the policy holds version {rule.get('version')}"
         )
     if verdict not in (rule.get("emits") or ()):
         raise Conflict(
-            f"Activation names verdict {verdict}, which {rule_id} does not emit"
+            f"automatic_rules names verdict {verdict}, which {rule_id} does not emit"
         )
     return block, rule
-
-
-# What a measured verdict may be, per family: a classification decides a
-# kind; a name binding joins a record to a Company (ticket 08).
-MEASURED_VERDICTS = {"classification": KINDS, "name_binding": frozenset({"bind"})}
-
-
-def _check_measured(kind: str, block: dict, rule: dict, entry: dict) -> None:
-    family, verdict = entry["family"], entry["verdict"]
-    if verdict not in MEASURED_VERDICTS[family]:
-        raise Conflict(
-            f"Activation names verdict {verdict}, which a {family} rule cannot "
-            "prove by measurement"
-        )
-    bar = (block.get("bars") or {}).get(family)
-    if bar is None:
-        raise Conflict(
-            f"Kind {kind} has no bar for {family}, so nothing there activates"
-        )
-    # The bar holds for each rule step that emits the verdict, not only for
-    # their pooled sample: a failing step must not hide behind a passing one
-    # (`company-policy.md`, Confidence bands).
-    steps = [s["step"] for s in rule.get("steps") or [] if s.get("verdict") == verdict]
-    _check_proof(kind, bar, entry.get("proof") or {}, steps)
-
-
-def _check_deterministic(kind: str, block: dict, rule: dict, entry: dict) -> None:
-    """§9.3: an identifier-only rule activates on its verified contracts.
-
-    It has no precision to measure; its failure mode is a wrong Identifier
-    Contract. So every namespace it names must have a complete one.
-    """
-    for namespace in binding_namespaces(rule):
-        contract = (block.get("identifiers") or {}).get(namespace)
-        if not contract:
-            raise Conflict(
-                f"Activation of {rule['rule_id']}: namespace {namespace} has no "
-                "Identifier Contract"
-            )
-        _check_contract(namespace, contract)
-
-
-def _check_sample(kind: str, what: str, sample: dict, bar: dict) -> None:
-    """A stated lower bound reproduces from its own sample and clears the bar."""
-    recomputed = wilson_lower_bound(
-        sample.get("correct"), sample.get("n"), bar["one_sided_confidence"]
-    )
-    stated = sample.get("lower_bound")
-    if (
-        not isinstance(stated, (int, float))
-        or stated > recomputed
-        or recomputed - stated > TOLERANCE
-    ):
-        raise Conflict(
-            f"{what} lower bound {stated} does not reproduce from its sample "
-            f"({recomputed:.6f})"
-        )
-    if recomputed < bar["min_precision"]:
-        raise Conflict(
-            f"{what} lower bound {recomputed:.6f} is below the {kind} bar "
-            f"{bar['min_precision']}"
-        )
-
-
-def _check_proof(kind: str, bar: dict, proof: dict, steps: list[str]) -> None:
-    if proof.get("method") != bar["method"]:
-        raise Conflict(
-            f"Proof method {proof.get('method')} is not the bar's {bar['method']}"
-        )
-    if proof.get("one_sided_confidence") != bar["one_sided_confidence"]:
-        raise Conflict(
-            f"Proof confidence {proof.get('one_sided_confidence')} is not the bar's "
-            f"{bar['one_sided_confidence']}"
-        )
-    _check_sample(kind, "Proof", proof, bar)
-    by_step = (proof.get("cohort") or {}).get("by_step") or {}
-    for step in steps:
-        if step not in by_step:
-            raise Conflict(f"Proof has no sample of its own for step {step}")
-        _check_sample(kind, f"Proof step {step}", by_step[step], bar)
-    adversarial = proof.get("adversarial") or {}
-    if adversarial.get("violations") != 0 or not adversarial.get("fixture_sha256"):
-        raise Conflict(
-            "Proof has adversarial violations or names no adversarial fixture"
-        )
-    if not (proof.get("cohort") or {}).get("files"):
-        raise Conflict("Proof cohort names no files")
-    if not all(proof.get(k) for k in ("approved_by", "approved_at", "reason")):
-        raise Conflict("Proof lacks its approval: approved_by, approved_at and reason")
 
 
 def activated(body: dict, kind: str, rule: dict, verdict: str) -> bool:
     """Whether this exact rule version's verdict may act without a Steward.
 
     Trusts `check_policy` to have refused a body whose entry does not hold; it
-    only finds the entry. A rule edited after its proof matches none.
+    only finds the entry. An edited rule (a new version) matches none.
     """
     return any(
         isinstance(entry, dict)
@@ -510,20 +366,6 @@ def _check_contract(namespace: str, contract: dict) -> None:
         or compatibility.get("predicate") not in COMPATIBILITY
     ):
         raise Conflict(f"{where} states no compatibility check")
-    verification = contract.get("verification") or {}
-    if not (
-        isinstance(verification.get("corpus_sha256"), str)
-        and len(verification["corpus_sha256"]) == 64
-        and all(verification.get(k) for k in ("approved_by", "approved_at", "reason"))
-    ):
-        raise Conflict(f"{where} is not verified: corpus hash and approval required")
-    tolerance = contract.get("tolerance") or {}
-    if not (
-        tolerance.get("unit")
-        and type(tolerance.get("warm_up_decisions")) is int
-        and isinstance(tolerance.get("max_per_10k"), (int, float))
-    ):
-        raise Conflict(f"{where} has an incomplete tolerance block")
 
 
 # The tests a name-binding rule must call: never the name alone (§10 check 5,
@@ -573,7 +415,7 @@ def _check_cascade_pass(rule_id: str, rule: dict, tests: list) -> None:
     """One pass of the cascade (ticket 21). It rests on the name count's answer,
     one to one over both whole sources, not on a Stage's scope; the pass
     states which address parts it compares, down to the name alone, as the
-    operator ruled (2026-09-27), and each pass is proven on its own."""
+    operator ruled (2026-09-27)."""
     from .cascade import CONFLICT, NOT_UNIQUE, PARTS
 
     if tests.count("cascade_pass@1") != 1:
@@ -623,33 +465,9 @@ def check_exact_name_rule(kind: str, rule: dict, kinds: dict) -> None:
         raise Conflict(f"Exact-name rule {rule_id} rests on one of the ids {sorted(EXACT_NAME_KEYS)} and no other test")
 
 
-def _check_exact_name(kind: str, block: dict, rule: dict, entry: dict) -> None:
-    """The limited test's counts, stated: a name is not an identifier, so there is no
-    contract to verify; what is shown is how the rule behaved on real names."""
-    proof = entry.get("proof") or {}
-    counts = ("names", "attached", "review", "waiting")
-    created = proof.get("created", 0)
-    if (entry.get("verdict") != "bind"
-            or not all(type(proof.get(c)) is int and proof[c] >= 0 for c in counts)
-            or type(created) is not int or created < 0
-            or proof["names"] != proof["attached"] + proof["review"] + proof["waiting"] + created
-            or proof["attached"] + created < 1 or proof.get("second_pass_changed_nothing") is not True
-            or not all(proof.get(k) for k in ("approved_by", "approved_at", "reason"))):
-        raise Conflict(
-            f"Activation of {rule['rule_id']} needs its limited test: names = attached + review + "
-            "waiting + created (at least one attached or created), a second pass that changed nothing, and its approval")
-
-
 RULE_CHECKS = {
     "classification": _check_classification_rule,
     "binding": check_binding_rule,
     "name_binding": check_name_binding_rule,
     "exact_name_binding": check_exact_name_rule,
-}
-# Which rule families each kind of activation may prove. Sets, so ticket 08's
-# measured (fuzzy) binding is one more member, not a reshaped table.
-ACTIVATIONS = {
-    "measured": (frozenset({"classification", "name_binding"}), _check_measured),
-    "deterministic": (frozenset({"binding"}), _check_deterministic),
-    "exact_name": (frozenset({"exact_name_binding"}), _check_exact_name),
 }

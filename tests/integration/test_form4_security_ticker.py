@@ -28,9 +28,6 @@ ONE, TWO, THREE = "ZZ0000013", "ZZ0000021", "ZZ0000039"  # invented CUSIPs, chec
 def policy_body() -> dict:
     body = policy_layers.with_rules_on(
         files.policy(), "security", "openfigi-security-cusip", "form4-security-ticker")
-    body["kinds"]["security"]["identifiers"]["ticker"]["verification"] = {
-        "corpus_sha256": "f" * 64, "approved_by": "fixture", "approved_at": "2026-11-04T00:00:00Z",
-        "reason": "fixture verification: shape only, not a measurement"}
     return body
 
 

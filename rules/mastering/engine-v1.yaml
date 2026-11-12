@@ -40,19 +40,6 @@ profiles:
   fund:
   - company
   - fund_structure
-accepted_bars:
-  company:
-    classification:
-      min_precision: 0.95
-      one_sided_confidence: 0.95
-    name_binding:
-      min_precision: 0.95
-      one_sided_confidence: 0.95
-  person:
-    classification:
-      min_precision: 0.99
-      one_sided_confidence: 0.975
-
 reference_tables:
   edgar-iso-v1:
     pin: sec-place-codes

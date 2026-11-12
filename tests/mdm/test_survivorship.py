@@ -428,7 +428,6 @@ class TestWhatTheKindDigestCovers:
                     {"rule_id": "C-J", "family": "classification", "version": "1"},
                     {"rule_id": "company-lei", "family": "binding", "version": "1"},
                 ],
-                bars={"min_precision": 0.999},
                 projection={"fields": ["legal_name"]},
             )
         )

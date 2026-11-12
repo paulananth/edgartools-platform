@@ -256,9 +256,8 @@ def register_policy(conn: Connection, body: dict) -> str:
     """Migration/governance owner only; runtime has no INSERT privilege.
 
     A body is refused, by name and with its reason, unless every rule in it is
-    well formed and every activation carries a proof that holds against its
-    kind's accepted bar (`activation.check_policy`). That replaces the blanket
-    refusal of any `automatic_rules`; an unimplemented family is still refused.
+    well formed and every `automatic_rules` entry names a rule version it holds
+    (`activation.check_policy`).
     """
     from .activation import check_policy, rule_version_conflicts
 

@@ -4,9 +4,7 @@
 # (operator, 2026-10-14): "CUSIP and ISIN join" (one CUSIP is one Security;
 # FIGI, ticker and SEDOL are lookup only); "Securities only, options aside";
 # "A" (the Security carries the issuer name and class title as filed).
-# Switched on (operator, 2026-10-15 06:27 ET, in their words: "merge 985 when green agreed for the rest"):
-# the matching rule activates on its Identifier Contract, verified on the
-# Proving Run's cohort (rules/merge/policy.yaml, automatic_rules).
+# The matching rule is on (rules/merge/policy.yaml, automatic_rules) and rests on its Identifier Contract.
 version: security-2026-11-02.thirteenf-source-is-securities
 defaults:
   # The first listed wins each field. Operator, 2026-10-18 (ticket 84): "make
@@ -162,7 +160,7 @@ rules:
   on_no_match: mint
   when:
   # Only a record keyed by it: a SEDOL filed beside a CUSIP or an ISIN is stored, never matched,
-  # since funds file one SEDOL on several Securities (2026 Q2: see the contract's verification).
+  # since funds file one SEDOL on several Securities.
   - primitive: field_in_set@1
     args:
       field: provenance.matching.key_class
@@ -184,7 +182,7 @@ rules:
   on_no_match: mint
   when:
   # Only a record keyed by it: a LOANX filed beside a CUSIP or an ISIN is stored, never matched,
-  # since funds file one LOANX on several Securities (2026 Q2: see the contract's verification).
+  # since funds file one LOANX on several Securities.
   - primitive: field_in_set@1
     args:
       field: provenance.matching.key_class
@@ -401,19 +399,6 @@ identifiers:
     compatibility:
       field: kind
       predicate: kind_equal@1
-    # Re-verified with N-PORT among its sources (ticket 79, operator 2026-10-17
-    # 21:03 ET): the part 1 Proving Run, which read 13F first, then N-PORT
-    # (.scratch/onboarding/sec.nport/proving-run.json). It was verified before on
-    # the SEC 13F Proving Run (52cb4469...fc80).
-    verification:
-      corpus_sha256: 0832f611736430d882303bd2417244572c1488a4fe95d2de92915591120878ae
-      approved_by: operator
-      approved_at: "2026-10-18T01:03:32Z"
-      reason: "ticket 79 part 1, N-PORT 2026q2 Security Proving Run with 13F first, approved in the operator's words: Switch on all six (Recommended). 423,562 Securities, 393,645 CUSIPs and 380,790 ISINs held, 0 on two Securities, a second pass changed nothing"
-    tolerance:
-      unit: items
-      warm_up_decisions: 10000
-      max_per_10k: 5
   isin:
     authority: ISIN (ISO 6166), issued by each country's numbering agency
     sources:
@@ -428,21 +413,11 @@ identifiers:
     compatibility:
       field: kind
       predicate: kind_equal@1
-    # The part 1 Proving Run (.scratch/onboarding/sec.nport/proving-run.json).
-    verification:
-      corpus_sha256: 0832f611736430d882303bd2417244572c1488a4fe95d2de92915591120878ae
-      approved_by: operator
-      approved_at: "2026-10-18T01:03:32Z"
-      reason: "ticket 79 part 1, N-PORT 2026q2 Security Proving Run with 13F first, approved in the operator's words: Switch on all six (Recommended). 423,562 Securities, 393,645 CUSIPs and 380,790 ISINs held, 0 on two Securities, a second pass changed nothing"
-    tolerance:
-      unit: items
-      warm_up_decisions: 10000
-      max_per_10k: 5
   # A SEDOL and a LoanX (ticket 125; operator, 2026-10-20: "SEDOL, CINS, LoanX
   # (Recommended)"): the fund's own "other identifier" rows told apart by their
   # label and shape. Each joins the Security its holding already keys by its CUSIP
   # or ISIN, and, with neither, key a Security (ticket 190: rules nport-security-sedol and
-  # nport-security-loanx, verified below on the limited test).
+  # nport-security-loanx).
   # An issuer may hold one SEDOL for several listings, so no reverse limit.
   sedol:
     authority: SEDOL (London Stock Exchange), the Stock Exchange Daily Official List
@@ -457,15 +432,6 @@ identifiers:
     compatibility:
       field: kind
       predicate: kind_equal@1
-    verification:
-      corpus_sha256: 0c2be443fafca180026149ddb1dfb7ca6f76f84f521a8c6ca74ca4077c6e2555
-      approved_by: operator
-      approved_at: "2026-11-04T14:34:50Z"
-      reason: "ticket 190 limited test (.scratch/rebuild-priorities/research/190_limited_test.json), approved under the operator's standing approval (2026-11-04: switch on for form 4 keep it standing approval for ticket 190 191). 2026 Q2 N-PORT: 1,122 Securities keyed by a SEDOL alone, of which 1,065 are also filed beside a CUSIP or an ISIN on another holding and so join an existing Security; of 26,081 SEDOLs filed on a keyed holding 1,590 sit on several Securities (at most 4), so the rule matches only a record keyed by it and one whose SEDOL several Securities hold goes to review. Published in a second batch after the CUSIP and ISIN records: 5 Securities, not 7 in one batch; a second pass changed nothing (tests/integration/test_nport_security_other_keys.py)"
-    tolerance:
-      unit: items
-      warm_up_decisions: 10000
-      max_per_10k: 5
   loanx:
     authority: LoanX, a loan-market data provider
     sources:
@@ -478,19 +444,9 @@ identifiers:
     compatibility:
       field: kind
       predicate: kind_equal@1
-    verification:
-      corpus_sha256: 0c2be443fafca180026149ddb1dfb7ca6f76f84f521a8c6ca74ca4077c6e2555
-      approved_by: operator
-      approved_at: "2026-11-04T14:34:50Z"
-      reason: "ticket 190 limited test (.scratch/rebuild-priorities/research/190_limited_test.json), approved under the operator's standing approval (2026-11-04: switch on for form 4 keep it standing approval for ticket 190 191). 2026 Q2 N-PORT: 2,238 Securities keyed by a LoanX alone, of which 202 are also filed beside a CUSIP or an ISIN on another holding and so join an existing Security; of 2,459 LoanX values filed on a keyed holding 204 sit on several Securities (at most 3), so the rule matches only a record keyed by it and one whose LoanX several Securities hold goes to review. Published in a second batch after the CUSIP and ISIN records; a second pass changed nothing (tests/integration/test_nport_security_other_keys.py)"
-    tolerance:
-      unit: items
-      warm_up_decisions: 10000
-      max_per_10k: 5
   # A listing's FIGI (ticket 138; operator, 2026-10-25): it matches like a
   # CUSIP or an ISIN, and only it shows two Securities are one. One Security
-  # holds a FIGI for each listing, so no reverse limit. Verified on ticket
-  # 138's limited test and switched on 2026-10-26 12:24 ET.
+  # holds a FIGI for each listing, so no reverse limit.
   figi:
     authority: FIGI (Object Management Group standard), issued by Bloomberg as its Registration Authority
     sources:
@@ -509,15 +465,6 @@ identifiers:
     compatibility:
       field: kind
       predicate: kind_equal@1
-    verification:
-      corpus_sha256: a1ac543735547058302a7c3f633fdc87aa21979d13198a0fb74dc962cf4b3175
-      approved_by: operator
-      approved_at: "2026-10-26T16:24:52Z"
-      reason: "ticket 138 limited test (.scratch/rebuild-priorities/research/138_switch_on_limited_test.json), approved in the operator's words: Do limited testing and switch on. 30 OpenFIGI CUSIP answer files and the 40 ISIN files sharing their FIGIs, with N-PORT's 3,000 CUSIPs: in both load orders 4,250 Securities, the same records each, 1 merge by a shared FIGI, 0 identifiers on two Securities, 0 open reviews, a second pass changed nothing"
-    tolerance:
-      unit: items
-      warm_up_decisions: 10000
-      max_per_10k: 5
   # A share class FIGI (ticket 206; operator, 2026-11-10: "step 3 agreed"): one value for every listing of a share
   # class in the world. It finds the Security that holds it, never merges two, and a Security that holds another
   # CUSIP or ISIN than the record states is a conflict for a data steward (`conflicts_with`).
@@ -535,15 +482,6 @@ identifiers:
     compatibility:
       field: kind
       predicate: kind_equal@1
-    verification:
-      corpus_sha256: 2c696d2f2d469bb915c42561fb9dad1751255298728de35947a498c50e48d377
-      approved_by: operator
-      approved_at: "2026-11-10T12:10:00Z"
-      reason: "ticket 206 limited test (.scratch/rebuild-priorities/research/206_share_class_limited_test.json), approved under the operator's standing approval (2026-10-15: \"Approved the rules always\") and his ruling \"step 3 agreed\" (2026-11-10). The 72 stored OpenFIGI records of the 25 share class values two Securities held: 50 Securities became 25, the 8 pairs with no conflicting CUSIP or ISIN joined, the 17 with a conflict sent their other 27 records to review, none merged"
-    tolerance:
-      unit: items
-      warm_up_decisions: 10000
-      max_per_10k: 5
   # A CUSIP as filed (ticket 204; operator, 2026-11-10): the last-resort key of an N-PORT security whose CUSIP fails
   # its check digit and which states no other identifier. One Security per value; it never merges two.
   filed_cusip:
@@ -558,15 +496,6 @@ identifiers:
     compatibility:
       field: kind
       predicate: kind_equal@1
-    verification:
-      corpus_sha256: 31d9a237f3a180bd30a3d1b63fe359b4a979b8e797cd2ab6bd93b4f6744a713e
-      approved_by: operator
-      approved_at: "2026-11-10T19:00:00Z"
-      reason: "ticket 204 limited test (.scratch/rebuild-priorities/research/204_filed_cusip_limited_test.json), approved under the operator's standing approval (\"Approved the rules always\") and his ruling \"Yes, the simple key, no type mapping (Recommended)\" (2026-11-10). 1,033 real N-PORT securities set aside for a bad CUSIP: 591 have an ISIN and join by it, 442 create one Security each by the filed CUSIP, 0 join by a name match; derivative contracts stay set aside; the one 13F holding is keyed the same way (2026-11-10)"
-    tolerance:
-      unit: items
-      warm_up_decisions: 10000
-      max_per_10k: 5
   # A listing's trading symbol (ticket 24; operator, 2026-11-04, "Yes, Form 4 route only"):
   # OpenFIGI issues it, only the Form 4 rule matches by it, it never merges two
   # Securities. A ticker is reused over the years: a rule on it sends several
@@ -587,12 +516,3 @@ identifiers:
     compatibility:
       field: kind
       predicate: kind_equal@1
-    verification:
-      corpus_sha256: e2d24ec0ef62358c6df4149c8cc891bb40a14fe3f3d2fcbf98e537c0be62a4f1
-      approved_by: operator
-      approved_at: "2026-11-04T17:01:47Z"
-      reason: "ticket 24 limited test (.scratch/rebuild-priorities/research/24_limited_test.json), approved under the operator's standing approval (2026-11-04: switch on for form 4 keep it standing approval for ticket 190 191, and \"Yes, Form 4 route only\"). 2026 Q2 Form 4 filings (5,356, the real reading) against the OpenFIGI tickers: 1,882 issuer and symbol records, 1,419 bind to one Security, 330 wait because no Security holds the ticker, 96 go to review because the ticker reaches several Securities (at most 3), 37 file no symbol; none makes a Security; tests/integration/test_form4_security_ticker.py: the rule off fails 2 of 3, a second pass changes nothing"
-    tolerance:
-      unit: items
-      warm_up_decisions: 10000
-      max_per_10k: 5

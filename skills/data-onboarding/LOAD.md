@@ -54,13 +54,20 @@ seconds.
 
 ## A new matching rule
 
-A matching rule declared in a kind's file acts once it is listed under `automatic_rules` in
-`rules/merge/policy.yaml`. Until the proof bar is removed from the engine, the command that lists it also
-checks the rule's measured sample:
+A matching rule declared in a kind's file fires and sends its result to a Steward. It acts alone once
+`rules/merge/policy.yaml` lists it under `automatic_rules`:
 
-```bash
-edgar-warehouse rules approve --merge platform --rule <rule_id> --by <who> --words "<why it is on>"
+```yaml
+- kind: <kind>
+  family: <the rule's family>
+  rule_id: <rule_id>
+  rule_version: <the rule's version>
+  verdict: <a verdict it emits>
 ```
+
+Listed is on. An edited rule gets a new version, and the entry names it. An identifier matching rule also
+needs its namespace's Identifier Contract in the kind's file (authority, sources, normalizer, claim,
+compatibility). `rules check` refuses an entry that does not hold, with the reason.
 
 A new domain's order: the classification rule, then the identifier matching rule, then the source.
 

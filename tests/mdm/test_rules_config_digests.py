@@ -2,7 +2,7 @@
 
 Each digest below was taken from the Python and JSON copies before they moved
 (rules skill ticket 01, 2026-09-26). A digest that moves means MDM would
-register different rules: the live Company policy is `983352e8…4049`.
+register different rules.
 """
 
 from __future__ import annotations
@@ -16,21 +16,12 @@ import pytest
 from edgar_warehouse.mdm import sec_company, gleif_publication
 from edgar_warehouse.mdm.store import canonical, digest
 from edgar_warehouse.rules import files
-from tests.mdm import policy_layers
 from tests.support.company_fields import before_ticket_129
 
 BEFORE = {
-    "policy": "983352e81d295a165a1391e82fa8a24a710e6f638361a577f18f541917fd4049",
     "contract": "6d833bebb781a1a0c8e1f288ac53787be8fd1d6f9ce9a4d3d7294bf8b44907d3",
     "fields": "8674b4d197d012e09b0b9680fe28a208b8b0ab44aa688d1bee6ebd1e93a2af3a",
-    "proof": "7c46a44386fe307576685efdc81666188619a40c91c6150c2ba824c30aad155c",
-    "approved_activation": "bb2758761a014f5f7e9524ae5a3da261b5346527618467e843732ed86a10a0a8",
-    "name_proofs": "42e7b849964f64d17eaf35ae2e9f02c46ee8783501ac87e8206e65eb031be6ef",
-    "name_matching_active": "c21dc69cdf1f2004d28afdacc120ca086c46475621b3709dfcfdc3fad1a6d0fb",
 }
-# Company's policy layers and their digests, newest first, are in
-# `tests/mdm/policy_layers.py` (`LAYERS`, `PINNED`): one place for each.
-
 # Company mastering ticket 22 added each feed's quality rule to its contract,
 # with its exceptions listed as non-blocking: a new mapping version. Without
 # both the contract is the one above.
@@ -66,10 +57,6 @@ GLEIF_BEFORE = {
     "reporting_exceptions": "963caacea2c6360c9853652e53e6617660e8d7b8eaf3f5d9d2b947d55b0d963f",
 }
 
-
-# Company's part of the policy: a new kind does not move these pins
-# (platform validation 05a).
-COMPANY = policy_layers.company_part(sec_company.POLICY)
 
 SEC_READING_V7 = "5d9ed22b068f2387a851590e385a7fd4da3447f3fcbea92f73c9c0fba89d9be4"
 # Native mapped-value reading requires approval of new source digests. Removing
@@ -177,12 +164,6 @@ def _with_retired_lists(contract: dict, code: str) -> dict:
 
 
 def test_the_company_configuration_is_unchanged():
-    # The source rename gets a new policy version. Normalize only its identity
-    # and version to verify the historic approval lineage; the current digest
-    # remains new and requires its own review before activation.
-    assert policy_layers.digests(_restore_company_identity(COMPANY)) == policy_layers.PINNED
-    assert digest(COMPANY) != policy_layers.PINNED[-1]
-    assert policy_layers.PINNED[-1] == BEFORE["policy"]
     # Ticket 18 made the SEC reading v7 (a region only for a state or
     # province; each ticker once); with v6 the contract is the one before.
     company = _with_company_fields_back(sec_company.CONTRACT, sec_company.SOURCE_CODE)
@@ -196,21 +177,6 @@ def test_the_company_configuration_is_unchanged():
     assert _historic_digest(v6) == WITH_QUALITY["contract"]
     assert _historic_digest(_without_quality(v6)) == BEFORE["contract"]
     assert digest(RETIRED_LISTS[HISTORIC_SEC_CODE]["fields"]) == BEFORE["fields"]
-    # Phase 1 (ticket 204) replaced the rule's proof and activation; the lineage holds the ones before.
-    held = json.loads((Path(__file__).parent / "fixtures/company_classification_2026_09_25_13.json").read_text())
-    assert digest(held["entry"]["proof"]) == BEFORE["proof"]
-    assert digest(held["entry"]) == BEFORE["approved_activation"]
-    restored = policy_layers.without_name_census_retired(COMPANY)  # the two name rules, retired in ticket 202
-    assert digest(policy_layers.company_proofs(sec_company.NAME_PROOFS, restored)) == BEFORE["name_proofs"]
-    # Each switched-on name rule carries its measured proof, unchanged, with
-    # the operator's approval added.
-    for entry in restored["automatic_rules"]:
-        if entry["rule_id"] in policy_layers.NAME_RULES:
-            stamped = {"approved_by", "approved_at", "approved_words"}
-            measured = sec_company.NAME_PROOFS[entry["rule_id"]]
-            assert {k: v for k, v in entry["proof"].items() if k not in stamped} == {
-                k: v for k, v in measured.items() if k not in stamped}
-            assert (entry["proof"]["approved_by"], entry["proof"]["approved_words"]) == ("operator", "yes")
 
 
 # Company mastering ticket 18 listed an invalid LEI as non-blocking in each

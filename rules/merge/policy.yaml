@@ -1,7 +1,5 @@
-# The Company Mastering Policy (digest 3520e890…1e17): this envelope, one file
-# per kind in kinds/, and every table in ../reference/. A change to any of them
-# is a change to what MDM runs. Without the reference tables the digest is
-# 983352e8…4049, the one the operator approved on 2026-09-25.
+# The Mastering Policy: this envelope, one file per kind in kinds/, and every table in
+# ../reference/. A change to any of them is a change to what MDM runs.
 version: sec-company-local-v2
 # The relationship types MDM masters (ticket 132): the RDM code set pinned under
 # this name in reference-pins.yaml, read and checked by the Rust engine.
@@ -11,514 +9,181 @@ required_consumers:
 - journal
 - export
 - graph
-# Ticket 12, the Account hold-back (rule 2026-09-25.13): both Company steps clear
-# the 95% bar and the fresh adversarial fixture has no violation. The operator
-# approved the frozen inactive-policy digest
-# 31fdbef91859cd8f7423a827ae29156c190b013cff14cde184f3585a2c56f63f on 2026-09-25;
-# approved_at is when that reply was processed.
+# The rule verdicts that are on: the Merge Stage acts on each alone. A rule not listed here
+# is declared only, and its result goes to a Steward. An entry names the exact rule version.
 automatic_rules:
 - kind: company
   family: classification
   rule_id: sec-company-candidate
   rule_version: 2026-11-09.phase-1-listed-operating
   verdict: company
-  activation: measured
-  proof:
-    method: wilson_lower_bound
-    one_sided_confidence: 0.95
-    n: 523
-    correct: 523
-    lower_bound: 0.9948535002383295
-    adversarial:
-      fixture_sha256: ebe220479915a56f86f5c57edc2665f5ad6d40f55d112b7849899941beed49f1
-      n: 328
-      violations: 0
-    cohort:
-      by_step:
-        "8":
-          n: 523
-          correct: 523
-          lower_bound: 0.9948535002383295
-      files:
-        12-13-adversarial.jsonl: ebe220479915a56f86f5c57edc2665f5ad6d40f55d112b7849899941beed49f1
-        12-13-label.py: 3858117cf62df1de0d6adfac6cd348da5a36e4d9587bcf82b69f358a90ed9e12
-        12-13-sample.jsonl: d276df62557c30106d8f49c52f23c0ea72c4795c664e96983c7569f91dd6ad97
-        phase1-measure.py: 0622c18ec98c11de868cdf58585769c658fbe20afc4ad1c83cea4c218772de21
-    approved_by: operator
-    approved_at: "2026-11-09T22:08:58Z"
-    reason: 'phase 1, listed operating filers only ("For phase 1 master only publically traded companies (filter)",
-      "Operating and listed a real company"; standing words "Approved the rules always"): the 279 listed filers
-      of the ticket 12 hand-labelled draw of old step 8 plus the 244 listed operating filers the old shell and
-      fund tests held back, 523 of 523 Companies, 0 of 328 adversarial draws wrongly classed; the step 10 of
-      type other (foreign issuers) is out of phase 1'
-# Company mastering ticket 15, the CIK matching rule: activates on its verified
-# Identifier Contract (kinds/company.yaml, identifiers.cik), not a measured bar.
-# The operator approved the switched-off policy digest
-# 0d4d5cb0f190a4486c7cc65c7ba71b4dc173e3ce82eb2734261caea7c6c20702 on
-# 2026-09-29 07:27 ET; the contract carries that approval.
 - kind: company
   family: binding
   rule_id: company-cik
   rule_version: "2026-09-24"
   verdict: bind
-  activation: deterministic
-# sec-person-candidate: switched on by operator, 2026-10-01T13:39:16Z, in their words: Approved
 - kind: person
   family: classification
   rule_id: sec-person-candidate
   rule_version: 2026-09-30.1
   verdict: person
-  activation: measured
-  proof:
-    method: wilson_lower_bound
-    one_sided_confidence: 0.975
-    n: 570
-    correct: 570
-    lower_bound: 0.993305
-    adversarial:
-      fixture_sha256: 7ffa3ed524df553a1338c3f0bbd322339ccd35fbfc5476fa389f5b6ee2461509
-      n: 57
-      violations: 0
-    cohort:
-      receipts_sha256: 3aee020551b37090e638b4e73d24a0119cc59456548557c883d1c032b6d5c247
-      sec_filers: 76230
-      labels: 720
-      by_step:
-        "3":
-          n: 570
-          correct: 570
-          lower_bound: 0.993305
-      files:
-        fresh-sample.jsonl: 0b3f1427587dc237f378a1a387340734161f78ec8df473cb2e3cfde2f7a01865
-        fresh-sample-key.jsonl: eabb7af717dd3414748dbf610358db8a85965e763ca443e39055b3295ccc9a33
-        fresh-labels-draft.jsonl: abfdb134f2a52fab84a8dfd774662adc1c322824c9472215c583e8aed42e73c7
-        fresh-labels-draft-extension.jsonl: 6bf5e9b7169fdb237ced3e28574a42bd603f9f4f972e1bef9b1539924cf90cf1
-        operator-checks.jsonl: 96347a9cf15005884596abd3cfeab8e9cc76ad8d7e910d6af1874fd9d320c24e
-        draw_sample.py: 3bfce607c2984eb66b1aac8c40086fdba41394a7f3b1302a1c9f54068a85b26e
-        hard-cases-checked.jsonl: 7ffa3ed524df553a1338c3f0bbd322339ccd35fbfc5476fa389f5b6ee2461509
-        score_hard_cases.py: b37ee84465c6c5d6ea89248fce5d6f94bf8679373cb779f2d79abe11cf970ea7
-    approved_by: operator
-    approved_at: "2026-10-01T13:39:16Z"
-    reason: 'person feed 1, rule C-J ported to SEC submissions: fresh random draw, step 3
-      person 570/570, step 2 entity 102/102; 57 hard cases, 0 entities called a person'
-    approved_words: Approved
-# person-cik: switched on by operator, 2026-10-01T21:12:53Z, in their words: Approved.
-# The Person CIK matching rule activates on its verified Identifier Contract
-# (kinds/person.yaml, identifiers.cik), as company-cik does: the person feed 1
-# Proving Run cohort (cohort-10000.json, sha256 cc9364f2...2dd3).
 - kind: person
   family: binding
   rule_id: person-cik
   rule_version: "2026-09-30"
   verdict: bind
-  activation: deterministic
-# sec-ownership-person: switched on by operator, 2026-10-14T16:26:29Z, in their words: Approve both (Recommended)
 - kind: person
   family: classification
   rule_id: sec-ownership-person
   rule_version: 2026-10-13.1
   verdict: person
-  activation: measured
-  proof:
-    method: wilson_lower_bound
-    one_sided_confidence: 0.975
-    n: 4622
-    correct: 4622
-    lower_bound: 0.999169
-    adversarial:
-      fixture_sha256: 199091171595270af3002e3da642e8e7b9bb1c95f88f0423707c580b1c57f441
-      n: 363
-      violations: 0
-    cohort:
-      filings: 8723
-      by_step:
-        3-director:
-          n: 2488
-          correct: 2488
-          lower_bound: 0.998458
-        3-officer:
-          n: 2148
-          correct: 2148
-          lower_bound: 0.998214
-      unlabelled_sample:
-        population: 198
-        n: 50
-        correct: 50
-      files:
-        measure.json: 199091171595270af3002e3da642e8e7b9bb1c95f88f0423707c580b1c57f441
-        measure.py: c242834459f699f2b012c7a66d0cf9dcc34746a5f27a14136647a4e74ce31a58
-        sample-50.json: 868c81643e99707d9d03bf81d36a8225b4f40af1a37cae8ebd29f677ac20d6d7
-        proving-run.json: e8df7616ce019967ceec9963328f578b4942228f4e5a6683ed3d2f7f10a71f2a
-    approved_by: operator
-    approved_at: "2026-10-14T16:26:29Z"
-    reason: 'SEC ownership owner Proving Run (ticket 01): 4,622 of 4,622 owners labelled people
-      called people (director 2,488, officer 2,148); 0 of 363 owners labelled entities called
-      a person; 50 of 50 sampled owners with no submissions document checked as people; Proving
-      Run: 4,820 people by CIK, 0 CIKs on two people, 0 both person and Company, second pass
-      changed nothing'
-    approved_words: Approve both (Recommended)
-# sec-ownership-person-cik: switched on by operator, 2026-10-14T16:26:29Z, in their words: Approve both (Recommended).
-# It activates on the Person CIK Identifier Contract (kinds/person.yaml, identifiers.cik),
-# re-verified with the ownership feed among its sources on the SEC ownership Proving
-# Run (proving-run.json, sha256 e8df7616...1a2f).
 - kind: person
   family: binding
   rule_id: sec-ownership-person-cik
   rule_version: 2026-10-13.1
   verdict: bind
-  activation: deterministic
-# security-cusip: switched on by operator, 2026-10-15T10:27:01Z, in their words: merge 985 when green agreed for the rest.
-# It activates on the Security CUSIP Identifier Contract (kinds/security.yaml,
-# identifiers.cusip), verified on the SEC 13F Proving Run (sha256
-# 52cb4469...fc80), then re-verified with N-PORT among its sources (ticket 79,
-# sec.nport/proving-run.json, sha256 0832f611...78ae).
-# security-cusip 2026-10-27.1 ("13F CUSIP binds first") and
-# thirteenf-security-figi ("Filed FIGI finds its Security"): switched on by
-# operator, 2026-10-27 (recorded 13:56 ET), in their words: On, set aside put/call
-# (Recommended). A 13F CUSIP no Security holds joins the Security holding its
-# filed FIGI; a held CUSIP stays on its own Security; a FIGI filed only on put
-# or call rows is not read (sec.thirteenf.securities/source.yaml). The
-# FIGI rule activates on the verified FIGI Identifier Contract; the limited
-# test is .scratch/rebuild-priorities/research/138_13f_figi_limited_test.json.
 - kind: security
   family: binding
   rule_id: security-cusip
   rule_version: 2026-11-10.source-v2
   verdict: bind
-  activation: deterministic
 - kind: security
   family: binding
   rule_id: thirteenf-security-figi
   rule_version: 2026-11-10.source-v2
   verdict: bind
-  activation: deterministic
-# iapd-adv-crd, iapd-adv-custodian-lei, iapd-adv-custodian-bd: switched on by
-# operator, 2026-10-17 08:31 ET, in their words: Switch on all three
-# (Recommended). They activate on their verified Identifier Contracts
-# (kinds/company.yaml: crd, lei, bd_number), the ticket 76 run.
 - kind: company
   family: binding
   rule_id: iapd-adv-crd
   rule_version: 2026-11-08.filings-v2
   verdict: bind
-  activation: deterministic
-# iapd-adv-cik: on under the operator's 2026-11-08 word "Both" (the CIK join with the Schedule D 7.A
-# link), on the limited test of invented records (tests/integration/test_adv_cik_join.py): an adviser
-# joins the Company holding its CIK in either order, a filing listing two Companies' CIKs goes to
-# review and merges nothing, and a second pass changes nothing. The filings carry their CIKs under a
-# new dataset code (iapd.adv.filings.v2), so iapd-adv-crd and iapd-adv-custodian-name read it at
-# their "filings v2" versions; nothing else in them changes.
 - kind: company
   family: binding
   rule_id: iapd-adv-cik
   rule_version: 2026-11-08.adviser-cik-filings-v2
   verdict: bind
-  activation: deterministic
 - kind: company
   family: binding
   rule_id: iapd-adv-custodian-lei
   rule_version: 2026-10-09.1
   verdict: bind
-  activation: deterministic
 - kind: company
   family: binding
   rule_id: iapd-adv-custodian-bd
   rule_version: 2026-10-09.1
   verdict: bind
-  activation: deterministic
-# iapd-adv-custodian-name: switched on with the operator's words "Complete and then run and switch on"
-# (Form ADV, 2026-11-04) after the limited test on the real June 2026 custodian names, local files,
-# counts only: 274 names, 33 attached to the one Company holding the name, 5 sent to review (several
-# Companies hold it), 236 waiting (none holds it), no Company created, a second pass changed nothing.
 - kind: company
   family: exact_name_binding
   rule_id: iapd-adv-custodian-name
   rule_version: 2026-11-08.filings-v2
   verdict: bind
-  activation: exact_name
-  proof:
-    names: 274
-    attached: 33
-    review: 5
-    waiting: 236
-    second_pass_changed_nothing: true
-    approved_by: operator
-    approved_at: '2026-11-04T17:52:00-05:00'
-    reason: 'Complete and then run and switch on (Form ADV); exact name only (Agreed); limited test on the real June 2026 names'
-# iapd-adv-custodian-name-form and iapd-adv-custodian-name-place (operator, 2026-11-09: "master using name and company
-# type if company type does not exist provide me option", then "Name plus place (Recommended)", "2 yes"; the strict
-# legal-form list accepted; standing words "Approved the rules always"): a custodian named only by its name creates its
-# Company, by the name when it ends in a legal form and by the name with its city, state and country when it does not.
 - kind: company
   family: exact_name_binding
   rule_id: iapd-adv-custodian-name-form
   rule_version: 2026-11-09.1
   verdict: bind
-  activation: exact_name
-  proof:
-    names: 477
-    attached: 102
-    review: 9
-    waiting: 10
-    created: 356
-    second_pass_changed_nothing: true
-    approved_by: operator
-    approved_at: '2026-11-09T23:22:22Z'
-    reason: 'Custodians named only by name create their Company by name when it ends in a legal form; limited test on the real Form ADV custodian files of March and June 2026 (custodians alone, in a throwaway PostgreSQL): 477 names, 102 attached to a Company the custodian source already made, 9 to review, 10 waiting, 356 created, second pass unchanged'
 - kind: company
   family: exact_name_binding
   rule_id: iapd-adv-custodian-name-place
   rule_version: 2026-11-09.1
   verdict: bind
-  activation: exact_name
-  proof:
-    names: 724
-    attached: 43
-    review: 1
-    waiting: 6
-    created: 674
-    second_pass_changed_nothing: true
-    approved_by: operator
-    approved_at: '2026-11-09T23:22:22Z'
-    reason: 'Custodians named only by name with no legal form create their Company by name and place; limited test on the real Form ADV custodian files of March and June 2026 (custodians alone, in a throwaway PostgreSQL): 724 names, 43 attached to a Company the custodian source already made, 1 to review, 6 waiting, 674 created, second pass unchanged'
-# openfigi-security-cusip, openfigi-isin-security-cusip, openfigi-security-isin
-# (version 2026-10-23.1, ticket 120, OpenFIGI first; operator, 2026-10-23:
-# "make the seurities run should process openfigi first", "agreed"): OpenFIGI's
-# CUSIP and ISIN answers create Securities, and an ISIN answer joins its
-# CUSIP's Security by their shared FIGI. Switched on 2026-10-24 19:27 ET,
-# in their words "switch on ticket 120", on the completed figi-full proof
-# (no second run: 0 identifiers on two Securities). The earlier versions
-# (2026-10-17.1, joining or waiting only) were switched on 2026-10-17 13:12 ET
-# ("Switch on CUSIP rule (Recommended)") and 2026-10-18 13:22 ET ("Switch it on
-# (Recommended)"), on ticket 80's Proving Run.
-# nport-security-cusip, nport-security-isin, nport-isin-security-isin,
-# nport-registrant-cik, nport-fund-series, nport-fund-lei: switched on by operator,
-# 2026-10-17 21:03 ET, in their words: Switch on all six (Recommended). Ticket 120
-# (operator, 2026-10-20: "One master record"): the two Security rules read
-# sec.nport.security.v2 (version 2026-10-20.1), and nport-isin-security-isin is
-# retired with sec.nport.security_isin.v1. They
-# activate on their verified Identifier Contracts: the Security's cusip and isin
-# (kinds/security.yaml, the part 1 Proving Run), the Company's cik
-# (kinds/company.yaml, the registrant Proving Run) and the Fund's sec_series_id
-# and lei (kinds/fund_structure.yaml, the Fund Proving Run), ticket 79.
-# nport-security-cusip and nport-security-isin 2026-10-20.1: their switch-ons
-# ended with ticket 138 part B2. N-PORT's records now carry every ISIN filed
-# with a CUSIP, not one FIGI-agreed ISIN; with the CUSIP rule alone on, a
-# record would bind by its CUSIP and every filed ISIN would ride onto that
-# Security unchecked. Both are version 2026-10-26.1 and wait for their own
-# switch-on (with OpenFIGI's rules, after part A2 and its proof).
 - kind: company
   family: binding
   rule_id: nport-registrant-cik
   rule_version: 2026-11-10.registrant-v2
   verdict: bind
-  activation: deterministic
-# nport-registrant-lei (ticket 203): an N-PORT registrant's LEI finds the Company that holds it. Switched on under the
-# operator's standing approval ("Approved the rules always") and his ruling of 2026-11-10 ("Master it ;consider it a
-# source"), after the limited test (.scratch/rebuild-priorities/research/203_registrant_lei_limited_test.json).
 - kind: company
   family: binding
   rule_id: nport-registrant-lei
   rule_version: 2026-11-10.searched
   verdict: bind
-  activation: deterministic
 - kind: fund_structure
   family: binding
   rule_id: nport-fund-series
   rule_version: 2026-10-15.1
   verdict: bind
-  activation: deterministic
 - kind: fund_structure
   family: binding
   rule_id: nport-fund-lei
   rule_version: 2026-10-15.1
   verdict: bind
-  activation: deterministic
-# Ticket 138 retired the three rules above with the two OpenFIGI targets
-# (operator, 2026-10-25: "there should be one processing with all the
-# identifier"): their switch-ons of 2026-10-24 19:27 ET ("switch on ticket
-# 120") ended with them.
-# openfigi-security-cusip, openfigi-security-isin, openfigi-security-figi
-# ("FIGI merges Securities"), nport-security-cusip ("Filed CUSIP binds
-# first") and nport-security-isin: switched on by operator, 2026-10-26
-# 12:24 ET, in their words: Do limited testing and switch on. Ticket 138:
-# one Security per security, looked up by any of its CUSIP, ISIN or listing
-# FIGIs, else created; FIGIs reaching two Securities merge them, the oldest
-# surviving; a filed CUSIP and ISIN on two Securities bind by the CUSIP.
-# They activate on their verified Identifier Contracts (kinds/security.yaml:
-# cusip and isin, the N-PORT Proving Run; figi, the limited test,
-# .scratch/rebuild-priorities/research/138_switch_on_limited_test.json,
-# sha256 a1ac5437...3175).
 - kind: security
   family: binding
   rule_id: openfigi-security-cusip
   rule_version: 2026-11-10.source-v4
   verdict: bind
-  activation: deterministic
 - kind: security
   family: binding
   rule_id: openfigi-security-isin
   rule_version: 2026-11-10.source-v4
   verdict: bind
-  activation: deterministic
 - kind: security
   family: binding
   rule_id: openfigi-not-found-cusip
   rule_version: 2026-11-10.source-v4
   verdict: bind
-  activation: deterministic
 - kind: security
   family: binding
   rule_id: openfigi-not-found-isin
   rule_version: 2026-11-10.source-v4
   verdict: bind
-  activation: deterministic
 - kind: security
   family: binding
   rule_id: openfigi-security-figi
   rule_version: 2026-11-10.source-v4
   verdict: bind
-  activation: deterministic
 - kind: security
   family: binding
   rule_id: openfigi-security-share-class-figi
   rule_version: 2026-11-10.source-v4
   verdict: bind
-  activation: deterministic
 - kind: security
   family: binding
   rule_id: nport-security-cusip
   rule_version: 2026-10-26.2
   verdict: bind
-  activation: deterministic
-# thirteenf-security-filed-cusip (ticket 204): the same last resort for a 13F holding, under the same words.
 - kind: security
   family: binding
   rule_id: thirteenf-security-filed-cusip
   rule_version: 2026-11-10.last-resort
   verdict: bind
-  activation: deterministic
-# nport-security-filed-cusip (ticket 204): the CUSIP as filed creates the Security of a real N-PORT holding whose CUSIP
-# fails its check digit and which states no other identifier. Switched on under the operator's standing approval
-# ("Approved the rules always") and his ruling of 2026-11-10 ("Yes, the simple key, no type mapping (Recommended)"),
-# after the limited test (.scratch/rebuild-priorities/research/204_filed_cusip_limited_test.json).
 - kind: security
   family: binding
   rule_id: nport-security-filed-cusip
   rule_version: 2026-11-10.last-resort
   verdict: bind
-  activation: deterministic
 - kind: security
   family: binding
   rule_id: nport-security-isin
   rule_version: 2026-10-26.1
   verdict: bind
-  activation: deterministic
-# form4-security-ticker (ticket 24): the trading symbol a Form 3, 4 or 5 files finds the Security OpenFIGI
-# gave that ticker to; it creates nothing, waits when none holds it and sends several to review. Switched
-# on under the operator's standing approval, 2026-11-04 (\"switch on for form 4 keep it standing approval
-# for ticket 190 191\"), after the limited test (.scratch/rebuild-priorities/research/24_limited_test.json,
-# sha256 e2d24ec0...62a4f1) passed. It activates on the ticker's verified Identifier Contract.
 - kind: security
   family: binding
   rule_id: form4-security-ticker
   rule_version: 2026-11-07.one-record-per-filing
   verdict: bind
-  activation: deterministic
-# nport-security-sedol and nport-security-loanx (ticket 190): a holding with neither a CUSIP nor an ISIN
-# is keyed by its SEDOL, else its LoanX. Switched on under the operator's standing approval, 2026-11-04
-# (\"switch on for form 4 keep it standing approval for ticket 190 191\"), after the limited test
-# (.scratch/rebuild-priorities/research/190_limited_test.json, sha256 0c2be443...2555) passed.
-# form4-security-issuer-symbol (operator, 2026-11-09: "This is not following step 1" on a Form 4 security stored
-# without a golden record; "Create by issuer and title (Recommended)"; standing words "Approved the rules always"):
-# the limited test on the real Form 4 securities no Security held, 826 records, run through the mastering merge in a
-# throwaway PostgreSQL: 337 issuer-and-symbol keys, each one Security created, all 826 records bound, no review, and a
-# second pass changed nothing.
 - kind: security
   family: exact_name_binding
   rule_id: form4-security-issuer-symbol
   rule_version: 2026-11-09.1
   verdict: bind
-  activation: exact_name
-  proof:
-    names: 337
-    attached: 0
-    review: 0
-    waiting: 0
-    created: 337
-    second_pass_changed_nothing: true
-    approved_by: operator
-    approved_at: '2026-11-09T22:54:58Z'
-    reason: 'Form 4 securities no Security holds are created by issuer and symbol (Create by issuer and title, Recommended); limited test on the 826 real records: 337 created, 0 review, second pass unchanged'
 - kind: security
   family: binding
   rule_id: nport-security-sedol
   rule_version: 2026-11-04.1
   verdict: bind
-  activation: deterministic
 - kind: security
   family: binding
   rule_id: nport-security-loanx
   rule_version: 2026-11-04.1
   verdict: bind
-  activation: deterministic
-# nport-security-figi (ticket 139): an N-PORT holding with only a FIGI finds the Security OpenFIGI gave it to and
-# creates nothing. Switched on on the operator's word, 2026-11-04: he chose \"Yes, find only, in the second
-# batch (Recommended)\", the option that read \"switched on after a limited test under your standing approval\"
-# (.scratch/rebuild-priorities/research/139_limited_test.json); it activates on the FIGI Identifier Contract
-# verified in ticket 138.
 - kind: security
   family: binding
   rule_id: nport-security-figi
   rule_version: 2026-11-04.1
   verdict: bind
-  activation: deterministic
-# sec-gleif-name-city-or-postcode ("Name and city or postcode", ticket 09;
-# renamed from its pass number, operator, 2026-11-03): switched on by
-# operator, 2026-10-30 18:20 ET, comparing the city; then, the same evening, in
-# their words: do not use p1 or p4, p5 can match on postel code; and, of the 4
-# flagged pairs it then links: Link them (Recommended). It compares the city or
-# the postcode; "name and full address" and "name and postcode" are deleted. Its proof is every new link it makes over the whole SEC population
-# (251 links today's two rules do not make: 84 of the old city-only pass, 68 of
-# name and postcode, 99 of name and full address), each labelled: 110 by Codex's independent review, 141 by the operator;
-# 251 the same entity. The adversarial fixture is its risky arms among them:
-# linked through a GLEIF other name, a conflict in place of incorporation, or a
-# name another candidate holds (159, none a different entity; the operator
-# labelled 3 the same after Claude flagged a renamed predecessor). The evidence
-# is on the operator's machine, ~/.local/share/edgartools/mdm/proving/t09-cascade/.
 - kind: company
   family: name_binding
   rule_id: sec-gleif-name-city-or-postcode
   rule_version: 2026-11-03.named-by-what-it-compares
   verdict: bind
-  activation: measured
-  proof:
-    method: wilson_lower_bound
-    one_sided_confidence: 0.95
-    n: 251
-    correct: 251
-    lower_bound: 0.989335
-    adversarial:
-      fixture_sha256: ce9b393cc598d58bef8ab4bd0b04e57236af7eaa8870539da72555144663b1c8
-      n: 159
-      violations: 0
-    cohort:
-      companies: 43338
-      new_links: 251
-      files:
-        p5-postcode-labels.jsonl: 2772053ce51381e337deb23c003cb20d8dc005139412dfc2aa3a5eabc1bbc8a3
-        p5-postcode-adversarial.jsonl: ce9b393cc598d58bef8ab4bd0b04e57236af7eaa8870539da72555144663b1c8
-        p5-postcode-sheet.csv: 80b56f8e1933cca6c83ecfae656954300b5d3fe4e501d2b1801ce8e88e0e4da6
-        p5-postcode-answers.json: aec2ce88fa51cecc09fa9472369ad848af7237520878014589d2199c6cbf6e9b
-        p5-postcode-notes.json: 26787ebe175fc04536d8a51e4500fb08b3f73e94a688b87d16aab9118b2dc757
-        ticket09-labels.codex-completed.csv: 475d7dd80db264bbbc7ba8c4bcf9082988d931ded0e2ffcb108738495d08a3c2
-        operator-answers.json: 640327dc14be3060b21afc9c967c24ed17c98d7ce6811f13d34b29965650fef6
-        operator-notes.json: 0e22f3ab43e8c3cf6554bcac510de014072190036e5386f3eff3c424740b1a19
-        census.json: 64096f1fa4c25308d4f6ce73e7112e2ff65eca6e97cfe4322785d10d10d942cf
-    approved_by: operator
-    approved_at: "2026-10-31T01:06:03Z"
-    reason: 'ticket 09, the cascade pass "name and city or postcode" ("name and full address" and "name and postcode" deleted): every new
-      link over the whole SEC population labelled, 251/251 the same entity (110 Codex independent
-      review, 141 operator), 0 of 159 adversarial (other name, incorporation conflict, name held by
-      another candidate)'
-    approved_words: "do not use p1 or p4, p5 can match on postel code; Link them (Recommended)"

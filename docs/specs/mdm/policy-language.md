@@ -392,8 +392,6 @@ where MDM's *"Exclusivity is policy-specific"*
 | `claim.forward` | one value → at most N identities | **1** | **1** |
 | `claim.reverse` | one identity → at most N values (`null`: any number) | **1** | **1**; duplicates measured ~12/10k |
 | `compatibility` | the second handle the runtime veto compares: `field`, `predicate@version` | `owner_name`, `name_compatible@lenient-v1` | `name`, same |
-| `verification` | the measurement that earned activation: counts, bound, corpus hash, who/when | 0/72,981 decisions, Wilson UB 0.53/10k; reverse 0/16,677 same-issuer pairs | research 16 figures; forward only |
-| `tolerance` | §9.3 | `{unit: items, warm_up_decisions: 10000, max_per_10k: 5}` | same |
 
 Why `sec.cik` can make its claim: EDGAR discards any filer-supplied
 reporting-owner name and inserts the CIK's registered name (Ownership XML
@@ -467,102 +465,22 @@ The Company example (SEC authoritative, GLEIF additive; a comparable GLEIF
 disagreement never overwrites an SEC value):
 [`prototype/policy-company.json`](../../../.scratch/mastering-policy-language/prototype/policy-company.json).
 
-## 9. Activation
+## 9. Which rules act alone
 
 A rule in the document is **declared** (it fires; its result goes to a
-Steward) until an `automatic_rules` entry makes one of its verdicts
-**active** (it fires; the Merge Stage binds or classifies alone).
-**Activation is per `(rule_id, rule_version, verdict)`, never per rule.**
-This is what lets C-J's `person` verdict run automatically while its
-`entity_undetermined` verdict stays review-only — Person ticket 03's
-release gates 1 and 2 as data. No new table, no status column, no new
-role: policy registration is already owner-only and the runtime is already
-forbidden to change activation (`docs/specs/mdm/recovery.md:51, 111`).
-Evidence: [research 02](../../../.scratch/mastering-policy-language/research/02-rule-activation-and-proof.md).
-
-### 9.1 Bars
-
-Declared per `(kind, family)` under `kinds.<kind>.bars`:
-`{ "min_precision": 0.99, "method": "wilson_lower_bound", "one_sided_confidence": 0.975 }`.
-Person classification is 0.99 (operator amendment, proposed to Codex).
-Company classification is 0.95 at 95% one-sided confidence (confidence bands,
-`docs/specs/mdm/company-policy.md`, 2026-09-24); merging two published
-Company IDs keeps 0.999 (Q11). The accepted floor is kept per **(kind,
-family)** (`activation.ACCEPTED_BARS`), so lowering one decision never lowers
-another; a pair with no accepted floor cannot declare a bar. A rule with no
-bar for its family cannot be activated.
-
-### 9.2 `measured` activation
+Steward) until an `automatic_rules` entry lists one of its verdicts. Listed is
+on: the Merge Stage binds or classifies alone. An entry names
+`(kind, family, rule_id, rule_version, verdict)` and nothing else, so one
+verdict of a rule can act alone while another stays review-only.
 
 ```json
-{ "kind": "person", "family": "classification", "rule_id": "C-J", "rule_version": "2026-09-20", "verdict": "person",
-  "activation": "measured",
-  "proof": { "method": "wilson_lower_bound", "one_sided_confidence": 0.975, "n": 841, "correct": 841, "lower_bound": 0.99545,
-             "adversarial": { "fixture_sha256": "…", "violations": 0 },
-             "cohort": { "description": "…", "source_codes": ["…"], "drawn_at": "…", "seed": "20260920", "n_population": 4831,
-                         "files": { "18-sample.jsonl": "87209b16…", "18-owners.jsonl": "8181e1bf…", "18-classify.py": "…" } },
-             "approved_by": "operator", "approved_at": "2026-09-20T…", "reason": "research 18, C-J person arm" } }
+{ "kind": "person", "family": "classification", "rule_id": "C-J", "rule_version": "2026-09-20", "verdict": "person" }
 ```
 
-The proof travels **inside the body next to the rule** (~923 canonical
-bytes); labelled samples stay outside as files named by SHA-256. The Merge
-Stage check is a pure predicate over the body:
-
-```
-for entry in automatic_rules:
-    rule = kinds[kind][family].rules[rule_id]            # must exist
-    require rule.version == entry.rule_version            # a rule edited after its proof is orphaned
-    require entry.verdict in rule.emits
-    bar = kinds[kind].bars[family]                        # no default
-    require proof.method == bar.method and proof.one_sided_confidence == bar.one_sided_confidence
-    require recompute(proof) == proof.lower_bound and proof.lower_bound >= bar.min_precision
-    require proof.adversarial.violations == 0 and proof.cohort.files non-empty
-    require approved_by, approved_at, reason
-```
-
-replacing the truthiness refusal at `merge.py:183-184` and
-`store.py:155-156`. Stated plainly: **the check verifies arithmetic, not
-truth** — a fabricated `n: 1000, correct: 1000` passes. The defences are
-attribution (append-only, in every publication payload) and a CI job
-outside the Merge Stage that re-scores the named files.
-
-### 9.3 `deterministic` activation
-
-A rule whose `when` is identifier primitives only has no precision to
-measure; its failure mode is a wrong **identifier contract**, not a wrong
-score. Its activation entry names `"activation": "deterministic"` and the
-predicate checks instead that every namespace the rule names has a
-contract (§7.2) with `claim.forward`, `compatibility` (predicate, version,
-**field**), `verification` with a corpus hash, and a complete `tolerance`
-block, and that every named primitive resolves.
-
-**Runtime behaviour when the claim is violated** (ticket 06, Q2 = defer and
-count, tuned on research 07):
-
-- **Detect**: `identifier_cardinality` resolves the incoming id to an
-  existing identity and compares the incoming `compatibility.field` with
-  the names already on it using the declared predicate. A "materially
-  new" name is the candidate violation. This is a heuristic inside a
-  deterministic rule and is declared and versioned for that reason.
-- **Defer** the violating record to the Steward; the rule keeps running.
-- **Count distinct `(identifier, incoming normalized name)` items**, not
-  records — one prolific filer with one typo'd registered name is
-  otherwise a burst (27 records for one typo in the corpus).
-- **Line**: `warm_up_decisions: 10000`, `max_per_10k: 5`. Measured: never
-  trips on 72,981 real decisions; stopped an injected bulk failure within
-  8–48 decisions where defer-only silently minted 291 bogus Persons, and
-  deactivate-on-first-violation died at decision 3,107 on a middle initial.
-- **Deactivate** when the rate crosses the line after warm-up: the
-  automatic verdict is withdrawn for the rest of the batch and thereafter;
-  review until a new document with a fresh verification is registered;
-  recorded as evidence against the contract in the batch's commit evidence.
-- **A Steward resolution must record the alias**, or the same item recurs
-  on every later filing.
-
-Limits: the runtime can see only name-mismatch alarms, every one of which
-was false on real data; a different person with a compatible name is
-invisible to any runtime check — the contract's verification guards
-against that, not the runtime. The tolerance is tuned on one failure shape.
+The check is a pure predicate over the body: the rule exists, the entry names
+its exact version (an edited rule is a new version), the rule emits the verdict,
+and no verdict is listed twice. An identifier matching rule that is on needs a
+complete Identifier Contract for its namespace (§7.2).
 
 ## 10. Checks a registration performs
 
@@ -611,8 +529,7 @@ document never becomes a digest.
 **Implemented 2026-09-24** in `clean/activation.py`: checks 1, 2 and 6 and
 the §9.2 predicate, at registration, again per batch and again when a read
 path runs a named rule; check 9 at registration only, since it compares
-against the bodies already registered. Each kind's accepted bar is a floor the
-document may raise but not lower. Check 9 compares the **whole rule**, not only
+against the bodies already registered. Check 9 compares the **whole rule**, not only
 its steps: an `emits` or `source` change under one version reclassifies records
 as surely as a step change. Check 1 verifies each primitive is registered and
 of the rule's family; its arguments are still checked when a record reaches

@@ -111,8 +111,7 @@ rules:
 # The CIK matching rule (company mastering tickets 04 and 15): an SEC record the
 # classification rule accepts joins the one Company that holds its CIK, or
 # creates it when none does. Only SEC's own record creates a Company from a CIK.
-# It activates on its verified Identifier Contract (below), not on a measured
-# bar; the operator approved it on 2026-09-29 07:27 ET (ticket 15).
+# It is on (policy.yaml) and rests on the CIK Identifier Contract (below).
 - rule_id: company-cik
   version: "2026-09-24"
   family: binding
@@ -132,8 +131,7 @@ rules:
 # (operator, 2026-10-15: "agreed"): SEC's own Company record sets nearly every
 # registrant aside (typed "investment" or "other" with no category), so none
 # would otherwise exist. Switched on (ticket 79; operator, 2026-10-17 21:03 ET:
-# "Switch on all six (Recommended)"): it activates on the CIK Identifier
-# Contract, re-verified with this source on the registrant Proving Run.
+# "Switch on all six (Recommended)"): it rests on the CIK Identifier Contract.
 - rule_id: nport-registrant-cik
   version: 2026-11-10.registrant-v2
   family: binding
@@ -173,11 +171,9 @@ rules:
 # one over what earlier passes left, on the addresses the quality rule leaves
 # fit (headquarters first; one more than 25 entities share is compared by
 # country only: ticket 22, "25, yes"). No jurisdiction test: a conflict in
-# place of incorporation is flagged, and the proof decides (2026-09-28).
-# Declared, not switched on: each pass needs its own proof and the
-# operator's approval (ticket 20). The two rules above stay until then.
+# place of incorporation is flagged.
 # "Name and city or postcode" is switched on (ticket 09; operator, 2026-10-30
-# 18:20 ET; its proof is in policy.yaml). It compares the city or the postcode;
+# 18:20 ET). It compares the city or the postcode;
 # "name and full address" (street, city and postcode) and "name and postcode"
 # were deleted (operator, 2026-10-30: "do not use p1 or p4, p5 can match on
 # postel code"): a pair either matched agrees on the city or the postcode, so
@@ -352,9 +348,8 @@ rules:
 # A GLEIF record an N-PORT holding names as its issuer joins the one Company
 # that holds its LEI, and otherwise waits for the SEC-GLEIF name rules; it
 # never creates a Company (operator, 2026-10-16: "Wait, config only
-# (Recommended)"; ticket 22). Creating one made 3,240 issuers that are SEC
-# filers a second Company in Proving Run 2, since identifier rules run before
-# the name rules. The record test keeps it to issuers. Declared, not switched on.
+# (Recommended)"; ticket 22). Creating one would make an issuer that is an SEC
+# filer a second Company, since identifier rules run before the name rules. The record test keeps it to issuers. Declared, not switched on.
 - rule_id: gleif-issuer-lei
   version: 2026-10-16.2
   family: binding
@@ -507,9 +502,7 @@ lists:
   bdc_election:
   - N-54A
 # Identifier Contracts (ticket 04, Q14): what a Company's identifier claim
-# rests on. The CIK contract's verification corpus is ticket 05's Proving Run
-# manifest (research/05-manifest.json, 7,000 CIKs). The operator approved it on
-# 2026-09-29 07:27 ET (ticket 15). The tolerance line is the spec's sec.cik row.
+# rests on.
 identifiers:
   cik:
     authority: SEC/EDGAR
@@ -529,21 +522,7 @@ identifiers:
     compatibility:
       field: kind
       predicate: kind_equal@1
-    # Re-verified with the N-PORT registrant among its sources (ticket 79, operator
-    # 2026-10-17 21:03 ET): the registrant Proving Run
-    # (.scratch/onboarding/sec.nport/registrant-proving-run.json). It was verified
-    # before on ticket 05's Proving Run (3607ae6c...60cc), approved 2026-09-29.
-    verification:
-      corpus_sha256: e217bf4d46fcef7226fa46eee97dd9d769fba9b669d035ad0fc3984ee342da61
-      approved_by: operator
-      approved_at: "2026-10-18T01:03:32Z"
-      reason: "ticket 79 part 2, N-PORT 2026q2 registrant Proving Run, approved in the operator's words: Switch on all six (Recommended). 1,947 registrant Companies, read with the 20 SEC Companies that hold the same CIKs, no CIK on two Companies, a second pass changed nothing; the SEC Companies' own run (ticket 05, 3607ae6c...60cc) stands"
-    tolerance:
-      unit: items
-      warm_up_decisions: 10000
-      max_per_10k: 5
-  # Form ADV (ticket 07). Verified on the ticket 76 run; operator, 2026-10-17
-  # 08:31 ET: "Switch on all three (Recommended)".
+  # Form ADV (ticket 07).
   crd:
     authority: FINRA Central Registration Depository
     sources:
@@ -558,15 +537,6 @@ identifiers:
     compatibility:
       field: kind
       predicate: kind_equal@1
-    verification:
-      corpus_sha256: 9a0a7bbe236126d31b0411cf2296ca25684bb0bbd1a971e65dc7966558d34d93
-      approved_by: operator
-      approved_at: "2026-10-17T12:31:29Z"
-      reason: "tickets 75 and 76: Form ADV run beside GLEIF and SEC, 13 months, 24,760 Companies, no CRD, LEI or BD number on two Companies, 15,339 custodian links, a third pass changed nothing"
-    tolerance:
-      unit: items
-      warm_up_decisions: 10000
-      max_per_10k: 5
   lei:
     authority: GLEIF (ISO 17442)
     # GLEIF's own record issues an LEI (ticket 22, the issuer rule). An N-PORT registrant states the LEI too
@@ -585,15 +555,6 @@ identifiers:
     compatibility:
       field: kind
       predicate: kind_equal@1
-    verification:
-      corpus_sha256: d394aacb960e161cc4fa82ea0729ec64a15f9fc6508fcee53aa07863f550e71a
-      approved_by: operator
-      approved_at: "2026-11-10T14:20:00Z"
-      reason: "tickets 75, 76 and 203: Form ADV run beside GLEIF and SEC (13 months, 24,760 Companies, no CRD, LEI or BD number on two Companies), and from 2026-11-10 the N-PORT registrant's stated LEI (operator: \"Master it ;consider it a source\"; standing approval \"Approved the rules always\"): limited test .scratch/rebuild-priorities/research/203_registrant_lei_limited_test.json, 1,943 registrant Company and LEI pairs, 1,712 keep their LEI, 231 find it on another Company and go to review"
-    tolerance:
-      unit: items
-      warm_up_decisions: 10000
-      max_per_10k: 5
   # The CRD normalizer keeps digits only: "8-129" is 8129. Over 13 months
   # the 326 BD numbers have no zero-padded variant (no "8-00129").
   bd_number:
@@ -610,21 +571,3 @@ identifiers:
     compatibility:
       field: kind
       predicate: kind_equal@1
-    verification:
-      corpus_sha256: 9a0a7bbe236126d31b0411cf2296ca25684bb0bbd1a971e65dc7966558d34d93
-      approved_by: operator
-      approved_at: "2026-10-17T12:31:29Z"
-      reason: "tickets 75 and 76: Form ADV run beside GLEIF and SEC, 13 months, 24,760 Companies, no CRD, LEI or BD number on two Companies, 15,339 custodian links, a third pass changed nothing"
-    tolerance:
-      unit: items
-      warm_up_decisions: 10000
-      max_per_10k: 5
-bars:
-  classification:
-    min_precision: 0.95
-    method: wilson_lower_bound
-    one_sided_confidence: 0.95
-  name_binding:
-    min_precision: 0.95
-    one_sided_confidence: 0.95
-    method: wilson_lower_bound

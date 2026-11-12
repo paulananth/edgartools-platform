@@ -185,17 +185,14 @@ counts look wrong, or **compare** lists drift handled by data-quality:
 ### change-matching: add or tune a matching rule
 
 For example: a cascade pass, a name rule, or records waiting for review.
-1. Read `rules/merge/kinds/<kind>.yaml`, `rules/merge/policy.yaml` (what is
-   switched on and why) and `rules/merge/pending-proofs.yaml`.
+1. Read `rules/merge/kinds/<kind>.yaml` and `rules/merge/policy.yaml` (which
+   rules are on: those listed under `automatic_rules`).
 2. Describe the change in plain words: what it would join, and what it
    must never join (parent and subsidiary, a registered agent's address,
    the same name in two places).
-3. **Measure it before it is switched on:**
-   - A rule on an issued identifier is deterministic, and its proof is its
-     Identifier Contract.
-   - Any other rule needs a labelled sample of the links it adds, plus
-     adversarial pairs, measured at its kind's bar (Examples). Record the
-     proof in `pending-proofs.yaml`.
+3. **Know what it does before it is on:** a rule on an issued identifier rests
+   on its Identifier Contract; for any other rule, read a sample of the links
+   it adds and of pairs it must not join.
 4. Show which records it moves. Use a proving run on a disposable
    PostgreSQL 16 (data-onboarding's test step): counts before and after,
    with examples.
