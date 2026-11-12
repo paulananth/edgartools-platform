@@ -1,4 +1,6 @@
 """PG16 generated work is sealed atomically within the original root."""
+from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from edgar_warehouse.rules import frozen
 from copy import deepcopy
 from uuid import uuid4, uuid5, UUID
 
@@ -32,12 +34,8 @@ def _fixture(databases, tmp_path):
                 {"name": "child", "operation": "artifact.copy", "requires": ["parent"], "key": "{id}",
                  "leases": ["output:{id}"], "checks": ["input.hash", "output.receipt"]},
             ], "checks": ["manifest.hash", "work.accounting", "journal.delivered"]}}}}
-    saved = databases.rules.save("source", "generated-fixture", uuid4().hex, body)
-    databases.rules.prove("source", "generated-fixture", saved["version"],
-                          {"digest": saved["digest"], "batch_hash": "0" * 64, "passed": True})
-    databases.rules.activate("source", "generated-fixture", saved["version"])
-    rules_ref = databases.rules.resolve("source", "generated-fixture",
-                                        root=tmp_path.as_uri() + "/rules")
+    saved = frozen.of("source", "generated-fixture", body)
+    rules_ref = Artifacts().put(tmp_path.as_uri() + "/rules", saved)
     source = book.artifacts.put(tmp_path.as_uri() + "/source", {"row": 1})
     child = {"keys": {"id": "c1"}, "input": source,
              "output": (tmp_path / "child.json").as_uri(), "cursor": {}}

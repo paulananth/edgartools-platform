@@ -6,6 +6,8 @@ reaches MDM is every document unchanged, and normalizing it gives the outcome
 the in-process reading gives. The merge step needs a registered MDM; the
 installed proof covers it.
 """
+from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from edgar_warehouse.rules import frozen
 import json
 from copy import deepcopy
 from pathlib import Path
@@ -50,11 +52,8 @@ def run_without_merge(databases, tmp_path, book, report):
     steps = book.artifacts.json(report["manifest"])["steps"]
     del steps["merge"], steps["processed"]
     manifest = book.artifacts.put(tmp_path.as_uri() + "/submitted", {"version": 2, "steps": steps})
-    saved = databases.rules.save("source", body["source"], "1", body)
-    databases.rules.prove("source", body["source"], "1",
-                          {"digest": saved["digest"], "batch_hash": manifest["sha256"], "passed": True})
-    databases.rules.activate("source", body["source"], "1")
-    rules = databases.rules.resolve("source", body["source"], root=tmp_path.as_uri() + "/rules")
+    saved = frozen.of("source", body["source"], body)
+    rules = Artifacts().put(tmp_path.as_uri() + "/rules", saved)
     return book.start(rules_ref=rules, inputs_ref=manifest, target="mastering", scope={"test": body["source"]})
 
 

@@ -15,9 +15,8 @@ Copying files into a folder named final establishes neither.
 | Stage | Owner and completion evidence |
 | --- | --- |
 | Author | data-onboarding creates a source; refining-rules changes an existing source/domain. The exact configuration and generated documents are versioned. |
-| Qualify | Those skills attach genuine matching test/qualification results to the exact content and input evidence. Reuse existing matching evidence; test changed or uncovered behavior. |
-| Approve for release | Follow the shared [approval procedure](../data-onboarding/APPROVE.md), retaining actual approval evidence and applicable operator authorization. A different configuration is a new version. |
-| Deploy | data-operations coordinates saving missing exact versions, recording their evidence/approval through the supported lifecycle, activating the merge policy and then the source, and reading back destination registration/active state. |
+| Check | `rules check` accepts every file ([LOAD](../data-onboarding/LOAD.md)). |
+| Deploy | The rules files ship with the image. `rules register` registers the merge rules and Dataset Contracts in the destination's MDM. |
 | Operate | data-operations checks the completed delivery, capacity and dependencies, then submits/resumes and verifies through Bookkeeping and Change Journal. |
 
 Keep a release record referencing the source configuration, dataset/matching/
@@ -34,8 +33,7 @@ the supported destination lifecycle must still validate. An older source's
 approval does not approve a changed policy, and a schema migration is separate
 from configuration promotion.
 
-The shared lifecycle already supplies save, record-proof, approve and activate
-operations. There is no single automated release-transfer/import command today.
+The rules files ship with the code; `rules register` registers them in a destination's MDM.
 If required evidence cannot be represented or a consumer still requires download
 producer steps, report that runtime gap; do not forge proof, register through test
 helpers or bypass activation. Keep source-specific readiness status in its
@@ -64,14 +62,10 @@ for all private connection files, hosted roles, grants and credential handling.
    Read each command's `--help` first. Done when every migration file prints with its checksum.
 4. **RDM codes.** `scripts/rdm_restore_published.py` in this skill, with the operator's exact words; every pin
    must read `pin ok`, then `rdm list`.
-5. **Governance logins.** Provision activation roles and grants through
+5. **Governance logins.** Provision the registration login through
    [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
-6. **Source configurations.** `rules load --root rules --version <name>` with the runtime connection
-   (approvals kept in git are imported), `rules pending` empty, then `rules activate` with the
-   activation connections from the central section: the merge policy, then
-   pipelines, then sources. Take the list from the load's own result and iterate it in code: a list file without
-   a final newline loses its last line to a `while read` loop, and that source then stays unactivated.
-   Done when `rules status` shows every version `active`.
+6. **Source configurations.** `rules check`, then `rules register` with the registration connection from the
+   central section. Done when it prints a digest for the merge rules and for every Dataset Contract.
 
 7. **Worker and verifier logins.** Apply the hosted worker/verifier roles, profile grants and
    MDM guard from [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).

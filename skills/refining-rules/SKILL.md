@@ -23,11 +23,6 @@ with merge rules.
 
 | Never | Instead |
 |---|---|
-| Approve for the operator or a steward, or record words they did not say | Ask, wait, record their exact words ([APPROVE.md](../data-onboarding/APPROVE.md)) |
-| Switch on (activate) a version the operator has not told you to switch on | Ask, wait, record their exact words ([APPROVE.md](../data-onboarding/APPROVE.md)) |
-| Approve with no test run | Run **test** first. A failing run may be overruled, a missing one never. |
-| Ask the operator to approve a digest, hash or version number they cannot read | Say in plain words what the version does, what it changes and on what evidence, under its descriptive name; the digest goes beside it, never instead |
-| Name a Rules version by a number alone | A label that says what it changes (the **test** step's version label, `<source or kind>-<YYYY-MM-DD>.<short change name>`) |
 | Write a value from the data (a name, an identifier, a record) into a public repository | Counts, and invented examples; real values stay on the machine |
 | Switch on a matching rule with no measured proof | A rule on an issued identifier is deterministic; any other rule needs a proof at its kind's bar |
 | Request anything from a provider the operator has ruled out (data-onboarding, Examples) | Use the captured files and this repo |
@@ -43,13 +38,12 @@ both in the log.
 ## Shared with Data Onboarding
 
 - **The contract language:** [REFERENCE.md](../data-onboarding/REFERENCE.md).
-- **Approval and switch-on:** [APPROVE.md](../data-onboarding/APPROVE.md).
+- **Check and load:** [LOAD.md](../data-onboarding/LOAD.md).
 - **What MDM and RDM hold now:** `edgar-warehouse context <kind|relationship|code set>
   <key|--search words>` ([REFERENCE.md](../data-onboarding/REFERENCE.md), "Reading MDM's
   context"). Look up the records, links or codes a change moves, before and after.
-- **How to run commands, the environment variables, and the dry run**
-  (`test` mode): see data-onboarding's SKILL.md, "How to run commands" and
-  "test".
+- **How to run commands and the environment variables:** see data-onboarding's SKILL.md,
+  "How to run commands".
 - **The log:** `.scratch/onboarding/<source>/refining-log.md` on your
   branch, never a temporary folder. In a sandbox or trial, keep the log and
   your draft rules together, as in data-onboarding's "Where you write"
@@ -75,8 +69,7 @@ both in the log.
 
 ## Modes
 
-Every change runs: the change mode → **test** → **approve** →
-**switch-on**.
+Every change runs: the change mode → **check and load**.
 
 **A new delivery comes first.** When a live feed's new delivery arrived, run
 [data-profiling](../data-profiling/SKILL.md)'s **compare** against the feed's
@@ -129,7 +122,7 @@ PR.
 3. Regenerate: `rules mapdoc write --only <source or kind>`. The generated
    rows replace the steward's, so the steward confirms they say what was
    meant. Then `rules mapdoc check` must pass.
-4. Continue with **test**. The steward who made the change approves it.
+4. Continue with **check and load**.
 
 ### change-quality: add or change a data quality check or fix
 
@@ -144,8 +137,7 @@ counts look wrong, or **compare** lists drift handled by data-quality:
      sha256, bytes) is its manifest. Its sha256 is the `batch_hash`. Check
      each file's sha256 against its line. For a file's path, replace the
      key's leading `warehouse/bronze/` with `<capture>/bronze/`. The
-     manifest lists exactly the files the measurement read (data-onboarding,
-     **test**, "Input manifest"): add a joined file another source captured,
+     manifest lists exactly the files the measurement read: add a joined file another source captured,
      and leave out a captured file the reading never opens.
    - **Build the records the checks read.** Run the candidate configured
      `read:` contract on the pinned files, then select the whole table rows or
@@ -161,8 +153,7 @@ counts look wrong, or **compare** lists drift handled by data-quality:
    - **Count two ways, and report both:**
      - **All filers:** `adapters.mapped_values(row, contract)` returns each
        record's `quality` block.
-     - **What MDM receives:** `adapters.normalize(...)`, as in
-       data-onboarding **test**. It sets aside records the classification
+     - **What MDM receives:** `adapters.normalize(...)`. It sets aside records the classification
        rule rejects before the quality checks run, so its counts are
        smaller. For a capture with one file per record, pass
        `publication={"artifact_sha256": <that file's sha256>, "member":
@@ -221,8 +212,7 @@ For example: a cascade pass, a name rule, or records waiting for review.
    installed-bundle test (`tests/engine/test_data_skill_bundle_postgres.py`)
    builds from the last commit, so it agrees only after the change is
    committed.
-7. Continue with **approve**, using "Switch one declared matching rule on"
-   in APPROVE.md. A rule short of its bar stays off, and its records go to
+7. Switch the rule on as in LOAD.md, "A new matching rule". A rule short of its bar stays off, and its records go to
    review.
 
 **Name matching across two sources.** When two sources share no issued
@@ -252,13 +242,10 @@ instants, never as text: the Stage stores a record's `effective_at` in UTC
 offset). A source's record-keeping date that only marks a new version is that
 record's effective time, not a field of the master.
 
-### test: the cheapest proof, then record it
+### check and load
 
-Prove the change at the level
-[Choose the cheapest proof](../mdm-engineering/SKILL.md#choose-the-cheapest-proof)
-names, and no further. Then `rules save` and record the proof, or carry the
-last one forward (same table, its last row). Show what changes, record by
-record.
+Run `rules check`, then load the change into a disposable store ([LOAD.md](../data-onboarding/LOAD.md)).
+Show what changes, record by record.
 
 A test of a source prepares with the keys the source itself declares for its
 `mdm.prepare` step, read from the rules file, never keys the test writes. A
@@ -270,21 +257,7 @@ A test that merges runs a policy with every kind it loads: each kind has its
 through `register_policy`, which checks it. A policy handed straight to the
 merge skips that check and passes where the real load refuses.
 
-### approve and switch-on
-
-Follow [APPROVE.md](../data-onboarding/APPROVE.md). A new version applies
-to new batches only. Running the feed is the Bookkeeping skill's **run**
-mode.
-
-When the operator asks for a limited test before a switch-on ("Do limited testing and switch on"): take a slice of the real
-capture that holds the cases the rule changes (for a merge rule, the answers
-sharing values with the slice), run it through the configured contracts and
-the Merge Stage on a disposable store in every load order the feeds allow,
-and a second pass. Write the counts only (records bound, masters, merges,
-identifiers on two masters, open reviews, whether the orders give the same
-masters, whether the second pass changed anything) to a file under
-`.scratch/`; its sha256 is the new Identifier Contract's
-`verification.corpus_sha256`. Say which case the slice did not hold.
+A changed rules file applies to new batches only. Running the feed is the Bookkeeping skill's **run** mode.
 
 ## When a command is missing
 

@@ -63,7 +63,7 @@ def _load(envelope, artifacts):
             or request['version'] != 1 or request['document'] not in ('main', 'page')):
         raise ValueError('Unsupported configured capture request')
     export = artifacts.json(envelope['rules'])
-    authority = frozen_authority(export, request['feed'], artifacts=artifacts)
+    authority = frozen_authority(export, request['feed'])
     configuration = authority['configuration']
     if envelope['keys'].get('feed') != request['feed']:
         raise ValueError('Capture feed differs from the frozen unit')

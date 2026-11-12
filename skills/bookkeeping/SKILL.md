@@ -283,7 +283,7 @@ evaluator, and does not grant a person's MDM approval.
 Read [RUN.md](RUN.md). Apply the validated configuration and submit or
 resume its bounded run in the selected environment. Verify that the plan,
 validation evidence and frozen inputs still match the requested source/feed.
-Use the existing Rules lifecycle for approval and frozen configuration. Submit
+The run freezes the rules files it is given. Submit
 with `rules run`, then run each step's worker and verifier and finish with
 `bookkeeping finalize` (see RUN.md). A step whose profile has no worker yet is
 unsupported: report it, and do not invent a command.

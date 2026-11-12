@@ -1,5 +1,7 @@
 """The 13F filings source lands each manager's 13F reports in silver (ticket 184), through real workers on
 PG16: read (one unit a submissions list), then one landing a unit. Invented lists; every value is invented."""
+from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from edgar_warehouse.rules import frozen
 import hashlib
 import json
 from copy import deepcopy
@@ -81,11 +83,8 @@ def test_each_managers_13f_reports_land_in_silver_and_other_forms_do_not(databas
     assert len(steps["filings"]) == len(steps["land"]) == 2  # one unit and one landing a manager
     manifest = book.artifacts.put(tmp_path.as_uri() + "/submitted", {"version": 2, "steps": steps})
     body = {"source": f"filings-{uuid4().hex}", "bookkeeping": {"version": 2, "targets": {"silver": target}}}
-    saved = databases.rules.save("source", body["source"], "1", body)
-    # Silver maps one to one, so there is no proof and no approval (operator, 2026-11-03).
-    assert saved["status"] == "draft"
-    databases.rules.activate("source", body["source"], "1")
-    rules = databases.rules.resolve("source", body["source"], root=tmp_path.as_uri() + "/rules")
+    saved = frozen.of("source", body["source"], body)
+    rules = Artifacts().put(tmp_path.as_uri() + "/rules", saved)
     rid = book.start(rules_ref=rules, inputs_ref=manifest, target="silver", scope={"test": body["source"]})
     workers = {"source.read": source_read, "silver.land": SimpleNamespace(execute=silver_land.execute, verify=silver_land.verify)}
     for profile in workers:

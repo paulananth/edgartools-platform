@@ -149,13 +149,11 @@ class Loader:
 
     def open_runs(self) -> tuple[list[str], dict[str, str]]:
         """Runs of this source and target to finish first, oldest first, and the runs left as they
-        are, each with why. A blocked run under the active rules version stops the load: its
-        documents would otherwise be submitted again. A blocked run under a retired version, or
+        are, each with why. A blocked run under the rules as they are stops the load: its
+        documents would otherwise be submitted again. A blocked run under other rules, or
         an open run pinned to other worker code (which this checkout cannot finish), stays as it
         is: the Change Journal loads its documents again in a new run."""
-        listed = json.loads(self.commands("worker", "rules", "status", "--source", self.source))
-        self.active_rules = next((v for v in listed if v.get("status") == "active"), None)
-        active = self.active_rules["version"] if self.active_rules else None
+        active = digest(self.reading)[:12]  # the version a run of the files as they are would carry
         left = {}
         for run in self.mine("blocked"):
             version = self.commands.status(str(run["run_id"]))["run"]["submission"].get("rule_version")
@@ -163,7 +161,7 @@ class Loader:
                 raise RunStopped(f"Run {run['run_id']} of {self.source} {self.target} is blocked: read "
                                  f"bookkeeping status {run['run_id']}, and recover it (bookkeeping RECOVERY.md) "
                                  "before loading more")
-            left[str(run["run_id"])] = f"blocked under retired rules version {version}"
+            left[str(run["run_id"])] = f"blocked under other rules ({version})"
         unfinished = []
         for run in sorted((r for state in OPEN for r in self.mine(state)), key=lambda r: str(r["created_at"])):
             pinned = self.commands.status(str(run["run_id"]))["run"].get("runtimes") or {}
@@ -284,6 +282,8 @@ class Loader:
              revision: int = 0, force: bool = False) -> dict:
         result = {"source": self.source, "target": self.target, "finished_open_runs": [], "bundles": []}
         result["silver_registered"] = self.register_silver()
+        # The merge rules and this source's Dataset Contracts, registered in MDM from the files.
+        result["registered"] = json.loads(self.commands("governance", "rules", "register", "--source", self.source))
         unfinished, result["left_as_they_are"] = self.open_runs()
         for run_id, why in result["left_as_they_are"].items():
             self.say(f"Run {run_id} is left as it is: {why}")
@@ -304,9 +304,6 @@ class Loader:
                 result["finished_open_runs"].append(run_id)
         self.at_once([(f"run {run_id}", lambda run_id=run_id: finish(run_id)) for run_id in unfinished])
         result["finished_open_runs"] = [run_id for run_id in unfinished if run_id in result["finished_open_runs"]]
-        if self.reading["bookkeeping"]["targets"][self.target].get("preparation"):
-            if not self.active_rules or self.active_rules.get("digest") != digest(self.reading):
-                raise RunStopped("Automatic preparation requires this source's current Rules digest to be active")
         result["preparation"] = prepare_load(reading=self.reading, target=self.target, capture=capture,
                                               folder=self.root / "preparation", facts=facts, as_of=as_of,
                                               deadline=self.commands.deadline, say=self.say,

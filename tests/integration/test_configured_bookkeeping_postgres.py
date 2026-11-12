@@ -4,6 +4,7 @@ The source fixture tests exercise configured control, not SEC/GLEIF business
 parsing or production cutover. No network source requests are made.
 """
 from __future__ import annotations
+from edgar_warehouse.rules import frozen
 
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -30,7 +31,6 @@ from edgar_warehouse.rules.db import Rules, migrate as migrate_rules
 from edgar_warehouse.workers import copy
 from tests.support import pg16
 from tests.support.bookkeeping_protocol import RUNTIME, complete, drive, verification_for, verification_report
-from tests.support.rules_approval import approve
 
 
 PROFILES = ("artifact.copy", "jsonl.count", "fixture.transform", "fixture.gather")
@@ -42,7 +42,6 @@ class Databases:
     runtime: object
     verifier: object
     rules: Rules
-    approver: Rules
     ledger: ChangeJournal
     ledger_admin: object
     destination: object
@@ -69,8 +68,6 @@ def databases():
                 # verifier (bk_verifier) log in separately (mastering to-do 20b).
                 conn.exec_driver_sql("CREATE ROLE bk_control NOLOGIN")
                 conn.exec_driver_sql("GRANT bk_control TO bk_runtime, bk_verifier")
-                conn.exec_driver_sql("CREATE ROLE rules_approver NOLOGIN")
-                conn.exec_driver_sql("GRANT rules_approver TO operator")
                 for db in ("bookkeeping", "rules", "change_journal", "destination"):
                     conn.exec_driver_sql(f"CREATE DATABASE {db}")
             admin = engine("bookkeeping")
@@ -85,14 +82,14 @@ def databases():
             migrate(admin, runtime_role="bk_control")
             for profile in PROFILES:
                 grant_profile(admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")
-            migrate_rules(rules_admin)
+            migrate_rules(rules_admin, agent_role="rules_agent")
             migrate_journal(ledger_admin, runtime_role="ledger_runtime")
             migrate_guard(destination_admin, runtime_role="destination_runtime")
             with destination_admin.begin() as conn:
                 conn.exec_driver_sql("CREATE TABLE effects(key text PRIMARY KEY, body jsonb NOT NULL)")
                 conn.exec_driver_sql("GRANT SELECT,INSERT ON effects TO destination_runtime")
             migrate_guard(destination_admin, runtime_role="clean_application")
-            yield Databases(admin, runtime, engine("bookkeeping", "bk_verifier"), Rules(engine("rules", "rules_agent")), Rules(engine("rules", "operator")),
+            yield Databases(admin, runtime, engine("bookkeeping", "bk_verifier"), Rules(engine("rules", "rules_agent")),
                             ChangeJournal(engine("change_journal", "ledger_runtime")), ledger_admin,
                             engine("destination", "destination_runtime"), destination_admin, engine("destination", "clean_application"))
         finally:
@@ -109,8 +106,8 @@ def config(steps=1, *, seconds=120, zero=False, resource="output:{destination}")
         "checks": ["manifest.hash", "work.accounting", "journal.delivered"]}}}}
 
 
-def approved_acquisition(body, name, contracts, manifest):
-    """Attach a bounded fixture feed to an MDM Rules source document."""
+def fixture_feed(body, name, contracts):
+    """Attach a bounded fixture feed to a source document."""
     body["source"] = name
     body["acquisition"] = {"version": 1, "feeds": {"fixture": {
         "family": "fixture", "datasets": list(contracts), "scope": ["fixture"],
@@ -118,8 +115,6 @@ def approved_acquisition(body, name, contracts, manifest):
         "completeness": {"format": "json", "required": [], "allow_empty": True, "max_bytes": 1024},
         "required_producers": ["fixture"], "url_prefixes": ["https://fixture.invalid/"],
     }}}
-    return {"fixture": {"manifest": manifest, "counts": {"fixture": {"expected": 0, "verified": 0}},
-                        "checks": {"fixture": True}}}
 
 
 def submit(databases, tmp_path, count=3, *, body=None, book=None, output_root=None, cursor=None):
@@ -128,7 +123,7 @@ def submit(databases, tmp_path, count=3, *, body=None, book=None, output_root=No
         book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)
     body = body or config()
     name = f"fixture-{uuid4().hex}"
-    saved = databases.rules.save("source", name, "1", body)
+    saved = frozen.of("source", name, body)
     artifacts = book.artifacts
     units = []
     for n in range(count):
@@ -137,11 +132,7 @@ def submit(databases, tmp_path, count=3, *, body=None, book=None, output_root=No
         units.append({"keys": {"id": str(n), "destination": output.as_uri()}, "input": source, "output": output.as_uri(),
                       "cursor": cursor(n) if cursor else {"offset": n}})
     inputs = artifacts.put(tmp_path.as_uri() + "/manifests", {"version": 1, "units": units})
-    databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True})
-    if body.get("dataset_contracts"):
-        approve(databases.approver, "source", name, "1")
-    databases.rules.activate("source", name, "1")
-    rules = databases.rules.resolve("source", name, root=tmp_path.as_uri() + "/rules")
+    rules = Artifacts().put(tmp_path.as_uri() + "/rules", saved)
     rid = book.start(rules_ref=rules, inputs_ref=inputs, target="silver", scope={"test": name})
     return book, rid, inputs, name
 
@@ -188,96 +179,6 @@ def test_bookkeeping_cli_init_and_migrate_use_owner_and_preserve_empty_control(m
             if owner is not None:
                 owner.dispose()
             setup.dispose()
-
-
-def test_pipeline_rules_and_approval_authority(databases, tmp_path):
-    body = config()
-    body["dataset_contracts"] = {"fixture": {"contract": {}}}
-    name = "approval-" + uuid4().hex
-    saved = databases.rules.save("pipeline", name, "1", body)
-    with pytest.raises(DBAPIError), databases.rules.engine.begin() as conn:
-        conn.execute(text("UPDATE rules.rule_version SET approved_by='operator',approved_at=clock_timestamp() WHERE name=:n"), {"n": name})
-    with pytest.raises(DBAPIError), databases.rules.engine.begin() as conn:
-        conn.execute(text("UPDATE rules.rule_version SET body='{}' WHERE name=:n"), {"n": name})
-    databases.rules.prove("pipeline", name, "1", {"digest": saved["digest"], "batch_hash": "a"*64, "passed": True})
-    with pytest.raises(DBAPIError):
-        databases.rules.activate("pipeline", name, "1")
-    approve(databases.approver, "pipeline", name, "1")
-    databases.rules.activate("pipeline", name, "1")
-    ref = databases.rules.resolve("pipeline", name, root=tmp_path.as_uri())
-    export = Artifacts().json(ref)
-    assert export["approval"]["by"] == "operator"
-    with pytest.raises(DBAPIError), databases.rules.engine.begin() as conn:
-        conn.execute(text("UPDATE rules.rule_version SET status='draft' WHERE name=:n"), {"n": name})
-    with pytest.raises(Blocked):
-        databases.rules.save("pipeline", name, "1", {**body, "change": True})
-    target = tmp_path / "pipeline.yaml"
-    databases.rules.to_file("pipeline", name, "1", target)
-    from edgar_warehouse.rules.files import load
-    assert digest(load(target)) == saved["digest"]
-
-
-@pytest.mark.parametrize("damage", ["failed", "truthy", "digest", "batch_hash", "unapproved_operation"])
-def test_submission_rejects_invalid_proof_or_unapproved_mastering(databases, tmp_path, damage):
-    from copy import deepcopy
-    book, rid, inputs, _ = submit(databases, tmp_path)
-    rules = book.artifacts.json(book._run(rid)["submission"]["rules"])
-    invalid = deepcopy(rules)
-    # A source that masters nothing needs no proof (ticket 187), so the proof is damaged on a source that
-    # masters: a pipeline whose first step merges into MDM, with its digest and its proof's digest kept equal.
-    invalid["kind"] = "pipeline"
-    invalid["body"]["bookkeeping"]["targets"]["silver"]["steps"][0]["operation"] = "mastering.merge"
-    invalid["body"]["dataset_contracts"] = {"fixture": {"contract": {}}}
-    invalid["digest"] = digest(invalid["body"])
-    invalid["proof"]["digest"] = invalid["digest"]
-    if damage == "failed":
-        invalid["proof"]["passed"] = False
-    elif damage == "truthy":
-        invalid["proof"]["passed"] = "true"
-    elif damage == "digest":
-        invalid["proof"]["digest"] = "0" * 64
-    elif damage == "batch_hash":
-        invalid["proof"]["batch_hash"] = "missing"
-    else:
-        assert damage == "unapproved_operation"  # a mastering operation still requires approval (shaped above)
-    ref = book.artifacts.put(tmp_path.as_uri() + "/invalid", invalid)
-    proposed = str(uuid4())
-    with pytest.raises(Blocked):
-        book.start(rules_ref=ref, inputs_ref=inputs, target="silver", scope={}, run_id=proposed)
-    with databases.runtime.connect() as conn:
-        assert not conn.scalar(text("SELECT EXISTS(SELECT 1 FROM bookkeeping.pipeline_run WHERE run_id=CAST(:r AS uuid))"), {"r": proposed})
-
-
-def test_two_way_rules_migration_preserves_all_document_digests(databases, tmp_path):
-    from edgar_warehouse.rules import files
-    version = "roundtrip-" + uuid4().hex
-    rows = databases.rules.from_files(files.ROOT, version)
-    assert {r["kind"] for r in rows} == {"source", "merge", "pipeline"}
-    # The approvals are in git (ticket 193): loading approves every version whose digest `rules/approvals.yaml` lists.
-    from edgar_warehouse.rules import approvals
-
-    assert approvals.missing() == []  # a rules change comes with its approval line
-    assert all(r["status"] == "proven" and r["approved_by"] and r["proof"] is None for r in rows)
-    exported = databases.rules.to_files(tmp_path, version)
-    assert {r["digest"] for r in rows} == {r["digest"] for r in exported}
-    assert digest(files.policy(tmp_path)) == digest(files.policy())
-    for name in ("gleif", "sec.company"):
-        assert digest(files.source(name, tmp_path)) == digest(files.source(name))
-    assert digest(files.pipeline("sec.thirteenf.extract", tmp_path)) == digest(files.pipeline("sec.thirteenf.extract"))
-    assert files.identifiers(tmp_path) == files.identifiers()  # the build's identifier types travel with it
-
-
-def test_invalid_proof_and_unsafe_document_names_refused(databases):
-    name = "invalid-proof-" + uuid4().hex
-    saved = databases.rules.save("pipeline", name, "1", config())
-    with pytest.raises(DBAPIError):  # the database refuses an unpinned batch
-        databases.rules.prove("pipeline", name, "1", {"digest": saved["digest"], "batch_hash": None, "passed": True})
-    with pytest.raises(Blocked, match="whether it passed"):
-        databases.rules.prove("pipeline", name, "1", {"digest": saved["digest"], "batch_hash": "a"*64, "passed": "true"})
-    with pytest.raises(Blocked):
-        databases.rules.save("pipeline", "../escape", "1", config())
-    with pytest.raises(DBAPIError), databases.rules.engine.begin() as conn:
-        conn.execute(text("INSERT INTO rules.rule_version(kind,name,version,body,digest) VALUES('pipeline','../escape','1','{}',:d)"), {"d": digest({})})
 
 
 def test_full_completion_and_duplicate_delivery(databases, tmp_path):
@@ -407,10 +308,8 @@ def staged_submission(databases, tmp_path):
     manifest = {"version": 2, "steps": {"z_capture": capture, "a_transform": transform_units, "b_finish": finish}}
     inputs = book.artifacts.put(tmp_path.as_uri() + "/manifests", manifest)
     name = "stages-" + uuid4().hex
-    saved = databases.rules.save("pipeline", name, "1", body)
-    databases.rules.prove("pipeline", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True})
-    databases.rules.activate("pipeline", name, "1")
-    rules = databases.rules.resolve("pipeline", name, root=tmp_path.as_uri() + "/rules")
+    saved = frozen.of("pipeline", name, body)
+    rules = Artifacts().put(tmp_path.as_uri() + "/rules", saved)
     rid = book.start(rules_ref=rules, inputs_ref=inputs, target="silver", scope={"test": name})
     book.workers = {"artifact.copy": copy, "fixture.transform": Transform}
     return book, rid, manifest, executions
@@ -486,7 +385,7 @@ def fan_in_submission(databases, tmp_path, first=None, declared=None, capture=No
     """A gathering step whose one input is a document composed from many verified outputs (to-do 20c).
     `first`: the slot `first` names this unit instead (another run's, ticket 120), which the gathering
     step declares as `declared` ({source, target, step}). `capture`: the capture the manifest was
-    written from (ticket 121); `pipeline`: an active pipeline's name, so two runs are one target's."""
+    written from (ticket 121); `pipeline`: a pipeline's name, so two runs are one target's."""
     book, _, manifest, executions = staged_submission(databases, tmp_path)
     gathered = []
 
@@ -533,15 +432,8 @@ def fan_in_submission(databases, tmp_path, first=None, declared=None, capture=No
         manifest["capture"] = capture
     inputs = book.artifacts.put(tmp_path.as_uri() + "/manifests", manifest)
     name = pipeline or "fan-in-" + uuid4().hex
-    try:  # a second run of an active pipeline submits under it again
-        active = bool(pipeline) and databases.rules.version("pipeline", name, "1")["status"] == "active"
-    except Blocked:
-        active = False
-    if not active:
-        saved = databases.rules.save("pipeline", name, "1", body)
-        databases.rules.prove("pipeline", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True})
-        databases.rules.activate("pipeline", name, "1")
-    rules = databases.rules.resolve("pipeline", name, root=tmp_path.as_uri() + "/rules")
+    saved = frozen.of("pipeline", name, body)  # a second run of the same pipeline freezes the same digest
+    rules = Artifacts().put(tmp_path.as_uri() + "/rules", saved)
     rid = book.start(rules_ref=rules, inputs_ref=inputs, target="silver", scope={"test": name})
     book.workers = {**book.workers, "fixture.gather": Gather}
     return book, rid, output, executions, gathered
@@ -1198,7 +1090,7 @@ def test_two_workers_in_their_own_processes_complete_a_cli_submitted_run(databas
     second.update(operation="jsonl.count", checks=["input.hash", "output.receipt", "count.readback"])
     book = Bookkeeping(databases.runtime)
     name = f"workers-{uuid4().hex}"
-    saved = databases.rules.save("source", name, "1", body)
+    saved = frozen.of("source", name, body)
     copies = []
     for n in range(2):
         source = book.artifacts.put(tmp_path.as_uri() + "/inputs", {"row": n})
@@ -1208,8 +1100,6 @@ def test_two_workers_in_their_own_processes_complete_a_cli_submitted_run(databas
                "input": {"from": {"step": "s0", "key": str(n)}}, "output": (tmp_path / f"count-{n}").as_uri(),
                "cursor": {"offset": n}} for n in range(2)]
     inputs = book.artifacts.put(tmp_path.as_uri() + "/manifests", {"version": 2, "steps": {"s0": copies, "s1": counts}})
-    databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True})
-    databases.rules.activate("source", name, "1")
     environment = {"BOOKKEEPING_DATABASE_URL": databases.runtime.url.render_as_string(hide_password=False),
                    "RULES_DATABASE_URL": databases.rules.engine.url.render_as_string(hide_password=False),
                    "CHANGE_JOURNAL_DATABASE_URL": databases.ledger.engine.url.render_as_string(hide_password=False),
@@ -1217,7 +1107,9 @@ def test_two_workers_in_their_own_processes_complete_a_cli_submitted_run(databas
     for key, value in environment.items():
         monkeypatch.setenv(key, value)
     monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
-    assert main(["rules", "run", "--source", name, "--target", "silver",
+    from edgar_warehouse.rules import files
+    files.write_source(body, tmp_path / "rules-root" / "sources" / name)
+    assert main(["rules", "run", "--source", name, "--target", "silver", "--root", str(tmp_path / "rules-root"),
                  "--input-manifest", inputs["uri"], "--input-sha256", inputs["sha256"]]) == 0
     submitted = json.loads(capsys.readouterr().out)
     rid = submitted["run"]["run_id"]
@@ -1290,7 +1182,7 @@ def _provision(server, monkeypatch, runpy):
         assert set(result) == {"bookkeeping", "rules", "change_journal"}
         assert provision(url, rules=True, journal=True) == result
         for database, role, table in (("bookkeeping", "bookkeeping_runtime", "bookkeeping.pipeline_run"),
-                                      ("rules", "rules_agent", "rules.rule_version")):
+                                      ("rules", "rules_agent", "rules.rules_used")):
             runtime = create_engine(server.url(database, role, driver="postgresql"))
             engines.append(runtime)
             with runtime.connect() as conn:
@@ -1323,26 +1215,22 @@ def test_a_claim_of_one_passes_a_unit_another_attempt_holds(databases, tmp_path)
     assert len(reported) == 1
 
 
-def test_a_source_with_acquisition_runs_captured_data_on_its_test_run_alone(databases, tmp_path):
-    """Operator, 2026-10-19: the pipes switch on apart from live data. A version proven on a
-    test run (no acquisition evidence) and approved runs over captured data; a run with a feed,
-    an empty feed, and a capture step without a feed are refused at submit."""
+def test_a_source_with_acquisition_runs_captured_data_without_its_feed(databases, tmp_path):
+    """A source that declares acquisition runs over captured data with no feed named. A run that names a
+    feed whose producers the target lacks, or an empty feed, is refused at submit."""
     book = Bookkeeping(databases.runtime)
     body = config()
     name = f"pipes-{uuid4().hex}"
-    approved_acquisition(body, name, [], None)
-    saved = databases.rules.save("source", name, "1", body)
+    fixture_feed(body, name, [])
+    saved = frozen.of("source", name, body)
     units = book.artifacts.put(tmp_path.as_uri() + "/inputs", {"version": 1, "units": [
         {"keys": {"id": "0", "destination": (tmp_path / "out-0").as_uri()},
          "input": book.artifacts.put(tmp_path.as_uri() + "/inputs", {"row": 0}),
          "output": (tmp_path / "out-0").as_uri(), "cursor": {"offset": 0}}]})
-    databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": units["sha256"], "passed": True})
-    approve(databases.approver, "source", name, "1")
-    databases.rules.activate("source", name, "1")
-    rules = databases.rules.resolve("source", name, root=tmp_path.as_uri() + "/rules")
+    rules = Artifacts().put(tmp_path.as_uri() + "/rules", saved)
 
     assert book.start(rules_ref=rules, inputs_ref=units, target="silver", scope={"source": name})
-    with pytest.raises(Blocked, match="qualify every declared acquisition feed"):
+    with pytest.raises(Blocked, match="omits required acquisition producers"):
         book.start(rules_ref=rules, inputs_ref=units, target="silver", scope={"source": name, "feed": "fixture"})
     with pytest.raises(Blocked, match="declared feed's name"):
         book.start(rules_ref=rules, inputs_ref=units, target="silver", scope={"source": name, "feed": ""})
@@ -1353,16 +1241,13 @@ def test_a_capture_runs_only_with_its_feed(databases, tmp_path):
     body = config()
     body["bookkeeping"]["targets"]["silver"]["steps"][0]["operation"] = "provider.capture"
     name = f"pipes-{uuid4().hex}"
-    approved_acquisition(body, name, [], None)
-    saved = databases.rules.save("source", name, "1", body)
+    fixture_feed(body, name, [])
+    saved = frozen.of("source", name, body)
     units = book.artifacts.put(tmp_path.as_uri() + "/inputs", {"version": 1, "units": [
         {"keys": {"id": "0", "destination": (tmp_path / "out-0").as_uri()},
          "input": book.artifacts.put(tmp_path.as_uri() + "/inputs", {"row": 0}),
          "output": (tmp_path / "out-0").as_uri(), "cursor": {"offset": 0}}]})
-    databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": units["sha256"], "passed": True})
-    approve(databases.approver, "source", name, "1")
-    databases.rules.activate("source", name, "1")
-    rules = databases.rules.resolve("source", name, root=tmp_path.as_uri() + "/rules")
+    rules = Artifacts().put(tmp_path.as_uri() + "/rules", saved)
     with pytest.raises(Blocked, match="only as live acquisition"):
         book.start(rules_ref=rules, inputs_ref=units, target="silver", scope={"source": name})
 
@@ -1374,29 +1259,21 @@ def test_rules_run_submits_a_source_with_acquisition_over_captured_files(databas
     book = Bookkeeping(databases.runtime)
     body = config()
     name = f"pipes-{uuid4().hex}"
-    approved_acquisition(body, name, [], None)
-    saved = databases.rules.save("source", name, "1", body)
+    fixture_feed(body, name, [])
+    saved = frozen.of("source", name, body)
     inputs = book.artifacts.put(tmp_path.as_uri() + "/inputs", {"version": 1, "units": [
         {"keys": {"id": "0", "destination": (tmp_path / "out-0").as_uri()},
          "input": book.artifacts.put(tmp_path.as_uri() + "/inputs", {"row": 0}),
          "output": (tmp_path / "out-0").as_uri(), "cursor": {"offset": 0}}]})
-    databases.rules.prove("source", name, "1", {"digest": saved["digest"], "batch_hash": inputs["sha256"], "passed": True})
-    approve(databases.approver, "source", name, "1")
-    databases.rules.activate("source", name, "1")
     for key, value in {"BOOKKEEPING_DATABASE_URL": databases.runtime.url.render_as_string(hide_password=False),
                        "RULES_DATABASE_URL": databases.rules.engine.url.render_as_string(hide_password=False),
                        "CHANGE_JOURNAL_DATABASE_URL": databases.ledger.engine.url.render_as_string(hide_password=False),
                        "BOOKKEEPING_MANIFEST_ROOT": (tmp_path / "cli-manifests").as_uri()}.items():
         monkeypatch.setenv(key, value)
     monkeypatch.delenv("MDM_DATABASE_URL", raising=False)
-    assert main(["rules", "run", "--source", name, "--target", "silver",
+    from edgar_warehouse.rules import files
+    files.write_source(body, tmp_path / "rules-root" / "sources" / name)
+    assert main(["rules", "run", "--source", name, "--target", "silver", "--root", str(tmp_path / "rules-root"),
                  "--input-manifest", inputs["uri"], "--input-sha256", inputs["sha256"]]) == 0
     submitted = json.loads(capsys.readouterr().out)
     assert submitted["run"]["submission"]["scope"] == {"kind": "source", "name": name, "source": name, "target": "silver"}
-
-
-def test_a_source_version_with_the_old_mdm_key_cannot_be_saved(databases):
-    body = config()
-    body["mdm"] = {"fixture": {"contract": {}}}
-    with pytest.raises(DBAPIError, match="dataset_contracts, not mdm"):
-        databases.rules.save("source", "old-key-" + uuid4().hex, "1", body)

@@ -126,44 +126,22 @@ def acquisition(document: dict) -> dict:
 
 
 def processing_authority(export: dict) -> dict:
-    """A proven, approved source version processing data already captured: its
-    test run holds and the operator approved this exact digest. Switching on its
-    live acquisition is separate (`frozen_authority`; operator, 2026-10-19:
-    "decouple actual turning on to live data to test and turn on the pipes
-    using already captured data")."""
+    """The frozen rules of a source, as a run holds them: its name and the digest of its body."""
     if (
         export.get("kind") != "source"
-        or export.get("status") not in {"active", "proven"}
         or export["body"].get("source") != export.get("name")
         or digest(export["body"]) != export.get("digest")
     ):
-        raise Blocked("A frozen proven Rules source envelope is required")
-    proof, approval = export.get("proof") or {}, export.get("approval") or {}
-    if not (proof_holds(export) or finalized_holds(export)):
-        raise Blocked("Processing requires verified Rules proof or finalized rules")
-    if (
-        approval.get("digest") != export["digest"]
-        or not approval.get("by")
-        or not approval.get("at")
-    ):
-        raise Blocked("Processing requires approval of the exact Rules version")
-    return {
-        "name": export["name"],
-        "version": export["version"],
-        "digest": export["digest"],
-        "proof": proof,
-        "approval": approval,
-    }
+        raise Blocked("A run needs a source's frozen rules: its name and the digest of its body")
+    return {"name": export["name"], "version": export["version"], "digest": export["digest"]}
 
 
-def frozen_authority(export: dict, feed: str, *, artifacts=None) -> dict:
-    """Live acquisition of `feed`: the processing authority and the proof of a
-    real acquisition run of every declared feed."""
+def frozen_authority(export: dict, feed: str) -> dict:
+    """Live acquisition of `feed`: the source's frozen rules and the feed's declared configuration."""
     authority = processing_authority(export)
-    validation_proof(export["body"], authority["proof"], artifacts=artifacts)
     feeds = acquisition(export["body"])
     if feed not in feeds:
-        raise Blocked("Feed is absent from frozen acquisition authority")
+        raise Blocked("Feed is absent from the source's acquisition section")
     return {**authority, "feed": feed, "configuration": feeds[feed]}
 
 
@@ -177,16 +155,12 @@ def registration_authority(export: dict, code: str, contract: dict) -> dict:
             (feed, value) for feed, value in feeds.items() if code in value["datasets"]
         ]
         if len(declared) != 1 or declared[0][1]["family"] != contract["family"]:
-            raise Blocked("Dataset requires exactly one approved feed with matching family")
+            raise Blocked("Dataset requires exactly one feed with matching family")
     elif contract["family"] != (export["body"].get("bronze") or {}).get("family"):
         raise Blocked("Dataset of a source with no feed of its own names the family its source reads (bronze.family)")
-    # A dataset is registered when its pipes switch on: the processing
-    # authority, not its live acquisition's.
     frozen = processing_authority(export)
     if export["body"].get("dataset_contracts", {}).get(code, {}).get("contract") != contract:
-        raise Blocked(
-            "Dataset contract differs from the frozen approved Rules document"
-        )
+        raise Blocked("Dataset contract differs from the source's frozen rules")
     version_id = str(
         uuid5(
             NAMESPACE_URL,
@@ -200,64 +174,3 @@ def registration_authority(export: dict, code: str, contract: dict) -> dict:
         "coverage_action": "add",
         "rules": frozen,
     }
-
-
-def masters_nothing(kind: str, body: dict) -> bool:
-    """A source with no Dataset Contract, no `mdm` target and no acquisition maps one to one into silver:
-    there is nothing to prove (operator, 2026-11-03: "There is nothing to prove in silver")."""
-    targets = ((body.get("bookkeeping") or {}).get("targets") or {})
-    return kind == "source" and "dataset_contracts" not in body and "acquisition" not in body and "mdm" not in targets
-
-
-def finalized_holds(export: dict) -> bool:
-    """Rules finalized on main: the operator approved this exact digest on the merge that made them final, so
-    no test run is needed (operator, 2026-11-04: "you dont need proof to activate once the rules are finalized")."""
-    approval = export.get("approval") or {}
-    return (approval.get("digest") == export.get("digest") and bool(approval.get("by"))
-            and bool(approval.get("finalized")))
-
-
-def proof_holds(export: dict) -> bool:
-    """A version's test evidence stands: its proof passed, or the operator
-    overruled a failing one when approving this exact version."""
-    proof, approval = export.get("proof") or {}, export.get("approval") or {}
-    if proof.get("digest") != export.get("digest"):
-        return False
-    return proof.get("passed") is True or (
-        proof.get("passed") is False and approval.get("digest") == export.get("digest") and bool(approval.get("overrule")))
-
-
-def validation_proof(body: dict, proof: dict, *, artifacts=None) -> None:
-    feeds = acquisition(body)
-    verified = proof.get("acquisition")
-    if not isinstance(verified, dict) or set(verified) != set(feeds):
-        raise Blocked("Rules proof must qualify every declared acquisition feed")
-    for feed, value in verified.items():
-        if not isinstance(value, dict) or set(value) != {
-            "manifest",
-            "counts",
-            "checks",
-        }:
-            raise Blocked("Feed proof requires baseline manifest, counts and checks")
-        reference(value["manifest"])
-        if artifacts is not None:
-            artifacts.verified(value["manifest"], max_bytes=32 * 1024**2)
-        if (
-            not isinstance(value["counts"], dict)
-            or set(value["counts"]) != set(feeds[feed]["required_producers"])
-            or any(
-                not isinstance(count, dict)
-                or set(count) != {"expected", "verified"}
-                or type(count["expected"]) is not int
-                or count["expected"] < 0
-                or type(count["verified"]) is not int
-                or count["verified"] != count["expected"]
-                for count in value["counts"].values()
-            )
-            or not isinstance(value["checks"], dict)
-            or not value["checks"]
-            or any(v is not True for v in value["checks"].values())
-        ):
-            raise Blocked(
-                "Acquisition proof requires complete producer counts and verified checks"
-            )

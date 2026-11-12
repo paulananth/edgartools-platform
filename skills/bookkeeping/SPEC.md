@@ -64,7 +64,7 @@ under its own ticket. Journal delivery uses the shared Change Journal adapter.
 
 The operator assigned Codex the required Rules integration during this task,
 including schema, resolver and runner. This extends Claude's planned single
-`rules.rule_version` table with the `pipeline` document kind. No other
+rules documents with the `pipeline` document kind. No other
 configuration table is created. The implementation lives in the existing
 `edgar_warehouse.rules` package; Claude should reuse it when adding its parse
 engine, proof runner and skill commands, rather than implement another store.
@@ -92,13 +92,8 @@ existing run's export. Changing the input reference or operation version
 requires a new run. Resume rechecks retained completion evidence; it never
 imports a legacy run or invents a missing worklist.
 
-Submission requires a boolean passed proof for the exact Rules digest and a
-valid proof batch hash. Mastering operations require exact-digest approval
-even under a pipeline document or a target with a different name.
-
-`rules record-proof` records a hashed proof produced by a separate evaluator.
-It does **not** perform source parsing tests, named cases, or a Batch Gate.
-Claude's planned proof evaluator remains necessary for production approval.
+Submission requires the frozen rules: the document as `rules check` accepts it, under the digest of its body.
+`rules run` freezes the files it is given and records that digest in the Rules Database.
 File → DB → file round trips preserve the JSON digest, not comments or YAML
 ordering. Approval metadata is not copied into a mutable authoring file.
 
@@ -203,7 +198,7 @@ moves nothing); `matches` ties a file to the capture (`to: receipts_sha256`: the
 file's dotted `path` must equal the sha256 of the capture's receipts file, else
 the manifest is refused as not counting this capture). Facts are what the
 operator gives (`--fact name=value`, a JSON value or text) and files are JSON files from outside the capture (`--file name=path`), for
-`rules test` and `mdm prepare-capture` alike. A run that gives other ones is
+`mdm prepare-capture`. A run that gives other ones is
 refused; each file's and each fact's digest joins the processing identity and the run's ids.
 
 The writer forms these for `source.read` and `source.combine` (one unit:
@@ -357,13 +352,8 @@ the five-table control boundary; see
 [Change Journal](../change-journal/SPEC.md) for their transaction/recovery contract.
 
 ```bash
-edgar-warehouse rules save --source <source> --version <new-version> rules/sources/<source>/source.yaml
-edgar-warehouse rules record-proof --source <source> --version <new-version> --proof-uri <URI> --proof-sha256 <SHA256>
-edgar-warehouse rules pending
-# Only on the person's own words, for the version they read.
-edgar-warehouse rules approve --source <source> --version <new-version> --evidence <evidence_hash from pending> \
-  --by "<name>" --words "<their exact words>"
-edgar-warehouse rules activate --source <source> --version <new-version>
+edgar-warehouse rules check --source <source>
+edgar-warehouse rules register --source <source>
 edgar-warehouse rules run --source <source> --target <merge target> --input-manifest <URI> --input-sha256 <SHA256> --limit 100
 edgar-warehouse rules run --source <source> --target <merge target> --resume-run-id <UUID> --limit 100
 edgar-warehouse bookkeeping status <UUID>

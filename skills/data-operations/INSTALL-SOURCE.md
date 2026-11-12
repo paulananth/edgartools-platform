@@ -21,36 +21,17 @@ submits one source.
    targets in that order; `rules/source-sequence.yaml` gives the order of
    sources, and a domain skill gives a domain's. Do not add a second inventory
    field, and do not submit another source in its place. A successful check does
-   not install, approve or start a run. Detail is in
+   not start a run. Detail is in
    `docs/specs/source-sequencing.md` in the repository.
-2. **Install that source only.** Save its document into the Rules database.
-   `rules load` saves every file under a root; do not use it for one source. A new store taking every
-   source (a go-live) needs nothing but git: `rules load --root rules --version <name>` saves each document
-   and approves it from `rules/approvals.yaml` with no test run, then `rules activate` each one (merge
-   policy first, then the pipeline, then the sources).
+2. **Check it.** `edgar-warehouse rules check --source <name>`. The files under `rules/` are the rules: nothing
+   is saved, approved or activated first.
+3. **Register it** (the load does this itself; run it alone only to see the result):
    ```bash
-   edgar-warehouse rules save --source <name> --version <v> rules/sources/<name>/source.yaml
+   edgar-warehouse rules register --source <name>
    ```
-   Check it offline first with `edgar-warehouse rules check --source <name>`.
-   Then record that version's proof before any approval: carry the last
-   proof forward when [mdm-engineering](../mdm-engineering/SKILL.md#choose-the-cheapest-proof)'s
-   "Choose the cheapest proof" allows it, and run no new test. Otherwise data-onboarding's **test** step runs and records one (`rules
-   test --version`). A test that stops is not a proof and is not recorded.
-3. **Enable it.** Follow [APPROVE](../data-onboarding/APPROVE.md), with activation
-   connections from [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
-   Activation registers the version in MDM and stops with "MDM activation requires an
-   explicit destination connection" without it. Activate the merge policy this source depends on first, then this source:
-   ```bash
-   edgar-warehouse rules activate --source <name> --version <v>
-   edgar-warehouse rules status --source <name>
-   ```
-   Enabled means `rules status` shows that version `active`. There is no
-   separate enable command.
-   **A source that masters nothing needs no proof and no approval** (operator: "There is nothing to prove in silver it is just one to one no
-   mastering"): one with no Dataset Contract, no `mdm` target and no acquisition
-   maps its files one to one into silver. Check it (`rules check`), save it, and
-   `rules activate` it from draft; `rules test` refuses such a source anyway.
-   Its silver tables must be registered first (`infra/scripts/deploy-silver-local.sh
+   It registers the merge rules and the source's Dataset Contracts in MDM with the store owner's connection
+   (`MDM_REGISTRATION_DATABASE_URL`, [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment)).
+   A source that lands silver needs its silver tables registered first (`infra/scripts/deploy-silver-local.sh
    <name>`), and a load stops before it starts if an env file has no silver login.
 4. **Load it.** One command, for any source and target, over files already
    captured. See **Load a capture** below.

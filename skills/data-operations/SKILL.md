@@ -407,8 +407,7 @@ Work it out from counts before starting:
 prepare-capture`, `rules run`, `workers work <operation> <run>` (several in
 parallel; a lease keeps two off the same unit), one `workers verify`, and
 `bookkeeping finalize <run>` ([Bookkeeping run](../bookkeeping/RUN.md)).
-`rules test` drives its two proof passes with the same driver. Do not write
-a source-specific driver script. A missing step is a gap in `load`: fix it
+Do not write a source-specific driver script. A missing step is a gap in `load`: fix it
 there.
 
 ## Operate the recurring loop

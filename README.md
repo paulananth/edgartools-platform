@@ -241,21 +241,11 @@ gets its own onboarding and source folder.
    instead of `rules`. These commands generate or inspect metadata; they do not
    approve or activate processing. Add the approved profiling summary as
    `profile.yaml` when publishing the part's silver and reference-data metadata.
-6. **Test the actual processing path.** Start with a small receipt-verified
-   captured sample, then run the qualification the part needs. Check values,
-   rejected records, identity decisions, source priority, relationships and
-   repeat-run behavior. Matching changes need their proving evidence. The
-   installed read → prepare → merge path needs real PostgreSQL 16 proof with
-   separate worker and verifier roles; a mapping-only check cannot replace it.
-   Reuse the first run's evidence unless inputs, rules or engine changed.
-7. **Save, approve and activate as separate steps.** Save descriptively named
-   Rules versions, record their test evidence, and inspect `rules pending`.
-   Explain the changes and results before asking for the operator's approval;
-   record their exact words. Activation needs its own authorization. Activating
-   a source also requires receipts from a real acquisition run of that source.
-   Follow the [approval guide](skills/data-onboarding/APPROVE.md); merging a PR
-   or generating a workbook does not authorize these steps.
-8. **Run, verify and expose the result.** Use the declared
+6. **Check and load.** The files under `rules/` are the rules: `rules check` accepts them offline, and
+   `edgar-warehouse load` registers them in MDM, then prepares, submits and drives each bundle of a capture.
+   Load into a disposable store first and read the counts
+   ([check and load](skills/data-onboarding/LOAD.md)). Nothing is saved, approved or activated before a run.
+7. **Run, verify and expose the result.** Use the declared
    [Bookkeeping workflow](skills/bookkeeping/RUN.md). Workers do the work;
    independent verifiers reread the destinations. Check that all units are
    verified and the run is finalized. Register and land silver explicitly where

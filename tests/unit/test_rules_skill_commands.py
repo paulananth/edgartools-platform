@@ -11,10 +11,9 @@ from edgar_warehouse.rules.cli import register
 SKILLS = Path(__file__).resolve().parents[2] / "skills"
 FILES = [
     SKILLS / "data-onboarding" / "SKILL.md",
-    SKILLS / "data-onboarding" / "APPROVE.md",
+    SKILLS / "data-onboarding" / "LOAD.md",
     SKILLS / "refining-rules" / "SKILL.md",
     SKILLS / "data-onboarding" / "MAP.md",
-    SKILLS / "data-onboarding" / "TEST.md",
 ]
 
 def _built():
@@ -43,12 +42,11 @@ def test_every_flag_the_skill_writes_exists_on_its_command(path):
         for flag in re.findall(r"--[a-z0-9-]+", rest):
             assert flag in built[command]._option_string_actions, f"rules {command} {flag}"
 
-def test_migrate_means_a_schema_upgrade_and_load_moves_files():
+def test_migrate_means_a_schema_upgrade_and_no_command_moves_rules_into_a_database():
     built = _built()
     assert "--agent-role" in built["migrate"]._option_string_actions
-    for command in ("load", "unload"):
-        assert {"--root", "--version"} <= set(built[command]._option_string_actions)
-    assert "--to-db" not in built["migrate"]._option_string_actions
+    assert not {"load", "unload", "save", "activate"} & set(built)
+
 
 def test_each_skill_says_when_to_use_the_other():
     onboarding = " ".join(FILES[0].read_text().split())

@@ -53,8 +53,6 @@ def provision(admin_url: str, *, rules: bool = False, journal: bool = False):
                     raise Blocked(f"Existing {database} database has another owner; refusing to adopt it")
                 if existing_owner is None:
                     conn.exec_driver_sql(f"CREATE DATABASE {quote(database)} OWNER {quote(owner)}")
-            if rules and not conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='rules_approver')")):
-                conn.exec_driver_sql("CREATE ROLE rules_approver NOLOGIN")
         for database, owner, runtime, _ in requested:
             engine = create_engine(make_url(admin_url).set(database=database), hide_parameters=True)
 

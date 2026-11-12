@@ -13,6 +13,8 @@ from uuid import uuid4
 
 import pytest
 
+from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from edgar_warehouse.rules import frozen
 from edgar_warehouse.bookkeeping.clean.database import grant_profile
 from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
 from edgar_warehouse.mdm.target_manifest import write_manifest
@@ -95,11 +97,8 @@ def run_target(databases, tmp_path, body, target=TARGET):
     del steps["merge"], steps["processed"]
     manifest = book.artifacts.put(tmp_path.as_uri() + "/submitted", {"version": 2, "steps": steps})
     version = uuid4().hex
-    saved = databases.rules.save("source", "openfigi", version, rules_body)
-    databases.rules.prove("source", "openfigi", version,
-                          {"digest": saved["digest"], "batch_hash": manifest["sha256"], "passed": True})
-    databases.rules.activate("source", "openfigi", version)
-    rules = databases.rules.resolve("source", "openfigi", root=tmp_path.as_uri() + "/rules")
+    saved = frozen.of("source", "openfigi", rules_body)
+    rules = Artifacts().put(tmp_path.as_uri() + "/rules", saved)
     rid = book.start(rules_ref=rules, inputs_ref=manifest, target=target, scope={"test": version})
     state = drive(book, rid, databases.ledger, workers=WORKERS)
     assert state["run"]["state"] == "complete", state

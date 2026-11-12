@@ -4,6 +4,8 @@ An invented monthly file runs through Bookkeeping's claim, lease and verify path
 preparation (read, combine, record, prepare; the merge and the Change Journal have their own
 tests): the filings carry their custodians, and the custodians are one record each however
 many advisers name them. Every name and number is invented."""
+from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from edgar_warehouse.rules import frozen
 import hashlib
 import io
 import json
@@ -73,11 +75,8 @@ def prepared(databases, tmp_path, target):
     for later in ("merge", "land_custody", "processed"):
         steps.pop(later, None)
     manifest = book.artifacts.put(tmp_path.as_uri() + "/submitted", {"version": 2, "steps": steps})
-    saved = databases.rules.save("source", body["source"], "1", body)
-    databases.rules.prove("source", body["source"], "1",
-                          {"digest": saved["digest"], "batch_hash": manifest["sha256"], "passed": True})
-    databases.rules.activate("source", body["source"], "1")
-    rules = databases.rules.resolve("source", body["source"], root=tmp_path.as_uri() + "/rules")
+    saved = frozen.of("source", body["source"], body)
+    rules = Artifacts().put(tmp_path.as_uri() + "/rules", saved)
     rid = book.start(rules_ref=rules, inputs_ref=manifest, target=target, scope={"test": body["source"]})
     state = drive(book, rid, databases.ledger, workers=WORKERS)
     assert state["run"]["state"] == "complete"

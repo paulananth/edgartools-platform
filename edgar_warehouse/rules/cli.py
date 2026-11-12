@@ -1,4 +1,4 @@
-"""Single Rules lifecycle and submission entry point for configured pipelines."""
+"""The rules commands: check the files, register them in MDM, submit a run."""
 from __future__ import annotations
 
 import json
@@ -23,9 +23,8 @@ def _approve_rule(args):
     separate save, test run and approval (the Approve steps, skills/data-onboarding/APPROVE.md)."""
     from datetime import datetime, timezone
 
-    if args.merge != "platform" or args.version or args.evidence or args.overrule:
-        print("--rule switches one rule of the platform merge rules on: use --merge platform, without "
-              "--version, --evidence or --overrule (a rule short of its bar is not overruled here)", file=sys.stderr)
+    if args.merge != "platform":
+        print("--rule switches one rule of the platform merge rules on: use --merge platform", file=sys.stderr)
         return 2
     at = args.at or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     try:
@@ -45,145 +44,82 @@ def _approve_rule(args):
     return 0
 
 
-def _test(args):
-    """A test run of one of a source's targets on local stores (ticket 14)."""
-    from .proving import TestRunError, run
-    from edgar_warehouse.mdm.target_manifest import run_arguments
-
-    try:
-        facts, run_files = run_arguments(args.fact, args.file)
-        result = run(source=args.source, capture=args.capture, documents=args.documents, capture_run=args.capture_run,
-                     as_of=args.as_of, stores=args.stores, out=args.out, minutes=args.minutes,
-                     target=args.target, version=args.version, facts=facts, run_files=run_files)
-    except (TestRunError, ValueError) as error:
-        print(f"Test run stopped: {error}", file=sys.stderr)
-        return 1
-    print(json.dumps({"report": str(args.out), "passed": result["passed"], "recorded": result.get("recorded"),
-                      "second_pass_changed_nothing": result["second_pass_changed_nothing"]}, indent=2))
-    return 0 if result["passed"] else 1
-
-
-def _approvals(args):
-    """The approvals kept in git (ticket 193): `check` names the documents with no approval at their digest,
-    `write` lists every document at its digest in the operator's words."""
-    from . import approvals
-
-    root = Path(args.root)
-    try:
-        if args.action == "check":
-            absent = approvals.missing(root)
-            print(json.dumps({"missing": [{"kind": k, "name": n, "digest": d} for k, n, d in absent]}, indent=2))
-            return 1 if absent else 0
-        entries = approvals.write(root, by=args.by, words=args.words, finalized=args.finalized, at=args.at)
-    except (ValueError, OSError) as error:
-        print(f"Approvals stopped: {error}", file=sys.stderr)
-        return 1
-    print(json.dumps({"approvals": len(entries), "file": str(root / approvals.FILE)}, indent=2))
-    return 0
-
-
 def _handle(args):
+    from . import frozen
     from .db import Rules, get_engine, migrate
-    if args.rules_command == "approve" and args.rule:
+
+    if args.rules_command == "approve":
         return _approve_rule(args)
     if args.rules_command in ("init", "migrate"):
         owner = get_engine(os.environ["RULES_MIGRATION_DATABASE_URL"])
         try:
-            result = migrate(owner, agent_role=args.agent_role, approver_role=args.approver_role, database_name=args.database_name)
+            result = migrate(owner, agent_role=args.agent_role)
+        finally:
+            owner.dispose()
+    elif args.rules_command == "entity-types":
+        result = [{"source": name, "dataset_code": code, "origin": found["origin"],
+                   "entity_types": ",".join(found["types"]), "rule_id": found.get("rule_id")}
+                  for kind, name, path in files.documents() if kind == "source"
+                  for code, found in sorted(files.entity_types(files.load_source(path)).items())]
+    elif args.rules_command == "register":
+        # The store owner's connection: the runtime login cannot add to MDM's registry.
+        owner = get_engine(os.environ["MDM_REGISTRATION_DATABASE_URL"])
+        try:
+            with owner.begin() as conn:
+                result = frozen.register(conn, args.source or None, Path(args.root))
         finally:
             owner.dispose()
     else:
+        name = args.source or args.pipeline or args.merge
+        kind = "source" if args.source else "pipeline" if args.pipeline else "merge"
         rules_engine = get_engine()
-        rules = Rules(rules_engine)
         try:
-            if args.rules_command in ("load", "unload"):
-                method = rules.from_files if args.rules_command == "load" else rules.to_files
-                root = Path(args.root) if args.rules_command == "load" else files.writable(args.root)
-                result = method(root, args.version)
-                print(json.dumps(result, default=str, indent=2, sort_keys=True))
-                return 0
-            if args.rules_command == "entity-types":
-                print(json.dumps(rules.entity_types(), default=str, indent=2, sort_keys=True))
-                return 0
-            if args.rules_command == "pending":
-                print(json.dumps(rules.pending(), default=str, indent=2, sort_keys=True))
-                return 0
-            name = args.source or args.pipeline or args.merge
-            kind = "source" if args.source else "pipeline" if args.pipeline else "merge"
-            operation = args.rules_command
-            if operation == "save":
-                path = Path(args.file)
-                result = rules.save(kind, name, args.version, files.LAYOUT[kind][0](path))
-            elif operation == "status":
-                result = rules.history(kind, name)
-            elif operation == "export":
-                rules.to_file(kind, name, args.version, Path(args.output))
-                result = {"path": args.output, "digest": rules.version(kind, name, args.version)["digest"]}
-            elif operation == "approve":
-                from edgar_warehouse.bookkeeping.clean.config import Blocked
-
-                if not args.version or not (args.evidence or args.finalized):
-                    raise Blocked("Approval names the version and the evidence hash `rules pending` showed, "
-                                  "or --finalized with the merge that made the rules final")
-                row = rules.approve(kind, name, args.version, evidence=args.evidence, by=args.by,
-                                    words=args.words, overrule=args.overrule, finalized=args.finalized)
-                result = {key: row[key] for key in ("kind", "name", "version", "status", "approved_by", "approved_at",
-                                                    "approved_words", "approval_overrule", "approval_evidence")}
-            elif operation == "record-proof":
-                from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-                from edgar_warehouse.bookkeeping.clean.config import Blocked
-
-                proof = Artifacts().json({"uri": args.proof_uri, "sha256": args.proof_sha256})
-                if proof.get("digest") != rules.version(kind, name, args.version)["digest"]:
-                    raise Blocked("Proof names a different Rules digest")
-                rules.prove(kind, name, args.version, proof)
-                result = {"proven": name, "version": args.version, "proof": args.proof_uri}
-            elif operation == "activate":
-                mdm_owner = get_engine(os.environ["RULES_MDM_ACTIVATION_DATABASE_URL"]) if os.environ.get("RULES_MDM_ACTIVATION_DATABASE_URL") else None
-                try:
-                    rules.activate(kind, name, args.version, mdm_engine=mdm_owner)
-                finally:
-                    if mdm_owner is not None:
-                        mdm_owner.dispose()
-                result = {"active": name, "version": args.version}
+            if args.rules_command == "status":
+                result = Rules(rules_engine).history(kind, name)
             else:
-                # Submit only. Workers in their own processes do the work
-                # (`python -m edgar_warehouse.workers`); Bookkeeping runs no
-                # worker code (mastering to-do 20a).
-                from edgar_warehouse.bookkeeping.clean.cli import configured_bookkeeping
-                from edgar_warehouse.bookkeeping.clean.config import Blocked
-
-                book = configured_bookkeeping()
-                try:
-                    if args.resume_run_id:
-                        existing = book.status(args.resume_run_id, limit=1)["run"]["submission"]
-                        if ((existing["kind"], existing["name"], existing["target"]) != (kind, name, args.target)
-                                or args.feed is not None and args.feed != existing["scope"].get("feed")):
-                            raise Blocked("Resume selection differs from the original run")
-                        if args.input_manifest or args.input_sha256:
-                            raise Blocked("Resume uses its frozen input reference; do not supply new inputs")
-                        result = book.resume(args.resume_run_id)
-                    else:
-                        if not args.input_manifest or not args.input_sha256:
-                            raise Blocked("Submission requires an exact input manifest URI and hash")
-                        ref = rules.resolve(kind, name, root=os.environ["BOOKKEEPING_MANIFEST_ROOT"], artifacts=book.artifacts)
-                        from edgar_warehouse.rules.local import staged_inputs
-
-                        # A target marked `local` has its source read and combine steps run here first (ticket 210).
-                        inputs = staged_inputs(book.artifacts, book.artifacts.json(ref)["body"], args.target,
-                                               {"uri": args.input_manifest, "sha256": args.input_sha256})
-                        run_id = book.start(rules_ref=ref, inputs_ref=inputs,
-                                            target=args.target, scope={"kind": kind, "name": name, "target": args.target,
-                                                                     **({"source": name} if kind == "source" else {}),
-                                                                     **({"feed": args.feed} if args.feed else {})})
-                        print(f"Bookkeeping run: {run_id}", file=sys.stderr, flush=True)
-                        result = book.status(run_id)
-                finally:
-                    book.close()
+                result = _run(args, kind, name, Rules(rules_engine))
         finally:
             rules_engine.dispose()
     print(json.dumps(result, default=str, indent=2, sort_keys=True))
     return 3 if isinstance(result, dict) and result.get("run", {}).get("state") in ("waiting", "blocked") else 0
+
+
+def _run(args, kind: str, name: str, rules) -> dict:
+    """Submit only: freeze the rules files, record their digest and start the run. Workers in their own
+    processes do the work (`python -m edgar_warehouse.workers`); Bookkeeping runs no worker code."""
+    from edgar_warehouse.bookkeeping.clean.cli import configured_bookkeeping
+    from edgar_warehouse.bookkeeping.clean.config import Blocked
+
+    from . import frozen
+
+    book = configured_bookkeeping()
+    try:
+        if args.resume_run_id:
+            existing = book.status(args.resume_run_id, limit=1)["run"]["submission"]
+            if ((existing["kind"], existing["name"], existing["target"]) != (kind, name, args.target)
+                    or args.feed is not None and args.feed != existing["scope"].get("feed")):
+                raise Blocked("Resume selection differs from the original run")
+            if args.input_manifest or args.input_sha256:
+                raise Blocked("Resume uses its frozen input reference; do not supply new inputs")
+            return book.resume(args.resume_run_id)
+        if not args.input_manifest or not args.input_sha256:
+            raise Blocked("Submission requires an exact input manifest URI and hash")
+        export = frozen.export(kind, name, Path(args.root))
+        rules.record(export)
+        ref = book.artifacts.put(os.environ["BOOKKEEPING_MANIFEST_ROOT"], export)
+        from edgar_warehouse.rules.local import staged_inputs
+
+        # A target marked `local` has its source read and combine steps run here first.
+        inputs = staged_inputs(book.artifacts, export["body"], args.target,
+                               {"uri": args.input_manifest, "sha256": args.input_sha256})
+        run_id = book.start(rules_ref=ref, inputs_ref=inputs,
+                            target=args.target, scope={"kind": kind, "name": name, "target": args.target,
+                                                     **({"source": name} if kind == "source" else {}),
+                                                     **({"feed": args.feed} if args.feed else {})})
+        print(f"Bookkeeping run: {run_id}", file=sys.stderr, flush=True)
+        return book.status(run_id)
+    finally:
+        book.close()
 
 
 def _mapdoc(args):
@@ -216,7 +152,7 @@ def _mapdoc(args):
 
 
 def _check(args):
-    """Each rules file checked as `rules save` would, offline, so an agent that
+    """Each rules file checked as a run checks it, offline, so an agent that
     edited one as text never writes Python to see whether it still holds."""
     results = files.check(args.source or None, Path(args.root))
     print(json.dumps(results, indent=2, sort_keys=True))
@@ -617,26 +553,21 @@ def _catalog(args):
 
 
 def register(subparsers):
-    parser = subparsers.add_parser("rules", help="Versioned Rules files, approvals and configured run submission")
+    parser = subparsers.add_parser("rules", help="The rules files: check them, register them in MDM, submit a run")
     commands = parser.add_subparsers(dest="rules_command", required=True)
     from .sequence import register as register_sequence
     register_sequence(commands)
-    # init and migrate both create or upgrade the Rules Database schema:
-    # "migrate" means a schema upgrade in every store (platform validation,
-    # operator 2026-09-30).
-    for name, help_text in (("init", "Create the Rules Database schema (first time; rerunning changes nothing)"),
-                            ("migrate", "Upgrade the Rules Database schema after a new migration file lands")):
+    # init and migrate both create the Rules Database's table: "migrate" means a schema upgrade in every store.
+    for name, help_text in (("init", "Create the Rules Database's table (first time; rerunning changes nothing)"),
+                            ("migrate", "Upgrade the Rules Database's table after a schema change")):
         schema = commands.add_parser(name, help=help_text)
         schema.add_argument("--agent-role", default="rules_agent")
-        schema.add_argument("--approver-role", default="rules_approver")
-        schema.add_argument("--database-name", default="rules", help="The configured isolated Rules database")
         schema.set_defaults(handler=_handle)
-    load = commands.add_parser("load", help="Save every rules file under --root as a version in the Rules Database")
-    unload = commands.add_parser("unload", help="Write the Rules Database's versions back to files under --root")
-    for command in (load, unload):
-        command.add_argument("--root", required=True)
-        command.add_argument("--version", required=True)
-        command.set_defaults(handler=_handle)
+    registering = commands.add_parser("register", help="Register the merge rules and the sources' Dataset Contracts "
+                                      "in MDM from the files (rerunning changes nothing)")
+    registering.add_argument("--source", action="append", help="Only this source (repeatable); default every source")
+    registering.add_argument("--root", default=str(files.ROOT))
+    registering.set_defaults(handler=_handle)
     mapping = commands.add_parser(
         "mapdoc", help="The Mapping Documents (spreadsheets) generated from the rules files")
     mapping.add_argument("action", choices=("write", "diff", "check"),
@@ -658,74 +589,28 @@ def register(subparsers):
                          help="publish: set every glossary term to Draft (a steward approves it); "
                               "by default the server's own status is left alone")
     catalog.set_defaults(handler=_catalog)
-    test = commands.add_parser(
-        "test", help="A source version's test run on local stores, from a capture already made (two passes)")
-    test.add_argument("--source", required=True, help="The source's folder name under rules/sources")
-    test.add_argument("--capture", required=True, type=Path, help="The capture folder (its receipts.jsonl and bronze/)")
-    test.add_argument("--documents", required=True, type=Path, help="A JSON list of the captured documents' keys")
-    test.add_argument("--capture-run", required=True, help="The capture's run id")
-    test.add_argument("--as-of", required=True, help="The publication's as-of time (ISO 8601)")
-    test.add_argument("--stores", required=True, type=Path,
-                      help="The local stores' folder, holding worker.env, verifier.env and governance.env")
-    test.add_argument("--out", required=True, type=Path, help="Where the counts-only report is written")
-    test.add_argument("--minutes", type=float, default=60, help="Stop a pass that runs longer")
-    test.add_argument("--target", default="mastering", help="The source's Bookkeeping target (default mastering)")
-    test.add_argument("--fact", action="append", help="A run fact the target declares: name=value (repeat)")
-    test.add_argument("--file", action="append", help="A run file the target declares: name=path (repeat)")
-    test.add_argument("--version", help="Record the run as this saved version's test run, in the Rules Database "
-                      "RULES_DATABASE_URL names (the version must be the rules on disk)")
-    test.set_defaults(handler=_test)
-    check = commands.add_parser("check", help="Check each rules file as `rules save` would, offline: "
-                                "it loads, its targets and acquisition hold, the merge rules pass")
+    check = commands.add_parser("check", help="Check each rules file, offline: it loads, its targets and "
+                                "acquisition hold, the merge rules pass. A run makes the same check")
     check.add_argument("--source", action="append", help="Only this source (repeatable); default every file")
     check.add_argument("--root", default=str(files.ROOT))
     check.set_defaults(handler=_check)
-    approvals = commands.add_parser("approvals", help="The operator's approvals kept in git beside the rules: "
-                                    "check which documents lack one, or write them in the operator's words")
-    approvals.add_argument("action", choices=["check", "write"])
-    approvals.add_argument("--root", default=str(files.ROOT))
-    approvals.add_argument("--by", help="write: who approved")
-    approvals.add_argument("--words", help="write: their exact words")
-    approvals.add_argument("--finalized", help="write: the merge on main that made the rules final")
-    approvals.add_argument("--at", help="write: when they said it (YYYY-MM-DD)")
-    approvals.set_defaults(handler=lambda args: (_approvals(args) if args.action == "check" or all(
-        (args.by, args.words, args.finalized, args.at)) else
-        (print("write needs --by, --words, --finalized and --at", file=sys.stderr) or 2)))
-    pending = commands.add_parser("pending", help="Versions with a test run and no approval yet: evidence and changes")
-    pending.set_defaults(handler=_handle)
-    entity_types = commands.add_parser("entity-types", help="Where each saved source's records get their entity type")
+    entity_types = commands.add_parser("entity-types", help="Where each source's records get their entity type")
     entity_types.set_defaults(handler=_handle)
-    for operation in ("save", "status", "export", "record-proof", "approve", "activate", "run"):
+    for operation in ("status", "approve", "run"):
         command = commands.add_parser(operation)
         _selection(command)
         if operation == "approve":
-            command.add_argument("--version", help="The version `rules pending` showed (not with --rule)")
-        elif operation not in ("status", "run"):
-            command.add_argument("--version", required=True)
-        if operation == "save":
-            command.add_argument("file", help="The document's main file: <source>/source.yaml, "
-                                 "<pipeline>/pipeline.yaml or merge/policy.yaml; the files beside it come too")
-        elif operation == "export":
-            command.add_argument("--output", required=True,
-                                 help="The main file to write, as for save; the files beside it are written too")
-        elif operation == "approve":
             command.add_argument("--by", required=True, help="Who approved: the operator's or steward's name")
             command.add_argument("--words", required=True, help="Their exact words of approval")
-            command.add_argument("--overrule", help="Their reason, when approving a failing test run")
-            command.add_argument("--evidence", help="The evidence_hash `rules pending` showed for it")
-            command.add_argument("--finalized", help="The merge on main that made these rules final: approves "
-                                 "them with no test run (the operator's words are the approval)")
-            command.add_argument("--rule", help="Switch one merge rule on, in the files, on its proof")
-            command.add_argument("--root", default=str(files.ROOT), help="The rules folder (--rule only)")
-            command.add_argument("--proof", help="An identifier matching rule's Proving Run report (--rule only)")
+            command.add_argument("--rule", required=True, help="Switch one merge rule on, in the files, on its proof")
+            command.add_argument("--root", default=str(files.ROOT), help="The rules folder")
+            command.add_argument("--proof", help="An identifier matching rule's Proving Run report")
             command.add_argument("--reason", help="With --proof: one line of what the Proving Run showed")
             command.add_argument("--at", help="When the operator gave their words, UTC (YYYY-MM-DDTHH:MM:SSZ); "
-                                              "default now (--rule only)")
-        elif operation == "record-proof":
-            command.add_argument("--proof-uri", required=True)
-            command.add_argument("--proof-sha256", required=True)
+                                              "default now")
         elif operation == "run":
             command.add_argument("--target", required=True)
+            command.add_argument("--root", default=str(files.ROOT), help="The rules folder the run freezes")
             command.add_argument("--feed", help="Exact acquisition feed identity")
             command.add_argument("--input-manifest")
             command.add_argument("--input-sha256")

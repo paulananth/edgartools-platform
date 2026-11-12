@@ -263,9 +263,8 @@ Learned the hard way; each is a standing operator rule.
   verification; both live outside Git, and their values are never printed.
   `worker.env` holds `RULES_DATABASE_URL` too; it is never missing, so never ask for it
   (operator, 2026-11-02: "This must be documented, you cannot keep on asking").
-- To record a `rules test` run, pass a disposable stores folder as `--stores`
-  (`local-test-stores.py up <name>`; `stop` it after) and the shared `worker.env` as the
-  Rules Database ([data-onboarding](skills/data-onboarding/SKILL.md), "test").
+- To try a source, `load` it into a disposable stores folder (`local-test-stores.py up <name>`; `stop` it
+  after): [data-onboarding](skills/data-onboarding/LOAD.md).
 
 **Writing to it**
 - Master data changes go through the Merge Stage. Other writes use each

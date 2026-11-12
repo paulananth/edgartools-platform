@@ -535,7 +535,7 @@ def empty_rules_database():
             if time.monotonic() > deadline:
                 pytest.fail("PostgreSQL 16 did not finish initializing")
             time.sleep(0.2)
-        for statement in ("CREATE ROLE rules_agent LOGIN PASSWORD 'test'", "CREATE ROLE rules_approver NOLOGIN",
+        for statement in ("CREATE ROLE rules_agent LOGIN PASSWORD 'test'",
                           "CREATE DATABASE rules"):
             subprocess.run(["docker", "exec", name, "psql", "-U", "postgres", "-v", "ON_ERROR_STOP=1",
                             "-c", statement], capture_output=True, check=True)
@@ -556,15 +556,12 @@ def test_the_rules_creator_runs_from_the_bundle_on_an_empty_rules_database(insta
     for command in (("rules", "init"), ("rules", "migrate")):
         done = cli(*command)
         assert done.returncode == 0, done.stderr
-    loaded = cli("rules", "load", "--root", str(folder), "--version", "bundle-1")
-    assert loaded.returncode == 0, loaded.stderr
-    saved = cli("rules", "save", "--source", "gleif", "--version", "bundle-2", str(folder / "sources/gleif/source.yaml"))
-    assert saved.returncode == 0, saved.stderr
+    checked = cli("rules", "check", "--root", str(folder))
+    assert checked.returncode == 0, checked.stdout
+    assert set(json.loads(checked.stdout).values()) == {"ok"}
     status = cli("rules", "status", "--source", "gleif")
     assert status.returncode == 0, status.stderr
-    rows = {row["version"]: row["digest"] for row in json.loads(status.stdout)}
-    gleif = [d["digest"] for d in json.loads(loaded.stdout) if (d["kind"], d["name"]) == ("source", "gleif")]
-    assert [rows["bundle-1"]] == gleif and rows["bundle-2"] == json.loads(saved.stdout)["digest"] == gleif[0]
+    assert json.loads(status.stdout) == []  # no run has used these rules yet
 
 
 @pytest.mark.parametrize('reading_mode', ['13f', 'company-main', 'company-page', 'company-catalog', 'company-dictionary'])
@@ -575,7 +572,6 @@ def test_parsing_runs_through_the_installed_bundle(installed, databases, tmp_pat
     body = files.pipeline("sec.thirteenf.extract")
     pipeline_name = 'sec.thirteenf.extract' if reading_mode == '13f' else f'{reading_mode}-reading'
     body['pipeline'] = pipeline_name
-    saved = databases.rules.save("pipeline", pipeline_name, "1", body)
     contract_path = ROOT / "crates/source-contract/contracts/thirteenf/contract.yaml"
     contract = store.put_bytes((tmp_path / "contract.yaml").as_uri(), contract_path.read_bytes())
     xml = store.put_bytes((tmp_path / "filing.xml").as_uri(),
@@ -611,12 +607,10 @@ def test_parsing_runs_through_the_installed_bundle(installed, databases, tmp_pat
     output = (tmp_path / "holdings.json").as_uri()
     manifest = store.put(tmp_path.as_uri(), {"version": 1, "units": [{
         "keys": {"batch_id": "sample"}, "input": input_ref, "output": output, "cursor": {"offset": 0}}]})
-    databases.rules.prove("pipeline", pipeline_name, "1",
-                          {"digest": saved["digest"], "batch_hash": manifest["sha256"], "passed": True})
-    databases.rules.activate("pipeline", pipeline_name, "1")
     folder = tmp_path / "rules"
     assert _run(python, "-m", "edgar_warehouse.cli", "skill", "install", "--home", str(tmp_path / "home"),
                 "--rules", str(folder), cwd=root).returncode == 0
+    files.LAYOUT["pipeline"][1](body, folder / "pipelines" / pipeline_name / "pipeline.yaml")
     env = {**_stores(databases), "BOOKKEEPING_MANIFEST_ROOT": (tmp_path / "control").as_uri(),
            "EDGAR_RULES_ROOT": str(folder)}
 
@@ -708,7 +702,6 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
     from edgar_warehouse.mdm.store import migrate, register_policy
     from sqlalchemy import create_engine, text
     from tests.integration import test_mdm_postgres as core
-    from tests.support.rules_approval import approve
     from tests.support.rules_authority import register_dataset
 
     custom_trial = trial_mode == "custom-step"
@@ -754,7 +747,8 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
         steps.insert(1, {"name": "combine", "operation": "source.combine", "requires": ["read"], "key": "{batch_id}",
                          "leases": ["combined-output:{batch_id}"], "checks": ["input.hash", "output.receipt", "source.combined"]})
         next(step for step in steps if step["name"] == "prepare")["requires"] = ["combine"]
-    saved = databases.rules.save("pipeline", pipeline_name, "1", pipeline)
+    rules_root = tmp_path / "rules-root"
+    files.LAYOUT["pipeline"][1](pipeline, rules_root / "pipelines" / pipeline_name / "pipeline.yaml")
     contract_bytes, filer_bytes = READ_CONTRACT, FILERS
     if trial_mode == "parquet-records":
         import io
@@ -916,10 +910,6 @@ read:
                                          "output": (out / "combined.json").as_uri(), "cursor": {}}]
         unit_body["steps"]["prepare"][0]["input"] = {"from": {"step": "combine", "key": "filers"}}
     units = store.put(tmp_path.as_uri(), unit_body)
-    databases.rules.prove("pipeline", pipeline_name, "1",
-                          {"digest": saved["digest"], "batch_hash": units["sha256"], "passed": True})
-    approve(databases.approver, "pipeline", pipeline_name, "1")
-    databases.rules.activate("pipeline", pipeline_name, "1")
 
     url = lambda engine: engine.url.render_as_string(hide_password=False)
     env = {**_stores(databases), "BOOKKEEPING_MANIFEST_ROOT": (tmp_path / "control").as_uri()}
@@ -946,7 +936,7 @@ read:
         bad_units_body["steps"]["prepare"][0]["output"] = (bad_out / "mdm/manifest.json").as_uri()
         bad_units_body["steps"]["merge"][0]["output"] = (bad_out / "merged.json").as_uri()
         bad_units = store.put(tmp_path.as_uri(), bad_units_body)
-        bad_run = json.loads(cli("rules", "run", "--pipeline", pipeline_name, "--target", "master",
+        bad_run = json.loads(cli("rules", "run", "--pipeline", pipeline_name, "--target", "master", "--root", str(rules_root),
             "--input-manifest", bad_units["uri"], "--input-sha256", bad_units["sha256"]))["run"]["run_id"]
         rejected = _run(python, "-m", "edgar_warehouse.cli", "workers", "work", "source.read", bad_run,
                         env={**env, **worker}, cwd=root)
@@ -959,7 +949,7 @@ read:
         assert failed_state["counts"].get("verified", 0) == 0
         assert mastered(mdm_reader) == (0, {}, [])
 
-    run_id = json.loads(cli("rules", "run", "--pipeline", pipeline_name, "--target", "master",
+    run_id = json.loads(cli("rules", "run", "--pipeline", pipeline_name, "--target", "master", "--root", str(rules_root),
                             "--input-manifest", units["uri"], "--input-sha256", units["sha256"]))["run"]["run_id"]
     if recovery_trial:
         from urllib.parse import unquote, urlparse

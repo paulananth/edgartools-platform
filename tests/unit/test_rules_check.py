@@ -62,16 +62,15 @@ def test_a_body_that_is_not_json_is_refused():
         files.check_document("source", {"source": "example", "when": ("a", "b")})
 
 
-def test_save_refuses_what_check_refuses_before_writing():
+def test_a_run_refuses_what_check_refuses_before_it_freezes():
     from edgar_warehouse.control_contract import Blocked
     from edgar_warehouse.mdm.store import Conflict
-    from edgar_warehouse.rules.db import Rules
+    from edgar_warehouse.rules import frozen
 
-    rules = Rules(engine=None)  # a refusal comes before any database work
     with pytest.raises(Blocked, match="A target requires steps"):
-        rules.save("source", "example", "1", {"source": "example",
-                                               "bookkeeping": {"version": 1, "targets": {"mastering": {"steps": []}}}})
+        frozen.of("source", "example", {"source": "example",
+                                        "bookkeeping": {"version": 1, "targets": {"mastering": {"steps": []}}}})
     policy = files.policy()
     policy["kinds"]["company"]["rules"] = policy["kinds"]["company"]["rules"] * 2
     with pytest.raises(Conflict, match="Rule .* version .*"):
-        rules.save("merge", "platform", "1", policy)
+        frozen.of("merge", "platform", policy)

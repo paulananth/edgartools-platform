@@ -30,25 +30,16 @@ SCAN = 1000
 CONTENTION = "Lease or prerequisite contention; retry on resume"
 
 
-def _authority(export: dict, scope: dict, artifacts) -> dict:
-    """A run with a feed acquires live data: the acquisition authority. A run
-    without one processes data already captured: the processing authority
-    (operator, 2026-10-19: switching on the pipes is decoupled from switching
-    on live data)."""
+def _authority(export: dict, scope: dict) -> dict:
+    """A run with a feed acquires live data and holds that feed's configuration; a run without one
+    processes data already captured."""
     from edgar_warehouse.rules.acquisition_authority import frozen_authority, processing_authority
 
     if "feed" in scope:
         if not isinstance(scope["feed"], str) or not scope["feed"]:
             raise Blocked("A run's feed is a declared feed's name")
-        return frozen_authority(export, scope["feed"], artifacts=artifacts)
+        return frozen_authority(export, scope["feed"])
     return processing_authority(export)
-
-
-def needs_mdm_approval(export: dict) -> bool:
-    """MDM work needs the approved digest: a merge document, or a document with an `mdm`
-    section. A target's name decides nothing, and a rules test's disposable version has no
-    `mdm` section, so its `mastering` target runs without approval (ticket 160)."""
-    return bool(export["kind"] == "merge" or export["body"].get("dataset_contracts"))
 
 
 @dataclass(frozen=True)
@@ -99,7 +90,7 @@ class Bookkeeping:
                     submission["kind"], submission["name"], submission["rule_version"]):
                 raise Blocked("Rules reference disagrees with submission")
             if "acquisition" in export["body"]:
-                _authority(export, submission["scope"], self.artifacts)
+                _authority(export, submission["scope"])
             config = staged(validate(export["body"], submission["target"]))
             if submission.get("profiles") != {step["name"]: step["operation"] for step in config["steps"]}:
                 raise Blocked("Frozen worker profiles differ from the Rules export")
@@ -161,23 +152,17 @@ class Bookkeeping:
 
     def start(self, *, rules_ref: dict, inputs_ref: dict, target: str, scope: dict,
               run_id: str | None = None) -> str:
-        """Called with an active Rules resolver export, never a mutable YAML file."""
+        """Called with the frozen rules (`rules.frozen.export`): the document as checked, under its digest."""
         reference(rules_ref)
         reference(inputs_ref)
         export = self.artifacts.json(rules_ref)
-        proof = export.get("proof")
-        from edgar_warehouse.rules.acquisition_authority import finalized_holds, masters_nothing, proof_holds
-
-        silver_only = masters_nothing(export.get("kind"), export.get("body") or {})  # nothing to prove
-        if (export.get("status") != "active" or digest(export["body"]) != export.get("digest")
-                or not (silver_only or finalized_holds(export) or (isinstance(proof, dict) and proof_holds(export)))):
-            raise Blocked("Submission requires an active Rules export that is proven or finalized")
-        reference({"uri": rules_ref["uri"], "sha256": (proof or {}).get("batch_hash") or export["digest"]})
+        if not isinstance(export.get("body"), dict) or digest(export["body"]) != export.get("digest"):
+            raise Blocked("Submission requires frozen rules whose digest is their body's")
         config = staged(validate(export["body"], target))
         if scope.get("feed") and "acquisition" not in export["body"]:
             raise Blocked("Retired acquisition feed cannot be submitted")
         if "acquisition" in export["body"]:
-            selected = _authority(export, scope, self.artifacts)
+            selected = _authority(export, scope)
             if scope.get("source") != export["name"]:
                 raise Blocked("Acquisition run requires exact source/feed binding")
             if "feed" in scope and not set(selected["configuration"]["required_producers"]) <= {
@@ -185,12 +170,6 @@ class Bookkeeping:
                 raise Blocked("Configured work omits required acquisition producers")
             if "feed" not in scope and any(s["operation"] == "provider.capture" for s in config["steps"]):
                 raise Blocked("A capture runs only as live acquisition, with its feed")
-        # An approval is pinned to the exact immutable body, including its
-        # Bookkeeping section. No automatic approval from an earlier version.
-        if needs_mdm_approval(export):
-            approval = export.get("approval") or {}
-            if approval.get("digest") != export["digest"] or not approval.get("by") or not approval.get("at"):
-                raise Blocked("MDM configuration requires approval of its exact digest")
         manifest = self.artifacts.json(inputs_ref)
         items = worklist(manifest, config)
         if "feed" in scope and not items:

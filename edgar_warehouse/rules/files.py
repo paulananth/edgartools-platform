@@ -233,7 +233,7 @@ def copy_identifiers(root: Path) -> None:
 
 
 def pipeline(name: str, root: Path | None = None) -> dict:
-    """A platform job uses the same Rules lifecycle as a source document."""
+    """A platform job is a rules document like a source."""
     return load((root or ROOT) / "pipelines" / name / "pipeline.yaml")
 
 
@@ -520,8 +520,8 @@ def entity_types(body: dict) -> dict[str, dict]:
 
 
 def check_document(kind: str, body: dict) -> None:
-    """Refuse a Rules document that cannot be saved as it stands: the one list of
-    checks `rules save` and `rules check` share. The body holds JSON values only (a
+    """Refuse a rules document that cannot run as it stands: the one list of
+    checks a run and `rules check` share. The body holds JSON values only (a
     loaded file always does; a body built in code may not); a source's Bookkeeping
     targets and acquisition hold; the merge rules pass `check_policy`."""
     if loads(dumps(body)) != body:
@@ -544,7 +544,7 @@ def check_document(kind: str, body: dict) -> None:
 
 
 def documents(root: Path | None = None) -> list[tuple[str, str, Path]]:
-    """Every document the Rules lifecycle saves: (kind, name, path), as `rules load` reads them."""
+    """Every rules document under the root: (kind, name, path)."""
     root = root or ROOT
     found = [(kind, path.parent.name, path)
              for kind, folder, filename in (("source", "sources", "source.yaml"), ("pipeline", "pipelines", "pipeline.yaml"))
@@ -555,7 +555,7 @@ def documents(root: Path | None = None) -> list[tuple[str, str, Path]]:
 
 
 def check(names: list[str] | None = None, root: Path | None = None) -> dict:
-    """Each rules file loaded and checked as `rules save` would, offline: `ok`, or the
+    """Each rules file loaded and checked as a run checks it, offline: `ok`, or the
     reason it is refused. Named sources only, when names are given. A loader's message
     can quote a private YAML line, so its refusal names the error's kind and the file only."""
     from edgar_warehouse.control_contract import Blocked

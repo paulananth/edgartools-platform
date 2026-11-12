@@ -56,8 +56,7 @@ def submission(book, tmp_path, *, count=2, body=None, cursor=None, key=None):
                       "cursor": cursor(n) if cursor else {"offset": n}})
     inputs = artifacts.put(tmp_path.as_uri() + "/manifests", {"version": 1, "units": units})
     export = {"kind": "pipeline", "name": "invented.control", "version": "v1", "digest": digest(body),
-              "body": body, "status": "active", "approval": None, "registration": None,
-              "proof": {"digest": digest(body), "batch_hash": inputs["sha256"], "passed": True}}
+              "body": body}
     rules = artifacts.put(tmp_path.as_uri() + "/rules", export)
     run_id = book.start(rules_ref=rules, inputs_ref=inputs, target="silver", scope={"invented": True})
     return run_id, rules, inputs
@@ -202,8 +201,7 @@ def test_generated_children_and_parent_intent_commit_together(control, tmp_path)
         "s0": [{"keys": {"id": "0", "destination": output}, "input": expansion, "output": output,
                 "cursor": {"generated_step": "s1", "ordinal_base": 0}}], "s1": []}})
     export = {"kind": "pipeline", "name": "invented.generated", "version": "v1", "digest": digest(body),
-              "body": body, "status": "active", "approval": None,
-              "proof": {"digest": digest(body), "batch_hash": manifest["sha256"], "passed": True}}
+              "body": body}
     rules = book.artifacts.put(tmp_path.as_uri() + "/rules", export)
     run_id = book.start(rules_ref=rules, inputs_ref=manifest, target="silver", scope={})
     complete(book, run_id, "0", step="s0", profile=book.profile)
