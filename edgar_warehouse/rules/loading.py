@@ -31,6 +31,7 @@ from pathlib import Path
 from sqlalchemy.engine import make_url
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from edgar_warehouse.control_contract import digest
 from edgar_warehouse.mdm import raw_capture
 
 from . import files
@@ -153,7 +154,8 @@ class Loader:
         an open run pinned to other worker code (which this checkout cannot finish), stays as it
         is: the Change Journal loads its documents again in a new run."""
         listed = json.loads(self.commands("worker", "rules", "status", "--source", self.source))
-        active = next((v["version"] for v in listed if v.get("status") == "active"), None)
+        self.active_rules = next((v for v in listed if v.get("status") == "active"), None)
+        active = self.active_rules["version"] if self.active_rules else None
         left = {}
         for run in self.mine("blocked"):
             version = self.commands.status(str(run["run_id"]))["run"]["submission"].get("rule_version")
@@ -302,6 +304,9 @@ class Loader:
                 result["finished_open_runs"].append(run_id)
         self.at_once([(f"run {run_id}", lambda run_id=run_id: finish(run_id)) for run_id in unfinished])
         result["finished_open_runs"] = [run_id for run_id in unfinished if run_id in result["finished_open_runs"]]
+        if self.reading["bookkeeping"]["targets"][self.target].get("preparation"):
+            if not self.active_rules or self.active_rules.get("digest") != digest(self.reading):
+                raise RunStopped("Automatic preparation requires this source's current Rules digest to be active")
         result["preparation"] = prepare_load(reading=self.reading, target=self.target, capture=capture,
                                               folder=self.root / "preparation", facts=facts, as_of=as_of,
                                               deadline=self.commands.deadline, say=self.say,

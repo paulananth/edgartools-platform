@@ -2,6 +2,7 @@
 
 Every name below is invented: the command knows no source or store by name."""
 import json
+import copy
 import threading
 
 import pytest
@@ -136,6 +137,33 @@ def test_failed_automatic_preparation_submits_no_bundle(tmp_path, monkeypatch):
         found.load(capture=capture(tmp_path / "c", "letters/a.json"), capture_run="capture-1",
                    as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
     assert not commands.prepared
+
+
+@pytest.mark.parametrize("active", [None, "other-digest", "current-digest"])
+def test_preparation_requires_the_current_source_rules_to_be_active_before_any_pair_write(tmp_path, monkeypatch, active):
+    class SourceVersions(Recorded):
+        def __call__(self, duty, *args):
+            if args[:2] == ("rules", "status"):
+                return json.dumps([] if active is None else [{"status": "active", "version": "example-2",
+                    "digest": loading.digest(found.reading) if active == "current-digest" else active}])
+            return super().__call__(duty, *args)
+
+    commands = SourceVersions()
+    found = loader(tmp_path, monkeypatch, commands)
+    found.reading = copy.deepcopy(found.reading)
+    found.reading["bookkeeping"]["targets"]["by_letter"]["preparation"] = [
+        {"method": "invented", "options": {}}]
+    pairs = []
+    monkeypatch.setattr(loading, "prepare_load", lambda **kw: pairs.append("applied") or [])
+    args = dict(capture=capture(tmp_path / "c", "letters/a.json"), capture_run="capture-1",
+                as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
+    if active == "current-digest":
+        found.load(**args)
+        assert pairs == ["applied"]
+    else:
+        with pytest.raises(driving.RunStopped, match="current Rules digest to be active"):
+            found.load(**args)
+        assert pairs == [] and not commands.prepared
 
 
 def test_a_load_names_the_publication_revision_and_defaults_to_the_first(tmp_path, monkeypatch):

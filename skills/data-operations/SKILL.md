@@ -203,8 +203,9 @@ first and never loads a document twice.
 
 ### Derive a run input; never ask for what the store can decide
 
-A target may declare `preparation` operations. The loader finishes them before deriving run files or freezing
-new bundles, using the selected stores' worker login. A complete-set matching pass belongs here when its answer
+A target may declare `preparation` operations. Their current source Rules digest must be active before they may
+write; a draft or a different active digest stops preparation. The loader finishes them before deriving run files
+or freezing new bundles, using the selected stores' worker login. A complete-set matching pass belongs here when its answer
 expands the scope the following read needs; actual binding remains after identifier matching in the Merge Stage.
 Use its hash-bound cached projection only for the same captured bytes, matching population, recipe, policy and
 runtime. An unchanged repeat applies nothing. Retain a completed projection after an interrupted application so

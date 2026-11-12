@@ -359,6 +359,8 @@ from the installed bundle.
   installs from the commit's HEAD, so uncommitted rules give a stale answer (its policy digest was the
   old one). Commit first, then `uv sync --all-extras --group dev --reinstall-package edgartools-platform`,
   then run it.
+  A shared namespace ships only the files its owning wheel lists: add a new runtime module to that wheel's
+  inclusion table and prove its installed import; a checkout import cannot establish package completeness.
 - **A policy or kind change moves the whole-policy digest** pinned in a test fixture
   (`tests/integration/fixtures/`, the mastering records file); the failing test prints the new value.
 - **A single-valued identifier that fails its shape refuses the whole record**, its other identifiers too (a list

@@ -23,7 +23,7 @@ approvals:
   by: operator
   words: Use automatic preparation (recommended)
   at: '2026-11-11T21:37:47.605017-05:00'
-  finalized: Lavish ef02f24e57d2ed12; fixture proof in .scratch/company-waterfall-integration/issues/01-connect-the-normal-load.md; CI pending
+  finalized: PR 1701
 - kind: source
   name: iapd.adv
   digest: 6feddb708c30e4f93c4944cfe4ed22ffa8783cfef75bb182e8cfa6c0c1fef907
