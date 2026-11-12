@@ -1,8 +1,6 @@
-"""SEC native mapping must preserve typed values and complete assertions.
+"""SEC field mapping keeps typed values and complete assertions.
 
-Issue 20 L7 retired the hand-written mapping these cases were compared with;
-what it gave for each case, taken from it on main before it went, is in
-`retired_mapper_outcomes.json` (`RETIRED`)."""
+The answer for each case is in `mapper_outcomes.json` (`EXPECTED`)."""
 import copy
 import json
 from pathlib import Path
@@ -11,48 +9,19 @@ import pytest
 from edgar_warehouse.control_contract import digest
 from edgar_warehouse.mdm import adapters
 from edgar_warehouse.rules import files,source_engine
-from tests.support.company_fields import before_ticket_129
-from tests.support.name_count_words import old_words
 
 SOURCES=('sec.company','sec.submissions.person')
-RETIRED=json.loads(Path(__file__).with_name('retired_mapper_outcomes.json').read_text())
+EXPECTED=json.loads(Path(__file__).with_name('mapper_outcomes.json').read_text())
 
 
 def contracts(source):
-    contract=next(iter(files.source(source)['dataset_contracts'].values()))['contract']
-    if source.endswith('person'):
-        # Rebuild ticket 10 made Person's quality v2 (one more check, which these
-        # cases pass); a record names its quality version, so the retired
-        # mapper's outcomes are compared under v1.
-        from tests.support.person_quality import before_ticket_10
-        contract=before_ticket_10(contract)
-    else:
-        # Rebuild ticket 129 took the SIC code's label out of the Company; the
-        # retired mapper's outcomes are compared with it put back.
-        contract=old_words(before_ticket_129(contract,'sec.company.v1'))  # ticket 178 words, as recorded
-    return contract
+    return next(iter(files.source(source)['dataset_contracts'].values()))['contract']
 
 
-def retired(key, outcome):
-    """The outcome as the retired mapping gave it for this case."""
-    key = key.replace("sec/exact/sec.company/", "sec/exact/sec.submissions.company/")
-    key = key.replace("sec/normalize/sec.company/", "sec/normalize/sec.submissions.company/")
-    assert key in RETIRED, key
-    assert json.loads(json.dumps(outcome))==RETIRED[key]
-
-
-def historical_assertion(assertion):
-    """Compare the rename's output with the retained pre-rename oracle."""
-    from tests.support.name_count_words import without_name_id
-
-    body = without_name_id(assertion)  # ticket 01: the name id came after
-    # Phase 1 (ticket 204) renamed the classification rule's version; the oracle holds the one before.
-    body["provenance"] = {**body["provenance"], "classification": {**body["provenance"]["classification"],
-                                                                     "version": "2026-09-25.13"}}
-    body["source_code"] = "sec.submissions.company.v1"
-    body["subject"] = digest([body["source_code"], body["record_key"]])
-    body["assertion_id"] = digest({k: v for k, v in body.items() if k != "assertion_id"})
-    return body
+def expected(key, outcome):
+    """The answer recorded for this case."""
+    assert key in EXPECTED, key
+    assert json.loads(json.dumps(outcome))==EXPECTED[key]
 
 
 def row(source):
@@ -64,7 +33,7 @@ def row(source):
             'business_address':{'street':' 1 Main Street ','street2':' Suite 2 ','city':' Cupertino ',
                                 'region':' CA ','postal_code':'95014-1234','country':'US'},
             'last_synced_at':'2026-01-01T00:00:00+00:00','last_sync_run_id':'fixture',
-            'raw_object_id':'a'*64,'name_census':{'version':'fixture','unknown':None,'count':0}}
+            'raw_object_id':'a'*64,'name_count':{'version':'fixture','unknown':None,'count':0}}
 
 
 @pytest.mark.parametrize('source',SOURCES)
@@ -76,14 +45,14 @@ def test_inline_native_reading_matches_bundled_recipe(source):
 
 @pytest.mark.parametrize('source',SOURCES)
 @pytest.mark.parametrize('value',[' Exact Spelling ',None,'\x1c \x1f',False,0,[],{}])
-def test_exact_values_and_invalid_shapes_match_retained_mapping(source,value):
+def test_exact_values_and_invalid_shapes(source,value):
     record=row(source);record['name' if source.endswith('person') else 'entity_name']=value
     body=contracts(source)
     try:
         mapped=('mapped',digest(adapters._fields(record,body['adapter'])),
                 digest(adapters._matching_values(record,body['adapter'])))
     except adapters.UnsupportedRecord as error: mapped=('deferred',error.reason)
-    retired(f'sec/exact/{source}/{value!r}',mapped)
+    expected(f'sec/exact/{source}/{value!r}',mapped)
 
 
 @pytest.mark.parametrize('value',[None,{},'text',[],False,{'street':'\x1c A \x1f','city':' '},
@@ -92,7 +61,7 @@ def test_company_address_group_preserves_dictionary_path_semantics(value):
     record=row(SOURCES[0]);record['business_address']=value
     try: mapped=('mapped',digest(adapters._fields(record,contracts(SOURCES[0])['adapter'])))
     except adapters.UnsupportedRecord as error: mapped=('deferred',error.reason)
-    retired(f'sec/address/{value!r}',mapped)
+    expected(f'sec/address/{value!r}',mapped)
 
 
 @pytest.mark.parametrize('source',SOURCES)
@@ -108,12 +77,10 @@ def test_normalization_preserves_assertion_ids_classification_quality_and_deferr
     try:
         assertion=adapters.normalize(record,source_code=code,contract=contracts(source),
                                      publication=publication,policy=files.policy())
-        if source == 'sec.company':
-            assertion = historical_assertion(assertion)
         normalized=('assertion',digest(assertion))
     except adapters.UnsupportedRecord as error:
         normalized=('deferred',error.reason,digest(error.detail),error.probable_kind)
-    retired(f'sec/normalize/{source}/{case}',normalized)
+    expected(f'sec/normalize/{source}/{case}',normalized)
 
 
 def test_company_metadata_timestamps_do_not_enter_the_declared_json_projection():
@@ -121,7 +88,7 @@ def test_company_metadata_timestamps_do_not_enter_the_declared_json_projection()
     configured=contracts(SOURCES[0]);record=row(SOURCES[0])
     record['last_synced_at']=datetime(2026,1,1,tzinfo=timezone.utc)
     actual=(adapters._fields(record,configured['adapter']),adapters._matching_values(record,configured['adapter']))
-    retired('sec/timestamps',digest(actual))
+    expected('sec/timestamps',digest(actual))
 
 
 @pytest.mark.parametrize('inputs',[None,[],['entity_name','entity_name'],['nested.field'],[False],['x']*129,'name'])
@@ -157,6 +124,6 @@ def test_declared_json_input_projection_preserves_missing_versus_explicit_null()
 @pytest.mark.parametrize('value', [('company',), {1: 'company'}])
 def test_selected_python_only_values_are_rejected_without_json_coercion(value):
     configured=contracts(SOURCES[0]);record=row(SOURCES[0])
-    record['name_census']=value
+    record['name_count']=value
     with pytest.raises(TypeError):
         adapters._matching_values(record,configured['adapter'])

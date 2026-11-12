@@ -348,8 +348,7 @@ from the installed bundle.
   and never creates (`on_no_match: wait`, `on_several: review`).
 - **Both sides must carry the name id as a cross-reference** (`name_id@1`, one fold for every source);
   a holder source that does not map it cannot be found. Adding it is a new contract version, not a new
-  source code, and every test that compares with a digest recorded before it puts the name id and the
-  version back first (`tests/support/name_count_words.py`, `before_name_id`, `without_name_id`).
+  source code; a test's recorded answers are recorded again from the new contract.
 - **A new candidate route changes the routes digest** that every stored record is indexed under
   (`matching_routes_sha256`); stored records must be reindexed, a rebuild store simply loads again.
 
