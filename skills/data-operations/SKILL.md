@@ -22,8 +22,8 @@ configuration and evidence. Reuse the current authorization for that scope.
 Read the source's runbook and live Bookkeeping runs/leases before starting work;
 another agent's in-flight work is a dependency, not a cleanup target.
 
-Use [RUNBOOK.md](RUNBOOK.md) for delivery, file-change, capacity and recovery
-decisions. Discover actual command capabilities with `edgar-warehouse doctor` and
+Use [RUNBOOK.md](RUNBOOK.md) for last-run lookup, delivery, file-change, capacity and recovery.
+Discover actual command capabilities with `edgar-warehouse doctor` and
 CLI help. Report missing enforcement or unsupported stages as runtime gaps;
 instructions cannot make them available. An offline sequence check is not a
 runtime readiness certificate. To install, enable and run one source, then
