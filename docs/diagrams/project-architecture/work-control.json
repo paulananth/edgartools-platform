@@ -1,0 +1,343 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "EdgarTools — rules, work control and verification",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "output": "docs/diagrams/project-architecture/work-control.html",
+    "repository": {
+      "url": "https://github.com/paulananth/edgartools-platform",
+      "revision": "8bbeb9981a695a8baea6cddd520cc6cbb78dd5e8"
+    }
+  },
+  "components": [
+    {
+      "id": "operator",
+      "type": "external",
+      "label": "Operator / skills",
+      "sublabel": "Profile · configure · prove · load",
+      "pos": [
+        40,
+        40
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "CLAUDE.md",
+          "line": 1,
+          "end_line": 28
+        },
+        {
+          "path": "edgar_warehouse/rules/loading.py",
+          "line": 103,
+          "end_line": 124
+        }
+      ]
+    },
+    {
+      "id": "rules",
+      "type": "database",
+      "label": "Rules store",
+      "sublabel": "Approved versions · frozen exports",
+      "pos": [
+        420,
+        40
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "edgar_warehouse/rules/db.py",
+          "line": 1,
+          "end_line": 28
+        }
+      ]
+    },
+    {
+      "id": "rdm",
+      "type": "database",
+      "label": "Reference data",
+      "sublabel": "Versioned codes and crosswalks",
+      "pos": [
+        800,
+        40
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "edgar_warehouse/rdm/store.py",
+          "line": 1,
+          "end_line": 25
+        },
+        {
+          "path": "edgar_warehouse/rules/files.py",
+          "line": 247,
+          "end_line": 263
+        }
+      ]
+    },
+    {
+      "id": "loader",
+      "type": "backend",
+      "label": "Load controller",
+      "sublabel": "Prepare scope · freeze bundles",
+      "pos": [
+        40,
+        240
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "edgar_warehouse/rules/loading.py",
+          "line": 283,
+          "end_line": 337
+        }
+      ]
+    },
+    {
+      "id": "book",
+      "type": "backend",
+      "label": "Bookkeeping",
+      "sublabel": "Leases · fences · admission",
+      "pos": [
+        420,
+        240
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "edgar_warehouse/bookkeeping/clean/engine.py",
+          "line": 162,
+          "end_line": 211
+        },
+        {
+          "path": "edgar_warehouse/bookkeeping/clean/engine.py",
+          "line": 418,
+          "end_line": 449
+        },
+        {
+          "path": "edgar_warehouse/bookkeeping/clean/engine.py",
+          "line": 491,
+          "end_line": 537
+        }
+      ]
+    },
+    {
+      "id": "worker",
+      "type": "backend",
+      "label": "Worker processes",
+      "sublabel": "Execute configured profiles",
+      "pos": [
+        800,
+        240
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "edgar_warehouse/workers/__init__.py",
+          "line": 1,
+          "end_line": 23
+        },
+        {
+          "path": "edgar_warehouse/workers/__main__.py",
+          "line": 1,
+          "end_line": 30
+        }
+      ]
+    },
+    {
+      "id": "journal",
+      "type": "database",
+      "label": "Change Journal",
+      "sublabel": "Verified events · replay evidence",
+      "pos": [
+        40,
+        440
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "edgar_warehouse/change_journal/store.py",
+          "line": 67,
+          "end_line": 104
+        },
+        {
+          "path": "edgar_warehouse/bookkeeping/clean/engine.py",
+          "line": 640,
+          "end_line": 689
+        }
+      ]
+    },
+    {
+      "id": "verify",
+      "type": "backend",
+      "label": "Verifier processes",
+      "sublabel": "Destination read-back checks",
+      "pos": [
+        420,
+        440
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "edgar_warehouse/workers/__init__.py",
+          "line": 1,
+          "end_line": 12
+        },
+        {
+          "path": "edgar_warehouse/workers/silver_land.py",
+          "line": 1,
+          "end_line": 17
+        }
+      ]
+    },
+    {
+      "id": "outputs",
+      "type": "database",
+      "label": "Destinations / artifacts",
+      "sublabel": "Separate owners and credentials",
+      "pos": [
+        800,
+        440
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "edgar_warehouse/rules/driving.py",
+          "line": 1,
+          "end_line": 15
+        },
+        {
+          "path": "edgar_warehouse/bookkeeping/clean/artifacts.py",
+          "line": 42,
+          "end_line": 75
+        }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "operator-rules",
+      "from": "operator",
+      "to": "rules",
+      "label": "Author / approve",
+      "variant": "default"
+    },
+    {
+      "id": "rules-rdm",
+      "from": "rules",
+      "to": "rdm",
+      "label": "Pinned references",
+      "variant": "default"
+    },
+    {
+      "id": "operator-loader",
+      "from": "operator",
+      "to": "loader",
+      "label": "Load retained capture",
+      "variant": "default"
+    },
+    {
+      "id": "loader-book",
+      "from": "loader",
+      "to": "book",
+      "label": "Submit / drive",
+      "variant": "default"
+    },
+    {
+      "id": "rules-book",
+      "from": "rules",
+      "to": "book",
+      "label": "Frozen rules",
+      "variant": "default"
+    },
+    {
+      "id": "worker-book",
+      "from": "worker",
+      "to": "book",
+      "label": "Pull / report",
+      "variant": "default"
+    },
+    {
+      "id": "worker-outputs",
+      "from": "worker",
+      "to": "outputs",
+      "label": "Execute effects",
+      "variant": "default"
+    },
+    {
+      "id": "verify-outputs",
+      "from": "verify",
+      "to": "outputs",
+      "label": "Read back",
+      "variant": "default"
+    },
+    {
+      "id": "verify-book",
+      "from": "verify",
+      "to": "book",
+      "label": "Report checks",
+      "variant": "default"
+    },
+    {
+      "id": "book-journal",
+      "from": "book",
+      "to": "journal",
+      "label": "Deliver verified events",
+      "variant": "default"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "violet",
+      "title": "Control does no data work",
+      "items": [
+        "Bookkeeping issues task envelopes. Workers execute; separate verifier processes inspect the reported output.",
+        "Destination transactions enforce their own authoritative constraints and live fencing."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Governance is a sequence of gates",
+      "items": [
+        "Profiling, data quality, onboarding, refining rules and data operations skills govern configuration and evidence.",
+        "Approval, qualification, activation and production execution are separate claims. A diagram grants none of them."
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Replay and recovery",
+      "items": [
+        "A run pins rules, inputs and runtime; leases and immutable receipts support bounded retry.",
+        "The loader finishes eligible open runs, performs configured preparation, derives scope and freezes new work."
+      ]
+    }
+  ]
+}

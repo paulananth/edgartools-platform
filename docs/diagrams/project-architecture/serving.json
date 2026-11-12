@@ -1,0 +1,303 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "EdgarTools — delivery and configured serving",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "output": "docs/diagrams/project-architecture/serving.html",
+    "repository": {
+      "url": "https://github.com/paulananth/edgartools-platform",
+      "revision": "8bbeb9981a695a8baea6cddd520cc6cbb78dd5e8"
+    }
+  },
+  "components": [
+    {
+      "id": "git",
+      "type": "external",
+      "label": "Repository / CI",
+      "sublabel": "Python packages · Rust crates",
+      "pos": [
+        40,
+        40
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "pyproject.toml",
+          "line": 1,
+          "end_line": 70
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "line": 1,
+          "end_line": 60
+        }
+      ]
+    },
+    {
+      "id": "image",
+      "type": "cloud",
+      "label": "Container images",
+      "sublabel": "Shared AWS ECR repository",
+      "pos": [
+        420,
+        40
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "infra/terraform/modules/warehouse_runtime/main.tf",
+          "line": 16,
+          "end_line": 38
+        },
+        {
+          "path": "infra/scripts/publish-warehouse-image.sh",
+          "line": 1,
+          "end_line": 50
+        }
+      ]
+    },
+    {
+      "id": "runtime",
+      "type": "cloud",
+      "label": "AWS runtime foundation",
+      "sublabel": "ECS · logs · secrets · S3",
+      "pos": [
+        800,
+        40
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "infra/terraform/modules/warehouse_runtime/main.tf",
+          "line": 65,
+          "end_line": 119
+        },
+        {
+          "path": "infra/terraform/modules/storage_buckets/main.tf",
+          "line": 1,
+          "end_line": 55
+        }
+      ]
+    },
+    {
+      "id": "exports",
+      "type": "database",
+      "label": "Serving export contract",
+      "sublabel": "Parquet and manifests in S3",
+      "pos": [
+        40,
+        240
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "infra/terraform/snowflake/modules/native_pull/main.tf",
+          "line": 595,
+          "end_line": 621
+        },
+        {
+          "path": "infra/snowflake/dbt/edgartools_gold/models/sources.yml",
+          "line": 1,
+          "end_line": 34
+        }
+      ]
+    },
+    {
+      "id": "pull",
+      "type": "backend",
+      "label": "Snowflake native pull",
+      "sublabel": "Pipe · stream · processing task",
+      "pos": [
+        420,
+        240
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "infra/terraform/snowflake/modules/native_pull/main.tf",
+          "line": 660,
+          "end_line": 735
+        }
+      ]
+    },
+    {
+      "id": "snow",
+      "type": "database",
+      "label": "Snowflake source tables",
+      "sublabel": "Configured serving mirror",
+      "pos": [
+        800,
+        240
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "infra/terraform/snowflake/modules/native_pull/main.tf",
+          "line": 623,
+          "end_line": 637
+        }
+      ]
+    },
+    {
+      "id": "catalog",
+      "type": "backend",
+      "label": "OpenMetadata tooling",
+      "sublabel": "API configuration and catalog",
+      "pos": [
+        40,
+        440
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "skills/openmetadata/scripts/initialize.py",
+          "line": 1,
+          "end_line": 65
+        }
+      ]
+    },
+    {
+      "id": "dashboard",
+      "type": "frontend",
+      "label": "Dashboard example",
+      "sublabel": "Streamlit queries gold",
+      "pos": [
+        420,
+        440
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "examples/dashboard/edgar_universe_dashboard.py",
+          "line": 1,
+          "end_line": 10
+        }
+      ]
+    },
+    {
+      "id": "dbt",
+      "type": "backend",
+      "label": "dbt silver / gold",
+      "sublabel": "Dynamic tables and gold views",
+      "pos": [
+        800,
+        440
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "infra/snowflake/dbt/edgartools_gold/dbt_project.yml",
+          "line": 1,
+          "end_line": 34
+        },
+        {
+          "path": "infra/snowflake/dbt/edgartools_gold/models/sources.yml",
+          "line": 1,
+          "end_line": 34
+        }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "git-image",
+      "from": "git",
+      "to": "image",
+      "label": "Build / publish",
+      "variant": "default"
+    },
+    {
+      "id": "image-runtime",
+      "from": "image",
+      "to": "runtime",
+      "label": "Image artifacts",
+      "variant": "default"
+    },
+    {
+      "id": "exports-pull",
+      "from": "exports",
+      "to": "pull",
+      "label": "Manifest / Parquet",
+      "variant": "default"
+    },
+    {
+      "id": "pull-snow",
+      "from": "pull",
+      "to": "snow",
+      "label": "COPY / refresh",
+      "variant": "default"
+    },
+    {
+      "id": "snow-dbt",
+      "from": "snow",
+      "to": "dbt",
+      "label": "Source models",
+      "variant": "default"
+    },
+    {
+      "id": "dashboard-dbt",
+      "from": "dashboard",
+      "to": "dbt",
+      "label": "Read gold",
+      "variant": "default"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "amber",
+      "title": "Publishing handoff remains unproven",
+      "items": [
+        "The native-pull infrastructure consumes serving Parquet exports and manifests.",
+        "No current exporter from the new relational MDM/silver path was identified in this trace; no automatic continuity is asserted.",
+        "These are configured infrastructure and model contracts, not evidence that resources are deployed, running or current."
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Provisioning and access",
+      "items": [
+        "Terraform defines infrastructure; committed scripts publish images and control deployment.",
+        "Snowflake SQL transformations belong to dbt. MDM writes belong to its application and storage adapter.",
+        "Hosted MDM targets are Snowflake Postgres and Databricks Lakebase; this diagram does not qualify either."
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Optional operational surfaces",
+      "items": [
+        "OpenMetadata tooling is shown separately: catalog initialization is not data processing or source activation.",
+        "Dashboard code is an example consumer. Graph-related release terminology alone does not establish a current graph runtime.",
+        "Processing and work-control diagrams contain the current data path and its runtime governance."
+      ]
+    }
+  ]
+}

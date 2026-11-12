@@ -86,6 +86,39 @@ explicit workflows, not an automated branch from every reading.
 [Mermaid source](docs/diagrams/platform-architecture.mmd) ·
 [Editable Excalidraw](docs/diagrams/platform-architecture.excalidraw)
 
+### Project architecture views
+
+These source-backed views expand the overview into processing, work control
+and serving. They describe committed code and configuration, not live deployment
+or source readiness. Download an HTML viewer and open it locally for interactive
+exploration; GitHub displays the SVG previews below.
+
+**Processing and durable data** — captured evidence, the source engine, mastering,
+relational silver and agent context.
+
+![Processing and durable data architecture](docs/diagrams/project-architecture/processing.svg)
+
+[Interactive HTML](docs/diagrams/project-architecture/processing.html) ·
+[Diagram source](docs/diagrams/project-architecture/processing.json)
+
+**Rules, work control and verification** — versioned rules and reference data,
+load preparation, Bookkeeping, independent workers and verifiers, and the Change Journal.
+
+![Rules, work control and verification architecture](docs/diagrams/project-architecture/work-control.svg)
+
+[Interactive HTML](docs/diagrams/project-architecture/work-control.html) ·
+[Diagram source](docs/diagrams/project-architecture/work-control.json)
+
+**Delivery and configured serving** — container delivery, AWS infrastructure,
+Snowflake native pull, dbt and the dashboard example. The handoff from the current
+relational stores to serving exports remains unproven in this architecture trace.
+
+![Delivery and configured serving architecture](docs/diagrams/project-architecture/serving.svg)
+
+[Interactive HTML](docs/diagrams/project-architecture/serving.html) ·
+[Diagram source](docs/diagrams/project-architecture/serving.json) ·
+[Evidence and regeneration](docs/diagrams/project-architecture/README.md)
+
 ### Follow one source through the platform
 
 1. **Keep the evidence.** Capture retains the original, hash-verified file as

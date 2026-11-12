@@ -1,0 +1,327 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "EdgarTools — processing and durable data",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "output": "docs/diagrams/project-architecture/processing.html",
+    "repository": {
+      "url": "https://github.com/paulananth/edgartools-platform",
+      "revision": "8bbeb9981a695a8baea6cddd520cc6cbb78dd5e8"
+    }
+  },
+  "components": [
+    {
+      "id": "providers",
+      "type": "external",
+      "label": "Data providers",
+      "sublabel": "SEC · GLEIF · OpenFIGI",
+      "pos": [
+        40,
+        40
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "edgar_warehouse/workers/provider_capture.py",
+          "line": 287,
+          "end_line": 326
+        }
+      ]
+    },
+    {
+      "id": "capture",
+      "type": "backend",
+      "label": "Capture worker",
+      "sublabel": "Authorized provider request",
+      "pos": [
+        420,
+        40
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "edgar_warehouse/workers/provider_capture.py",
+          "line": 287,
+          "end_line": 328
+        }
+      ]
+    },
+    {
+      "id": "bronze",
+      "type": "database",
+      "label": "Captured artifacts",
+      "sublabel": "Immutable evidence · file / S3",
+      "pos": [
+        800,
+        40
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "edgar_warehouse/bookkeeping/clean/artifacts.py",
+          "line": 42,
+          "end_line": 75
+        },
+        {
+          "path": "edgar_warehouse/workers/provider_capture.py",
+          "line": 315,
+          "end_line": 328
+        }
+      ]
+    },
+    {
+      "id": "reader",
+      "type": "backend",
+      "label": "Source engine",
+      "sublabel": "Rust parsing through Python",
+      "pos": [
+        800,
+        240
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "edgar_warehouse/workers/source_read.py",
+          "line": 1,
+          "end_line": 18
+        },
+        {
+          "path": "edgar_warehouse/rules/source_engine.py",
+          "line": 1,
+          "end_line": 13
+        }
+      ]
+    },
+    {
+      "id": "master",
+      "type": "backend",
+      "label": "Merge Stage",
+      "sublabel": "Identity before field selection",
+      "pos": [
+        420,
+        240
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "edgar_warehouse/workers/mastering_merge.py",
+          "line": 77,
+          "end_line": 108
+        },
+        {
+          "path": "edgar_warehouse/mastering/merge.py",
+          "line": 1,
+          "end_line": 22
+        }
+      ]
+    },
+    {
+      "id": "mdm",
+      "type": "database",
+      "label": "MDM",
+      "sublabel": "Masters · identifiers · decisions",
+      "pos": [
+        40,
+        240
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "edgar_warehouse/mastering/store.py",
+          "line": 26,
+          "end_line": 55
+        },
+        {
+          "path": "edgar_warehouse/mastering/merge.py",
+          "line": 75,
+          "end_line": 135
+        }
+      ]
+    },
+    {
+      "id": "silverworker",
+      "type": "backend",
+      "label": "Silver workers",
+      "sublabel": "Land rows · derive measures",
+      "pos": [
+        800,
+        440
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "edgar_warehouse/workers/silver_land.py",
+          "line": 1,
+          "end_line": 17
+        },
+        {
+          "path": "edgar_warehouse/workers/silver_derive.py",
+          "line": 1,
+          "end_line": 35
+        }
+      ]
+    },
+    {
+      "id": "silver",
+      "type": "database",
+      "label": "Relational silver",
+      "sublabel": "Registered tables · quality checks",
+      "pos": [
+        420,
+        440
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "edgar_warehouse/silver_writer/relational.py",
+          "line": 34,
+          "end_line": 103
+        },
+        {
+          "path": "edgar_warehouse/silver_writer/writer.py",
+          "line": 31,
+          "end_line": 80
+        }
+      ]
+    },
+    {
+      "id": "context",
+      "type": "frontend",
+      "label": "Agent context CLI",
+      "sublabel": "Read masters, links and silver",
+      "pos": [
+        40,
+        440
+      ],
+      "size": [
+        190,
+        72
+      ],
+      "sources": [
+        {
+          "path": "edgar_warehouse/context.py",
+          "line": 247,
+          "end_line": 301
+        }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "capture-providers",
+      "from": "capture",
+      "to": "providers",
+      "label": "Authorized fetch",
+      "variant": "default"
+    },
+    {
+      "id": "capture-bronze",
+      "from": "capture",
+      "to": "bronze",
+      "label": "Store snapshot",
+      "variant": "default"
+    },
+    {
+      "id": "bronze-reader",
+      "from": "bronze",
+      "to": "reader",
+      "label": "Read retained bytes",
+      "variant": "default"
+    },
+    {
+      "id": "reader-master",
+      "from": "reader",
+      "to": "master",
+      "label": "Prepared assertions",
+      "variant": "default"
+    },
+    {
+      "id": "master-mdm",
+      "from": "master",
+      "to": "mdm",
+      "label": "Atomic merge",
+      "variant": "default"
+    },
+    {
+      "id": "reader-silverworker",
+      "from": "reader",
+      "to": "silverworker",
+      "label": "Source Extract",
+      "variant": "default"
+    },
+    {
+      "id": "silverworker-silver",
+      "from": "silverworker",
+      "to": "silver",
+      "label": "Land / derive",
+      "variant": "default"
+    },
+    {
+      "id": "context-silver",
+      "from": "context",
+      "to": "silver",
+      "label": "Read specs",
+      "variant": "default"
+    },
+    {
+      "id": "context-mdm",
+      "from": "context",
+      "to": "mdm",
+      "label": "Read identities",
+      "variant": "default"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Rules drive the same engine",
+      "items": [
+        "Source contracts declare formats, columns, quality and mapping. Readers make no provider requests.",
+        "Source Extract tables feed mastering preparation and silver workers; source-specific targets declare their ordering."
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Identity and evidence",
+      "items": [
+        "Mastering decides kind, searches identifiers, applies activated name rules, then selects fields and relationships.",
+        "Automatic preparation runs before scoped reads where configured; actual name binding follows identifier matching."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Scope of this map",
+      "items": [
+        "Current committed main; code/configuration architecture, not live deployment or source readiness.",
+        "Company, Person, Security and fund-related domains share the engine. Domain coverage and activation vary by source.",
+        "Continue with work-control.html for governance and serving.html for deployment and publishing."
+      ]
+    }
+  ]
+}
