@@ -77,7 +77,7 @@ FROM SNOWFLAKE.ACCOUNT_USAGE.METERING_HISTORY
 WHERE START_TIME >= DATEADD(HOUR, -48, CURRENT_TIMESTAMP())
   AND START_TIME < CURRENT_TIMESTAMP()
 GROUP BY SERVICE_TYPE
-ORDER BY 2 DESC;
+ORDER BY TOTAL_CREDITS DESC;
 ```
 
 Sum `TOTAL_CREDITS` across service rows for the account total. Report the
@@ -89,7 +89,9 @@ with `DESC VIEW SNOWFLAKE.ACCOUNT_USAGE.METERING_HISTORY` rather than assuming
 an adjustment column exists. Avoid ordering by `SUM(CREDITS_USED)` when the
 selected alias is also named `CREDITS_USED`; Snowflake can resolve the alias
 inside the aggregate and report a nested-aggregate error. Use an unambiguous
-alias and ordinal ordering such as `ORDER BY 2 DESC`.
+alias and order by that alias. Ordinal ordering (`ORDER BY 2 DESC`) only works
+while the credit column is the second selected column: adding a column in
+front of it silently orders by the wrong one, so order by the alias instead.
 
 - Do not use the shorthand multi-column `FOR row IN (SELECT a, b, ...) DO` cursor form in this account —
   it fails with `Unsupported: Scalar subquery with multi-column SELECT clause`. Use an explicit
