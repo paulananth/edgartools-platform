@@ -362,9 +362,9 @@ cell, and `check` fails on any.
 
 `edgar-warehouse rules catalog plan|publish|check [--root <rules>]` works from
 the rules files alone. `plan` prints the catalog as JSON; `publish` makes
-the OpenMetadata catalog equal to it, with `OPENMETADATA_URL` and
-`OPENMETADATA_TOKEN` (an authorized bot token from the private environment). It is one database
-service, `edgartools-rules`:
+the OpenMetadata catalog equal to it, using
+[Data Platform connection setup](../data-platform/SKILL.md#connection-urls-and-environment).
+It is one database service, `edgartools-rules`:
 
 | Database | Schema | Tables | Columns |
 |---|---|---|---|

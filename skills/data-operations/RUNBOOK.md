@@ -49,51 +49,37 @@ source runbook references the release and its active environment/run IDs.
 ## Initialize a hosted store
 
 A hosted PostgreSQL 16 instance (Snowflake Postgres) is initialized with the same commands as the local store,
-in this order, by skills and their own commands only. No script installs it end to end. Credentials live in
-private files (`umask 077`, a folder outside the repository) and are never printed; redact a result by key and
-by value before showing any of it.
+in this order, by skills and their own commands only. No script installs it end to end.
+Use [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment)
+for all private connection files, hosted roles, grants and credential handling.
 
-1. **Instance.** [aws-snowflake-operations](../aws-snowflake-operations/SKILL.md) creates it. Its one-time admin
-   and application credentials go straight to a private file. A password rotation needs the operator's word.
+1. **Instance.** [aws-snowflake-operations](../aws-snowflake-operations/SKILL.md) creates it.
+   Handle its credentials through the central connection section. A password rotation needs the operator's word.
    Wait for `state` to read `READY`.
-2. **Databases and logins.** As the admin login, create `rules`, `bookkeeping`, `change_journal`, `mdm`, `rdm`
-   and `silver` ([data-platform](../data-platform/SKILL.md), Databases). Each store gets a login without
-   administrative rights (`<store>_runtime`; the rules store's is `rules_agent`, beside the role
-   `rules_approver`). The admin login is every store's owner. Write a private `connection.env` holding each
-   store's owner URL (`<STORE>_MIGRATION_DATABASE_URL`) and runtime URL (`<STORE>_DATABASE_URL`), `sslmode=require`.
-3. **Schemas.** The commands of "Apply store DDL", each with its owner connection: `mdm migrate` reads
-   `MDM_DATABASE_URL` as the owner and refuses when owner and runtime role are the same login, so set it to the
-   owner for that one run; `bookkeeping init` and `migrate` read `BOOKKEEPING_DATABASE_URL` as the owner and take the group role
-   `bookkeeping_control` as `--runtime-role` (create it, and add the runtime and verifier logins to it, first:
-   a verifier login that is not in the group cannot read the schema);
-   `rdm`, `change-journal`, `silver` and `rules` read their `*_MIGRATION_DATABASE_URL`. Read each command's
-   `--help` first. Done when every migration file prints with its checksum.
+2. **Databases and logins.** Provision the hosted databases, owners and restricted roles through
+   [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment),
+   including the Bookkeeping control group before applying its schema.
+3. **Schemas.** Run [Apply store DDL](STORES.md#apply-store-ddl) with each store's owner connection
+   and runtime-role argument from the central connection section.
+   Read each command's `--help` first. Done when every migration file prints with its checksum.
 4. **RDM codes.** `scripts/rdm_restore_published.py` in this skill, with the operator's exact words; every pin
    must read `pin ok`, then `rdm list`.
-5. **Governance logins.** Activation needs `mdm_governance` (connect to `mdm`, `USAGE` on schema `mdm`, `SELECT`
-   on every table and on the prepared and mastering tables, `INSERT` on `mdm.policy`, `mdm.dataset` and
-   `mdm.dataset_mapping`, and the registration grant) and `rules_governance` (a member of the rules agent and
-   `rules_approver` roles). Write them, with `RULES_MDM_ACTIVATION_DATABASE_URL`, into a private `governance.env`.
-6. **Source configurations.** `rules load --root rules --version <name>` with the runtime env (approvals kept in
-   git are imported), `rules pending` empty, then `rules activate` with `governance.env`: the merge policy, then
+5. **Governance logins.** Provision activation roles and grants through
+   [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
+6. **Source configurations.** `rules load --root rules --version <name>` with the runtime connection
+   (approvals kept in git are imported), `rules pending` empty, then `rules activate` with the
+   activation connections from the central section: the merge policy, then
    pipelines, then sources. Take the list from the load's own result and iterate it in code: a list file without
    a final newline loses its last line to a `while read` loop, and that source then stays unactivated.
    Done when `rules status` shows every version `active`.
 
-7. **Worker and verifier logins.** Create `bookkeeping_verifier` and `mdm_verifier` (logins without administrative
-   rights, `CONNECT` on their database) and the group role `bookkeeping_control`, granted to `bookkeeping_runtime`
-   and `bookkeeping_verifier`. As the owner, give every worker profile its two duties the way the local store does
-   (`grant_profile` for each profile in `edgar_warehouse.workers.PROFILES`, the worker `bookkeeping_runtime`, the
-   verifier `bookkeeping_verifier`) and refuse when a login holds both duties of one profile. Set the MDM guard
-   (`migrate_guard`, runtime role `mdm_runtime`) and give `mdm_verifier` `USAGE` on schema `mdm` and `SELECT` on
-   every table, the prepared tables and the mastering tables. Write `worker.env` (every store's runtime URL,
-   `MDM_APPLICATION_ROLE`, and `BOOKKEEPING_MANIFEST_ROOT`, a local folder written as a `file://` address: a plain path is refused with
-   "Unsupported manifest store") and `verifier.env` (the same, with the
-   two verifier logins for Bookkeeping and MDM) beside `connection.env` and `governance.env`. That folder is what
-   `load --stores` takes. Done when `doctor` prints `"ok": true` with the worker file and `load --plan` reads the
-   capture.
+7. **Worker and verifier logins.** Apply the hosted worker/verifier roles, profile grants and
+   MDM guard from [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
+   Keep each profile's worker and verifier duties separate. Done when `doctor` prints
+   `"ok": true` under the worker connection and `load --plan` reads the capture.
 
-A missing grant or login that a command names is a gap to fix in this section, not to work around.
+A missing grant or login that a command names is a gap to fix through the central connection
+section, not to work around.
 
 ## Delivery availability
 
@@ -203,8 +189,9 @@ the selected target declares it; no omitted stage is silently treated as done.
 ## Test and clear a source run
 
 A test proves **Install and enable one source** on the **test** instance from
-[data-platform setup](../data-platform/SKILL.md#0-setup). It uses that
-instance's private connection file. It does not use a production container.
+[data-platform setup](../data-platform/SKILL.md#0-setup). Select its connections through
+[Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment),
+not a production container.
 
 Run one source through install, enable and its wired `rules run`. The test
 passes only when `edgar-warehouse bookkeeping status <run_id>` shows

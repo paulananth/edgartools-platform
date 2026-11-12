@@ -7,10 +7,10 @@ Part of the `data-onboarding` skill: [SKILL.md](SKILL.md) says when to read this
 **Recording a run: two Postgres servers.** `rules test --stores <folder>` runs the
 chain in disposable stores (start them: `uv run --extra mdm python
 infra/scripts/local-test-stores.py up <name>`, then `stop <name>` and remove the
-container after), and `--version` records the result in the Rules Database that
-`RULES_DATABASE_URL` names. Source the shared store's `worker.env` for that URL
-(the shared store is the Rules Database); never use it as `--stores`
-(the command refuses: the stores' Rules Database is the test's sandbox). Then
+container after), and `--version` records the result in the operator's Rules
+Database. Configure that connection through [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment);
+never use that shared store as `--stores` (the command refuses: the stores'
+Rules Database is the test's sandbox). Then
 `rules pending` and `rules approve` under the standing words. A small invented
 capture is enough for a source whose rules are already proved on real files
 (two files, every step verified, second pass changed nothing: about 30 s).
@@ -196,9 +196,9 @@ capture is enough for a source whose rules are already proved on real files
    A failing run is recorded too; it can be replaced until it is approved.
 
    **A source tested with `rules test`** records its run itself: save the
-   version first, then add `--version <v>` to the `rules test` command, with
-   `RULES_DATABASE_URL` naming the operator's Rules Database (set in their
-   own terminal). The run is checked before it starts: the saved version must
+   version first, then add `--version <v>` to the `rules test` command, using
+   the operator's Rules Database connection from the central section above.
+   The run is checked before it starts: the saved version must
    be the rules on disk. Its proof is the report's counts, and its
    `batch_hash` the first pass's input manifest. A source that declares
    `acquisition` records its test run the same way: the run switches on its

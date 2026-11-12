@@ -34,7 +34,7 @@ Read these before anything else. Breaking one is never the right call.
 | Name a Rules version by a number alone | A label that says what it changes (the **test** step's version label, `<source or kind>-<YYYY-MM-DD>.<short change name>`) |
 | Write a value from the data (a name, an identifier, a record) into a public repository | Counts, and invented examples; real values stay on the machine |
 | Request anything from a provider the operator has ruled out, including its documentation (see Examples) | Use the captured files and this repo |
-| Read, print or paste a secret, password or token | Use the environment variables named here. If one is missing, ask the operator to set it outside the chat. |
+| Read, print or paste a secret, password or token | Follow [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment) for private credential handling. |
 | Guess an identifier (any key or issued id) | Take it from the files |
 | Edit code while onboarding, even for a code ticket the operator approved | Configuration only: write the ticket for the code, and ask before coding |
 | Invent a command this skill does not name | Follow "When a command is missing" |
@@ -118,20 +118,9 @@ Every step says what differs for each target. Read [TARGETS.md](TARGETS.md) befo
   - to commands: `--root <folder>` in `rules check`, `rules mapdoc` and
     `rules catalog`.
   In a sandbox or trial, keep the log beside that folder, not in the repo.
-- Environment:
-
-  | Variable | Login | Used by |
-  |---|---|---|
-  | `RULES_DATABASE_URL` | `rules_agent` | every rules command |
-  | `RULES_MIGRATION_DATABASE_URL` | owner | **init** and **migrate** |
-  | `RULES_MDM_ACTIVATION_DATABASE_URL` | MDM governance | **switch-on** |
-  | `OPENMETADATA_URL`, `OPENMETADATA_TOKEN` | — | catalog publish |
-
-  A command that stops with `KeyError: 'RULES_DATABASE_URL'` means the
-  variable is not set. Source the shared store's private `worker.env` for
-  rules commands and `governance.env` for switch-on. Never print either
-  file. A refused connection is a moved port
-  ([LOCAL-TESTING](../data-platform/LOCAL-TESTING.md)).
+- **Connections:** use [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment)
+  for Rules, migration, activation and catalog credentials, environment loading
+  and connection recovery.
 
 ## The log
 
@@ -273,10 +262,9 @@ databases.
 edgar-warehouse rules init
 ```
 
-- **Needs:** `RULES_MIGRATION_DATABASE_URL`, the owner's login.
-- **Before you run it:** the PostgreSQL 16 database `rules`, the login
-  `rules_agent` and the role `rules_approver` must already exist. It does
-  not create them. If they are missing, ask the operator.
+- **Before you run it:** provision the Rules database, roles and owner connection
+  through [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
+  This command creates the schema, not the database or logins.
 - **Worked:** it prints each migration file with its checksum.
 - **Fails:** the roles are missing, or it is not PostgreSQL 16. Ask the
   operator.
@@ -399,9 +387,9 @@ does not run or activate a pipeline.
    `edgar-warehouse rules catalog plan`. This runs
    offline.
 5. After the PR is merged, publish to the catalog:
-   `edgar-warehouse rules catalog publish`. It needs
-   `OPENMETADATA_URL` and `OPENMETADATA_TOKEN`. Never print the token. If
-   no catalog server is reachable, say so; do not skip it silently.
+   `edgar-warehouse rules catalog publish`, with the catalog connection from
+   [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
+   If no catalog server is reachable, say so; do not skip it silently.
 
 ### test: run it on real captured files and record the result
 

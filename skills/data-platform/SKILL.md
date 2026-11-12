@@ -1,6 +1,6 @@
 ---
 name: data-platform
-description: Guide data work from current readiness to verified operation. Use for setup, onboarding, custom parsing, cross-reference readiness, processing captured files, turning drafts into tested and approved releases, activation, deployment or recovery. Coordinates data-onboarding, refining-rules, data-operations, MDM engineering, Bookkeeping and Change Journal.
+description: Guide data work from current readiness to verified operation. Use for service URLs, .env discovery, connection setup, onboarding, custom parsing, cross-reference readiness, processing captured files, turning drafts into tested and approved releases, activation, deployment or recovery. Coordinates data-onboarding, refining-rules, data-operations, MDM engineering, Bookkeeping and Change Journal.
 ---
 
 # Data Platform
@@ -115,6 +115,12 @@ alerting integration or replace the normal run verifier.
 | 6 | Custom parsing, only when the engine cannot state a field | this file |
 | 7 | Self-check | this file |
 
+## Connection URLs and environment
+
+Before discovering or configuring any service URL, `.env`, connection profile
+or database duty, read [Connection setup](CONNECTIONS.md). Data Platform is
+the sole owner of these instructions; other skills link here.
+
 ## 0. Setup
 
 For persistent local agent environments, baseline promotion or recovery, read
@@ -228,35 +234,10 @@ checks and points to the repository lifecycle script.
    and `silver`. Do not paste the statement or an address into the chat. Do
    not apply the store schemas here.
    [data-operations](../data-operations/SKILL.md) applies that DDL into these
-   databases. Each connection must name the selected engine's dialect and
-   that store's database. The connection variables, never printed, are
-   `RULES_DATABASE_URL`, `BOOKKEEPING_DATABASE_URL`,
-   `CHANGE_JOURNAL_DATABASE_URL`, `MDM_DATABASE_URL`,
-   `RDM_DATABASE_URL`, and `SILVER_DATABASE_URL`.
-
-   For Snowflake-hosted MDM, `edgartools-prod` is the Snowflake SQL connection,
-   not a PostgreSQL DSN. The PostgreSQL port is `5432`. Keep the actual host
-   only in the repository-root `.env`; never commit it to this public skill.
-   Store the complete, existing authorized `MDM_DATABASE_URL` there with mode
-   `0600`; `.env` is ignored by Git. The URL needs the intended database, role,
-   credential and SSL settings; do not infer them from the Snowflake SQL
-   connection. Load it only into the process that needs it. Never print or
-   commit DSNs; `.env.example` contains placeholders only.
-
-   If the PostgreSQL DSN is unavailable, obtain it through the operator's
-   approved connection path; do not rotate PostgreSQL access merely to discover
-   it. `bootstrap-prod-mdm.sh` resets PostgreSQL role access and is not a DSN
-   lookup or a generic database-creation command.
-
-   Database creation requires an authorized owner connection with `CREATEDB`;
-   do not assume an MDM application DSN has that privilege. Verify the target
-   instance and create only missing databases, preserving existing databases and
-   data. Use each store's own connection variable and database; an MDM URL does
-   not configure RDM, Bookkeeping, Change Journal or Silver.
-
-   `BOOKKEEPING_MANIFEST_ROOT` is the local folder, as a `file://` address (a plain path is refused), where
-   Rules freezes run configuration; `local-test-stores.py` writes it into
-   `worker.env`.
+   databases. Use [Connection URLs and environment](#connection-urls-and-environment)
+   for addresses, credentials and role selection. Database creation requires
+   an authorized owner with `CREATEDB`; create only missing databases and
+   preserve existing data.
 
 5. **Check.** `edgar-warehouse doctor` must print `"ok": true`. It lists any
    command a skill names that does not exist, whether the engine loads, the

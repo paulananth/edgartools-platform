@@ -70,14 +70,15 @@ Every step says what differs for each target.
     every row by outcome.
   1. Hand the approved spec to
   [data-operations](../data-operations/SKILL.md), which applies it as DDL.
-  On PostgreSQL the schema owner (`SILVER_MIGRATION_DATABASE_URL`) runs
+  Use the owner and runtime connections from [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
+  On PostgreSQL the schema owner runs
   `edgar-warehouse silver init --runtime-role <runtime login>` once, and
   `edgar-warehouse silver register rules/sources/<source>/silver-<table>.yaml --runtime-role <runtime login>`
   for the table (or `register <findings.yaml> --part <part>`). A changed
   spec is refused for a registered table: register it as a new table.
   `edgar-warehouse load` does this itself before it submits anything: for each
   `silver.land` step it registers the `silver-*.yaml` beside the source's rules
-  whose `table` the step names, as the stores' migration login (`connection.env`),
+  whose `table` the step names, as the stores' migration login,
   for the silver runtime login. It changes nothing for a table already registered
   with the same spec, so a source with a spec beside its rules needs no
   preparation by hand.
@@ -87,8 +88,8 @@ Every step says what differs for each target.
   2. A target lands a table through a `silver.land` step (`requires` the reading
      and the merge whose masters the rows link to; `input: {keys: {table, silver}}`;
      the Change Journal's `journal.record` requires it), as a source's transaction rows do.
-     Otherwise the runtime (`SILVER_DATABASE_URL`, plus `MDM_DATABASE_URL` to read MDM
-     ids) runs `edgar-warehouse silver land <table> <rows file>` with the
+     Otherwise the runtime, with MDM read access configured through the central
+     connection section, runs `edgar-warehouse silver land <table> <rows file>` with the
      part's rows as a flat CSV, Parquet or JSON Lines file. A rerun of the same
      delivery changes nothing; an unmastered record keeps its source key and an
      empty MDM id. Once its master is onboarded, `edgar-warehouse silver

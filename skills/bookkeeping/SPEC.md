@@ -9,9 +9,10 @@ legacy caller or qualify a production cutover.**
 
 ## Implemented boundary
 
-`edgar_warehouse.bookkeeping.clean` uses only
-`BOOKKEEPING_DATABASE_URL`.
-The PostgreSQL 16 database is `bookkeeping`. Its schema has exactly
+`edgar_warehouse.bookkeeping.clean` uses only its own control-store connection;
+configure it through
+[Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
+The PostgreSQL 16 control schema has exactly
 five tables: `pipeline_run`, `work_item`, `lease`, `checkpoint`, and
 `journal_outbox`. Migration checksums live in a schema comment, so they do
 not add a sixth control table. No old history or checkpoints are imported.
@@ -340,24 +341,20 @@ and pending journal deliveries are retained.
 
 ## Local use
 
-Use the shared local PostgreSQL 16 server
-(`infra/scripts/local-test-stores.py up <name>`). It creates empty stores,
-restricted logins under NOLOGIN owners, and private env files. It refuses to
-adopt databases owned by another workstream. `connection.env` sets
-`BOOKKEEPING_DATABASE_URL` to the owner; `worker.env` sets it to the runtime
-login. `BOOKKEEPING_MANIFEST_ROOT` in `worker.env` is that environment's
-`manifests/` folder (`file://` or a path). On AWS it is an S3 prefix. Source
-`worker.env` before work; never print the files.
+Use [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment)
+for local store provisioning, role selection and manifest storage. Local
+provisioning creates empty stores with restricted logins under NOLOGIN owners
+and refuses to adopt databases owned by another workstream.
 
-Existing control databases can be migrated explicitly with
-`bookkeeping migrate --runtime-role <role>` and `rules init`, using
-`BOOKKEEPING_DATABASE_URL` set to the owner login and `RULES_MIGRATION_DATABASE_URL`.
-Use `bookkeeping init` only to initialize the fresh control schema;
-`bookkeeping migrate` refuses a missing schema. `change-journal init` or
-`change-journal migrate` and `bookkeeping init-guard` use their separate
-migration URLs. They do not populate business or source data. Resource checkpoint and
-request authorization migrations retain the five-table control boundary;
-see [Change Journal](../change-journal/SPEC.md) for their transaction/recovery contract.
+Migrate existing control databases only when explicitly authorized, using
+`bookkeeping migrate --runtime-role <role>` and `rules init` under their
+selected owner duties. Use `bookkeeping init` only to initialize the fresh
+control schema; `bookkeeping migrate` refuses a missing schema.
+`change-journal init` or `change-journal migrate` and `bookkeeping init-guard`
+remain separate owner-authorized operations. They do not populate business or
+source data. Resource checkpoint and request authorization migrations retain
+the five-table control boundary; see
+[Change Journal](../change-journal/SPEC.md) for their transaction/recovery contract.
 
 ```bash
 edgar-warehouse rules save --source <source> --version <new-version> rules/sources/<source>/source.yaml
@@ -379,7 +376,7 @@ edgar-warehouse bookkeeping leases <UUID>
 names whose waiting work has a recorded attempt and error. It omits unit keys
 and raw error text; keep `items[].error` within Bookkeeping.
 
-Activation of mappings also requires `RULES_MDM_ACTIVATION_DATABASE_URL`.
+Activation of mappings requires the separately selected governance duty.
 A source with a feed of its own declares its acquisition authority in Rules;
 one that reads files another source's feed captures declares none. Neither
 needs a legacy registry connection. The explicit `Rules.activate` Python

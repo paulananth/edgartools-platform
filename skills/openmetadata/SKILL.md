@@ -314,9 +314,9 @@ different jobs:
   run's frozen source and target to the configured Pipeline, writes
   `PUT /api/v1/pipelines/{fqn}/status`, and reads `pipelineStatus` back. Publish
   the catalog plan first if the target Pipeline does not exist.
-  The status API requires effective Pipeline `EditStatus`. Load
-  `BOOKKEEPING_DATABASE_URL` from the configured private runtime environment and
-  verify connectivity without printing the URL. Publish only a real run's status
+  The status API requires effective Pipeline `EditStatus`. Select the runtime
+  through [Data Platform connection setup](../data-platform/SKILL.md#connection-urls-and-environment)
+  and verify connectivity. Publish only a real run's status
   returned by Bookkeeping; never synthesize a failure to populate the catalog.
   This is an explicit status publication, not a Bookkeeping callback or a
   pipeline trigger; invoke it after the run transition that needs catalog

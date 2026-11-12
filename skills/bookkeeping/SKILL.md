@@ -181,13 +181,13 @@ Both install the selected engine's frozen migrations and refresh restricted runt
 schema blocks both. These modes create no run, import no legacy history or
 checkpoints, and do not change Rules, Change Journal or destination schemas.
 
-Set `BOOKKEEPING_DATABASE_URL` to a separate migration owner and pass an
-existing restricted runtime role. Never use the runtime login as the
-migration owner. Check
-the configured database, selected engine/version and role before executing; do not print
-connection secrets. Then run the selected command and verify the returned
-migration checksums, five control tables, runtime privileges and zero imported
-run/work rows:
+Select the migration-owner connection through
+[Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment)
+and pass an existing restricted runtime role. Never use the runtime login as
+the migration owner. Check the configured database, selected engine/version
+and role before executing; do not print connection secrets. Then run the
+selected command and verify the returned migration checksums, five control
+tables, runtime privileges and zero imported run/work rows:
 
 ```bash
 edgar-warehouse bookkeeping init --runtime-role <role>
@@ -195,9 +195,8 @@ edgar-warehouse bookkeeping migrate --runtime-role <role>
 ```
 
 The database defaults to `bookkeeping`. An explicitly approved different name
-uses `--database-name <database>` on either command; its private owner connection
-must select that exact database. Bare PostgreSQL/MySQL URLs select the shipped
-drivers. The independent control wheel needs its `mysql` extra for MySQL.
+uses `--database-name <database>` on either command; the selected owner must
+target that exact database. Driver setup is in the central connection section.
 Keep the existing runtime account's host restriction: MySQL resolves its unique
 account and refuses ambiguous same-name accounts rather than widening access.
 
@@ -213,8 +212,8 @@ prepared-transition helper checks do not qualify a whole run.
 
 Select one command for the requested state. Caller-held destination transaction
 guards are PostgreSQL-only. When those guards are in scope, provision them
-separately with `bookkeeping init-guard` using
-`DESTINATION_MIGRATION_DATABASE_URL` and its restricted destination role.
+separately with `bookkeeping init-guard` and its restricted destination role,
+using the destination-owner setup in the central connection section.
 MySQL writers use their destination's own atomic capability; report unsupported
 legacy guard calls explicitly rather than emulating deferred commit enforcement.
 Neither control-store mode silently provisions a destination or executes work.
@@ -300,8 +299,8 @@ edgar-warehouse bookkeeping checks <run-id>
 edgar-warehouse bookkeeping leases <run-id> --limit 100
 ```
 
-Each needs `BOOKKEEPING_DATABASE_URL` (the runtime login). `status`,
-`checks` and `leases` take the run id; `runs` lists them. `status` also returns
+Use the runtime connection selected through the central connection section.
+`status`, `checks` and `leases` take the run id; `runs` lists them. `status` also returns
 `failed_steps`, the distinct step names with a waiting work item, a recorded
 attempt and an error. This aggregate omits unit keys and error text; do not copy
 `items[].error` into OpenMetadata.

@@ -68,11 +68,10 @@ platform modules and is not the independence proof.
 Use init for an empty Journal database on its selected PostgreSQL 16, MySQL 8
 or SQL Server 2022 target; migrate only its already initialized checksummed
 storage. Qualify the actual selected engine and independent installation.
-Check the exact
-database, version and separate migration/runtime roles without printing secrets.
-Use `CHANGE_JOURNAL_MIGRATION_DATABASE_URL` for the migration owner and
-`CHANGE_JOURNAL_DATABASE_URL` for restricted runtime append/read functions.
-Neither falls back to Bookkeeping, legacy ledger, Rules or MDM connections.
+Select the journal's separate migration-owner and restricted runtime duties
+through [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
+Check the exact database, version and roles without printing secrets. Journal
+connections never fall back to Bookkeeping, legacy ledger, Rules or MDM.
 
 ```bash
 edgar-warehouse change-journal init --runtime-role <role>
@@ -80,9 +79,8 @@ edgar-warehouse change-journal migrate --runtime-role <role>
 ```
 
 The database defaults to `change_journal`. On either command, an explicitly
-approved different name uses `--database-name <database>` and an owner connection
-that selects that exact database. The independent wheel's `mysql` or `sqlserver`
-extra supplies the selected optional driver.
+approved different name uses `--database-name <database>`; the selected owner
+must target that exact database. Driver setup is in the central connection section.
 
 Select the command matching store state. Read back migration checksums, the
 engine's Journal-owned event storage/readback objects, restricted grants and event count. Untracked
