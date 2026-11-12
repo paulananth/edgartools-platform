@@ -14,7 +14,7 @@ from edgar_warehouse.control_contract import Blocked, canonical, digest, referen
 
 
 # Checks control runs itself. Every other check a step names is a domain check:
-# the step's verifier must report it true (mastering to-do 20a).
+# the step's worker must report it true.
 STEP_CHECKS = frozenset({"input.hash", "output.receipt"})
 RUN_CHECKS = frozenset({"manifest.hash", "work.accounting", "journal.delivered"})
 IDENTIFIER = r"[a-z][a-z0-9_.-]*"
@@ -317,7 +317,7 @@ def validate(document: dict, target: str) -> dict:
 
 
 # The operations a target marked `local: true` runs in the loader's own process: they turn captured files into
-# extracts and write files with receipts, so they need no claim, lease or verifier (ticket 210).
+# extracts and write files with receipts, so they need no claim or lease (ticket 210).
 LOCAL_OPERATIONS = frozenset({"source.read", "source.combine"})
 
 

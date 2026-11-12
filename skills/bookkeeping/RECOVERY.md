@@ -2,7 +2,7 @@
 
 Read [INDEPENDENCE.md](INDEPENDENCE.md) before selecting an execution recovery
 path. `bookkeeping resume` rechecks retained evidence and reopens the run; the
-workers and verifiers then continue it. The restricted-role and recovery gates
+workers then continue it. The restricted-role and recovery gates
 (mastering to-do 20b) have not run yet, so do not claim qualified recovery. A
 dependency failure is implementation work, not a reason to reintroduce a loader
 into control.
@@ -39,15 +39,13 @@ immutable output, and the evidence a resumed load carries is the evidence the
 first attempt produced.
 
 1. Read bounded status: `edgar-warehouse bookkeeping status <run-id>`. A
-   `reported` unit is awaiting its verifier. A `running` unit's worker stopped
-   only once its lease expires; a live lease still holds the unit.
-2. Reopen the run: `edgar-warehouse bookkeeping resume <run-id>`. It rechecks
-   every completed unit's retained evidence and blocks the run if any evidence
-   is corrupt; a `reported` unit's candidate is retained and is admitted by its
-   verifier. Exit 3 means the run is not complete yet, which is expected here.
-3. Run the workers and verifiers for the run's profiles again, in step order:
-   `edgar-warehouse workers work <profile> <run-id> --limit 100` and
-   `edgar-warehouse workers verify <profile> <run-id> --reports <report-root>
+   `running` unit's worker stopped only once its lease expires; a live lease
+   still holds the unit.
+2. Reopen the run: `edgar-warehouse bookkeeping resume <run-id>`. Completed
+   units stay complete and are not checked again. Exit 3 means the run is not
+   complete yet, which is expected here.
+3. Run the workers for the run's profiles again, in step order:
+   `edgar-warehouse workers work <profile> <run-id> --reports <report-root>
    --limit 100`. Repeat until the run's units are all verified. A unit whose
    attempt ended is reclaimed only after its lease expires (the default is 120
    seconds); a re-execution reconciles with the receipt it already wrote.
@@ -97,8 +95,8 @@ today's authoring document may have changed.
 | All work verified, deliveries pending | Restore ledger availability and resume. Delivery retries the exact event id/envelope. Completion waits for acknowledgement. |
 | Publication verification failed | Correct availability/read-back failures, then resume. Exact required consumers must verify. Hosted export/graph adapters are currently unsupported. |
 | Missing/corrupt manifest, receipt or output | Preserve failure evidence. When repair is authorized, recover exact original bytes from trusted retained evidence. A replacement scope/hash requires a new run. |
-| Worker runtime changed | A run pins each profile's runtime at its first admitted report; a different runtime is refused. Run the pinned runtime, or submit new work. |
-| Candidate reported, verifier never admitted it | While the lease is live, run the verifier again. Once it expires, the worker reclaims the unit and reconciles its earlier effect before writing. |
+| Worker runtime changed | A run pins each profile's runtime at its first completed unit; a different runtime is refused. Run the pinned runtime, or submit new work. |
+| Output written, report lost | Once the lease expires, a worker reclaims the unit and reconciles its earlier effect before writing. |
 | Rules retired or authoring YAML changed | Resume from the frozen export. Recover its exact bytes if missing; the live active version cannot replace it. |
 | Unknown/legacy run id | Use bounded fresh run discovery. Legacy history is not imported; submit new work when no fresh run exists. |
 | Compacted run | Retain its summary, references and checkpoints as audit evidence. Compacted runs cannot resume. |

@@ -1,4 +1,4 @@
-"""Real PG16 task lifecycle with separate restricted worker/verifier logins."""
+"""Real PG16 task lifecycle with a restricted worker login."""
 from edgar_warehouse.rules import frozen
 import json
 import os
@@ -13,11 +13,11 @@ from edgar_warehouse.rules import files
 from tests.integration.test_configured_bookkeeping_postgres import databases  # noqa: F401
 
 
-def test_rules_submitted_13f_work_is_completed_by_separate_worker_and_verifier(
+def test_rules_submitted_13f_work_is_completed_by_its_worker(
         databases, tmp_path, monkeypatch, capsys):
     root = Path(__file__).resolve().parents[2]
     store = Artifacts()
-    grant_profile(databases.admin, profile="source.read", worker="bk_runtime", verifier="bk_verifier")
+    grant_profile(databases.admin, profile="source.read", worker="bk_runtime")
     body = files.pipeline("sec.thirteenf.extract")
     saved = frozen.of("pipeline", "sec.thirteenf.extract", body)
     contract_path = root / "crates/source-contract/contracts/thirteenf/contract.yaml"
@@ -45,12 +45,7 @@ def test_rules_submitted_13f_work_is_completed_by_separate_worker_and_verifier(
         assert result.returncode == 0, result.stderr
         return result.stdout
 
-    command("edgar_warehouse.workers", "work", "source.read", run_id)
-    # A reported candidate must remain unverified until the other login checks it.
-    state = json.loads(command("edgar_warehouse.bookkeeping", "status", run_id))
-    assert state["counts"] != {"verified": 1}
-    env["BOOKKEEPING_DATABASE_URL"] = databases.verifier.url.render_as_string(hide_password=False)
-    command("edgar_warehouse.workers", "verify", "source.read", run_id,
+    command("edgar_warehouse.workers", "work", "source.read", run_id,
             "--reports", (tmp_path / "reports").as_uri())
     state = json.loads(command("edgar_warehouse.bookkeeping", "finalize", run_id))
     assert state["counts"] == {"verified": 1} and state["run"]["state"] == "complete"

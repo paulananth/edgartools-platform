@@ -84,12 +84,12 @@ def test_address_worker_verifier_and_preparation_preserve_exact_nested_record(tm
     manifest = store.put(tmp_path.as_uri(), {'version': 1, 'contract': contract, 'artifacts': [raw]})
     work = {'input': manifest, 'output': (tmp_path / 'reading.json').as_uri(), 'checks': ['source.output']}
     result = source_read.execute(work, store)
-    assert source_read.verify({**work, 'candidate': result}, store) == ({'source.output': True}, [])
+    assert source_read.check({**work, 'candidate': result}, store) == ({'source.output': True}, [])
     keys = {'table': 'addresses', 'dataset': 'fixture.address', 'policy': '0' * 64,
             'consumer': 'trial', 'batch_id': 'address', 'as_of': '2026-10-04T00:00:00Z'}
     prepare = {'input': result, 'output': (tmp_path / 'mdm/manifest.json').as_uri(), 'keys': keys, 'checks': ['mdm.prepared']}
     prepared = mdm_prepare.execute(prepare, store)
-    assert mdm_prepare.verify({**prepare, 'candidate': prepared}, store) == ({'mdm.prepared': True}, [])
+    assert mdm_prepare.check({**prepare, 'candidate': prepared}, store) == ({'mdm.prepared': True}, [])
     batch = store.json(prepared)['batches'][0]
     assert json.loads((tmp_path / 'mdm' / batch['input']['path']).read_bytes()) == {'business_address': retained(payload)}
 

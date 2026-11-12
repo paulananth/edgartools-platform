@@ -75,7 +75,6 @@ def test_each_managers_13f_reports_land_in_silver_and_other_forms_do_not(databas
     assert [step["name"] for step in target["steps"]] == ["filings", "land", "processed"]
     target["steps"] = target["steps"][:-1]  # the Change Journal step has its own plan test
     book = Bookkeeping(databases.runtime)
-    book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)
     steps = book.artifacts.json(report["manifest"])["steps"]
     recorded = book.artifacts.json(steps["processed"][0]["input"])["files"]
     assert [f["key"] for f in recorded] == [key(cik) for cik in MANAGERS]  # the Change Journal notes each list
@@ -86,9 +85,9 @@ def test_each_managers_13f_reports_land_in_silver_and_other_forms_do_not(databas
     saved = frozen.of("source", body["source"], body)
     rules = Artifacts().put(tmp_path.as_uri() + "/rules", saved)
     rid = book.start(rules_ref=rules, inputs_ref=manifest, target="silver", scope={"test": body["source"]})
-    workers = {"source.read": source_read, "silver.land": SimpleNamespace(execute=silver_land.execute, verify=silver_land.verify)}
+    workers = {"source.read": source_read, "silver.land": SimpleNamespace(execute=silver_land.execute, check=silver_land.check)}
     for profile in workers:
-        grant_profile(databases.admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")
+        grant_profile(databases.admin, profile=profile, worker="bk_runtime")
     with silver_database(databases.admin) as (owner, runtime):
         silver.migrate(owner, runtime_role=RUNTIME)
         assert silver.register(owner, spec_file(FOLDER / "silver-filing.yaml", None), runtime_role=RUNTIME)["created"]

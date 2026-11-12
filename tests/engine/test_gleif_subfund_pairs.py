@@ -40,6 +40,6 @@ def test_only_an_active_subfund_record_gives_a_fund_and_its_umbrella(tmp_path):
                                              "artifacts": [{"input": raw, "context": context}]})
     task = {"input": manifest, "output": (tmp_path / "reading.json").as_uri(), "checks": ["source.output"]}
     out = source_read.execute(task, store)
-    assert source_read.verify({**task, "candidate": out}, store) == ({"source.output": True}, [])
+    assert source_read.check({**task, "candidate": out}, store) == ({"source.output": True}, [])
     (artifact,) = source_readings.load(out, store, max_bytes=1 << 24, max_rows=100)[0]["artifacts"]
     assert artifact["tables"]["subfund"] == [{"fund": FUND, "umbrella": UMBRELLA}]

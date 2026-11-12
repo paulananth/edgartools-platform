@@ -41,7 +41,7 @@ def runtime_login(store: str) -> str:
 
 def owner_login(store: str) -> str:
     return store + "_owner"
-EXTRA_LOGINS = ("bookkeeping_verifier", "mdm_verifier", "mdm_governance", "rules_governance")
+EXTRA_LOGINS = ("mdm_governance", "rules_governance")
 IMAGE = "postgres:16-alpine"
 LABEL = "org.edgartools.local-tests.owner"
 # Server settings for a full load (ticket 194): the default 4 MB of work memory sends each merge statement's
@@ -209,12 +209,10 @@ class LocalStores:
         # Bookkeeping owner uses BOOKKEEPING_DATABASE_URL, as MDM uses MDM_DATABASE_URL.
         bookkeeping_owner = migration.pop("BOOKKEEPING_MIGRATION_DATABASE_URL")
         connection = {**migration, "BOOKKEEPING_DATABASE_URL": bookkeeping_owner}
-        verifier = {"BOOKKEEPING_DATABASE_URL": self.url(name, "bookkeeping", "bookkeeping_verifier").render_as_string(hide_password=False),
-                    "MDM_DATABASE_URL": self.url(name, "mdm", "mdm_verifier").render_as_string(hide_password=False)}
         governance = {"RULES_DATABASE_URL": self.url(name, "rules", "rules_governance").render_as_string(hide_password=False),
                       "MDM_REGISTRATION_DATABASE_URL": self.url(name, "mdm", "mdm_governance").render_as_string(hide_password=False)}
         for filename, extra in (("connection.env", connection), ("worker.env", {}),
-                                ("verifier.env", verifier), ("governance.env", governance)):
+                                ("governance.env", governance)):
             # Clear a previous shell's owner/silver settings before choosing a duty.
             unset = [*migration, "BOOKKEEPING_MIGRATION_DATABASE_URL",
                      "BOOKKEEPING_ADMIN_DATABASE_URL",
@@ -258,11 +256,9 @@ class LocalStores:
                         conn.exec_driver_sql(f"CREATE DATABASE {quote(database)} OWNER {quote(owner_login(store))}")
                     conn.exec_driver_sql(f"REVOKE CONNECT ON DATABASE {quote(database)} FROM PUBLIC")
                     conn.exec_driver_sql(f"GRANT CONNECT ON DATABASE {quote(database)} TO {quote(runtime_login(store))}")
-                for database, login in (("bookkeeping", "bookkeeping_verifier"), ("mdm", "mdm_verifier"),
-                                        ("mdm", "mdm_governance"), ("rules", "rules_governance")):
+                for database, login in (("mdm", "mdm_governance"), ("rules", "rules_governance")):
                     conn.exec_driver_sql(f"GRANT CONNECT ON DATABASE {quote(database)} TO {quote(login)}")
                 for parent, member in (("bookkeeping_control", "bookkeeping_runtime"),
-                                       ("bookkeeping_control", "bookkeeping_verifier"),
                                        ("rules_runtime", "rules_governance")):
                     if not conn.scalar(text("SELECT pg_has_role(:m,:p,'MEMBER')"), {"m": member, "p": parent}):
                         conn.exec_driver_sql(f"GRANT {quote(parent)} TO {quote(member)}")
@@ -296,30 +292,24 @@ class LocalStores:
         book = self.engine(name, "bookkeeping")
         try:
             for profile in PROFILES:
-                grant_profile(book, profile=profile, worker="bookkeeping_runtime", verifier="bookkeeping_verifier")
-            with book.connect() as conn:
-                for profile in PROFILES:
-                    for login, duty in (("bookkeeping_runtime", "verifier"), ("bookkeeping_verifier", "worker")):
-                        if conn.scalar(text("SELECT pg_has_role(:l,bookkeeping.profile_role(:p,:d),'MEMBER')"),
-                                       {"l": login, "p": profile, "d": duty}):
-                            raise ValueError("Worker and verifier duties overlap; refusing initialization")
+                grant_profile(book, profile=profile, worker="bookkeeping_runtime")
         finally:
             book.dispose()
         mdm = self.engine(name, "mdm")
         try:
             with mdm.begin() as conn:
-                conn.exec_driver_sql("GRANT USAGE ON SCHEMA mdm TO mdm_verifier,mdm_governance")
-                conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA mdm TO mdm_verifier,mdm_governance")
+                conn.exec_driver_sql("GRANT USAGE ON SCHEMA mdm TO mdm_governance")
+                conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA mdm TO mdm_governance")
                 conn.exec_driver_sql("GRANT INSERT ON mdm.policy,mdm.dataset,mdm.dataset_mapping TO mdm_governance")
                 from edgar_warehouse.mdm.prepared_registry import require_installed
                 from edgar_warehouse.mdm.registration import grant
                 adapter = require_installed(conn)
                 quote = mdm.dialect.identifier_preparer.quote
                 for table in adapter.tables.values():
-                    conn.exec_driver_sql(f"GRANT SELECT ON {quote(table.schema)}.{quote(table.name)} TO mdm_verifier,mdm_governance")
+                    conn.exec_driver_sql(f"GRANT SELECT ON {quote(table.schema)}.{quote(table.name)} TO mdm_governance")
                 from edgar_warehouse.mastering.store import WRITTEN
                 read = ",".join(f"mastering_{name}" for name in (*WRITTEN, "decision"))
-                conn.exec_driver_sql(f"GRANT SELECT ON {read} TO mdm_verifier,mdm_governance")
+                conn.exec_driver_sql(f"GRANT SELECT ON {read} TO mdm_governance")
             grant(mdm, "mdm_governance")
 
         finally:

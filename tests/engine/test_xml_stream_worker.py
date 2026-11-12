@@ -49,7 +49,7 @@ def test_xml_projection_retries_and_independent_verification(tmp_path, compresse
     assert reading["record_count"] == 2
     assert store.json(reading["partitions"][0]["receipt"])["tables"]["rows"] == [
         {"n": 10, "index": 1}, {"n": 20, "index": 2}]
-    assert source_read.verify({**envelope, "candidate": receipt}, store) == ({"source.output": True}, [])
+    assert source_read.check({**envelope, "candidate": receipt}, store) == ({"source.output": True}, [])
 
 
 @pytest.mark.parametrize("bad", [document("3"), document() + b"trailing",

@@ -1,9 +1,9 @@
 """Drive one Bookkeeping run to the end, with the platform's own commands (ticket 136).
 
-Shared by `rules test` and `load`. Each command runs in its own process under its
-duty's login (the stores' `worker.env`, `verifier.env`, `governance.env`). Steps go
-in their declared order: several workers on a step, one verifier, until every unit
-of the step is verified; then `bookkeeping finalize`.
+Used by `load`. Each command runs in its own process under its duty's login (the
+stores' `worker.env`, `governance.env`). Steps go in their declared order, several
+workers on a step, each checking its own units, until every unit of the step is
+verified; then `bookkeeping finalize`.
 
 A unit left waiting on busy prerequisites or leases is claimed again on the next
 pass. A unit that failed its work or its checks stops the run, which stays
@@ -24,7 +24,7 @@ from urllib.parse import unquote, urlparse
 
 from edgar_warehouse.bookkeeping.clean.engine import CONTENTION
 
-DUTIES = ("worker", "verifier", "governance")
+DUTIES = ("worker", "governance")
 # Seconds to wait after a pass that moved nothing: the units left are under another attempt's lease.
 PAUSE = 15
 
@@ -107,7 +107,7 @@ class Commands:
         return json.loads(self("worker", "bookkeeping", "status", run_id, "--limit", "1000", *named))
 
     def drive(self, run_id: str, steps: list[dict]) -> dict:
-        """Each step's workers, then its verifier, in step order, until nothing is left."""
+        """Each step's workers, in step order, until nothing is left."""
         for step in steps:
             profile = step["operation"]
             # The step's own counts: exact however many units it has.
@@ -117,10 +117,9 @@ class Commands:
                     break
                 # No more workers than units left: a one-unit step (a merge) gets one.
                 left = sum(n for state, n in found["counts"].items() if state != "verified")
-                work = ("worker", "workers", "work", profile, run_id, "--limit", "100")
+                work = ("worker", "workers", "work", profile, run_id, "--reports", self.reports, "--limit", "100")
                 with ThreadPoolExecutor(max(1, min(self.workers, left))) as pool:
                     list(pool.map(lambda _: self(*work), range(max(1, min(self.workers, left)))))
-                self("verifier", "workers", "verify", profile, run_id, "--reports", self.reports, "--limit", "1000")
                 before, found = found["counts"], self.status(run_id, step["name"])
                 if found["counts"] == before:
                     time.sleep(PAUSE)

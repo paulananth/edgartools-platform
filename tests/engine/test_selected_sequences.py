@@ -82,12 +82,12 @@ def test_worker_verifier_preserve_unselected_input_and_refuse_changed_count(tmp_
     candidate = source_read.execute(envelope, store)
     reading = store.json(candidate)
     assert reading['artifacts'] == [{'input': data, 'context': context, 'tables': {'filings': []}, 'deferred': []}]
-    assert source_read.verify({**envelope, 'candidate': candidate}, store) == ({'source.output': True}, [])
+    assert source_read.check({**envelope, 'candidate': candidate}, store) == ({'source.output': True}, [])
     forged = copy.deepcopy(reading)
     forged['artifacts'][0]['context']['sha256'] = '0' * 64
     forged_ref = store.put_bytes((tmp_path / 'forged.json').as_uri(), json.dumps(forged).encode())
     with pytest.raises(ValueError):
-        source_read.verify({**envelope, 'output': forged_ref['uri'], 'candidate': forged_ref}, store)
+        source_read.check({**envelope, 'output': forged_ref['uri'], 'candidate': forged_ref}, store)
     payload['count'] = 0
     bad = store.put_bytes((tmp_path / 'bad-count.json').as_uri(), json.dumps(payload).encode())
     bound = store.put(tmp_path.as_uri(), {'version': 1, 'input': bad, 'values': {**CONTEXT, 'recent_limit': 0}})

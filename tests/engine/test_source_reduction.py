@@ -54,7 +54,7 @@ def test_complete_sets_last_occurrence_and_uncapped_subtraction(tmp_path):
     work = envelope(store, tmp_path, body, refs)
     candidate = source_combine.execute(work, store)
     assert source_combine.execute(work, store) == candidate
-    assert source_combine.verify({**work, "candidate": candidate}, store) == ({source_combine.CHECK: True}, [])
+    assert source_combine.check({**work, "candidate": candidate}, store) == ({source_combine.CHECK: True}, [])
     output = store.json(candidate)
     tables = output["artifacts"][0]["tables"]
     assert tables["legal"] == [{"key": "a", "count": 2, "sample": [{"holder": "A", "time": "new"}]},
@@ -110,7 +110,7 @@ def test_large_input_uses_incremental_state_not_materializing_loader(tmp_path, m
     work = envelope(store, tmp_path, plan({"members": member("rows")}, max_rows=200000,
                                          max_input_bytes=16*1024**2), {"main": ref})
     candidate = source_combine.execute(work, store)
-    assert source_combine.verify({**work, "candidate": candidate}, store) == ({source_combine.CHECK: True}, [])
+    assert source_combine.check({**work, "candidate": candidate}, store) == ({source_combine.CHECK: True}, [])
     assert store.json(candidate)["artifacts"][0]["tables"]["members"] == [
         {"key": "a", "count": 7, "sample": [{"holder": "0"}, {"holder": "1"}]}]
 
@@ -141,7 +141,7 @@ def test_union_tables_deduplicate_before_legal_subtraction(tmp_path):
     refs = {"main": reading(store, tmp_path, tables)}
     work = envelope(store, tmp_path, plan(groups), refs)
     candidate = source_combine.execute(work, store)
-    assert source_combine.verify({**work, "candidate": candidate}, store) == ({source_combine.CHECK: True}, [])
+    assert source_combine.check({**work, "candidate": candidate}, store) == ({source_combine.CHECK: True}, [])
     assert store.json(candidate)["artifacts"][0]["tables"]["other"] == [
         {"key": "a", "count": 2, "sample": [{"holder": "B"}, {"holder": "C"}]}]
 
@@ -268,7 +268,7 @@ def test_lookup_scope_changes_identity_even_when_reduced_values_agree(tmp_path):
         work = envelope(store, tmp_path / label, plan({"members": member("rows")}), {"main": ref})
         candidate = source_combine.execute(work, store)
         output = store.json(candidate)
-        assert source_combine.verify({**work, "candidate": candidate}, store) == ({source_combine.CHECK: True}, [])
+        assert source_combine.check({**work, "candidate": candidate}, store) == ({source_combine.CHECK: True}, [])
         outputs.append(output)
     assert outputs[0]["artifacts"][0]["tables"] == outputs[1]["artifacts"][0]["tables"]
     assert outputs[0]["artifacts"][0]["input"]["sha256"] != outputs[1]["artifacts"][0]["input"]["sha256"]

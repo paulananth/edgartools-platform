@@ -59,8 +59,7 @@ def tables(kind: str) -> dict[str, Table]:
             ("resources", document), ("unit", document), ("state", String(16)),
             ("attempt", uuid), ("attempts", BigInteger), ("authority_until", timestamp),
             ("receipt", document), ("checks", document), ("error", UnicodeText),
-            ("generated_count", BigInteger), ("candidate", document), ("reporter", UnicodeText),
-            ("verifier", UnicodeText)]),
+            ("generated_count", BigInteger)]),
         "lease": table("lease", [
             ("resource", UnicodeText), ("token", BigInteger), ("run_id", uuid), ("attempt", uuid),
             ("expires_at", timestamp), ("heartbeat_at", timestamp)]),
@@ -155,18 +154,9 @@ def available_keys(engine, run_id, step, limit):
                                lease.c.attempt == work.c.attempt, lease.c.expires_at > clock)).exists()
     statement = select(work.c.unit_key).where(
         work.c.run_id == run_id, work.c.step == step,
-        work.c.state.not_in(["verified", "reported"]), ~live).order_by(work.c.ordinal).limit(limit)
+        work.c.state != "verified", ~live).order_by(work.c.ordinal).limit(limit)
     with engine.connect() as conn:
         return list(conn.scalars(statement))
-
-
-def reported(engine, run_id, steps, limit):
-    table = tables(engine.dialect.name)["work_item"]
-    statement = select(table.c.step, table.c.unit_key, table.c.attempt, table.c.candidate).where(
-        table.c.run_id == run_id, table.c.step.in_(steps), table.c.state == "reported"
-    ).order_by(table.c.step, table.c.ordinal).limit(limit)
-    with engine.connect() as conn:
-        return rows(conn, statement)
 
 
 def checkpoint(engine, resource):

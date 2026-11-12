@@ -22,7 +22,7 @@ def test_nested_join_handles_null_parent_missing_answer_and_preserves_shared_evi
               {'cik':3,'name_count':None,'_helper':'D'}]
     task,_,refs=work(tmp_path,store,original,[{'cik':1,'answer':{'lei':'L1'}},{'cik':2,'answer':{'lei':'L2'}}])
     result=source_combine.execute(task,store)
-    assert source_combine.verify({**task,'candidate':result},store)==({'source.combined':True},[])
+    assert source_combine.check({**task,'candidate':result},store)==({'source.combined':True},[])
     rows=store.json(result)['artifacts'][0]['tables']['company']
     assert rows==[{'cik':1,'name_count':{'key':'A','cascade':{'lei':'L1'}}},
                   {'cik':1,'name_count':{'key':'B','cascade':{'lei':'L1'}}},

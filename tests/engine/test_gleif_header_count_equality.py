@@ -22,7 +22,7 @@ def test_equal_header_and_input_context_complete_and_verify(tmp_path, member):
     rules, store = count_bound_rules(member), Artifacts()
     task = bound_task(tmp_path, store, archive(rules, member, 'xml'), rules)
     receipt = source_read.execute(task, store)
-    assert source_read.verify({**task, 'candidate':receipt}, store) == ({'source.output':True}, [])
+    assert source_read.check({**task, 'candidate':receipt}, store) == ({'source.output':True}, [])
 
 
 @pytest.mark.parametrize('member', MEMBERS)

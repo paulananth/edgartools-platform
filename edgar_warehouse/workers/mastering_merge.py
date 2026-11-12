@@ -2,7 +2,7 @@
 
 The envelope's input is the manifest `mdm.prepare` wrote. Each batch's records go to `merge_file`,
 which commits one file at a time, so a retry skips what is done. The receipt names each file and its
-record count, and the verifier reads the same rows with its own login. The database lock, not a
+record count, and the check reads the same rows back. The database lock, not a
 lease, keeps writers apart.
 """
 from __future__ import annotations
@@ -107,7 +107,7 @@ def execute(envelope: dict, artifacts) -> dict:
         engine.dispose()
 
 
-def verify(envelope: dict, artifacts) -> tuple[dict, list]:
+def check(envelope: dict, artifacts) -> tuple[dict, list]:
     from edgar_warehouse.mastering.store import open_store
 
     if envelope["candidate"]["uri"] != envelope["output"]:

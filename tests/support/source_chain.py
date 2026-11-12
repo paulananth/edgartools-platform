@@ -26,7 +26,7 @@ def read(store: Artifacts, root: Path, body: dict, artifacts: list[dict], versio
                                          "artifacts": artifacts})
     task = {"input": manifest, "output": (root / "reading.json").as_uri(), "checks": ["source.output"]}
     out = source_read.execute(task, store)
-    assert source_read.verify({**task, "candidate": out}, store) == ({"source.output": True}, [])
+    assert source_read.check({**task, "candidate": out}, store) == ({"source.output": True}, [])
     return out
 
 
@@ -37,7 +37,7 @@ def combine(store: Artifacts, root: Path, contract: Path, readings: dict) -> dic
                                          "readings": readings})
     task = {"input": manifest, "output": (root / "out.json").as_uri(), "checks": [source_combine.CHECK], "keys": {}}
     out = source_combine.execute(task, store)
-    assert source_combine.verify({**task, "candidate": out}, store) == ({source_combine.CHECK: True}, [])
+    assert source_combine.check({**task, "candidate": out}, store) == ({source_combine.CHECK: True}, [])
     return out
 
 
@@ -45,7 +45,7 @@ def prepare(store: Artifacts, root: Path, reading: dict, keys: dict) -> dict:
     """MDM preparation of `reading`; its batches are written under `root`."""
     task = {"input": reading, "output": (root / "manifest.json").as_uri(), "checks": [mdm_prepare.CHECK], "keys": keys}
     prepared = mdm_prepare.execute(task, store)
-    assert mdm_prepare.verify({**task, "candidate": prepared}, store) == ({mdm_prepare.CHECK: True}, [])
+    assert mdm_prepare.check({**task, "candidate": prepared}, store) == ({mdm_prepare.CHECK: True}, [])
     return prepared
 
 

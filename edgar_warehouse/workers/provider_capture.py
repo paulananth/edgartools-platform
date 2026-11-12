@@ -330,7 +330,7 @@ def execute(envelope, artifacts):
         journal.engine.dispose()
 
 
-def verify(envelope, artifacts):
+def check(envelope, artifacts):
     request, authority, completeness, url = _load(envelope, artifacts)
     if envelope['candidate']['uri'] != envelope['output']:
         raise ValueError('Capture candidate differs from intended output')

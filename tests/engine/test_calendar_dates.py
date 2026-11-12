@@ -62,7 +62,7 @@ def test_calendar_reading_survives_immutable_worker_and_independent_reparse(tmp_
     manifest = store.put(tmp_path.as_uri(), {'version': 1, 'contract': contract, 'artifacts': [data]})
     envelope = {'input': manifest, 'output': (tmp_path / 'reading.json').as_uri(), 'checks': ['source.output']}
     candidate = source_read.execute(envelope, store)
-    assert source_read.verify({**envelope, 'candidate': candidate}, store) == ({'source.output': True}, [])
+    assert source_read.check({**envelope, 'candidate': candidate}, store) == ({'source.output': True}, [])
     rows = store.json(candidate)['artifacts'][0]['tables']['filings']
     assert [(row['filing_date'], row['report_date']) for row in rows] == [
         ('2024-02-29', '2019-12-30'), (None, None)]

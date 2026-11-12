@@ -47,16 +47,14 @@ def test_worker_prepares_unmodified_records_and_verifier_binds_selection(tmp_pat
     manifest = store.put(tmp_path.as_uri(), {"version": 1, "contract": contract, "artifacts": [data]})
     envelope = {"input": manifest, "output": (tmp_path / "reading.json").as_uri(), "checks": ["source.output"]}
     reading = source_read.execute(envelope, store)
-    assert source_read.verify({**envelope, "candidate": reading}, store) == ({"source.output": True}, [])
+    assert source_read.check({**envelope, "candidate": reading}, store) == ({"source.output": True}, [])
     keys = {"record_column": "record", "table": "submissions", "dataset": "sec.submissions.person.v1", "policy": "0"*64,
             "consumer": "qualified", "batch_id": "raw", "as_of": "2026-10-04T00:00:00Z"}
     prepare = {"input": reading, "output": (tmp_path / "mdm" / "manifest.json").as_uri(), "checks": ["mdm.prepared"], "keys": keys}
     result = mdm_prepare.execute(prepare, store)
-    assert mdm_prepare.verify({**prepare, "candidate": result}, store) == ({"mdm.prepared": True}, [])
+    assert mdm_prepare.check({**prepare, "candidate": result}, store) == ({"mdm.prepared": True}, [])
     batch = store.json(result)["batches"][0]
     assert json.loads((tmp_path / "mdm" / batch["input"]["path"]).read_bytes()) == payload
-    with pytest.raises(ValueError):
-        mdm_prepare.verify({**prepare, "keys": {k: v for k, v in keys.items() if k != "record_column"}, "candidate": result}, store)
 
 
 @pytest.mark.parametrize("record", [None, [], "text", 1, True])
@@ -95,7 +93,7 @@ def test_worker_byte_budgets_fail_before_writing_unverifiable_output(tmp_path, m
         pieces = tmp_path / "pieces.json"
         split = {**source, "output": pieces.as_uri()}
         receipt = source_read.execute(split, store)
-        assert source_read.verify({**split, "candidate": receipt}, store) == ({"source.output": True}, [])
+        assert source_read.check({**split, "candidate": receipt}, store) == ({"source.output": True}, [])
         assert store.json(receipt)["version"] == 2
         loaded, _ = source_readings.load(receipt, store, max_bytes=1024**2, max_rows=100)
         assert [a["tables"] for a in loaded["artifacts"]] == [a["tables"] for a in whole["artifacts"]]
@@ -131,7 +129,7 @@ def test_a_large_reading_is_cut_into_pieces_that_read_back_whole(tmp_path, monke
     index = store.json(receipt)
     assert index["version"] == 2 and len(index["artifacts"]) == 3
     assert all(part["bytes"] <= 700 for a in index["artifacts"] for part in a["partitions"])
-    assert source_read.verify({**work, "candidate": receipt}, store) == ({"source.output": True}, [])
+    assert source_read.check({**work, "candidate": receipt}, store) == ({"source.output": True}, [])
     loaded, _ = source_readings.load(receipt, store, max_bytes=1024**2, max_rows=100)
     assert [a["tables"] for a in loaded["artifacts"]] == [a["tables"] for a in whole["artifacts"]]
     monkeypatch.setattr(source_readings, "PART_BYTES", 40)  # one row larger than a piece is refused

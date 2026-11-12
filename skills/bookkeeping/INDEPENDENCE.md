@@ -7,36 +7,30 @@ or running/recovering work under the Bookkeeping skill.
 
 Control owns work identities, dependency readiness, leases/fencing, bounded
 retry, checkpoints, accounting, generic child manifests and control delivery.
-External workload workers own source reading, transformations and destination
-writes. External destination verifiers own domain checks and readback.
+External workload workers own source reading, transformations, destination
+writes, and the domain checks and readback of what they wrote.
 
 Only a fixed, authenticated task protocol crosses this separation. Pass frozen
 specification/input/output references and narrowly scoped authority messages.
 Workers receive no Bookkeeping object, SQL engine, registry or private methods.
 The controller has no domain callbacks or domain-operation name branches.
-Approved profiles pin worker/verifier runtime and contract digests; authoring
+A run pins each profile's worker runtime digest; authoring
 YAML cannot supply an arbitrary import path or shell command.
 
-The [replacement design](DESIGN.md)
-defines the proposed protocol and transition rules. Follow its failure and
-recovery requirements; loader replacement is not a prerequisite for removing
-control coupling. Existing loaders may remain inside external worker processes.
-
-## Status (mastering to-do 20a and 20b)
+## Status
 
 The callback registry, the per-source, MDM and source-input modules, the
 acquisition and source-evidence callbacks and the Journal branches on operation
-names are deleted. Control now hands out task envelopes and admits verifier
-reports (`bookkeeping claim`, `renew`, `report`, `verifications`, `admit`,
-`fail`, `finalize`); workers run as their own processes
+names are deleted. Control hands out task envelopes and accepts workers' check
+reports (`bookkeeping claim`, `renew`, `report`, `fail`, `finalize`); workers run as their own processes
 (`edgar-warehouse workers`).
 
 | Gate | State |
 | --- | --- |
-| 1. Control starts and builds every command with domain packages blocked | Passed: the control-only wheel (`packages/bookkeeping`) installs with the Journal wheel and no domain distribution, and its own CLI, in isolated mode, makes every control call of a run (migrate, grant-profile, claim, report, verifications, admit, finalize) on PostgreSQL 16; submission is Rules' job (`tests/integration/test_bookkeeping_wheel_postgres.py`); an import guard also covers the repository's control (`tests/architecture/test_bookkeeping_control_only.py`) |
+| 1. Control starts and builds every command with domain packages blocked | Passed: the control-only wheel (`packages/bookkeeping`) installs with the Journal wheel and no domain distribution, and its own CLI, in isolated mode, makes every control call of a run (migrate, grant-profile, claim, report, finalize) on PostgreSQL 16; submission is Rules' job (`tests/integration/test_bookkeeping_wheel_postgres.py`); an import guard also covers the repository's control (`tests/architecture/test_bookkeeping_control_only.py`) |
 | 2. Two workers on one protocol, no Bookkeeping change between them | Passed: `artifact.copy` and `jsonl.count`, in their own processes (`test_two_workers_in_their_own_processes_complete_a_cli_submitted_run`) |
-| 3. PostgreSQL 16 restricted roles: issuer authorization, wrong bindings, forged checks, conflicting reports | Partly: wrong bindings, a candidate outside its intended output, forged or missing checks, conflicting reports, stale or missing fencing and unreported completion are refused (`test_admission_refuses_*`, `test_a_candidate_must_be_*`, `test_restricted_functions_*`, `test_renewal_takeover_*`). A run freezes each step's profile; only that profile's worker role claims and reports its work, only its verifier role verifies and completes it, never the login that reported it, and the verifier's runtime is pinned with the completion (`test_only_a_profiles_roles_*`, `test_a_verifier_runtime_*`) |
-| 4. Recovery: lost acknowledgement, crash after commit, lease expiry during verification, missing runtime, Journal outage | Partly: lost acknowledgement, crash after commit, Journal outage, a changed runtime, resource checkpoints across runs, and a report whose lease lapsed before verification (the verifier re-takes it; no worker repeats it) are covered. A lease lapsing while a verifier runs refuses the late admission and a fresh verification completes the unit (`test_a_lease_lapsing_*`). Destination re-verification on resume waits for the first mutable destination, MDM (20e) |
+| 3. PostgreSQL 16 restricted roles: issuer authorization, wrong bindings, forged checks, conflicting reports | Wrong bindings, an output outside its intended place, forged or missing checks, a conflicting report and stale or missing fencing are refused (`test_a_report_that_names_other_work_*`, `test_a_candidate_must_be_*`, `test_restricted_functions_*`, `test_renewal_takeover_*`). A run freezes each step's profile; only a login of that profile's worker role claims and completes its units (`test_only_a_profiles_worker_*`) |
+| 4. Recovery: lost acknowledgement, crash after commit, lease expiry, changed runtime, Journal outage | Lost acknowledgement, crash after commit, Journal outage, a changed runtime and resource checkpoints across runs are covered. A lease lapsing before the report refuses it, and the next attempt completes the unit (`test_a_lease_lapsing_*`) |
 
 A kind or source whose step has no worker profile yet (no key in `PROFILES`,
 `edgar_warehouse/workers/__init__.py`) is reported unsupported, naming the
@@ -77,7 +71,7 @@ blocked. That proves helper isolation only, not independence of the controller.
 ## Evidence admission
 
 A worker exit code, report flag or output hash does not prove destination
-completion. Admit authenticated reports from the frozen verifier profile with
+completion. Accept a report only from a login of the frozen worker profile, with
 exact work/input/spec/runtime/candidate bindings, required check coverage and
 destination proof references. Recheck live authority before marking work
 verified and releasing dependents. Lost leases reject old completion.

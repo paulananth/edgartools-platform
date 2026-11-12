@@ -15,8 +15,8 @@ SECOND = [{"key": "a", "holder": "A"}, {"key": "a", "holder": "B"}]
 def run(store, root, body, readings):
     envelope = combine_case.envelope(store, root, body, readings)
     out = source_combine.execute(envelope, store)
-    assert source_combine.verify({**envelope, "candidate": out}, store) == ({source_combine.CHECK: True}, [])
-    assert source_combine.confirm({**envelope, "candidate": out}, store)[0] == {source_combine.CHECK: True}
+    assert source_combine.check({**envelope, "candidate": out}, store) == ({source_combine.CHECK: True}, [])
+    assert source_combine.check({**envelope, "candidate": out}, store)[0] == {source_combine.CHECK: True}
     return store.json(out)
 
 

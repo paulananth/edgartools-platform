@@ -26,11 +26,11 @@ def control(database_factory):
                 checksums = migrate(owner, runtime_role=worker_role, database_name=owner.url.database)
                 assert migrate(owner, runtime_role=verifier_role, database_name=owner.url.database, existing_only=True) == checksums
                 profile = "invented." + uuid4().hex
-                granted = grant_profile(owner, profile=profile, worker=worker_role, verifier=verifier_role)
+                granted = grant_profile(owner, profile=profile, worker=worker_role)
                 book = Bookkeeping(worker)
                 book.profile = profile
                 book.granted = granted
-                book.verifier = Bookkeeping(verifier, book.artifacts)
+                book.other = Bookkeeping(verifier, book.artifacts)
                 try:
                     yield owner, worker_role, verifier_role, book, checksums
                 finally:
@@ -116,43 +116,28 @@ def test_normal_cli_uses_configured_database_and_default_driver(control, monkeyp
 def test_real_duties_fencing_and_report_bindings(control, tmp_path):
     from dataclasses import replace
     from sqlalchemy.exc import DBAPIError
+    from edgar_warehouse.control_contract import Blocked
     from edgar_warehouse.workers import copy
-    from tests.support.bookkeeping_protocol import RUNTIME, verification_for, verification_report
+    from tests.support.bookkeeping_protocol import check_report
     owner, worker_role, _, book, _ = control
     run_id, _, _ = submission(book, tmp_path, count=1)
     with pytest.raises(DBAPIError, match="role"):
-        book.verifier.claim(run_id, "s0", "0")
+        book.other.claim(run_id, "s0", "0")
     claim = book.claim(run_id, "s0", "0")
     for invalid in ([], [{**entry, "token": entry["token"] + 1} for entry in claim.proof]):
         with pytest.raises(DBAPIError, match="[Pp]roof|[Ll]ease"):
             book.heartbeat(replace(claim, proof=invalid))
     envelope = book.envelope(claim)
     candidate = copy.execute(envelope, book.artifacts)
-    with pytest.raises(DBAPIError, match="role"):
-        book.verifier.report(envelope, candidate, RUNTIME)
-    book.report(envelope, candidate, RUNTIME)
-    book.report(envelope, candidate, RUNTIME)  # lost acknowledgement
-    with pytest.raises(DBAPIError, match="[Cc]onflicting"):
-        book.report(envelope, {**candidate, "sha256": "b" * 64}, RUNTIME)
-    with pytest.raises(DBAPIError, match="role"):
-        book.verifications(run_id, book.profile)
-    quote = owner.dialect.identifier_preparer.quote_identifier
-    group = "'" + book.granted["verifier"]["role"] + "'@'%'" if owner.dialect.name == "mysql" else quote(book.granted["verifier"]["role"])
-    login = "'" + worker_role + "'@'%'" if owner.dialect.name == "mysql" else quote(worker_role)
-    with owner.begin() as conn:
-        conn.execute(text("GRANT " + group + " TO " + login))
-    try:
-        with pytest.raises(DBAPIError, match="own report"):
-            book.verifications(run_id, book.profile)
-    finally:
-        with owner.begin() as conn:
-            conn.execute(text("REVOKE " + group + " FROM " + login))
-    verification = verification_for(book, run_id, "s0", "0", book.profile)
-    report = verification_report(book, verification, copy)
-    book.verifier.admit(verification, report)
+    report = check_report(book, envelope, candidate, copy)
+    with pytest.raises(DBAPIError, match="role"):  # a login without the profile's worker role completes nothing
+        book.other.report(envelope, candidate, report)
+    book.report(envelope, candidate, report)
     before = book.status(run_id)
-    book.verifier.admit(verification, report)
+    book.report(envelope, candidate, report)  # lost acknowledgement
     assert book.status(run_id) == before and before["counts"] == {"verified": 1}
+    with pytest.raises(Blocked, match="changed"):
+        book.report(envelope, candidate, book.artifacts.put(tmp_path.as_uri() + "/other", {"other": True}))
 
 
 def test_exact_cursor_and_journal_time_survive_completion(control, tmp_path):
@@ -255,28 +240,27 @@ def test_a_claim_that_loses_every_retry_reports_not_claimed(control, tmp_path, m
 def test_mysql_expiry_during_completion_rolls_back_every_effect(control, tmp_path):
     from sqlalchemy.exc import DBAPIError
     from edgar_warehouse.workers import copy
-    from tests.support.bookkeeping_protocol import RUNTIME, verification_for, verification_report
+    from tests.support.bookkeeping_protocol import check_report, finish
     owner, _, _, book, _ = control
     if owner.dialect.name != "mysql":
         pytest.skip("MySQL procedure-owned commit; retained PostgreSQL deferred-commit tests cover its boundary")
     run_id, _, _ = submission(book, tmp_path, count=1, body=config(seconds=2))
     envelope = book.tasks(run_id, book.profile)[0]
-    book.report(envelope, copy.execute(envelope, book.artifacts), RUNTIME)
-    verification = verification_for(book, run_id, "s0", "0", book.profile)
-    report = verification_report(book, verification, copy)
+    candidate = copy.execute(envelope, book.artifacts)
+    report = check_report(book, envelope, candidate, copy)
     before = book.status(run_id)
     with owner.begin() as conn:
         conn.execute(text("CREATE TRIGGER invented_expiry BEFORE UPDATE ON bookkeeping_work_item FOR EACH ROW BEGIN IF NEW.state='verified' THEN DO SLEEP(3); END IF; END"))
     try:
         with pytest.raises(DBAPIError, match="[Ee]xpired"):
-            book.verifier.admit(verification, report)
+            book.report(envelope, candidate, report)
         assert book.status(run_id) == before
     finally:
         with owner.begin() as conn:
             conn.execute(text("DROP TRIGGER invented_expiry"))
-    renewed = verification_for(book, run_id, "s0", "0", book.profile)
-    assert renewed["claim"]["proof"][0]["token"] > verification["claim"]["proof"][0]["token"]
-    book.verifier.admit(renewed, verification_report(book, renewed, copy))
+    renewed = book.tasks(run_id, book.profile)[0]
+    assert renewed["claim"]["proof"][0]["token"] > envelope["claim"]["proof"][0]["token"]
+    finish(book, renewed, copy)
     assert book.status(run_id)["counts"] == {"verified": 1}
 
 
@@ -328,7 +312,7 @@ def test_mysql_populated_interruption_revokes_both_cached_duties_and_recovers(co
     run_id, _, _ = submission(book, tmp_path)
     complete(book, run_id, "0", profile=book.profile)
     before = book.status(run_id)
-    with book.engine.connect() as worker, book.verifier.engine.connect() as verifier:
+    with book.engine.connect() as worker, book.other.engine.connect() as verifier:
         for conn in (worker, verifier):
             conn.execute(text("SELECT * FROM bookkeeping_pipeline_run"))
             conn.commit()
@@ -355,7 +339,7 @@ def test_mysql_populated_interruption_revokes_both_cached_duties_and_recovers(co
         for role in (worker_role, verifier_role):
             assert migrate(owner, runtime_role=role, database_name=owner.url.database) == checksums
         assert book.status(run_id) == before
-        assert book.verifier.status(run_id) == before
+        assert book.other.status(run_id) == before
     complete(book, run_id, "1", profile=book.profile)
     assert book.status(run_id)["counts"] == {"verified": 2}
 
@@ -448,28 +432,22 @@ def test_failed_journal_verification_retains_intent_and_retries_the_same_event(c
         assert book.deliver(journal, run_id) == 0 and journal.status()["events"] == 1
 
 
-def test_worker_and_verifier_runtime_changes_rollback_without_repinning(control, tmp_path):
+def test_a_worker_runtime_change_rolls_back_without_repinning(control, tmp_path):
     from sqlalchemy.exc import DBAPIError
     from edgar_warehouse.workers import copy
-    from tests.support.bookkeeping_protocol import RUNTIME, verification_for, verification_report
+    from tests.support.bookkeeping_protocol import check_report
     _, _, _, book, _ = control
     run_id, _, _ = submission(book, tmp_path)
     complete(book, run_id, "0", profile=book.profile)
     envelope = book.tasks(run_id, book.profile)[0]
     candidate = copy.execute(envelope, book.artifacts)
-    before = book.status(run_id)
-    with pytest.raises(DBAPIError, match="worker runtime changed"):
-        book.report(envelope, candidate, "b" * 64)
-    assert book.status(run_id) == before
-    book.report(envelope, candidate, RUNTIME)
-    verification = verification_for(book, run_id, "s0", "1", book.profile)
-    original = verification_report(book, verification, copy)
+    original = check_report(book, envelope, candidate, copy)
     changed = book.artifacts.put(tmp_path.as_uri() + "/reports", {**book.artifacts.json(original), "runtime": "b" * 64})
     before = book.status(run_id)
-    with pytest.raises(DBAPIError, match="verifier runtime changed"):
-        book.verifier.admit(verification, changed)
+    with pytest.raises(DBAPIError, match="worker runtime changed"):
+        book.report(envelope, candidate, changed)
     assert book.status(run_id) == before
-    book.verifier.admit(verification, original)
+    book.report(envelope, candidate, original)
     assert book.status(run_id)["counts"] == {"verified": 2}
 
 
@@ -493,10 +471,10 @@ def test_mysql_uses_the_existing_host_restricted_runtime_account(database_factor
                 migrate(owner, runtime_role=role, database_name=owner.url.database)
                 migrate(owner, runtime_role=reader_role, database_name=owner.url.database)
                 profile = "invented.host." + uuid4().hex
-                granted = grant_profile(owner, profile=profile, worker=role, verifier=reader_role)
+                granted = grant_profile(owner, profile=profile, worker=role)
                 book = Bookkeeping(runtime)
                 book.profile = profile
-                book.verifier = Bookkeeping(verifier, book.artifacts)
+                book.other = Bookkeeping(verifier, book.artifacts)
                 run_id, _, _ = submission(book, tmp_path, count=1)
                 complete(book, run_id, "0", profile=profile)
                 assert book.status(run_id)["counts"] == {"verified": 1}

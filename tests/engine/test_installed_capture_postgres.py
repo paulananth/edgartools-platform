@@ -1,11 +1,11 @@
-"""Capture and public verifier run from committed installed wheels, no checkout."""
+"""Capture runs from committed installed wheels, no checkout."""
 import json
 
 from tests.engine.test_data_skill_bundle_postgres import installed, _run
 from tests.integration.test_configured_capture_postgres import databases, setup
 
 
-def test_installed_capture_and_public_verifier_with_offline_http(installed, setup, databases):
+def test_installed_capture_with_offline_http(installed, setup, databases):
     python, root = installed
     book, start, _ = setup
     envelope = start()
@@ -31,16 +31,15 @@ transport.httpx.Client = functools.partial(httpx.Client, transport=httpx.MockTra
 artifacts = Artifacts()
 candidate = capture.execute(envelope, artifacts)
 assert len(calls) == 1
-control.report(envelope, candidate, runtime(capture))
+candidate = {"uri": candidate["uri"], "sha256": candidate["sha256"]}
+checks, proofs = capture.check({**envelope, "candidate": candidate}, artifacts)
+report = artifacts.put(envelope['output'].rsplit('/', 1)[0] + '/reports', control.report_document(envelope, candidate, checks, proofs, runtime(capture)))
+control.report(envelope, candidate, report)
 print(json.dumps(candidate))
 '''
     worked = _run(python, '-c', script, cwd=root, document=envelope)
     assert worked.returncode == 0, worked.stderr
     candidate = json.loads(worked.stdout)
-    env = {'BOOKKEEPING_DATABASE_URL': databases.verifier.url.render_as_string(hide_password=False)}
-    verified = _run(python, '-m', 'edgar_warehouse.workers', 'verify', 'provider.capture', envelope['claim']['run_id'],
-                    '--reports', (root / 'capture-reports').as_uri(), '--limit', '1', cwd=root, env=env)
-    assert verified.returncode == 0, verified.stderr
     book.deliver(databases.ledger, envelope['claim']['run_id'])
     assert book.finalize(envelope['claim']['run_id'])['run']['state'] == 'complete'
     assert book.artifacts.json(candidate)['metadata']['etag'] == 'W/"installed"'

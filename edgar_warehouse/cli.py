@@ -30,7 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     register_rules(subparsers)
     register_load(subparsers)
     register_journal(subparsers)
-    worker_arguments(subparsers.add_parser("workers", help="Run a worker or a verifier for one profile and run"))
+    worker_arguments(subparsers.add_parser("workers", help="Run a worker for one profile and run"))
     register_plan(subparsers)
     register_context(subparsers)
     register_rdm(subparsers)

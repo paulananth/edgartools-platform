@@ -25,10 +25,10 @@ def test_preparation_chunks_rows_and_verifies_every_records_file(tmp_path):
     manifest = store.json(candidate)
     assert [b["input"]["record_count"] for b in manifest["batches"]] == [1000, 1]
     assert [(b["expected_checkpoint"], b["checkpoint"]) for b in manifest["batches"]] == [(0, 1), (1, 2)]
-    assert mdm_prepare.verify({**envelope, "candidate": candidate}, store) == ({"mdm.prepared": True}, [])
+    assert mdm_prepare.check({**envelope, "candidate": candidate}, store) == ({"mdm.prepared": True}, [])
     (tmp_path / "prepared" / manifest["batches"][1]["input"]["path"]).write_bytes(b"corrupted\n")
     with pytest.raises(ValueError, match="records file.*differs"):
-        mdm_prepare.verify({**envelope, "candidate": candidate}, store)
+        mdm_prepare.check({**envelope, "candidate": candidate}, store)
 
 
 @pytest.mark.parametrize("name", ["../escape.jsonl", "/absolute.jsonl", "manifest.json"])
@@ -62,7 +62,7 @@ def test_an_effective_column_dates_each_publication(tmp_path):
     candidate = mdm_prepare.execute(envelope, store)
     batches = store.json(candidate)["batches"]
     assert [b["input"]["publication"]["effective_at"] for b in batches] == ["2026-06-30T00:00:00+00:00"] * 2
-    assert mdm_prepare.verify({**envelope, "candidate": candidate}, store) == ({"mdm.prepared": True}, [])
+    assert mdm_prepare.check({**envelope, "candidate": candidate}, store) == ({"mdm.prepared": True}, [])
     # Without the key, a publication states no effective time, as before.
     (tmp_path / "without").mkdir()
     store, envelope = _prepare(tmp_path / "without", rows)
@@ -156,7 +156,7 @@ def test_distinct_on_keeps_the_first_row_of_each_key_in_file_order(tmp_path):
     # A missing column and a null are one key: null.
     assert kept == [{"id": "a", "name": "Acme"}, {"id": "b", "name": "Bee"}, {"id": None, "name": "x"}]
     assert batch["input"]["record_count"] == 3
-    assert mdm_prepare.verify({**envelope, "candidate": candidate}, store) == ({"mdm.prepared": True}, [])
+    assert mdm_prepare.check({**envelope, "candidate": candidate}, store) == ({"mdm.prepared": True}, [])
     (tmp_path / "two").mkdir()
     store, envelope = _prepare(tmp_path / "two", rows[:3] + [{"id": "a", "name": "Acme"}], distinct_on=["id", "name"])
     batch = store.json(mdm_prepare.execute(envelope, store))["batches"][0]
@@ -179,7 +179,7 @@ def test_distinct_on_names_one_to_eight_distinct_columns(tmp_path, value):
 
 def _records(tmp_path, store, envelope):
     result = mdm_prepare.execute(envelope, store)
-    assert mdm_prepare.verify({**envelope, "candidate": result}, store) == ({"mdm.prepared": True}, [])
+    assert mdm_prepare.check({**envelope, "candidate": result}, store) == ({"mdm.prepared": True}, [])
     batch = store.json(result)["batches"][0]
     return [json.loads(line) for line in (tmp_path / "prepared" / batch["input"]["path"]).read_text().splitlines()]
 
@@ -221,7 +221,7 @@ def test_rows_read_against_a_lookup_set_are_their_own_publication(tmp_path):
         (tmp_path / name).mkdir()
         store, envelope = _prepare(tmp_path / name, [{"id": "a"}], lookups=lookups)
         candidate = mdm_prepare.execute(envelope, store)
-        assert mdm_prepare.verify({**envelope, "candidate": candidate}, store) == ({"mdm.prepared": True}, [])
+        assert mdm_prepare.check({**envelope, "candidate": candidate}, store) == ({"mdm.prepared": True}, [])
         keys[name] = store.json(candidate)["batches"][0]["input"]["publication"]["publication_key"]
     assert keys["none"] == "fixture.rows:" + hashlib.sha256(b"captured").hexdigest()
     assert len(set(keys.values())) == 3

@@ -36,7 +36,7 @@ Each artifact's rows of that table become records files of at most 1,000
 rows beside the output, one batch each, keyed by the artifact's digest. The
 records a check set aside stay in the reading itself. The output is the
 manifest `mastering.merge` takes. Everything is a function of the reading and the
-keys, so the verifier rebuilds it and compares bytes.
+keys, so a retry writes the same bytes.
 """
 from __future__ import annotations
 
@@ -277,14 +277,15 @@ def execute(envelope: dict, artifacts) -> dict:
     return artifacts.put_bytes(envelope["output"], manifest)
 
 
-def verify(envelope: dict, artifacts) -> tuple[dict, list]:
+def check(envelope: dict, artifacts) -> tuple[dict, list]:
+    """The step's own check of what it wrote: every records file the manifest names holds the bytes
+    the manifest states. Bookkeeping hashes the manifest."""
     if envelope["candidate"]["uri"] != envelope["output"]:
         raise ValueError("Candidate URI differs from the intended output")
-    def check(name, data):
-        if artifacts.read(_beside(envelope["output"], name), max_bytes=limits.RECORDS_FILE_BYTES) != data:
-            raise ValueError(f"The records file {name} differs from the reading")
-
-    manifest = _documents(envelope, artifacts, check)
-    if artifacts.verified(envelope["candidate"], max_bytes=limits.MANIFEST_BYTES) != manifest:
-        raise ValueError("The manifest differs from the reading")
+    manifest = json.loads(artifacts.verified(envelope["candidate"], max_bytes=limits.MANIFEST_BYTES))
+    for batch in manifest["batches"]:
+        name = batch["input"]["path"]
+        data = artifacts.read(_beside(envelope["output"], name), max_bytes=limits.RECORDS_FILE_BYTES)
+        if hashlib.sha256(data).hexdigest() != batch["input"]["sha256"]:
+            raise ValueError(f"The records file {name} differs from the manifest")
     return {CHECK: True}, []

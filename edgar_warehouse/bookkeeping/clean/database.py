@@ -27,7 +27,9 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False, database_
     if engine.dialect.name != "postgresql":
         raise Blocked("Bookkeeping supports PostgreSQL/MySQL; SQL Server follows last")
     quote = engine.dialect.identifier_preparer.quote
-    paths = sorted((Path(__file__).parent / "migrations").glob("[0-9]*.sql"))
+    # The current schema, then any numbered change made after it.
+    folder = Path(__file__).parent / "migrations"
+    paths = [folder / "schema.sql", *sorted(folder.glob("[0-9]*.sql"))]
     with engine.begin() as conn:
         if conn.scalar(text("SELECT current_database()")) != database_name:
             raise Blocked("Refusing migration outside fresh bookkeeping")
@@ -46,6 +48,9 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False, database_
         if exists and not saved:
             raise Blocked("Existing untracked schema; refusing to adopt it")
         checksums = json.loads(saved) if saved else {}
+        if checksums and "schema.sql" not in checksums:
+            raise Blocked("This Bookkeeping store has an earlier schema; rebuild the store")
+        from .run_storage import execute_ddl
         for path in paths:
             sql = path.read_text()
             sha = hashlib.sha256(sql.encode()).hexdigest()
@@ -53,11 +58,7 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False, database_
                 if checksums[path.name] != sha:
                     raise Blocked("Installed migration checksum differs")
             else:
-                if path.name in {"009_native_run_checks.sql", "010_native_run_resume.sql"}:
-                    from .run_storage import execute_ddl
-                    execute_ddl(conn, sql)
-                else:
-                    conn.execute(text(sql))
+                execute_ddl(conn, sql)
                 checksums[path.name] = sha
         comment = canonical(checksums).replace("'", "''")
         conn.exec_driver_sql(f"COMMENT ON SCHEMA bookkeeping IS '{comment}'")
@@ -74,8 +75,7 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False, database_
             "resume_run_prepared(text)", "block_run(uuid,text)", "delivery(uuid,text)",
             "finish_resource(uuid,text,text,uuid,jsonb,jsonb,jsonb,uuid,text,bigint,bigint)",
             "finish_expand(uuid,text,text,uuid,jsonb,jsonb,jsonb,uuid,jsonb,text)",
-            "report(uuid,text,text,uuid,jsonb,jsonb,text,text)", "verify_claim(uuid,text,text,uuid,integer)",
-            "pin_verifier(uuid,text,text)",
+            "pin_runtime(uuid,text,text)",
         ):
             conn.exec_driver_sql(f"GRANT EXECUTE ON FUNCTION bookkeeping.{signature} TO {runtime}")
         if conn.scalar(text("SELECT has_schema_privilege(:r,'bookkeeping','CREATE') OR EXISTS(SELECT 1 FROM pg_tables WHERE schemaname='bookkeeping' AND has_table_privilege(:r,format('%I.%I',schemaname,tablename),'INSERT,UPDATE,DELETE,TRUNCATE'))"), {"r": runtime_role}):
@@ -83,24 +83,20 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False, database_
     return checksums
 
 
-def grant_profile(engine, *, profile: str, worker: str, verifier: str) -> dict:
-    """Let one login report a profile's work and another verify it. The
-    profile's two group roles are created on first use; grants are added,
-    never removed, and the two logins must differ."""
+def grant_profile(engine, *, profile: str, worker: str) -> dict:
+    """Let a login work a profile's steps. The profile's group role is created
+    on first use; grants are added, never removed."""
     import re
-    if not re.fullmatch(r"[a-z][a-z0-9_.-]{0,99}", profile) or worker == verifier:
-        raise Blocked("A profile needs a name and two different logins")
+    if not re.fullmatch(r"[a-z][a-z0-9_.-]{0,99}", profile):
+        raise Blocked("A profile needs a name")
     if engine.dialect.name == "mysql":
         from .mysql import grant_profile as grant_selected
-        return grant_selected(engine, profile=profile, worker=worker, verifier=verifier)
+        return grant_selected(engine, profile=profile, worker=worker)
     quote = engine.dialect.identifier_preparer.quote
-    granted = {}
     with engine.begin() as conn:
-        for duty, login in (("worker", worker), ("verifier", verifier)):
-            role = conn.scalar(text("SELECT bookkeeping.profile_role(:p,:d)"), {"p": profile, "d": duty})
-            if not conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=:r)"), {"r": role}):
-                conn.exec_driver_sql(f"CREATE ROLE {quote(role)} NOLOGIN")
-            if not conn.scalar(text("SELECT pg_has_role(:l,:r,'MEMBER')"), {"l": login, "r": role}):
-                conn.exec_driver_sql(f"GRANT {quote(role)} TO {quote(login)}")
-            granted[duty] = {"role": role, "login": login}
-    return granted
+        role = conn.scalar(text("SELECT bookkeeping.profile_role(:p,'worker')"), {"p": profile})
+        if not conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=:r)"), {"r": role}):
+            conn.exec_driver_sql(f"CREATE ROLE {quote(role)} NOLOGIN")
+        if not conn.scalar(text("SELECT pg_has_role(:l,:r,'MEMBER')"), {"l": worker, "r": role}):
+            conn.exec_driver_sql(f"GRANT {quote(role)} TO {quote(worker)}")
+    return {"worker": {"role": role, "login": worker}}

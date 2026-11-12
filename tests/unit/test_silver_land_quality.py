@@ -104,13 +104,13 @@ def test_execute_keeps_real_quality_report_in_the_immutable_receipt(worker):
 
 def test_verify_recomputes_quality_and_rejects_altered_outcomes(worker):
     result = silver_land.execute(envelope(), worker)
-    assert silver_land.verify(envelope(), worker) == ({"silver.landed": True, silver_land.QUALITY_CHECK: True}, [])
+    assert silver_land.check(envelope(), worker) == ({"silver.landed": True, silver_land.QUALITY_CHECK: True}, [])
 
     receipt = json.loads(worker.written[result["uri"]])
     receipt["quality"]["checks"]["valid_category"]["rows_failed"] = 0
     worker.written[result["uri"]] = json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode()
     with pytest.raises(ValueError, match="quality outcomes"):
-        silver_land.verify(envelope(), worker)
+        silver_land.check(envelope(), worker)
 
 
 def test_v2_requires_bookkeeping_load_identity(worker):
@@ -162,4 +162,4 @@ def test_v1_receipt_production_remains_default(worker, monkeypatch):
     receipt = json.loads(worker.written[result["uri"]])
     assert receipt["version"] == 1
     assert "quality" not in receipt
-    assert silver_land.verify(work, worker) == ({"silver.landed": True}, [])
+    assert silver_land.check(work, worker) == ({"silver.landed": True}, [])

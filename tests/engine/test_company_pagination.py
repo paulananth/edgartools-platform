@@ -58,7 +58,7 @@ def read(store, root, name, body, payload, context):
     manifest = store.put(root.as_uri(), {'version': 2, 'contract': contract, 'artifacts': [{'input': raw, 'context': bound}]})
     work = {'input': manifest, 'output': (root / f'{name}-reading.json').as_uri(), 'checks': ['source.output']}
     result = source_read.execute(work, store)
-    assert source_read.verify({**work, 'candidate': result}, store) == ({'source.output': True}, [])
+    assert source_read.check({**work, 'candidate': result}, store) == ({'source.output': True}, [])
     return result
 
 
@@ -74,7 +74,7 @@ def test_recent_and_raw_pages_combine_prepare_and_keep_capture_scope(tmp_path):
         {'company': table('main', 'company', {'forms': join('forms')}, checks={'last_sync_run_id': 'capture'})})
     work = envelope(store, tmp_path, combination, {'main': main, 'page': page})
     result = source_combine.execute(work, store)
-    assert source_combine.verify({**work, 'candidate': result}, store) == ({'source.combined': True}, [])
+    assert source_combine.check({**work, 'candidate': result}, store) == ({'source.combined': True}, [])
     rows = store.json(result)['artifacts'][0]['tables']['company']
     assert rows[0]['forms'] == ['10-K', '20-F']
     scope = store.json(store.json(result)['artifacts'][0]['input'])
@@ -83,7 +83,7 @@ def test_recent_and_raw_pages_combine_prepare_and_keep_capture_scope(tmp_path):
         'keys': {'table': 'company', 'dataset': 'sec.company.v1', 'policy': '0' * 64,
                  'consumer': 'trial', 'batch_id': 'page', 'as_of': '2026-10-04T00:00:00Z'}}
     prepared = mdm_prepare.execute(prepare, store)
-    assert mdm_prepare.verify({**prepare, 'candidate': prepared}, store) == ({'mdm.prepared': True}, [])
+    assert mdm_prepare.check({**prepare, 'candidate': prepared}, store) == ({'mdm.prepared': True}, [])
     batch = store.json(prepared)['batches'][0]
     require_tables(json.loads((tmp_path / 'mdm' / batch['input']['path']).read_bytes()), rows[0])
     # A foreign capture cannot enter the form evidence, even with the same CIK.

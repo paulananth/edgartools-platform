@@ -13,47 +13,41 @@ RUNTIME = "a" * 64
 WORKERS = {"artifact.copy": copy}
 
 
-def verifier_of(book):
-    """The verifier's own login: never the one that reported (to-do 20b)."""
-    return getattr(book, "verifier", book)
-
-
 def reports_root(envelope: dict) -> str:
     return envelope["output"].rsplit("/", 1)[0] + "/reports"
 
 
-def verification_report(book, verification: dict, worker) -> dict:
-    checks, proofs = worker.verify(verification, book.artifacts)
-    return book.artifacts.put(reports_root(verification), report_document(verification, checks, proofs, RUNTIME))
+def check_report(book, envelope: dict, candidate: dict, worker) -> dict:
+    """The worker's own check of what it wrote, stored as its report."""
+    candidate = {"uri": candidate["uri"], "sha256": candidate["sha256"]}
+    checks, proofs = worker.check({**envelope, "candidate": candidate}, book.artifacts)
+    return book.artifacts.put(reports_root(envelope), report_document(envelope, candidate, checks, proofs, RUNTIME))
 
 
 def envelope_for(book, claim) -> dict:
     return book.envelope(claim)
 
 
-def verification_for(book, rid: str, step: str, key: str, profile: str = "artifact.copy") -> dict:
-    return next(v for v in verifier_of(book).verifications(rid, profile, limit=1000)
-                if (v["claim"]["step"], v["claim"]["key"]) == (step, key))
+def finish(book, envelope: dict, worker) -> dict:
+    """Work, check and report one claimed unit; its receipt."""
+    candidate = worker.execute(envelope, book.artifacts)
+    report = check_report(book, envelope, candidate, worker)
+    book.report(envelope, candidate, report)
+    return {"uri": candidate["uri"], "sha256": candidate["sha256"],
+            "evidence": {"uri": report["uri"], "sha256": report["sha256"]}}
 
 
 def complete(book, rid, key="0", step="s0", worker=copy, profile="artifact.copy"):
-    """Claim, work, report, verify and admit one unit."""
+    """Claim, work, check and report one unit."""
     claim = book.claim(rid, step, key, sleep=lambda _: None)
     assert claim
-    envelope = book.envelope(claim)
-    candidate = worker.execute(envelope, book.artifacts)
-    book.report(envelope, candidate, RUNTIME)
-    verification = verification_for(book, rid, step, key, profile)
-    report = verification_report(book, verification, worker)
-    verifier_of(book).admit(verification, report)
-    receipt = {"uri": candidate["uri"], "sha256": candidate["sha256"], "evidence": report}
-    return claim, receipt
+    return claim, finish(book, book.envelope(claim), worker)
 
 
 def drive(book, rid, ledger, *, workers=None, limit=1000) -> dict:
-    """What a worker and a verifier per profile do, in step order, until
-    nothing more can run; then deliver control's events and record the run's
-    checks. Claims go through `tasks`, as the worker commands' do."""
+    """What a worker per profile does, in step order, until nothing more can
+    run; then deliver control's events and record the run's checks. Claims go
+    through `tasks`, as the worker commands' do."""
     workers = workers or WORKERS
     _, config, _, _ = book._frozen(rid)
     done = 0
@@ -63,9 +57,7 @@ def drive(book, rid, ledger, *, workers=None, limit=1000) -> dict:
         while done < limit:
             envelopes = book.tasks(rid, profile, limit=limit - done)
             for envelope in envelopes:
-                book.report(envelope, worker.execute(envelope, book.artifacts), RUNTIME)
-            for verification in verifier_of(book).verifications(rid, profile, limit=1000):
-                verifier_of(book).admit(verification, verification_report(book, verification, worker))
+                finish(book, envelope, worker)
                 done += 1
             if not envelopes:
                 break

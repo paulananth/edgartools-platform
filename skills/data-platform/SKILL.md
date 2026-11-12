@@ -246,13 +246,13 @@ tables and the records set aside. Nothing feed-specific runs. Read
 [Configured source extract](READING.md) before writing the contract: it covers
 complete JSON records, column arrays, exact source text and frozen references.
 
-1. The feed's pipeline is saved, tested, approved and switched on (Mode 4).
+1. The feed's pipeline file passes `rules check`.
 2. Submit: `edgar-warehouse rules run --pipeline <name> --target <target> --input-manifest <uri> --input-sha256 <sha256>`.
    Keep the `run_id` it prints.
-3. Work, as the worker login: `edgar-warehouse workers work source.read <run_id> --limit 100`.
-4. Verify, as the verifier login (a different `BOOKKEEPING_DATABASE_URL`):
-   `edgar-warehouse workers verify source.read <run_id> --reports <uri> --limit 100`.
-5. Repeat work and verify until every read unit is verified; the limit bounds
+3. Work, as the worker login:
+   `edgar-warehouse workers work source.read <run_id> --reports <uri> --limit 100`.
+   The worker checks each unit it wrote and completes it.
+4. Repeat until every read unit is verified; the limit bounds
    one invocation. For a read-only target, finish with
    `edgar-warehouse bookkeeping finalize <run_id>` and check `run.state` is
    `complete` with every unit `verified`. For a combined target, continue the
@@ -327,9 +327,9 @@ step:
   later revision of the same records that keeps its own time; a link first
   seen in it starts then. They exclude `effective_column`.
   See [READING.md](READING.md) for shape checks. Records files of at most 1,000 rows sit beside the
-  manifest. Its verifier rebuilds them and reports `mdm.prepared`.
+  manifest. Its check reads each file against the hash the manifest states and reports `mdm.prepared`.
 - `mastering.merge`: one MDM input manifest (contract version 2), merged one
-  file at a time; its verifier reads the files back from MDM and reports
+  file at a time; its check reads the files back from MDM and reports
   `mdm.committed`. A reader pulls the masters changed after its checkpoint;
   nothing is published.
 
@@ -356,16 +356,13 @@ The steps below are what it runs, for a run you drive by hand.
 1. For a combined run already submitted in Parse, retain its `run_id` and
    continue its declared steps. Otherwise submit:
    `edgar-warehouse rules run --source <name> --target <merge target> --input-manifest <uri> --input-sha256 <sha256>`.
-   A source with a `dataset_contracts` section needs the operator's approval of that rules version first (Mode 4).
-2. Work and verify **each declared profile in dependency order**: `source.read`,
+   A source with a `dataset_contracts` section is registered in MDM first (`rules register`; `load` does it).
+2. Work **each declared profile in dependency order**: `source.read`,
    `mdm.prepare`, `mastering.merge`. For example:
-   `edgar-warehouse workers work mdm.prepare <run_id> --limit 100`, then
-   `edgar-warehouse workers verify mdm.prepare <run_id> --reports <uri> --limit 100`.
-   Use the worker Bookkeeping login for work and the separate verifier login
-   for verify. For merge, set `MDM_DATABASE_URL` to the MDM
-   application login for work (`MDM_APPLICATION_ROLE` names its role), and to
-   the separate MDM verifier login for verify.
-3. Repeat work and verify for each profile until its units are verified.
+   `edgar-warehouse workers work mdm.prepare <run_id> --reports <uri> --limit 100`.
+   For merge, set `MDM_DATABASE_URL` to the MDM application login
+   (`MDM_APPLICATION_ROLE` names its role).
+3. Repeat for each profile until its units are verified.
    `--limit 100` bounds one invocation; it does not prove the whole step ran.
 4. Finish: `edgar-warehouse bookkeeping finalize <run_id>`. Done when
    `edgar-warehouse bookkeeping status <run_id>` shows the run complete and

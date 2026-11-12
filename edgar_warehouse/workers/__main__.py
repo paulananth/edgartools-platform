@@ -1,7 +1,9 @@
-"""Run a worker or a verifier for one profile against one Bookkeeping run.
+"""Run a worker for one profile against one Bookkeeping run.
 
-    python -m edgar_warehouse.workers work   <profile> <run_id> [--limit N]
-    python -m edgar_warehouse.workers verify <profile> <run_id> --reports <URI> [--limit N]
+    python -m edgar_warehouse.workers work <profile> <run_id> --reports <URI> [--limit N]
+
+A worker does a unit's work, checks its own result once and reports both; the
+report completes the unit.
 
 `edgar-warehouse workers …` takes the same arguments (`cli.py`).
 """
@@ -9,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import secrets
 import sys
 import threading
 import time
@@ -17,7 +18,7 @@ from pathlib import Path
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 
-from . import Redo, control, profile as load_profile
+from . import control, profile as load_profile
 
 
 def runtime(module) -> str:
@@ -79,7 +80,7 @@ def one_at_a_time(fetch, limit: int):
         yield found[0]
 
 
-def work(name: str, run_id: str, limit: int) -> int:
+def work(name: str, run_id: str, reports: str, limit: int) -> int:
     module, artifacts, failed = load_profile(name), Artifacts(), 0
     digest = runtime(module)
     for envelope in one_at_a_time(lambda n: control.claim(run_id, name, n), limit):
@@ -87,9 +88,15 @@ def work(name: str, run_id: str, limit: int) -> int:
         try:
             with Renewal(envelope) as renewal:
                 candidate = module.execute(envelope, artifacts)
+                candidate = {"uri": candidate["uri"], "sha256": candidate["sha256"]}
+                # The step's own check of what it wrote, once.
+                checks, proofs = module.check({**envelope, "candidate": candidate}, artifacts)
             if renewal.error is not None:
                 raise renewal.error  # the lease lapsed while the work ran
-            control.report(renewal.envelope, candidate, digest)
+            if any(value is not True for value in checks.values()):
+                raise ValueError("A check failed")
+            evidence = artifacts.put(reports, control.report_document(envelope, candidate, checks, proofs, digest))
+            control.report(renewal.envelope, candidate, evidence)
         except Exception as exc:
             failed += 1
             state = renewal.state() if renewal is not None else "claimed, not started"
@@ -98,57 +105,6 @@ def work(name: str, run_id: str, limit: int) -> int:
                 control.fail(envelope, type(exc).__name__)
             except control.ControlError:
                 pass  # a stale attempt cannot change the current one
-            break  # see one_at_a_time
-    return 1 if failed else 0
-
-
-# A check confirms a step's output; it redoes the work in full for the step's
-# first unit in the run and for this share of the rest (operator, ticket 72).
-SAMPLE_PERCENT = 5
-
-
-def sample(verification: dict) -> dict:
-    """Whether this check redoes the work, decided when the check runs (after
-    the output is written), so a worker cannot know which unit is redone."""
-    draw = secrets.randbelow(100)
-    first = verification["ordinal"] == 0
-    return {"redone": first or draw < SAMPLE_PERCENT, "first_unit": first, "draw": draw,
-            "percent": SAMPLE_PERCENT}
-
-
-def verify(name: str, run_id: str, reports: str, limit: int) -> int:
-    module, artifacts, failed = load_profile(name), Artifacts(), 0
-    digest = runtime(module)
-    for verification in one_at_a_time(lambda n: control.verifications(run_id, name, n), limit):
-        claim = verification["claim"]
-        try:
-            # A profile without `confirm` always redoes; one with it confirms, or redoes a sample.
-            decision = sample(verification) if hasattr(module, "confirm") else None
-            with Renewal(verification) as renewal:
-                if decision is None or decision["redone"]:
-                    checks, proofs = module.verify(verification, artifacts)
-                else:
-                    try:
-                        checks, proofs = module.confirm(verification, artifacts)
-                    except Redo as reason:  # this output cannot be confirmed: redo it
-                        decision = {**decision, "redone": True, "why": str(reason)}
-                        checks, proofs = module.verify(verification, artifacts)
-            if decision is not None:  # the decision is evidence beside the report
-                proofs = [*proofs, artifacts.put(reports, {"sample": decision, "claim": {
-                    k: claim[k] for k in ("run_id", "step", "key", "attempt")}})]
-            if renewal.error is not None:
-                raise renewal.error
-            if any(value is not True for value in checks.values()):
-                raise ValueError("A check failed")
-            control.admit({**renewal.envelope, "candidate": verification["candidate"]},
-                          artifacts.put(reports, control.report_document(verification, checks, proofs, digest)))
-        except Exception as exc:
-            failed += 1
-            print(f"{claim['step']}/{claim['key']}: {exc}", file=sys.stderr)
-            try:
-                control.fail(verification, type(exc).__name__)
-            except control.ControlError:
-                pass
             break  # see one_at_a_time
     return 1 if failed else 0
 

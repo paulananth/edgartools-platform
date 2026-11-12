@@ -1,7 +1,7 @@
 # Run the validated source and feed
 
 First read [INDEPENDENCE.md](INDEPENDENCE.md). `rules run` only submits; the
-work is done by workers in their own processes, checked by separate verifiers,
+work is done by workers in their own processes, each checking its own result,
 and finished by `bookkeeping finalize`. A step whose worker profile has no
 worker yet (no key in `PROFILES`, `edgar_warehouse/workers/__init__.py`) is a
 blocker to report, never a reason to run it some other way.
@@ -19,25 +19,23 @@ unsupported required stage is a blocker, not a reason to drop that stage.
 
 ## Configuration and execution
 
-Select the environment, worker/verifier duties, manifest storage and any
+Select the environment, the worker duty, manifest storage and any
 registration connections through
 [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
-Keep worker and verifier identities separate; provisioning does not authorize
-execution.
+Provisioning does not authorize execution.
 Old run ids are not fallbacks.
 
 A new or changed rules file is checked with `rules check`; the run freezes it ([check and load](../data-onboarding/LOAD.md)).
 
-Submit the selected source/feed's manifest, then run each step's worker and
-verifier, in step order, and finish the run:
+Submit the selected source/feed's manifest, then run each step's worker,
+in step order, and finish the run:
 
 ```bash
 edgar-warehouse rules run \
   --source "$RULES_SOURCE_NAME" --target "$BOOKKEEPING_TARGET" \
   --input-manifest "$INPUT_MANIFEST_URI" --input-sha256 "$INPUT_MANIFEST_SHA256"
-# A live acquisition run adds --feed "$SOURCE_FEED" (and needs the acquisition proof).
-edgar-warehouse workers work <profile> "$RUN_ID" --limit 100
-edgar-warehouse workers verify <profile> "$RUN_ID" \
+# A live acquisition run adds --feed "$SOURCE_FEED" (it makes provider requests: the operator's permission first).
+edgar-warehouse workers work <profile> "$RUN_ID" \
   --reports "$REPORT_ROOT_URI" --limit 100
 edgar-warehouse bookkeeping finalize "$RUN_ID"
 ```
@@ -67,7 +65,7 @@ it mark the run blocked. Listings are bounded; state counts cover all work.
 Read [RECOVERY.md](RECOVERY.md) for incomplete runs. Authorized continuation uses
 `bookkeeping resume <run-id>`, or the original Rules selection with
 `--resume-run-id <run-id>` and no replacement input options, then the workers
-and verifiers again. Keep the run id, original Rules reading, pinned worker
+again. Keep the run id, original Rules reading, pinned worker
 runtimes and business idempotency keys.
 Verified effects reconcile before execution. A fresh Rules version or a changed
 authoring file is not a substitute for missing original evidence.

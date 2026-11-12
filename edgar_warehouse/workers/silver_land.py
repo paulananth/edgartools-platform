@@ -11,8 +11,8 @@ of the reading, so a table with `append` load mode lands each filer's rows
 exactly once, and a retry lands the same rows again with no change. SILVER_DATABASE_URL
 is the silver login; MDM_DATABASE_URL, when set,
 finds each linked master's id. Its output is a receipt naming what the
-reading held: rows, distinct keys and a digest of the keys. The verifier reads
-the reading again, rebuilds the receipt, and reads silver with its own login to
+reading held: rows, distinct keys and a digest of the keys. The check reads
+the reading again, rebuilds the receipt, and reads silver to
 confirm the table holds at least that many distinct keys.
 """
 from __future__ import annotations
@@ -215,7 +215,7 @@ def _missing(engine, spec: dict, wanted: set) -> int:
     return len(wanted - held)
 
 
-def verify(envelope: dict, artifacts) -> tuple[dict, list]:
+def check(envelope: dict, artifacts) -> tuple[dict, list]:
     from edgar_warehouse.silver_writer.relational import DatabaseSink
 
     if envelope["candidate"]["uri"] != envelope["output"]:

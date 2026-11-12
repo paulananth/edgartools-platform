@@ -31,7 +31,7 @@ def read(store, root, name, rules, payload, context, *, more_payloads=()):
     manifest = store.put(root.as_uri(), {'version': 2, 'contract': contract, 'artifacts': artifacts})
     work = {'input': manifest, 'output': (root / f'{name}-reading.json').as_uri(), 'checks': ['source.output']}
     receipt = source_read.execute(work, store)
-    assert source_read.verify({**work, 'candidate': receipt}, store) == ({'source.output': True}, [])
+    assert source_read.check({**work, 'candidate': receipt}, store) == ({'source.output': True}, [])
     return receipt, values
 
 
@@ -75,7 +75,7 @@ def test_shipped_blueprint_combines_all_raw_readings_then_prepares_exact_rows(tm
         rules['combine']['groups']['forms']['source'] = ['main']
     work = envelope(store, tmp_path, rules, refs)
     result = source_combine.execute(work, store)
-    assert source_combine.verify({**work, 'candidate': result}, store) == ({'source.combined': True}, [])
+    assert source_combine.check({**work, 'candidate': result}, store) == ({'source.combined': True}, [])
     assert source_combine.execute(work, store) == result
     # Forms of the recent filings and the pages, sorted, blanks dropped; the
     # tickers of CIK 1 by their rank in each catalog, each once.
@@ -91,7 +91,7 @@ def test_shipped_blueprint_combines_all_raw_readings_then_prepares_exact_rows(tm
         'checks': ['mdm.prepared'], 'keys': {'table': 'company', 'dataset': 'sec.company.v1',
             'policy': '0' * 64, 'consumer': 'trial', 'batch_id': 'all-inputs', 'as_of': CONTEXT['last_synced_at']}}
     prepared = mdm_prepare.execute(prepare, store)
-    assert mdm_prepare.verify({**prepare, 'candidate': prepared}, store) == ({'mdm.prepared': True}, [])
+    assert mdm_prepare.check({**prepare, 'candidate': prepared}, store) == ({'mdm.prepared': True}, [])
     batch = store.json(prepared)['batches'][0]
     require_tables(json.loads((tmp_path / 'mdm' / batch['input']['path']).read_bytes()), company)
 

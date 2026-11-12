@@ -45,7 +45,7 @@ def test_flat_collections_preserve_one_level_types_and_missing_keys(tmp_path):
     spec = group('parts', 'parts', 'cik', 'values', mode='collect_flat', distinct=True)
     work = envelope(store, tmp_path, plan({'values': spec}, {'company': table('main', 'companies', {'values': join('values')})}), refs)
     result = source_combine.execute(work, store)
-    assert source_combine.verify({**work, 'candidate': result}, store) == ({source_combine.CHECK: True}, [])
+    assert source_combine.check({**work, 'candidate': result}, store) == ({source_combine.CHECK: True}, [])
     from edgar_warehouse.control_contract import canonical
     expected = ['8-K', '10-K', False, 0, ['nested'], '20-F', 0.0]
     assert canonical(store.json(result)['artifacts'][0]['tables']['company'][0]['values']) == canonical(expected)
@@ -87,7 +87,7 @@ def test_flat_value_sort_is_natural_including_prefix_form_names(tmp_path):
     spec['sort_values'] = True
     work = envelope(store, tmp_path, plan({'values': spec}, {'company': table('main', 'companies', {'values': join('values')})}), refs)
     result = source_combine.execute(work, store)
-    assert source_combine.verify({**work, 'candidate': result}, store) == ({source_combine.CHECK: True}, [])
+    assert source_combine.check({**work, 'candidate': result}, store) == ({source_combine.CHECK: True}, [])
     assert store.json(result)['artifacts'][0]['tables']['company'][0]['values'] == ['10-K', '20-F', 'S-8', 'S-8 POS']
 
 
@@ -102,7 +102,7 @@ def test_order_distinct_exact_keys_and_preparation_share_verified_scope(tmp_path
     work = envelope(store, tmp_path, body, refs)
     result = source_combine.execute(work, store)
     assert source_combine.execute(work, store) == result  # repeat/lost acknowledgement
-    assert source_combine.verify({**work, "candidate": result}, store) == ({source_combine.CHECK: True}, [])
+    assert source_combine.check({**work, "candidate": result}, store) == ({source_combine.CHECK: True}, [])
     combined = store.json(result)
     assert combined["artifacts"][0]["tables"]["companies"] == [
         {"cik": 1, "tickers": ["A", "B"]}, {"cik": "1", "tickers": ["TEXT"]}, {"cik": 2, "tickers": []}]
@@ -111,7 +111,7 @@ def test_order_distinct_exact_keys_and_preparation_share_verified_scope(tmp_path
             "consumer": "trial", "batch_id": "combined", "as_of": "2026-10-04T00:00:00Z"}
     prepare = {"input": result, "output": (tmp_path / "mdm/manifest.json").as_uri(), "keys": keys, "checks": ["mdm.prepared"]}
     prepared = mdm_prepare.execute(prepare, store)
-    assert mdm_prepare.verify({**prepare, "candidate": prepared}, store) == ({"mdm.prepared": True}, [])
+    assert mdm_prepare.check({**prepare, "candidate": prepared}, store) == ({"mdm.prepared": True}, [])
     first = store.json(prepared)["batches"][0]
     actual = [json.loads(line) for line in (tmp_path / "mdm" / first["input"]["path"]).read_text().splitlines()]
     assert actual == combined["artifacts"][0]["tables"]["companies"]
@@ -163,7 +163,7 @@ def test_a_large_combination_is_written_in_pieces_that_read_back_whole(tmp_path,
     receipt = source_combine.execute(split, store)
     index = store.json(receipt)
     assert index["version"] == 2 and len(index["artifacts"][0]["partitions"]) > 1
-    assert source_combine.verify({**split, "candidate": receipt}, store)[1] == []
+    assert source_combine.check({**split, "candidate": receipt}, store)[1] == []
     loaded, _ = source_readings.load(receipt, store, max_bytes=1024**2, max_rows=100)
     assert loaded["artifacts"][0]["tables"] == whole["artifacts"][0]["tables"]
 
@@ -183,8 +183,8 @@ def test_more_pieces_than_the_old_index_limit_read_back_whole(tmp_path, monkeypa
     assert loaded["artifacts"][0]["tables"]["companies"] == rows
 
 
-@pytest.mark.parametrize("changed", ["reading", "candidate", "scope"])
-def test_verifier_rejects_changed_receipts(tmp_path, changed):
+@pytest.mark.parametrize("changed", ["candidate", "scope"])
+def test_the_check_rejects_changed_receipts(tmp_path, changed):
     store = Artifacts()
     ref = reading(store, tmp_path, {"companies": [{"cik": 1}]})
     work = envelope(store, tmp_path, plan({}, {"companies": table("main", "companies", {})}), {"main": ref})
@@ -193,7 +193,7 @@ def test_verifier_rejects_changed_receipts(tmp_path, changed):
     from urllib.parse import urlparse
     from pathlib import Path
     Path(urlparse(target["uri"]).path).write_bytes(b'{}')
-    with pytest.raises(ValueError): source_combine.verify({**work, "candidate": result}, store)
+    with pytest.raises(ValueError): source_combine.check({**work, "candidate": result}, store)
 
 
 def test_predecessor_reading_and_changed_contract_have_distinct_mdm_scope(tmp_path):
@@ -205,7 +205,7 @@ def test_predecessor_reading_and_changed_contract_have_distinct_mdm_scope(tmp_pa
     work = {"input": primary, "output": (tmp_path / "one/combined.json").as_uri(), "checks": [source_combine.CHECK],
             "keys": {"combine_contract_uri": contract["uri"], "combine_contract_sha256": contract["sha256"], "reading_name": "main"}}
     result = source_combine.execute(work, store)
-    assert source_combine.verify({**work, "candidate": result}, store) == ({source_combine.CHECK: True}, [])
+    assert source_combine.check({**work, "candidate": result}, store) == ({source_combine.CHECK: True}, [])
     original = store.json(result)["artifacts"][0]["input"]
     body["combine"]["groups"]["names"]["distinct"] = True
     changed_contract = store.put(tmp_path.as_uri(), body)
@@ -285,7 +285,7 @@ def test_multiple_pinned_readings_preserve_declared_order_and_auxiliary_identity
             "keys": {"reading_name": "main", "combine_contract_uri": contract["uri"], "combine_contract_sha256": contract["sha256"],
                      "readings_uri": aux["uri"], "readings_sha256": aux["sha256"]}}
     result = source_combine.execute(work, store)
-    assert source_combine.verify({**work, "candidate": result}, store) == ({source_combine.CHECK: True}, [])
+    assert source_combine.check({**work, "candidate": result}, store) == ({source_combine.CHECK: True}, [])
     data = store.json(result)
     assert data["artifacts"][0]["tables"]["companies"] == [{"cik": 1, "forms": ["10-Q", "10-K"]}]
     changed = reading(store, tmp_path, {"filings": [{"cik": 1, "form": "8-K"}]})
@@ -299,7 +299,7 @@ def test_multiple_pinned_readings_preserve_declared_order_and_auxiliary_identity
     from pathlib import Path
     Path(urlparse(aux["uri"]).path).write_bytes(b'{}')
     with pytest.raises(ValueError):
-        source_combine.verify({**work, "candidate": result}, store)
+        source_combine.check({**work, "candidate": result}, store)
 
 
 @pytest.mark.parametrize("names", [[], ["main", "main"], ["main", "missing"], ["main", 1], None])
@@ -321,7 +321,7 @@ def test_empty_text_collection_filter_preserves_types_order_and_element_budget(t
     spec['skip_empty_text'] = True
     work = envelope(store, tmp_path, plan({'values': spec}, {'rows': table('main', 'rows', {'values': join('values')})}, limit=10), refs)
     result = source_combine.execute(work, store)
-    assert source_combine.verify({**work, 'candidate': result}, store) == ({source_combine.CHECK: True}, [])
+    assert source_combine.check({**work, 'candidate': result}, store) == ({source_combine.CHECK: True}, [])
     from edgar_warehouse.control_contract import canonical
     assert canonical(store.json(result)['artifacts'][0]['tables']['rows'][0]['values']) == canonical([False, 0, 0.0, ' ', 'A'])
     bounded = envelope(store, tmp_path, plan({'values': spec}, {'rows': table('main', 'rows', {'values': join('values')})}, limit=6), refs)

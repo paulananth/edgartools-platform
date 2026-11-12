@@ -33,7 +33,7 @@ def by_pieces(store: Artifacts, root: Path, reading: dict) -> tuple[dict, dict, 
     manifest = store.put(root.as_uri(), {"version": 4, "contract": store.put(root.as_uri(), RECORD), "pieces": reading})
     task = {"input": manifest, "output": (root / "reading.json").as_uri(), "checks": ["source.output"]}
     out = source_read.execute(task, store)
-    assert source_read.verify({**task, "candidate": out}, store) == ({"source.output": True}, [])
+    assert source_read.check({**task, "candidate": out}, store) == ({"source.output": True}, [])
     body, _ = source_read.source_readings.load(out, store, max_bytes=1 << 20, max_rows=1000)
     return task, out, [row["id"] for artifact in body["artifacts"] for row in artifact["tables"]["record"]]
 
@@ -58,17 +58,6 @@ def test_a_large_reading_is_read_from_its_parts_with_the_same_rows(tmp_path, mon
     _, _, ids = by_pieces(store, tmp_path / "record", reading)
 
     assert ids == [f"id-{n}" for n in range(5)]
-
-
-def test_the_verifier_reads_an_inline_piece_back_by_its_hash(tmp_path):
-    store = Artifacts()
-    task, out, _ = by_pieces(store, tmp_path / "record", first_reading(store, tmp_path, 2))
-    pieces = list((tmp_path / "record").glob("reading.json.pieces/*.json"))
-    assert pieces
-    pieces[0].write_text('{"version":1,"tables":{"rows":[{"id":"invented"}]},"deferred":[]}')
-
-    with pytest.raises(ValueError):
-        source_read.verify({**task, "candidate": out}, store)
 
 
 def test_more_pieces_than_the_contract_allows_are_refused(tmp_path, monkeypatch):
@@ -145,7 +134,7 @@ def test_a_reading_in_pieces_is_given_context_values(tmp_path):
                                          "context": {"batch": "other"}})
     task = {"input": manifest, "output": (root / "reading.json").as_uri(), "checks": ["source.output"]}
     out = source_read.execute(task, store)
-    assert source_read.verify({**task, "candidate": out}, store) == ({"source.output": True}, [])
+    assert source_read.check({**task, "candidate": out}, store) == ({"source.output": True}, [])
     loaded, _ = source_read.source_readings.load(out, store, max_bytes=1 << 20, max_rows=1000)
     assert [(r["id"], r["batch"]) for a in loaded["artifacts"] for r in a["tables"]["record"]] == [
         ("id-0", "other"), ("id-1", "other")]

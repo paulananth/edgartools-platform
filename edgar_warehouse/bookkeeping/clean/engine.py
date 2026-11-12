@@ -1,9 +1,9 @@
 """Control for configured work: no worker code, no domain callbacks.
 
-Workers and verifiers run in their own processes. They pull a task envelope,
-report a candidate, and a verifier reports its checks; Bookkeeping admits a
-report only against the envelope's bindings and the live lease (mastering
-to-do 20a, after Codex's design of 2026-10-02).
+Workers run in their own processes. A worker pulls a task envelope, does the
+work, checks its own result and reports both; Bookkeeping accepts the report
+only against the envelope's bindings and the live lease, and that completes
+the unit.
 """
 from __future__ import annotations
 
@@ -222,7 +222,7 @@ class Bookkeeping:
         return Claim(claim.run_id, claim.step, claim.key, claim.attempt, proof)
 
     def _resolve_item(self, item: dict, *, context: dict | None = None, store: bool = False) -> dict:
-        """Materialize an input from immutable, reverified prerequisite evidence.
+        """Materialize an input from its prerequisite units' verified outputs.
 
         The stored unit retains the frozen selector. Capabilities receive an
         ordinary URI/hash, so their business interface and versions stay the
@@ -247,10 +247,9 @@ class Bookkeeping:
         return {"run": run, "config": config, "manifest": manifest}
 
     def _receipt(self, item: dict, dependency: dict, context: dict, others: dict | None = None) -> dict:
-        """One prerequisite unit's verified output, after reverifying its chain. A unit of another run
-        (ticket 120) is reverified against that run's own frozen configuration. `others` holds each other
-        run's checked context once per fill (ticket 122): a complete run is final, so 480 units of 8 runs
-        check 8 runs, not 480 times (measured: 0.17 s a check, 73 s a claim)."""
+        """One prerequisite unit's verified output, its bytes checked against the hash its receipt holds.
+        A unit of another run is read only from a complete run its step declares. `others` holds each
+        other run's context once per fill."""
         found = storage.work(self.engine, dependency.get("run", str(item["run_id"])),
                              step=dependency["step"], key=dependency["key"], states=["verified"])
         if not found:
@@ -268,9 +267,9 @@ class Bookkeeping:
                 raise Blocked("Another run's unit is read only from a complete, uncompacted run")
             if (submission["kind"], submission["name"], submission["target"], dependency["step"]) not in declared:
                 raise Blocked("Another run's unit is read only from the source, target and step its step declares")
-        upstream = self._resolve_item(found[0], context=context)
-        self._verify_item(upstream, context)
-        receipt = upstream["receipt"]
+        receipt = found[0]["receipt"]
+        if not isinstance(receipt, dict) or set(receipt) != {"uri", "sha256", "evidence"}:
+            raise Blocked("Prerequisite completion receipt is missing or malformed")
         resolved = reference({"uri": receipt["uri"], "sha256": receipt["sha256"]})
         self.artifacts.verified(resolved)
         return resolved
@@ -310,25 +309,6 @@ class Bookkeeping:
             raise Blocked("Unknown unit")
         return found[0]
 
-    def _verify_item(self, item: dict, context: dict):
-        """Recheck retained completion evidence: the candidate's bytes, and a
-        verifier report bound to exactly this work and candidate. Control
-        reads no destination; the verifier did, when it reported."""
-        step = next(s for s in context["config"]["steps"] if s["name"] == item["step"])
-        receipt = item["receipt"]
-        if not isinstance(receipt, dict) or set(receipt) != {"uri", "sha256", "evidence"}:
-            raise Blocked("Prerequisite completion receipt is missing or malformed")
-        candidate = {"uri": receipt["uri"], "sha256": receipt["sha256"]}
-        self.artifacts.verified(reference(candidate))
-        report = self.artifacts.json(receipt["evidence"])
-        binding = report.get("binding") if isinstance(report.get("binding"), dict) else {}
-        if (report.get("protocol") != PROTOCOL or binding.get("candidate") != candidate
-                or (binding.get("run_id"), binding.get("step"), binding.get("key"))
-                != (str(item["run_id"]), item["step"], item["unit_key"])):
-            raise Blocked("Previously completed evidence is no longer valid")
-        if any(item["checks"].get(name) is not True for name in step["checks"]):
-            raise Blocked("Previously completed checks no longer pass")
-
     def check(self, run_id: str) -> dict:
         """The run's own checks; control computes every one of them."""
         run, config, _, _ = self._frozen(run_id)
@@ -350,13 +330,13 @@ class Bookkeeping:
         except ValueError as error:
             raise Blocked(str(error)) from None
 
-    # The task protocol. A worker pulls an envelope, renews it while it works
-    # and reports a candidate; a separate verifier reads the destination and
-    # reports its checks. Nothing here imports, names or calls a worker.
+    # The task protocol. A worker pulls an envelope, renews it while it works,
+    # checks its own result and reports it with those checks; the report
+    # completes the unit. Nothing here imports, names or calls a worker.
 
     def envelope(self, claim: Claim, *, store: bool = True) -> dict:
         """Everything a worker may know: the frozen work, its live authority
-        and the domain checks its verifier must report. No connection, no
+        and the domain checks it must report. No connection, no
         engine, no private method crosses this boundary."""
         run, config, _, _ = self._frozen(claim.run_id)
         step = next(s for s in config["steps"] if s["name"] == claim.step)
@@ -371,7 +351,7 @@ class Bookkeeping:
                 "effect_key": digest({"rules": rules, "step": claim.step, "key": claim.key, "unit": row["unit"]}),
                 "rules": rules, "input": item["unit"]["input"], "output": item["unit"]["output"],
                 "keys": row["unit"]["keys"], "cursor": row["unit"]["cursor"],
-                # The unit's place in its step: a check redoes the step's first unit in full (ticket 72).
+                # The unit's place in its step.
                 "ordinal": row["ordinal"],
                 "checks": [name for name in step["checks"] if name not in STEP_CHECKS],
                 "heartbeat_seconds": config["heartbeat_seconds"], "retry": config["retry"],
@@ -389,7 +369,7 @@ class Bookkeeping:
 
     def _same_work(self, envelope: dict, claim: Claim) -> dict:
         current = self.envelope(claim, store=False)  # a check compares; it writes nothing
-        if {k: v for k, v in envelope.items() if k not in ("claim", "candidate", "deadline")} != {
+        if {k: v for k, v in envelope.items() if k not in ("claim", "deadline")} != {
                 k: v for k, v in current.items() if k not in ("claim", "deadline")}:
             raise Blocked("Envelope differs from the frozen work")
         return current
@@ -404,7 +384,6 @@ class Bookkeeping:
         for step in config["steps"]:
             if step["operation"] != profile or len(found) >= limit:
                 continue
-            # A reported unit belongs to verifiers, never another worker.
             keys = storage.available_keys(self.engine, run_id, step["name"], SCAN)
             for key in keys:
                 if len(found) >= limit:
@@ -425,84 +404,43 @@ class Bookkeeping:
         self._same_work(envelope, claim)  # External effects need the frozen work, not only a live lease.
         return {**envelope, "claim": {**envelope["claim"], "proof": self.heartbeat(claim).proof}}
 
-    def report(self, envelope: dict, candidate: dict, runtime: str) -> dict:
-        """A worker's candidate; the unit is not complete until verified."""
+    def report(self, envelope: dict, candidate: dict, evidence: dict) -> dict:
+        """Complete a unit from its worker's own report: the output it wrote and
+        the document of the checks it ran on it. The work, the checks the step
+        requires and the live lease must all hold."""
         claim = self._claim_of(envelope)
         reference(candidate)
+        reference(evidence)
+        candidate = {"uri": candidate["uri"], "sha256": candidate["sha256"]}
+        _, config, _, _ = self._frozen(claim.run_id)
+        step = next(s for s in config["steps"] if s["name"] == claim.step)
         current = self._same_work(envelope, claim)
         if candidate["uri"] != current["output"]:
-            raise Blocked("A candidate must be written to the work's intended output")
-        self._transition("report",
-                   r=claim.run_id, s=claim.step, k=claim.key, a=claim.attempt, p=canonical(claim.proof),
-                   c=canonical({"uri": candidate["uri"], "sha256": candidate["sha256"]}), f=current["profile"], t=runtime)
-        return {"reported": candidate, "step": claim.step, "key": claim.key}
-
-    def fail(self, envelope: dict, message: str) -> None:
-        """Give up this attempt; the unit waits for a later claim."""
-        self.wait(self._claim_of(envelope), message[:200])
-
-    def verifications(self, run_id: str, profile: str, *, limit: int = 10) -> list[dict]:
-        """Reported candidates of a profile's steps. The verifier works under
-        the reporting attempt's leases, renewed or re-taken here; a unit whose
-        resource another attempt holds is skipped."""
-        if not 1 <= limit <= 1000:
-            raise ValueError("Verification limit must be 1..1000")
-        _, config, _, _ = self._frozen(run_id)
-        steps = [s["name"] for s in config["steps"] if s["operation"] == profile]
-        rows = storage.reported(self.engine, run_id, steps, SCAN)
-        found = []
-        for row in rows:
-            if len(found) >= limit:
-                break
-            try:
-                proof = self._transition("verify_claim",
-                                   r=run_id, s=row["step"], k=row["unit_key"], a=str(row["attempt"]),
-                                   d=config["lease_seconds"])
-            except DBAPIError as exc:
-                if not lifecycle.contention(self.engine, exc):
-                    raise
-                continue
-            if proof:
-                claim = Claim(run_id, row["step"], row["unit_key"], str(row["attempt"]), proof)
-                found.append({**self.envelope(claim), "candidate": row["candidate"]})
-        return found
-
-    def admit(self, verification: dict, report_ref: dict) -> dict:
-        """Complete a unit from a verifier's report: every binding, the
-        required checks and the live lease must hold. Worker success alone
-        is never enough."""
-        claim = self._claim_of(verification)
-        reference(report_ref)
-        run, config, _, _ = self._frozen(claim.run_id)
-        step = next(s for s in config["steps"] if s["name"] == claim.step)
-        current = self._same_work(verification, claim)
+            raise Blocked("A unit's output must be written to the work's intended output")
+        receipt = {**candidate, "evidence": {"uri": evidence["uri"], "sha256": evidence["sha256"]}}
         row = self._row(claim.run_id, claim.step, claim.key)
         if row["state"] == "verified" and str(row["attempt"]) == claim.attempt:
-            # A lost acknowledgement: the same report is admitted again; any
-            # other report for completed work is a conflict.
-            if row["receipt"] != {"uri": verification.get("candidate", {}).get("uri"),
-                                  "sha256": verification.get("candidate", {}).get("sha256"), "evidence": report_ref}:
+            # A lost acknowledgement: the same report again; any other is a conflict.
+            if row["receipt"] != receipt:
                 raise Blocked("Completion evidence changed")
-            return {"verified": verification["candidate"], "step": claim.step, "key": claim.key}
-        if row["state"] != "reported" or str(row["attempt"]) != claim.attempt or row["candidate"] != verification.get("candidate"):
-            raise Blocked("Only the live attempt's reported candidate can be verified")
-        candidate = row["candidate"]
-        report = self.artifacts.json(report_ref)
+            return {"verified": candidate, "step": claim.step, "key": claim.key}
+        if row["state"] != "running" or str(row["attempt"]) != claim.attempt:
+            raise Blocked("Only the live attempt can complete its unit")
+        report = self.artifacts.json(evidence)
         binding = {"run_id": claim.run_id, "step": claim.step, "key": claim.key, "attempt": claim.attempt,
-                   "effect_key": verification["effect_key"], "candidate": candidate}
+                   "effect_key": current["effect_key"], "candidate": candidate}
         if set(report) != {"protocol", "binding", "checks", "proofs", "runtime"} or report["protocol"] != PROTOCOL:
-            raise Blocked("Malformed verification report")
+            raise Blocked("Malformed check report")
         if report["binding"] != binding:
-            raise Blocked("Verification report names other work")
+            raise Blocked("Check report names other work")
         required = set(step["checks"]) - STEP_CHECKS
         reported = report["checks"]
         if not isinstance(reported, dict) or set(reported) != required or any(v is not True for v in reported.values()):
-            raise Blocked("Verification report lacks a required check")
+            raise Blocked("Check report lacks a required check")
         if not isinstance(report["proofs"], list):
-            raise Blocked("Malformed verification report")
+            raise Blocked("Malformed check report")
         for proof in report["proofs"]:
             self.artifacts.verified(reference(proof))
-        receipt = {"uri": candidate["uri"], "sha256": candidate["sha256"], "evidence": report_ref}
         checks = dict(reported)
         if "input.hash" in step["checks"]:
             self.artifacts.verified(current["input"])
@@ -510,11 +448,15 @@ class Bookkeeping:
         if "output.receipt" in step["checks"]:
             self.artifacts.verified(candidate)
             checks["output.receipt"] = True
-        self._complete(claim, config, row, receipt, checks, verifier_runtime=report["runtime"])
+        self._complete(claim, config, row, receipt, checks, runtime=report["runtime"])
         return {"verified": candidate, "step": claim.step, "key": claim.key}
 
+    def fail(self, envelope: dict, message: str) -> None:
+        """Give up this attempt; the unit waits for a later claim."""
+        self.wait(self._claim_of(envelope), message[:200])
+
     def _complete(self, claim: Claim, config: dict, row: dict, receipt: dict, checks: dict, *,
-                  verifier_runtime: str) -> None:
+                  runtime: str) -> None:
         event_id = str(uuid5(UUID(claim.run_id), f"{claim.step}:{claim.key}"))
         parameters = dict(r=claim.run_id, s=claim.step, k=claim.key, a=claim.attempt,
                           p=canonical(claim.proof), v=canonical(receipt), c=canonical(checks), e=event_id)
@@ -534,8 +476,8 @@ class Bookkeeping:
         else:
             finish = ("finish",
                       parameters)
-        # The verifier's runtime is pinned only with the completion it vouches for.
-        lifecycle.complete(self.engine, finish[0], finish[1], verifier_runtime)
+        # The worker's runtime is pinned for the run with its first completion.
+        lifecycle.complete(self.engine, finish[0], finish[1], runtime)
 
     def resource_checkpoint(self, resource: str) -> dict | None:
         found = storage.checkpoint(self.engine, resource)
@@ -545,19 +487,6 @@ class Bookkeeping:
         self._transition("wait_work",
                    r=claim.run_id, s=claim.step, k=claim.key, m=message, a=claim.attempt, p=canonical(claim.proof))
 
-    def _verify_completed(self, run_id: str, config: dict):
-        # Reverify retained receipts before skipping anything. If evidence is
-        # corrupt, execution blocks; it never silently repeats committed work.
-        items = storage.work(self.engine, run_id, states=["verified"], ordered=True)
-        try:
-            run, _, manifest, _ = self._frozen(run_id)
-            context = {"run": run, "config": config, "manifest": manifest}
-            for item in items:
-                self._verify_item(self._resolve_item(item, context=context), context)
-        except (Blocked, KeyError, TypeError) as exc:
-            self._transition("block_run", r=run_id, m=str(exc))
-            raise Blocked(str(exc)) from exc
-
     def resume(self, run_id: str) -> dict:
         import edgar_control
         from .run_storage import record_run_resume
@@ -565,8 +494,7 @@ class Bookkeeping:
             wire = edgar_control.prepare_run_resume(canonical(storage.resume_observations(self.engine, run_id)))
         except ValueError as error:
             raise Blocked(str(error)) from None
-        _, config, _, _ = self._frozen(run_id)
-        self._verify_completed(run_id, config)
+        self._frozen(run_id)  # the frozen submission and manifest still read as they were frozen
         record_run_resume(self.engine, wire)
         return self.status(run_id)
 
@@ -624,7 +552,6 @@ class Bookkeeping:
         for _ in range(config["retry"]["attempts"]):
             if run["compacted_at"]:
                 return self.status(run_id)
-            self._verify_completed(run_id, config)
             observations = storage.completion_observations(self.engine, run_id)
             checks = self._checks(run, config, observations)
             wire = edgar_control.prepare_run_completion(canonical({

@@ -48,7 +48,7 @@ def test_installed_rules_and_real_workers_complete_and_resume_one_run(installed,
         groups = []
         try:
             for profile in ("artifact.copy", "jsonl.count"):
-                granted = command("bookkeeping", "grant-profile", "--profile", profile, "--worker", role, "--verifier", reader_role)
+                granted = command("bookkeeping", "grant-profile", "--profile", profile, "--worker", role)
                 groups += [item["role"] for item in granted.values() if item["role"] not in known]
             body = config(steps=2)
             body["bookkeeping"]["targets"]["silver"]["steps"][1]["operation"] = "jsonl.count"
@@ -64,14 +64,13 @@ def test_installed_rules_and_real_workers_complete_and_resume_one_run(installed,
             run = command("rules", "run", *selection, "--target", "silver", "--input-manifest", inputs["uri"], "--input-sha256", inputs["sha256"])
             rid = run["run"]["run_id"]
             for profile in ("artifact.copy", "jsonl.count"):
-                command("workers", "work", profile, rid, report=False)
-                command("workers", "verify", profile, rid, "--reports", (root / "reports").as_uri(), verifier=True, report=False)
+                command("workers", "work", profile, rid, "--reports", (root / "reports").as_uri(), report=False)
             final = command("bookkeeping", "finalize", rid)
             assert final["run"]["state"] == "complete" and final["counts"] == {"verified": 2}
             assert command("change-journal", "status")["events"] == 2
             command("rules", "run", *selection, "--target", "silver", "--resume-run-id", rid)
             for profile in ("artifact.copy", "jsonl.count"):
-                command("workers", "work", profile, rid, report=False)
+                command("workers", "work", profile, rid, "--reports", (root / "reports").as_uri(), report=False)
             assert command("bookkeeping", "finalize", rid)["counts"] == {"verified": 2}
             assert command("change-journal", "status")["events"] == 2
         finally:

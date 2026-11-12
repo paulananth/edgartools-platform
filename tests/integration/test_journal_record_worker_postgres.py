@@ -29,7 +29,7 @@ def test_the_worker_records_each_file_once_and_its_verifier_reads_them_back(data
     task = envelope(store, tmp_path, body)
     first = journal_record.execute(task, store)
     assert journal_record.execute(task, store) == first  # a retry appends the same events
-    assert journal_record.verify({**task, "candidate": first}, store) == ({journal_record.CHECK: True}, [])
+    assert journal_record.check({**task, "candidate": first}, store) == ({journal_record.CHECK: True}, [])
     pairs = [(f["key"], f["sha256"]) for f in FILES]
     assert changed_files.unprocessed(databases.ledger, source, "i" * 64, pairs) == []
     assert changed_files.unprocessed(databases.ledger, source, "j" * 64, pairs) == [f["key"] for f in FILES]
@@ -47,7 +47,7 @@ def test_the_verifier_refuses_receipts_that_do_not_match_the_files(databases, tm
     one = changed_files.record_input(source=source, feed="documents", processing="i" * 64, files=FILES[:1],
                                      forced=False, as_of="2026-10-13T13:00:00Z")
     with pytest.raises(ValueError, match="every file"):
-        journal_record.verify({**envelope(store, tmp_path, one), "output": task["output"], "candidate": first}, store)
+        journal_record.check({**envelope(store, tmp_path, one), "output": task["output"], "candidate": first}, store)
 
 
 def test_a_forced_rerun_and_a_file_another_run_recorded_first_keep_the_first_record(databases, tmp_path, monkeypatch):  # noqa: F811
@@ -62,7 +62,7 @@ def test_a_forced_rerun_and_a_file_another_run_recorded_first_keep_the_first_rec
                                         forced=True, as_of="2026-10-14T13:00:00Z")
     task = envelope(store, tmp_path / "b", forced)
     result = journal_record.execute(task, store)
-    assert journal_record.verify({**task, "candidate": result}, store) == ({journal_record.CHECK: True}, [])
+    assert journal_record.check({**task, "candidate": result}, store) == ({journal_record.CHECK: True}, [])
     receipts = json.loads(store.verified(result))["receipts"]
     kept = json.loads(store.verified(recorded))["receipts"][0]
     assert receipts[0] == kept  # the first record of the file stands
@@ -87,4 +87,4 @@ def test_the_same_file_read_from_another_capture_folder_keeps_its_first_record(d
                                         forced=True, as_of="2026-10-14T13:00:00Z")
     task = envelope(store, tmp_path / "b", forced)
     result = journal_record.execute(task, store)
-    assert journal_record.verify({**task, "candidate": result}, store) == ({journal_record.CHECK: True}, [])
+    assert journal_record.check({**task, "candidate": result}, store) == ({journal_record.CHECK: True}, [])

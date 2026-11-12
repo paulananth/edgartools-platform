@@ -94,7 +94,7 @@ relational silver and agent context.
 [Diagram source](docs/diagrams/project-architecture/processing.json)
 
 **Rules, work control and verification** — versioned rules and reference data,
-load preparation, Bookkeeping, independent workers and verifiers, and the Change Journal.
+load preparation, Bookkeeping, its workers, and the Change Journal.
 
 ![Rules, work control and verification architecture](docs/diagrams/project-architecture/work-control.svg)
 
@@ -122,8 +122,8 @@ load preparation, Bookkeeping, independent workers and verifiers, and the Change
    RDM holds approved code sets, hierarchies and crosswalks; silver holds
    source-shaped rows with links to MDM where available. A source may need
    several of these destinations.
-6. **Verify and expose it.** Workers submit evidence; separate verifiers
-   reread destinations before Bookkeeping completes work. MDM publishes
+6. **Check and expose it.** Each worker reads back what it wrote and reports
+   its checks; Bookkeeping then completes the unit. MDM publishes
    committed changes to consumers. The Data Catalog exposes metadata, and
    the `context` command exposes bounded answers from the data stores.
 
@@ -176,7 +176,7 @@ without giving an agent authority to approve its own findings or activate rules.
 | [data-onboarding](skills/data-onboarding/SKILL.md) | How do we introduce a new feed or master kind? | Contracts, mappings, quality checks, generated metadata and test evidence, followed by operator approval and activation. Master parts first, then needed reference data, then silver. |
 | [data-quality](skills/data-quality/SKILL.md) | Which checks or fixes are needed, and what do they do? | Measured proposals and approved MDM input checks in `quality.yaml`; unresolved cases remain explicit. |
 | [refining-rules](skills/refining-rules/SKILL.md) | How do we safely change an existing feed? | Delivery comparison, measured mapping/quality/matching changes, regenerated metadata and a new tested Rules version. |
-| [bookkeeping](skills/bookkeeping/SKILL.md) | How do we plan, run, verify and resume processing? | Declared work, worker/verifier execution, progress and recovery. |
+| [bookkeeping](skills/bookkeeping/SKILL.md) | How do we plan, run, verify and resume processing? | Declared work, worker execution, progress and recovery. |
 | [change-journal](skills/change-journal/SKILL.md) | How do we inspect and recover durable journal delivery? | Verified events and receipts, with recovery coordinated by the producer that owns delivery. |
 | [mdm-engineering](skills/mdm-engineering/SKILL.md) | How do we change the MDM engine or schema? | Scoped implementation, migrations and the cheapest proof that establishes correctness. Rules-only onboarding is a different activity. |
 
@@ -246,8 +246,8 @@ gets its own onboarding and source folder.
    Load into a disposable store first and read the counts
    ([check and load](skills/data-onboarding/LOAD.md)). Nothing is saved, approved or activated before a run.
 7. **Run, verify and expose the result.** Use the declared
-   [Bookkeeping workflow](skills/bookkeeping/RUN.md). Workers do the work;
-   independent verifiers reread the destinations. Check that all units are
+   [Bookkeeping workflow](skills/bookkeeping/RUN.md). Workers do the work
+   and check their own results. Check that all units are
    verified and the run is finalized. Register and land silver explicitly where
    needed. After the metadata PR is merged, publish the reviewed catalog plan
    to the configured catalog server; publication is a separate action.
@@ -458,7 +458,7 @@ See the [catalog implementation](edgar_warehouse/rules/catalog.py),
 For local development, use
 [Shared PostgreSQL initialization](docs/local-agent-testing.md). Agents share
 one server containing MDM, RDM, Rules, Bookkeeping and the Change Journal.
-Initialization excludes silver by default and provisions worker/verifier
+Initialization excludes silver by default and provisions worker
 access and MDM's lease guard. Separate data copies are for disruptive tests
 or recovery; reinitialization preserves existing data.
 
@@ -516,7 +516,7 @@ with [publish-warehouse-image.sh](infra/scripts/publish-warehouse-image.sh).
 | [Runtime responsibility map](docs/architecture/runtime-responsibilities.md) | Current Rust/Python/database ownership and migration prerequisites. |
 | [Combining and reducing extracts](skills/data-platform/COMBINING.md) | Configured joins, collections and complete-set reduction. |
 | [crates/source-contract](crates/source-contract) | Generic Rust engine, reached through Python callers. |
-| [edgar_warehouse/workers](edgar_warehouse/workers) | External workers and independent destination verifiers. |
+| [edgar_warehouse/workers](edgar_warehouse/workers) | External workers, each with the check of its own result. |
 | [MDM specifications](docs/specs/mdm/README.md) | Identity, evidence, merge, publication and recovery contracts. |
 | [RDM specification](docs/specs/rdm/spec.md) | Code sets, approved versions, hierarchies and crosswalks. |
 | [edgar_warehouse/silver_writer](edgar_warehouse/silver_writer) | PostgreSQL silver landing and MDM-ID links. |

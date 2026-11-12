@@ -2,13 +2,10 @@
 
 One disposable run over invented company-facts files: the `silver.land` step asks
 for `silver.quality.evidence.v2`, the run is interrupted, and `bookkeeping resume`
-reopens it. Two interruption shapes are proven, because they fail differently:
-
-- the receipt was written and reported, and the verifier never admitted it: the
-  verifier admits the retained receipt after the resume;
-- the receipt was written but the report was lost (the worker stopped between
-  writing its output and reporting it): the unit is re-executed after its lease
-  ends, and the re-execution must reconcile with the retained output.
+reopens it. The interruption proven: the receipt was written but the report was
+lost (the worker stopped between writing its output and reporting it), so the
+unit is re-executed after its lease ends, and the re-execution must reconcile
+with the retained output.
 
 No provider data is read: every document here is invented, and every store is a
 disposable PostgreSQL 16 container.
@@ -36,7 +33,7 @@ from edgar_warehouse.silver_writer.cli import spec_file
 from edgar_warehouse.workers import silver_land, source_read
 from tests.integration.test_configured_bookkeeping_postgres import databases  # noqa: F401
 from tests.integration.test_silver_writer_postgres import RUNTIME as SILVER_RUNTIME, silver_database
-from tests.support.bookkeeping_protocol import RUNTIME, verification_report
+from tests.support.bookkeeping_protocol import finish
 from tests.support.memory_journal import MemoryJournal
 
 SOURCE = "sec.company-facts"
@@ -117,28 +114,23 @@ def expire(databases, claim):
 def read_units(book, rid):
     """Work and verify the run's read step; its units are what the landings read."""
     for envelope in book.tasks(rid, "source.read", limit=10):
-        book.report(envelope, source_read.execute(envelope, book.artifacts), RUNTIME)
-    for verification in book.verifier.verifications(rid, "source.read", limit=10):
-        book.verifier.admit(verification, verification_report(book, verification, source_read))
+        finish(book, envelope, source_read)
 
 
 def work_landings(book, rid):
     """Work and verify every landing the run can offer."""
     for envelope in book.tasks(rid, "silver.land", limit=10):
-        book.report(envelope, silver_land.execute(envelope, book.artifacts), RUNTIME)
-    for verification in book.verifier.verifications(rid, "silver.land", limit=10):
-        book.verifier.admit(verification, verification_report(book, verification, silver_land))
+        finish(book, envelope, silver_land)
 
 
 @pytest.fixture
 def recovery_run(databases, tmp_path, monkeypatch):
     """A submitted run over two invented files, with its disposable silver table."""
     for profile in WORKERS:
-        grant_profile(databases.admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")
+        grant_profile(databases.admin, profile=profile, worker="bk_runtime")
     monkeypatch.setenv(silver_land.QUALITY_V2_GATE, "enabled")
     report = target_manifest.write_manifest(**capture(tmp_path, [42, 43]))
     book = Bookkeeping(databases.runtime)
-    book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)
     rid = submit(databases, tmp_path, book, report, recovery_target())
 
     with silver_database(databases.admin) as (owner, runtime):
@@ -155,40 +147,6 @@ def recovery_run(databases, tmp_path, monkeypatch):
         read_units(book, rid)
         land_keys = [unit["keys"]["unit"] for unit in book.artifacts.json(report["manifest"])["steps"]["land"]]
         yield book, rid, runtime, land_keys, databases.ledger
-
-
-def test_a_reported_but_unadmitted_version_2_landing_resumes_and_is_admitted(recovery_run):
-    """The receipt was reported and the verifier stopped: the resume admits it."""
-    book, rid, runtime, land_keys, ledger = recovery_run
-    claim = book.claim(rid, "land", land_keys[0])
-    envelope = book.envelope(claim)
-    candidate = silver_land.execute(envelope, book.artifacts)
-    book.report(envelope, candidate, RUNTIME)
-    assert book.status(rid)["counts"] == {"verified": 1, "reported": 1}
-
-    started = time.monotonic()
-    reopened = book.resume(rid)
-    for verification in book.verifier.verifications(rid, "silver.land", limit=10):
-        book.verifier.admit(verification, verification_report(book, verification, silver_land))
-    work_landings(book, rid)
-    book.deliver(ledger, rid, limit=1000)
-    state = book.finalize(rid)
-    elapsed = time.monotonic() - started
-
-    assert reopened["run"]["state"] == "running"
-    assert state["run"]["state"] == "complete"
-    assert state["counts"] == {"verified": 2}  # one reading, one landing
-    with runtime.connect() as conn:
-        rows = conn.execute(text("SELECT count(*) FROM silver.recovery_fact")).scalar()
-    assert rows == 4  # two files, two facts each, landed once
-
-    summary = aggregate(book, rid)
-    assert summary["status"] == "passed"
-    assert summary["units_expected"] == 1 and summary["units_verified"] == 1
-    assert {result["check"] for result in summary["results"]} == CHECKS
-
-    print(f"\nRESUME_SECONDS={elapsed:.3f}\n")
-    assert elapsed < 300
 
 
 def test_a_lost_report_is_reconciled_by_the_re_execution(recovery_run, databases):

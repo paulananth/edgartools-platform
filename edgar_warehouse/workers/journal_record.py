@@ -6,7 +6,7 @@ Its input names the files and their processing identity
 `file.processed` event per file not yet recorded under that identity, dated
 by the run's own time so a retry appends the same events; a file another run
 recorded first (a forced run, two runs at once) keeps that record. A forced
-run also records itself once (`files.forced`). The verifier reads back, for
+run also records itself once (`files.forced`). The check reads back, for
 every file, the record under its key.
 """
 from __future__ import annotations
@@ -95,7 +95,7 @@ def execute(envelope: dict, artifacts) -> dict:
         {"version": 1, "receipts": receipts}, sort_keys=True, separators=(",", ":")).encode())
 
 
-def verify(envelope: dict, artifacts) -> tuple[dict, list]:
+def check(envelope: dict, artifacts) -> tuple[dict, list]:
     if envelope["candidate"]["uri"] != envelope["output"]:
         raise ValueError("Candidate URI differs from the intended output")
     body = json.loads(artifacts.verified(envelope["input"], max_bytes=MAX_INPUT))

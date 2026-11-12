@@ -41,10 +41,8 @@ The setup step (data-platform, "0. Setup", step 4) initializes it:
 uv run --extra mdm python infra/scripts/local-test-stores.py up
 ```
 
-`stop`, `status`, `backup` and `copy` name it the same way. Its folder, holding `worker.env`,
-`verifier.env` and `governance.env`, is what `edgar-warehouse load --stores` takes. A source is
-activated (its proven, approved rules version made the active one) in this store's Rules Database,
-and its loads write here. A second store is for a test that could disrupt this one (a deletion, a
+`stop`, `status`, `backup` and `copy` name it the same way. Its folder, holding `worker.env`
+and `governance.env`, is what `edgar-warehouse load --stores` takes. A source's loads write here. A second store is for a test that could disrupt this one (a deletion, a
 recovery, an experimental migration), named for what it tests.
 
 ## Containers

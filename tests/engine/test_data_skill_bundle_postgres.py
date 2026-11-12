@@ -11,7 +11,7 @@ the repository, so nothing here can stand in for a missing file.
   library (edgartools, spaCy) is installed; `doctor` passes on PG16 stores.
 - G2: the rules creator runs from the bundle against an empty Rules Database.
 - G3 (parse): a Rules-submitted run is read by the configured engine and
-  verified by separate worker and verifier processes, all from the bundle.
+  completed by worker processes, all from the bundle.
 - G5: `doctor` names a command a skill writes that does not exist.
 """
 import json
@@ -147,7 +147,7 @@ for source, first in [("sec.company", "ELECTRICITE HLDGS CORP"), ("gleif", "ELEC
     manifest = store.put(root.as_uri(), {"version":2,"contract":contract,"artifacts":[{"input":raw,"context":context}]})
     task = {"input":manifest,"output":(root / (source + ".json")).as_uri(),"checks":["source.output"]}
     receipt = source_read.execute(task,store)
-    assert source_read.verify({**task,"candidate":receipt},store) == ({"source.output":True},[])
+    assert source_read.check({**task,"candidate":receipt},store) == ({"source.output":True},[])
     reading = store.json(receipt)
     rows = reading["artifacts"][0]["tables"]["names"]
     assert [row["key"] for row in rows] == [first,"A AND B LLC","WAYFAIR INC","WAYFAIR LLC"]
@@ -408,7 +408,7 @@ context = store.put(root.as_uri(), {"version":1,"input":ref,"values":{"publicati
 manifest = store.put(root.as_uri(), {"version":2,"contract":rules,"artifacts":[{"input":ref,"context":context}]})
 task = {"input":manifest,"output":(root / "index.json").as_uri(),"checks":["source.output"]}
 receipt = source_read.execute(task, store)
-assert source_read.verify({**task,"candidate":receipt},store) == ({"source.output":True},[])
+assert source_read.check({**task,"candidate":receipt},store) == ({"source.output":True},[])
 reading = store.json(receipt)
 parts = reading["artifacts"][0]["partitions"]
 assert reading["version"] == 2 and len(parts) == 2
@@ -423,7 +423,7 @@ scoped_manifest = store.put(root.as_uri(), {"version":3,"contract":scoped_rules,
     "artifacts":[{"input":ref,"context":context,"lookups":lookup}]})
 scoped_task = {**task,"input":scoped_manifest,"output":(root / "scoped-index.json").as_uri()}
 scoped = source_read.execute(scoped_task, store)
-assert source_read.verify({**scoped_task,"candidate":scoped},store) == ({"source.output":True},[])
+assert source_read.check({**scoped_task,"candidate":scoped},store) == ({"source.output":True},[])
 opened = source_readings.OpenedExtract(scoped,store,max_bytes=1024**2,max_rows=100,
     max_contract_bytes=1024**2,allow_lookup_receipts=True)
 assert "site-packages" in source_readings.__file__
@@ -435,13 +435,13 @@ combine_rules = store.put(root.as_uri(), {"execution":{"profile":"source.combine
 combine_manifest = store.put(root.as_uri(), {"version":1,"contract":combine_rules,"readings":{"streamed":receipt}})
 combine_task = {"input":combine_manifest,"output":(root / "combined.json").as_uri(),"checks":[source_combine.CHECK]}
 combined = source_combine.execute(combine_task, store)
-assert source_combine.verify({**combine_task,"candidate":combined}, store) == ({source_combine.CHECK:True},[])
+assert source_combine.check({**combine_task,"candidate":combined}, store) == ({source_combine.CHECK:True},[])
 prepare_task = {"input":combined,"output":(root / "mdm/manifest.json").as_uri(),"checks":[mdm_prepare.CHECK],
  "keys":{"table":"rows","dataset":"fixture.rows","policy":"0"*64,"consumer":"trial",
  "batch_id":"trial","as_of":"2026-10-05T00:00:00Z"}}
 prepared = mdm_prepare.execute(prepare_task,store)
 assert mdm_prepare.execute(prepare_task,store) == prepared
-assert mdm_prepare.verify({**prepare_task,"candidate":prepared},store) == ({mdm_prepare.CHECK:True},[])
+assert mdm_prepare.check({**prepare_task,"candidate":prepared},store) == ({mdm_prepare.CHECK:True},[])
 batch = store.json(prepared)["batches"][0]
 assert [json.loads(line) for line in (root / "mdm" / batch["input"]["path"]).read_text().splitlines()] == [{"n":1},{"n":2}]
 assert store.json(store.json(combined)["artifacts"][0]["input"])["readings"] == {"streamed":receipt}
@@ -568,7 +568,7 @@ def test_the_rules_creator_runs_from_the_bundle_on_an_empty_rules_database(insta
 def test_parsing_runs_through_the_installed_bundle(installed, databases, tmp_path, reading_mode):
     python, root = installed
     store = Artifacts()
-    grant_profile(databases.admin, profile="source.read", worker="bk_runtime", verifier="bk_verifier")
+    grant_profile(databases.admin, profile="source.read", worker="bk_runtime")
     body = files.pipeline("sec.thirteenf.extract")
     pipeline_name = 'sec.thirteenf.extract' if reading_mode == '13f' else f'{reading_mode}-reading'
     body['pipeline'] = pipeline_name
@@ -622,10 +622,7 @@ def test_parsing_runs_through_the_installed_bundle(installed, databases, tmp_pat
     submitted = command("edgar_warehouse.cli", "rules", "run", "--pipeline", pipeline_name, "--target", "extract",
                         "--input-manifest", manifest["uri"], "--input-sha256", manifest["sha256"])
     run_id = json.loads(submitted)["run"]["run_id"]
-    command("edgar_warehouse.cli", "workers", "work", "source.read", run_id)
-    verifier = databases.verifier.url.render_as_string(hide_password=False)
-    command("edgar_warehouse.cli", "workers", "verify", "source.read", run_id, "--reports", (tmp_path / "reports").as_uri(),
-            BOOKKEEPING_DATABASE_URL=verifier)
+    command("edgar_warehouse.cli", "workers", "work", "source.read", run_id, "--reports", (tmp_path / "reports").as_uri())
     state = json.loads(command("edgar_warehouse.cli", "bookkeeping", "finalize", run_id))
     assert state["counts"] == {"verified": 1} and state["run"]["state"] == "complete"
     tables = json.loads((tmp_path / "holdings.json").read_bytes())["artifacts"][0]["tables"]
@@ -696,7 +693,7 @@ def mastered(engine):
 @pytest.mark.parametrize("trial_mode", ["configured", "parquet-records", "custom-step", "source-coercion", "reference-lookup", "raw-person", "combined-records", "choice-records", "streamed-records", "xml-streamed-recovery"])
 def test_parse_then_master_runs_through_the_installed_bundle(installed, databases, tmp_path, trial_mode):
     """G3: captured records, read by the engine, prepared and merged into Clean
-    MDM in one Rules run, every step by a worker and a separate verifier from
+    MDM in one Rules run, every step by a worker from
     the installed bundle."""
     from edgar_warehouse.bookkeeping.clean.destinations import migrate_guard
     from edgar_warehouse.mdm.store import migrate, register_policy
@@ -713,7 +710,7 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
     python, root = installed
     store = Artifacts()
     for profile in profiles:
-        grant_profile(databases.admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")
+        grant_profile(databases.admin, profile=profile, worker="bk_runtime")
     mdm_name = f"mdm_bundle_{uuid4().hex[:8]}"
     with databases.admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         conn.exec_driver_sql(f"CREATE DATABASE {mdm_name}")
@@ -736,10 +733,10 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
                              files.mdm_contract("sec.submissions.person", "sec.submissions.person.v1"))
 
     with mdm_admin.begin() as conn:
-        conn.exec_driver_sql("GRANT USAGE ON SCHEMA mdm TO bk_verifier")
-        conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA mdm TO bk_verifier")
-        conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA public TO bk_verifier")
-    mdm_reader = create_engine(mdm_admin.url.set(username="bk_verifier", password="test"))
+        conn.exec_driver_sql("GRANT USAGE ON SCHEMA mdm TO mdm_reader")
+        conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA mdm TO mdm_reader")
+        conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA public TO mdm_reader")
+    mdm_reader = create_engine(mdm_admin.url.set(username="mdm_reader", password="test"))
     pipeline_name = f"parse-and-master-{trial_mode}"
     pipeline = copy.deepcopy({**MASTER, "pipeline": pipeline_name})
     if combined_trial:
@@ -914,7 +911,6 @@ read:
     url = lambda engine: engine.url.render_as_string(hide_password=False)
     env = {**_stores(databases), "BOOKKEEPING_MANIFEST_ROOT": (tmp_path / "control").as_uri()}
     worker = {"MDM_DATABASE_URL": url(mdm_app), "MDM_APPLICATION_ROLE": "clean_application"}
-    verifier = {"BOOKKEEPING_DATABASE_URL": url(databases.verifier), "MDM_DATABASE_URL": url(mdm_reader)}
 
     def cli(*args, **extra):
         done = _run(python, "-m", "edgar_warehouse.cli", *args, env={**env, **extra}, cwd=root)
@@ -938,11 +934,11 @@ read:
         bad_units = store.put(tmp_path.as_uri(), bad_units_body)
         bad_run = json.loads(cli("rules", "run", "--pipeline", pipeline_name, "--target", "master", "--root", str(rules_root),
             "--input-manifest", bad_units["uri"], "--input-sha256", bad_units["sha256"]))["run"]["run_id"]
-        rejected = _run(python, "-m", "edgar_warehouse.cli", "workers", "work", "source.read", bad_run,
+        rejected = _run(python, "-m", "edgar_warehouse.cli", "workers", "work", "source.read", bad_run, "--reports", (tmp_path / "reports").as_uri(),
                         env={**env, **worker}, cwd=root)
         assert rejected.returncode == 1 and "pinned-count" in rejected.stderr, rejected.stderr
         for downstream in ("mdm.prepare", "mastering.merge"):
-            cli("workers", "work", downstream, bad_run, **worker)
+            cli("workers", "work", downstream, bad_run, "--reports", (tmp_path / "reports").as_uri(), **worker)
         assert not (bad_out / "reading.json").exists() and not (bad_out / "reading.json.parts").exists()
         assert not (bad_out / "mdm/manifest.json").exists() and not (bad_out / "merged.json").exists()
         failed_state = json.loads(cli("bookkeeping", "status", bad_run))
@@ -958,7 +954,7 @@ read:
         unavailable = tmp_path / "temporarily-unavailable.xml"
         captured.rename(unavailable)
         try:
-            rejected = _run(python, "-m", "edgar_warehouse.cli", "workers", "work", "source.read", run_id,
+            rejected = _run(python, "-m", "edgar_warehouse.cli", "workers", "work", "source.read", run_id, "--reports", (tmp_path / "reports").as_uri(),
                             env={**env, **worker}, cwd=root)
             assert rejected.returncode == 1 and "Artifact missing or unreadable" in rejected.stderr, rejected.stderr
             assert filers["uri"] in rejected.stderr
@@ -970,13 +966,12 @@ read:
         if recovery_trial and profile == "source.read":
             deadline = time.monotonic() + 10
             while True:
-                cli("workers", "work", profile, run_id, **worker)
+                cli("workers", "work", profile, run_id, "--reports", (tmp_path / "reports").as_uri(), **worker)
                 if (out / "reading.json").exists(): break
                 if time.monotonic() >= deadline: pytest.fail("Source retry did not become claimable")
                 time.sleep(0.01)
         else:
-            cli("workers", "work", profile, run_id, **worker)
-        cli("workers", "verify", profile, run_id, "--reports", (tmp_path / "reports").as_uri(), **verifier)
+            cli("workers", "work", profile, run_id, "--reports", (tmp_path / "reports").as_uri(), **worker)
     if recovery_trial:
         recovered = json.loads(cli("bookkeeping", "status", run_id))
         read_item = next(item for item in recovered["items"] if item["step"] == "read")
@@ -1105,7 +1100,7 @@ for member in ["level1", "relationships", "reporting-exceptions"]:
         task = {"input":manifest,"output":(folder / "reading.json").as_uri(),"checks":["source.output"]}
         receipt = source_read.execute(task,store)
         assert source_read.execute(task,store) == receipt
-        assert source_read.verify({**task,"candidate":receipt},store) == ({"source.output":True},[])
+        assert source_read.check({**task,"candidate":receipt},store) == ({"source.output":True},[])
         artifact = store.json(receipt)["artifacts"][0]
         rows = [row for part in artifact["partitions"] for row in store.json(part["receipt"])["tables"][member.replace("-","_")]]
         assert artifact["record_count"] == 1 and rows == [{"record":row,"source_index":1,**({"nport_issuer":None} if declared else {})}]
@@ -1139,7 +1134,7 @@ def read(name, template, payload, context):
     manifest = store.put(folder.as_uri(),{"version":2,"contract":rules,"artifacts":[{"input":raw,"context":bound}]})
     task = {"input":manifest,"output":(folder / (name+"-reading.json")).as_uri(),"checks":["source.output"]}
     receipt = source_read.execute(task,store)
-    assert source_read.verify({**task,"candidate":receipt},store) == ({"source.output":True},[])
+    assert source_read.check({**task,"candidate":receipt},store) == ({"source.output":True},[])
     return receipt
 main = read("main","source.yaml",{"name":"Example","filings":{"recent":{
     "accessionNumber":["r1","r2"],"form":["8-K","10-K"]}},
@@ -1159,7 +1154,7 @@ manifest = store.put(folder.as_uri(),{"version":1,"contract":store.put(folder.as
 task = {"input":manifest,"output":(folder / "combined.json").as_uri(),"checks":["source.combined"]}
 combined = source_combine.execute(task,store)
 assert source_combine.execute(task,store) == combined
-assert source_combine.verify({**task,"candidate":combined},store) == ({"source.combined":True},[])
+assert source_combine.check({**task,"candidate":combined},store) == ({"source.combined":True},[])
 artifact = store.json(combined)["artifacts"][0]
 assert store.json(artifact["input"])["readings"] == refs
 row = artifact["tables"]["company"][0]
@@ -1170,7 +1165,7 @@ prepare = {"input":combined,"output":(folder / "mdm/manifest.json").as_uri(),"ch
     "keys":{"table":"company","dataset":"sec.company.v1","policy":"0"*64,
         "consumer":"trial","batch_id":"composition","as_of":date}}
 prepared = mdm_prepare.execute(prepare,store)
-assert mdm_prepare.verify({**prepare,"candidate":prepared},store) == ({"mdm.prepared":True},[])
+assert mdm_prepare.check({**prepare,"candidate":prepared},store) == ({"mdm.prepared":True},[])
 batch = store.json(prepared)["batches"][0]
 assert json.loads((folder / "mdm" / batch["input"]["path"]).read_bytes()) == row
 print("installed Company raw combination and preparation passed")

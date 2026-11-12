@@ -46,7 +46,7 @@ def test_profile_executes_retries_and_verifies_two_files_with_two_workers(tmp_pa
     receipt = source_read.execute(envelope, store)
     assert len(thread_ids) == 2
     assert source_read.execute(envelope, store) == receipt
-    checks, proofs = source_read.verify({**envelope, "candidate": receipt}, store)
+    checks, proofs = source_read.check({**envelope, "candidate": receipt}, store)
     assert checks == {"source.output": True} and proofs == []
     rows = json.loads(store.verified(receipt))["artifacts"]
     assert len(rows) == 2
@@ -74,13 +74,13 @@ def test_verifier_rejects_corrupt_output_and_other_destination(tmp_path):
     receipt = source_read.execute(envelope, store)
     (tmp_path / "rows.json").write_bytes(b"{}")
     with pytest.raises(Blocked, match="hash mismatch"):
-        source_read.verify({**envelope, "candidate": receipt}, store)
+        source_read.check({**envelope, "candidate": receipt}, store)
     candidate = {**receipt, "sha256": hashlib.sha256(b"{}").hexdigest()}
-    with pytest.raises(ValueError, match="differs"):
-        source_read.verify({**envelope, "candidate": candidate}, store)
+    with pytest.raises(ValueError, match="does not name this contract"):
+        source_read.check({**envelope, "candidate": candidate}, store)
     candidate["uri"] = (tmp_path / "elsewhere.json").as_uri()
     with pytest.raises(ValueError, match="URI differs"):
-        source_read.verify({**envelope, "candidate": candidate}, store)
+        source_read.check({**envelope, "candidate": candidate}, store)
 
 
 def test_manifest_cannot_expand_the_bounded_worklist(tmp_path):
@@ -109,7 +109,7 @@ def test_one_reading_reads_up_to_512_documents_and_no_more(tmp_path):
     work = reading(5, 5)
     candidate = source_read.execute(work, store)
     assert len(store.json(candidate)["artifacts"]) == 5
-    assert source_read.verify({**work, "candidate": candidate}, store) == ({"source.output": True}, [])
+    assert source_read.check({**work, "candidate": candidate}, store) == ({"source.output": True}, [])
     with pytest.raises(ValueError, match="1..512 artifacts"):
         source_read.execute(reading(1, 513), store)
     with pytest.raises(ValueError, match="bounded artifact count"):

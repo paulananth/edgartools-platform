@@ -61,7 +61,7 @@ EXPECTED = json.loads((Path(__file__).parent / "fixtures/company-mastering-recor
 def run_without_merge(databases, tmp_path, book, report):
     """Submit the target as configured, less its merge step (no MDM here)."""
     for profile in WORKERS:
-        grant_profile(databases.admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")
+        grant_profile(databases.admin, profile=profile, worker="bk_runtime")
     target = deepcopy(files.source("sec.company")["bookkeeping"]["targets"]["mastering"])
     target.pop("local", None)  # this test runs every step in the database; a local target's run starts at records
     assert [step["name"] for step in target["steps"][-2:]] == ["merge", "processed"]
@@ -79,7 +79,6 @@ def test_the_mastering_target_prepares_what_the_in_process_preparation_did(datab
     folder, population = company_capture(tmp_path, documents(), CATALOG_ROWS)
     report = plan(tmp_path, folder)
     book = Bookkeeping(databases.runtime)
-    book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)
     rid = run_without_merge(databases, tmp_path, book, report)
     state = drive(book, rid, databases.ledger, workers=WORKERS)
     # One main unit (3 small documents, under the byte budget), catalog, combine, records.
@@ -130,7 +129,6 @@ def mastered(databases, tmp_path, found=None, slice_bytes=None):
     folder, population = company_capture(tmp_path, found or documents(), CATALOG_ROWS)
     report = plan(tmp_path, folder, slice_bytes=slice_bytes)
     book = Bookkeeping(databases.runtime)
-    book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)
     assert drive(book, run_without_merge(databases, tmp_path, book, report), databases.ledger,
                  workers=WORKERS)["run"]["state"] == "complete"
     root = tmp_path / "bundle/records"

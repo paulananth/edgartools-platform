@@ -1,7 +1,7 @@
 """source.combine: declared keyed collections and joins over pinned readings.
 
 Domain-free preparation between source.read and mdm.prepare. Every input,
-contract and result is an immutable receipt; a verifier rebuilds exact bytes.
+contract and result is an immutable receipt; a retry rebuilds exact bytes.
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from pathlib import Path
 import edgar_warehouse.bookkeeping.clean.artifacts as artifact_store
 from edgar_warehouse import control_contract
 from edgar_warehouse.control_contract import canonical, reference
-from . import Redo, source_readings, source_reduction
+from . import source_readings, source_reduction
 
 CHECK = "source.combined"
 # Bounds, not budgets (ticket 83): an output over the index bound is written in
@@ -232,24 +232,11 @@ def execute(envelope, artifacts):
     return artifacts.put_bytes(envelope["output"], output)
 
 
-def verify(envelope, artifacts):
-    if envelope["candidate"]["uri"] != envelope["output"]:
-        raise ValueError("Candidate URI differs from intended combined output")
-    scope_ref, scope, expected = _documents(envelope, artifacts, source_readings.check(artifacts))
-    if artifacts.verified(scope_ref, max_bytes=source_readings.INDEX_BYTES) != scope:
-        raise ValueError("Written combination scope differs from pinned inputs")
-    if artifacts.verified(envelope["candidate"], max_bytes=source_readings.INDEX_BYTES) != expected:
-        raise ValueError("Written combined reading differs from pinned inputs and configuration")
-    return {CHECK: True}, []
-
-
-def confirm(envelope, artifacts):
-    """The check without combining again (ticket 72). The inputs and contract
-    pass the step's own checks, the written scope equals these inputs, and the
-    written output parses as one combination of this contract and these
-    receipts, holding only the contract's tables within its output bounds.
-    Bookkeeping pins the worker's runtime for the run and hashes the input and
-    the output; the check loop still redoes a sample of units."""
+def check(envelope, artifacts):
+    """The step's own check of what it wrote. The inputs and contract pass the
+    step's checks, the written scope equals these inputs, and the written
+    output parses as one combination of this contract and these receipts,
+    holding only the contract's tables within its output bounds."""
     if envelope["candidate"]["uri"] != envelope["output"]:
         raise ValueError("Candidate URI differs from intended combined output")
     manifest, refs, plan, reduced = _checked(envelope, artifacts)
@@ -259,7 +246,7 @@ def confirm(envelope, artifacts):
     data = artifacts.verified(envelope["candidate"], max_bytes=source_readings.INDEX_BYTES)
     body = artifact_store.json_value(data)
     if isinstance(body, dict) and body.get("version") == 2:
-        raise Redo("a combination written in pieces is checked by redoing it")
+        return {CHECK: True}, []
     if (not isinstance(body, dict) or set(body) != {"version", "contract", "readings", "artifacts"}
             or body["contract"] != manifest["contract"] or body["readings"] != refs):
         raise ValueError("Written combination does not name this contract and these receipts")

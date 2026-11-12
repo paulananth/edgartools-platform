@@ -23,7 +23,7 @@ def test_constructed_record_survives_worker_receipts_and_preparation(tmp_path):
                                            "artifacts": [{"input": raw, "context": context}]})
     read = {"input": manifest, "output": (tmp_path / "reading.json").as_uri(), "checks": ["source.output"]}
     receipt = source_read.execute(read, store)
-    assert source_read.verify({**read, "candidate": receipt}, store) == ({"source.output": True}, [])
+    assert source_read.check({**read, "candidate": receipt}, store) == ({"source.output": True}, [])
     expected = {"cik": 9007199254740993, "evidence": [True, None, {"unknown": 18446744073709551615}],
                 "business_address": {"street": "  x  ", "country": "US"}, "origin": {"run": "trial", "row": 1}}
     assert store.json(receipt)["artifacts"][0]["tables"]["rows"] == [{"record": expected}]
@@ -32,13 +32,13 @@ def test_constructed_record_survives_worker_receipts_and_preparation(tmp_path):
     prepare = {"input": receipt, "output": (tmp_path / "mdm/manifest.json").as_uri(),
                "checks": ["mdm.prepared"], "keys": keys}
     prepared = mdm_prepare.execute(prepare, store)
-    assert mdm_prepare.verify({**prepare, "candidate": prepared}, store) == ({"mdm.prepared": True}, [])
+    assert mdm_prepare.check({**prepare, "candidate": prepared}, store) == ({"mdm.prepared": True}, [])
     batch = store.json(prepared)["batches"][0]
     record_file = tmp_path / "mdm" / batch["input"]["path"]
     assert json.loads(record_file.read_bytes()) == expected
     record_file.write_text(json.dumps({**expected, "cik": 1}))
     with pytest.raises(ValueError):
-        mdm_prepare.verify({**prepare, "candidate": prepared}, store)
+        mdm_prepare.check({**prepare, "candidate": prepared}, store)
 
 
 def test_nested_refusal_leaves_no_source_output(tmp_path):

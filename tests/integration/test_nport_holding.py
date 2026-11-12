@@ -226,7 +226,7 @@ def test_the_land_step_lands_every_holding_once_and_its_verifier_confirms(databa
         with runtime.connect() as conn:
             assert conn.scalar(text("SELECT count(*) FROM silver.nport_holding")) == len(rows)
         candidate = {"uri": out["uri"], "sha256": "invented"}
-        assert silver_land.verify({**envelope, "candidate": candidate}, store) == ({"silver.landed": True}, [])
+        assert silver_land.check({**envelope, "candidate": candidate}, store) == ({"silver.landed": True}, [])
 
 
 def test_a_landing_holds_one_piece_of_a_reading_at_a_time(monkeypatch):

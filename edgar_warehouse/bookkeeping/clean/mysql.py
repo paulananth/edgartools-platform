@@ -10,7 +10,7 @@ from .config import Blocked, canonical
 from .storage import tables
 
 PAYLOAD = Path(__file__).parent / "migrations/mysql-v1.sql"
-CAPABILITIES = ("start_run", "claim", "heartbeat", "wait_work", "report", "verify_claim", "finish", "finish_resource", "finish_expand", "delivery", "block_run")
+CAPABILITIES = ("start_run", "claim", "heartbeat", "wait_work", "finish", "finish_resource", "finish_expand", "delivery", "block_run")
 NATIVE_CAPABILITIES = ("record_run_checks", "resume_run_prepared")
 OWNED_TABLES = {table.name for table in tables("mysql").values()}
 
@@ -35,7 +35,7 @@ def _restricted(conn, principal):
     if conn.scalar(text("SELECT @@mandatory_roles")) not in ("", "NONE"):
         raise Blocked("Mandatory roles must be qualified before control installation")
     for membership in conn.execute(text("SELECT FROM_USER,FROM_HOST,WITH_ADMIN_OPTION FROM mysql.role_edges WHERE TO_USER=:r AND TO_HOST=:h"), params):
-        if membership.FROM_HOST != "%" or membership.WITH_ADMIN_OPTION != "N" or not re.fullmatch(r"bk_(worker|verifier)_[0-9a-f]{20}", membership.FROM_USER):
+        if membership.FROM_HOST != "%" or membership.WITH_ADMIN_OPTION != "N" or not re.fullmatch(r"bk_worker_[0-9a-f]{20}", membership.FROM_USER):
             raise Blocked("Control runtime inherits an unqualified role")
         role_account = "'" + membership.FROM_USER + "'@'%'"
         inherited = [row[0] for row in conn.execute(text("SHOW GRANTS FOR " + role_account))]
@@ -175,18 +175,15 @@ def call(engine, operation, params):
         return json.loads(value) if value is not None else None
 
 
-def grant_profile(engine, *, profile, worker, verifier):
-    granted = {}
+def grant_profile(engine, *, profile, worker):
     with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-        for duty, login in (("worker", worker), ("verifier", verifier)):
-            account = _restricted(conn, login)
-            role = "bk_" + duty + "_" + hashlib.sha256(profile.encode()).hexdigest()[:20]
-            group = "'" + role + "'@'%'"
-            if not conn.scalar(text("SELECT COUNT(*) FROM mysql.user WHERE User=:r AND Host='%'"), {"r": role}):
-                conn.execute(text("CREATE ROLE " + group))
-            inherited = [row[0] for row in conn.execute(text("SHOW GRANTS FOR " + group))]
-            if any(not row.startswith("GRANT USAGE ON *.* ") for row in inherited):
-                raise Blocked("Control profile role has privileges beyond its duty")
-            conn.execute(text("GRANT " + group + " TO " + account))
-            granted[duty] = {"role": role, "login": login}
-    return granted
+        account = _restricted(conn, worker)
+        role = "bk_worker_" + hashlib.sha256(profile.encode()).hexdigest()[:20]
+        group = "'" + role + "'@'%'"
+        if not conn.scalar(text("SELECT COUNT(*) FROM mysql.user WHERE User=:r AND Host='%'"), {"r": role}):
+            conn.execute(text("CREATE ROLE " + group))
+        inherited = [row[0] for row in conn.execute(text("SHOW GRANTS FOR " + group))]
+        if any(not row.startswith("GRANT USAGE ON *.* ") for row in inherited):
+            raise Blocked("Control profile role has privileges beyond its duty")
+        conn.execute(text("GRANT " + group + " TO " + account))
+    return {"worker": {"role": role, "login": worker}}

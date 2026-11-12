@@ -62,7 +62,7 @@ def prepared(databases, tmp_path, target):
     """Plan the target, run it without merge and journal, and return the prepared records."""
     report = target_manifest.write_manifest(**capture(tmp_path), target=target)
     for profile in WORKERS:
-        grant_profile(databases.admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")
+        grant_profile(databases.admin, profile=profile, worker="bk_runtime")
     reading = deepcopy(target_manifest.rules_files.source(SOURCE))
     plan = deepcopy(reading["bookkeeping"]["targets"][target])
     names = [s["name"] for s in plan["steps"]]
@@ -70,7 +70,6 @@ def prepared(databases, tmp_path, target):
     plan["steps"] = plan["steps"][:names.index("merge")]  # the merge, the silver landing and the journal step have their own tests
     body = {"source": f"iapd-{uuid4().hex}", "bookkeeping": {"version": 2, "targets": {target: plan}}}
     book = Bookkeeping(databases.runtime)
-    book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)
     steps = book.artifacts.json(report["manifest"])["steps"]
     for later in ("merge", "land_custody", "processed"):
         steps.pop(later, None)

@@ -45,13 +45,13 @@ def test_worker_verifies_frozen_reference_and_refuses_a_changed_contract(tmp_pat
     envelope = {"input": manifest, "output": (tmp_path / "reading.json").as_uri(), "checks": ["source.output"]}
     candidate = source_read.execute(envelope, store)
     assert store.json(candidate)["artifacts"][0]["tables"]["rows"] == [{"jurisdiction": "US-DE"}]
-    assert source_read.verify({**envelope, "candidate": candidate}, store) == ({"source.output": True}, [])
+    assert source_read.check({**envelope, "candidate": candidate}, store) == ({"source.output": True}, [])
     changed = copy.deepcopy(spec)
     changed["read"]["references"]["places"]["DE"]["iso"] = "US-NV"
     altered = store.put(tmp_path.as_uri(), changed)
     other_manifest = store.put(tmp_path.as_uri(), {"version": 1, "contract": altered, "artifacts": [data]})
     with pytest.raises(ValueError):
-        source_read.verify({**envelope, "input": other_manifest, "candidate": candidate}, store)
+        source_read.check({**envelope, "input": other_manifest, "candidate": candidate}, store)
 
 
 def test_missing_key_error_remains_an_artifact_failure():

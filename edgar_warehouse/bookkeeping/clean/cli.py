@@ -1,7 +1,7 @@
 """Bookkeeping commands: control only, and the task protocol workers pull.
 
-Workers and verifiers are other processes. They call `claim`, `renew`,
-`report`, `fail`, `verifications` and `admit` and read the JSON these print;
+Workers are other processes. They call `claim`, `renew`, `report` and
+`fail` and read the JSON these print;
 Bookkeeping never names, imports or starts a worker (mastering to-do 20a).
 """
 from __future__ import annotations
@@ -18,14 +18,14 @@ def configured_bookkeeping():
 
 
 def _document(path: str) -> dict:
-    """An envelope or verification document, from a file or `-` (stdin)."""
+    """An envelope, from a file or `-` (stdin)."""
     text = sys.stdin.read() if path == "-" else open(path, encoding="utf-8").read()
     return json.loads(text)
 
 
 def run_command(book, operation: str, args, read=None):
     """One command against an open Bookkeeping: the one-shot CLI and `serve` both run it. `read` takes an
-    envelope or verification argument (a file, or `-` for stdin) and returns its document."""
+    envelope argument (a file, or `-` for stdin) and returns its document."""
     read = read or _document
     if operation == "runs":
         result = book.runs(limit=args.limit, state=args.state)
@@ -39,18 +39,14 @@ def run_command(book, operation: str, args, read=None):
         result = book.resume(args.run_id)
     elif operation == "claim":
         result = book.tasks(args.run_id, args.profile, limit=args.limit)
-    elif operation == "verifications":
-        result = book.verifications(args.run_id, args.profile, limit=args.limit)
     elif operation == "renew":
         result = book.renew(read(args.envelope))
     elif operation == "report":
         result = book.report(read(args.envelope), {"uri": args.candidate, "sha256": args.sha256},
-                             args.runtime)
+                             {"uri": args.checks, "sha256": args.checks_sha256})
     elif operation == "fail":
         book.fail(read(args.envelope), args.message)
         result = {"failed": True}
-    elif operation == "admit":
-        result = book.admit(read(args.verification), {"uri": args.report, "sha256": args.sha256})
     else:  # finalize: deliver every control event, `--limit` a batch, then record the run's checks
         from edgar_warehouse.change_journal.store import ChangeJournal, get_engine as journal_engine
         ledger = journal_engine()
@@ -84,7 +80,7 @@ def serve(book, lines, out) -> None:
         out.flush()
 
 
-TASK_COMMANDS = frozenset({"claim", "verifications", "renew", "report", "fail", "admit"})
+TASK_COMMANDS = frozenset({"claim", "renew", "report", "fail"})
 
 
 def _handle(args):
@@ -113,7 +109,7 @@ def _handle(args):
         from .database import grant_profile
         owner = get_engine()
         try:
-            result = grant_profile(owner, profile=args.profile, worker=args.worker, verifier=args.verifier)
+            result = grant_profile(owner, profile=args.profile, worker=args.worker)
         finally:
             owner.dispose()
     elif operation == "init-guard":
@@ -141,10 +137,10 @@ def register(subparsers):
         command.set_defaults(handler=_handle)
     commands.add_parser("serve", help="Answer task protocol commands, one JSON line each, until stdin ends"
                         ).set_defaults(handler=_handle)
-    grant = commands.add_parser("grant-profile", help="Let one login report a profile's work and another verify it")
+    grant = commands.add_parser("grant-profile", help="Let a login work a profile's steps")
     grant.add_argument("--profile", required=True)
     grant.add_argument("--worker", required=True, help="The worker's database login")
-    grant.add_argument("--verifier", required=True, help="The verifier's database login (not the worker's)")
+
     grant.set_defaults(handler=_handle)
     listing = commands.add_parser("runs", help="Find runs after a lost submission acknowledgement")
     listing.add_argument("--state", choices=("running", "waiting", "blocked", "complete"))
@@ -157,31 +153,25 @@ def register(subparsers):
         if name == "status":
             command.add_argument("--step", help="Only this step's units and counts")
         command.set_defaults(handler=_handle)
-    for name, help_text in (("claim", "Claim task envelopes for a worker profile"),
-                            ("verifications", "List reported candidates for a verifier")):
-        command = commands.add_parser(name, help=help_text)
-        command.add_argument("run_id")
-        command.add_argument("--profile", required=True)
-        command.add_argument("--limit", type=int, default=10)
-        command.set_defaults(handler=_handle)
+    claim = commands.add_parser("claim", help="Claim task envelopes for a worker profile")
+    claim.add_argument("run_id")
+    claim.add_argument("--profile", required=True)
+    claim.add_argument("--limit", type=int, default=10)
+    claim.set_defaults(handler=_handle)
     renew = commands.add_parser("renew", help="Renew a task envelope's lease")
     renew.add_argument("--envelope", required=True, help="The envelope file, or - for stdin")
     renew.set_defaults(handler=_handle)
-    report = commands.add_parser("report", help="Report a worker's candidate output")
+    report = commands.add_parser("report", help="Complete a unit: its output and the worker's own check report")
     report.add_argument("--envelope", required=True)
-    report.add_argument("--candidate", required=True, help="The candidate's URI")
+    report.add_argument("--candidate", required=True, help="The output's URI")
     report.add_argument("--sha256", required=True)
-    report.add_argument("--runtime", required=True, help="The worker runtime's digest")
+    report.add_argument("--checks", required=True, help="The check report's URI")
+    report.add_argument("--checks-sha256", required=True)
     report.set_defaults(handler=_handle)
     fail = commands.add_parser("fail", help="Give up a task attempt")
     fail.add_argument("--envelope", required=True)
     fail.add_argument("--message", required=True)
     fail.set_defaults(handler=_handle)
-    admit = commands.add_parser("admit", help="Admit a verifier's report and complete the unit")
-    admit.add_argument("--verification", required=True)
-    admit.add_argument("--report", required=True, help="The verification report's URI")
-    admit.add_argument("--sha256", required=True)
-    admit.set_defaults(handler=_handle)
 
 
 def main(argv=None) -> int:
