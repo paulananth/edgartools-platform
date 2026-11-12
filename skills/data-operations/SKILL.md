@@ -203,6 +203,13 @@ first and never loads a document twice.
 
 ### Derive a run input; never ask for what the store can decide
 
+Declared `preparation` operations finish before derived files or new bundles, under the selected worker login.
+They require the current source Rules digest to be active. Complete-set matching may expand the next read's
+scope; binding still follows identifier matching. Reuse a hash-bound cached projection only for identical bytes,
+population, recipe, policy and runtime; an unchanged repeat applies nothing. Keep a completed projection
+for retry after interrupted application. EOF and count verify the declared complete scope; independent
+provider completeness needs publisher evidence.
+
 A target's run files and facts are of two kinds: what the caller must bring (a capture, a time, a count the
 provider states) and what the rules and the store decide (a scope, the names a reading keeps, a list that flags
 nothing). The second kind is declared in the target's `run.derived` with a registered method, its `purpose` and its

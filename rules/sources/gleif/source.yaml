@@ -66,6 +66,20 @@ bookkeeping:
     # scope (the LEIs mastered: {LEI: {selected: true}}) and the LEIs N-PORT
     # holdings name as issuers (a JSON list; empty flags none).
     mastering:
+      # Prepare whole-publication name pairs before deriving the LEIs this load reads.
+      # Actual name binding still follows identifier matching in the common Merge Stage.
+      preparation:
+        - method: waterfall
+          options:
+            kind: company
+            holder_source: sec.company.v1
+            files: "*lei2-golden-copy*"
+            # This approved declaration names a complete capture and its count; it does not
+            # assert independent provider completeness. Full-file naming is retained in the
+            # captured publisher binding (publication-level1-json.yaml: full_file/GoldenCopy).
+            completeness: full_publication
+            full_filename: '[0-9]{8}-[0-9]{4}-gleif-goldencopy-lei2-golden-copy[.]json[.]zip'
+            count_fact: publication_count
       run:
         facts: [publication_count]
         files: [approved_scope, nport_issuers]

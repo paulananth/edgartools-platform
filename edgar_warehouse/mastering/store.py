@@ -218,6 +218,11 @@ class Store:
         self.cursor.executemany("update mastering_record set bound_id=coalesce(bound_id,%s),entity_id=%s where assertion_id=%s",
                                 [(entity, entity, assertion) for assertion, entity in older])
 
+    def update_records(self, records: list[tuple[str, str]]) -> None:
+        """Retain newly computed matching evidence on the same source assertion, under the file lock."""
+        self.cursor.executemany("update mastering_record set body=%s where assertion_id=%s",
+                                [(body, assertion_id) for assertion_id, body in records])
+
     def add_decision(self, body: dict, left, right) -> None:
         self.insert("mastering_decision", ("decision_id", "operation", "left_id", "right_id", "body"),
                     [(body["decision_id"], body["operation"], left, right, json.dumps(body))])

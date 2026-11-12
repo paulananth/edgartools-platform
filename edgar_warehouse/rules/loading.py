@@ -31,10 +31,12 @@ from pathlib import Path
 from sqlalchemy.engine import make_url
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from edgar_warehouse.control_contract import digest
 from edgar_warehouse.mdm import raw_capture
 
 from . import files
 from .driving import Commands, RunStopped, duties, manifest_root, run_steps
+from .preparation import prepare_load
 
 OPEN = ("running", "waiting")
 
@@ -152,7 +154,8 @@ class Loader:
         an open run pinned to other worker code (which this checkout cannot finish), stays as it
         is: the Change Journal loads its documents again in a new run."""
         listed = json.loads(self.commands("worker", "rules", "status", "--source", self.source))
-        active = next((v["version"] for v in listed if v.get("status") == "active"), None)
+        self.active_rules = next((v for v in listed if v.get("status") == "active"), None)
+        active = self.active_rules["version"] if self.active_rules else None
         left = {}
         for run in self.mine("blocked"):
             version = self.commands.status(str(run["run_id"]))["run"]["submission"].get("rule_version")
@@ -246,6 +249,9 @@ class Loader:
         cut = self.cut(capture)
         plan.update(documents=len({k for b in cut for k in b}), bundle_size=self.reading["execution"]["max_artifacts"],
                     bundles=len(cut))
+        preparation = self.reading["bookkeeping"]["targets"][self.target].get("preparation")
+        if preparation:
+            plan["preparation"] = preparation
         return plan
 
     def derived_files(self, given: list[str], *, folder: Path) -> list[str]:
@@ -253,7 +259,7 @@ class Loader:
         named as `name=path`, with what it holds and why it is made."""
         from edgar_warehouse.bookkeeping.clean.config import run_inputs
         from edgar_warehouse.mastering.store import open_store
-        from edgar_warehouse.mdm.connections import engine_from_env
+        from edgar_warehouse.mdm.connections import engine_from_environment
         from edgar_warehouse.rules import derivations
 
         derived = run_inputs(self.reading["bookkeeping"]["targets"][self.target])["derived"]
@@ -261,7 +267,7 @@ class Loader:
         wanted = {name: how for name, how in derived.items() if name not in named}
         if not wanted:
             return []
-        engine = engine_from_env("MDM_DATABASE_URL", restricted=True)
+        engine = engine_from_environment("MDM_DATABASE_URL", self.env["worker"], restricted=True)
         store = open_store(engine)
         made = []
         try:
@@ -298,6 +304,13 @@ class Loader:
                 result["finished_open_runs"].append(run_id)
         self.at_once([(f"run {run_id}", lambda run_id=run_id: finish(run_id)) for run_id in unfinished])
         result["finished_open_runs"] = [run_id for run_id in unfinished if run_id in result["finished_open_runs"]]
+        if self.reading["bookkeeping"]["targets"][self.target].get("preparation"):
+            if not self.active_rules or self.active_rules.get("digest") != digest(self.reading):
+                raise RunStopped("Automatic preparation requires this source's current Rules digest to be active")
+        result["preparation"] = prepare_load(reading=self.reading, target=self.target, capture=capture,
+                                              folder=self.root / "preparation", facts=facts, as_of=as_of,
+                                              deadline=self.commands.deadline, say=self.say,
+                                              environment=self.env["worker"])
         cut = self.cut(capture)
         self.say(f"{self.source} {self.target}: {sum(len(b) for b in cut)} documents in {len(cut)} bundles, "
                  f"{self.at_a_time} at once")

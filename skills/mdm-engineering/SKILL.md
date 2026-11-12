@@ -133,6 +133,11 @@ authoritative content before approval freezes it.
 
 ## Cross-reference completion
 
+**Retain computed matching evidence with its lookup keys.** A later source arrival must find both the key and
+the evidence the matching rule reads on the stored holder. Write that evidence, keys, merges and waiting-record
+release in one locked transaction. Prove a fault at release rolls them all back, then retry and repeat unchanged;
+a committed key must never make a retry skip an unfinished release.
+
 Read [CROSS-REFERENCE.md](CROSS-REFERENCE.md) before changing how identifiers are stored or looked up, qualifying native cross-reference lookup, or touching a rule that binds or consolidates by an identifier.
 
 ## The Merge Stage: each batch costs only what its records touch
@@ -350,10 +355,17 @@ from the installed bundle.
 
 ### Learned on a lookup-only route
 
+- **A retained source population includes history.** Use the shared current-record fold for revision and
+  as-of selection, and compare its folded fields with the selected original's matching provenance.
+  Keep that comparison view transient: save derived matching evidence on the original assertion,
+  without replacing a patch's original fields with an accumulated snapshot. Test an omitted current
+  field, a retraction, reversed row order and a future revision.
 - **An installed-bundle test reads the committed rules.** `tests/engine/test_data_skill_bundle_postgres.py`
   installs from the commit's HEAD, so uncommitted rules give a stale answer (its policy digest was the
   old one). Commit first, then `uv sync --all-extras --group dev --reinstall-package edgartools-platform`,
   then run it.
+  A shared namespace ships only the files its owning wheel lists: add a new runtime module to that wheel's
+  inclusion table and prove its installed import; a checkout import cannot establish package completeness.
 - **A policy or kind change moves the whole-policy digest** pinned in a test fixture
   (`tests/integration/fixtures/`, the mastering records file); the failing test prints the new value.
 - **A single-valued identifier that fails its shape refuses the whole record**, its other identifiers too (a list

@@ -403,10 +403,10 @@ def test_the_waterfall_pairs_reach_the_merge_as_cascade_name_keys_and_a_second_c
 ADDRESS = {"street": "1 EXAMPLE WAY", "city": "ANYTOWN", "postcode": "12345", "country": "US"}
 
 
-def placed_filer():
-    return assertion(source_code=SEC, record_key="0000000017", publication_key="invented", revision=1, effective_at=None,
+def placed_filer(*, revision=1, name="INVENTED CO"):
+    return assertion(source_code=SEC, record_key="0000000017", publication_key="invented", revision=revision, effective_at=None,
                      kind="company", identifiers={"cik": "0000000017"},
-                     fields={"name": "INVENTED CO", "state_of_incorporation": "CA"},
+                     fields={"name": name, "state_of_incorporation": "CA"},
                      provenance={"matching": {"address": ADDRESS, "business_country": "US"}})
 
 
@@ -460,3 +460,106 @@ def test_the_pass_pairs_and_the_merge_joins_the_company_in_either_order_and_a_se
         assert db.rows("select count(*) from mastering_review where open_review=1") == [(0,)]
         before = live(db)
         assert merge.apply_pairs(db, COMPANY, SEC, found) == {"records": 0} and live(db) == before
+
+
+@pytest.mark.parametrize("gleif_first", [False, True])
+@pytest.mark.parametrize("historical", [False, True])
+def test_normal_configured_preparation_expands_scope_and_merges_through_the_existing_stage(
+        database_factory, tmp_path, monkeypatch, gleif_first, historical):
+    from edgar_warehouse.rules import derivations, preparation
+    from tests.support.waterfall import capture, native
+
+    with opened(database_factory) as db:
+        filer, entity = placed_filer(revision=2, name=None if historical else "INVENTED CO"), placed_entity()
+        if gleif_first:
+            merge.merge_file(db, COMPANY, [entity])
+        if historical:
+            earlier = placed_filer()
+            merge.merge_file(db, COMPANY, [earlier])
+        merge.merge_file(db, COMPANY, [filer])
+        assert LEI not in derivations.lei_scope(db) if not gleif_first else LEI in derivations.lei_scope(db)
+
+        @contextmanager
+        def registered(digest, environment):
+            yield db  # restricted runtime store; registry validation has its own boundary checks
+
+        monkeypatch.setattr(preparation, "registered_store", registered)
+        folder = capture(tmp_path / "capture", [native(lei=LEI, city=ADDRESS["city"],
+                                                       updated="2026-09-01T00:00:00Z")])
+        arguments = dict(reading=files.source("gleif"), target="mastering", capture=folder,
+                         folder=tmp_path / "preparation", facts=["publication_count=1"], as_of=AS_OF,
+                         deadline=float("inf"), say=lambda _: None, environment={})
+        [done] = preparation.prepare_load(**arguments)
+        assert (done["pairs"], done["applied"]) == (1, 1)
+        if historical:
+            earlier_body = json.loads(db.rows("select body from mastering_record where assertion_id=%s",
+                                             [earlier["assertion_id"]])[0][0])
+            assert "name_count" not in earlier_body["provenance"]["matching"]
+            latest_body = json.loads(db.rows("select body from mastering_record where assertion_id=%s",
+                                            [filer["assertion_id"]])[0][0])
+            assert latest_body["fields"] == filer["fields"]
+        assert derivations.lei_scope(db)[LEI] == {"selected": True}
+        from edgar_warehouse.mdm import matching
+        staged_filer = json.loads(db.rows("select body from mastering_stage")[0][0])
+        rule = next(r for r in POLICY["kinds"]["company"]["rules"] if r["family"] == "name_binding")
+        if not historical:
+            assert matching.compare_candidate_records(rule, [(staged_filer, entity)])[0][0], staged_filer["provenance"]
+        if not gleif_first:
+            merge.merge_file(db, COMPANY, [entity])
+        (master,) = live(db).values()
+        assert sorted(master["subjects"]) == sorted([filer["subject"], entity["subject"]])
+        before = live(db)
+        monkeypatch.setattr(preparation, "project_capture", lambda *a, **k: pytest.fail("unchanged input re-read"))
+        [repeated] = preparation.prepare_load(**arguments)
+        assert repeated["applied"] == 0 and live(db) == before
+
+
+def test_changed_pair_evidence_is_retained_when_its_lookup_key_already_exists(database_factory):
+    with opened(database_factory) as db:
+        filer = placed_filer()
+        merge.merge_file(db, COMPANY, [filer])
+        from collections import Counter
+        from edgar_warehouse.mdm import cascade, waterfall
+        entity = placed_entity()
+        spec = cascade.spec(POLICY)
+        [answer] = waterfall.assignments([cascade.filer_of(filer)],
+            [cascade.entity_of(entity, frozenset({"INVENTED CO"}), eligible=True)], spec["passes"],
+            gleif_addresses=Counter(), over_shared=spec["over_shared"]).values()
+        original = {**answer, "last_update": "2026-08-01T00:00:00Z"}
+        updated = {**original, "last_update": "2026-09-01T00:00:00Z"}
+        assert merge.apply_pairs(db, COMPANY, SEC, {"0000000017": original})["records"] == 1
+        assert merge.apply_pairs(db, COMPANY, SEC, {"0000000017": updated})["records"] == 1
+        body = json.loads(db.rows("select body from mastering_record where assertion_id=%s", [filer["assertion_id"]])[0][0])
+        assert body["provenance"]["matching"]["name_count"]["cascade"] == {"version": "sec-gleif-cascade-v1", **updated}
+        assert db.rows("select value,subject from mastering_name_key where role='cascade'") == [(LEI, filer["subject"])]
+        merge.merge_file(db, COMPANY, [entity])
+        (master,) = live(db).values()
+        assert sorted(master["subjects"]) == sorted([filer["subject"], entity["subject"]])
+        before = live(db)
+        assert merge.apply_pairs(db, COMPANY, SEC, {"0000000017": updated}) == {"records": 0}
+        assert live(db) == before
+
+
+def test_pair_evidence_keys_and_waiter_release_roll_back_together_and_retry_completes(database_factory, monkeypatch):
+    with opened(database_factory) as db:
+        filer = placed_filer()
+        merge.merge_file(db, COMPANY, [filer])
+        before = db.rows("select body from mastering_record where assertion_id=%s", [filer["assertion_id"]])
+        release = merge._release_waiting
+
+        def interrupted(store, settings, arrived):
+            current = json.loads(store.rows("select body from mastering_record where assertion_id=%s",
+                                            [filer["assertion_id"]])[0][0])
+            assert current["provenance"]["matching"]["name_count"]["cascade"]["lei"] == LEI
+            assert store.rows("select value from mastering_name_key where role='cascade'") == [(LEI,)]
+            raise RuntimeError("interrupted waiter release")
+
+        monkeypatch.setattr(merge, "_release_waiting", interrupted)
+        pair = {"0000000017": {"lei": LEI, "pass": "name and city or postcode"}}
+        with pytest.raises(RuntimeError, match="interrupted waiter release"):
+            merge.apply_pairs(db, COMPANY, SEC, pair)
+        assert db.rows("select body from mastering_record where assertion_id=%s", [filer["assertion_id"]]) == before
+        assert db.rows("select value from mastering_name_key where role='cascade'") == []
+        monkeypatch.setattr(merge, "_release_waiting", release)
+        assert merge.apply_pairs(db, COMPANY, SEC, pair)["records"] == 1
+        assert merge.apply_pairs(db, COMPANY, SEC, pair) == {"records": 0}

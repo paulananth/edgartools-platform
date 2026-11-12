@@ -19,11 +19,11 @@ approvals:
   finalized: PR 1428
 - kind: source
   name: gleif
-  digest: a6473dcd814cf14ca11b51cb7c0dd6794ea0624ae16bd6cb00e807944ff47b18
+  digest: bddcceb9de067a88bbe26f5ceef212b7e8e6de5dc5cbf507e8e5a5a790bcee9d
   by: operator
-  words: Approved the rules always
-  at: '2026-11-11'
-  finalized: PR 1680
+  words: Use automatic preparation (recommended)
+  at: '2026-11-11T21:37:47.605017-05:00'
+  finalized: PR 1701
 - kind: source
   name: iapd.adv
   digest: 6feddb708c30e4f93c4944cfe4ed22ffa8783cfef75bb182e8cfa6c0c1fef907
