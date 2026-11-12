@@ -43,8 +43,7 @@ Every step says what differs for each target.
   - **A link stated on each transaction row is a lookup, not an MDM record**
     (a fund's holding of a security, an order's supplier). Land the rows in
     silver with one link per master; the writer fills each MDM id by its key.
-    Never stage one MDM record per row only to master the link (operator,
-    2026-10-22: "Why do you need to merge it it's just a lookup").
+    Never stage one MDM record per row only to master the link (operator: "Why do you need to merge it it's just a lookup").
   - **Never carry a many-to-many link as a list on a record.** A reduction keeps
     at most 1,000 members per list (`sample_limit`), so a widely held entity
     loses links silently: one row per link instead.
@@ -54,8 +53,7 @@ Every step says what differs for each target.
     key the master's contract makes from the same files.
   - **Rows for silver get their own reading**, beside the master's, so the
     master's reading and its pinned digests do not change.
-  - **Limits on a production feed are the engine's ceilings** (operator,
-    2026-10-22: "No limit on production", "I asked to remove all limits").
+  - **Limits on a production feed are the engine's ceilings** (operator: "No limit on production", "I asked to remove all limits").
     The engine requires each to be declared, so "no limit" means its ceiling:
     a stream's `max_input_bytes`, `max_bytes` and `max_spool_bytes` 1 TiB,
     `max_records` and `max_output_rows` 10^12, `max_partitions` 10^7,
@@ -65,8 +63,7 @@ Every step says what differs for each target.
     over pieces `execution.max_input_bytes` and `limits.max_bytes` 16 GiB,
     `limits.max_records` 100,000,000. A streamed reading's `read.limits`
     bounds one row: at most 32 MiB and 100,000.
-  - **Check it on the largest real case before any run** (operator,
-    2026-10-22: "make sure the logic is correct and works for a major fund
+  - **Check it on the largest real case before any run** (operator: "make sure the logic is correct and works for a major fund
     issuer"): cut that case's files out of the capture, run the real
     contracts on them in pieces as a run cuts them (8 MiB, 100,000 rows; a
     large combined output arrives as a version-2 index of pieces), and count

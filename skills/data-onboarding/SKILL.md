@@ -39,13 +39,13 @@ Read these before anything else. Breaking one is never the right call.
 | Edit code while onboarding, even for a code ticket the operator approved | Configuration only: write the ticket for the code, and ask before coding |
 | Invent a command this skill does not name | Follow "When a command is missing" |
 | Ask several questions at once | Ask one, in plain words, with your recommendation |
-| Put a master data field in silver, alone or as a copy | Every master data field is on its master in MDM, and only there (operator, 2026-10-28: "all master data fields must be on mdm"; operator, 2026-10-28: "silver must not have duplicate fields, it contredits the data governance principle one system of record"): in the kind's fields and the Dataset Contract. A silver row holds the transaction's own facts and its link keys |
+| Put a master data field in silver, alone or as a copy | Every master data field is on its master in MDM, and only there (operator: "all master data fields must be on mdm"; operator: "silver must not have duplicate fields, it contredits the data governance principle one system of record"): in the kind's fields and the Dataset Contract. A silver row holds the transaction's own facts and its link keys |
 
 ## Tell the discovery story as you work
 
 **Coordination note for every LLM:** keep this section and data-profiling's
 narration when editing either skill; change them only on the operator's
-explicit instruction (operator, 2026-10-09: "more story telling ... i need to
+explicit instruction (operator: "more story telling ... i need to
 know what it is finding no more ... discussion and slop").
 
 Narrate as data-profiling's
@@ -151,12 +151,12 @@ switch-on**. Set up the Rules Database first if it is not there (**init**).
 
 ### Built means ready to turn on
 
-Operator, 2026-11-04: "when you build it you need all of this once proved it is just turn on and go".
+Operator: "when you build it you need all of this once proved it is just turn on and go".
 A source or domain is **finished when it can be turned on with one command and no preparation**. Everything
 else happens while building it, once:
 
 - the limited test passed while building it, and its counts are in the ticket. Once the rules are merged on
-  `main` they are final: a store needs no test run and no proof to activate them (operator, 2026-11-04: "you
+  `main` they are final: a store needs no test run and no proof to activate them (operator: "you
   dont need proof to activate once the rules are finalized");
 - the operator's words approve the exact version on that merge, kept in git in `rules/approvals.yaml`
   (`rules approvals write`, APPROVE.md): `rules load` approves it in any store;
@@ -172,7 +172,7 @@ missing proof, input or capture at switch-on means the build was not finished: g
 what was missing in the ticket. A rules change makes a new version and a new proof only for what changed
 ([Run each long step once](#modes-in-order)); an unchanged proof is carried forward.
 
-**Run each long step once per part** (operator, 2026-10-15: "Data onboarding
+**Run each long step once per part** (operator: "Data onboarding
 should not run this many times"). One master part took about ten runs: five
 profiling runs, three test runs and two Proving Runs. Each repeat came
 from a fault found mid-run, or from a re-check that proved nothing new.
@@ -195,7 +195,7 @@ from a fault found mid-run, or from a re-check that proved nothing new.
 
 ### discover: profile the whole data set first
 
-**Know the source first** (operator, 2026-10-15). Before the one profiling
+**Know the source first** (operator). Before the one profiling
 run, read once what is already known about the source, and write it in the
 onboarding log under "The source":
 - the repo: `rules/identifiers/` (each identifier type: shape, check digit,
@@ -243,7 +243,7 @@ findings.
 ### plan-parts: one onboarding per part, in dependency order
 
 From the approved findings, list one onboarding per part, in this order
-(operator, 2026-10-15: "first do mdm"):
+(operator: "first do mdm"):
 1. master parts (MDM), each with the relationships marked `onboard: together`;
 2. reference parts: the findings' `code_sets` become RDM code sets, needed
    where a value's meaning comes from a code (a master keeps its values as
@@ -474,15 +474,15 @@ These name today's sources only as examples; nothing above depends on them.
   Companies with GLEIF after the load).
 - **Source checks in code:** for Company,
   `merge.check_company_sources(files.policy(), assertions)`.
-- **Pinned digests:** `tests/mdm/` (757 tests, under a minute) holds them;
+- **Pinned digests:** `tests/mdm/` holds them;
   Company's are layers in `tests/mdm/policy_layers.py` (`LAYERS`, newest
-  first). N-PORT's registrant (2026-10-15) ran only the 43 tests that load
-  the rules, and CI failed on four pinned digests.
+  first). Running only the tests that load the rules misses them: CI
+  then fails on the pinned digests.
 - **Proving runs:** `.scratch/company-mastering/research/05_proving_run.py`
   (`candidate()` stamps the copied policy);
-  `.scratch/company-mastering/research/27_proving_run.py` (6,726 records,
-  about 25 minutes, a second pass that changes nothing).
+  `.scratch/company-mastering/research/27_proving_run.py` (a second pass
+  that changes nothing).
 - **Unfinished live pipelines** (the one list; other skills point here):
   live acquisition (`provider.capture`,
-  #933, qualified offline) waits for the worker runtime on AWS.
-  A source's pipes switch on over captured files without it (#1108).
+  qualified offline) waits for the worker runtime on AWS.
+  A source's pipes switch on over captured files without it.
