@@ -46,8 +46,7 @@ submits one source.
    ```
    Enabled means `rules status` shows that version `active`. There is no
    separate enable command.
-   **A source that masters nothing needs no proof and no approval** (operator,
-   2026-11-03: "There is nothing to prove in silver it is just one to one no
+   **A source that masters nothing needs no proof and no approval** (operator: "There is nothing to prove in silver it is just one to one no
    mastering"): one with no Dataset Contract, no `mdm` target and no acquisition
    maps its files one to one into silver. Check it (`rules check`), save it, and
    `rules activate` it from draft; `rules test` refuses such a source anyway.
