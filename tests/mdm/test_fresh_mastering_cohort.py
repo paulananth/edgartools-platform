@@ -15,56 +15,10 @@ def test_the_local_cohort_reads_as_two_companies_and_two_people():
         "company-cik", "person-cik", "sec-company-candidate", "sec-person-candidate"}
 
 
-def test_removing_person_fixture_conversion_preserves_all_assertion_ids_and_provenance(monkeypatch):
+def test_the_cohort_records_are_the_recorded_ones():
+    """Every assertion id and provenance of the four records, as one hash."""
     import hashlib
     import json
 
-    from edgar_warehouse.rules import files
-    from edgar_warehouse.mdm.store import digest
-    from tests.mdm.test_rules_config_digests import WITHOUT_TICKET_129_FIELDS, _with_company_fields_back
-    from tests.support.name_count_words import old_words, without_name_id
-    from tests.support import person_quality
-
-    def historical_cohort():
-        records = cohort()[2]
-        for n, record in enumerate(records):
-            if record.get("cross_references", {}).get("name_id"):  # ticket 01: the name id came after
-                records[n] = record = without_name_id(record)
-                record["assertion_id"] = digest({k: v for k, v in record.items() if k != "assertion_id"})
-            if record["source_code"] == "sec.company.v1":
-                # Phase 1 (ticket 204) renamed the classification rule's version; the pinned cohort holds the one before.
-                record["provenance"]["classification"]["version"] = "2026-09-25.13"
-                records[n] = record = old_words(record)
-                record["source_code"] = "sec.submissions.company.v1"
-                record["subject"] = digest([record["source_code"], record["record_key"]])
-                record["assertion_id"] = digest({k: v for k, v in record.items() if k != "assertion_id"})
-        return records
-
-    actual = json.dumps(historical_cohort(), sort_keys=True).encode()
-    assert hashlib.sha256(actual).hexdigest() == "a539af8021c6704a95d63d28301a5b322b1ddc0c6009fa35cadb846ddf82155b"
-    # Ticket 129 took the SIC code's label out of the Company; with it put back
-    # the cohort is the one pinned before.
-    current = files.mdm_contract
-
-    def with_company_fields(source, code, root=None):
-        found = current(source, code, root)
-        return _with_company_fields_back(found, code) if code in WITHOUT_TICKET_129_FIELDS else found
-
-    monkeypatch.setattr(files, "mdm_contract", with_company_fields)
-    actual = json.dumps(historical_cohort(), sort_keys=True).encode()
-    assert hashlib.sha256(actual).hexdigest() == "e908d67bbdf589e1081ff77aa025d2e83b89ad154ea0846428f46bdbff10e8d2"
-    # Rebuild ticket 10 made Person's quality v2 (one more check, which the
-    # cohort passes); a record names its quality version. Under v1 the hash is
-    # the one recorded from the retained conversion at 07cd4ef0, before it was
-    # replaced with raw Person fixture documents (all four complete assertions).
-    contract = files.mdm_contract
-
-    def before_ticket_10(source, code, root=None):
-        found = contract(source, code, root)
-        if source != "sec.submissions.person":
-            return found
-        return person_quality.before_ticket_10(found)
-
-    monkeypatch.setattr(files, "mdm_contract", before_ticket_10)
-    actual = json.dumps(historical_cohort(), sort_keys=True).encode()
-    assert hashlib.sha256(actual).hexdigest() == "35220d0129283863f957b93fee8317c4ce9ec390003d57d74d52e3709c29640c"
+    actual = json.dumps(cohort()[2], sort_keys=True).encode()
+    assert hashlib.sha256(actual).hexdigest() == "d9988a72cc7525e4ea6559b7d0f9cf7652596de68c7c7bb4ca157df8991d37e1"

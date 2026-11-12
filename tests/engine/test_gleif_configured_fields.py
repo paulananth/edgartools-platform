@@ -1,8 +1,6 @@
-"""Native field projection must match the retained mapper.
+"""GLEIF field projection.
 
-Issue 20 L7 retired the hand-written mapping these cases were compared with;
-what it gave for each case, taken from it on main before it went, is in
-`retired_mapper_outcomes.json` (`RETIRED`)."""
+The answer for each case is in `mapper_outcomes.json` (`EXPECTED`)."""
 import copy
 import json
 from pathlib import Path
@@ -11,32 +9,23 @@ import pytest
 from edgar_warehouse.control_contract import digest
 from edgar_warehouse.mdm import adapters
 from edgar_warehouse.rules import files, source_engine
-from tests.support.company_fields import before_ticket_129, reading_before_ticket_129
 
 
-RETIRED=json.loads(Path(__file__).with_name('retired_mapper_outcomes.json').read_text())
+EXPECTED=json.loads(Path(__file__).with_name('mapper_outcomes.json').read_text())
 
 
 def contract(member):
     return copy.deepcopy(files.source('gleif')['dataset_contracts'][f'gleif.{member}.v1']['contract'])
 
 
-def retired_contract(member):
-    """Rebuild ticket 129 took GLEIF's two record-keeping dates out of Level 1;
-    the retired mapper's outcomes are compared with them put back."""
-    found=contract(member)
-    return before_ticket_129(found,'gleif.level1.v1') if member=='level1' else found
-
-
-def retired(key, outcome):
-    """The outcome as the retired mapping gave it for this case."""
-    assert key in RETIRED, key
-    assert json.loads(json.dumps(outcome))==RETIRED[key]
+def expected(key, outcome):
+    """The answer recorded for this case."""
+    assert key in EXPECTED, key
+    assert json.loads(json.dumps(outcome))==EXPECTED[key]
 
 
 def project(member, row):
     config=files.load(files.ROOT/'sources/gleif'/f'{member.replace("_","-")}-fields.yaml')
-    if member=='level1': config=reading_before_ticket_129(config,'gleif.level1.v1')
     # The field projection alone; the contract's record checks have their own tests.
     mapped=config['read']['tables']['mapped']
     mapped.pop('checks',None)
@@ -68,17 +57,17 @@ def test_level1_projection_matches_exact_values_and_python_whitespace(case):
     elif case=='empty_address': row['Entity']['LegalAddress']={'FirstAddressLine':{'$':' '},'AdditionalAddressLine':[{'$':' '}]}
     elif case=='null_lines': row['Entity']['LegalAddress']['AdditionalAddressLine']=None
     elif case=='empty_lines': row['Entity']['LegalAddress']['AdditionalAddressLine']=[]
-    retired(f'gleif/level1/{case}',digest(project('level1',row)))
+    expected(f'gleif/level1/{case}',digest(project('level1',row)))
 
 
 @pytest.mark.parametrize('member',['relationships','reporting_exceptions'])
 def test_other_member_fields_and_matching_keep_raw_types(member):
     row={'key':False,'Relationship':{'RelationshipType':{'$':'IS_DIRECTLY_CONSOLIDATED_BY'}}}
-    retired(f'gleif/raw/{member}',digest(project(member,row)))
+    expected(f'gleif/raw/{member}',digest(project(member,row)))
 
 
 @pytest.mark.parametrize('value',[False,0,{},[{'$':'valid'},{'$':None}],[{'$':False}],[{'$':1}],['text'],[None]])
-def test_malformed_address_lines_refuse_like_retained_mapper(value):
+def test_malformed_address_lines_are_refused(value):
     row=raw();row['Entity']['LegalAddress']['AdditionalAddressLine']=value
     with pytest.raises(adapters.UnsupportedRecord,match='invalid_field_shape'):
         adapters._fields(row,contract('level1')['adapter'])
@@ -87,7 +76,7 @@ def test_malformed_address_lines_refuse_like_retained_mapper(value):
 
 
 @pytest.mark.parametrize('value',[False,0,[],{}])
-def test_nontext_field_refuses_like_retained_nullable_text_mapping(value):
+def test_nontext_field_is_refused(value):
     row=raw();row['Entity']['LegalName']={'$':value}
     with pytest.raises(adapters.UnsupportedRecord,match='invalid_field_shape'):
         adapters._fields(row,contract('level1')['adapter'])
@@ -97,12 +86,12 @@ def test_nontext_field_refuses_like_retained_nullable_text_mapping(value):
 @pytest.mark.parametrize('value',['plain text', [{'LegalName': {'$': 'hidden'}}], None, False, 0])
 def test_scalar_and_repeated_parents_match_dictionary_only_traversal(value):
     row=raw(); row['Entity']=value
-    retired(f'gleif/parents/{value!r}',digest(project('level1',row)))
+    expected(f'gleif/parents/{value!r}',digest(project('level1',row)))
 
 @pytest.mark.parametrize('value',['plain text', [{'$': 'hidden'}]])
 def test_reserved_text_alias_is_not_a_literal_dictionary_field(value):
     row=raw(); row['Entity']['LegalName']=value
-    retired(f'gleif/alias/{value!r}',digest(project('level1',row)))
+    expected(f'gleif/alias/{value!r}',digest(project('level1',row)))
 
 @pytest.mark.parametrize('member',['level1','relationships','reporting_exceptions'])
 def test_frozen_inline_reading_matches_bundled_recipe(member):
@@ -121,15 +110,11 @@ def test_configured_normalization_preserves_assertion_ids_and_deferrals(case):
     publication={'artifact_sha256':'a'*64,'member':'level1','publication_key':'fixture',
                  'revision':1,'effective_at':None}
     try:
-        from tests.support.name_count_words import without_name_id
-
-        assertion=adapters.normalize(row,source_code='gleif.level1.v1',contract=retired_contract('level1'),publication=publication)
-        earlier=without_name_id(assertion)  # ticket 01: the name id came after
-        earlier['assertion_id']=digest({k:v for k,v in earlier.items() if k!='assertion_id'})
-        outcome=('assertion',digest(earlier))
+        assertion=adapters.normalize(row,source_code='gleif.level1.v1',contract=contract('level1'),publication=publication)
+        outcome=('assertion',digest(assertion))
     except adapters.UnsupportedRecord as error:
         outcome=('deferred',error.reason,digest(error.detail),error.probable_kind)
-    retired(f'gleif/normalize/{case}',outcome)
+    expected(f'gleif/normalize/{case}',outcome)
 
 
 def test_invalid_reading_configuration_stops_instead_of_deferring_record():

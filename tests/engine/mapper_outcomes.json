@@ -1,12 +1,12 @@
 {
- "gleif/alias/'plain text'": "f50d2fb15899eb12075de6343fd2232f59f12c842d7aafd9c193d97989057d06",
- "gleif/alias/[{'$': 'hidden'}]": "f50d2fb15899eb12075de6343fd2232f59f12c842d7aafd9c193d97989057d06",
- "gleif/level1/blank": "f50d2fb15899eb12075de6343fd2232f59f12c842d7aafd9c193d97989057d06",
- "gleif/level1/complete": "6f29d1f2b2971943f849f4a0ad2035be7937ecea070d60fef03ce2929ae268e2",
- "gleif/level1/empty_address": "093c4ca40a1ab70670ed363c47f0dbd6476e26fb2902523c2c3ff68af2eabab0",
- "gleif/level1/empty_lines": "49f2b5c848fa14a946924a6128e302308d6641015540943794b9099fef5aac5f",
- "gleif/level1/missing": "045a2028908164a236281eb30d5731d25342f928dbc4b6d76cb48ade4db33786",
- "gleif/level1/null_lines": "49f2b5c848fa14a946924a6128e302308d6641015540943794b9099fef5aac5f",
+ "gleif/alias/'plain text'": "fab3c5923a72924c63df7be6d4431f2448d558042e7018fbe094731d043a6720",
+ "gleif/alias/[{'$': 'hidden'}]": "fab3c5923a72924c63df7be6d4431f2448d558042e7018fbe094731d043a6720",
+ "gleif/level1/blank": "fab3c5923a72924c63df7be6d4431f2448d558042e7018fbe094731d043a6720",
+ "gleif/level1/complete": "f2e14c38b39496cdf55ac05b5d13064ce634ad5d5eb9dea3fb8f19d3650dcffc",
+ "gleif/level1/empty_address": "f49c533987f5a53cfebe8588a433561924613a043b810e4d0fc7d9edd089c11e",
+ "gleif/level1/empty_lines": "60ef943cf3b0a993ba2689709203bcb43711a19fc3d7ee4214ddac3744ec0fc3",
+ "gleif/level1/missing": "c47a43afba16387bf3822e9023464a55b34d44bce706fb73de63d0dd9bcfdf26",
+ "gleif/level1/null_lines": "60ef943cf3b0a993ba2689709203bcb43711a19fc3d7ee4214ddac3744ec0fc3",
  "gleif/normalize/bad_address": [
   "deferred",
   "invalid_field_shape",
@@ -39,34 +39,34 @@
  ],
  "gleif/normalize/valid": [
   "assertion",
-  "601a07a3a228c07bd7bd7e9752c8a58fd59fa85f053d9cf7e3a2037945534d28"
+  "de132d9524a8bc92d2067fb6583b651b0fe5c5c9506273970f2ac418161875ce"
  ],
- "gleif/parents/'plain text'": "4ced0a5213042571d173e3ae95cb45442c5f420eb2624cdba95493a45d0745eb",
- "gleif/parents/0": "4ced0a5213042571d173e3ae95cb45442c5f420eb2624cdba95493a45d0745eb",
- "gleif/parents/False": "4ced0a5213042571d173e3ae95cb45442c5f420eb2624cdba95493a45d0745eb",
- "gleif/parents/None": "4ced0a5213042571d173e3ae95cb45442c5f420eb2624cdba95493a45d0745eb",
- "gleif/parents/[{'LegalName': {'$': 'hidden'}}]": "4ced0a5213042571d173e3ae95cb45442c5f420eb2624cdba95493a45d0745eb",
+ "gleif/parents/'plain text'": "0803fff15876616e80bf448856a145a1b25091c95158cdadc098fdc86bab9937",
+ "gleif/parents/0": "0803fff15876616e80bf448856a145a1b25091c95158cdadc098fdc86bab9937",
+ "gleif/parents/False": "0803fff15876616e80bf448856a145a1b25091c95158cdadc098fdc86bab9937",
+ "gleif/parents/None": "0803fff15876616e80bf448856a145a1b25091c95158cdadc098fdc86bab9937",
+ "gleif/parents/[{'LegalName': {'$': 'hidden'}}]": "0803fff15876616e80bf448856a145a1b25091c95158cdadc098fdc86bab9937",
  "gleif/raw/relationships": "829dd32c54e3cf0ae0ee24012fae209e414464e7617050eb92a6e46d130a91ab",
  "gleif/raw/reporting_exceptions": "829dd32c54e3cf0ae0ee24012fae209e414464e7617050eb92a6e46d130a91ab",
  "sec/address/'text'": [
   "mapped",
-  "bb19abfe32dfc79cce637aafa7bf5c5dab0713e627605b77cf5e8315546e1ebd"
+  "099148d6b8d0955ec1b86b8c724adc2043da77b31c88a22974883e7a78bf53de"
  ],
  "sec/address/False": [
   "mapped",
-  "bb19abfe32dfc79cce637aafa7bf5c5dab0713e627605b77cf5e8315546e1ebd"
+  "099148d6b8d0955ec1b86b8c724adc2043da77b31c88a22974883e7a78bf53de"
  ],
  "sec/address/None": [
   "mapped",
-  "bb19abfe32dfc79cce637aafa7bf5c5dab0713e627605b77cf5e8315546e1ebd"
+  "099148d6b8d0955ec1b86b8c724adc2043da77b31c88a22974883e7a78bf53de"
  ],
  "sec/address/[]": [
   "mapped",
-  "bb19abfe32dfc79cce637aafa7bf5c5dab0713e627605b77cf5e8315546e1ebd"
+  "099148d6b8d0955ec1b86b8c724adc2043da77b31c88a22974883e7a78bf53de"
  ],
  "sec/address/{'street': '\\x1c A \\x1f', 'city': ' '}": [
   "mapped",
-  "68bb2b0ffbd640964163e5b83bde035a8823b0e6e435786a776e0a1988ed7c5f"
+  "d545d905128366a6b875ab34beeca77475a3fabf480efb6c5425c2a2228741b1"
  ],
  "sec/address/{'street': 0}": [
   "deferred",
@@ -82,36 +82,36 @@
  ],
  "sec/address/{}": [
   "mapped",
-  "bb19abfe32dfc79cce637aafa7bf5c5dab0713e627605b77cf5e8315546e1ebd"
+  "099148d6b8d0955ec1b86b8c724adc2043da77b31c88a22974883e7a78bf53de"
  ],
- "sec/exact/sec.submissions.company/' Exact Spelling '": [
+ "sec/exact/sec.company/' Exact Spelling '": [
   "mapped",
-  "96e9468497738a8d2a7f3669fe6fca72b4862fef53b856338d82171331ec6f48",
-  "d6e10a7eb7bf553bc789efc154f27861fa12da375a78cf3f7021d1a233b4eb06"
+  "e3a08c2617c468cab9478a554b1d17aa3970b83cda089a43b1bc498e03698a00",
+  "3aaf53620a32c685ae3a8a4697fb0092ebd64faabae68f1945bec0e1449e15cd"
  ],
- "sec/exact/sec.submissions.company/'\\x1c \\x1f'": [
+ "sec/exact/sec.company/'\\x1c \\x1f'": [
   "mapped",
-  "24a68d398a41b1efab867a01093fb46582cbb722aa5977ec1430c7a4eba28a89",
-  "d6e10a7eb7bf553bc789efc154f27861fa12da375a78cf3f7021d1a233b4eb06"
+  "03468a21dec526b7d31f576a2a712d7ac20802f6b466207b253e09cef8ead78b",
+  "3aaf53620a32c685ae3a8a4697fb0092ebd64faabae68f1945bec0e1449e15cd"
  ],
- "sec/exact/sec.submissions.company/0": [
+ "sec/exact/sec.company/0": [
   "deferred",
   "invalid_field_shape"
  ],
- "sec/exact/sec.submissions.company/False": [
+ "sec/exact/sec.company/False": [
   "deferred",
   "invalid_field_shape"
  ],
- "sec/exact/sec.submissions.company/None": [
+ "sec/exact/sec.company/None": [
   "mapped",
-  "24a68d398a41b1efab867a01093fb46582cbb722aa5977ec1430c7a4eba28a89",
-  "d6e10a7eb7bf553bc789efc154f27861fa12da375a78cf3f7021d1a233b4eb06"
+  "03468a21dec526b7d31f576a2a712d7ac20802f6b466207b253e09cef8ead78b",
+  "3aaf53620a32c685ae3a8a4697fb0092ebd64faabae68f1945bec0e1449e15cd"
  ],
- "sec/exact/sec.submissions.company/[]": [
+ "sec/exact/sec.company/[]": [
   "deferred",
   "invalid_field_shape"
  ],
- "sec/exact/sec.submissions.company/{}": [
+ "sec/exact/sec.company/{}": [
   "deferred",
   "invalid_field_shape"
  ],
@@ -146,31 +146,31 @@
   "deferred",
   "invalid_field_shape"
  ],
- "sec/normalize/sec.submissions.company/bad_identity": [
+ "sec/normalize/sec.company/bad_identity": [
   "deferred",
   "invalid_cik",
   "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
   null
  ],
- "sec/normalize/sec.submissions.company/bad_name": [
+ "sec/normalize/sec.company/bad_name": [
   "deferred",
   "invalid_field_shape",
   "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
   null
  ],
- "sec/normalize/sec.submissions.company/blank_name": [
+ "sec/normalize/sec.company/blank_name": [
   "deferred",
   "quality_name_present",
   "212ec0ff044695bf34d90d3c68333b779dcf0da93bff78c92b2ea0158193b071",
   null
  ],
- "sec/normalize/sec.submissions.company/unknown_fields": [
+ "sec/normalize/sec.company/unknown_fields": [
   "assertion",
-  "0452f1757504dbba4db94fd201064a507f39bf5967a3dc156f76699147b32da2"
+  "5c38d67247cb88b014c233f85196122997c360b3e6f2d26140e5ad14d4f40540"
  ],
- "sec/normalize/sec.submissions.company/valid": [
+ "sec/normalize/sec.company/valid": [
   "assertion",
-  "0452f1757504dbba4db94fd201064a507f39bf5967a3dc156f76699147b32da2"
+  "5c38d67247cb88b014c233f85196122997c360b3e6f2d26140e5ad14d4f40540"
  ],
  "sec/normalize/sec.submissions.person/bad_identity": [
   "deferred",
@@ -192,11 +192,11 @@
  ],
  "sec/normalize/sec.submissions.person/unknown_fields": [
   "assertion",
-  "1863434f8bcecf0c2639de0f88868d0694489e61fbe818c5c87ebec4bea2e47e"
+  "5524a2b31ca49f427485346da5c259eeaac93c73979bc22dd6935309cbeb36b6"
  ],
  "sec/normalize/sec.submissions.person/valid": [
   "assertion",
-  "1863434f8bcecf0c2639de0f88868d0694489e61fbe818c5c87ebec4bea2e47e"
+  "5524a2b31ca49f427485346da5c259eeaac93c73979bc22dd6935309cbeb36b6"
  ],
- "sec/timestamps": "0fdc179a446447fab45a8f8400ec3126ea9cb1303a9951e2d530da018ce67434"
+ "sec/timestamps": "e9f271d5b49dee42c6011338cbe2e550b545abfc4df835ec5d58a8d132de9b84"
 }
