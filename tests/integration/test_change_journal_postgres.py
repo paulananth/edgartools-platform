@@ -188,12 +188,12 @@ def test_journal_cli_init_and_migrate_use_owner_and_preserve_events(databases, m
         assert conn.scalar(text("SELECT count(*) FROM journal.event")) == before
 
 
-def test_no_legacy_or_mdm_connection_fallback(monkeypatch):
+def test_the_journal_uses_only_its_own_connection(monkeypatch):
     from edgar_warehouse.change_journal.store import get_engine
 
     monkeypatch.delenv("CHANGE_JOURNAL_DATABASE_URL", raising=False)
-    monkeypatch.setenv("CHANGE_LEDGER_DATABASE_URL", "postgresql://legacy/legacy")
-    monkeypatch.setenv("MDM_DATABASE_URL", "postgresql://legacy/mdm")
+    monkeypatch.setenv("CHANGE_LEDGER_DATABASE_URL", "postgresql://other/ledger")
+    monkeypatch.setenv("MDM_DATABASE_URL", "postgresql://other/mdm")
     with pytest.raises(KeyError):
         get_engine()
 
@@ -221,7 +221,7 @@ def test_canonical_unicode_timezone_and_direct_noncanonical_rejection(databases)
         event(scope=[])
 
 
-def test_legacy_root_rejected_without_mutating_its_control_or_delivery(
+def test_a_run_submitted_without_the_journal_is_refused_and_left_unchanged(
     databases, tmp_path
 ):
     from edgar_warehouse.bookkeeping.clean.config import digest
@@ -229,7 +229,7 @@ def test_legacy_root_rejected_without_mutating_its_control_or_delivery(
 
     book, rid, _, _ = submit(databases, tmp_path, count=1)
     root, configuration, _, items = book._frozen(rid)
-    legacy = {k: v for k, v in root["submission"].items() if k != "journal"}
+    without_journal = {k: v for k, v in root["submission"].items() if k != "journal"}
     old_run = str(uuid4())
     with databases.runtime.begin() as conn:
         conn.execute(
@@ -238,8 +238,8 @@ def test_legacy_root_rejected_without_mutating_its_control_or_delivery(
             ),
             {
                 "r": old_run,
-                "s": canonical(legacy),
-                "h": digest(legacy),
+                "s": canonical(without_journal),
+                "h": digest(without_journal),
                 "w": canonical(items),
             },
         )

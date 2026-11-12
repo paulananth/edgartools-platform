@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create fresh local control stores; never import or reset legacy state.
+"""Create the local control stores (Bookkeeping, and on request Rules and the Change Journal).
 
 Run with uv run --extra mdm infra/scripts/provision-clean-bookkeeping.py.
 BOOKKEEPING_DATABASE_URL names a server login; the script opens the

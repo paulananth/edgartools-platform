@@ -30,7 +30,7 @@ class BoundaryTests(unittest.TestCase):
         offenders = [path for path in _python_sources() if "db._conn" in path.read_text(encoding="utf-8")]
         self.assertEqual(offenders, [])
 
-    def test_canonical_package_files_do_not_use_legacy_runtime_names(self) -> None:
+    def test_package_files_carry_no_stage_in_their_names(self) -> None:
         offenders = [
             path
             for path in _python_sources()

@@ -357,14 +357,14 @@ class TestTheReadPathRunsTheNamedRule:
         from edgar_warehouse.mdm.sec_company import CONTRACT
 
         by_rule = self.read(self.ROW, self.policy(active=True))
-        legacy_contract = copy.deepcopy(CONTRACT)
-        legacy_contract["adapter"].pop("classification")
-        legacy_contract["adapter"]["kind_field"] = "entity_type"
-        legacy_contract["adapter"]["kind_values"] = {"operating": "company"}
+        table_contract = copy.deepcopy(CONTRACT)
+        table_contract["adapter"].pop("classification")
+        table_contract["adapter"]["kind_field"] = "entity_type"
+        table_contract["adapter"]["kind_values"] = {"operating": "company"}
         by_table = normalize(
             self.ROW,
             source_code="sec.company.v1",
-            contract=legacy_contract,
+            contract=table_contract,
             publication={
                 "publication_key": "p",
                 "revision": 0,

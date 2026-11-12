@@ -77,7 +77,7 @@ def test_failed_restore_keeps_the_previous_baseline(tmp_path, monkeypatch):
     assert (tmp_path / "baseline").read_text() == "previous snapshot\n"
 
 
-def test_new_environments_default_to_five_and_legacy_backups_keep_silver(tmp_path):
+def test_new_environments_default_to_five_and_an_unlisted_selection_keeps_silver(tmp_path):
     stores = local.LocalStores(tmp_path, tmp_path)
     identity = stores.identity("one", create=True)
     assert set(stores.stores("one")) == {"mdm", "rdm", "rules", "bookkeeping", "change_journal"}

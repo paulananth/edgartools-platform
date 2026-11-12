@@ -41,7 +41,7 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False) -> dict:
             raise Blocked("Refusing to adopt an untracked silver schema")
         checksums = json.loads(saved) if saved else {}
         if checksums and "schema.sql" not in checksums:
-            raise Blocked("This silver store has an earlier schema; rebuild the store")
+            raise Blocked("This silver store does not hold this build's schema; rebuild the store")
         if set(checksums) - {p.name for p in paths}:
             raise Blocked("Installed silver migration is absent from this build")
         for path in paths:

@@ -17,7 +17,7 @@ def configured_root(tmp_path):
     shutil.copytree(files.ROOT, tmp_path, dirs_exist_ok=True)
     body = copy.deepcopy(catalog.CATALOG)
     body["kinds"].append("invented-kind")
-    body["legacy_pair_comparison"] = "invented-comparison"
+    body["default_pair_comparison"] = "invented-comparison"
     body["pair_comparisons"]["invented-comparison"] = {
         "name_field": "invented_name",
         "identifier_namespace": "invented_reference",
@@ -102,9 +102,9 @@ def test_configured_record_shape_reaches_normal_comparison(configured_root, scen
     assert result.returncode == 0, result.stderr
 
 
-def test_rule_selects_another_profile_without_changing_the_legacy_default(configured_root):
+def test_rule_selects_another_profile_without_changing_the_default(configured_root):
     body = files.load(configured_root / catalog.RELATIVE)
-    body["legacy_pair_comparison"] = "existing-name-binding"
+    body["default_pair_comparison"] = "existing-name-binding"
     (configured_root / catalog.RELATIVE).write_text(files.dumps(body))
     program = PROGRAM + '''
 def compare(primitive, args):

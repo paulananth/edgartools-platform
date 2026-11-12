@@ -288,7 +288,7 @@ def test_an_agent_reads_a_table_spec_through_context(stores):
         TableContext(runtime).answer(entity_context.args("silver", "nope"))
 
 
-def test_legacy_interval_text_transport_is_preserved(stores):
+def test_interval_text_transport_is_preserved(stores):
     from datetime import timedelta
     owner, runtime, _, _ = stores
     config = a_spec(links=[], columns=[{"name": "visit_id", "type": "BIGINT", "nullable": False},

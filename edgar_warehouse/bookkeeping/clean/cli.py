@@ -127,7 +127,7 @@ def _handle(args):
 
 
 def register(subparsers):
-    parser = subparsers.add_parser("bookkeeping", help="Fresh configured control; never imports legacy checkpoints")
+    parser = subparsers.add_parser("bookkeeping", help="Runs, work units, leases and checkpoints")
     commands = parser.add_subparsers(dest="bookkeeping_command", required=True)
     for name in ("init", "migrate", "init-guard"):
         command = commands.add_parser(name)

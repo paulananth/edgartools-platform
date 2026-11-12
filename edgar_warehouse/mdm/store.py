@@ -83,14 +83,13 @@ def _migrate(
     """Explicit isolated migration with checksum validation.
 
     Role provisioning stays outside this function; deployments provide the
-    restricted login role. A database that still holds the retired `mdm_v2`
-    schema is refused: it is recreated, not upgraded in place.
+    restricted login role.
     """
     if type(prepared) is not bool:
         raise ValueError("prepared must be a boolean")
     if not prepared:
         raise Conflict(
-            "Legacy MDM runtime installation is retired; use governed storage"
+            "MDM installs governed storage only"
         )
     if engine.dialect.name == "mysql":
         from . import catalog
@@ -120,12 +119,7 @@ def _migrate(
         if conn.scalar(text("SELECT to_regclass('mdm.batch')")) and conn.scalar(
             text("SELECT EXISTS(SELECT 1 FROM mdm.batch)")
         ):
-            raise Conflict("Populated native MDM requires a qualified data migration; use a fresh prepared store")
-        if conn.scalar(text("SELECT to_regnamespace('mdm_v2')")):
-            raise Conflict(
-                "This database holds the retired mdm_v2 schema. Recreate the "
-                "database and migrate it from empty; it is not upgraded in place."
-            )
+            raise Conflict("This store holds batches outside governed storage; use an empty store")
         if conn.scalar(text("SELECT current_user")) == application_role:
             raise ValueError("Migration owner and runtime role must differ")
         role = rows(
@@ -144,12 +138,12 @@ def _migrate(
                 {"name": path.name},
             )
             if saved is None:
-                raise Conflict("This MDM store has an earlier schema; rebuild the store")
+                raise Conflict("This MDM store does not hold this build's schema; rebuild the store")
             if saved != checksum:
                 raise Conflict("Installed migration checksum differs")
         else:
             if conn.scalar(text("SELECT to_regnamespace('mdm')")):
-                raise Conflict("This MDM store has an earlier schema; rebuild the store")
+                raise Conflict("This MDM store does not hold this build's schema; rebuild the store")
             # Execute the real SQL file, including PL/pgSQL bodies, atomically.
             conn.exec_driver_sql(source.replace("%", "%%"))
             conn.execute(
@@ -343,9 +337,8 @@ def register_dataset(
     adapter = body.get("adapter", {})
     if {"fields", "matching", "field_shape"} & set(adapter):
         # The reading is the contract's one statement of a record's fields and
-        # matching values (Issue 20 L7: the hand-written mapping is gone); a
-        # contract without one is refused when it maps a record.
-        raise ValueError("adapter.fields, adapter.matching and adapter.field_shape are retired; "
+        # matching values; a contract without one is refused when it maps a record.
+        raise ValueError("adapter.fields, adapter.matching and adapter.field_shape are no contract keys; "
                          "the contract's reading states them")
     if adapter.get("classification") and ("kind" in adapter or "kind_field" in adapter):
         # One writer of the kind: the contract states it when every record is

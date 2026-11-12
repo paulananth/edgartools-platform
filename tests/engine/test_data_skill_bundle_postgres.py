@@ -209,7 +209,7 @@ folder = Path(tempfile.mkdtemp(dir=".")) / "rules"
 shutil.copytree(files.ROOT, folder)
 body = copy.deepcopy(catalog.CATALOG)
 body["kinds"].append("bundle-invented-kind")
-profile = copy.deepcopy(body["pair_comparisons"][body["legacy_pair_comparison"]])
+profile = copy.deepcopy(body["pair_comparisons"][body["default_pair_comparison"]])
 profile.update(eligibility_kind="bundle-invented-kind", eligibility_categories=["INVENTED"],
                name_field="invented_name", status_field="invented_status",
                registration_status_field="invented_registration",

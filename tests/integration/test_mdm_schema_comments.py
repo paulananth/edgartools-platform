@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import text
 
-from edgar_warehouse.mdm.store import Conflict, migrate
+from edgar_warehouse.mdm.store import migrate
 
 
 def _uncommented(conn) -> list[str]:
@@ -42,18 +42,10 @@ def test_every_table_view_column_and_function_has_a_comment(database):
         assert kinds == conn.scalar(text("SELECT count(*) FROM mdm.master_kind"))
 
 
-def test_legacy_schema_is_absent_and_governed_storage_is_installed(database):
+def test_only_governed_storage_is_installed(database):
     with database.admin.connect() as conn:
-        assert conn.scalar(text("SELECT to_regnamespace('mdm_v2')")) is None
         from edgar_warehouse.mdm.prepared_registry import require_installed
         assert require_installed(conn).protocol == 7
-
-
-def test_a_store_with_the_retired_mdm_v2_schema_is_refused(database):
-    with database.admin.begin() as conn:
-        conn.execute(text("CREATE SCHEMA mdm_v2"))
-    with pytest.raises(Conflict, match="retired mdm_v2 schema"):
-        migrate(database.admin, application_role="clean_application")
 
 
 def test_migrating_a_store_that_holds_data_changes_nothing(database):

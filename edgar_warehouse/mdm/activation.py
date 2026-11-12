@@ -379,7 +379,7 @@ def check_name_binding_rule(kind: str, rule: dict, kinds: dict) -> None:
     It never creates a Company, so its `on_no_match` is `wait`.
     """
     rule_id = rule.get("rule_id")
-    profile = rule.get("pair_comparison", CATALOG["legacy_pair_comparison"])
+    profile = rule.get("pair_comparison", CATALOG["default_pair_comparison"])
     if not isinstance(profile, str) or profile not in CATALOG["pair_comparisons"]:
         raise Conflict(f"Name binding rule {rule_id} names an unknown pair comparison profile")
     if CATALOG["pair_comparisons"][profile]["eligibility_kind"] != kind:

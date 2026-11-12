@@ -27,7 +27,7 @@ def legal_form_key(name: Any) -> str:
 
 
 def sec_legal_form_key(name: Any) -> str:
-    """Legacy facade for names carrying a trailing place tag."""
+    """The name key for a name that carries a trailing place tag."""
     return compare_matching_values({"action": "prepare_name", "value": name, "remove_tag": True})
 
 
@@ -50,7 +50,7 @@ def load_reference_tables(declarations: dict) -> dict[str, dict[str, str]]:
 
 REFERENCE_TABLES = load_reference_tables(CATALOG["reference_tables"])
 # Compatibility exports retain the existing caller surface.
-_EDGAR_ISO = REFERENCE_TABLES[CATALOG["legacy_jurisdiction_table"]]
+_EDGAR_ISO = REFERENCE_TABLES[CATALOG["default_jurisdiction_table"]]
 _US_TERRITORIES = frozenset({"PR", "GU", "VI", "MP", "AS"})
 
 

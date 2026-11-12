@@ -553,7 +553,7 @@ def register(subparsers):
                          help="plan: preview; publish: reconcile; check: read back; status: publish a Bookkeeping run status")
     catalog.add_argument("--root", default=str(files.ROOT))
     catalog.add_argument("--results", type=Path,
-                         help="publish, check: legacy silver quality results JSON file")
+                         help="publish, check: silver quality results JSON file of a direct silver run")
     catalog.add_argument("--bookkeeping-run",
                          help="publish/check: verified quality receipts; status: update the target Pipeline from this run")
     catalog.add_argument("--draft-terms", action="store_true",

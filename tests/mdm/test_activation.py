@@ -177,7 +177,7 @@ class TestAListedVerdictIsOn:
         with pytest.raises(Conflict, match="twice"):
             check_policy(policy(automatic=[entry(), entry()]))
 
-    def test_a_legacy_string_entry_is_refused(self):
+    def test_a_bare_string_entry_is_refused(self):
         with pytest.raises(Conflict, match="entry"):
             check_policy(policy(automatic=["exact"]))
 
