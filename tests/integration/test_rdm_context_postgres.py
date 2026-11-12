@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import shutil
 from datetime import date, timedelta
 
 import pytest
@@ -22,7 +21,6 @@ from edgar_warehouse import context
 from edgar_warehouse.context import LIMIT_BYTES, ContextError
 from edgar_warehouse.control_contract import Blocked
 from edgar_warehouse.rdm import database
-from edgar_warehouse.rdm import store as store_module
 from edgar_warehouse.rdm.context import CodeContext
 from edgar_warehouse.rdm.store import RDM
 from tests.integration.test_rdm_postgres import OPERATOR, _import, server
@@ -46,23 +44,13 @@ def _now(engine):
 
 @pytest.fixture(scope="module")
 def published(tmp_path_factory):
-    """RDM at migration 001 holding published versions, then upgraded in place.
-    It is filled as the store was before 004: codes without a typed value, read
-    by the columns the code table had then."""
+    """RDM holding published versions."""
     out = tmp_path_factory.mktemp("published")
-    first_only = tmp_path_factory.mktemp("migrations")
-    shutil.copy(database.MIGRATIONS / "001_rdm.sql", first_only)
     with server() as engine:
         owner, runtime = engine("rdm"), engine("rdm", "rdm_runtime")
         store = RDM(runtime)
-        held, database.MIGRATIONS = database.MIGRATIONS, first_only
-        try:
-            assert list(database.migrate(owner, runtime_role="rdm_runtime")) == ["001_rdm.sql"]
-        finally:
-            database.MIGRATIONS = held
-        with pytest.MonkeyPatch.context() as patch:
-            patch.setattr(store_module, "CODE_COLUMNS",
-                          tuple(c for c in store_module.CODE_COLUMNS if c not in ("value", "unit", "properties")))
+        assert list(database.migrate(owner, runtime_role="rdm_runtime")) == ["schema.sql"]
+        if True:
             _import(store)
             store.approve("sec-place-codes", "1", **OPERATOR)
             first = store.publish("sec-place-codes", "1", out=out)
@@ -91,9 +79,7 @@ def published(tmp_path_factory):
             store.publish("test-retired", "1", out=out)
             before_retiring = _now(runtime)
             store.retire("test-retired", "1")
-        upgraded = database.migrate(owner, runtime_role="rdm_runtime", existing_only=True)
-        assert list(upgraded) == ["001_rdm.sql", "002_code_context.sql", "003_content_lock.sql", "004_code_value.sql",
-                                 "005_code_properties.sql"]
+        assert list(database.migrate(owner, runtime_role="rdm_runtime", existing_only=True)) == ["schema.sql"]
         yield runtime, first, between, before_retiring
 
 

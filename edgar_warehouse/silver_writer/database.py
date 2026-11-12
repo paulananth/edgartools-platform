@@ -19,14 +19,15 @@ LOCK = 730706  # the advisory lock that serialises migrating and registering
 
 
 def migrate(engine, *, runtime_role: str, existing_only: bool = False) -> dict:
-    """Apply the numbered migrations not yet installed, then let the runtime role
+    """Create the schema, or apply the numbered changes not yet installed, then let the runtime role
     read the registry and nothing else; each registered table grants its own rows."""
     if engine.dialect.name == "mysql":
         from .mysql import migrate as selected_migrate
         return selected_migrate(engine, runtime_role=runtime_role, existing_only=existing_only)
     if engine.dialect.name != "postgresql":
         raise Blocked("Silver currently supports PostgreSQL and MySQL; other engines are deferred")
-    paths = sorted(MIGRATIONS.glob("[0-9]*.sql"))
+    # The current schema, then any numbered change made after it.
+    paths = [MIGRATIONS / "schema.sql", *sorted(MIGRATIONS.glob("[0-9]*.sql"))]
     with engine.begin() as conn:
         if int(conn.scalar(text("SHOW server_version_num"))) // 10000 != 16:
             raise Blocked("Silver migration requires PostgreSQL 16")
@@ -39,6 +40,8 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False) -> dict:
         if exists and not saved:
             raise Blocked("Refusing to adopt an untracked silver schema")
         checksums = json.loads(saved) if saved else {}
+        if checksums and "schema.sql" not in checksums:
+            raise Blocked("This silver store has an earlier schema; rebuild the store")
         if set(checksums) - {p.name for p in paths}:
             raise Blocked("Installed silver migration is absent from this build")
         for path in paths:

@@ -7,7 +7,7 @@ from sqlalchemy import text
 
 from .store import Conflict
 
-MIGRATION = "029_registration_authority.sql"
+MIGRATION = "registration_authority.sql"
 SIGNATURE = "public.mdm_store_register_pin(text,text)"
 
 

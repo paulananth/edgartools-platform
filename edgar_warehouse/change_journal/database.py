@@ -22,7 +22,9 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False, database_
     from .storage_sql import statements
     additions = statements("postgresql")
     addition_checksum = hashlib.sha256("\n".join(additions).encode()).hexdigest()
-    paths = sorted((Path(__file__).parent / "migrations").glob("[0-9]*.sql"))
+    # The current schema, then any numbered change made after it.
+    folder = Path(__file__).parent / "migrations"
+    paths = [folder / "schema.sql", *sorted(folder.glob("[0-9]*.sql"))]
     quote = engine.dialect.identifier_preparer.quote
     with engine.begin() as conn:
         if (
@@ -73,6 +75,8 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False, database_
         ):
             raise Blocked("Journal database must not contain legacy or business tables")
         checksums = json.loads(saved) if saved else {}
+        if checksums and "schema.sql" not in checksums:
+            raise Blocked("This Change Journal store has an earlier schema; rebuild the store")
         if set(checksums) - ({p.name for p in paths} | {"003_native_storage"}):
             raise Blocked("Installed journal migration is absent from this build")
         for path in paths:
@@ -82,7 +86,7 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False, database_
                 if checksums[path.name] != checksum:
                     raise Blocked("Installed journal migration checksum differs")
             else:
-                conn.execute(text(source))
+                conn.exec_driver_sql(source.replace("%", "%%"))
                 checksums[path.name] = checksum
         if "003_native_storage" in checksums and checksums["003_native_storage"] != addition_checksum:
             raise Blocked("Installed journal migration checksum differs")

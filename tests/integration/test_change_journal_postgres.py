@@ -125,7 +125,7 @@ def test_migration_drift_wrong_database_and_runtime_owner_rejected(databases):
                 "SELECT obj_description(oid,'pg_namespace') FROM pg_namespace WHERE nspname='journal'"
             )
         )
-        conn.exec_driver_sql('COMMENT ON SCHEMA journal IS \'{"001_event.sql":"bad"}\'')
+        conn.exec_driver_sql('COMMENT ON SCHEMA journal IS \'{"schema.sql":"bad"}\'')
     try:
         with pytest.raises(Blocked):
             migrate(databases.ledger_admin, runtime_role="ledger_runtime")
@@ -181,9 +181,9 @@ def test_journal_cli_init_and_migrate_use_owner_and_preserve_events(databases, m
         databases.ledger_admin.url.render_as_string(hide_password=False),
     )
     assert main(["change-journal", "init", "--runtime-role", "ledger_runtime"]) == 0
-    assert "001_event.sql" in capsys.readouterr().out
+    assert "schema.sql" in capsys.readouterr().out
     assert main(["change-journal", "migrate", "--runtime-role", "ledger_runtime"]) == 0
-    assert "001_event.sql" in capsys.readouterr().out
+    assert "schema.sql" in capsys.readouterr().out
     with databases.ledger_admin.connect() as conn:
         assert conn.scalar(text("SELECT count(*) FROM journal.event")) == before
 

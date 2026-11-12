@@ -245,10 +245,10 @@ until the load ends.
 
 ## Migrations
 
-- A schema change is a new migration file, added at the end of the
-  registered list. Never edit an applied one.
-  `store.MIGRATIONS` is that list: a file left out of it is never applied
-  (one migration was), and
+- `migrations/schema.sql` is the schema `mdm migrate` creates in an empty
+  database. A schema change after go-live is a new numbered file beside it,
+  added at the end of `store.MIGRATIONS`; never edit an applied file. A file
+  left out of that list is never applied, and
   `tests/unit/test_every_mdm_migration_is_applied.py` fails for it.
 - A registered name is an identity. A rule version keeps its steps, so a matching
   function's id cannot be renamed under it; a Dataset Contract keeps its
@@ -442,10 +442,8 @@ These name this repo's code and the failures each rule came from.
   input cut is `edgar_warehouse/mdm/limits.py` (1,000 records and
   1 MiB a batch); the migrations are registered in
   `edgar_warehouse/mdm/store.py` (`MIGRATIONS`).
-- **Tests that hold the rules:**
-  `tests/architecture/test_mdm_routine_retirement.py` (retired calculation
-  callers stay absent) and `tests/mdm/test_limits.py` (input batching keeps an
-  oversized record).
+- **Tests that hold the rules:** `tests/mdm/test_limits.py` (input batching
+  keeps an oversized record).
 - **No size refusal**: a closure cap and a
   request cap, chosen for a local machine, stopped the ownership
   Proving Run, whose insider network was one connected group.
