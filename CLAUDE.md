@@ -56,10 +56,9 @@ never copies a rule, since copies drift (ticket 63, 2026-11-03; ticket 213).
   disrupts yours. If your branch changed under you, check `git branch
   --show-current`, `git reflog` and that your commits resolve before recovering;
   push your branch as soon as it is good.
-- Before editing, run `git status --short` and `git log -1`, and read
-  `.planning/active-workstream` when present.
-- Never edit another runtime's open PR, worktree or `.planning/workstreams/`
-  directory, and never stage or revert its changes; build on it once it merges.
+- Before editing, run `git status --short` and `git log -1`.
+- Never edit another runtime's open PR or worktree, and never stage or revert
+  its changes; build on it once it merges.
 - Work only in this repository. Never commit, push or open a PR in another
   repository, even for a task that spans repositories.
 

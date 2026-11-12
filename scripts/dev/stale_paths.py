@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-TOP = {p.name for p in ROOT.iterdir() if not p.name.startswith(".")} | {".scratch", ".planning", ".github"}
+TOP = {p.name for p in ROOT.iterdir() if not p.name.startswith(".")} | {".scratch", ".github"}
 TOKEN = re.compile(r"(?<![\w/.~-])((?:\.?[A-Za-z0-9_-]+/)+[A-Za-z0-9_.*<>{}-]*)")
 
 

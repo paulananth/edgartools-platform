@@ -465,6 +465,3 @@ These name this repo's code and the failures each rule came from.
   FIGI, inside the first bundle. The other seven bundles were the same join,
   hours of over-processing. Stop after the bundle that holds the new
   case. The quarter's totals stay unchecked until switch-on.
-- **The full installed proof** for the Company population:
-  `.planning/workstreams/whole-source-census/installed_proof.py` (its
-  docstring has the command).
