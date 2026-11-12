@@ -21,7 +21,7 @@ def test_ordered_pins_authenticate_reads_and_refuse_substitution_before_output(t
     store=Artifacts()
     work,manifest,refs=task(tmp_path,store,version)
     receipt=source_read.execute(work,store)
-    assert source_read.verify({**work,'candidate':receipt},store)==({'source.output':True},[])
+    assert source_read.check({**work,'candidate':receipt},store)==({'source.output':True},[])
     assert [a['tables']['rows'][0]['n'] for a in store.json(receipt)['artifacts']]==[1,2]
     bad=deepcopy(manifest)
     bad['artifacts'].reverse()
@@ -30,7 +30,7 @@ def test_ordered_pins_authenticate_reads_and_refuse_substitution_before_output(t
         source_read.execute(changed,store)
     assert not (tmp_path/'rejected.json').exists()
     with pytest.raises(ValueError,match='approved artifact hash'):
-        source_read.verify({**changed,'output':work['output'],'candidate':receipt},store)
+        source_read.check({**changed,'output':work['output'],'candidate':receipt},store)
     assert store.json(receipt)['artifacts'][0]['input']==refs[0]
 
 

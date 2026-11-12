@@ -53,8 +53,8 @@ store's URL, or a guessed database name.
 | Silver | `SILVER_DATABASE_URL` | `SILVER_MIGRATION_DATABASE_URL` |
 
 The selected stores folder is authoritative: use its `worker.env` for work,
-`verifier.env` for independent verification, `connection.env` for owner or
-migration duties, and `governance.env` for activation. Source the appropriate
+`connection.env` for owner or migration duties, and `governance.env` for
+registering rules in MDM. Source the appropriate
 trusted file in a command-scoped subshell with `set -a` and disable tracing.
 `load --stores` takes this folder and selects duties itself, not a single
 `.env` file. `infra/scripts/local-test-stores.py` creates local role files.
@@ -74,12 +74,9 @@ access.
 Rules commands use the restricted `rules_agent` login; activation uses the
 Rules governance login plus the MDM governance connection. Silver landing
 uses its runtime connection and the MDM runtime connection to resolve master
-IDs. Bookkeeping work and verification must use different authenticated
-logins; each profile grants worker duty to `bookkeeping_runtime` and
-verifier duty to `bookkeeping_verifier`, never both duties to one login.
-For a hosted store, both are members of `bookkeeping_control`, the group
-role passed to Bookkeeping initialization/migration. MDM verification uses
-`mdm_verifier` with schema usage and read access to prepared/mastering tables.
+IDs. Each profile grants its worker duty to `bookkeeping_runtime`.
+For a hosted store, it is a member of `bookkeeping_control`, the group
+role passed to Bookkeeping initialization/migration.
 The application guard uses runtime role `mdm_runtime`.
 
 When provisioning these files, use `umask 077`, retain TLS settings

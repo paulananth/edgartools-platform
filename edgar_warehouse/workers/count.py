@@ -13,7 +13,7 @@ def execute(envelope: dict, artifacts) -> dict:
     return artifacts.put_bytes(envelope["output"], json.dumps({"lines": lines}, sort_keys=True).encode())
 
 
-def verify(envelope: dict, artifacts) -> tuple[dict, list]:
+def check(envelope: dict, artifacts) -> tuple[dict, list]:
     expected = {"lines": _count(artifacts.verified(envelope["input"]))}
     found = json.loads(artifacts.verified(envelope["candidate"]))
     if found != expected:

@@ -26,30 +26,28 @@ Bookkeeping root run.
 
 The interface is the task protocol (mastering to-do 20a). `Bookkeeping.start`
 freezes a run; workers in their own processes `claim` task envelopes for a
-worker profile, `renew` them while they work, and `report` a candidate; a
-separate verifier lists `verifications` and has its report admitted with
-`admit`. `resume`, `status`, `deliver` and `finalize` complete the set. A step's
-`operation` names its worker profile. Control holds no executor, reconciler,
-verifier or check callback, and no branch on a source or operation name.
+worker profile, `renew` them while they work, check their own result and
+`report` it, which completes the unit. `resume`, `status`, `deliver` and
+`finalize` complete the set. A step's `operation` names its worker profile.
+Control holds no executor, reconciler or check callback, and no branch on a
+source or operation name.
 
 - **Envelope:** run, step, key, attempt and lease proof; the frozen Rules
   reference; the resolved input; the intended output; the step's domain checks;
   and an **effect key**, the digest of the Rules reference, step, key and frozen
   unit, which stays the same across retries of the same work.
-- **Report:** a worker's candidate (URI and hash) moves the unit to `reported`.
-  The first report of a profile in a run pins that profile's runtime digest
-  (`pipeline_run.runtimes`); a different runtime later is refused.
-- **Admission:** the verifier's report must name exactly this run, step, key,
-  attempt, effect key and candidate, and report every domain check the step
-  names, all true. Control itself checks `input.hash` and `output.receipt`
-  (the bytes it can read) and the run checks `manifest.hash`, `work.accounting`
-  and `journal.delivered`. A database trigger refuses any completion that is
-  not the reported candidate, whichever finish function commits it.
-- **Issuers (20b):** each profile has a worker role (`bk_worker_<profile>`) and a
-  verifier role (`bk_verifier_<profile>`), granted with `bookkeeping
-  grant-profile`. Only the worker role reports; only the verifier role verifies
-  and completes, and never the login that reported. The verifier names its
-  runtime in its report, pinned for the run like the worker's.
+- **Report:** a worker's output (URI and hash) with its check report, which
+  must name exactly this run, step, key, attempt, effect key and output, and
+  report every domain check the step names, all true. Control itself checks
+  `input.hash` and `output.receipt` (the bytes it can read) and the run checks
+  `manifest.hash`, `work.accounting` and `journal.delivered`. An accepted
+  report moves the unit from `running` to `verified`. The first of a profile
+  in a run pins that profile's runtime digest (`pipeline_run.runtimes`); a
+  different runtime later is refused.
+- **Issuers:** each profile has a worker role (`bk_worker_<profile>`), granted
+  with `bookkeeping grant-profile`. Only a login of that role claims, renews
+  and completes the profile's units; a database trigger refuses any other
+  completion, whichever finish function commits it.
 - **Package:** `packages/bookkeeping` builds the control alone
   (`edgartools-bookkeeping`, with the `edgartools-change-journal` wheel).
 - **Events:** control emits only `work.verified`. Domain events go through the
@@ -291,10 +289,8 @@ block submission before a root is created. Empty stages require explicit
 Stage barriers retain their configured order: every prerequisite's unit must
 complete before a dependent step can claim work. The stored unit and input
 manifest keep the immutable selector. Workers resolve it to the retained
-receipt's output URI/hash only after rechecking the prerequisite's evidence,
-operation verifier, required checks, and the output bytes. The same checks
-follow the complete input chain during resume. Missing or corrupt evidence
-blocks execution rather than discovering scope or repeating committed work.
+receipt's output URI/hash after checking the output bytes against that hash.
+A missing receipt or corrupt output blocks execution rather than discovering scope or repeating committed work.
 Capabilities still receive an ordinary input reference, so their existing
 versions and business idempotency keys are unchanged. Separate publication
 intent worklists can follow a merged batch without treating its commit receipt
@@ -305,7 +301,7 @@ MDM work is done by a worker profile, never by control. `mastering.merge`
 takes one MDM input manifest (contract version 2; a batch's records file sits
 beside it) and merges it one file at a time under one database lock; a retry
 skips a file already committed. Its receipt names each file and its record
-count, and its verifier reads the same rows with its own login and reports
+count, and its own check reads the same rows back and reports
 `mdm.committed`. MDM publishes nothing: a reader pulls the masters changed
 after its own checkpoint.
 

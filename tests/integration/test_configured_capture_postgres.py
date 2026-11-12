@@ -2,7 +2,7 @@
 
 Fixtures are approved fixture Rules, never production SEC acquisition proof.
 Worker renewal invokes public control commands with its restricted login;
-independent readback/admission uses a separate verifier login.
+the worker reads its own durable evidence back before it reports.
 """
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.rules import frozen
@@ -27,11 +27,11 @@ from tests.integration.test_configured_bookkeeping_postgres import databases, ex
 
 @pytest.fixture
 def setup(databases, tmp_path, monkeypatch, request):
-    grant_profile(databases.admin, profile=capture.PRODUCER, worker='bk_runtime', verifier='bk_verifier')
+    grant_profile(databases.admin, profile=capture.PRODUCER, worker='bk_runtime')
     monkeypatch.setenv('BOOKKEEPING_DATABASE_URL', databases.runtime.url.render_as_string(hide_password=False))
     monkeypatch.setenv('CHANGE_JOURNAL_DATABASE_URL', databases.ledger.engine.url.render_as_string(hide_password=False))
     monkeypatch.setenv('EDGAR_IDENTITY', 'Offline fixture test@example.com')
-    book, verifier = Bookkeeping(databases.runtime), Bookkeeping(databases.verifier)
+    book = Bookkeeping(databases.runtime)
     body = config(resource='output:{destination}')
     target = body['bookkeeping']['targets'].pop('silver')
     body['bookkeeping']['targets']['capture'] = target
@@ -79,22 +79,15 @@ def setup(databases, tmp_path, monkeypatch, request):
         return envelope
 
     def finish(envelope, candidate):
-        book.report(envelope, candidate, runtime(capture))
-        from sqlalchemy.exc import DBAPIError
-        with pytest.raises(DBAPIError):
-            book.verifications(envelope['claim']['run_id'], capture.PRODUCER, limit=1)
-        verification, = verifier.verifications(envelope['claim']['run_id'], capture.PRODUCER, limit=1)
-        monkeypatch.setenv('BOOKKEEPING_DATABASE_URL', databases.verifier.url.render_as_string(hide_password=False))
-        try:
-            renewed = control.renew(verification)
-            checks, proofs = capture.verify(renewed, book.artifacts)
-            report = book.artifacts.put(tmp_path.as_uri() + '/reports', control.report_document(renewed, checks, proofs, runtime(capture)))
-            control.admit(renewed, report)
-        finally:
-            monkeypatch.setenv('BOOKKEEPING_DATABASE_URL', databases.runtime.url.render_as_string(hide_password=False))
+        candidate = {'uri': candidate['uri'], 'sha256': candidate['sha256']}
+        renewed = control.renew(envelope)
+        checked = {**renewed, 'candidate': candidate}
+        checks, proofs = capture.check(checked, book.artifacts)
+        report = book.artifacts.put(tmp_path.as_uri() + '/reports', control.report_document(renewed, candidate, checks, proofs, runtime(capture)))
+        control.report(renewed, candidate, report)
         book.deliver(databases.ledger, envelope['claim']['run_id'])
         assert book.finalize(envelope['claim']['run_id'])['run']['state'] == 'complete'
-        return verification
+        return checked
 
     yield book, start, finish
     # Tests deliberately leave expired/invalid attempts behind. Expire only
@@ -109,7 +102,7 @@ def http(monkeypatch, handler):
     monkeypatch.setattr(transport.httpx, 'Client', partial(real, transport=httpx.MockTransport(handler)))
 
 
-def test_capture_control_journal_order_and_restricted_verifier(setup, databases, monkeypatch):
+def test_capture_control_journal_order(setup, databases, monkeypatch):
     book, start, finish = setup
     envelope = start()
     called = []
@@ -288,16 +281,14 @@ def test_lease_loss_after_get_cannot_persist_but_retry_can_refetch(setup, databa
 
 
 @pytest.mark.parametrize('damage', ['authorization', 'outcome', 'candidate', 'snapshot'])
-def test_independent_verifier_rejects_disagreeing_durable_evidence(setup, databases, monkeypatch, damage):
+def test_the_check_rejects_disagreeing_durable_evidence(setup, databases, monkeypatch, damage):
     from edgar_warehouse.change_journal import ChangeJournal
     book, start, _ = setup
     envelope = start()
     calls = []
     http(monkeypatch, lambda request: calls.append(request) or httpx.Response(200, content=b'{"ok":true}'))
     candidate = capture.execute(envelope, book.artifacts)
-    book.report(envelope, candidate, runtime(capture))
-    verifier = Bookkeeping(databases.verifier)
-    verification, = verifier.verifications(envelope['claim']['run_id'], capture.PRODUCER, limit=1)
+    verification = {**envelope, 'candidate': {'uri': candidate['uri'], 'sha256': candidate['sha256']}}
     if damage in ('authorization', 'outcome'):
         original = ChangeJournal.get
         producer = capture.AUTHORIZATION if damage == 'authorization' else capture.OUTCOME
@@ -316,9 +307,9 @@ def test_independent_verifier_rejects_disagreeing_durable_evidence(setup, databa
         meta['feed'] = 'wrong'
         Path(receipt['snapshot']['uri'].removeprefix('file://')).write_bytes(capture._pack(meta, payload))
     with pytest.raises((ValueError, Blocked)):
-        capture.verify(verification, book.artifacts)
+        capture.check(verification, book.artifacts)
     assert len(calls) == 1
-    assert verifier.status(envelope['claim']['run_id'])['counts'] == {'reported': 1}
+    assert book.status(envelope['claim']['run_id'])['counts'] == {'running': 1}
 
 
 @pytest.mark.parametrize('damage', ['snapshot', 'orphan_candidate'])

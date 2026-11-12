@@ -99,7 +99,7 @@ def test_all_members_preserve_selected_raw_record_and_original_source_position(t
     # JSON Level 1 reads the issuer flag beside the record (ticket 97): none listed, none set.
     flag = {"nport_issuer": None} if (member, format) == ("level1", "json") else {}
     assert rows == [{"record": records(member)[1], "source_index": 2, **flag}]
-    assert source_read.verify({**envelope, "candidate": receipt}, store) == ({"source.output": True}, [])
+    assert source_read.check({**envelope, "candidate": receipt}, store) == ({"source.output": True}, [])
 
 
 def test_a_listed_issuer_is_flagged_beside_its_record(tmp_path):

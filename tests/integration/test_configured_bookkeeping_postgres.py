@@ -30,7 +30,7 @@ from edgar_warehouse.bookkeeping.clean.engine import CONTENTION, Bookkeeping
 from edgar_warehouse.rules.db import Rules, migrate as migrate_rules
 from edgar_warehouse.workers import copy
 from tests.support import pg16
-from tests.support.bookkeeping_protocol import RUNTIME, complete, drive, verification_for, verification_report
+from tests.support.bookkeeping_protocol import RUNTIME, check_report, complete, drive, finish
 
 
 PROFILES = ("artifact.copy", "jsonl.count", "fixture.transform", "fixture.gather")
@@ -40,7 +40,6 @@ PROFILES = ("artifact.copy", "jsonl.count", "fixture.transform", "fixture.gather
 class Databases:
     admin: object
     runtime: object
-    verifier: object
     rules: Rules
     ledger: ChangeJournal
     ledger_admin: object
@@ -62,12 +61,11 @@ def databases():
 
             setup = engine("postgres")
             with setup.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-                for role in ("bk_runtime", "bk_verifier", "rules_agent", "operator", "ledger_runtime", "destination_runtime", "clean_application"):
+                for role in ("bk_runtime", "mdm_reader", "rules_agent", "operator", "ledger_runtime", "destination_runtime", "clean_application"):
                     conn.exec_driver_sql(f"CREATE ROLE {role} LOGIN PASSWORD 'test' NOSUPERUSER NOCREATEDB NOCREATEROLE")
-                # Control's grants go to one group; the worker (bk_runtime) and the
-                # verifier (bk_verifier) log in separately (mastering to-do 20b).
+                # Control's grants go to one group; the worker (bk_runtime) is its member.
                 conn.exec_driver_sql("CREATE ROLE bk_control NOLOGIN")
-                conn.exec_driver_sql("GRANT bk_control TO bk_runtime, bk_verifier")
+                conn.exec_driver_sql("GRANT bk_control TO bk_runtime")
                 for db in ("bookkeeping", "rules", "change_journal", "destination"):
                     conn.exec_driver_sql(f"CREATE DATABASE {db}")
             admin = engine("bookkeeping")
@@ -81,7 +79,7 @@ def databases():
                 migrate_journal(ledger_admin, runtime_role="ledger_runtime", existing_only=True)
             migrate(admin, runtime_role="bk_control")
             for profile in PROFILES:
-                grant_profile(admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")
+                grant_profile(admin, profile=profile, worker="bk_runtime")
             migrate_rules(rules_admin, agent_role="rules_agent")
             migrate_journal(ledger_admin, runtime_role="ledger_runtime")
             migrate_guard(destination_admin, runtime_role="destination_runtime")
@@ -89,7 +87,7 @@ def databases():
                 conn.exec_driver_sql("CREATE TABLE effects(key text PRIMARY KEY, body jsonb NOT NULL)")
                 conn.exec_driver_sql("GRANT SELECT,INSERT ON effects TO destination_runtime")
             migrate_guard(destination_admin, runtime_role="clean_application")
-            yield Databases(admin, runtime, engine("bookkeeping", "bk_verifier"), Rules(engine("rules", "rules_agent")),
+            yield Databases(admin, runtime, Rules(engine("rules", "rules_agent")),
                             ChangeJournal(engine("change_journal", "ledger_runtime")), ledger_admin,
                             engine("destination", "destination_runtime"), destination_admin, engine("destination", "clean_application"))
         finally:
@@ -119,8 +117,6 @@ def fixture_feed(body, name, contracts):
 
 def submit(databases, tmp_path, count=3, *, body=None, book=None, output_root=None, cursor=None):
     book = book or Bookkeeping(databases.runtime)
-    if not hasattr(book, "verifier"):
-        book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)
     body = body or config()
     name = f"fixture-{uuid4().hex}"
     saved = frozen.of("source", name, body)
@@ -169,9 +165,9 @@ def test_bookkeeping_cli_init_and_migrate_use_owner_and_preserve_empty_control(m
             owner = create_engine(server.url("bookkeeping", driver="postgresql"))
             monkeypatch.setenv("BOOKKEEPING_DATABASE_URL", owner.url.render_as_string(hide_password=False))
             assert main(["bookkeeping", "init", "--runtime-role", "bk_control"]) == 0
-            assert "001_control.sql" in capsys.readouterr().out
+            assert "schema.sql" in capsys.readouterr().out
             assert main(["bookkeeping", "migrate", "--runtime-role", "bk_control"]) == 0
-            assert "001_control.sql" in capsys.readouterr().out
+            assert "schema.sql" in capsys.readouterr().out
             with owner.connect() as conn:
                 assert conn.scalar(text("SELECT count(*) FROM bookkeeping.pipeline_run")) == 0
                 assert conn.scalar(text("SELECT count(*) FROM bookkeeping.work_item")) == 0
@@ -281,13 +277,12 @@ def staged_submission(databases, tmp_path):
             return artifacts.put_bytes(envelope["output"], data)
 
         @classmethod
-        def verify(cls, envelope, artifacts):
+        def check(cls, envelope, artifacts):
             if artifacts.verified(envelope["candidate"]) != cls.expected(envelope, artifacts):
                 raise ValueError("Transformed output differs from verified input")
             return {name: True for name in envelope["checks"]}, []
 
     book = Bookkeeping(databases.runtime)
-    book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)
     body = config(3)
     steps = body["bookkeeping"]["targets"]["silver"]["steps"]
     for step, name, requires in zip(steps, ("z_capture", "a_transform", "b_finish"),
@@ -355,7 +350,7 @@ def test_chained_transform_reconciles_lost_ack_before_reexecution(databases, tmp
     assert {"uri": receipt["uri"], "sha256": receipt["sha256"]} == retained
 
 
-@pytest.mark.parametrize("corruption", ["output", "evidence", "missing_receipt"])
+@pytest.mark.parametrize("corruption", ["output", "missing_receipt"])
 def test_dependency_corruption_blocks_downstream_without_execution(databases, tmp_path, corruption):
     book, rid, manifest, executions = staged_submission(databases, tmp_path)
     state = drive(book, rid, databases.ledger, workers=book.workers, limit=2)
@@ -364,21 +359,10 @@ def test_dependency_corruption_blocks_downstream_without_execution(databases, tm
         with databases.admin.begin() as conn:
             conn.execute(text("UPDATE bookkeeping.work_item SET receipt=NULL WHERE run_id=CAST(:r AS uuid) AND step='z_capture' AND unit_key='raw0'"), {"r": rid})
     else:
-        uri = upstream["receipt"]["uri"] if corruption == "output" else upstream["receipt"]["evidence"]["uri"]
-        Path(uri.removeprefix("file://")).write_bytes(b"corrupt")
+        Path(upstream["receipt"]["uri"].removeprefix("file://")).write_bytes(b"corrupt")
     with pytest.raises(Blocked):
         drive(book, rid, databases.ledger, workers=book.workers)
     assert book.status(rid)["run"]["state"] == "blocked" and executions == []
-
-
-def test_resume_rechecks_full_dependency_chain_and_blocks_corrupt_intermediate(databases, tmp_path):
-    book, rid, manifest, executions = staged_submission(databases, tmp_path)
-    state = drive(book, rid, databases.ledger, workers=book.workers)
-    Path(manifest["steps"]["a_transform"][2]["output"].removeprefix("file://")).unlink()
-    with pytest.raises(Blocked):
-        book.resume(rid)
-    assert book.status(rid)["run"]["state"] == "blocked"
-    assert executions == ["parsed0", "parsed1", "parsed2"]
 
 
 def fan_in_submission(databases, tmp_path, first=None, declared=None, capture=None, pipeline=None):
@@ -404,7 +388,7 @@ def fan_in_submission(databases, tmp_path, first=None, declared=None, capture=No
             return artifacts.put_bytes(envelope["output"], cls.expected(envelope, artifacts))
 
         @classmethod
-        def verify(cls, envelope, artifacts):
+        def check(cls, envelope, artifacts):
             if artifacts.verified(envelope["candidate"]) != cls.expected(envelope, artifacts):
                 raise ValueError("Gathered output differs from its composed inputs")
             return {name: True for name in envelope["checks"]}, []
@@ -636,9 +620,7 @@ def test_control_commit_expiry_rolls_back_progress_and_outbox(databases, tmp_pat
     claim = book.claim(rid, "s0", "0")
     envelope = book.envelope(claim)
     candidate = copy.execute(envelope, book.artifacts)
-    book.report(envelope, candidate, RUNTIME)
-    report = verification_report(book, verification_for(book, rid, "s0", "0"), copy)
-    receipt = {**candidate, "evidence": report}
+    receipt = {**candidate, "evidence": check_report(book, envelope, candidate, copy)}
     checks = {"input.hash": True, "output.receipt": True}
     with pytest.raises(DBAPIError), databases.runtime.begin() as conn:
         conn.execute(text("SELECT bookkeeping.finish(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid))"),
@@ -646,7 +628,7 @@ def test_control_commit_expiry_rolls_back_progress_and_outbox(databases, tmp_pat
                       "v": canonical(receipt), "c": canonical(checks), "e": str(uuid4())})
         time.sleep(2.1)
     state = book.status(rid)
-    assert state["counts"] == {"reported": 1} and state["pending_deliveries"] == 0
+    assert state["counts"] == {"running": 1} and state["pending_deliveries"] == 0
     book.resume(rid)
     assert drive(book, rid, databases.ledger)["run"]["state"] == "complete"
 
@@ -659,24 +641,22 @@ def test_renewal_takeover_and_stale_completion(databases, tmp_path):
     assert renewed.proof[0]["expires_at"] >= old.proof[0]["expires_at"]
     stale = book.envelope(old)
     candidate = copy.execute(stale, book.artifacts)
+    stale_report = check_report(book, stale, candidate, copy)
     expire(databases, old)
     new = book.claim(rid, "s0", "0")
     assert new.attempt != old.attempt
-    with pytest.raises(DBAPIError):
-        book.report(stale, candidate, RUNTIME)
+    with pytest.raises(Blocked, match="live attempt"):
+        book.report(stale, candidate, stale_report)
     with pytest.raises(DBAPIError):
         book.wait(old, "stale")
     envelope = book.envelope(new)
-    book.report(envelope, candidate, RUNTIME)
-    book.report(envelope, candidate, RUNTIME)  # lost acknowledgement
-    verification = verification_for(book, rid, "s0", "0")
-    report = verification_report(book, verification, copy)
-    book.verifier.admit(verification, report)
-    book.verifier.admit(verification, report)  # lost acknowledgement
+    report = check_report(book, envelope, candidate, copy)
+    book.report(envelope, candidate, report)
+    book.report(envelope, candidate, report)  # lost acknowledgement
     assert book.status(rid)["counts"] == {"verified": 1}
     other = book.artifacts.put(tmp_path.as_uri() + "/other-reports", {"other": True})
     with pytest.raises(Blocked, match="changed"):
-        book.verifier.admit(verification, other)
+        book.report(envelope, candidate, other)
 
 
 def test_worker_renews_during_execution(databases, tmp_path, monkeypatch):
@@ -689,9 +669,7 @@ def test_worker_renews_during_execution(databases, tmp_path, monkeypatch):
     with runner.Renewal(envelope) as renewal:
         time.sleep(3.2)
     assert renewal.error is None and renewal.envelope["claim"]["proof"][0]["expires_at"] > initial
-    book.report(renewal.envelope, copy.execute(renewal.envelope, book.artifacts), RUNTIME)
-    verification = verification_for(book, rid, "s0", "0")
-    book.verifier.admit(verification, verification_report(book, verification, copy))
+    finish(book, renewal.envelope, copy)
     assert book.status(rid)["counts"] == {"verified": 1}
 
 
@@ -735,89 +713,67 @@ def test_journal_failure_and_recovery(databases, tmp_path):
     assert book.finalize(rid)["run"]["state"] == "complete"
 
 
-@pytest.mark.parametrize("damage", ["missing", "corrupt", "receipt"])
-def test_resume_blocks_drift_and_bad_evidence(databases, tmp_path, damage):
+@pytest.mark.parametrize("damage", ["missing", "corrupt"])
+def test_no_work_starts_on_a_changed_manifest(databases, tmp_path, damage):
     book, rid, inputs, _ = submit(databases, tmp_path, count=1)
-    if damage == "receipt":
-        _, receipt = complete(book, rid)
-        Path(receipt["evidence"]["uri"].removeprefix("file://")).write_text("{}")
+    path = Path(inputs["uri"].removeprefix("file://"))
+    if damage == "missing":
+        path.unlink()
     else:
-        path = Path(inputs["uri"].removeprefix("file://"))
-        if damage == "missing":
-            path.unlink()
-        else:
-            path.write_text("not a manifest")
+        path.write_text("not a manifest")
     with pytest.raises(Blocked):
-        book.resume(rid)
-    assert book.status(rid)["run"]["state"] == "blocked"
+        Bookkeeping(databases.runtime).tasks(rid, "artifact.copy")
 
 
 def test_a_worker_runtime_is_pinned_for_the_run(databases, tmp_path):
+    from edgar_warehouse.workers.control import report_document
     book, rid, _, _ = submit(databases, tmp_path, count=2)
     complete(book, rid, "0")
     envelope = book.envelope(book.claim(rid, "s0", "1"))
+    candidate = copy.execute(envelope, book.artifacts)
+    checks, proofs = copy.check({**envelope, "candidate": candidate}, book.artifacts)
+
+    def report(runtime):
+        return book.artifacts.put(tmp_path.as_uri() + "/reports", report_document(envelope, candidate, checks, proofs, runtime))
+
     with pytest.raises(DBAPIError, match="Pinned worker runtime changed"):
-        book.report(envelope, copy.execute(envelope, book.artifacts), "b" * 64)
-    book.report(envelope, copy.execute(envelope, book.artifacts), RUNTIME)
+        book.report(envelope, candidate, report("c" * 64))
+    with pytest.raises(DBAPIError, match="names its runtime"):
+        book.report(envelope, candidate, report("unnamed"))
+    assert book.status(rid)["run"]["runtimes"] == {"artifact.copy": RUNTIME}
+    assert book.status(rid)["counts"] == {"verified": 1, "running": 1}  # a refused report pins nothing new
+    book.report(envelope, candidate, report(RUNTIME))
 
 
-def test_admission_refuses_reports_that_name_other_work_or_skip_checks(databases, tmp_path):
+def test_a_report_that_names_other_work_or_skips_a_check_is_refused(databases, tmp_path):
     body = config(2)
     body["bookkeeping"]["targets"]["silver"]["steps"][1]["checks"].append("fixture.readback")
     book, rid, _, _ = submit(databases, tmp_path, count=1, body=body)
     complete(book, rid, "0")
     envelope = book.envelope(book.claim(rid, "s1", "0"))
-    book.report(envelope, copy.execute(envelope, book.artifacts), RUNTIME)
-    verification = verification_for(book, rid, "s1", "0")
-    assert verification["checks"] == ["fixture.readback"]
+    assert envelope["checks"] == ["fixture.readback"]
+    candidate = copy.execute(envelope, book.artifacts)
     binding = {"run_id": rid, "step": "s1", "key": "0", "attempt": envelope["claim"]["attempt"],
-               "effect_key": verification["effect_key"], "candidate": verification["candidate"]}
+               "effect_key": envelope["effect_key"], "candidate": candidate}
 
-    def admit(**changes):
-        report = {"protocol": 1, "binding": binding, "checks": {"fixture.readback": True}, "proofs": [],
-                  "runtime": RUNTIME}
-        report.update(changes)
-        return book.verifier.admit(verification, book.artifacts.put(tmp_path.as_uri() + "/forged", report))
+    def report(**changes):
+        document = {"protocol": 1, "binding": binding, "checks": {"fixture.readback": True}, "proofs": [],
+                    "runtime": RUNTIME}
+        document.update(changes)
+        return book.report(envelope, candidate, book.artifacts.put(tmp_path.as_uri() + "/forged", document))
 
     for forged in ({"binding": {**binding, "key": "1"}}, {"binding": {**binding, "attempt": str(uuid4())}},
                    {"binding": {**binding, "candidate": {"uri": "file:///other", "sha256": "0" * 64}}},
                    {"checks": {}}, {"checks": {"fixture.readback": False}},
                    {"checks": {"fixture.readback": True, "extra": True}}):
         with pytest.raises(Blocked):
-            admit(**forged)
+            report(**forged)
     with pytest.raises(Blocked, match="frozen work"):
-        book.verifier.admit({**verification, "input": {"uri": "file:///elsewhere", "sha256": "0" * 64}},
-                   book.artifacts.put(tmp_path.as_uri() + "/forged", {"protocol": 1}))
-    assert book.status(rid)["counts"] == {"verified": 1, "reported": 1}
-    admit()
+        book.report({**envelope, "input": {"uri": "file:///elsewhere", "sha256": "0" * 64}}, candidate,
+                    book.artifacts.put(tmp_path.as_uri() + "/forged", {"protocol": 1}))
+    assert book.status(rid)["counts"] == {"verified": 1, "running": 1}
+    report()
     assert book.status(rid)["counts"] == {"verified": 2}
-
-
-def test_completion_must_be_the_reported_candidate(databases, tmp_path):
-    book, rid, _, _ = submit(databases, tmp_path, count=1)
-    claim = book.claim(rid, "s0", "0")
-    candidate = copy.execute(book.envelope(claim), book.artifacts)
-    evidence = book.artifacts.put(tmp_path.as_uri() + "/evidence", {"unreported": True})
-    with pytest.raises(DBAPIError, match="reported candidate"):
-        book._call("SELECT bookkeeping.finish(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid))",
-                   r=rid, s="s0", k="0", a=claim.attempt, p=canonical(claim.proof),
-                   v=canonical({**candidate, "evidence": evidence}), c=canonical({"input.hash": True}), e=str(uuid4()))
-
-
-def test_a_lapsed_report_is_verified_not_worked_again(databases, tmp_path):
-    """A reported unit belongs to verifiers: once its lease lapses, the
-    verifier re-takes it for the same attempt; no worker claims it again."""
-    book, rid, _, _ = submit(databases, tmp_path, count=12)
-    for key in map(str, range(12)):
-        envelope = book.envelope(book.claim(rid, "s0", key))
-        book.report(envelope, copy.execute(envelope, book.artifacts), RUNTIME)
-        expire(databases, book._claim_of(envelope))
-    assert book.tasks(rid, "artifact.copy", limit=20) == []
-    found = book.verifier.verifications(rid, "artifact.copy", limit=12)
-    assert len(found) == 12 and all(v["claim"]["proof"][0]["token"] >= 2 for v in found)
-    for verification in found:
-        book.verifier.admit(verification, verification_report(book, verification, copy))
-    assert book.status(rid)["counts"] == {"verified": 12}
 
 
 def test_a_candidate_must_be_the_intended_output(databases, tmp_path):
@@ -825,7 +781,7 @@ def test_a_candidate_must_be_the_intended_output(databases, tmp_path):
     envelope = book.envelope(book.claim(rid, "s0", "0"))
     elsewhere = book.artifacts.put_bytes((tmp_path / "elsewhere").as_uri(), b"x")
     with pytest.raises(Blocked, match="intended output"):
-        book.report(envelope, elsewhere, RUNTIME)
+        book.report(envelope, elsewhere, book.artifacts.put(tmp_path.as_uri() + "/reports", {"protocol": 1}))
 
 
 def test_resource_checkpoints_span_runs_and_refuse_a_stale_comparison(databases, tmp_path):
@@ -850,131 +806,97 @@ def test_resource_checkpoints_span_runs_and_refuse_a_stale_comparison(databases,
     assert current.resource_checkpoint("feed:checkpointed")["revision"] == 2
 
 
-def test_restricted_functions_refuse_missing_fencing_or_unreported_completion(databases, tmp_path):
+def test_restricted_functions_refuse_missing_fencing(databases, tmp_path):
     book, rid, _, _ = submit(databases, tmp_path, count=1)
     claim = book.claim(rid, "s0", "0")
-    candidate = copy.execute(book.envelope(claim), book.artifacts)
+    envelope = book.envelope(claim)
+    candidate = copy.execute(envelope, book.artifacts)
+    receipt = {**candidate, "evidence": check_report(book, envelope, candidate, copy)}
     for proof in ([], [{**claim.proof[0], "token": claim.proof[0]["token"] + 1}], None):
         with pytest.raises(DBAPIError):
-            book._call("SELECT bookkeeping.report(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:c AS jsonb),:f,:t)",
+            book._call("SELECT bookkeeping.finish(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid))",
                        r=rid, s="s0", k="0", a=claim.attempt, p=None if proof is None else canonical(proof),
-                       c=canonical(candidate), f="artifact.copy", t=RUNTIME)
-    evidence = book.artifacts.put(tmp_path.as_uri() + "/evidence", {"unreported": True})
-    with pytest.raises(DBAPIError, match="reported candidate"):
-        book._call("SELECT bookkeeping.finish_resource(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid),:x,0,-1)",
-                   r=rid, s="s0", k="0", a=claim.attempt, p=canonical(claim.proof),
-                   v=canonical({**candidate, "evidence": evidence}), c=canonical({"input.hash": True}),
-                   e=str(uuid4()), x=claim.proof[0]["resource"])
+                       v=canonical(receipt), c=canonical({"input.hash": True}), e=str(uuid4()))
     with databases.runtime.connect() as conn:
-        assert not conn.scalar(text("SELECT has_function_privilege('bk_runtime','bookkeeping.verify_claim(uuid,text,text,uuid,integer)','EXECUTE') IS FALSE"))
-        assert not conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_proc WHERE proname='authorize_request')"))
+        assert not conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_proc WHERE proname IN ('authorize_request','report','verify_claim','pin_verifier'))"))
 
 
-def test_only_a_profiles_roles_report_and_verify_and_never_the_same_login(databases, tmp_path):
+def test_only_a_profiles_worker_claims_and_completes_its_units(databases, tmp_path):
     with databases.admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         conn.exec_driver_sql("CREATE ROLE bk_stranger LOGIN PASSWORD 'test'")
         conn.exec_driver_sql("GRANT bk_control TO bk_stranger")
-    with pytest.raises(Blocked, match="two different logins"):
-        grant_profile(databases.admin, profile="self.check", worker="bk_runtime", verifier="bk_runtime")
-    stranger = Bookkeeping(create_engine(databases.runtime.url.set(username="bk_stranger")))
+    stranger = Bookkeeping(create_engine(databases.runtime.url.set(username="bk_stranger")), artifacts=None)
     book, rid, _, _ = submit(databases, tmp_path, count=2)
-    for wrong in (stranger, book.verifier):  # only the worker role claims
-        with pytest.raises(DBAPIError, match="no worker role"):
-            wrong.claim(rid, "s0", "1", sleep=lambda _: None)
+    stranger.artifacts = book.artifacts
+    with pytest.raises(DBAPIError, match="no worker role"):
+        stranger.claim(rid, "s0", "1", sleep=lambda _: None)
     envelope = book.envelope(book.claim(rid, "s0", "0"))
     candidate = copy.execute(envelope, book.artifacts)
-    for wrong in (stranger, book.verifier):
-        with pytest.raises(DBAPIError, match="no worker role"):
-            wrong.report(envelope, candidate, RUNTIME)
-    with pytest.raises(DBAPIError, match="profile the run froze"):  # a worker of another profile's name
-        book._call("SELECT bookkeeping.report(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:c AS jsonb),:f,:t)",
-                   r=rid, s="s0", k="0", a=envelope["claim"]["attempt"], p=canonical(envelope["claim"]["proof"]),
-                   c=canonical(candidate), f="jsonl.count", t=RUNTIME)
-    book.report(envelope, candidate, RUNTIME)
-    for wrong in (stranger, book):
-        with pytest.raises(DBAPIError, match="no verifier role"):
-            wrong.verifications(rid, "artifact.copy")
-    # A login granted both duties still cannot verify, or complete, what it reported.
-    with databases.admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-        role = conn.scalar(text("SELECT bookkeeping.profile_role('artifact.copy','verifier')"))
-        conn.exec_driver_sql(f'GRANT "{role}" TO bk_runtime')
-    try:
-        with pytest.raises(DBAPIError, match="its own report"):
-            book.verifications(rid, "artifact.copy")
-        evidence = book.artifacts.put(tmp_path.as_uri() + "/evidence", {"self": True})
-        with pytest.raises(DBAPIError, match="other than its reporter"):
-            book._call("SELECT bookkeeping.finish(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid))",
+    report = check_report(book, envelope, candidate, copy)
+    with pytest.raises(DBAPIError, match="no worker role"):
+        stranger.report(envelope, candidate, report)
+    with pytest.raises(DBAPIError, match="worker of this profile"):  # the finish function alone, by another login
+        stranger._call("SELECT bookkeeping.finish(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid))",
                        r=rid, s="s0", k="0", a=envelope["claim"]["attempt"], p=canonical(envelope["claim"]["proof"]),
-                       v=canonical({**candidate, "evidence": evidence}), c=canonical({"input.hash": True}), e=str(uuid4()))
-    finally:
-        with databases.admin.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-            conn.exec_driver_sql(f'REVOKE "{role}" FROM bk_runtime')
-    verification = verification_for(book, rid, "s0", "0")
-    book.verifier.admit(verification, verification_report(book, verification, copy))
+                       v=canonical({**candidate, "evidence": report}), c=canonical({"input.hash": True}), e=str(uuid4()))
+    book.report(envelope, candidate, report)
     assert book.status(rid)["counts"] == {"verified": 1, "pending": 1}
     stranger.close()
 
 
-def test_a_lease_lapsing_while_the_verifier_runs_refuses_the_late_admission(databases, tmp_path):
+def test_a_lease_lapsing_before_the_report_refuses_it(databases, tmp_path):
     book, rid, _, _ = submit(databases, tmp_path, count=1)
-    envelope = book.envelope(book.claim(rid, "s0", "0"))
-    book.report(envelope, copy.execute(envelope, book.artifacts), RUNTIME)
-    late = verification_for(book, rid, "s0", "0")
-    report = verification_report(book, late, copy)
+    late = book.envelope(book.claim(rid, "s0", "0"))
+    candidate = copy.execute(late, book.artifacts)
+    report = check_report(book, late, candidate, copy)
     expire(databases, book._claim_of(late))
     with pytest.raises(DBAPIError, match="Stale lease"):
-        book.verifier.admit(late, report)
-    fresh = verification_for(book, rid, "s0", "0")
+        book.report(late, candidate, report)
+    fresh = book.envelope(book.claim(rid, "s0", "0"))
     assert fresh["claim"]["proof"][0]["token"] > late["claim"]["proof"][0]["token"]
-    with pytest.raises(DBAPIError, match="Stale lease"):  # the old lease's token stays dead
-        book.verifier.admit(late, report)
-    book.verifier.admit(fresh, verification_report(book, fresh, copy))
+    with pytest.raises(Blocked, match="live attempt"):  # the old attempt stays dead
+        book.report(late, candidate, report)
+    finish(book, fresh, copy)
     assert book.status(rid)["counts"] == {"verified": 1}
 
 
 @pytest.mark.parametrize("complete_replacement", [False, True], ids=["running", "verified"])
-def test_attempt_superseded_after_admission_precheck_is_refused_atomically(
+def test_attempt_superseded_after_the_report_precheck_is_refused_atomically(
     databases, tmp_path, complete_replacement
 ):
-    """A replacement cannot be completed or have its evidence replaced by a stale admission."""
+    """A replacement cannot be completed or have its evidence replaced by a stale report."""
     book, rid, _, _ = submit(databases, tmp_path, count=1)
-    old_envelope = book.envelope(book.claim(rid, "s0", "0"))
-    candidate = copy.execute(old_envelope, book.artifacts)
-    book.report(old_envelope, candidate, RUNTIME)
-    stale = verification_for(book, rid, "s0", "0")
-    report = verification_report(book, stale, copy)
+    stale = book.envelope(book.claim(rid, "s0", "0"))
+    candidate = copy.execute(stale, book.artifacts)
+    report = check_report(book, stale, candidate, copy)
     precheck_passed = Event()
-    resume_old_admission = Event()
-    original_artifacts = book.verifier.artifacts
+    resume_old_report = Event()
+    original_artifacts = book.artifacts
+    late = Bookkeeping(databases.runtime, artifacts=None)
 
     class PausingArtifacts:
         def __getattr__(self, name):
             return getattr(original_artifacts, name)
 
         def json(self, ref):
-            # Admission has checked the attempt before it reads this report.
+            # The report has checked the attempt before it reads this document.
             if ref == report:
                 precheck_passed.set()
-                if not resume_old_admission.wait(timeout=10):
-                    raise TimeoutError("Admission did not resume after the replacement claim")
+                if not resume_old_report.wait(timeout=10):
+                    raise TimeoutError("The report did not resume after the replacement claim")
             return original_artifacts.json(ref)
 
-    book.verifier.artifacts = PausingArtifacts()
+    late.artifacts = PausingArtifacts()
     with ThreadPoolExecutor(max_workers=1) as executor:
-        pending = executor.submit(book.verifier.admit, stale, report)
+        pending = executor.submit(late.report, stale, candidate, report)
         try:
-            assert precheck_passed.wait(timeout=10), "Admission did not reach its report read"
+            assert precheck_passed.wait(timeout=10), "The report did not reach its document read"
             expire(databases, book._claim_of(stale))
             replacement = book.claim(rid, "s0", "0")
             if complete_replacement:
-                replacement_envelope = book.envelope(replacement)
-                replacement_candidate = copy.execute(replacement_envelope, book.artifacts)
-                book.report(replacement_envelope, replacement_candidate, RUNTIME)
-                current = verification_for(book, rid, "s0", "0")
-                replacement_report = verification_report(book, current, copy)
-                book.verifier.admit(current, replacement_report)
+                replacement_receipt = finish(book, book.envelope(replacement), copy)
         finally:
-            resume_old_admission.set()
+            resume_old_report.set()
         error = "Completion evidence changed" if complete_replacement else "Stale attempt"
         with pytest.raises(DBAPIError, match=error):
             pending.result(timeout=10)
@@ -983,30 +905,11 @@ def test_attempt_superseded_after_admission_precheck_is_refused_atomically(
     assert state["items"][0]["attempt"] == replacement.attempt
     if complete_replacement:
         assert state["counts"] == {"verified": 1}
-        assert state["items"][0]["state"] == "verified"
-        assert state["items"][0]["receipt"]["evidence"] == replacement_report
+        assert state["items"][0]["receipt"] == replacement_receipt
         assert state["items"][0]["receipt"]["evidence"] != report
     else:
         assert state["counts"] == {"running": 1}
         assert state["items"][0]["state"] == "running"
-
-
-def test_a_verifier_runtime_is_pinned_for_the_run(databases, tmp_path):
-    from edgar_warehouse.workers.control import report_document
-    book, rid, _, _ = submit(databases, tmp_path, count=2)
-    complete(book, rid, "0")
-    envelope = book.envelope(book.claim(rid, "s0", "1"))
-    book.report(envelope, copy.execute(envelope, book.artifacts), RUNTIME)
-    verification = verification_for(book, rid, "s0", "1")
-    checks, proofs = copy.verify(verification, book.artifacts)
-    other = book.artifacts.put(tmp_path.as_uri() + "/reports", report_document(verification, checks, proofs, "c" * 64))
-    with pytest.raises(DBAPIError, match="Pinned verifier runtime changed"):
-        book.verifier.admit(verification, other)
-    malformed = book.artifacts.put(tmp_path.as_uri() + "/reports", report_document(verification, checks, proofs, "unnamed"))
-    with pytest.raises(DBAPIError, match="names its runtime"):
-        book.verifier.admit(verification, malformed)
-    assert book.status(rid)["run"]["runtimes"]["verify:artifact.copy"] == RUNTIME
-    assert book.status(rid)["counts"] == {"verified": 1, "reported": 1}  # a refused admission pins nothing new
 
 
 def test_zero_work_explicit_configuration_and_manifest_evidence(databases, tmp_path):
@@ -1127,18 +1030,14 @@ def test_two_workers_in_their_own_processes_complete_a_cli_submitted_run(databas
         return done.stdout
 
     reports = (tmp_path / "reports").as_uri()
-    verifier_url = databases.verifier.url.render_as_string(hide_password=False)
     for profile in ("artifact.copy", "jsonl.count"):
-        process("-m", "edgar_warehouse.workers", "work", profile, rid)
-        env["BOOKKEEPING_DATABASE_URL"], worker_url = verifier_url, env["BOOKKEEPING_DATABASE_URL"]
-        process("-m", "edgar_warehouse.workers", "verify", profile, rid, "--reports", reports)
-        env["BOOKKEEPING_DATABASE_URL"] = worker_url
+        process("-m", "edgar_warehouse.workers", "work", profile, rid, "--reports", reports)
     finished = json.loads(process("-m", "edgar_warehouse.bookkeeping", "finalize", rid))
     assert finished["run"]["state"] == "complete" and finished["counts"] == {"verified": 4}
     assert json.loads(Path(tmp_path / "count-1").read_text()) == {"lines": 1}
     runtimes = {p: json.loads(process("-m", "edgar_warehouse.workers", "describe", p))["runtime"]
                 for p in ("artifact.copy", "jsonl.count")}
-    assert book.status(rid)["run"]["runtimes"] == {**runtimes, **{f"verify:{p}": d for p, d in runtimes.items()}}
+    assert book.status(rid)["run"]["runtimes"] == runtimes
 
     # The guard is live: control refuses to start once a domain import creeps in.
     refused = subprocess.run([sys.executable, "-c", GUARD + "\nsys.argv=['edgar_warehouse/bookkeeping/__main__.py']\nimport edgar_warehouse.mdm"],
@@ -1208,11 +1107,9 @@ def test_a_claim_of_one_passes_a_unit_another_attempt_holds(databases, tmp_path)
     held = book.claim(rid, "s0", "0")
     (envelope,) = book.tasks(rid, "artifact.copy", limit=1)
     assert envelope["claim"]["key"] == "1"
-    book.report(envelope, copy.execute(envelope, book.artifacts), RUNTIME)
-    first = book.envelope(held)
-    book.report(first, copy.execute(first, book.artifacts), RUNTIME)
-    reported = book.verifier.verifications(rid, "artifact.copy", limit=1)
-    assert len(reported) == 1
+    finish(book, envelope, copy)
+    finish(book, book.envelope(held), copy)
+    assert book.status(rid)["counts"] == {"verified": 2}
 
 
 def test_a_source_with_acquisition_runs_captured_data_without_its_feed(databases, tmp_path):

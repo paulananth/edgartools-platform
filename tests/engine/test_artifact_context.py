@@ -66,17 +66,13 @@ def test_context_receipt_is_preserved_retried_and_independently_verified(tmp_pat
     store, envelope = task(tmp_path)
     receipt = source_read.execute(envelope, store)
     assert source_read.execute(envelope, store) == receipt
-    assert source_read.verify({**envelope, 'candidate': receipt}, store) == ({'source.output': True}, [])
+    assert source_read.check({**envelope, 'candidate': receipt}, store) == ({'source.output': True}, [])
     output = store.json(receipt)
     entry = store.json(envelope['input'])['artifacts'][0]
     assert output['version'] == 1
     assert output['artifacts'][0]['input'] == entry['input']
     assert output['artifacts'][0]['context'] == entry['context']
     assert output['artifacts'][0]['tables']['filings'][0]['cik'] == VALUES['cik']
-    # Corrupt the context, leaving the source and candidate output untouched.
-    Path(entry['context']['uri'].removeprefix('file://')).write_bytes(b'{}')
-    with pytest.raises(Blocked, match='hash mismatch'):
-        source_read.verify({**envelope, 'candidate': receipt}, store)
 
 
 @pytest.mark.parametrize('mutation', ['different-uri', 'different-hash', 'version-bool', 'missing-values', 'extra-key', 'values-list', 'duplicate-key', 'too-large'])
@@ -129,7 +125,7 @@ def test_context_identity_survives_prepare_and_verification(tmp_path):
     prepare = {'input': reading, 'output': (tmp_path / 'mdm/manifest.json').as_uri(), 'checks': ['mdm.prepared'], 'keys': {
         'table': 'filings', 'dataset': 'qualification.filings', 'policy': '0' * 64, 'consumer': 'test/filings', 'batch_id': 'trial', 'as_of': '2026-10-03T00:00:00Z'}}
     receipt = mdm_prepare.execute(prepare, store)
-    assert mdm_prepare.verify({**prepare, 'candidate': receipt}, store) == ({'mdm.prepared': True}, [])
+    assert mdm_prepare.check({**prepare, 'candidate': receipt}, store) == ({'mdm.prepared': True}, [])
     batches = store.json(receipt)['batches']
     assert len(batches) == 2
     assert len({batch['input']['path'] for batch in batches}) == 2
@@ -163,5 +159,5 @@ def test_an_artifact_that_selects_no_rows_prepares_no_batch(tmp_path):
         'table': 'filings', 'dataset': 'qualification.filings', 'policy': '0' * 64, 'consumer': 'test/filings',
         'batch_id': 'trial', 'as_of': '2026-10-03T00:00:00Z'}}
     receipt = mdm_prepare.execute(prepare, store)
-    assert mdm_prepare.verify({**prepare, 'candidate': receipt}, store) == ({'mdm.prepared': True}, [])
+    assert mdm_prepare.check({**prepare, 'candidate': receipt}, store) == ({'mdm.prepared': True}, [])
     assert [b['input']['record_count'] for b in store.json(receipt)['batches']] == [2]

@@ -78,7 +78,6 @@ def test_no_landing_is_claimable_before_the_merge_and_each_then_lands_its_rows(d
     assert target["steps"][-1]["name"] == "processed"
     target["steps"] = target["steps"][:-1]  # the Change Journal step has its own plan test
     book = Bookkeeping(databases.runtime)
-    book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)
     steps = book.artifacts.json(report["manifest"])["steps"]
     del steps["processed"]
     assert len(steps["read"]) == 2  # one unit a file
@@ -101,10 +100,10 @@ def test_no_landing_is_claimable_before_the_merge_and_each_then_lands_its_rows(d
         return silver_land.execute(envelope, artifacts)
 
     workers = {"source.read": source_read, "mdm.prepare": mdm_prepare,
-               "mastering.merge": SimpleNamespace(execute=merge, verify=lambda e, a: ({n: True for n in e["checks"]}, [])),
-               "silver.land": SimpleNamespace(execute=land, verify=silver_land.verify)}
+               "mastering.merge": SimpleNamespace(execute=merge, check=lambda e, a: ({n: True for n in e["checks"]}, [])),
+               "silver.land": SimpleNamespace(execute=land, check=silver_land.check)}
     for profile in workers:
-        grant_profile(databases.admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")
+        grant_profile(databases.admin, profile=profile, worker="bk_runtime")
 
     with silver_database(databases.admin) as (owner, runtime):
         silver.migrate(owner, runtime_role=RUNTIME)

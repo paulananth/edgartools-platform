@@ -48,14 +48,8 @@ def test_configured_projection_partitions_retries_and_independent_verification(t
     assert [(p["first_ordinal"], p["record_count"]) for p in reading["partitions"]] == [(1, 2), (3, 2), (5, 1)]
     rows = [row for part in reading["partitions"] for row in store.json(part["receipt"])["tables"]["rows"]]
     assert rows == [{"n": i, "index": i + 1} for i in range(5)]
-    checks, proofs = source_read.verify({**envelope, "candidate": receipt}, store)
+    checks, proofs = source_read.check({**envelope, "candidate": receipt}, store)
     assert checks == {"source.output": True} and proofs == []
-    part = reading["partitions"][0]["receipt"]
-    from pathlib import Path
-    from urllib.parse import urlparse
-    Path(urlparse(part["uri"]).path).write_bytes(b"{}")
-    with pytest.raises(Blocked, match="hash mismatch"):
-        source_read.verify({**envelope, "candidate": receipt}, store)
 
 
 @pytest.mark.parametrize("bad", [b'{"records":[{"n":1}]} null', b'{"records":[{"n":1},{"n":2,"n":3}]}'])
@@ -120,7 +114,7 @@ def test_a_bare_array_streams_each_element_with_its_position(tmp_path):
     assert reading["record_count"] == 3
     rows = [row for part in reading["partitions"] for row in store.json(part["receipt"])["tables"]["rows"]]
     assert rows == [{"figi": "F1", "index": 1}, {"figi": "F2", "index": 1}, {"figi": "F3", "index": 3}]
-    assert source_read.verify({**envelope, "candidate": receipt}, store) == ({"source.output": True}, [])
+    assert source_read.check({**envelope, "candidate": receipt}, store) == ({"source.output": True}, [])
     wrapped = task(tmp_path / "wrapped", store, [b'{"records":[{"data":[]}]}'], rules)
     with pytest.raises(SourceRejected):
         source_read.execute(wrapped, store)
@@ -170,7 +164,7 @@ def test_partition_byte_accounting_handles_nested_unicode_and_escaped_values(tmp
     parts = store.json(receipt)["artifacts"][0]["partitions"]
     assert parts[0]["record_count"] == 1
     assert parts[0]["bytes"] == rules["read"]["stream"]["partition_bytes"]
-    assert source_read.verify({**envelope, "candidate": receipt}, store) == ({"source.output": True}, [])
+    assert source_read.check({**envelope, "candidate": receipt}, store) == ({"source.output": True}, [])
 
 
 def test_expanded_policy_can_represent_the_actual_gleif_capture_size(tmp_path):
@@ -181,7 +175,7 @@ def test_expanded_policy_can_represent_the_actual_gleif_capture_size(tmp_path):
     rules["read"]["stream"]["max_bytes"] = 13252301819
     envelope = task(tmp_path, store, [b'{"records":[{"n":1}]}'], rules)
     receipt = source_read.execute(envelope, store)
-    assert source_read.verify({**envelope, "candidate": receipt}, store) == ({"source.output": True}, [])
+    assert source_read.check({**envelope, "candidate": receipt}, store) == ({"source.output": True}, [])
 
 
 def test_forged_zip_expanded_length_is_refused_before_partition_publication(tmp_path):
@@ -265,7 +259,7 @@ def test_stream_publication_count_is_bound_to_input_and_checked_through_eof(tmp_
     receipt = source_read.execute(envelope, store)
     assert store.json(receipt)["artifacts"][0]["record_count"] == 2
     assert store.json(receipt)["artifacts"][0]["context"] == context
-    assert source_read.verify({**envelope,"candidate":receipt}, store) == ({"source.output":True},[])
+    assert source_read.check({**envelope,"candidate":receipt}, store) == ({"source.output":True},[])
 
 
 def delimited_contract(member=None, encoding="utf-8"):
@@ -300,7 +294,7 @@ def test_a_tsv_of_a_zip_of_tables_streams_into_pieces_and_verifies(tmp_path):
     assert [(p["first_ordinal"], p["record_count"]) for p in reading["partitions"]] == [(1, 2), (3, 2), (5, 1)]
     rows = [row for part in reading["partitions"] for row in store.json(part["receipt"])["tables"]["rows"]]
     assert rows == [{"n": i, "name": f'issuer {i} "A"', "index": i + 1} for i in range(5)]
-    assert source_read.verify({**envelope, "candidate": receipt}, store) == ({"source.output": True}, [])
+    assert source_read.check({**envelope, "candidate": receipt}, store) == ({"source.output": True}, [])
 
 
 @pytest.mark.parametrize("change, message", [

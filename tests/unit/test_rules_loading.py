@@ -79,8 +79,7 @@ class Recorded:
     def status(self, run_id):
         return {"run": {"submission": {"rules": {"uri": f"file:///frozen/{run_id}", "sha256": "2" * 64},
                                        "rule_version": self.versions.get(run_id, CURRENT)},
-                        "runtimes": self.pinned.get(run_id, {"source.read": "this-checkout",
-                                                             "verify:source.read": "this-checkout"})}}
+                        "runtimes": self.pinned.get(run_id, {"source.read": "this-checkout"})}}
 
     def drive(self, run_id, steps):
         self.calls.append(("drive", run_id, tuple(step["name"] for step in steps)))
@@ -264,8 +263,7 @@ def test_a_target_the_source_does_not_declare_is_refused(monkeypatch):
 
 def test_an_open_run_pinned_to_other_worker_code_is_left_and_its_documents_load_anew(tmp_path, monkeypatch):
     commands = Recorded(open_runs=[("other-code-1", "example", "by_letter", "running")],
-                        pinned={"other-code-1": {"source.read": "this-checkout", "source.combine": "older-code",
-                                                 "verify:source.combine": "older-code"}})
+                        pinned={"other-code-1": {"source.read": "this-checkout", "source.combine": "older-code"}})
     folder = capture(tmp_path / "c", "letters/a.json")
 
     result = loader(tmp_path, monkeypatch, commands).load(
@@ -420,7 +418,7 @@ def test_a_target_that_lands_silver_stops_at_once_when_an_env_file_has_no_silver
     with pytest.raises(loading.RunStopped, match="lands silver .*land.* no silver login"):
         loading.Loader(source="example", target="by_letter", stores=tmp_path, workers=1, minutes=1, say=lambda line: None)
 
-    for duty in ("worker", "verifier"):
+    for duty in ("worker",):
         (tmp_path / f"{duty}.env").write_text("export BOOKKEEPING_MANIFEST_ROOT=file://%s/m\nexport SILVER_DATABASE_URL=x\n" % tmp_path)
     assert loading.Loader(source="example", target="by_letter", stores=tmp_path, workers=1, minutes=1, say=lambda line: None)
 

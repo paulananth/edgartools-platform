@@ -1,7 +1,7 @@
 """Run a target's source read and source combine steps in this process (ticket 210).
 
 These steps turn captured files into extracts and write files with receipts. They need no claim, lease,
-heartbeat or verifier, so they never reach the database: the content hash is their proof. Inputs resolve from
+heartbeat, so they never reach the database: the content hash is their proof. Inputs resolve from
 the receipts of earlier local units, through `compose_document`. A run in the database
 then opens at the first step that writes the destination, with these receipts as its inputs."""
 from __future__ import annotations

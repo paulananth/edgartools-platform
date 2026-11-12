@@ -27,7 +27,7 @@ def prepare(store, root, keys, ciks=(3, 1, 2)):
     listed = store.put(root.as_uri(), {"version": 1, "readings": [reading(store, root, cik) for cik in ciks]})
     task = {"input": listed, "output": (root / "mdm/manifest.json").as_uri(), "checks": ["mdm.prepared"], "keys": keys}
     candidate = mdm_prepare.execute(task, store)
-    assert mdm_prepare.verify({**task, "candidate": candidate}, store) == ({"mdm.prepared": True}, [])
+    assert mdm_prepare.check({**task, "candidate": candidate}, store) == ({"mdm.prepared": True}, [])
     return store.json(candidate)
 
 

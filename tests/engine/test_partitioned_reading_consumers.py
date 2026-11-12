@@ -40,7 +40,7 @@ def test_streamed_and_inline_readings_produce_identical_mdm_batches_across_parti
     for batch in store.json(streamed)["batches"]:
         name = batch["input"]["path"]
         assert (tmp_path / "streamed" / name).read_bytes() == (tmp_path / "inline" / name).read_bytes()
-    assert mdm_prepare.verify({**streamed_task, "candidate": streamed}, store) == ({mdm_prepare.CHECK: True}, [])
+    assert mdm_prepare.check({**streamed_task, "candidate": streamed}, store) == ({mdm_prepare.CHECK: True}, [])
 
 
 def test_combination_selects_partitioned_tables_in_original_source_order(tmp_path):
@@ -50,7 +50,7 @@ def test_combination_selects_partitioned_tables_in_original_source_order(tmp_pat
     receipt = source_combine.execute(work, store)
     rows = store.json(receipt)["artifacts"][0]["tables"]["rows"]
     assert rows == [{"n": i, "index": i + 1} for i in range(5)]
-    assert source_combine.verify({**work, "candidate": receipt}, store) == ({source_combine.CHECK: True}, [])
+    assert source_combine.check({**work, "candidate": receipt}, store) == ({source_combine.CHECK: True}, [])
 
 
 @pytest.mark.parametrize("mutation", ["gap", "record_count", "bytes", "tables", "bool_ordinal"])

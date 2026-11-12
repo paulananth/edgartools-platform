@@ -273,14 +273,11 @@ has its own output lease. Preparation takes the combine step's output through
 its `from` reference. Use the same submitted run ID and, in dependency order:
 
 ```bash
-edgar-warehouse workers work source.combine <run_id> --limit 100
-edgar-warehouse workers verify source.combine <run_id> --reports <uri> --limit 100
+edgar-warehouse workers work source.combine <run_id> --reports <uri> --limit 100
 ```
 
-Work uses the worker Bookkeeping login; verification uses the separate verifier
-login. Repeat bounded work/verify until every combination unit verifies, then
-continue preparation and merge. Finalize only after every declared step has
-verified. Existing Rules proof and operator approval requirements apply.
+Repeat until every combination unit is verified, then continue preparation
+and merge. Finalize only after every declared step is verified.
 
 ## Qualification boundary
 

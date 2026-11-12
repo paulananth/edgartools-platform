@@ -24,8 +24,7 @@ def test_claiming_stops_when_no_unit_is_ready():
     assert asked == [1]
 
 
-@pytest.mark.parametrize("command", ["work", "verify"])
-def test_a_failure_ends_the_call_before_another_claim(monkeypatch, command):
+def test_a_failure_ends_the_call_before_another_claim(monkeypatch):
     unit = {"claim": {"step": "main", "key": "main-0", "run_id": "r"}, "heartbeat_seconds": 60, "candidate": {}}
     claims, failed = [], []
 
@@ -36,16 +35,12 @@ def test_a_failure_ends_the_call_before_another_claim(monkeypatch, command):
         def execute(envelope, artifacts):
             raise ValueError("unreadable")
 
-        verify = execute
+        check = execute
 
     monkeypatch.setattr(workers, "load_profile", lambda name: Failing)
     monkeypatch.setattr(workers, "runtime", lambda module: "digest")
     fetch = lambda *args: claims.append(args) or [dict(unit)]  # noqa: E731 - the failed unit comes back at once
     monkeypatch.setattr(workers.control, "claim", fetch)
-    monkeypatch.setattr(workers.control, "verifications", fetch)
     monkeypatch.setattr(workers.control, "fail", lambda envelope, message: failed.append(message))
-    if command == "work":
-        assert workers.work("source.read", "r", 1000) == 1
-    else:
-        assert workers.verify("source.read", "r", "file:///reports", 1000) == 1
+    assert workers.work("source.read", "r", "file:///reports", 1000) == 1
     assert len(claims) == 1 and failed == ["ValueError"]

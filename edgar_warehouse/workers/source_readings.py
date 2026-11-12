@@ -441,14 +441,6 @@ def publish(artifacts):
     return sink
 
 
-def check(artifacts):
-    """A piece sink that compares each written piece with the one made again."""
-    def sink(receipt, data):
-        if artifacts.verified(receipt, max_bytes=PART_BYTES) != data:
-            raise ValueError("Written partition differs from pinned inputs and configuration")
-    return sink
-
-
 def pieces(output_uri: str, evidence: dict, tables: dict, deferred: list, names: list[str],
            input_bytes: int, sink) -> dict:
     """One input's rows, then its deferred records, in order, cut into version-1

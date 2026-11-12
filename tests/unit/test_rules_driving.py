@@ -55,9 +55,8 @@ def test_steps_run_in_declared_order_with_workers_only_where_units_are_left(monk
     assert script.drive("run-1", STEPS) == {"run": {"state": "complete"}}
 
     work = [c for c in script.calls if c[1:3] == ("workers", "work")]
-    verify = [c for c in script.calls if c[1:3] == ("workers", "verify")]
     assert [c[3] for c in work] == ["source.read"] * 3 + ["mastering.merge"]  # one worker for a one-unit step
-    assert [c[0] for c in verify] == ["verifier", "verifier"]
+    assert not [c for c in script.calls if c[1:3] == ("workers", "verify")]
     assert script.calls[-1] == ("worker", "bookkeeping", "finalize", "run-1")
 
 

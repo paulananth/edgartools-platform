@@ -78,37 +78,28 @@ def _reason(stderr: str) -> str:
     return (database[-1] if database else lines[-1]) if lines else ""
 
 
-def report_document(verification: dict, checks: dict, proofs: list, runtime: str) -> dict:
-    """A verifier's report: its checks and its own runtime, bound to exactly
-    this work and candidate."""
-    claim = verification["claim"]
-    return {"protocol": verification["protocol"], "checks": checks, "proofs": proofs, "runtime": runtime,
+def report_document(envelope: dict, candidate: dict, checks: dict, proofs: list, runtime: str) -> dict:
+    """A worker's check report: its checks and its runtime, bound to exactly
+    this work and the output it wrote."""
+    claim = envelope["claim"]
+    return {"protocol": envelope["protocol"], "checks": checks, "proofs": proofs, "runtime": runtime,
             "binding": {"run_id": claim["run_id"], "step": claim["step"], "key": claim["key"],
-                        "attempt": claim["attempt"], "effect_key": verification["effect_key"],
-                        "candidate": verification["candidate"]}}
+                        "attempt": claim["attempt"], "effect_key": envelope["effect_key"],
+                        "candidate": candidate}}
 
 
 def claim(run_id: str, profile: str, limit: int) -> list[dict]:
     return call("claim", run_id, "--profile", profile, "--limit", str(limit))
 
 
-def verifications(run_id: str, profile: str, limit: int) -> list[dict]:
-    return call("verifications", run_id, "--profile", profile, "--limit", str(limit))
-
-
 def renew(envelope: dict) -> dict:
     return call("renew", "--envelope", "-", document=envelope, session="renewals")
 
 
-def report(envelope: dict, candidate: dict, runtime: str) -> dict:
+def report(envelope: dict, candidate: dict, evidence: dict) -> dict:
     return call("report", "--envelope", "-", "--candidate", candidate["uri"], "--sha256", candidate["sha256"],
-                "--runtime", runtime, document=envelope)
+                "--checks", evidence["uri"], "--checks-sha256", evidence["sha256"], document=envelope)
 
 
 def fail(envelope: dict, message: str) -> None:
     call("fail", "--envelope", "-", "--message", message, document=envelope)
-
-
-def admit(verification: dict, report_ref: dict) -> dict:
-    return call("admit", "--verification", "-", "--report", report_ref["uri"], "--sha256", report_ref["sha256"],
-                document=verification)

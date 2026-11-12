@@ -9,9 +9,7 @@ POSTGRES = {
     "claim": "SELECT bookkeeping.claim(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),:d,CAST(:p AS jsonb))",
     "heartbeat": "SELECT bookkeeping.heartbeat(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),:d)",
     "wait_work": "SELECT bookkeeping.wait_work(CAST(:r AS uuid),:s,:k,:m,CAST(:a AS uuid),CAST(:p AS jsonb))",
-    "report": "SELECT bookkeeping.report(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:c AS jsonb),:f,:t)",
-    "verify_claim": "SELECT bookkeeping.verify_claim(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),:d)",
-    "pin_verifier": "SELECT bookkeeping.pin_verifier(CAST(:r AS uuid),:s,:t)",
+    "pin_runtime": "SELECT bookkeeping.pin_runtime(CAST(:r AS uuid),:s,:t)",
     "finish": "SELECT bookkeeping.finish(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid))",
     "finish_resource": "SELECT bookkeeping.finish_resource(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid),:resource,:revision,:position)",
     "finish_expand": "SELECT bookkeeping.finish_expand(CAST(:r AS uuid),:s,:k,CAST(:a AS uuid),CAST(:p AS jsonb),CAST(:v AS jsonb),CAST(:c AS jsonb),CAST(:e AS uuid),CAST(:children AS jsonb),:child_step)",
@@ -36,7 +34,7 @@ def complete(engine, operation, params, runtime):
     if engine.dialect.name != "postgresql" or operation not in {"finish", "finish_resource", "finish_expand"}:
         raise Blocked("Unsupported control completion capability")
     with engine.begin() as conn:
-        conn.execute(text(POSTGRES["pin_verifier"]), {"r": params["r"], "s": params["s"], "t": runtime})
+        conn.execute(text(POSTGRES["pin_runtime"]), {"r": params["r"], "s": params["s"], "t": runtime})
         conn.execute(text(POSTGRES[operation]), params)
 
 

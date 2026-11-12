@@ -12,8 +12,8 @@ description: Initialize or migrate Bookkeeping, or plan, validate, run, inspect 
 **Modes:** init, migrate, plan, validate, run, status, recover. Bookkeeping
 owns work control and verified completion. Workers, each in its own process,
 own the work itself. `edgar-warehouse rules run` submits the approved versions;
-workers then pull the work (`edgar-warehouse workers work`), separate
-verifiers check it (`… verify`), and `edgar-warehouse bookkeeping finalize`
+workers then pull the work (`edgar-warehouse workers work`), each checking
+its own result once, and `edgar-warehouse bookkeeping finalize`
 delivers control's events and records the run's checks. There is no
 `bookkeeping run` command (operator: "Keep `rules run`"). Plan,
 validate and recover are steps you follow with the existing commands; they are
@@ -29,7 +29,7 @@ external operation also violates this requirement. Moving a callback to another
 file or selecting its name in YAML does not remove the dependency.
 
 Use a fixed task protocol with immutable specifications and references. External
-workers execute and reconcile effects; external verifiers check destinations.
+workers execute and reconcile effects and check their own results.
 Bookkeeping owns dependencies, leases/fencing, retries, checkpoints, evidence
 admission and control outbox delivery. Source/feed names are opaque selection
 metadata; source grammar and domain checks stay outside control.
@@ -126,50 +126,40 @@ Confirm live commands with `edgar-warehouse bookkeeping --help` and
 
 ### The task protocol
 
-A step's `operation` names the **worker profile** that pulls it. The profiles are `artifact.copy`, `source.read`, `source.combine`, `mdm.prepare`, `mastering.merge`, `provider.capture`, `journal.record`, `silver.land` (a reading's table into a registered silver table, verified by asking silver for the unit's own keys) and `silver.derive` (a silver table built from other silver tables, verified by reading it back against a receipt of its keys). Workers and
-verifiers reach Bookkeeping only through these commands, which print JSON:
+A step's `operation` names the **worker profile** that pulls it. The profiles are `artifact.copy`, `source.read`, `source.combine`, `mdm.prepare`, `mastering.merge`, `provider.capture`, `journal.record`, `silver.land` (a reading's table into a registered silver table, checked by asking silver for the unit's own keys) and `silver.derive` (a silver table built from other silver tables, checked by reading it back against a receipt of its keys). Workers
+reach Bookkeeping only through these commands, which print JSON:
 
 | Command | Who calls it | What it does |
 |---|---|---|
 | `bookkeeping claim <run> --profile P --limit N` | worker | Claims units and prints task envelopes |
-| `bookkeeping renew --envelope -` | worker, verifier | Renews the lease while the work runs |
-| `bookkeeping report --envelope - --candidate URI --sha256 H --runtime D` | worker | Reports the candidate; the first report pins the profile's runtime for the run |
-| `bookkeeping verifications <run> --profile P` | verifier | Lists reported candidates whose lease is live |
-| `bookkeeping admit --verification - --report URI --sha256 H` | verifier | Admits a report bound to that work, with every check the step names; completes the unit |
-| `bookkeeping fail --envelope - --message M` | worker, verifier | Gives the attempt up; the unit waits |
+| `bookkeeping renew --envelope -` | worker | Renews the lease while the work runs |
+| `bookkeeping report --envelope - --candidate URI --sha256 H --checks URI --checks-sha256 H` | worker | Completes the unit: its output and the worker's own check report, bound to that work, with every check the step names. The first report pins the profile's runtime for the run |
+| `bookkeeping fail --envelope - --message M` | worker | Gives the attempt up; the unit waits |
 | `bookkeeping finalize <run>` | operator | Delivers control's events and records the run's checks |
-| `bookkeeping grant-profile --profile P --worker W --verifier V` | operator (migration owner) | Lets login W report profile P's work and a different login V verify it |
+| `bookkeeping grant-profile --profile P --worker W` | operator (migration owner) | Lets login W work profile P's steps |
 
-Workers and verifiers connect as their own logins, each with the restricted
-control runtime grants. A profile no login was granted cannot report or verify anything.
-Profile groups record authenticated duty membership; they carry no SQL object
-privileges. Install the control capabilities for each runtime
-principal, then grant its profile duty. A login with both duties still cannot
-verify its own report.
+A worker connects as its own login, with the restricted control runtime grants.
+A profile no login was granted cannot claim or complete anything. A profile
+group records authenticated membership; it carries no SQL object privileges.
 Control is also packaged alone: `packages/bookkeeping` (`edgar-bookkeeping`).
 
-`edgar-warehouse workers work|verify <profile> <run>` runs a worker
-or a verifier. The profiles built are the keys of `PROFILES` in
+`edgar-warehouse workers work <profile> <run> --reports <uri>` runs a worker. The profiles built are the keys of `PROFILES` in
 `edgar_warehouse/workers/__init__.py`; `edgar-warehouse workers describe <profile>`
 shows one. A step whose profile is not there has no worker yet: report its
-execution as unsupported and name the ticket that builds it; never route it
-through an in-process callback.
+execution as unsupported; never route it through an in-process callback.
 
-A verifier for `source.read` or `source.combine` confirms instead of redoing
-the work: the inputs and contract pass the step's own checks, and the output
-names this contract and these inputs and holds only declared tables. It still
-redoes the work in full for the step's first unit in a run and for a random
-5% of units, drawn when the check runs; each decision is written beside the
-report as a proof. Bookkeeping pins the worker's runtime per run and hashes
-the input and output. A streamed source extract and every other profile are
-always redone or read back.
+Each profile has one `check` of what it wrote, run once by the worker before
+it reports. A step that writes a destination (`mastering.merge`, `silver.land`,
+`silver.derive`, `journal.record`, `provider.capture`) reads the destination
+back. `source.read` and `source.combine` check that the output names this
+contract and these inputs and holds only declared tables; `mdm.prepare` checks
+each records file against the hash its manifest states. Bookkeeping pins the
+worker's runtime per run and hashes the input and output.
 
 A target marked `local: true` runs its `source.read` and `source.combine` steps in the loader's own process
-(`rules/local.py`, called by `rules run`). They take no claim, lease, heartbeat or verifier and write files with
+(`rules/local.py`, called by `rules run`). They take no claim, lease or heartbeat and write files with
 receipts, and the content hash is their proof. The run in the database starts at the first later step
-(`config.staged`), with those receipts as its inputs, and Bookkeeping holds no record of the local steps. The
-verifier paragraph above applies to targets not marked `local`. Every step that writes a destination
-(`mastering.merge`, `silver.land`, `silver.derive`) is still verified. A local step requires only local steps, and a
+(`config.staged`), with those receipts as its inputs, and Bookkeeping holds no record of the local steps. A local step requires only local steps, and a
 local step that generates work is refused until a source needs it.
 
 ## Init and migrate modes
@@ -233,7 +223,7 @@ Source records stay in artifacts. Lease scopes name actual conflicting work
 or write resources; a feed label alone does not prove the right conflict scope.
 
 Audit the control dependency path first using INDEPENDENCE.md. Plan external
-worker/verifier profiles and frozen specification references; do not add a
+worker profiles and frozen specification references; do not add a
 source-specific capability to the control registry to fill an execution gap.
 Record missing task-protocol support as required implementation work.
 
@@ -255,8 +245,8 @@ worklist scope and input hashes with the implementation validators. A later
 configuration, input or processing-version change invalidates this validation.
 
 Validate loader independence separately from source output correctness using
-INDEPENDENCE.md. A worker's own success never qualifies the run: only its
-verifier's admitted report does.
+INDEPENDENCE.md. A unit is complete only when Bookkeeping accepts its
+worker's check report.
 
 Use bounded captured inputs and isolated PostgreSQL 16 control/destination
 stores for actual execution. Verify the selected feed's stage outputs,
@@ -284,7 +274,7 @@ Read [RUN.md](RUN.md). Apply the validated configuration and submit or
 resume its bounded run in the selected environment. Verify that the plan,
 validation evidence and frozen inputs still match the requested source/feed.
 The run freezes the rules files it is given. Submit
-with `rules run`, then run each step's worker and verifier and finish with
+with `rules run`, then run each step's worker and finish with
 `bookkeeping finalize` (see RUN.md). A step whose profile has no worker yet is
 unsupported: report it, and do not invent a command.
 Infrastructure rollout belongs here only when explicitly included in the user's
@@ -308,8 +298,8 @@ attempt and an error. This aggregate omits unit keys and error text; do not copy
 ## Recover mode
 
 Read [RECOVERY.md](RECOVERY.md). `edgar-warehouse bookkeeping resume <run-id>`
-rechecks every completed unit's evidence and reopens the run (exit 3 means it
-is not complete yet); then run the workers and verifiers again. A worker
+reopens the run (exit 3 means it is not complete yet); then run the workers
+again. A completed unit is not checked again. A worker
 reconciles an earlier attempt's effect before writing. Delivery to the Journal
 of a run's committed events is the Change Journal skill's **recover-delivery**.
 

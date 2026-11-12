@@ -21,15 +21,14 @@ CREATE TABLE IF NOT EXISTS bookkeeping_work_item (
  state VARCHAR(16) NOT NULL DEFAULT 'pending', attempt CHAR(32) CHARACTER SET ascii COLLATE ascii_bin,
  attempts BIGINT NOT NULL DEFAULT 0, authority_until DATETIME(6), receipt LONGTEXT,
  checks LONGTEXT NOT NULL DEFAULT ('{}'), error LONGTEXT, generated_count BIGINT,
- candidate LONGTEXT, reporter LONGTEXT, verifier LONGTEXT,
  _identity BINARY(32) GENERATED ALWAYS AS (UNHEX(SHA2(CAST(JSON_ARRAY(run_id,step,unit_key) AS BINARY),256))) STORED PRIMARY KEY,
  _step BINARY(32) GENERATED ALWAYS AS (UNHEX(SHA2(step,256))) STORED,
  UNIQUE KEY work_ordinal(run_id,_step,ordinal), KEY pending_work(run_id,state,_step,ordinal),
  FOREIGN KEY(run_id) REFERENCES bookkeeping_pipeline_run(run_id),
  CHECK (ordinal>=0), CHECK (attempts>=0), CHECK (generated_count IS NULL OR generated_count>=0),
- CHECK (state IN ('pending','running','reported','waiting','verified')),
+ CHECK (state IN ('pending','running','waiting','verified')),
  CHECK (JSON_VALID(resources)), CHECK (JSON_VALID(unit)), CHECK (JSON_VALID(checks)),
- CHECK (receipt IS NULL OR JSON_VALID(receipt)), CHECK (candidate IS NULL OR JSON_VALID(candidate))
+ CHECK (receipt IS NULL OR JSON_VALID(receipt))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin COMMENT='bookkeeping-storage-v1'
 -- statement boundary
 CREATE TABLE IF NOT EXISTS bookkeeping_lease (
@@ -134,8 +133,7 @@ BEGIN
   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Control login must name one unambiguous account'; END IF;
  SELECT Host INTO actor_host FROM mysql.user WHERE User=actor;
  IF profile IS NULL OR NOT EXISTS(SELECT 1 FROM mysql.role_edges WHERE TO_USER=actor AND TO_HOST=actor_host
-  AND FROM_HOST='%' AND (FROM_USER=CONCAT('bk_',duty,'_',LEFT(SHA2(profile,256),20))
-   OR (duty='either' AND FROM_USER IN(CONCAT('bk_worker_',LEFT(SHA2(profile,256),20)),CONCAT('bk_verifier_',LEFT(SHA2(profile,256),20)))))) THEN
+  AND FROM_HOST='%' AND FROM_USER=CONCAT('bk_',duty,'_',LEFT(SHA2(profile,256),20))) THEN
   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='This login has no required role for the frozen profile'; END IF;
 END
 -- statement boundary
@@ -147,8 +145,8 @@ BEGIN
  DECLARE root_id CHAR(32);
  SELECT run_id INTO root_id FROM bookkeeping_pipeline_run WHERE run_id=r FOR UPDATE NOWAIT;
  IF root_id IS NULL THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Unknown control run'; END IF;
- SELECT JSON_OBJECT('state',state,'attempt',attempt,'resources',resources,'unit',unit,'candidate',candidate,
-  'reporter',reporter,'receipt',receipt,'checks',checks,'ordinal',ordinal,'generated_count',generated_count,'cursor',_cursor)
+ SELECT JSON_OBJECT('state',state,'attempt',attempt,'resources',resources,'unit',unit,
+  'receipt',receipt,'checks',checks,'ordinal',ordinal,'generated_count',generated_count,'cursor',_cursor)
   INTO w FROM bookkeeping_work_item WHERE _identity=UNHEX(SHA2(CAST(JSON_ARRAY(r,s,k) AS BINARY),256))
   AND run_id=r AND step=s AND unit_key=k FOR UPDATE NOWAIT;
  IF w IS NULL THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Unknown control unit'; END IF;
@@ -174,7 +172,7 @@ BEGIN
  CALL bookkeeping_lock_work(r,s,k,w);
  CALL bookkeeping_live(r);
  SET resources=JSON_UNQUOTE(JSON_EXTRACT(w,'$.resources'));
- IF JSON_UNQUOTE(JSON_EXTRACT(w,'$.state')) NOT IN('running','reported')
+ IF JSON_UNQUOTE(JSON_EXTRACT(w,'$.state'))<>'running'
   OR NOT (JSON_UNQUOTE(JSON_EXTRACT(w,'$.attempt'))<=>a) THEN
   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Stale attempt'; END IF;
  IF NOT (JSON_TYPE(CAST(proof AS JSON))<=>'ARRAY') OR JSON_LENGTH(proof)<>JSON_LENGTH(resources) THEN
@@ -216,7 +214,7 @@ main: BEGIN
   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Invalid claim'; END IF;
  SET TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION; CALL bookkeeping_require_ready();
  CALL bookkeeping_require(r,s,'worker'); CALL bookkeeping_lock_work(r,s,k,w); CALL bookkeeping_live(r);
- IF JSON_UNQUOTE(JSON_EXTRACT(w,'$.state')) IN('verified','reported') THEN COMMIT; SELECT NULL; LEAVE main; END IF;
+ IF JSON_UNQUOTE(JSON_EXTRACT(w,'$.state'))='verified' THEN COMMIT; SELECT NULL; LEAVE main; END IF;
  WHILE i<JSON_LENGTH(prereqs) DO
   SET dependency=JSON_UNQUOTE(JSON_EXTRACT(prereqs,CONCAT('$[',i,']')));
   IF EXISTS(SELECT 1 FROM bookkeeping_work_item WHERE run_id=r AND step=dependency AND state<>'verified') THEN
@@ -240,7 +238,7 @@ main: BEGIN
    'run_id',JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.r')),'attempt',JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.a')),
    'expires_at',DATE_FORMAT(expiry,'%Y-%m-%dT%H:%i:%s.%f+00:00'))), i=i+1;
  END WHILE;
- UPDATE bookkeeping_work_item SET state='running',attempt=a,attempts=attempts+1,error=NULL,candidate=NULL,reporter=NULL,verifier=NULL
+ UPDATE bookkeeping_work_item SET state='running',attempt=a,attempts=attempts+1,error=NULL
   WHERE _identity=UNHEX(SHA2(CAST(JSON_ARRAY(r,s,k) AS BINARY),256));
  COMMIT; SELECT result;
 END
@@ -258,7 +256,7 @@ BEGIN
   seconds=CAST(JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.d')) AS SIGNED);
  IF seconds IS NULL OR seconds<2 OR seconds>86400 THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Invalid lease duration'; END IF;
  SET TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION; CALL bookkeeping_require_ready();
- CALL bookkeeping_require(r,s,'either');
+ CALL bookkeeping_require(r,s,'worker');
  CALL bookkeeping_authority(r,s,k,a,JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.p')));
  UPDATE bookkeeping_lease SET expires_at=TIMESTAMPADD(SECOND,seconds,UTC_TIMESTAMP(6)),heartbeat_at=UTC_TIMESTAMP(6)
   WHERE run_id=r AND attempt=a;
@@ -280,7 +278,7 @@ main: BEGIN
   k=JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.k')), a=REPLACE(JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.a')),'-','');
  IF a='null' THEN SET a=NULL; END IF;
  SET TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION; CALL bookkeeping_require_ready();
- CALL bookkeeping_require(r,s,'either'); CALL bookkeeping_lock_work(r,s,k,w);
+ CALL bookkeeping_require(r,s,'worker'); CALL bookkeeping_lock_work(r,s,k,w);
  IF a IS NOT NULL THEN
   CALL bookkeeping_authority(r,s,k,a,JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.p')));
   UPDATE bookkeeping_lease SET expires_at=UTC_TIMESTAMP(6) WHERE run_id=r AND attempt=a;
@@ -292,87 +290,6 @@ main: BEGIN
  UPDATE bookkeeping_work_item SET state='waiting',error=JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.m'))
   WHERE _identity=UNHEX(SHA2(CAST(JSON_ARRAY(r,s,k) AS BINARY),256)) AND state<>'verified';
  COMMIT;
-END
--- statement boundary
-DROP PROCEDURE IF EXISTS bookkeeping_report
--- statement boundary
-CREATE PROCEDURE bookkeeping_report(IN p_wire LONGTEXT)
-SQL SECURITY DEFINER
-main: BEGIN
- DECLARE r CHAR(32); DECLARE s LONGTEXT; DECLARE k LONGTEXT; DECLARE a CHAR(32);
- DECLARE candidate LONGTEXT; DECLARE profile LONGTEXT; DECLARE runtime LONGTEXT; DECLARE pinned LONGTEXT;
- DECLARE w LONGTEXT; DECLARE actor LONGTEXT;
- DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN ROLLBACK; RESIGNAL; END;
- SET r=REPLACE(JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.r')),'-',''), s=JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.s')),
-  k=JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.k')), a=REPLACE(JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.a')),'-',''),
-  candidate=JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.c')), profile=JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.f')),
-  runtime=JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.t')), actor=SUBSTRING_INDEX(SESSION_USER(),'@',1);
- IF NOT (JSON_TYPE(CAST(candidate AS JSON))<=>'OBJECT') OR JSON_LENGTH(candidate)<>2
-  OR NOT (JSON_TYPE(JSON_EXTRACT(candidate,'$.uri'))<=>'STRING') OR JSON_UNQUOTE(JSON_EXTRACT(candidate,'$.uri'))=''
-  OR NOT COALESCE(REGEXP_LIKE(JSON_UNQUOTE(JSON_EXTRACT(candidate,'$.sha256')),'^[0-9a-f]{64}$','c'),FALSE)
-  OR NOT COALESCE(REGEXP_LIKE(runtime,'^[0-9a-f]{64}$','c'),FALSE) THEN
-  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='A report names a candidate URI/hash and runtime'; END IF;
- SET TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION; CALL bookkeeping_require_ready();
- CALL bookkeeping_require(r,s,'worker'); CALL bookkeeping_authority(r,s,k,a,JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.p')));
- CALL bookkeeping_lock_work(r,s,k,w);
- IF NOT EXISTS(SELECT 1 FROM bookkeeping_pipeline_run WHERE run_id=r
-  AND JSON_UNQUOTE(JSON_EXTRACT(submission,CONCAT('$.profiles.',JSON_QUOTE(s))))=profile) THEN
-  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Report differs from the frozen profile'; END IF;
- IF JSON_UNQUOTE(JSON_EXTRACT(w,'$.state'))='reported' THEN
-  IF NOT (BINARY JSON_UNQUOTE(JSON_EXTRACT(w,'$.candidate'))<=>BINARY candidate)
-   OR NOT (JSON_UNQUOTE(JSON_EXTRACT(w,'$.reporter'))<=>actor) THEN
-   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Conflicting candidate for this attempt'; END IF;
-  COMMIT; LEAVE main;
- END IF;
- SELECT JSON_UNQUOTE(JSON_EXTRACT(runtimes,CONCAT('$.',JSON_QUOTE(profile)))) INTO pinned
-  FROM bookkeeping_pipeline_run WHERE run_id=r;
- IF pinned IS NULL THEN
-  UPDATE bookkeeping_pipeline_run SET runtimes=JSON_SET(runtimes,CONCAT('$.',JSON_QUOTE(profile)),runtime) WHERE run_id=r;
- ELSEIF BINARY pinned<>BINARY runtime THEN
-  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Pinned worker runtime changed; start a new run';
- END IF;
- UPDATE bookkeeping_work_item SET state='reported',candidate=candidate,error=NULL,reporter=actor
-  WHERE _identity=UNHEX(SHA2(CAST(JSON_ARRAY(r,s,k) AS BINARY),256));
- COMMIT;
-END
--- statement boundary
-DROP PROCEDURE IF EXISTS bookkeeping_verify_claim
--- statement boundary
-CREATE PROCEDURE bookkeeping_verify_claim(IN p_wire LONGTEXT)
-SQL SECURITY DEFINER
-main: BEGIN
- DECLARE r CHAR(32); DECLARE s LONGTEXT; DECLARE k LONGTEXT; DECLARE a CHAR(32); DECLARE seconds BIGINT;
- DECLARE w LONGTEXT; DECLARE resources LONGTEXT; DECLARE i BIGINT DEFAULT 0; DECLARE resource_key LONGTEXT;
- DECLARE held_resource LONGTEXT; DECLARE held_run CHAR(32); DECLARE held_attempt CHAR(32);
- DECLARE held_token BIGINT; DECLARE expiry DATETIME(6); DECLARE result LONGTEXT DEFAULT '[]';
- DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN ROLLBACK; RESIGNAL; END;
- SET r=REPLACE(JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.r')),'-',''), s=JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.s')),
-  k=JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.k')), a=REPLACE(JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.a')),'-',''),
-  seconds=CAST(JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.d')) AS SIGNED);
- IF seconds IS NULL OR seconds<2 OR seconds>86400 THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Invalid lease duration'; END IF;
- SET TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION; CALL bookkeeping_require_ready();
- CALL bookkeeping_require(r,s,'verifier'); CALL bookkeeping_lock_work(r,s,k,w); CALL bookkeeping_live(r);
- IF JSON_UNQUOTE(JSON_EXTRACT(w,'$.state'))<>'reported' OR NOT (JSON_UNQUOTE(JSON_EXTRACT(w,'$.attempt'))<=>a) THEN
-  COMMIT; SELECT NULL; LEAVE main; END IF;
- IF JSON_UNQUOTE(JSON_EXTRACT(w,'$.reporter'))=SUBSTRING_INDEX(SESSION_USER(),'@',1) THEN
-  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='This login may not verify its own report'; END IF;
- SET resources=JSON_UNQUOTE(JSON_EXTRACT(w,'$.resources'));
- WHILE i<JSON_LENGTH(resources) DO
-  SET resource_key=JSON_UNQUOTE(JSON_EXTRACT(resources,CONCAT('$[',i,']'))), held_resource=NULL;
-  SELECT resource,run_id,attempt,token,expires_at INTO held_resource,held_run,held_attempt,held_token,expiry
-   FROM bookkeeping_lease WHERE _resource=UNHEX(SHA2(resource_key,256)) FOR UPDATE NOWAIT;
-  IF held_resource IS NULL OR NOT (held_resource<=>resource_key) THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Missing lease'; END IF;
-  IF expiry>UTC_TIMESTAMP(6) AND (NOT (held_run<=>r) OR NOT (held_attempt<=>a)) THEN
-   SIGNAL SQLSTATE 'HY000' SET MYSQL_ERRNO=3572,MESSAGE_TEXT='Lease contention'; END IF;
-  IF expiry<=UTC_TIMESTAMP(6) OR NOT (held_attempt<=>a) OR NOT (held_run<=>r) THEN SET held_token=held_token+1; END IF;
-  SET expiry=TIMESTAMPADD(SECOND,seconds,UTC_TIMESTAMP(6));
-  UPDATE bookkeeping_lease SET token=held_token,run_id=r,attempt=a,expires_at=expiry,heartbeat_at=UTC_TIMESTAMP(6)
-   WHERE _resource=UNHEX(SHA2(resource_key,256));
-  SET result=JSON_ARRAY_APPEND(result,'$',JSON_OBJECT('resource',resource_key,'token',held_token,
-   'run_id',JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.r')),'attempt',JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.a')),
-   'expires_at',DATE_FORMAT(expiry,'%Y-%m-%dT%H:%i:%s.%f+00:00'))), i=i+1;
- END WHILE;
- COMMIT; SELECT result;
 END
 -- statement boundary
 DROP PROCEDURE IF EXISTS bookkeeping_prepare_children
@@ -464,7 +381,7 @@ CREATE PROCEDURE bookkeeping_finish(IN p_wire LONGTEXT)
 SQL SECURITY DEFINER
 main: BEGIN
  DECLARE r CHAR(32); DECLARE s LONGTEXT; DECLARE k LONGTEXT; DECLARE a CHAR(32); DECLARE e CHAR(32);
- DECLARE w LONGTEXT; DECLARE receipt LONGTEXT; DECLARE checks LONGTEXT; DECLARE candidate LONGTEXT;
+ DECLARE w LONGTEXT; DECLARE receipt LONGTEXT; DECLARE checks LONGTEXT;
  DECLARE runtime LONGTEXT; DECLARE profile LONGTEXT; DECLARE slot LONGTEXT; DECLARE pinned LONGTEXT;
  DECLARE check_names LONGTEXT; DECLARE i BIGINT DEFAULT 0; DECLARE check_name LONGTEXT; DECLARE deadline DATETIME(6);
  DECLARE last_ordinal BIGINT; DECLARE last_cursor LONGTEXT; DECLARE last_receipt LONGTEXT;
@@ -489,7 +406,7 @@ main: BEGIN
   SET i=i+1;
  END WHILE;
  SET TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION; CALL bookkeeping_require_ready();
- CALL bookkeeping_require(r,s,'verifier'); CALL bookkeeping_lock_work(r,s,k,w);
+ CALL bookkeeping_require(r,s,'worker'); CALL bookkeeping_lock_work(r,s,k,w);
  SET operation=JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.operation')), frozen_cursor=JSON_UNQUOTE(JSON_EXTRACT(w,'$.cursor'));
  IF JSON_CONTAINS_PATH(frozen_cursor,'one','$.generated_step') THEN
   IF NOT (operation<=>'finish_expand') THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Expansion must seal its generated children'; END IF;
@@ -503,27 +420,23 @@ main: BEGIN
  IF operation='finish_resource' THEN CALL bookkeeping_compare_checkpoint(r,s,w,p_wire); END IF;
  SELECT JSON_UNQUOTE(JSON_EXTRACT(submission,CONCAT('$.profiles.',JSON_QUOTE(s)))) INTO profile
   FROM bookkeeping_pipeline_run WHERE run_id=r;
- SET slot=CONCAT('verify:',profile);
+ SET slot=profile;
  SELECT JSON_UNQUOTE(JSON_EXTRACT(runtimes,CONCAT('$.',JSON_QUOTE(slot)))) INTO pinned FROM bookkeeping_pipeline_run WHERE run_id=r;
  IF pinned IS NULL THEN
   UPDATE bookkeeping_pipeline_run SET runtimes=JSON_SET(runtimes,CONCAT('$.',JSON_QUOTE(slot)),runtime) WHERE run_id=r;
  ELSEIF BINARY pinned<>BINARY runtime THEN
-  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Pinned verifier runtime changed; start a new run'; END IF;
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Pinned worker runtime changed; start a new run'; END IF;
  IF JSON_UNQUOTE(JSON_EXTRACT(w,'$.state'))='verified' THEN
   IF NOT (BINARY JSON_UNQUOTE(JSON_EXTRACT(w,'$.receipt'))<=>BINARY receipt)
    OR NOT (BINARY JSON_UNQUOTE(JSON_EXTRACT(w,'$.checks'))<=>BINARY checks) THEN
    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Completion evidence changed'; END IF;
   COMMIT; LEAVE main;
  END IF;
- SET candidate=JSON_UNQUOTE(JSON_EXTRACT(w,'$.candidate'));
- IF JSON_UNQUOTE(JSON_EXTRACT(w,'$.state'))<>'reported'
-  OR JSON_UNQUOTE(JSON_EXTRACT(w,'$.reporter'))=SUBSTRING_INDEX(SESSION_USER(),'@',1)
-  OR NOT (JSON_UNQUOTE(JSON_EXTRACT(candidate,'$.uri'))<=>JSON_UNQUOTE(JSON_EXTRACT(receipt,'$.uri')))
-  OR NOT (JSON_UNQUOTE(JSON_EXTRACT(candidate,'$.sha256'))<=>JSON_UNQUOTE(JSON_EXTRACT(receipt,'$.sha256'))) THEN
-  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Completion needs the reported candidate and a different verifier'; END IF;
+ IF JSON_UNQUOTE(JSON_EXTRACT(w,'$.state'))<>'running' THEN
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Completion needs the running attempt'; END IF;
  SELECT MIN(expires_at) INTO deadline FROM bookkeeping_lease WHERE run_id=r AND attempt=a;
  UPDATE bookkeeping_work_item SET state='verified',receipt=receipt,checks=checks,error=NULL,
-  authority_until=deadline,verifier=SUBSTRING_INDEX(SESSION_USER(),'@',1)
+  authority_until=deadline
   WHERE _identity=UNHEX(SHA2(CAST(JSON_ARRAY(r,s,k) AS BINARY),256));
  INSERT INTO bookkeeping_journal_outbox(event_id,run_id,step,unit_key,payload,created_at)
   VALUES(e,r,s,k,JSON_OBJECT('version',1,'event_id',JSON_UNQUOTE(JSON_EXTRACT(p_wire,'$.e')),

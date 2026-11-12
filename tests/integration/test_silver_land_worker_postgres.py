@@ -63,7 +63,7 @@ def test_the_worker_lands_every_filer_once_and_the_verifier_confirms(landed):
         assert conn.execute(text("SELECT count(*) FROM silver.company_fact")).scalar() == 8
     assert again.written == store.written
     candidate = {"uri": out["uri"], "sha256": "invented"}
-    assert silver_land.verify({**envelope(), "candidate": candidate}, store) == ({"silver.landed": True}, [])
+    assert silver_land.check({**envelope(), "candidate": candidate}, store) == ({"silver.landed": True}, [])
 
 
 def test_the_verifier_refuses_when_silver_lacks_a_key_the_reading_holds(landed):
@@ -72,7 +72,7 @@ def test_the_verifier_refuses_when_silver_lacks_a_key_the_reading_holds(landed):
     with landed.begin() as conn:
         conn.execute(text("DELETE FROM silver.company_fact WHERE company_key = '0000000043'"))
     with pytest.raises(ValueError, match="lacks keys"):
-        silver_land.verify({**envelope(), "candidate": {"uri": out["uri"], "sha256": "invented"}}, store)
+        silver_land.check({**envelope(), "candidate": {"uri": out["uri"], "sha256": "invented"}}, store)
 
 
 def test_the_worker_verifies_only_its_own_check(landed):
@@ -94,4 +94,4 @@ def test_other_units_rows_cannot_hide_a_missing_key(landed, database):
                           "(SELECT ctid FROM silver.company_fact WHERE company_key = '0000000043' LIMIT 1)"))
         assert conn.execute(text("SELECT count(*) FROM silver.company_fact")).scalar() >= 8
     with pytest.raises(ValueError, match="lacks keys"):
-        silver_land.verify({**envelope(), "candidate": {"uri": out["uri"], "sha256": "invented"}}, store)
+        silver_land.check({**envelope(), "candidate": {"uri": out["uri"], "sha256": "invented"}}, store)

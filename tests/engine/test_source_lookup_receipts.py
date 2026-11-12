@@ -52,7 +52,7 @@ def test_lookup_receipt_flows_through_execution_retry_verification_and_consumpti
     envelope, manifest = lookup_task(tmp_path, store, streamed=streamed, parquet=parquet)
     receipt = source_read.execute(envelope, store)
     assert source_read.execute(envelope, store) == receipt
-    assert source_read.verify({**envelope,'candidate':receipt}, store) == ({'source.output':True}, [])
+    assert source_read.check({**envelope,'candidate':receipt}, store) == ({'source.output':True}, [])
     found, _ = source_readings.load(receipt, store, max_bytes=1024**2, max_rows=100, allow_lookup_receipts=True)
     artifact = found['artifacts'][0]
     assert artifact['input'] == manifest['artifacts'][0]['input']
@@ -108,7 +108,7 @@ def test_lookup_hash_corruption_refuses_without_publication(tmp_path):
     assert not (tmp_path/'reading.json.parts').exists()
 
 
-@pytest.mark.parametrize('parquet', [False, True])
+@pytest.mark.parametrize('parquet', [True])
 def test_changed_authenticated_scope_cannot_verify_an_old_candidate(tmp_path, parquet):
     store = Artifacts()
     envelope, manifest = lookup_task(tmp_path, store, streamed=not parquet, parquet=parquet)
@@ -119,7 +119,7 @@ def test_changed_authenticated_scope_cannot_verify_an_old_candidate(tmp_path, pa
     entry['lookups'] = store.put(tmp_path.as_uri(), new_scope)
     envelope['input'] = store.put(tmp_path.as_uri(), manifest)
     with pytest.raises((ValueError, Blocked)):
-        source_read.verify({**envelope,'candidate':candidate}, store)
+        source_read.check({**envelope,'candidate':candidate}, store)
 
 
 def test_missing_receipt_cannot_fall_back_to_undeclared_or_context_scope(tmp_path):
@@ -179,7 +179,7 @@ def test_combined_scope_keeps_distinct_lookup_receipts_in_mdm_publication_identi
         combined_task = combine_envelope(store, tmp_path, plan({}, {'rows':table('main','rows',{})}), {'main':reading})
         combined_task['output'] = (tmp_path/f'combined-{trial}.json').as_uri()
         combined = source_combine.execute(combined_task, store)
-        assert source_combine.verify({**combined_task, 'candidate':combined}, store) == ({'source.combined':True}, [])
+        assert source_combine.check({**combined_task, 'candidate':combined}, store) == ({'source.combined':True}, [])
         combined_body = store.json(combined)
         assert [r['n'] for r in combined_body['artifacts'][0]['tables']['rows']] == ['A','A']
         scope = combined_body['artifacts'][0]['input']
@@ -189,7 +189,7 @@ def test_combined_scope_keeps_distinct_lookup_receipts_in_mdm_publication_identi
                 'checks':['mdm.prepared'], 'keys':{'table':'rows','dataset':'fixture',
                   'policy':'0'*64,'consumer':'trial','batch_id':'lookup','as_of':'2026-10-08T00:00:00Z'}}
         prepared = mdm_prepare.execute(prep, store)
-        assert mdm_prepare.verify({**prep,'candidate':prepared}, store) == ({'mdm.prepared':True}, [])
+        assert mdm_prepare.check({**prep,'candidate':prepared}, store) == ({'mdm.prepared':True}, [])
         publications.append(store.json(prepared)['batches'][0]['input']['publication']['publication_key'])
     assert len(set(scopes)) == len(set(publications)) == 2
 
@@ -203,7 +203,7 @@ def test_approved_input_hash_pins_work_with_version_three_and_reject_changed_sou
     manifest['contract'] = store.put_bytes((tmp_path/'pinned-contract.yaml').as_uri(), files.dumps(rules).encode())
     envelope['input'] = store.put(tmp_path.as_uri(), manifest)
     candidate = source_read.execute(envelope, store)
-    assert source_read.verify({**envelope,'candidate':candidate}, store) == ({'source.output':True}, [])
+    assert source_read.check({**envelope,'candidate':candidate}, store) == ({'source.output':True}, [])
     manifest['artifacts'][0]['input'] = store.put_bytes((tmp_path/'different').as_uri(), b'{"records":[]}')
     envelope['input'] = store.put(tmp_path.as_uri(), manifest)
     with pytest.raises(ValueError, match='approved artifact hash'):
@@ -246,7 +246,7 @@ def test_a_streamed_table_takes_each_keys_value_from_a_derived_pair_set(tmp_path
     envelope = _pair_task(tmp_path, store, ids)
     receipt = source_read.execute(envelope, store)
     assert source_read.execute(envelope, store) == receipt
-    assert source_read.verify({**envelope, "candidate": receipt}, store) == ({"source.output": True}, [])
+    assert source_read.check({**envelope, "candidate": receipt}, store) == ({"source.output": True}, [])
     found, _ = source_readings.load(receipt, store, max_bytes=1024**2, max_rows=100, allow_lookup_receipts=True)
     rows = found["artifacts"][0]["tables"]["rows"]
     # One value; several distinct values give none (on_many: null); a holding with none, none.

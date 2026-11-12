@@ -113,7 +113,7 @@ class Loader:
         env = self.env = duties(stores)
         lands = [step["name"] for step in self.reading["bookkeeping"]["targets"][target]["steps"]
                  if step.get("operation") in ("silver.land", "silver.derive")]
-        bare = [duty for duty in ("worker", "verifier") if lands and not env[duty].get("SILVER_DATABASE_URL")]
+        bare = [duty for duty in ("worker",) if lands and not env[duty].get("SILVER_DATABASE_URL")]
         if bare:
             raise RunStopped(f"{source} {target} lands silver (steps {', '.join(lands)}) but the {' and '.join(bare)} "
                              f"env file has no silver login: start the stores with infra/scripts/local-test-stores.py up <name>")
@@ -165,7 +165,7 @@ class Loader:
         unfinished = []
         for run in sorted((r for state in OPEN for r in self.mine(state)), key=lambda r: str(r["created_at"])):
             pinned = self.commands.status(str(run["run_id"]))["run"].get("runtimes") or {}
-            other = sorted(p for p, digest in pinned.items() if not p.startswith("verify:") and digest != self.runtime(p))
+            other = sorted(p for p, digest in pinned.items() if digest != self.runtime(p))
             if other:
                 left[str(run["run_id"])] = f"pinned to other worker code ({', '.join(other)})"
             else:
@@ -362,10 +362,10 @@ def register(subparsers) -> None:
                         help="Print what this load would do (runs it would finish or leave and why, documents, "
                              "bundles) and change nothing")
     parser.add_argument("--stores", required=True, type=Path,
-                        help="The stores' environment folder, holding worker.env, verifier.env and governance.env")
-    parser.add_argument("--workers", type=int, default=1, help="Worker processes on each step of a run (one verifier a run)")
+                        help="The stores' environment folder, holding worker.env and governance.env")
+    parser.add_argument("--workers", type=int, default=1, help="Worker processes on each step of a run")
     parser.add_argument("--bundles", type=int, default=1,
-                        help="Bundles loaded at once, each its own run with its own verifier (default 1)")
+                        help="Bundles loaded at once, each its own run (default 1)")
     parser.add_argument("--minutes", type=float, default=120, help="Stop after this long; rerun to carry on")
     parser.add_argument("--as-of", help="The load's time, UTC (YYYY-MM-DDTHH:MM:SSZ); default now")
     parser.add_argument("--revision", type=int, default=0,

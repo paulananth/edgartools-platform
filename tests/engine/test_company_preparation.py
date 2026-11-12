@@ -68,14 +68,14 @@ def test_receipt_bound_main_read_combine_prepare_and_repeat(tmp_path):
     manifest = store.put(tmp_path.as_uri(), {'version': 2, 'contract': contract, 'artifacts': [{'input': raw, 'context': bound}]})
     work = {'input': manifest, 'output': (tmp_path / 'reading.json').as_uri(), 'checks': ['source.output']}
     result = source_read.execute(work, store)
-    assert source_read.verify({**work, 'candidate': result}, store) == ({'source.output': True}, [])
+    assert source_read.check({**work, 'candidate': result}, store) == ({'source.output': True}, [])
     combination = plan({
         'forms': group('main', 'filings', 'cik', 'form', distinct=True, order_by=('form',), checks={'sync_run_id': 'capture'}),
         'address': group('main', 'addresses', 'cik', 'business_address', mode='last', checks={'last_sync_run_id': 'capture'}),
     }, {'company': table('main', 'company', {'forms': join('forms'), 'business_address': join('address')}, checks={'last_sync_run_id': 'capture'})})
     combined_work = envelope(store, tmp_path, combination, {'main': result})
     combined = source_combine.execute(combined_work, store)
-    assert source_combine.verify({**combined_work, 'candidate': combined}, store) == ({'source.combined': True}, [])
+    assert source_combine.check({**combined_work, 'candidate': combined}, store) == ({'source.combined': True}, [])
     assert source_combine.execute(combined_work, store) == combined
     company = company_row(context, entity_name='Example', forms=['10-K', '8-K'],
                           business_address=retained_address(payload))
@@ -84,7 +84,7 @@ def test_receipt_bound_main_read_combine_prepare_and_repeat(tmp_path):
             'consumer': 'trial', 'batch_id': 'main', 'as_of': CONTEXT['last_synced_at']}
     prepare = {'input': combined, 'output': (tmp_path / 'mdm/manifest.json').as_uri(), 'keys': keys, 'checks': ['mdm.prepared']}
     prepared = mdm_prepare.execute(prepare, store)
-    assert mdm_prepare.verify({**prepare, 'candidate': prepared}, store) == ({'mdm.prepared': True}, [])
+    assert mdm_prepare.check({**prepare, 'candidate': prepared}, store) == ({'mdm.prepared': True}, [])
     batch = store.json(prepared)['batches'][0]
     assert json.loads((tmp_path / 'mdm' / batch['input']['path']).read_bytes()) == company
 

@@ -11,7 +11,7 @@ def execute(envelope: dict, artifacts) -> dict:
     return artifacts.put_bytes(envelope["output"], data)
 
 
-def verify(envelope: dict, artifacts) -> tuple[dict, list]:
+def check(envelope: dict, artifacts) -> tuple[dict, list]:
     output = artifacts.read(envelope["output"])
     if not hashlib.sha256(output).hexdigest() == envelope["input"]["sha256"] == envelope["candidate"]["sha256"]:
         raise ValueError("The output is not a copy of the input")

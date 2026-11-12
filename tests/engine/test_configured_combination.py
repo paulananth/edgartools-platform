@@ -74,6 +74,6 @@ def test_worker_keeps_escaped_surrogate_metadata_until_unused_columns_are_droppe
     manifest = store.put(tmp_path.as_uri(), {'version': 1, 'contract': contract, 'readings': {'raw': raw}})
     work = {'input': manifest, 'output': (tmp_path / 'output.json').as_uri(), 'checks': ['source.combined'], 'keys': {}}
     result = source_combine.execute(work, store)
-    assert source_combine.verify({**work, 'candidate': result}, store) == ({'source.combined': True}, [])
+    assert source_combine.check({**work, 'candidate': result}, store) == ({'source.combined': True}, [])
     assert store.json(result)['artifacts'][0]['tables'] == {'out': [
         {'value': 'B', 'chosen': ['A', 'B']}, {'value': 'A', 'chosen': ['A', 'B']}]}

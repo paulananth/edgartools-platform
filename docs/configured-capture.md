@@ -49,11 +49,10 @@ requires a printable `EDGAR_IDENTITY`; SEC identity must contain an email addres
 Redirects and environment HTTP proxies are disabled. Retries belong to control.
 
 For an already approved and submitted run with profile role grants, use the
-existing commands, with separate worker and verifier control logins:
+existing commands:
 
 ```bash
-edgar-warehouse workers work provider.capture "$RUN_ID" --limit 1
-edgar-warehouse workers verify provider.capture "$RUN_ID" --reports "$REPORTS_URI" --limit 1
+edgar-warehouse workers work provider.capture "$RUN_ID" --reports "$REPORTS_URI" --limit 1
 ```
 
 Set `BOOKKEEPING_DATABASE_URL` to the appropriate login and

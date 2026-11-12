@@ -12,7 +12,7 @@ removes any row a delivery lacks, so a delivery of some companies would remove
 the rest. The step runs only when the Change Journal names a changed file.
 SILVER_DATABASE_URL is the silver login; MDM_DATABASE_URL finds the master ids
 (both tables link to the Company masters, so it is required). The output is a receipt naming the table's
-rows and a digest of its keys; the verifier reads the table back and compares.
+rows and a digest of its keys; the check reads the table back and compares.
 It does not recompute the query: the builds' own tests prove the arithmetic.
 """
 from __future__ import annotations
@@ -120,7 +120,7 @@ def execute(envelope: dict, artifacts) -> dict:
             mdm.dispose()
 
 
-def verify(envelope: dict, artifacts) -> tuple[dict, list]:
+def check(envelope: dict, artifacts) -> tuple[dict, list]:
     from edgar_warehouse.silver_writer.relational import DatabaseSink
 
     if envelope["candidate"]["uri"] != envelope["output"]:

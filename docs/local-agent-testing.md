@@ -38,23 +38,20 @@ Source that file in your terminal to set runtime and migration connections. It i
 stored outside Git with mode `0600`; do not print it, paste it into chat or
 commit it. Schema-owner connections stay separate from runtime connections.
 Startup applies the real migrations; repeating startup preserves existing data.
-It creates separate Bookkeeping worker and verifier logins, grants opposite
-duties for every registered profile, creates a read-only MDM verifier and a
-narrow MDM registration login, and installs MDM's Bookkeeping lease guard.
-The Rules governance login can record existing approvals and register approved
-versions; provisioning does not approve or activate any source or rule.
+It creates the Bookkeeping worker login, grants it every registered profile,
+creates a narrow MDM registration login, and installs MDM's Bookkeeping lease
+guard. The governance login registers a source's rules in MDM.
 
-Four private files are written in the environment folder:
+Three private files are written in the environment folder:
 
 | File | Use |
 | --- | --- |
 | `connection.env` | Runtime connections plus migration connections for administration |
 | `worker.env` | Five runtime connections; Bookkeeping worker and MDM application logins |
-| `verifier.env` | Separate Bookkeeping verifier and read-only MDM logins |
 | `governance.env` | Rules governance and MDM registration connections |
 
-Source `worker.env` before work and `verifier.env` before verification. These
-files clear owner/activation settings left by another duty and carry the silver login.
+Source `worker.env` before work. These
+files clear owner settings left by another duty and carry the silver login.
 `BOOKKEEPING_MANIFEST_ROOT` is the environment's `manifests/` folder (`file://`
 or a path) where Rules freezes run configuration. Connections and
 passwords are never printed by initialization.

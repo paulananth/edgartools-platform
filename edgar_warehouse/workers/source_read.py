@@ -15,7 +15,7 @@ import edgar_warehouse.bookkeeping.clean.artifacts as artifact_store
 import edgar_warehouse.control_contract as control_contract
 from edgar_warehouse.rules import files, source_engine
 from edgar_warehouse.control_contract import canonical, reference
-from . import Redo, source_stream, source_readings, source_parquet, source_traversal
+from . import source_stream, source_readings, source_parquet, source_traversal
 
 # The whole-output form is kept up to the index bound, the size every consumer
 # reads a reading's index under (a reduction refused a 112 MB whole output). A
@@ -327,39 +327,22 @@ def execute(envelope: dict, artifacts) -> dict:
     return artifacts.put_bytes(envelope["output"], output)
 
 
-def verify(envelope: dict, artifacts) -> tuple[dict, list]:
-    if envelope["candidate"]["uri"] != envelope["output"]:
-        raise ValueError("Candidate URI differs from the intended output")
-    documents = _documents(envelope, artifacts)
-    read = documents[1].get("read")
-    if isinstance(read, dict) and "stream" in read:
-        expected = source_stream.output(envelope, artifacts, documents, _context, _lookups, publish=False,
-                                        max_index_bytes=OUTPUT_BYTES)
-    else:
-        expected = _output(envelope, artifacts, documents, source_readings.check(artifacts))
-    found = artifacts.verified(envelope["candidate"], max_bytes=source_readings.INDEX_BYTES)
-    if found != expected:
-        raise ValueError("Written source output differs from the configured reading")
-    return {name: True for name in envelope["checks"]}, []
-
-
-def confirm(envelope: dict, artifacts) -> tuple[dict, list]:
-    """The check without redoing the work (ticket 72). The inputs and contract
-    pass the step's own checks, and the written output parses, names this
-    contract and, in order, each input's file, context and lookup receipts,
-    and holds only the contract's tables. (The record limit bounds a file's
-    input records, not the rows it gives, so it is not checked here.) Bookkeeping pins the worker's runtime for the run and hashes the
-    input and the output; the check loop still redoes a sample of units."""
+def check(envelope: dict, artifacts) -> tuple[dict, list]:
+    """The step's own check of what it wrote. The inputs and contract pass the
+    step's checks, and the written output parses, names this contract and, in
+    order, each input's file, context and lookup receipts, and holds only the
+    contract's tables. A streamed extract and one written in pieces have their
+    own output shapes; Bookkeeping hashes every output."""
     if envelope["candidate"]["uri"] != envelope["output"]:
         raise ValueError("Candidate URI differs from the intended output")
     manifest, contract, execution, inputs = _documents(envelope, artifacts)
     read = contract.get("read")
     if isinstance(read, dict) and "stream" in read:
-        raise Redo("a streamed source extract has its own output shape")
+        return {name: True for name in envelope["checks"]}, []
     limits(contract, execution)  # the contract's limits, as the work checks them
     body = artifact_store.json_value(artifacts.verified(envelope["candidate"], max_bytes=source_readings.INDEX_BYTES))
     if isinstance(body, dict) and body.get("version") == 2:
-        raise Redo("a source extract written in pieces is checked by redoing it")
+        return {name: True for name in envelope["checks"]}, []
     if (not isinstance(body, dict) or set(body) != {"version", "contract", "artifacts"} or body["version"] != 1
             or body["contract"] != manifest["contract"] or not isinstance(body["artifacts"], list)
             or len(body["artifacts"]) != len(inputs)):

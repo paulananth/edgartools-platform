@@ -60,7 +60,7 @@ assert not names & set({DOMAIN!r})
                     known = set(conn.scalars(text("SELECT User FROM mysql.user" if owner.dialect.name == "mysql" else "SELECT rolname FROM pg_roles")))
                 try:
                     for profile in ("artifact.copy", "jsonl.count"):
-                        groups = invoke("grant-profile", "--profile", profile, "--worker", role, "--verifier", reader_role)
+                        groups = invoke("grant-profile", "--profile", profile, "--worker", role)
                         granted.extend(item["role"] for item in groups.values() if item["role"] not in known)
                     artifacts = Artifacts()
                     body = config(steps=2)
@@ -92,13 +92,11 @@ finally: book.close()
                         assert len(envelopes) == 1
                         for envelope in envelopes:
                             candidate = workload.execute(envelope, artifacts)
+                            candidate = {"uri": candidate["uri"], "sha256": candidate["sha256"]}
+                            checks, proofs = workload.check({**envelope, "candidate": candidate}, artifacts)
+                            report = artifacts.put(tmp_path.as_uri() + "/reports", report_document(envelope, candidate, checks, proofs, "a" * 64))
                             invoke("report", "--envelope", "-", "--candidate", candidate["uri"], "--sha256", candidate["sha256"],
-                                   "--runtime", "a" * 64, document=envelope)
-                        for verification in invoke("verifications", run_id, "--profile", profile, verifier=True):
-                            checks, proofs = workload.verify(verification, artifacts)
-                            report = artifacts.put(tmp_path.as_uri() + "/reports", report_document(verification, checks, proofs, "b" * 64))
-                            invoke("admit", "--verification", "-", "--report", report["uri"], "--sha256", report["sha256"],
-                                   document=verification, verifier=True)
+                                   "--checks", report["uri"], "--checks-sha256", report["sha256"], document=envelope)
                     final = invoke("finalize", run_id)
                     assert final["run"]["state"] == "complete" and final["counts"] == {"verified": 2}
                     assert invoke("finalize", run_id) == final

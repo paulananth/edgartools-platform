@@ -19,7 +19,7 @@ def mdm(databases):
         conn.exec_driver_sql(f"CREATE DATABASE {name}")
     admin = create_engine(databases.admin.url.set(database=name))
     app = create_engine(admin.url.set(username="clean_application", password="test"))
-    reader = create_engine(admin.url.set(username="bk_verifier", password="test"))
+    reader = create_engine(admin.url.set(username="mdm_reader", password="test"))
     try:
         core.initialize_database(admin, app)
         migrate_guard(admin, runtime_role="clean_application")
@@ -28,9 +28,9 @@ def mdm(databases):
                 "version": 1, "required_consumers": ["export", "graph", "journal"], "automatic_rules": [],
                 "fields": {"company": {"name": {"sources": ["fixture.primary", "fixture.secondary"]}}}}))
         with admin.begin() as conn:
-            conn.exec_driver_sql("GRANT USAGE ON SCHEMA mdm TO bk_verifier")
-            conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA mdm TO bk_verifier")
-            conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA public TO bk_verifier")
+            conn.exec_driver_sql("GRANT USAGE ON SCHEMA mdm TO mdm_reader")
+            conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA mdm TO mdm_reader")
+            conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA public TO mdm_reader")
         yield SimpleNamespace(admin=admin, application=app, reader=reader, policy=policy)
     finally:
         admin.dispose()

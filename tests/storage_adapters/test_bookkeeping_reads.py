@@ -88,7 +88,7 @@ def test_real_typed_reads_preserve_uuid_json_values_and_bounded_status(control_t
     owner, runtime, models = control_tables
     rid, name = add_run(owner, models, state="running")
     add_work(owner, models, rid, key="a", ordinal=0)
-    add_work(owner, models, rid, key="b", ordinal=1, state="reported")
+    add_work(owner, models, rid, key="b", ordinal=1, state="running")
     add_work(owner, models, rid, key="c", ordinal=2, state="verified")
     book = Bookkeeping(runtime)
     row = book._run(rid)
@@ -98,10 +98,8 @@ def test_real_typed_reads_preserve_uuid_json_values_and_bounded_status(control_t
     assert "document_hash" not in row
     state = book.status(rid, limit=1)
     assert len(state["items"]) == 1
-    assert state["counts"] == {"pending": 1, "reported": 1, "verified": 1}
+    assert state["counts"] == {"pending": 1, "running": 1, "verified": 1}
     assert any(row["run_id"] == rid for row in book.runs(state="running"))
-    assert storage.reported(runtime, rid, [], 10) == []
-    assert storage.reported(runtime, rid, ["read"], 1)[0]["unit_key"] == "b"
     assert storage.available_keys(runtime, rid, "read", 1) == ["a"]
     # Reads use the restricted role; granting a read boundary gives no write authority.
     with pytest.raises(DBAPIError), runtime.begin() as conn:

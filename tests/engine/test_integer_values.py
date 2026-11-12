@@ -92,7 +92,7 @@ def test_complete_filing_content_worker_and_verifier_without_source_loader(tmp_p
     manifest = store.put(tmp_path.as_uri(), {'version': 1, 'contract': ref, 'artifacts': [data]})
     envelope = {'input': manifest, 'output': (tmp_path / 'reading.json').as_uri(), 'checks': ['source.output']}
     candidate = source_read.execute(envelope, store)
-    assert source_read.verify({**envelope, 'candidate': candidate}, store) == ({'source.output': True}, [])
+    assert source_read.check({**envelope, 'candidate': candidate}, store) == ({'source.output': True}, [])
     empty = dict.fromkeys(files.load(fixture)['read']['tables']['filings']['columns'])
     # Exactly, types too: `==` would take a flag read as 1 for True.
     assert digest(store.json(candidate)['artifacts'][0]['tables']['filings']) == digest([

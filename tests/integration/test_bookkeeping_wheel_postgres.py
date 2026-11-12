@@ -65,20 +65,18 @@ def test_installed_control_runs_a_whole_run(control_python, databases, tmp_path)
         return json.loads(done.stdout)
 
     url = lambda engine: engine.url.render_as_string(hide_password=False)
-    owner, worker, verifier, journal = url(databases.admin), url(databases.runtime), url(databases.verifier), url(databases.ledger.engine)
-    assert "006_issuer_roles.sql" in control(owner, "migrate", "--runtime-role", "bk_control")
-    control(owner, "grant-profile", "--profile", "artifact.copy", "--worker", "bk_runtime", "--verifier", "bk_verifier")
+    owner, worker, journal = url(databases.admin), url(databases.runtime), url(databases.ledger.engine)
+    assert "schema.sql" in control(owner, "migrate", "--runtime-role", "bk_control")
+    control(owner, "grant-profile", "--profile", "artifact.copy", "--worker", "bk_runtime")
     # Submission is Rules' job; the run is frozen in this process.
     book, rid, _, _ = submit(databases, tmp_path, count=2, body=config())
     artifacts = book.artifacts
     for envelope in control(worker, "claim", rid, "--profile", "artifact.copy"):
         candidate = copy.execute(envelope, artifacts)
+        candidate = {"uri": candidate["uri"], "sha256": candidate["sha256"]}
+        checks, proofs = copy.check({**envelope, "candidate": candidate}, artifacts)
+        report = artifacts.put(tmp_path.as_uri() + "/reports", report_document(envelope, candidate, checks, proofs, RUNTIME))
         control(worker, "report", "--envelope", "-", "--candidate", candidate["uri"], "--sha256", candidate["sha256"],
-                "--runtime", RUNTIME, document=envelope)
-    for verification in control(verifier, "verifications", rid, "--profile", "artifact.copy"):
-        checks, proofs = copy.verify(verification, artifacts)
-        report = artifacts.put(tmp_path.as_uri() + "/reports", report_document(verification, checks, proofs, RUNTIME))
-        control(verifier, "admit", "--verification", "-", "--report", report["uri"], "--sha256", report["sha256"],
-                document=verification)
+                "--checks", report["uri"], "--checks-sha256", report["sha256"], document=envelope)
     finished = control(worker, "finalize", rid)
     assert finished["run"]["state"] == "complete" and finished["counts"] == {"verified": 2}

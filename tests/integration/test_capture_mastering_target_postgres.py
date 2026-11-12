@@ -43,7 +43,7 @@ def bundle(tmp_path, documents=PEOPLE):
 def run_without_merge(databases, tmp_path, book, report):
     """Submit the target as configured, less its merge step (no MDM here)."""
     for profile in WORKERS:
-        grant_profile(databases.admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")
+        grant_profile(databases.admin, profile=profile, worker="bk_runtime")
     section = files.source(SOURCE)["bookkeeping"]
     target = deepcopy(section["targets"]["mastering"])
     assert [step["name"] for step in target["steps"][-2:]] == ["merge", "processed"]
@@ -63,7 +63,6 @@ def test_the_target_hands_mdm_every_document_whole_as_one_publication(databases,
     monkeypatch.setattr(files, "source", lambda name, root=None: body)
     report = bundle(tmp_path)
     book = Bookkeeping(databases.runtime)
-    book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)
     rid = run_without_merge(databases, tmp_path, book, report)
     state = drive(book, rid, databases.ledger, workers=WORKERS)
     assert state["run"]["state"] == "complete" and state["counts"] == {"verified": 4}  # three readings, records

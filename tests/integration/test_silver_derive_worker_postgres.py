@@ -67,7 +67,7 @@ def test_line_items_are_rebuilt_from_the_facts_and_the_verifier_reads_them_back(
     again = Artifacts()
     silver_derive.execute(envelope("line_items"), again)  # a second run rebuilds the same table
     assert again.written == store.written
-    assert silver_derive.verify({**envelope("line_items"), "candidate": {"uri": out["uri"], "sha256": "x"}}, store) == (
+    assert silver_derive.check({**envelope("line_items"), "candidate": {"uri": out["uri"], "sha256": "x"}}, store) == (
         {"silver.derived": True}, [])
 
 
@@ -79,7 +79,7 @@ def test_the_verifier_refuses_a_table_that_no_longer_matches_its_receipt(silver_
         conn.execute(text("DELETE FROM silver.company_line_item WHERE ctid IN "
                           "(SELECT ctid FROM silver.company_line_item LIMIT 1)"))
     with pytest.raises(ValueError, match="differs from the table"):
-        silver_derive.verify({**envelope("line_items"), "candidate": {"uri": out["uri"], "sha256": "x"}}, store)
+        silver_derive.check({**envelope("line_items"), "candidate": {"uri": out["uri"], "sha256": "x"}}, store)
 
 
 def test_a_build_without_the_master_database_is_refused(silver_store, monkeypatch):
@@ -93,7 +93,7 @@ def test_measures_are_rebuilt_from_the_line_items(silver_store):
     store = Artifacts()
     out = silver_derive.execute(envelope("measures"), store)
     assert json.loads(store.written[out["uri"]])["rows"] > 0
-    assert silver_derive.verify({**envelope("measures"), "candidate": {"uri": out["uri"], "sha256": "x"}}, store)[0] == {
+    assert silver_derive.check({**envelope("measures"), "candidate": {"uri": out["uri"], "sha256": "x"}}, store)[0] == {
         "silver.derived": True}
 
 

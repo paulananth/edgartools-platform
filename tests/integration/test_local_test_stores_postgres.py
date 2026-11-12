@@ -60,23 +60,20 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
         with admin.connect() as conn:
             assert not conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname='silver')"))
             assert not conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='silver_runtime')"))
-        for filename in ("connection.env", "worker.env", "verifier.env", "governance.env"):
+        for filename in ("connection.env", "worker.env", "governance.env"):
             assert (stores.folder(name) / filename).stat().st_mode & 0o777 == 0o600
-        worker, verifier, governance = (environment(f + ".env") for f in ("worker", "verifier", "governance"))
+        assert not (stores.folder(name) / "verifier.env").exists()
+        worker, governance = (environment(f + ".env") for f in ("worker", "governance"))
         assert "SILVER_DATABASE_URL" not in worker
         assert "MDM_MIGRATION_DATABASE_URL" not in worker
         assert "BOOKKEEPING_MIGRATION_DATABASE_URL" not in worker
         book = engine("bookkeeping", "postgres")
         with book.connect() as conn:
             for profile in PROFILES:
-                for login, allowed, denied in (("bookkeeping_runtime", "worker", "verifier"),
-                                              ("bookkeeping_verifier", "verifier", "worker")):
-                    assert conn.scalar(text("SELECT pg_has_role(:l,bookkeeping.profile_role(:p,:d),'MEMBER')"),
-                                       {"l": login, "p": profile, "d": allowed})
-                    assert not conn.scalar(text("SELECT pg_has_role(:l,bookkeeping.profile_role(:p,:d),'MEMBER')"),
-                                           {"l": login, "p": profile, "d": denied})
+                assert conn.scalar(text("SELECT pg_has_role('bookkeeping_runtime',bookkeeping.profile_role(:p,'worker'),'MEMBER')"),
+                                   {"p": profile})
         # Governance registers an invented policy and a source's Dataset Contracts from a rules folder,
-        # while workers and verifiers cannot insert master state directly.
+        # while workers cannot insert master state directly.
         from edgar_warehouse.rules import frozen
         root = tmp_path / "rules-root"
         files.write_policy({"version": 1, "required_consumers": ["export", "graph"], "automatic_rules": []}, root)
@@ -97,7 +94,7 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
         # Another source cannot register over a dataset Person owns.
         with pytest.raises(Blocked, match="belongs to source sec.submissions.person"), governance_mdm.begin() as conn:
             frozen.register(conn, ["invented.other"], root)
-        for login in ("mdm_runtime", "mdm_verifier", "mdm_governance"):
+        for login in ("mdm_runtime", "mdm_governance"):
             reader = engine("mdm", login)
             with reader.connect() as conn:
                 assert conn.scalar(text("SELECT count(*) FROM mdm.policy")) == 1
@@ -116,7 +113,7 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
             with application.begin() as conn:
                 conn.execute(text("SELECT bookkeeping_guard.authorize(CAST(:p AS jsonb))"),
                              {"p": lease(datetime.now(timezone.utc) - timedelta(minutes=1))})
-        # Run a real offline copy using the generated worker/verifier files.
+        # Run a real offline copy using the generated worker file.
         artifacts = Artifacts()
         inp = artifacts.put(tmp_path.as_uri() + "/inputs", {"invented": 1})
         output = (tmp_path / "copied.json").as_uri()
@@ -128,10 +125,7 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
         result = cli("worker", "rules", "run", "--pipeline", "invented-local-load", "--target", "load", "--root", str(root),
                      "--input-manifest", manifest["uri"], "--input-sha256", manifest["sha256"])
         run_id = str(result["run"]["run_id"])
-        cli("verifier", "workers", "work", "artifact.copy", run_id, success=False)
-        cli("worker", "workers", "work", "artifact.copy", run_id)
-        cli("worker", "workers", "verify", "artifact.copy", run_id, "--reports", (tmp_path / "reports").as_uri(), success=False)
-        cli("verifier", "workers", "verify", "artifact.copy", run_id, "--reports", (tmp_path / "reports").as_uri())
+        cli("worker", "workers", "work", "artifact.copy", run_id, "--reports", (tmp_path / "reports").as_uri())
         cli("worker", "bookkeeping", "finalize", run_id)
         status = cli("worker", "bookkeeping", "status", run_id)
         assert status["run"]["state"] == "complete" and status["pending_deliveries"] == 0
@@ -143,7 +137,7 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
             stores.start(name)
         assert stores.contents(name) == expected
         # Every generated login is paused/restored by backups, not just workers.
-        active = engine("mdm", "mdm_verifier")
+        active = engine("mdm", "mdm_governance")
         with active.connect():
             with pytest.raises(ValueError, match="connections are active"):
                 stores.backup(name)
@@ -154,12 +148,6 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
         with stores.locked(copy):
             stores.restore(copy, snapshot)
         assert stores.contents(copy) == expected
-        with book.begin() as conn:
-            role = conn.scalar(text("SELECT bookkeeping.profile_role('artifact.copy','worker')"))
-            conn.exec_driver_sql(f'GRANT "{role}" TO bookkeeping_verifier')
-        with pytest.raises(ValueError, match="duties overlap"):
-            with stores.locked(name):
-                stores.start(name)
     finally:
         for value in engines:
             value.dispose()

@@ -82,12 +82,11 @@ def run_target(databases, tmp_path, body, target=TARGET):
     listed = tmp_path / "documents.json"
     listed.write_text(json.dumps(keys))
     book = Bookkeeping(databases.runtime)
-    book.verifier = Bookkeeping(databases.verifier, artifacts=book.artifacts)
     report = write_manifest(source="openfigi", target=target, capture=str(tmp_path / "capture"),
                             documents=str(listed), capture_run="capture-1", output=str(tmp_path / "bundle"),
                             as_of="2026-10-17T00:00:00Z", revision=0, journal=MemoryJournal(), bookkeeping=book)
     for profile in WORKERS:
-        grant_profile(databases.admin, profile=profile, worker="bk_runtime", verifier="bk_verifier")
+        grant_profile(databases.admin, profile=profile, worker="bk_runtime")
     declared_target = copy.deepcopy(body["bookkeeping"]["targets"][target])
     declared_target.pop("local", None)  # this test runs every step in the database; a local target's run starts at prepare
     declared_target["steps"] = declared_target["steps"][:-2]  # no MDM here: the merge and the journal are Person's tests'

@@ -31,7 +31,7 @@ def test_worker_and_verifier_read_the_declared_arrays_without_a_source_loader(tm
     manifest = store.put(tmp_path.as_uri(), {"version": 1, "contract": contract, "artifacts": [data]})
     envelope = {"input": manifest, "output": (tmp_path / "reading.json").as_uri(), "checks": ["source.output"]}
     candidate = source_read.execute(envelope, store)
-    assert source_read.verify({**envelope, "candidate": candidate}, store) == ({"source.output": True}, [])
+    assert source_read.check({**envelope, "candidate": candidate}, store) == ({"source.output": True}, [])
     assert store.json(candidate)["artifacts"][0]["tables"]["filings"] == [
         {"accession_number": "a", "form": "10-K"}, {"accession_number": "b", "form": None}]
 
