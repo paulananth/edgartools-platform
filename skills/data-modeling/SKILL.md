@@ -66,7 +66,7 @@ Read these before deciding, and use their words:
   historic one) instead. `rules/reference/published/` is the form RDM publishes a version in, not a
   place to edit or copy from. Write a published file with `rdm.store.canonical` (rows in its order, then the
   sha256 of those bytes in `pin.json`), never by hand: `tests/unit/test_reference_preparation.py` rebuilds each
-  one and fails on any other row order (ticket 188, CI).
+  one and fails on any other row order (CI).
 - `docs/specs/rdm/spec.md` and `docs/specs/agent-context/spec.md`: how
   reference data and agent context are kept.
 
@@ -103,7 +103,7 @@ of an amount the row states stays beside that amount (operator, 2026-10-28:
 "Keep it on the row (Recommended)"), even when the master also holds a
 currency.
 
-**A retired column leaves a store by a new table, never by a drop** (ticket 143). The silver writer adds
+**A retired column leaves a store by a new table, never by a drop**. The silver writer adds
 columns and never drops them, and a changed spec is refused for a registered table. So a spec that loses a
 copy is registered under a new table name (`silver register`), the loads go to it, and the old table is dropped
 by its owner after the people reading the shared server are told. A store that holds no Silver needs nothing.
@@ -355,7 +355,7 @@ Examples only; nothing above depends on them.
   matching rules switched on in the policy. An EIN mapped by a contract's
   `cross_references` would be a cross-reference, lookup only (no contract maps
   one today).
-- **One kind, many identifiers (ticket 138):** a CUSIP and an ISIN are two
+- **One kind, many identifiers:** a CUSIP and an ISIN are two
   identifiers of one Security, not two kinds or two loads. An OpenFIGI answer
   has no CUSIP or ISIN field; the CUSIP answer and the ISIN answer of one
   security share their listing FIGIs, so the FIGI, matching in the
@@ -368,7 +368,7 @@ Examples only; nothing above depends on them.
   `FOREIGN` would make "FOREIGN" a valid state code, so `type` became its own
   code set, `sec-place-types`, with a `broad` crosswalk row from each place
   code; the ISO 3166 codes are `exact` rows to `iso-3166` (`outside`).
-- **Real names (profiling ticket 04b):** the review of 2026-10-07 found
+- **Real names:** the review of 2026-10-07 found
   `ACCOUNTING_PARENT` beside `IS_DIRECTLY_CONSOLIDATED_BY`, and
   `REPORTED_ULTIMATE_PARENT` beside `IS_ULTIMATELY_CONSOLIDATED_BY`: invented
   names for what GLEIF's relationship file already names. The operator kept
@@ -381,7 +381,7 @@ Examples only; nothing above depends on them.
 - **Who decides is not who owns:** an adviser's discretion (discretionary or
   non-discretionary, Form ADV Item 5.F) is on its link; ownership is
   `BENEFICIAL_OWNER_OF`.
-- **The Security model (ticket 138, 2026-10-25): every rule above, measured.**
+- **The Security model (2026-10-25): every rule above, measured.**
   Counts from the 2026-10-15 OpenFIGI capture and the 2026 Q2 N-PORT
   holdings; the security-master skill states the rulings.
   - *One kind, many identifiers.* OpenFIGI had been loaded as a CUSIP target

@@ -60,7 +60,7 @@ def identifier_type(args: dict) -> identifier_types.IdentifierType | None:
     """The declared identifier type (`rules/identifiers/<name>.yaml`) whose
     check-digit family and length are the item's, if any: the Dataset Contract
     that formats the column with it already sets a failing value's record aside
-    (its `checksum_reason`), so no quality check is needed (ticket 81)."""
+    (its `checksum_reason`), so no quality check is needed."""
     return next((t for t in identifier_types.TYPES.values()
                  if t.family is not None and t.family == args.get("family") and t.length == args.get("length")), None)
 

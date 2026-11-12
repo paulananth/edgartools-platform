@@ -48,7 +48,7 @@ engines. A dialect branch must not change which masters bind, which claims
 win, which links exist or which records wait or are rejected.
 
 **Configured vocabulary lives once, in RDM, read by Rust.** A vocabulary MDM
-runs by (the relationship types, ticket 132) is an RDM code set the policy
+runs by (the relationship types) is an RDM code set the policy
 pins, each entry a code whose properties are its rules; one Rust module reads
 the pinned rows and holds the one check, called at registration and before
 every calculation. Python only carries rows to it and its error back. No code
@@ -56,7 +56,7 @@ copy, no default for a missing entry: a policy pinning none has no entries,
 so what would use one goes to review.
 A new capacity or type is a new published version (`rules/reference/published/<set>/<n>/`, the file's
 sha256 in its `pin.json`) and a new pin in `rules/merge/reference-pins.yaml`; the committed workbooks
-(`rules mapdoc write`) and the test fixture follow it (ticket 182). When a source field is not one of the
+(`rules mapdoc write`) and the test fixture follow it. When a source field is not one of the
 vocabulary's words, count how many rows state it first: 7 of 3,570 owners did, each refining a capacity
 already held, so the form's own word became a capacity with the stated text as its title.
 
@@ -133,7 +133,7 @@ authoritative content before approval freezes it.
 
 ## Cross-reference completion
 
-Decided (operator, 2026-10-25, ticket 138): the cross-reference becomes the
+Decided (operator, 2026-10-25): the cross-reference becomes the
 one table of every identifier, each row the master id, the identifier kind,
 the value, matching or lookup only, the source, first and last seen. Built
 for one kind first (switched on 2026-10-26): a record may carry a list of values
@@ -159,7 +159,7 @@ it, but the value is never minted, projected or counted as held, and the
 rule may not merge (activation refuses it). A value two masters hold reaches
 both, so the record's own `first` identifier still settles the conflict.
 Registration refuses a cross-reference only on a namespace the dataset
-itself issues (ticket 138, Design 5).
+itself issues (Design 5).
 
 **A rule's merge** is a `merge` decision (`actor: rule:<id>@<version>`, no
 survivor named). It names every live merge either side rests on
@@ -175,8 +175,8 @@ change makes the proposal stale. An excluded pair goes to review.
 runs its own query, then asks it: both stores' holder lookups, the portable
 carrier read, name matching's held values, the agent lookup, the planner's
 re-delivered records and the master projection. A new rule about which
-values count changes that module, never the seven readers (ticket 138 had
-to edit all seven twice before it existed). The lookup index keeps a
+values count changes that module, never the seven readers (all seven were
+edited twice before it existed). The lookup index keeps a
 withheld value; the readers drop it.
 
 MDM owns source-record identity bindings, canonical master redirects and
@@ -222,7 +222,7 @@ identifier exists. The save then checks the proposal again under the save
 lock, and a proposal another run has overtaken is proposed again (a few
 tries, then the run stops).
 
-**A wrong consolidation is split by a steward, never edited** (ticket 142). `edgar-warehouse mdm steward split
+**A wrong consolidation is split by a steward, never edited**. `edgar-warehouse mdm steward split
 --merge <decision id> --by <name> --reason <words> --policy-digest <digest>` previews, and `--confirm` writes one
 `reverse` decision that names the merge, in one transaction with the replay of both masters' records. Both masters
 return with their listings and links, and the reversed pair is a Match Exclusion (a later record reaching both goes
@@ -293,7 +293,7 @@ temporary table and require an index seek in the plan. A scan fails the test.
 A statement whose key-list size changes enough to pick a bad cached plan uses
 `OPTION (RECOMPILE)` on that statement only. Do not put it on every procedure.
 
-**A lookup over current masters is an index passed as data** (ticket 138).
+**A lookup over current masters is an index passed as data**.
 `master_index.py` owns what every such lookup needs: a retained summary per
 master, per-generation coverage, the batch's changes once coverage is
 complete, and the resumable owner rebuild. A lookup gives an `Index`: its
@@ -319,14 +319,14 @@ until the load ends.
 - A schema change is a new migration file, added at the end of the
   registered list. Never edit an applied one.
   `store.MIGRATIONS` is that list: a file left out of it is never applied
-  (ticket 178's migration 030 was), and
+  (one migration was), and
   `tests/unit/test_every_mdm_migration_is_applied.py` fails for it.
 - A registered name is an identity. A rule version keeps its steps, so a matching
   function's id cannot be renamed under it; a Dataset Contract keeps its
   `publication_key` words and `record_key`. Before renaming a word that is
   stored or registered, try the activation in the shared store (it refuses
   with "Rule version already registered" or "Dataset identity is immutable"),
-  and keep the old word as the permanent name (ticket 178).
+  and keep the old word as the permanent name.
 - Test every migration against a **populated** table. An empty-table test
   proves nothing about what a migration exists to do.
 - PostgreSQL cannot defer a **partial** unique index, and SQL Server checks a
@@ -342,7 +342,7 @@ until the load ends.
   batch's request once (the distinct batch keys), never once a record. A
   whole-store check still reads the current records (`iter_type`).
 
-A module that moves between folders (ticket 73) also breaks the paths it computes from its own
+A module that moves between folders also breaks the paths it computes from its own
 location: `Path(__file__).parents[N]` and `.parent`. Before the move, grep `parents\[`,
 `__file__` and the files a runtime pin lists (`rules/`, `migrations/`), and run the whole CI set
 (`tests/unit tests/architecture tests/mdm` plus `tests/engine`), not the tests of one folder.
@@ -378,7 +378,7 @@ Name the claim in one sentence, then take the smallest cohort that can falsify i
 | A proof on a large delivery | [A sample chosen by kind](../data-profiling/SKILL.md#choose-a-proof-sample-by-kind): the batches richest in each rare case and one ordinary batch |
 | A stage that changes what readers see, on top of its own proof | Trace one well-known entity end to end: every source that names it, its masters, its silver rows and links, and each reader's answer. Keep the questions as a script that runs again. A bulk comparison checks that two paths agree, and agreement hides what both get wrong; a traced entity shows a stripped identifier, an empty name or a missing link at once |
 | A rebuilt merge path | Replay real stored records and compare with the stored masters: members, identifiers, each field's value, winner and conflicts. Pick whole masters, so none is cut in two, and run batches of the real size as well as one record a batch: each size hides faults the other shows. |
-| Any code, a migration, a rules or data file | The affected tests, locally, and CI (`AGENTS.md`, "Tests and CI"). A source's rules file is also read by tests that never name the source, through a shared helper (ticket 183: two tests reached a source through another test's helper and only CI found them). Before the first push of a change to a source's rules, run the whole test folder CI runs for it once (`tests/integration` takes 12 minutes) rather than the files whose names match |
+| Any code, a migration, a rules or data file | The affected tests, locally, and CI (`CLAUDE.md`, "Tests"). A source's rules file is also read by tests that never name the source, through a shared helper (two tests reached a source through another test's helper and only CI found them). Before the first push of a change to a source's rules, run the whole test folder CI runs for it once (`tests/integration` takes 12 minutes) rather than the files whose names match |
 | A rule upstream of MDM (a source extract, a combine step) | Compare the changed step's output over a capture, and the combined output on one bundle. Equal combined bytes mean everything downstream is unchanged |
 | The Merge Stage engine, a worker, Bookkeeping | A Proving Run on a pinned cohort, and the full installed proof on an empty store: every count as before, a killed worker resumes, the second pass changes nothing |
 | Matching rules, a Dataset Contract | The smallest cohort that contains each new case. One slice whose second pass changes nothing proves the path on real records. A case that slice did not contain is the one bundle that contains it, then stop. The whole delivery is the proof only when the claim is that delivery's totals, or switch-on |
@@ -404,16 +404,16 @@ installed commands on a sample (the answer key's few records) until it
 passes; then run full size once. Each check states what it proves: the
 source record found is not a value equal to it. A failed run keeps its
 stores and restarts at the failed step; a rerun check (the second load
-changes nothing) runs on a slice, not the whole load. Ticket 48 ran its
+changes nothing) runs on a slice, not the whole load. One ticket ran its
 45-minute proof four times: two installed-bundle faults a sample finds in
 2 minutes, then checks the review found too weak.
 
 **A module reads a rules file through `rules.files.ROOT`**, never a path
 beside a checkout (`Path(__file__).parents[n] / "rules"`): the installed
 bundle ships `rules/` elsewhere, and the bundle test loads each such file
-from the installed bundle (ticket 48).
+from the installed bundle.
 
-### Learned on a record that carries only a name (ticket 01, 2026-11-04)
+### Learned on a record that carries only a name (2026-11-04)
 
 - **The name rules (`name_binding`) serve one pair of sources only**: they need a Name Matching and a place test, so
   a Form ADV custodian named only by its name cannot use them. The rule for it is the `exact_name_binding`
@@ -426,7 +426,7 @@ from the installed bundle (ticket 48).
 - **A new candidate route changes the routes digest** that every stored record is indexed under
   (`matching_routes_sha256`); stored records must be reindexed, a rebuild store simply loads again.
 
-### Learned on a lookup-only route (ticket 24, 2026-11-04)
+### Learned on a lookup-only route (2026-11-04)
 
 - **An installed-bundle test reads the committed rules.** `tests/engine/test_data_skill_bundle_postgres.py`
   installs from the commit's HEAD, so uncommitted rules give a stale answer (its policy digest was the
@@ -466,7 +466,7 @@ expected engine/kind/case once and refuse missing or contradictory outcomes.
 
 **Count a store through its record reader, never its tables.** Governed
 storage keeps the records in its own tables, so a count of the old `mdm`
-tables reads an empty store whatever the run did (ticket 135, 2026-10-29: a
+tables reads an empty store whatever the run did (2026-10-29: a
 proof passed with every count 0). Count with `inspection.counts` and each
 source record's current pointer, and grant the verifier what the installed
 test grants. A proof whose counts are all zero proved nothing: treat it as
@@ -512,20 +512,20 @@ These name this repo's code and the failures each rule came from.
   `tests/architecture/test_mdm_routine_retirement.py` (retired calculation
   callers stay absent) and `tests/mdm/test_limits.py` (input batching keeps an
   oversized record).
-- **No size refusal** (rebuild ticket 74): a 10,000-record closure cap and a
+- **No size refusal**: a 10,000-record closure cap and a
   16 MiB request cap, chosen for a local machine, stopped the ownership
   Proving Run, whose insider network was one connected group.
-- **Record by record** (rebuild ticket 77): without the cap, every batch
+- **Record by record**: without the cap, every batch
   replayed the whole insider network (23 batches in 60 minutes); merging only
   the masters a batch touches made batch times flat over the full Person feed.
-- **Join the keys** (profiling ticket 07): at 2,229 keys a whole-list GIN
+- **Join the keys**: at 2,229 keys a whole-list GIN
   search took 12 to 21 s, and one key at a time 14 to 18 ms for all of them.
   A generic plan took 5.2 s against 0.8 s for a custom one.
 - **Remove a layer** (operator, 2026-09-26): the Merge Stage writes and reads
   the dated master table directly, instead of copying rows between tables.
 - **Cheapest proof** (operator, 2026-10-13): a source extract column trim
   already shown equal over 7,000 documents needed no 45-minute proof.
-- **Lean cohort** (operator, 2026-10-24): ticket 120. A slice of the
+- **Lean cohort** (operator, 2026-10-24). A slice of the
   Securities proof passed twice, and the CUSIP half of the quarter matched.
   The ISIN half's only new case was one CUSIP offered two ISINs that share a
   FIGI, inside the first bundle. The other seven bundles were the same join,

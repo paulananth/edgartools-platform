@@ -73,7 +73,7 @@ them in PRs. [REFERENCE.md](REFERENCE.md) is the contract language.
 | File | What it holds |
 |---|---|
 | `rules/sources/<source>/source.yaml` | The feed: `source`, `bronze` and `dataset_contracts` (one Dataset Contract per source code). Its `bookkeeping` section, which runs the feed into silver and MDM, belongs to the Bookkeeping skill. |
-| `rules/source-sequence.yaml` | One line per source folder, naming its Bookkeeping target (or `null` when no target is registered yet) and preferred `after` order. Every folder needs both a `source.yaml` (even one that only names the source and reads nothing) and a sequence entry. Every source must declare its intended `bookkeeping.targets` in `source.yaml`; a missing target or `target: null` is an explicit unregistered/not-runnable gap to resolve before claiming a complete pipeline. `after` is not a runtime dependency. Suite tests walk both files (ticket 45). |
+| `rules/source-sequence.yaml` | One line per source folder, naming its Bookkeeping target (or `null` when no target is registered yet) and preferred `after` order. Every folder needs both a `source.yaml` (even one that only names the source and reads nothing) and a sequence entry. Every source must declare its intended `bookkeeping.targets` in `source.yaml`; a missing target or `target: null` is an explicit unregistered/not-runnable gap to resolve before claiming a complete pipeline. `after` is not a runtime dependency. Suite tests walk both files. |
 | `rules/sources/<source>/quality.yaml` | The feed's data quality checks and fixes |
 | `rules/sources/<source>/silver-<table>.yaml` | A silver table spec, one file per table (silver target): reviewed in the PR, registered from this file |
 | `rules/merge/kinds/<kind>.yaml` | A new domain's matching and merge rules (only when the kind is new) |
@@ -526,7 +526,7 @@ missing, go on and log it.
   the findings name (and each fact every row repeats about the master) and
   check it is in the kind's fields and the Dataset Contract, and that no
   silver table spec carries it (a link's source key excepted); one found in
-  silver is a defect, not a choice (ticket 138 found six master fields in
+  silver is a defect, not a choice (six master fields were once found in
   silver only, ruled for MDM three days before).
 - **Fields:** use the kind's names. A list-shaped field has no contract
   syntax yet: leave it out, say so, and log a ticket.
@@ -976,10 +976,10 @@ Either way, write it in the log.
 
 | Command | State | What to do | Built by |
 |---|---|---|---|
-| Preview (matches against a copy of MDM) | not built | A proving run on a disposable PostgreSQL 16 (**test**) | rules-skill ticket 04 |
+| Preview (matches against a copy of MDM) | not built | A proving run on a disposable PostgreSQL 16 (**test**) | the rules skill |
 | Silver writer to a warehouse store | not built: the writer lands on PostgreSQL 16 only | Land on PostgreSQL 16 (**Two targets**) | a warehouse sink ticket (plan decision 36) |
-| Flat export of a nested part | not built | Land flat parts; record each nested part as a gap | a follow-up of profiling ticket 06 |
-| Silver output worker in a pipeline | built (ticket 169): a `silver.land` step lands a reading's table | Add the step after the merge that makes the master ids the rows link to (**Two targets**); `silver land` by hand only for a table whose source has no such step | none |
+| Flat export of a nested part | not built | Land flat parts; record each nested part as a gap | a profiling follow-up |
+| Silver output worker in a pipeline | built: a `silver.land` step lands a reading's table | Add the step after the merge that makes the master ids the rows link to (**Two targets**); `silver land` by hand only for a table whose source has no such step | none |
 
 ## Examples (this repo's sources)
 
@@ -1022,11 +1022,11 @@ These name today's sources only as examples; nothing above depends on them.
   Company's are layers in `tests/mdm/policy_layers.py` (`LAYERS`, newest
   first). N-PORT's registrant (2026-10-15) ran only the 43 tests that load
   the rules, and CI failed on four pinned digests.
-- **Proving runs:** ticket 05's `.scratch/company-mastering/research/05_proving_run.py`
-  (`candidate()` stamps the copied policy); ticket 27's
+- **Proving runs:** `.scratch/company-mastering/research/05_proving_run.py`
+  (`candidate()` stamps the copied policy);
   `.scratch/company-mastering/research/27_proving_run.py` (6,726 records,
   about 25 minutes, a second pass that changes nothing).
 - **Unfinished live pipelines** (the one list; other skills point here):
   live acquisition (`provider.capture`,
-  #933, qualified offline) waits for the worker runtime on AWS (ticket 71).
+  #933, qualified offline) waits for the worker runtime on AWS.
   A source's pipes switch on over captured files without it (#1108).

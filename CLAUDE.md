@@ -32,6 +32,8 @@ never copies a rule, since copies drift (ticket 63, 2026-11-03; ticket 213).
 - **Choosing tests, or starting a watcher**: [the recipes](docs/agents/watching-and-testing.md).
 - **Starting, backing up or copying the local stores**:
   [Initialize shared local PostgreSQL](docs/local-agent-testing.md).
+- **Choosing a skill, or installing them**: [the skills index](skills/README.md)
+  (`bash skills/link.sh`).
 - Issues and Wayfinder maps: local Markdown under `.scratch/` (`docs/agents/issue-tracker.md`).
 - Triage labels: the default five-role vocabulary (`docs/agents/triage-labels.md`).
 - Domain docs: root `CONTEXT.md` and `docs/adr/` (`docs/agents/domain.md`).

@@ -86,7 +86,7 @@ teardown.
   procedures `REFRESH_AFTER_LOAD` and `PROCESS_RUN_MANIFEST_STREAM` have one definition, Terraform's
   `native_pull` module (`infra/terraform/snowflake/modules/native_pull/sql/`); the stream processor is
   JavaScript (a temp table, then a loop), so it uses no cursor. Edit them there, never as a second copy
-  in `infra/snowflake/sql/bootstrap/` (ticket 109 deleted the `04_refresh_wrapper.sql` copy).
+  in `infra/snowflake/sql/bootstrap/` (the `04_refresh_wrapper.sql` copy was deleted).
 - `GRANT OWNERSHIP ... REVOKE CURRENT GRANTS` strips *all* outbound grants, not just the previous
   owner's — it once silently dropped the dashboard reader role's `SELECT` on all 20 gold tables. Use
   `COPY CURRENT GRANTS`, or additive `GRANT ... ON ALL/FUTURE TABLES`.
@@ -186,7 +186,7 @@ before trusting it.
   authority is Postgres; the closest reflection is `NEO4J_GRAPH_MIGRATION.MDM_GRAPH_NODES`).
 - **The original `EDGARTOOLS_DASHBOARD` Streamlit app is still ACCOUNTADMIN-owned** — the same gap already
   fixed for `MDM_GRAPH_DASHBOARD`, with the same drop/recreate-as-target-role recipe.
-- **Release-readiness Ticket 74, items 1-2:** repairing the two known stale accessions, and a proactive
+- **Stale bronze objects:** repairing the two known stale accessions, and a proactive
   scan for other pre-2026-07-31 stale bronze objects.
 
 ## Snowflake-side facts from the old pipeline (still live)
@@ -320,7 +320,7 @@ export DBT_SNOWFLAKE_WAREHOUSE=EDGARTOOLS_DEV_REFRESH_WH
 this repo (always a placeholder like `<account_locator.region.cloud>` above) — the only
 project-level convention is the **connection name**, resolved from
 `~/.snowflake/config.toml`. **`--snow-connection` is required and never derived** from the
-environment name — as of wayfinder ticket 03 (snowflake-env-provisioning map), `deploy-snowflake-stack.sh` fails closed without it, and no script derives one from the environment. Prod's connection is
+environment name — `deploy-snowflake-stack.sh` fails closed without it, and no script derives one from the environment. Prod's connection is
 `edgartools-prod`; pass it explicitly.
 
 **Environment identifier.** The same ticket replaced `--env <dev|prod>` with
@@ -509,7 +509,7 @@ docker push $ECR:warehouse-dev
 
 ## ECS cost sizing (old pipeline)
 
-The ECS sizing study (Ticket 28, 2026-08-30) measured MDM commands of the old
+The ECS sizing study (2026-08-30) measured MDM commands of the old
 pipeline, since deleted; its method stays valid for a future worker runtime:
 judge a cheaper profile on validated output (correctness, completeness,
 idempotency across reruns, a matched control on the same input), never on
