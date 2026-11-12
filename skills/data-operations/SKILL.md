@@ -135,8 +135,6 @@ edgar-warehouse load \
 
 - `--stores` is the stores folder configured through
   [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
-  `uv run --extra mdm python infra/scripts/local-test-stores.py up <name>` initializes
-  every store empty. Each step runs under its own duty's login; connection files are not printed.
 - **Create a store from an up-to-date checkout, and keep its lifecycle there.** `up` refuses a checkout
   behind `origin/main`, and a store belongs to the checkout that created it: `up`, `stop`, `backup` and `copy`
   from another checkout stop at "Environment belongs to another worktree". A stale untracked skill link
