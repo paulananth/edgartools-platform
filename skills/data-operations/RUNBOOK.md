@@ -171,6 +171,25 @@ edgar-warehouse change-journal events --run-id <run-id> --limit 20
 These queries have bounded listings; a short listing does not account for the
 whole source. Use full state counts and delivery inventories for reconciliation.
 
+### Find the last run
+
+For a last-run question, resolve source, target and environment. Inspect
+source-specific load logs and manifest evidence, preferring successful completion
+summaries over modification times. Report times in local ET. Verify with
+`bookkeeping status` in the load's private store: complete, every unit verified,
+no pending delivery. `bookkeeping runs` is unfiltered and bounded; absence is
+not proof. If a historical log ID is unknown to the current store, report only
+the logged result, not current verification. Do not replay or force to answer
+when a run last completed.
+
+#### Examples: SEC Company
+
+- The target is `sec.company` / `mastering` in hosted MDM (Snowflake Postgres),
+  not Gold or `sec.company-facts`.
+- Search `~/.local/share/edgartools/load-logs/` and
+  `~/.local/share/edgartools/hosted-prod/manifests/load/sec.company/mastering/`.
+- Use the same private store environment as the load; never print connection URLs.
+
 | Observation | Decision |
 | --- | --- |
 | Work reported but not admitted | Run the separate verifier under the current lease; after expiry use supported reclaim/reconciliation. Worker success is not completion. |

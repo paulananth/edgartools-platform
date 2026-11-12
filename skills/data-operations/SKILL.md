@@ -22,38 +22,14 @@ configuration and evidence. Reuse the current authorization for that scope.
 Read the source's runbook and live Bookkeeping runs/leases before starting work;
 another agent's in-flight work is a dependency, not a cleanup target.
 
-Use [RUNBOOK.md](RUNBOOK.md) for delivery, file-change, capacity and recovery
-decisions. Discover actual command capabilities with `edgar-warehouse doctor` and
+Use [RUNBOOK.md](RUNBOOK.md) for last-run lookup, delivery, file-change, capacity and recovery.
+Discover actual command capabilities with `edgar-warehouse doctor` and
 CLI help. Report missing enforcement or unsupported stages as runtime gaps;
 instructions cannot make them available. An offline sequence check is not a
 runtime readiness certificate. To install, enable and run one source, then
 clear a finished test, follow **Install and enable one source**. To load a
 captured delivery, use **Load a capture**: one command for every source. Recover
 retained progress before making a new run.
-
-### Find the last run
-
-For a last-run question, resolve the exact source, target and environment. Inspect
-source-specific load logs and manifests first; use completion summaries rather
-than modification times. Report times in local ET, converting UTC values as needed.
-Verify the candidate with `bookkeeping status` in the same private store
-environment used by the load. Confirm the run completed,
-all work was verified and no deliveries remain pending. Bounded run listings
-may omit older or less frequent sources, so absence from a listing is not proof
-that a source has no runs. If a log's run ID is unknown to the current store,
-report it as historical evidence and say current verification is unavailable.
-A last-run question needs inspection, not a replay or forced load.
-
-#### Examples: SEC Company
-
-- Resolve this as `sec.company` / `mastering` in hosted MDM (Snowflake Postgres),
-  distinct from Gold and `sec.company-facts`.
-- Search `~/.local/share/edgartools/load-logs/` for SEC Company load logs and
-  `~/.local/share/edgartools/hosted-prod/manifests/load/sec.company/mastering/`
-  for retained bundle evidence.
-- `bookkeeping runs --limit` has no source filter; use it for live contention,
-  not to conclude Company has no runs.
-- Use the same private store environment as the load. Never print connection URLs.
 
 When deploying tested configuration to an environment, follow **Configuration
 promotion** in RUNBOOK.md. Reuse the existing Rules approval procedure and exact
