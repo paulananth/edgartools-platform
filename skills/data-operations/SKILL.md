@@ -203,14 +203,12 @@ first and never loads a document twice.
 
 ### Derive a run input; never ask for what the store can decide
 
-A target may declare `preparation` operations. Their current source Rules digest must be active before they may
-write; a draft or a different active digest stops preparation. The loader finishes them before deriving run files
-or freezing new bundles, using the selected stores' worker login. A complete-set matching pass belongs here when its answer
-expands the scope the following read needs; actual binding remains after identifier matching in the Merge Stage.
-Use its hash-bound cached projection only for the same captured bytes, matching population, recipe, policy and
-runtime. An unchanged repeat applies nothing. Retain a completed projection after an interrupted application so
-the retry can apply it without reading the full capture again. A declared complete capture proves its declared
-scope through EOF and count; independent provider completeness requires publisher evidence.
+Declared `preparation` operations finish before derived files or new bundles, under the selected worker login.
+They require the current source Rules digest to be active. Complete-set matching may expand the next read's
+scope; binding still follows identifier matching. Reuse a hash-bound cached projection only for identical bytes,
+population, recipe, policy and runtime; an unchanged repeat applies nothing. Keep a completed projection
+for retry after interrupted application. EOF and count verify the declared complete scope; independent
+provider completeness needs publisher evidence.
 
 A target's run files and facts are of two kinds: what the caller must bring (a capture, a time, a count the
 provider states) and what the rules and the store decide (a scope, the names a reading keeps, a list that flags

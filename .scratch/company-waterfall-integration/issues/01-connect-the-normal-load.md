@@ -16,6 +16,7 @@ pairs before the scoped read, keeping name binding after identifier matching.
 - [x] 2026-11-11 22:04 ET Repair installed wheel inclusion: preparation and derivation modules are present, and an isolated installed CLI imports them outside the checkout. Final focused gate/skill checks: 28 passed.
 - [x] 2026-11-12 06:20 ET Select current revisions and folded patch fields through the shared Rust kernel while retaining original assertions; 43 affected matching checks and 108 guide/skill checks passed. Three-axis focused reviews are clear.
 - [x] 2026-11-12 06:20 ET Prove partial patch inheritance, original-field preservation and changed same-key evidence on real stores; all 30 mastering adapter tests pass on PostgreSQL (47 s) and MySQL (179 s), with automatic container cleanup.
+- [x] 2026-11-12 06:32 ET Keep the new preparation guidance below the updated base's skill-size limit without dropping its rules; 114 skill and guide checks pass, including the formerly failing size check.
 - [ ] Publish the PR and verify its final head in CI.
 - [x] 2026-11-11 22:04 ET Update the architecture atlas: all nine revised native diagrams pass, connected-path screenshots inspected in light/dark, and the narrow review page contains all 13 sources without overflow. Source revision is pinned in the atlas.
 - [x] 2026-11-11 21:43 ET Learning → skill: `data-operations` names configured preparation before deriving scope; `mdm-engineering` requires durable pair evidence, lookup keys and waiter release in one transaction.
@@ -97,3 +98,7 @@ authoritative clean-environment gate.
 **Regression test:** `tests/engine/test_data_skill_bundle_postgres.py::test_the_bundle_installs_whole_with_no_file_in_two_wheels`.
 **Status:** repaired head `6105c51e4aecfe9c91513d20b89fabee97b7c08b` passed full CI run `43145742578`.
 The subsequent history correction remains draft until its own final-head CI passes.
+
+The updated-base run `43208445525` passed all runtime, engine and storage jobs but failed the new
+skill-length gate: `data-operations` had 500 lines and the limit is strictly below 500. Shorten the
+new preparation paragraph without removing its admission, ordering, cache, retry or completeness rules.
