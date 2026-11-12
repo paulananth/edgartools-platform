@@ -6,7 +6,7 @@ Type: task. Status: resolved (2026-11-11 19:40 ET).
 
 ## Checklist
 
-- [x] (2026-11-11 19:40 ET) 33 dates removed across the skill's seven files: an operator's ruling keeps its words and loses its date. One date stays, an example of a refused value in `REFERENCE.md`. Verified by the date script
+- [x] (2026-11-11 19:40 ET) 33 dates removed from four of the skill's files: an operator's ruling keeps its words and loses its date. One date stays, an example of a refused value in `REFERENCE.md`. Verified by the date script
 - [x] (2026-11-11 19:40 ET) Run figures removed from the Examples: one run's test counts, a proving run's record count and time, and three pull request numbers. Limits the engine enforces stay
 - [x] (2026-11-11 19:40 ET) Focus: every section serves onboarding a new feed or domain; nothing is moved out. The "Unfinished live pipelines" line stays because other skills point to it
 - [x] (2026-11-11 19:40 ET) Ticket-citation and genericity lints pass; the `rules` command tests pass (12)
