@@ -233,6 +233,27 @@ checks and points to the repository lifecycle script.
    `RULES_DATABASE_URL`, `BOOKKEEPING_DATABASE_URL`,
    `CHANGE_JOURNAL_DATABASE_URL`, `MDM_DATABASE_URL`,
    `RDM_DATABASE_URL`, and `SILVER_DATABASE_URL`.
+
+   For Snowflake-hosted MDM, `edgartools-prod` is the Snowflake SQL connection,
+   not a PostgreSQL DSN. The PostgreSQL port is `5432`. Keep the actual host
+   only in the repository-root `.env`; never commit it to this public skill.
+   Store the complete, existing authorized `MDM_DATABASE_URL` there with mode
+   `0600`; `.env` is ignored by Git. The URL needs the intended database, role,
+   credential and SSL settings; do not infer them from the Snowflake SQL
+   connection. Load it only into the process that needs it. Never print or
+   commit DSNs; `.env.example` contains placeholders only.
+
+   If the PostgreSQL DSN is unavailable, obtain it through the operator's
+   approved connection path; do not rotate PostgreSQL access merely to discover
+   it. `bootstrap-prod-mdm.sh` resets PostgreSQL role access and is not a DSN
+   lookup or a generic database-creation command.
+
+   Database creation requires an authorized owner connection with `CREATEDB`;
+   do not assume an MDM application DSN has that privilege. Verify the target
+   instance and create only missing databases, preserving existing databases and
+   data. Use each store's own connection variable and database; an MDM URL does
+   not configure RDM, Bookkeeping, Change Journal or Silver.
+
    `BOOKKEEPING_MANIFEST_ROOT` is the local folder, as a `file://` address (a plain path is refused), where
    Rules freezes run configuration; `local-test-stores.py` writes it into
    `worker.env`.
