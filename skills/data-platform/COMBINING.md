@@ -10,7 +10,7 @@ provider, classification or database dependency.
 A standalone input manifest is an object with `version: 1`, a `contract`
 receipt (`uri`, `sha256`), and `readings`: a mapping from logical names to
 source-extract receipts. A name may list 1..256 receipts instead of one: they
-are read in that order as one source extract (ticket 112), so a step fed by
+are read in that order as one source extract, so a step fed by
 many units (a Bookkeeping list slot) names one source in the rules, not one per
 unit; the output names every listed receipt and a receipt listed twice is
 refused. A contract that numbers its sources per unit (`units_1` to `units_8`) cannot run as a
@@ -46,7 +46,7 @@ cannot change a later authenticated receipt or declared schema.
 
 The index is bounded to 32 MiB and each partition to 8 MiB and 100,000 rows;
 an artifact's rows and bytes have no lower ceiling, so the index names some
-150,000 partitions, over a terabyte (ticket 83). Explicit byte and
+150,000 partitions, over a terabyte. Explicit byte and
 row budgets apply across every table, deferral, partition and artifact.
 Complete contiguous range and EOF accounting are checked before traversing
 an artifact's content. Each partition's exact hash, byte count and schema are
@@ -130,7 +130,7 @@ null and nontext values refuse. Normalize them in the source-extract contract.
   null files none (a missing column is refused), and a key with no member
   filed has no output row. Use it
   for a fact every row repeats about a master: the master takes the most-filed
-  value (ticket 138).
+  value.
 - Optional `exclude` names another member group with identical key columns
   and no exclusion of its own. Subtract its complete member set after all
   inputs finish. Counts remain uncapped; samples contain the lexically first
@@ -196,7 +196,7 @@ frozen units.
   32 entries. `where` never compares two columns: to keep a row by its
   group's counts (two counts equal, a count above one), join the counts onto
   each row in a combine, then decide in a source extract over its pieces with
-  `choose` and `equal` (ticket 138).
+  `choose` and `equal`.
 - Group keys are exact text or integers, with no conversion: integer `1`
   and text `"1"` are different identities; boolean/structured keys fail.
   Null group keys are skipped. Group `value` is a column or `.` for the
@@ -241,7 +241,7 @@ frozen units.
   and input **and** output rows each respect `max_rows` (1–40,000,000).
   Counts include every input table. A combined output over 32 MiB is written
   in pieces of at most 8 MiB behind a version-2 index, never refused for its
-  size (ticket 83); only one row larger than a piece is refused. Validation
+  size; only one row larger than a piece is refused. Validation
   failures occur before any destination write; pieces are written before the
   index that names them. A combination in pieces is checked by redoing it.
 

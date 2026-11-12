@@ -146,7 +146,7 @@ checks and points to the repository lifecycle script.
    Otherwise the installed `edgar-warehouse` fails on import, though every
    test run from a checkout passes. The bundle tests
    (`tests/engine/test_data_skill_bundle_postgres.py`) install from the
-   committed head and catch it (ticket 136).
+   committed head and catch it.
 
 2. **Skills and rules folder.** `edgar-warehouse skill install --rules <new folder>`
    copies these skills into `~/.agents/skills` and `~/.claude/skills`, and the

@@ -21,7 +21,7 @@ replaced OpenFIGI's ticket 120 rules (switched on 2026-10-24 19:27 ET,
 "switch on ticket 120"; those switch-ons ended with them) with one dataset,
 `openfigi.security.v4`, and three rules that wait for their switch-on.
 
-## The mastering process (decided 2026-10-25, ticket 138; being built)
+## The mastering process (decided 2026-10-25; being built)
 
 The operator replaced the per-kind design on 2026-10-25 ("secutiy is the kind
 cusip and isin are diffrant identifiers of the same securities", "there
@@ -51,8 +51,8 @@ the value, matching or lookup only, the source, first seen, last seen.
 |---|---|
 | CUSIP, ISIN, each listing FIGI | matching, from any source (a FIGI 13F or N-PORT files too) |
 | composite FIGI, share-class FIGI | lookup only: 9 composite and 2 share-class FIGIs are on CUSIPs whose names or types differ ("Lookup only", 2026-10-25) |
-| SEDOL, CINS, LoanX | matching, each under its verified Identifier Contract (ticket 125) |
-| ticker (letters and digits, one to nine once a slash, dash or dot is dropped) | OpenFIGI issues it; only the Form 4 rule matches by it (ticket 24; operator, 2026-11-04, "Yes, Form 4 route only"): 616 of 154,511 sit on two or more CUSIPs, at most 3, so its claim is 3 and a symbol reaching several Securities goes to review |
+| SEDOL, CINS, LoanX | matching, each under its verified Identifier Contract |
+| ticker (letters and digits, one to nine once a slash, dash or dot is dropped) | OpenFIGI issues it; only the Form 4 rule matches by it (operator, 2026-11-04, "Yes, Form 4 route only"): 616 of 154,511 sit on two or more CUSIPs, at most 3, so its claim is 3 and a symbol reaching several Securities goes to review |
 | ticker + exchange, Bloomberg ID | lookup only: 17,941 raw (ticker, exchange) pairs are on two or more CUSIPs (55,057 CUSIPs, 2026-10-15 capture), mostly a bond's description written in the ticker field |
 
 **Each source does the same: look up, then master.** A source record carries
@@ -94,7 +94,7 @@ CUSIPs, the old one with its last-seen date).
 - **N-PORT adds fields.** A holding's record looks up its CUSIP, ISIN or other
   issued identifier; it mints only when none is found. Its seven pairing steps
   (`cusips_found` to `fold`) go.
-- **Form 4** finds its Security by the issuer's trading symbol (ticket 24): the
+- **Form 4** finds its Security by the issuer's trading symbol: the
   `security_symbols` target reads only each filing's issuer and symbol, and
   `form4-security-ticker` binds the symbol to the one Security OpenFIGI gave
   that ticker to. None held waits unbound, several go to review, and it makes
@@ -115,7 +115,7 @@ priority"; this replaces "make openfigi priority 1 and 13f last" when ticket
 | name | OpenFIGI, 13F, N-PORT |
 | security type, security type 2, market sector, security description | OpenFIGI: the one value the listings state, else the US composite's, else the ISIN country's composite's (description is new to MDM, "Same rule as name") |
 | title of class, share class, issuer | 13F, N-PORT; the issuer by N-PORT's issuer LEI |
-| asset category, issuer type, investment country, currency, restricted, derivative category | N-PORT: the value the most holdings file; a tie keeps none ("Most-filed value"). Only on the Security in MDM; the holding row in silver does not repeat them (one system of record, 2026-10-28), except its currency code, the unit of its own value ("Keep it on the row"). **To build** (ticket 138): today they are in silver only |
+| asset category, issuer type, investment country, currency, restricted, derivative category | N-PORT: the value the most holdings file; a tie keeps none ("Most-filed value"). Only on the Security in MDM; the holding row in silver does not repeat them (one system of record, 2026-10-28), except its currency code, the unit of its own value ("Keep it on the row"). **To build**: today they are in silver only |
 
 The one Cross-reference serves every kind; Company, Person and Fund move onto
 it in their own tickets ("Security now, others next tickets").
@@ -124,15 +124,15 @@ it in their own tickets ("Security now, others next tickets").
 
 | Never | Instead |
 |---|---|
-| Join two Securities on a ticker, a ticker and exchange, or a Bloomberg ID | Lookup only (2026-10-25, ticket 138). Today FIGI is lookup only too; ticket 138 makes it matching |
+| Join two Securities on a ticker, a ticker and exchange, or a Bloomberg ID | Lookup only (2026-10-25). Today FIGI is lookup only too; ticket 138 makes it matching |
 | Let one identifier sit on two Securities | Every proof counts `identifiers_on_two_masters`; it must be 0 |
 | Let an OpenFIGI ISIN answer create a second Security for an issue its CUSIP answer already made | It joins that Security by a shared listing FIGI in MDM; FIGIs leading to two Securities merge them, the oldest surviving (built, A2a; a pair a steward split stays apart and goes to review) |
-| Let a filed CUSIP and ISIN merge two Securities | Never: the record binds by its CUSIP, else an ISIN; an ISIN another Security holds is not added (2026-10-25, ticket 138) |
+| Let a filed CUSIP and ISIN merge two Securities | Never: the record binds by its CUSIP, else an ISIN; an ISIN another Security holds is not added (2026-10-25) |
 | Fill a security-level field by guessing between disagreeing listings | Take the primary listing's value, else leave it blank (decided) |
 | Fold OpenFIGI's values into N-PORT's record | OpenFIGI keeps its own record on the same Security (decided) |
 | Send a request to OpenFIGI or the SEC | Captured files only; a new request needs the operator's permission for that request |
 | Load ISIN-only Securities in a second run over the same quarter | One run reads the quarter once (decided) |
-| Pair a CUSIP with an ISIN in a source's own rules, or order one source's loads by kind of identifier | The Merge Stage pairs them through the Cross-reference (decided, ticket 138) |
+| Pair a CUSIP with an ISIN in a source's own rules, or order one source's loads by kind of identifier | The Merge Stage pairs them through the Cross-reference (decided) |
 
 ## One Security, several sources
 
@@ -141,9 +141,9 @@ CUSIP). Each source keeps its own record on it; MDM merges them.
 
 | Source | Dataset | Creates a Security? | Gives |
 |---|---|---|---|
-| SEC N-PORT | `sec.nport.security.v2` | Yes (decided) | CUSIP, every ISIN filed with it (ticket 138), issuer name as filed, title of class, issuer LEI, "issued by" link |
+| SEC N-PORT | `sec.nport.security.v2` | Yes (decided) | CUSIP, every ISIN filed with it, issuer name as filed, title of class, issuer LEI, "issued by" link |
 | SEC 13F | `sec.thirteenf.securities.v2` | Yes (live) | CUSIP, name and title as filed, a filed FIGI |
-| OpenFIGI | `openfigi.security.v4` (both kinds asked, ticket 138) | Yes, and first (on since 2026-10-26 12:24 ET) | All ten OpenFIGI fields and every listing; the CUSIP or ISIN asked and every listing's FIGI as identifiers |
+| OpenFIGI | `openfigi.security.v4` (both kinds asked) | Yes, and first (on since 2026-10-26 12:24 ET) | All ten OpenFIGI fields and every listing; the CUSIP or ISIN asked and every listing's FIGI as identifiers |
 
 The ranking that fills a field: OpenFIGI, then 13F, then N-PORT (operator,
 2026-10-25: "this should be second source", then "Load and priority"; it
@@ -190,13 +190,13 @@ their Identifier Contract is verified (`policy.yaml`, `automatic_rules`,
 | Rule | Source | Joins by | No Security holds it | Switched on |
 |---|---|---|---|---|
 | `security-cusip` | 13F | CUSIP | creates one | 2026-10-15 ("merge 985 when green agreed for the rest") |
-| `nport-security-cusip` | N-PORT | CUSIP | creates one; a filed CUSIP and ISIN on two Securities bind by the CUSIP, the ISIN withheld from it (version 2026-10-26.2, "Filed CUSIP binds first") | switched on 2026-10-26 12:24 ET ("Do limited testing and switch on"), ticket 138 |
-| `nport-security-isin` | N-PORT | an ISIN (each filed with a CUSIP; the key of an ISIN-only one) | creates one | switched on 2026-10-26 12:24 ET ("Do limited testing and switch on"), ticket 138 |
-| `openfigi-security-cusip` | OpenFIGI (CUSIP asked) | CUSIP | creates one (version 2026-10-25.1) | switched on 2026-10-26 12:24 ET ("Do limited testing and switch on"), ticket 138 |
-| `openfigi-security-isin` | OpenFIGI (ISIN asked) | ISIN | creates one (version 2026-10-25.1) | switched on 2026-10-26 12:24 ET ("Do limited testing and switch on"), ticket 138 |
-| `openfigi-security-figi` | OpenFIGI | every listing FIGI | creates one; FIGIs reaching two or more Securities merge them (version 2026-10-26.1, "FIGI merges Securities") | switched on 2026-10-26 12:24 ET ("Do limited testing and switch on"), ticket 138 |
+| `nport-security-cusip` | N-PORT | CUSIP | creates one; a filed CUSIP and ISIN on two Securities bind by the CUSIP, the ISIN withheld from it (version 2026-10-26.2, "Filed CUSIP binds first") | switched on 2026-10-26 12:24 ET ("Do limited testing and switch on") |
+| `nport-security-isin` | N-PORT | an ISIN (each filed with a CUSIP; the key of an ISIN-only one) | creates one | switched on 2026-10-26 12:24 ET ("Do limited testing and switch on") |
+| `openfigi-security-cusip` | OpenFIGI (CUSIP asked) | CUSIP | creates one (version 2026-10-25.1) | switched on 2026-10-26 12:24 ET ("Do limited testing and switch on") |
+| `openfigi-security-isin` | OpenFIGI (ISIN asked) | ISIN | creates one (version 2026-10-25.1) | switched on 2026-10-26 12:24 ET ("Do limited testing and switch on") |
+| `openfigi-security-figi` | OpenFIGI | every listing FIGI | creates one; FIGIs reaching two or more Securities merge them (version 2026-10-26.1, "FIGI merges Securities") | switched on 2026-10-26 12:24 ET ("Do limited testing and switch on") |
 
-- **Look up first, then create, in a batch** (ticket 138): every record that
+- **Look up first, then create, in a batch**: every record that
   finds a held Security binds first, then records that may create, then
   those that only join, so a value one record adds is found by the rest. One
   identifier value creates one Security per batch.
@@ -236,7 +236,7 @@ it; the priority decides only where several give it. For each field
    2. `sec.thirteenf.securities.v2`
    3. `sec.nport.security.v2`
 
-   (operator, 2026-10-18, ticket 84: "make openfigi priority 1 and 13f
+   (operator, 2026-10-18: "make openfigi priority 1 and 13f
    last", then "Name only (Recommended)").
 3. **Within one source, the latest effective time wins.** Ties go to the
    source code, then the record key, then the assertion, so the result is
@@ -252,10 +252,9 @@ it; the priority decides only where several give it. For each field
    "mastering is all about having good values not blanks, use priority").
    No field rule asks the sources to agree. To find a disagreement, read the
    `master_field` view where `conflict_count` is above 0. Within one source,
-   filers that disagree on `share_class` still give no letter (ticket 130,
-   `share_class_one_letter`). Both rulings are revisited once real examples exist.
+   filers that disagree on `share_class` still give no letter (`share_class_one_letter`). Both rulings are revisited once real examples exist.
 
-What this gives today, measured (ticket 84): OpenFIGI fills the name: it
+What this gives today, measured: OpenFIGI fills the name: it
 states one name for 99.7% of its 353,491 CUSIPs. OpenFIGI gives no title, so
 N-PORT, then 13F, fill the title of class. A Security OpenFIGI did not find
 takes N-PORT's filed name, else 13F's.
@@ -266,23 +265,22 @@ moves the Mastering Policy's digest, so it needs its test run and the
 operator's approval of the new digest (data-onboarding, "a merge-rule change
 moves pinned digests").
 
-**The key of a Security is its CUSIP, else its ISIN, else its SEDOL, else its LoanX, and a holding with only a FIGI is a find-only record** (ticket 139: FIGI is the fourth class of the same path, a cross-reference that finds the Security OpenFIGI gave it to and never creates one; 123 of 6,015 FIGI-only FIGIs are held today, the rest wait) (ticket 190; operator, 2026-11-04: "You can not build every make isin work for others", "Always build generic"). The no-CUSIP branch (`no_cusip_*` in the N-PORT rules) takes the first class a holding files, `key_kind` names it and `record.yaml` gives the identifier of that class. A SEDOL or LoanX filed beside a CUSIP or an ISIN is stored on the Security and never matches: funds file one SEDOL on several Securities (1,590 of 26,081), and an unrestricted rule merged two CUSIP Securities. Their rules match only a record keyed by their class (`field_in_set@1` on `provenance.matching.key_class`), and the keyed records are published in the second target, `mastering_other_keys`, which reads the first run's combine with `record.yaml`'s `batch` context set to `other`. A new class is a lookup set, one line in each key coalesce (source.yaml, issuers.yaml, holding-rows.yaml) and one rule: the rules language has no list, so an engine key-class list waits for a fourth class.
+**The key of a Security is its CUSIP, else its ISIN, else its SEDOL, else its LoanX, and a holding with only a FIGI is a find-only record** (FIGI is the fourth class of the same path, a cross-reference that finds the Security OpenFIGI gave it to and never creates one; 123 of 6,015 FIGI-only FIGIs are held today, the rest wait) (operator, 2026-11-04: "You can not build every make isin work for others", "Always build generic"). The no-CUSIP branch (`no_cusip_*` in the N-PORT rules) takes the first class a holding files, `key_kind` names it and `record.yaml` gives the identifier of that class. A SEDOL or LoanX filed beside a CUSIP or an ISIN is stored on the Security and never matches: funds file one SEDOL on several Securities (1,590 of 26,081), and an unrestricted rule merged two CUSIP Securities. Their rules match only a record keyed by their class (`field_in_set@1` on `provenance.matching.key_class`), and the keyed records are published in the second target, `mastering_other_keys`, which reads the first run's combine with `record.yaml`'s `batch` context set to `other`. A new class is a lookup set, one line in each key coalesce (source.yaml, issuers.yaml, holding-rows.yaml) and one rule: the rules language has no list, so an engine key-class list waits for a fourth class.
 
 ### 3. Held back
 
 A record a contract sets aside never reaches matching. It waits with an open
 review ("Held back, never dropped", below).
 
-**A Security has one issuer at a time** (relationship types version 3, ticket 24; operator, 2026-11-04). Two source records of one Security that name two issuers over overlapping periods set both ISSUED_BY links aside and open the review `conflicting_targets`; a changed issuer is two periods of history. This is the same answer inside one record (two issuers, no link).
+**A Security has one issuer at a time** (relationship types version 3; operator, 2026-11-04). Two source records of one Security that name two issuers over overlapping periods set both ISSUED_BY links aside and open the review `conflicting_targets`; a changed issuer is two periods of history. This is the same answer inside one record (two issuers, no link).
 
-**N-PORT carries every ISIN filed with a CUSIP** (ticket 138 part B2; it
+**N-PORT carries every ISIN filed with a CUSIP** (it
 replaces "Use FIGI to add pairs too", 2026-10-15, and its rules
 `figi-agree.yaml`, `figi-offers.yaml`, `figi-attach.yaml`, all deleted). MDM
 binds the record by its CUSIP, else an ISIN; a listed ISIN failing its check
 digit is left out, the record kept.
 
-**OpenFIGI: one load, every listing FIGI an identifier** (ticket 138 part B1;
-it replaces ticket 120's ISIN target, which joined an ISIN answer to its
+**OpenFIGI: one load, every listing FIGI an identifier** (it replaces ticket 120's ISIN target, which joined an ISIN answer to its
 CUSIP's Security through `figi-ids.yaml`, `isin-figi-cusips.yaml` and
 `isin-attach.yaml`, all deleted). A CUSIP answer and an ISIN answer of one
 security meet in MDM by a shared listing FIGI. Until part A2, an answer whose
@@ -296,12 +294,12 @@ silver holding row is keyed by its ISIN.
 
 **ISSUED_BY reaches an SEC filer's Securities only through GLEIF.** An N-PORT
 holding names its issuer by LEI, and SEC filings almost never state one: 1 of
-1,602 Form 4 issuers' submissions carries an LEI (2026-10-23, ticket 24). So
+1,602 Form 4 issuers' submissions carries an LEI (2026-10-23). So
 "ISSUED_BY" reaches an SEC Company only where its GLEIF record joined it by
 the SEC-GLEIF name rules (the Companies-only proof: 2,764 issuers on their SEC
-filer's Company, ticket 22). Measure that lookup through MDM's links, never
+filer's Company). Measure that lookup through MDM's links, never
 through the filing's own LEI. A Form 4 class attaches by the filed trading
-symbol through OpenFIGI's ticker (ticket 24), not through this link.
+symbol through OpenFIGI's ticker, not through this link.
 
 **Share-class FIGI does not join records** (operator, 2026-10-20: "Lookup
 only for now (Recommended)"). Before proposing it, count the ISIN-only
@@ -318,16 +316,16 @@ fund's own label never makes one. 2026 Q2 N-PORT, 5,347,869 holdings:
 |---|---|---|
 | CUSIP | 3,546,715 (66.3%) | a Security (live) |
 | ISIN, no CUSIP | 812,952 (15.2%) | a Security (live) |
-| SEDOL, CINS or LoanX in the "other" field | 7,718 | a Security, each by its verified Identifier Contract (decided: "SEDOL, CINS, LoanX (Recommended)"; ticket 125) |
+| SEDOL, CINS or LoanX in the "other" field | 7,718 | a Security, each by its verified Identifier Contract (decided: "SEDOL, CINS, LoanX (Recommended)") |
 | A Bloomberg ID or FIGI in the "other" field | 10,415 | a cross-reference only; never joins |
 | A ticker only | 59,409 (mostly futures, forwards, options) | no Security: a ticker is not unique |
 | The fund's own ID only | 909,030 (17%; loans 652,058, forwards, swaps) | **not a Security** (decided: "Not Securities (Recommended)"): a contract between two parties stays a holding under its fund |
 
-Live today (ticket 125): a SEDOL (seven characters, check digit) or a LoanX (LX and six digits),
+Live today: a SEDOL (seven characters, check digit) or a LoanX (LX and six digits),
 told apart by the "other identifier" label and shape, **joins** the Security its holding already
 keys by its CUSIP, else its ISIN; the label `CINS` is not read (1,316 of 1,327 such rows are CUSIPs
 under the wrong label). A Security keyed by one of them alone, with no CUSIP or ISIN, is not made
-yet (ticket 190). A fund that files without a series id is its registrant's Company, not a second
+yet. A fund that files without a series id is its registrant's Company, not a second
 master keyed by the same CIK (operator, 2026-11-03: "the company is the fund").
 
 ## Share classes
@@ -340,7 +338,7 @@ master keyed by the same CIK (operator, 2026-11-03: "the company is the fund").
   span three or more identifiers.
 - **A fund's share classes (Class A, Class I) are not Securities.** They
   belong to the fund series, not here. Operator, 2026-10-20: "Profile first
-  (Recommended)" (ticket 124).
+  (Recommended)".
 
 ## Every OpenFIGI field (decided)
 
@@ -376,7 +374,7 @@ countries, and for 25 of 36 countries tried the home composite never appears
 in the answers, which is why the code set holds 11. A Security OpenFIGI did
 not find (5%) keeps its N-PORT and 13F fields only.
 
-## The listings detail table (decided; kept by ticket 138)
+## The listings detail table (decided)
 
 Operator, 2026-10-25: "changing my mind need a separate table for listing
 ie figi, exchange, ticker, exchange" (replacing "we don't need this table").
@@ -404,7 +402,7 @@ ticker ends in a code by chance 121,414 times). Lines without an exchange
 code form one group. Steps: `line-counts.yaml`, `lines.yaml`, `listing.yaml`.
 
 **What listings are for: resolving a venue's key to its Security (decided
-2026-10-26; being built, ticket 138).** Operator, 18:58 ET: "Listing table is
+2026-10-26; being built).** Operator, 18:58 ET: "Listing table is
 inside mdm primary use is the resolution of securities trading in different
 exchanges or venues". So the lookups run from a venue's key to the Security,
 never from a Security to its listings; the (master id, exchange, currency)
@@ -488,8 +486,8 @@ for their switch-on after the merge part A2):
    them, else creates one.
 5. 13F, then Securities `mastering` (N-PORT): each looks up first, then
    creates.
-6. Securities `mastering_other_keys` (N-PORT, ticket 190), then the Form 4
-   `security_symbols` (ownership, ticket 24): the Securities keyed by a SEDOL
+6. Securities `mastering_other_keys` (N-PORT), then the Form 4
+   `security_symbols` (ownership): the Securities keyed by a SEDOL
    or a LoanX, and the symbols a Form 4 files, each after the Securities they
    look up exist. Neither is in `rules/source-sequence.yaml`, which names one
    target a source.
@@ -512,9 +510,9 @@ until the operator permits it.
 
 ## Proving a change
 
-**Check the premise in the rules before measuring.** A count taken with code a ticket has since removed is not evidence (ticket 127: 2,688 folded Securities were measured with the FIGI fold ticket 138 had ended, and the operator ruled on that number). Read the current rules for the step first, then measure the behaviour that runs, with a test.
+**Check the premise in the rules before measuring.** A count taken with code a ticket has since removed is not evidence (2,688 folded Securities were measured with the FIGI fold ticket 138 had ended, and the operator ruled on that number). Read the current rules for the step first, then measure the behaviour that runs, with a test.
 
-Prove a Security contract or merge rule at the level [Choose the cheapest proof](../mdm-engineering/SKILL.md#choose-the-cheapest-proof) names. The whole quarter is that proof only when the claim is the quarter's totals or switch-on. When it is, 2026 Q2, one record per Security, takes about 3 h 10 min a pass on a laptop; keep it on power ("Make the Securities run faster", ticket 122).
+Prove a Security contract or merge rule at the level [Choose the cheapest proof](../mdm-engineering/SKILL.md#choose-the-cheapest-proof) names. The whole quarter is that proof only when the claim is the quarter's totals or switch-on. When it is, 2026 Q2, one record per Security, takes about 3 h 10 min a pass on a laptop; keep it on power ("Make the Securities run faster").
 
 OpenFIGI first was switched on from the completed figi-full store (2026-10-24). CUSIP answers created the Securities. ISIN bundle 1 held the new case, one CUSIP offered two ISINs that share a FIGI. Bundles 2–8 stayed unchecked. Its ISIN target reads the complete CUSIP runs' `figi_ids`, so those CUSIP runs finish first in the same store.
 - Report counts only: Securities, held back by reason, identifiers on two
@@ -522,7 +520,7 @@ OpenFIGI first was switched on from the completed figi-full store (2026-10-24). 
 
 ## RDM code sets and their sources
 
-Reloaded from `rules/reference/published/` by `scripts/dev/reload_rdm.py` (ticket 189); the words of each are in
+Reloaded from `rules/reference/published/` by `scripts/dev/reload_rdm.py`; the words of each are in
 `WORDS` there.
 
 | Code set | Source | Ticket |

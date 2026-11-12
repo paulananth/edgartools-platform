@@ -16,7 +16,7 @@ measure computed from it?**
 ## Status of each rule
 
 Every rule here is **live**: built in silver (`company_fact`, `company_line_item`,
-`company_measure`) and proved by the cohort proof (ticket 48), which the operator
+`company_measure`) and proved by the cohort proof, which the operator
 accepted (operator, 2026-10-30 14:35 ET: "yes"). The proof ran the installed
 commands over 368 filers once, with its final checks: every filed line item equal
 to a fact of its filing, every measure's inputs stored line items, no empty value
@@ -35,7 +35,7 @@ proof is live only once its own change is proved
 | Send a request to the SEC or a data provider | Captured files only; a new request needs the operator's permission for that request |
 | Type a financial column `integer`, `int`, `float`, `double` or `real`, in a silver spec, dbt, Python or the engine, or read a filed figure as a float | A whole number (CIK, year, window, count) is `bigint`; a figure, ratio or measure is a big decimal (`decimal(38,10)`, Python `Decimal`, exact text from the engine: `big_numbers: text` and `decimals: text`, or a JSON reader with `parse_float=str`). No float anywhere between the filed text and the stored value, even where no captured figure loses a digit today (operator, 2026-10-22: "For financial projects never use integer's use only bigint or big decimal", "Big decimal", "Fix the data type issue") |
 
-## The time model (ticket 35, decided 2026-10-21)
+## The time model (decided 2026-10-21)
 
 - **Every filed copy is kept; the latest is the default** (operator: "Keep all,
   latest by default (Recommended)"). Silver keeps each filed figure, as of its
@@ -62,7 +62,7 @@ proof is live only once its own change is proved
 
 Evidence and sources: ticket 35, research 02 section 1.
 
-## Standard line items (ticket 38, decided 2026-10-21)
+## Standard line items (decided 2026-10-21)
 
 - **Nineteen groups, 23 line items** (current assets and liabilities, pretax
   income and income tax, and dividends paid, buybacks and dividends per share
@@ -83,7 +83,7 @@ Evidence and sources: ticket 35, research 02 section 1.
 - **Revenue keeps the standard order** (`Revenues` first), with a data-quality
   rule that flags a period where the chosen revenue is smaller than another
   revenue total filed for it (another unflagged concept of its list, same
-  unit: never an industry kind; ticket 46), for a steward (operator: "Standard order + a
+  unit: never an industry kind), for a steward (operator: "Standard order + a
   quality check (Recommended)"). Never a silent switch to the larger total.
 - **A missing line item** is empty, with the reason "no concept filed", and
   counted per line item.
@@ -122,16 +122,16 @@ Evidence and sources: ticket 35, research 02 section 1.
 - **A concept of another taxonomy than the year's is named with its taxonomy**
   (`dei:EntityCommonStockSharesOutstanding`), since the row's `taxonomy` is
   the year's.
-- **Ties the rulings leave open** (ticket 46, measured on the cohort): an
+- **Ties the rulings leave open** (measured on the cohort): an
   annual report filing as many facts for two annual periods covers the later
   as its own year; one filed copy in two units keeps the unit its filing uses
   most (its reporting currency), then the unit's text. The query and the answer
   key break them alike.
-- Figures in the reporting currency with its ISO code (ticket 42, below).
+- Figures in the reporting currency with its ISO code (below).
 
 Evidence and sources: ticket 38, research 02 section 2.
 
-## Measures (ticket 39, decided 2026-10-21)
+## Measures (decided 2026-10-21)
 
 - **Stored, built from silver** (operator: "Stored, built from silver
   (Recommended)"): one row per company, measure, fiscal year and window, naming
@@ -152,8 +152,7 @@ Evidence and sources: ticket 38, research 02 section 2.
 - **ROIC's tax rate** is income tax over pretax income; when pretax income is
   zero or negative, or that rate falls outside 0–100%, it is the statutory rate
   of the filer's country, from RDM's `corporate-tax-rates` (OECD; operator,
-  2026-10-22: "Statutory rate (new source)", "RDM, OECD source (Recommended)";
-  ticket 133). The country is the filer's place of incorporation through the
+  2026-10-22: "Statutory rate (new source)", "RDM, OECD source (Recommended)"). The country is the filer's place of incorporation through the
   pinned `sec-place-codes` ISO crosswalk (a subdivision such as US-PA reads as
   its country); the rate is the child code whose year holds the fiscal year's
   end, the combined central and sub-central rate, divided by 100.
@@ -162,7 +161,7 @@ Evidence and sources: ticket 38, research 02 section 2.
   the latest-filed series.
 - **Proved** per measure and per null reason against ticket 44's hand-computed
   answer key.
-- **Built as SQL over the line items** (ticket 47): `measures.yaml` names each
+- **Built as SQL over the line items**: `measures.yaml` names each
   ratio, return and growth series; `company_measure` is rebuilt whole from
   `company_line_item`, and reads `company_fact` only to find a year that holds
   two annual periods.
@@ -186,13 +185,13 @@ Evidence and sources: ticket 38, research 02 section 2.
 
 Evidence and sources: ticket 39, research 02 section 3; the build, ticket 47.
 
-## Reading company facts (ticket 40, decided 2026-10-22)
+## Reading company facts (decided 2026-10-22)
 
 - **Configured reading only** (operator, 2026-10-22: "configure only"): a
   source-extract contract, no Python custom step. It is
-  `rules/sources/sec.company-facts/facts.yaml` (ticket 45). Its `company_fact`
+  `rules/sources/sec.company-facts/facts.yaml`. Its `company_fact`
   table gives one row per filed fact through the engine's generic `nest`
-  iteration (ticket 46; operator, 2026-10-28: "Engine step, local
+  iteration (operator, 2026-10-28: "Engine step, local
   (Recommended)"), the rows silver's `company_fact` lands.
 - **The filer's CIK is filed two ways**: a JSON number in some files, digit text
   (zero-padded) in others (262 and 105 of the cohort). `integer` reads both as
@@ -211,17 +210,17 @@ Evidence and sources: ticket 39, research 02 section 3; the build, ticket 47.
 - **A concept with no facts** lands and flattens to nothing (119 of 138,987 in
   the cohort).
 - **A number beyond exact 64-bit** is kept as exact text: declare
-  `big_numbers: text` on the `units` value (ticket 128; operator: "Exact big
+  `big_numbers: text` on the `units` value (operator: "Exact big
   numbers in the reader"). Never round it; without the option the file is
   refused (`value_number_range`). With it, all 368 captured files read.
 - **Every decimal figure is a big decimal**: declare `decimals: text` on the
-  `units` value too (ticket 134), so a figure with a decimal point reaches
+  `units` value too, so a figure with a decimal point reaches
   silver as its exact filed digits, never through a float (operator,
   2026-10-22: "For financial projects never use integer's use only bigint or
   big decimal", "Big decimal"). Of 323,634 decimal figures captured, none loses a
   digit through a float today; the rule holds anyway.
 
-## Currencies, IFRS and industry formats (ticket 42, decided 2026-10-22)
+## Currencies, IFRS and industry formats (decided 2026-10-22)
 
 - **Reporting currency with its ISO code beside each figure** (operator:
   "Reporting currency + code (Recommended)"); never convert. A measure whose
@@ -246,7 +245,7 @@ Evidence and sources: ticket 39, research 02 section 3; the build, ticket 47.
   reason "not meaningful for financial services". Operating margin follows its
   inputs.
 
-## Silver tables and their review (ticket 43, decided 2026-10-22)
+## Silver tables and their review (decided 2026-10-22)
 
 - **Three tables**: `company_fact` (every filed fact, append, keyed on the
   measured eight columns), `company_line_item` and `company_measure` (built from
@@ -261,9 +260,9 @@ Evidence and sources: ticket 39, research 02 section 3; the build, ticket 47.
   the IFRS, financial-services, mixed-currency and changed-year-end cases.
 - **The statement format is read from Company, never copied onto a row**: it
   comes from the Company master's SIC code, and is "unknown" until Company is
-  mastered (ticket 37; ticket 46).
+  mastered (ticket 46).
 
-## Running the facts through Bookkeeping (ticket 169)
+## Running the facts through Bookkeeping
 
 `sec.company-facts` has one Bookkeeping target, `silver`: `facts` (`source.read`,
 filers' files in slices of at most 8 MiB), `land` (`silver.land`: the reading's
@@ -279,7 +278,7 @@ replaces by partition (`company_key`); that is not built.
 
 ## RDM code sets and their sources
 
-Reloaded from `rules/reference/published/` by `scripts/dev/reload_rdm.py` (ticket 189); the words of each are in
+Reloaded from `rules/reference/published/` by `scripts/dev/reload_rdm.py`; the words of each are in
 `WORDS` there.
 
 | Code set | Source | Ticket |

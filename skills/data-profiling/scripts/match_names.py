@@ -1,4 +1,4 @@
-"""Learn what a name rule must respect, from two sources' records (profiling ticket 07b).
+"""Learn what a name rule must respect, from two sources' records.
 
     uv run --with duckdb --with pyyaml python skills/data-profiling/scripts/match_names.py \\
         --left <file> --left-key <col> --left-name <col> [--left-variants <col>] \\

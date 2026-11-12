@@ -1,4 +1,4 @@
-"""What a name rule must respect, learnt from the data (profiling ticket 07b; plan decision 26).
+"""What a name rule must respect, learnt from the data.
 
 A name rule needs more than a fixed precision bar (operator, 2026-10-06: "name
 with class A is completely different from class C"). The data says which parts

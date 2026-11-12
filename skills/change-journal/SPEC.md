@@ -189,7 +189,7 @@ journal no events, so there is none to recover. Journal recovery
 delivers committed intent; it does not silently request new source data.
 Recovery returns 3 when deliveries remain pending or authority/evidence fails.
 Configured Rules submission supports an exact `--feed` binding. Install the
-shared source/feed skill with `bash skills/change-journal/link.sh` (or a
+shared source/feed skill with `bash skills/link.sh change-journal` (or a
 temporary `--home` for installation tests). Both runtimes use one skill file.
 
 Producer workflow qualification in `edgar-warehouse plan workflow`

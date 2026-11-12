@@ -1070,7 +1070,7 @@ class Adapter:
                 & (event.c.observer_key == run.c.run_key) & (event.c.event == "applied"))
         # The batch's request and assessment are read once per batch (`origin_requests_statement`),
         # never once per record: a large batch's request repeated on every master of a page
-        # exhausted memory (ticket 147).
+        # exhausted memory.
         statement = select(selected, batch.c.batch_bytes.label("origin_batch"),
             batch.c.generation.label("origin_generation"), batch.c.request_hash.label("origin_hash"),
             run.c.run_key.label("origin_run_key"), run.c.run_bytes.label("origin_run"),

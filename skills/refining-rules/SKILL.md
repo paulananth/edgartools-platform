@@ -251,7 +251,7 @@ A rule that asks whether two records state the same time compares them as
 instants, never as text: the Stage stores a record's `effective_at` in UTC
 (`+00:00`), while a Name Matching or a source keeps the provider's spelling (`Z`, an
 offset). A source's record-keeping date that only marks a new version is that
-record's effective time, not a field of the master (rebuild ticket 129).
+record's effective time, not a field of the master.
 
 ### test: the cheapest proof, then record it
 
@@ -277,8 +277,7 @@ Follow [APPROVE.md](../data-onboarding/APPROVE.md). A new version applies
 to new batches only. Running the feed is the Bookkeeping skill's **run**
 mode.
 
-When the operator asks for a limited test before a switch-on (ticket 138,
-2026-10-26: "Do limited testing and switch on"): take a slice of the real
+When the operator asks for a limited test before a switch-on (2026-10-26: "Do limited testing and switch on"): take a slice of the real
 capture that holds the cases the rule changes (for a merge rule, the answers
 sharing values with the slice), run it through the configured contracts and
 the Merge Stage on a disposable store in every load order the feeds allow,
@@ -303,14 +302,13 @@ Never invent a command.
   (`waterfall.py`, from the SEC Companies in the store and the whole GLEIF publication; its answer
   reaches the merge through `merge.apply_pairs`); the pass `sec-gleif-name-city-or-postcode` (the older name rules and the passes that compared less are deleted)
   (`cascade_pass@1`; "name and city or postcode" compares `[[city, postcode]]`); the code in
-  `edgar_warehouse/mdm/waterfall.py` and `cascade.py`
-  (ticket 09). Name a matching rule by what it compares, never by a pass
+  `edgar_warehouse/mdm/waterfall.py` and `cascade.py`. Name a matching rule by what it compares, never by a pass
   number (operator, 2026-11-03). A rename or a deletion moves the policy
   digest: add a policy layer in `tests/mdm/policy_layers.py` that restores the
   old form, then run the whole CI set (`tests/unit tests/architecture
   tests/mdm` and the engine and integration files that name the rule), since
   the mapping-document test, the Company mastering fixture digest and the
-  installed-bundle test each hold the rule list (ticket 09 needed three extra
+  installed-bundle test each hold the rule list (missing one cost three extra
   pushes).
 - Issued identifiers: those with an Identifier Contract in a kind file (today `cik`; GLEIF states `lei`). Name-rule proofs:
   `.scratch/company-mastering/research/08-*` and `12-*`. A proving run:

@@ -66,7 +66,7 @@ approved findings exist, or to say that they do not.
 ## Settled since the first version
 
 - The RDM spec is approved (2026-10-05) and built: the `rdm`
-  database, the policy's pin of its reference data (ticket 02).
+  database, the policy's pin of its reference data.
 - `edgar-warehouse context <code set>` reads `rdm.code_context`;
   `edgar-warehouse rdm list` and `rdm describe` give a code set's meaning,
   version, usage and hints.
@@ -75,7 +75,7 @@ approved findings exist, or to say that they do not.
 
 ## Open questions
 
-1. `silver.table_context` is specified but not built (ticket 06); until then
+1. `silver.table_context` is specified but not built; until then
    the silver spec is read from the findings.
 2. The review of 2026-10-07 found two pairs of overlapping parent types and
    unnoted inverse fund types (the skill's Examples): rulings for the operator.

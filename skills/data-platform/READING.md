@@ -68,7 +68,7 @@ read:
 ```
 
 `wrapper` names the one array under the document's single key; `wrapper: null`
-reads a document that is itself the array, one record per element (ticket 104).
+reads a document that is itself the array, one record per element.
 Write `null`: a bare `wrapper:` line is also no value. Each still refuses the other shape. With `ordinal_context`, a table that iterates
 a list inside each record (`each: data`) gives every row its record's position,
 so rows of a nested list stay tied to the element they came from.
@@ -78,7 +78,7 @@ one unencrypted file, verifies its CRC through EOF and enforces the expanded
 byte limit. `max_input_bytes` bounds the authenticated snapshot and
 `max_bytes` the expanded bytes (each at most 1 TiB); the private spool is a
 file (at most 1 TiB), `max_partitions` at most 10,000,000, and each partition
-at most 8 MiB and 100,000 records (ticket 83: only one record, `max_record`,
+at most 8 MiB and 100,000 records (only one record, `max_record`,
 is bounded below the machine). `max_record` applies the explicitly selected
 native or Python compact JSON encoding. Recursive object key order is retained
 before projection. `read.limits` bounds each projected record, and assertions
@@ -167,7 +167,7 @@ Python JSON formatting policies inside assertions. Assertions run even when
 every table is empty and cannot defer records. The source worker writes no
 source-extract output on rejection; the existing parser and byte limits still apply.
 
-`overlap` tells whether two lists of text share a value (ticket 93): true when
+`overlap` tells whether two lists of text share a value: true when
 they share one, false when they share none (an empty list shares nothing), null
 when either is null or missing. Anything but a list of text refuses with
 `value_type`. Use it where a reading compares two sets, such as the identifiers
@@ -306,7 +306,7 @@ selected table holds complete records in a column. Every selected value must
 be an object. Preparation writes those exact objects as JSON Lines; its
 verifier rebuilds the same selection. Without `record_column`, the entire
 table row remains the record. A missing/null/list/scalar selection fails
-before output files are written. No output is refused for its size (ticket 83). A
+before output files are written. No output is refused for its size. A
 source extract over 32 MiB is written in pieces of at most 8 MiB and 100,000
 rows behind a version-2 index; only one row larger than a piece is refused.
 MDM preparation reads up to 16 GiB and 100,000,000 rows, cuts batches of 1,000
@@ -743,8 +743,8 @@ undeclared eager membership retains its existing semantics.
 
 Declare at most 16 sets, with nonempty names of at most 128 UTF-8 bytes.
 Each set declares positive `max_values` (at most 100,000,000), `max_bytes`
-(at most 16 GiB), and `max_value_bytes` (at most 16,384): ceilings, not caps
-(ticket 91, as ticket 83); declare the measured size. Supplied names must
+(at most 16 GiB), and `max_value_bytes` (at most 16,384): ceilings, not caps;
+declare the measured size. Supplied names must
 exactly match the declarations, including for empty input. Raw counts and
 UTF-8 bytes are bounded before duplicate removal; aggregate raw bytes across
 sets must not exceed 16 GiB. The native reader freezes and indexes values once
@@ -958,7 +958,7 @@ raw-count limits are preserved. `on_invalid: empty` is explicit; the default
 refuses a missing or non-object input.
 
 `each.nest` iterates inside each row of another iteration, so one table holds a
-row per inner item (ticket 46), such as a fact under its concept and unit in
+row per inner item, such as a fact under its concept and unit in
 `facts.<taxonomy>.<concept>.units.<unit>[]`:
 
 ```yaml
@@ -1380,7 +1380,7 @@ An empty key list still validates document shape and assertions.
 ## Examples: configured preparation caller
 
 `mdm prepare-capture --source sec.company` writes the input manifest of the Company source's
-`mastering` target (Issue 20 slice 20c; ticket 177: the generic planner), and `rules run --target mastering`
+`mastering` target (the generic planner), and `rules run --target mastering`
 runs it: registered workers read the receipt-bound raw capture's main
 documents through `name-count-main.yaml` (each row's bronze origin from the
 caller's `bronze_object` context) and the exchange catalog through `catalog.yaml`;
@@ -1451,7 +1451,7 @@ The interpreter retains ordinary functions and declared expressions:
   from parts, such as a batch named in context and a row's position:
   `concat: [{context: {name: batch}}, {const: {value: ":"}}, {ordinal: {}}]`.
 - `pluck: {value: EXPRESSION, fields: [name, ...]}` takes, from each object
-  in a list and in order, the text of each named field (ticket 95): a field
+  in a list and in order, the text of each named field: a field
   missing or null is skipped, a null list gives null, an empty list an empty
   one. An item that is not an object, or a field that is not text, refuses
   with `value_type`; 1 to 16 different fields, at most 100,000 values

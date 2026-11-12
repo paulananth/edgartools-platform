@@ -162,7 +162,7 @@ redoes the work in full for the step's first unit in a run and for a random
 5% of units, drawn when the check runs; each decision is written beside the
 report as a proof. Bookkeeping pins the worker's runtime per run and hashes
 the input and output. A streamed source extract and every other profile are
-always redone or read back (ticket 72).
+always redone or read back.
 
 A target marked `local: true` runs its `source.read` and `source.combine` steps in the loader's own process
 (`rules/local.py`, called by `rules run`). They take no claim, lease, heartbeat or verifier and write files with
