@@ -43,6 +43,14 @@ Reuse the current request, approved plan and retained evidence; history recovery
 is needed only when a decision is genuinely missing. Report generation has its
 own deadline, independent of the hours a production load may take.
 
+Before starting the five-minute clock, confirm the project environment has the
+MDM runtime dependencies. In a fresh worktree, initialize it once with
+`uv sync --extra s3 --extra mdm-runtime`; use the prepared environment for report
+work. `uv run --no-sync` does not install dependencies and can create an empty
+environment that fails when the profiler imports SQLAlchemy. If setup is not
+ready, keep reporting from retained evidence and mark live profiling unavailable;
+do not spend the report deadline bootstrapping dependencies.
+
 1. **Scope once (first minute).** Resolve the environment and private evidence
    directory. Read the configured source/target inventory and dependency list
    once; obtain the entity-kind map from active Dataset Contracts, not source
@@ -427,6 +435,10 @@ Work it out from counts before starting:
   wakes make a run look slow, not stopped (a 6-minute test took 61, ticket
   138). Start a long run or test as `caffeinate -i <command>`.
 - **Measure a slow load with `scripts/profile_load.py`, never by hand**.
+  Use the prepared environment:
+  `uv run --no-sync --extra mdm-runtime python skills/data-operations/scripts/profile_load.py steps --run <run-id>`.
+  `--no-sync` is valid only after the environment is prepared; never use it to
+  bootstrap dependencies.
   `progress` shows, for the running runs, the units in each state per step and how long they have run: the
   answer to "how far is it", and it lists runs left `running` by a load that was stopped.
   `quality` lists the data quality counts each merge run retained (records, records set aside by a failed check,
