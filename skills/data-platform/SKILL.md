@@ -1,6 +1,6 @@
 ---
 name: data-platform
-description: Guide data work from current readiness to verified operation. Use for setup, onboarding, custom parsing, cross-reference readiness, processing captured files, turning drafts into tested and approved releases, activation, deployment or recovery. Coordinates data-onboarding, refining-rules, data-operations, MDM engineering, Bookkeeping and Change Journal.
+description: Guide data work from current readiness to verified operation. Use for service URLs, .env discovery, connection setup, onboarding, custom parsing, cross-reference readiness, processing captured files, turning drafts into tested and approved releases, activation, deployment or recovery. Coordinates data-onboarding, refining-rules, data-operations, MDM engineering, Bookkeeping and Change Journal.
 ---
 
 # Data Platform
@@ -115,6 +115,133 @@ alerting integration or replace the normal run verifier.
 | 6 | Custom parsing, only when the engine cannot state a field | this file |
 | 7 | Self-check | this file |
 
+## Connection URLs and environment
+
+This is the sole skill section for service URLs and connection setup. Other
+skills link here; they retain their operational procedures, not copies of
+the connection instructions.
+
+### Discover existing configuration first
+
+Check variable presence without displaying values in the process environment,
+the active worktree's root `.env`, and the shared
+`~/.local/share/edgartools/.env` before asking for a connection. A worktree
+does not automatically inherit another worktree's ignored `.env`. Confirm the
+requested environment and duty before using any saved address; a discovered
+URL does not authorize a different target.
+
+Keep private files mode `0600`, outside Git or covered by its ignore rules.
+Load only the selected variables into the process that needs them, without
+shell tracing or printing the file. Source only trusted, operator-controlled
+shell env files; parse dotenv files as data when they are not shell-compatible.
+Keep existing explicit process values unless deliberately selecting a new
+environment. Missing configuration means ask the operator to set it in their
+own terminal, never paste it into chat. Examples contain placeholders only.
+
+The shared `.env` is a private URL catalog across agent worktrees. Standard
+database variable names hold hosted worker connections. Saved alternatives
+use `HOSTED_PROD_VERIFIER_`, `HOSTED_PROD_GOVERNANCE_`,
+`HOSTED_PROD_CONNECTION_` and `WORKTREE_` prefixes. These are catalog aliases,
+not variables applications automatically select. Preserve the original role
+files and refresh saved values from them when connections change; do not
+combine credentials or silently substitute an owner for a runtime login.
+
+### Database connections and duties
+
+Each store uses its own database and URL; never derive another store's URL
+by changing an MDM address. Preserve the complete authorized dialect, host,
+port, database, role, credential and SSL options.
+
+Bare PostgreSQL and MySQL URLs select the shipped drivers. An independent
+Bookkeeping installation needs its `mysql` extra for MySQL; an independent
+Change Journal installation needs its selected `mysql` or `sqlserver` extra.
+Provision separate owners and restricted runtime roles, retaining the
+environment's ownership checks; do not adopt another workstream's databases.
+Missing store configuration never falls back to a legacy store, another
+store's URL, or a guessed database name.
+
+| Store | Runtime variable | Migration/owner variable |
+|---|---|---|
+| MDM | `MDM_DATABASE_URL` | `MDM_MIGRATION_DATABASE_URL` |
+| RDM | `RDM_DATABASE_URL` | `RDM_MIGRATION_DATABASE_URL` |
+| Rules | `RULES_DATABASE_URL` | `RULES_MIGRATION_DATABASE_URL` |
+| Bookkeeping | `BOOKKEEPING_DATABASE_URL` | `BOOKKEEPING_MIGRATION_DATABASE_URL` |
+| Change Journal | `CHANGE_JOURNAL_DATABASE_URL` | `CHANGE_JOURNAL_MIGRATION_DATABASE_URL` |
+| Silver | `SILVER_DATABASE_URL` | `SILVER_MIGRATION_DATABASE_URL` |
+
+The selected stores folder is authoritative: use its `worker.env` for work,
+`verifier.env` for independent verification, `connection.env` for owner or
+migration duties, and `governance.env` for activation. Source the appropriate
+trusted file in a command-scoped subshell with `set -a` and disable tracing.
+`load --stores` takes this folder and selects duties itself, not a single
+`.env` file. `infra/scripts/local-test-stores.py` creates local role files.
+
+MDM and Bookkeeping migration commands consume their ordinary
+`*_DATABASE_URL` variable as the owner for that command only; other stores'
+migrations consume `*_MIGRATION_DATABASE_URL`. Never leave owner connections
+as runtime defaults. Activation additionally needs
+`RULES_MDM_ACTIVATION_DATABASE_URL` from the governance file; destination
+guard setup uses `DESTINATION_MIGRATION_DATABASE_URL` as its owner.
+`PROFILE_DATABASE_URL` is a separately authorized profiling login with access
+to database activity. Configure these only for their requested duty.
+For load profiling, `quality` reads MDM, `progress`, `failures` and `steps`
+read Bookkeeping, and `sample` uses the profiling login's `pg_stat_activity`
+access.
+
+Rules commands use the restricted `rules_agent` login; activation uses the
+Rules governance login plus the MDM governance connection. Silver landing
+uses its runtime connection and the MDM runtime connection to resolve master
+IDs. Bookkeeping work and verification must use different authenticated
+logins; each profile grants worker duty to `bookkeeping_runtime` and
+verifier duty to `bookkeeping_verifier`, never both duties to one login.
+For a hosted store, both are members of `bookkeeping_control`, the group
+role passed to Bookkeeping initialization/migration. MDM verification uses
+`mdm_verifier` with schema usage and read access to prepared/mastering tables.
+The application guard uses runtime role `mdm_runtime`.
+
+When provisioning these files, use `umask 077`, retain TLS settings
+(`sslmode=require` for the hosted PostgreSQL target), and keep owners
+separate from restricted runtime logins. `mdm_governance` needs database
+`CONNECT`, schema `USAGE`, read access to prepared/mastering tables, and
+`INSERT` on `mdm.policy`, `mdm.dataset` and `mdm.dataset_mapping`, plus the
+registration grant. `rules_governance` needs Rules agent and approver
+membership. Apply the committed provisioning and grant procedures rather
+than granting administrative rights to runtimes.
+
+`MDM_APPLICATION_ROLE` names the application role.
+`BOOKKEEPING_MANIFEST_ROOT` is the manifest folder written as a `file://`
+URI (a plain path is refused), or the authorized S3 prefix on AWS. The role
+files carry these non-URL settings too; a URL-only catalog does not replace
+them. Check configuration with `edgar-warehouse doctor`, then the requested
+read-only connectivity command; report presence and outcomes, not addresses.
+
+### Snowflake and catalog services
+
+Snowflake SQL uses the explicit named connection `edgartools-prod`; inspect
+connection names in `~/.snowflake/connections.toml` and defaults in
+`~/.snowflake/config.toml` without displaying credentials. Do not derive a
+connection name from the environment slug. `snowconn` is decommissioned.
+For dbt, retain the selected private profile or its configured
+`DBT_SNOWFLAKE_ACCOUNT`, `DBT_SNOWFLAKE_USER`, `DBT_SNOWFLAKE_PASSWORD` and
+`DBT_SNOWFLAKE_WAREHOUSE` values. Select the production target explicitly;
+do not inherit retired development defaults or copy credentials into examples.
+
+Snowflake-hosted MDM is PostgreSQL protocol on port `5432`, not the Snowflake
+SQL connection. Its complete authorized DSN belongs in private `.env` storage.
+Do not infer it from the SQL account, rotate access to discover it, or run a
+bootstrap/reset command as a URL lookup. Graph analytics lives inside
+Snowflake; there is no external `NEO4J_URI` or Bolt endpoint.
+
+OpenMetadata uses `OPENMETADATA_URL` and `OPENMETADATA_TOKEN`, an authorized
+bot token from private configuration. The local server endpoint is
+`http://127.0.0.1:8585`; confirm the configured instance rather than replacing
+it with that default. Retain the token privately; login/token creation and
+catalog operations belong to the OpenMetadata skill.
+The server root has no `/api/v1` suffix when passed to `catalog.connect`,
+which appends it. Local initialization may instead use
+`OPENMETADATA_LOGIN_EMAIL` with `OPENMETADATA_LOGIN_PASSWORD` (or the
+supported `OPENMETADATA_PASSWORD` alias) for native login.
+
 ## 0. Setup
 
 For persistent local agent environments, baseline promotion or recovery, read
@@ -228,35 +355,10 @@ checks and points to the repository lifecycle script.
    and `silver`. Do not paste the statement or an address into the chat. Do
    not apply the store schemas here.
    [data-operations](../data-operations/SKILL.md) applies that DDL into these
-   databases. Each connection must name the selected engine's dialect and
-   that store's database. The connection variables, never printed, are
-   `RULES_DATABASE_URL`, `BOOKKEEPING_DATABASE_URL`,
-   `CHANGE_JOURNAL_DATABASE_URL`, `MDM_DATABASE_URL`,
-   `RDM_DATABASE_URL`, and `SILVER_DATABASE_URL`.
-
-   For Snowflake-hosted MDM, `edgartools-prod` is the Snowflake SQL connection,
-   not a PostgreSQL DSN. The PostgreSQL port is `5432`. Keep the actual host
-   only in the repository-root `.env`; never commit it to this public skill.
-   Store the complete, existing authorized `MDM_DATABASE_URL` there with mode
-   `0600`; `.env` is ignored by Git. The URL needs the intended database, role,
-   credential and SSL settings; do not infer them from the Snowflake SQL
-   connection. Load it only into the process that needs it. Never print or
-   commit DSNs; `.env.example` contains placeholders only.
-
-   If the PostgreSQL DSN is unavailable, obtain it through the operator's
-   approved connection path; do not rotate PostgreSQL access merely to discover
-   it. `bootstrap-prod-mdm.sh` resets PostgreSQL role access and is not a DSN
-   lookup or a generic database-creation command.
-
-   Database creation requires an authorized owner connection with `CREATEDB`;
-   do not assume an MDM application DSN has that privilege. Verify the target
-   instance and create only missing databases, preserving existing databases and
-   data. Use each store's own connection variable and database; an MDM URL does
-   not configure RDM, Bookkeeping, Change Journal or Silver.
-
-   `BOOKKEEPING_MANIFEST_ROOT` is the local folder, as a `file://` address (a plain path is refused), where
-   Rules freezes run configuration; `local-test-stores.py` writes it into
-   `worker.env`.
+   databases. Use [Connection URLs and environment](#connection-urls-and-environment)
+   for addresses, credentials and role selection. Database creation requires
+   an authorized owner with `CREATEDB`; create only missing databases and
+   preserve existing data.
 
 5. **Check.** `edgar-warehouse doctor` must print `"ok": true`. It lists any
    command a skill names that does not exist, whether the engine loads, the

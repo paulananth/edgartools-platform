@@ -44,8 +44,8 @@ Never write a line in words the operator did not say.
    ```bash
    edgar-warehouse rules pending
    ```
-   Needs `RULES_DATABASE_URL` (the `rules_agent` login). For each version
-   that has a test run and no approval, it prints:
+   Use the Rules connection from [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
+   For each version that has a test run and no approval, it prints:
    - whether the run passed;
    - its evidence (counts and up to 10 examples);
    - its note;
@@ -137,11 +137,9 @@ Proving Run where each identifier landed on one entity.
 edgar-warehouse rules activate --source <name> --version <v>
 ```
 
-Use `--merge <name>` for merge rules. It needs `RULES_DATABASE_URL` and
-`RULES_MDM_ACTIVATION_DATABASE_URL` (the MDM governance login), both from
-the shared store's private `governance.env`. A refused connection is a
-moved port ([LOCAL-TESTING](../data-platform/LOCAL-TESTING.md)). It registers
-the approved version in MDM and records the handoff receipt.
+Use `--merge <name>` for merge rules. Configure activation connections through
+[Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
+It registers the approved version in MDM and records the handoff receipt.
 
 **Which MDM database.** The one the MDM runs read and write: the governance
 login opens it, and its schema is `mdm`, created and upgraded by

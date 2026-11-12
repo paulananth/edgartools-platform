@@ -36,10 +36,10 @@ submits one source.
    proof forward when [mdm-engineering](../mdm-engineering/SKILL.md#choose-the-cheapest-proof)'s
    "Choose the cheapest proof" allows it, and run no new test. Otherwise data-onboarding's **test** step runs and records one (`rules
    test --version`). A test that stops is not a proof and is not recorded.
-3. **Enable it.** Follow [APPROVE](../data-onboarding/APPROVE.md). Source `governance.env` beside
-   `worker.env`: activation registers the version in MDM and stops with "MDM activation requires an
-   explicit destination connection" without it. Activate
-   the merge policy this source depends on first, then this source:
+3. **Enable it.** Follow [APPROVE](../data-onboarding/APPROVE.md), with activation
+   connections from [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
+   Activation registers the version in MDM and stops with "MDM activation requires an
+   explicit destination connection" without it. Activate the merge policy this source depends on first, then this source:
    ```bash
    edgar-warehouse rules activate --source <name> --version <v>
    edgar-warehouse rules status --source <name>

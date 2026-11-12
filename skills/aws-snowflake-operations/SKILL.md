@@ -56,10 +56,8 @@ view includes non-warehouse services as well as warehouse cloud-services
 usage; use `WAREHOUSE_METERING_HISTORY` only when the question is specifically
 warehouse attribution.
 
-Use the production SnowCLI connection `edgartools-prod`. Named connections may
-be in `~/.snowflake/connections.toml` even when `~/.snowflake/config.toml`
-selects a different default. Inspect connection names without printing the
-configuration or credentials; `snowconn` is the decommissioned dev connection.
+Select the connection through
+[Data Platform connection setup](../data-platform/SKILL.md#connection-urls-and-environment).
 
 ```sql
 SELECT
@@ -201,13 +199,10 @@ What it left in Snowflake is live:
 - **Graph storage is inside Snowflake**, not an external Neo4j: the Neo4j
   Graph Analytics Native App in the same account, tables in
   `NEO4J_GRAPH_MIGRATION`, the live generation named by
-  `GRAPH_ACTIVE_POINTER`. There is no `NEO4J_URI` and no Bolt connection.
+  `GRAPH_ACTIVE_POINTER`.
   Grants: `infra/snowflake/sql/neo4j_graph_analytics_app_grants.sql`.
-- **MDM's hosted store is Snowflake Postgres**, not AWS RDS
-  (`infra/snowflake/postgres/mdm_create_instance.sql` creates the instance; the owner connects
-  as `snowflake_admin`). It is a PostgreSQL-protocol address
-  (`MDM_DATABASE_URL`, port 5432), separate from the Snowflake SQL connection
-  used for dbt and gold: one account and governance boundary, two protocols.
+- **Hosted MDM connection setup** belongs to
+  [Data Platform](../data-platform/SKILL.md#connection-urls-and-environment).
 
 ## Development Commands
 

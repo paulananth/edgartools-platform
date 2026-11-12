@@ -56,7 +56,8 @@ the whole list.
    entities waits until that version is the active proven one.
 3. **RDM, per domain.** A new store's RDM is empty: restore every published code set from git with
    `scripts/rdm_restore_published.py --by <name> --words "<their exact words>"` in this skill
-   (worker.env sourced; it drafts, approves in those words, publishes and checks each version's sha256
+   (with the runtime connection from [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment);
+   it drafts, approves in those words, publishes and checks each version's sha256
    against its `pin.json`, and exits 1 naming any that differs). Then `edgar-warehouse rdm list`, then
    `edgar-warehouse rdm describe <code set>` for every code set that domain
    pins. A published version is operational. A missing or draft code set is a
@@ -66,8 +67,8 @@ the whole list.
 4. **Apply the silver spec.** This skill applies DDL. Data-profiling writes
    the logical spec and does not. MDM engineering writes the MDM store's own
    migrations and does not apply a profile's silver spec.
-   For each part with an approved spec, apply that spec to the engine named
-   by `SILVER_DATABASE_URL`. On PostgreSQL or MySQL,
+   For each part with an approved spec, apply that spec to the selected Silver
+   engine, using the connections in the central section above. On PostgreSQL or MySQL,
    `edgar-warehouse silver register <findings.yaml> --part <part> --runtime-role <role>`,
    then `edgar-warehouse silver describe <table>`. Numbers, identifiers and
    material commentary are the fields the spec already names. The same spec
@@ -132,10 +133,10 @@ edgar-warehouse load \
   --workers <readers> --bundles <runs at once> --minutes <window>
 ```
 
-- `--stores` is the folder holding the stores' `worker.env`, `verifier.env`
-  and `governance.env` (`uv run --extra mdm python infra/scripts/local-test-stores.py up <name>`
-  writes them, and initializes every store empty). Each step runs under its own duty's login.
-  Nothing is printed from those files.
+- `--stores` is the stores folder configured through
+  [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
+  `uv run --extra mdm python infra/scripts/local-test-stores.py up <name>` initializes
+  every store empty. Each step runs under its own duty's login; connection files are not printed.
 - **Create a store from an up-to-date checkout, and keep its lifecycle there.** `up` refuses a checkout
   behind `origin/main`, and a store belongs to the checkout that created it: `up`, `stop`, `backup` and `copy`
   from another checkout stop at "Environment belongs to another worktree". A stale untracked skill link
@@ -143,7 +144,7 @@ edgar-warehouse load \
 - Add `--fact name=value` and `--file name=path` for each input the target's
   `run` declares; `scripts/run_inputs.py <source>` in the data-onboarding skill lists them.
 - **A target that lands silver registers its tables itself**, before it submits
-  anything, as the migration login in the stores folder's `connection.env`
+  anything, as the migration login configured through the central connection section
   (the same spec again changes nothing). Do not register by hand first.
 - **Look on the machine before asking to capture.** Reading retained files needs no provider request, so search
   every place below before asking for one. Say which you found: a cohort proves a path, never a delivery's totals.
@@ -278,7 +279,8 @@ can finish ("Pinned worker runtime changed; start a new run").
 A source loaded under rules that no longer fit it (a Dataset Contract that got a new dataset code, a rule that
 changed what its records join) is cleared and loaded again. Never delete rows by hand.
 
-1. **Count first.** With the store's owner login (`connection.env`, the runtime role may not delete decisions):
+1. **Count first.** With the store's owner connection from [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment)
+   (the runtime role may not delete decisions):
    `edgar-warehouse mdm clear-source --source <dataset code>`. It runs every delete and rolls back, and prints what
    would go: the source's records, the golden records only it made (with the aliases of their merges) and what hangs
    on them. It refuses, and clears nothing, when a golden record also holds another source's records: replay those
@@ -365,7 +367,7 @@ Work it out from counts before starting:
   `progress` shows, for the running runs, the units in each state per step and how long they have run: the
   answer to "how far is it", and it lists runs left `running` by a load that was stopped.
   `quality` lists the data quality counts each merge run retained (records, records set aside by a failed check,
-  open reviews, fields with empty values; needs `MDM_DATABASE_URL`).
+  open reviews, fields with empty values).
   For a completed run whose frozen steps requested version-2 silver quality evidence,
   `edgar-warehouse rules catalog publish --bookkeeping-run <run-id>` sends only
   verified per-unit outcomes with stable run, step and opaque unit references,
@@ -382,9 +384,10 @@ Work it out from counts before starting:
   the pipeline.
   `failures` groups the units that hold an error by step, state and error shape, with counts: read it before
   opening the load log.
-  `steps` gives each step's share of a finished run (needs `BOOKKEEPING_DATABASE_URL`, in `worker.env`);
-  `sample` ranks what the database ran, once a second (needs `PROFILE_DATABASE_URL`, a login that reads
-  `pg_stat_activity`). For a statement inside a function, set `shared_preload_libraries=auto_explain` with
+  `steps` gives each step's share of a finished run;
+  `sample` ranks what the database ran, once a second. Configure profiling connections through
+  [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
+  For a statement inside a function, set `shared_preload_libraries=auto_explain` with
   `auto_explain.log_nested_statements=on` and read the server log. The first answer is the step; the second,
   the statement.
 - **Read a failed call's database error**, the `(psycopg2.errors.X)` line,

@@ -42,15 +42,15 @@ the full warehouse distribution. See the
 The full warehouse distribution still carries its other commands' dependencies.
 No container rollout or package publication is included in this refactor.
 
-Provision the new `change_journal` database on PostgreSQL 16. The `journal`
-schema contains exactly one append-only `event` table. Checksummed migrations
+On PostgreSQL 16, the `journal` schema contains exactly one append-only
+`event` table. Checksummed migrations
 are recorded in its schema comment. Migration and runtime connections are
 separate. Runtime has only schema usage and bounded append/read functions;
 direct table/sequence privileges and mutation functions are refused.
 
-Set `CHANGE_JOURNAL_DATABASE_URL` and
-`CHANGE_JOURNAL_MIGRATION_DATABASE_URL`. Neither falls back to the legacy
-ledger or MDM connection. Apply with:
+Select the journal's own connection and separate duties through
+[Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
+Neither duty falls back to Bookkeeping, legacy ledger, Rules or MDM. Apply with:
 
 ```bash
 edgar-warehouse change-journal init --runtime-role <role>
@@ -195,10 +195,9 @@ Producer workflow qualification in `edgar-warehouse plan workflow`
 reads back the actual completed validation root, exact frozen
 submission, verified work counts, checks, zero delivery backlog and journal
 receipts. An edited validation report cannot replace that authority. When
-deploying to different stores, retain the validation databases and point
-`BOOKKEEPING_DATABASE_URL` and `CHANGE_JOURNAL_DATABASE_URL` at those
-read connections. Otherwise the validation root must exist in the selected
-fresh target stores. There
+deploying to different stores, retain the validation databases and select their
+read-only control and journal connections through the central connection section.
+Otherwise the validation root must exist in the selected fresh target stores. There
 is no legacy lookup or history import when validation authority is unavailable.
 
 ## Qualification and cutover status
@@ -214,10 +213,9 @@ tracks remaining active uses and replacement tests. Keep old stacks available
 for their runs/backlog; fresh roots are marked `change-journal-v1` and reject
 historical roots. Do not import historical decisions, checkpoints or pending
 delivery. Fresh provisioning never creates legacy source/mirror tables.
-`provision-local-postgres-stores.sh` now provisions only the three fresh
-control stores, with separate NOLOGIN owners and restricted runtime logins;
-it imports nothing and removes nothing. Original acquisition connection
-helpers reject a runtime with `CHANGE_JOURNAL_DATABASE_URL` configured.
+Local fresh-store provisioning is described in the central connection section;
+it imports nothing and removes nothing. Original acquisition connection helpers
+reject a runtime with `CHANGE_JOURNAL_DATABASE_URL` configured.
 That marker also restricts the CLI to `rules`, `bookkeeping` and
 `change-journal`, and refuses ungated provider transport. Legacy scheduled commands
 cannot be run with the fresh connections; keep their original task revisions
@@ -231,7 +229,9 @@ retirement step; retain the legacy audit archive indefinitely by default.
 
 ## AWS connection wiring and promotion gates
 
-The application script accepts these three runtime secret ARN flags together:
+Use [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment)
+for connection selection and owner/runtime duties. The application's execution
+contract requires these three runtime secret ARN flags together:
 
 ```text
 --bookkeeping-clean-postgres-dsn-secret-arn
@@ -253,9 +253,9 @@ promotion. No workflow has been redirected by this implementation.
 
 Before rollout, provision the three isolated PostgreSQL 16 databases with
 separate owners/runtime roles, apply checksummed migrations via owner
-connections, create/populate empty Secrets Manager containers out of band,
-and review execution-role access to exactly those runtime secret ARNs. No
-wildcard IAM expansion or Terraform apply is part of this workstream.
+connections under explicit authorization, create/populate empty Secrets Manager
+containers out of band, and review execution-role access to exactly those runtime
+secret ARNs. No wildcard IAM expansion or Terraform apply is part of this workstream.
 
 Freeze bounded source/feed baseline manifests and the exact approved Rules
 body, finish complete replacement stages and qualify destination/count parity,

@@ -36,13 +36,18 @@ migration, restricted-role operations and populated recovery before claiming
 readiness. Route a missing capability to engineering while leaving that target
 incomplete; retain the selected engine instead of substituting PostgreSQL.
 
-| Schema | Command | Owner connection |
-|---|---|---|
-| MDM | `edgar-warehouse mdm migrate --application-role <role>` | `MDM_DATABASE_URL` |
-| RDM | `edgar-warehouse rdm init --runtime-role <role>`, then `rdm migrate` | `RDM_MIGRATION_DATABASE_URL` |
-| Bookkeeping | `edgar-warehouse bookkeeping init --runtime-role bookkeeping_runtime`, then `bookkeeping migrate`. The database name is `bookkeeping`. | `BOOKKEEPING_DATABASE_URL` |
-| Change Journal | `edgar-warehouse change-journal init --runtime-role <role>`, then `change-journal migrate`. The database name is `change_journal`. | `CHANGE_JOURNAL_MIGRATION_DATABASE_URL` |
-| Silver | `edgar-warehouse silver init --runtime-role <role>`, then `silver migrate` | `SILVER_MIGRATION_DATABASE_URL` |
+Use the owner connection and runtime-role arguments from
+[Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
+That section owns role provisioning and command-specific connection selection,
+including the hosted Bookkeeping control group.
+
+| Schema | Command |
+|---|---|
+| MDM | `edgar-warehouse mdm migrate --application-role <role>` |
+| RDM | `edgar-warehouse rdm init --runtime-role <role>`, then `rdm migrate` |
+| Bookkeeping | `edgar-warehouse bookkeeping init --runtime-role <role>`, then `bookkeeping migrate`. The database name is `bookkeeping`. |
+| Change Journal | `edgar-warehouse change-journal init --runtime-role <role>`, then `change-journal migrate`. The database name is `change_journal`. |
+| Silver | `edgar-warehouse silver init --runtime-role <role>`, then `silver migrate` |
 
 The runtime role exists, has no administrative privileges, and is not the
 migration login. Done when the selected engine's migration history matches

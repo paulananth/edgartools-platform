@@ -79,6 +79,10 @@ without the interactive prompt, base64-encoding the password and writing the
 token to the private token file with a restrictive mode, and print neither the
 password nor the token.
 
+Resolve the endpoint and private credentials through
+[Data Platform connection setup](../data-platform/SKILL.md#connection-urls-and-environment)
+before this token-refresh operation.
+
 Refresh it in the private terminal session, with
 shell tracing off. Enter the local account password only at the hidden prompt;
 the password is base64 encoded for the login API, and neither it nor the returned
@@ -87,7 +91,7 @@ token is printed:
 ```bash
 set +x
 set -euo pipefail
-export OPENMETADATA_URL=http://127.0.0.1:8585
+# Load the configured endpoint through Data Platform's connection setup.
 read -r -p 'OpenMetadata email: ' OM_LOGIN_EMAIL
 read -r -s -p 'OpenMetadata password: ' OM_LOGIN_PASSWORD
 printf '\n'

@@ -46,8 +46,7 @@ terraform plan
 terraform apply
 
 # Snowflake native-pull deploy (prod; dev is decommissioned, above)
-# Requires a SnowCLI connection (configured in ~/.snowflake/config.toml) and keeps
-# Snowflake secrets out of repo files. A prod change needs the operator's word.
+# Configure the connection through Data Platform's connection setup first.
 bash infra/scripts/deploy-snowflake-stack.sh \
   --env-name prod \
   --snow-connection edgartools-prod \
@@ -95,23 +94,8 @@ A `--full-refresh` makes the deploying role the dynamic table's owner, and the
 INITIAL refresh checks that role's *direct* grants only (secondary roles do not
 count): give it direct `SELECT` on every table the model reads first.
 
-Required env vars for `dbt run`/`dbt compile` against Snowflake (none have
-defaults except role/database/warehouse, which fall back to the dev target's
-values in `profiles.yml`):
-
-```bash
-export DBT_SNOWFLAKE_ACCOUNT=<account_locator.region.cloud>
-export DBT_SNOWFLAKE_USER=<user>
-export DBT_SNOWFLAKE_PASSWORD=<password>
-export DBT_SNOWFLAKE_WAREHOUSE=EDGARTOOLS_DEV_REFRESH_WH
-```
-
-**SnowCLI connection naming.** No literal Snowflake account locator is ever committed to
-this repo (always a placeholder like `<account_locator.region.cloud>` above) — the only
-project-level convention is the **connection name**, resolved from
-`~/.snowflake/config.toml`. **`--snow-connection` is required and never derived** from the
-environment name — `deploy-snowflake-stack.sh` fails closed without it, and no script derives one from the environment. Prod's connection is
-`edgartools-prod`; pass it explicitly.
+For dbt profiles and SnowCLI connection selection, use
+[Data Platform connection setup](../data-platform/SKILL.md#connection-urls-and-environment).
 
 **Environment identifier.** The same ticket replaced `--env <dev|prod>` with
 `--env-name <slug>` across `deploy-snowflake-stack.sh` and `create-deployer.sh`
