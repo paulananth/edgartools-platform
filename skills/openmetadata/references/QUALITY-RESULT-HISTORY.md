@@ -30,6 +30,26 @@ again blindly. On OpenMetadata 2.0.2, a timestamp-specific `PATCH` can correct
 one mismatching result; make at most one correction attempt, then require exact
 readback.
 
+## Capturing results before a reset
+
+A catalog reset deletes the owned quality cases, and their results go with
+them. The publisher restores results from a `--results` file or a
+`--bookkeeping-run`; it cannot rebuild them from the server it just emptied.
+Capture them first: for each owned case,
+`GET /api/v1/dataQuality/testCases/testCaseResults/{caseFQN}` returns every
+result row it holds. The response rows carry the server's own fields
+(`timestamp`, `testCaseStatus`, `result`, `passedRows`, `failedRows`,
+`testResultValue`); the `--results` file wants a different shape, so convert
+on the way out. Each entry under a case name carries `rows_checked`,
+`rows_failed`, `on_fail` (`flag` or `exception`) and `at` (an ISO 8601
+instant), plus the optional `correlation`. `passedRows + failedRows` is
+`rows_checked`. The `result` text carries the load reference after `Load: `,
+which is the `correlation`; keep it, because it identifies the load. The
+publisher rebuilds the server's `result` text from these fields, so it does
+not need the captured text itself.
+Remap a case whose source version moved to the plan's current name, then
+republish and require the readback to confirm every result.
+
 This API behavior does not establish that the platform supplied complete,
 verified evidence for the load. Preserve an incomplete run as unknown, and
 publish only results backed by admitted load evidence.

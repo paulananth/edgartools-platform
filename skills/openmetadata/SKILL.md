@@ -280,6 +280,10 @@ gate and scoped repair above; retain type definitions as vocabulary.
 The glossary Relations Graph is a different API,
 `GET /glossaryTerms/{id}/relationsGraph`. A domain glossary's Relations Graph
 page starts at that domain's identity term.
+To read a term's own relations rather than the graph, request
+`GET /glossaryTerms/{id}?fields=relatedTerms` with the term's id; the
+`relatedTerms` rows carry the relation type and the other term. The
+`/glossaryTerms` list response carries no relations at all.
 A term that mentions another term is not a relation. Do not add an edge
 from a definition, a display name, or an Avoid line.
 The current publisher also derives identity-to-type edges from permitted kinds;
@@ -349,6 +353,14 @@ reference list.
   `columnsLineage` names fully qualified upstream/downstream columns and the
   transformation. A registered pipeline with tasks alone does not supply that
   edge association. No transformation SQL is invented for a non-SQL process.
+- **Checking lineage is a read.** Verify an edge with
+  `GET /api/v1/lineage/...`, never with the `PUT` that writes it.
+  `PUT /api/v1/lineage/domain/name/{domain}/table/name/{table}` replaces the
+  edge's description with whatever body it carries, so a probe that PUTs `{}`
+  blanks the description of every edge it touches (2026-11-11). A later
+  `rules catalog publish` restores those descriptions from the plan; verify
+  each affected edge's `lineageDetails.description` matches the plan
+  afterwards.
 - Descriptions may have one transport layer of HTML entity escaping. Normalize
   Markdown fields once for comparison; keep identity, rule parameters and hashes
   exact. A genuine semantic difference must still fail.
@@ -358,6 +370,39 @@ reference list.
 - List all pages and constrain ownership by exact service membership or an
   explicit ownership receipt. Domains, glossaries, terms and quality resources
   are global and are not assumed removed when a service is reset.
+- **A list endpoint omits the relationships it does not name.** A table in the
+  `/tables` list carries no `domains`, no `tags` and no `certification`; a
+  glossary term in the `/glossaryTerms` list carries no relations; a data
+  product in the `/dataProducts` list carries no `assets` and no `inputPorts`.
+  An absent field in a list response is not proof the link is absent. Read each
+  relation from its own endpoint or with its own `fields=` parameter, and read
+  a data product's assets from `GET /api/v1/dataProducts/{id}/assets` and its
+  input ports from `GET /api/v1/dataProducts/{id}/inputPorts` (the
+  `/name/{fqn}/inputPorts` form answers the same rows).
+- **A glossary term's relations live in `relatedTerms`.** Read them with
+  `GET /api/v1/glossaryTerms/{id}?fields=relatedTerms`, by the term's id. The
+  name form does not resolve for a term whose name contains a space. The
+  server materializes each planned relation in both directions, so a planned
+  set of N edges reads back as 2N; compare against the planned set plus its
+  reverse.
+- **A lineage edge's description lives in `lineageDetails.description`.** The
+  edge's top-level `description` is empty on 2.0.7, so a readback that reads
+  the top level reports every edge as undescribed. Compare
+  `lineageDetails.description`.
+- **A lineage graph's `nodes` may omit the entity you queried.** Reading one
+  table's lineage returns the other endpoints of its edges; the subject table
+  is often absent from `nodes`. Resolve both ends of an edge through a global
+  id-to-FQN map built from the `/tables` and `/pipelines` lists rather than
+  from that response's `nodes` alone.
+- **The server quotes a FQN whose name contains a dot.** `silver."iapd.adv"`
+  and `silver.iapd.adv` are the same schema under two spellings. Compare on
+  the unquoted dotted path, or quote the way the publisher's `fqn` helper does,
+  or a set comparison reports every such object as both missing and extra.
+- **A data product's assets can exceed the plan.** The server rolls a
+  planned asset's child tables into the product's asset list, so the live count
+  is larger than the planned count. Require every planned asset to be present
+  and account for each extra as a child of a planned asset; the product is
+  correct when nothing is unexplained.
 
 - A renamed source leaves its old tables behind. Such a table still holds its
   test cases, so `DELETE /tables/{id}?hardDelete=true` answers 400 "table is not
@@ -690,13 +735,33 @@ exclusion and readback to an already running server.
 Keep the helper behind this repository entrypoint; directly invoking a helper
 inside the skill directory is checkout-only and fails the installed-skill doctor.
 
+A compose recreate can leave the server wedged: Docker reports "cannot stop
+container: ... tried to kill container, but did not receive an exit event" and
+leaves a `Created` replacement beside the running original, which then exits
+137 and leaves the port unbound while its logs still show healthy requests
+(2026-11-11). Recover by removing both the stale `Created` container and the
+wedged original, then bringing the stack up with
+`docker compose -f infra/openmetadata/docker-compose.yml up -d --wait`. The
+named `db-data` and `es-data` volumes carry the catalog, so remove the
+containers, never the volumes, and confirm the PostgreSQL data directory is
+still populated before restarting. The catalog survives the recreate intact.
+
 The tool reads `OPENMETADATA_TOKEN`, or `OPENMETADATA_LOGIN_EMAIL` with
 `OPENMETADATA_LOGIN_PASSWORD` (also accepts `OPENMETADATA_PASSWORD`), privately.
 It refreshes the token through native login when login credentials are present.
 Its result is counts only; a failed exclusion exits nonzero.
 
 A login token of the local account expires within the hour; a publish that
-answers 401 needs a new one. Refresh it in the private terminal session, with
+answers 401 needs a new one. A token that worked for a read can still be
+expired, and the expiry shows up on the first write: a GET answers 200 while
+`PUT /api/v1/services/databaseServices` answers 401 "Expired token!"
+(2026-11-11). Refresh and retry the write; the publish is not the failing
+step. When the private credentials are already in the environment, refresh
+without the interactive prompt, base64-encoding the password and writing the
+token to the private token file with a restrictive mode, and print neither the
+password nor the token.
+
+Refresh it in the private terminal session, with
 shell tracing off. Enter the local account password only at the hidden prompt;
 the password is base64 encoded for the login API, and neither it nor the returned
 token is printed:
@@ -795,6 +860,32 @@ reviewed scope. Keep built-in definitions, classifications, tags,
 relationships, workflows, and settings unless the plan explicitly owns them. If
 a delete fails or ownership becomes unclear, stop and account for remaining
 objects before continuing.
+
+Four deletions have their own behavior on 2.0.7:
+
+- **A quality case needs `recursive=true`.** `DELETE /dataQuality/testCases/{id}`
+  answers 400 "testCase is not empty" without it, because the case carries a
+  resolution-status child row. `recursive=true&hardDelete=true` clears the
+  cascade.
+- **Quality case ownership is by entity link, not by name.** The plan renames a
+  case when its source's version moves (v1 to v2), so matching on the exact name
+  leaves the stale case behind. Every live case whose `entityLink` names the
+  owned service is owned.
+- **`Certification.Gold` and `Certification.Silver` are built-in system
+  entities.** The server refuses to delete them: "System entity [Gold] of type
+  tag can not be deleted." They stay and the publisher reuses them. Only the
+  plan's own `data_class.*` tags are deletable, and they go before the
+  `data_class` classification that holds them.
+- **A PipelineService the plan dropped is still owned.** A service absent from
+  the current plan but serving the same rules namespace was retired by the
+  rules change; it goes with the rest of the owned services.
+
+Capture the per-load quality results before deleting anything that holds them.
+A reset without a captured copy destroys evidence that no publish can
+reconstruct, because the publisher restores results from a `--results` file or
+a `--bookkeeping-run`, not from the server it just emptied. Read
+[Quality result history](references/QUALITY-RESULT-HISTORY.md#capturing-results-before-a-reset)
+for the capture and the conversion.
 
 Publish the current plan only after the reviewed scope is empty. Require the
 publish result's readback to match, run `rules catalog check` independently,
