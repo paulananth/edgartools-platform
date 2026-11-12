@@ -10,6 +10,8 @@ The merge step needs a registered MDM; the installed proof covers it.
 The target is planned by the generic `write_manifest` (ticket 177, slice 5): the same rules, run facts and
 Name Count file the dedicated writer took, with no Company-specific code.
 """
+from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from edgar_warehouse.rules import frozen
 import json
 import pytest
 from copy import deepcopy
@@ -68,11 +70,8 @@ def run_without_merge(databases, tmp_path, book, report):
     steps = book.artifacts.json(report["manifest"])["steps"]
     del steps["merge"], steps["processed"]
     manifest = book.artifacts.put(tmp_path.as_uri() + "/submitted", {"version": 2, "steps": steps})
-    saved = databases.rules.save("source", body["source"], "1", body)
-    databases.rules.prove("source", body["source"], "1",
-                          {"digest": saved["digest"], "batch_hash": manifest["sha256"], "passed": True})
-    databases.rules.activate("source", body["source"], "1")
-    rules = databases.rules.resolve("source", body["source"], root=tmp_path.as_uri() + "/rules")
+    saved = frozen.of("source", body["source"], body)
+    rules = Artifacts().put(tmp_path.as_uri() + "/rules", saved)
     return book.start(rules_ref=rules, inputs_ref=manifest, target="mastering", scope={"test": body["source"]})
 
 

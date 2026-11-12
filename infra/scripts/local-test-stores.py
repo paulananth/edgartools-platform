@@ -212,13 +212,13 @@ class LocalStores:
         verifier = {"BOOKKEEPING_DATABASE_URL": self.url(name, "bookkeeping", "bookkeeping_verifier").render_as_string(hide_password=False),
                     "MDM_DATABASE_URL": self.url(name, "mdm", "mdm_verifier").render_as_string(hide_password=False)}
         governance = {"RULES_DATABASE_URL": self.url(name, "rules", "rules_governance").render_as_string(hide_password=False),
-                      "RULES_MDM_ACTIVATION_DATABASE_URL": self.url(name, "mdm", "mdm_governance").render_as_string(hide_password=False)}
+                      "MDM_REGISTRATION_DATABASE_URL": self.url(name, "mdm", "mdm_governance").render_as_string(hide_password=False)}
         for filename, extra in (("connection.env", connection), ("worker.env", {}),
                                 ("verifier.env", verifier), ("governance.env", governance)):
             # Clear a previous shell's owner/silver settings before choosing a duty.
             unset = [*migration, "BOOKKEEPING_MIGRATION_DATABASE_URL",
                      "BOOKKEEPING_ADMIN_DATABASE_URL",
-                     "RULES_MDM_ACTIVATION_DATABASE_URL", "DESTINATION_MIGRATION_DATABASE_URL"]
+                     "MDM_REGISTRATION_DATABASE_URL", "DESTINATION_MIGRATION_DATABASE_URL"]
             if not include_silver:
                 unset += ["SILVER_DATABASE_URL", "SILVER_MIGRATION_DATABASE_URL"]
             lines = ["unset " + " ".join(unset)]
@@ -240,7 +240,7 @@ class LocalStores:
                 roles = {owner_login(store): False for store in selected}
                 roles.update({runtime_login(store): True for store in selected})
                 roles.update({role: True for role in EXTRA_LOGINS})
-                roles.update(bookkeeping_control=False, rules_approver=False)
+                roles.update(bookkeeping_control=False)
                 for role, login in roles.items():
                     held = conn.execute(text("SELECT rolsuper,rolcreatedb,rolcreaterole,rolcanlogin,rolbypassrls FROM pg_roles WHERE rolname=:r"), {"r": role}).first()
                     if held:
@@ -263,7 +263,7 @@ class LocalStores:
                     conn.exec_driver_sql(f"GRANT CONNECT ON DATABASE {quote(database)} TO {quote(login)}")
                 for parent, member in (("bookkeeping_control", "bookkeeping_runtime"),
                                        ("bookkeeping_control", "bookkeeping_verifier"),
-                                       ("rules_runtime", "rules_governance"), ("rules_approver", "rules_governance")):
+                                       ("rules_runtime", "rules_governance")):
                     if not conn.scalar(text("SELECT pg_has_role(:m,:p,'MEMBER')"), {"m": member, "p": parent}):
                         conn.exec_driver_sql(f"GRANT {quote(parent)} TO {quote(member)}")
             if migrate:

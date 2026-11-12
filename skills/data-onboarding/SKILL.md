@@ -1,6 +1,6 @@
 ---
 name: data-onboarding
-description: Bring a NEW data feed or a NEW domain (a kind with no merge rules yet) into MDM and silver, starting from its captured files. Profile the data set with the data-profiling skill, plan one onboarding per part, map its fields and identifiers, write its first data quality checks, generate its metadata (Mapping Document and Data Catalog entry), test it, get the operator's approval and switch it on. Also sets up the Rules Database (init, migrate). Use when the user wants to add or onboard a feed, a source or a domain that has no rules file yet. To change something already live, use refining-rules.
+description: Bring a NEW data feed or a NEW domain (a kind with no merge rules yet) into MDM and silver, starting from its captured files. Profile the data set with the data-profiling skill, plan one onboarding per part, map its fields and identifiers, write its first data quality checks, generate its metadata (Mapping Document and Data Catalog entry), check its rules files and load it. Also sets up the Rules Database (init, migrate). Use when the user wants to add or onboard a feed, a source or a domain that has no rules file yet. To change something already live, use refining-rules.
 ---
 
 # Data Onboarding
@@ -27,11 +27,6 @@ Read these before anything else. Breaking one is never the right call.
 
 | Never | Instead |
 |---|---|
-| Approve for the operator, or record words they did not say | Ask, wait, record their exact words ([APPROVE.md](APPROVE.md)) |
-| Switch on (activate) a version the operator has not told you to switch on | Ask, wait, record their exact words ([APPROVE.md](APPROVE.md)) |
-| Approve with no test run | Run **test** first. A failing run may be overruled, a missing one never. |
-| Ask the operator to approve a digest, hash or version number they cannot read | Say in plain words what the version does, what it changes and on what evidence, under its descriptive name; the digest goes beside it, never instead |
-| Name a Rules version by a number alone | A label that says what it changes (the **test** step's version label, `<source or kind>-<YYYY-MM-DD>.<short change name>`) |
 | Write a value from the data (a name, an identifier, a record) into a public repository | Counts, and invented examples; real values stay on the machine |
 | Request anything from a provider the operator has ruled out, including its documentation (see Examples) | Use the captured files and this repo |
 | Read, print or paste a secret, password or token | Follow [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment) for private credential handling. |
@@ -54,15 +49,14 @@ says, through every step of onboarding: each update is a finding with its
 numbers and meaning, never a description of the step you are about to take.
 Onboarding's findings are fields, identifiers, defects, refusals and test
 results, and how each changes the proposed onboarding. Label each result for
-what it proves: explored, approved, tested locally or active. A command that
+what it proves: explored, checked, or loaded. A command that
 succeeds proves only what it checks.
 
 Not: "Next I'll reconcile the export with the workbook to confirm the counts."
 Instead: "The export has 3,022 rows; the workbook reader refuses the original
 file, so these counts are explored, not yet read by the contract."
 
-At a question or approval pause, give the evidence and your recommendation,
-then follow the approval gate. Record findings and open questions in the
+At a question, give the evidence and your recommendation. Record findings and open questions in the
 onboarding log as well.
 
 ## What you produce
@@ -82,10 +76,8 @@ them in PRs. [REFERENCE.md](REFERENCE.md) is the contract language.
 
 When renaming an existing source identity, update its folder and `source:`
 identifier, Dataset Contract IDs, source-sequence entry, Bookkeeping bindings,
-cross-source references and generated Mapping Document together. Treat the
-rename as a new Rules version; retain prior run/capture evidence under the
-identity that produced it, and use the normal review and approval gates before
-activation.
+cross-source references and generated Mapping Document together. Retain prior
+run and capture evidence under the identity that produced it.
 
 The files in `rules/sources/` show Dataset Contracts and publication rules.
 For configured complete JSON source extract, find a feed that keeps each
@@ -135,52 +127,24 @@ The operator reads it, and it is how this skill gets fixed.
 ## Modes, in order
 
 A new data set runs **discover → plan-parts**, then each part runs
-**identify → profile → map → quality → metadata → test → approve →
-switch-on**. Set up the Rules Database first if it is not there (**init**).
+**identify → profile → map → quality → metadata → check → load**. Set up the Rules Database first if it is
+not there (**init**).
 
-### Built means ready to turn on
+### The files are the rules
 
-Operator: "when you build it you need all of this once proved it is just turn on and go".
-A source or domain is **finished when it can be turned on with one command and no preparation**. Everything
-else happens while building it, once:
+A source or domain is finished when its rules files pass `rules check` and its capture loads. Nothing else
+stands between the files and a run: no saved version, no test run to record, no approval and no activation.
 
-- the limited test passed while building it, and its counts are in the ticket. Once the rules are merged on
-  `main` they are final: a store needs no test run and no proof to activate them (operator: "you
-  dont need proof to activate once the rules are finalized");
-- the operator's words approve the exact version on that merge, kept in git in `rules/approvals.yaml`
-  (`rules approvals write`, APPROVE.md): `rules load` approves it in any store;
-- the run's inputs are named where the source declares them: each fact and file its target needs, how it is
+- The run's inputs are named where the source declares them: each fact and file its target needs, how it is
   produced, and where its captured files are. Write how each is produced in a comment directly above the
-  target; `scripts/run_inputs.py [source]` prints every target's facts and files with those comments, and for
-  an input with none, the comment lines that mention it, or says that none does;
-- the order it needs (the sources and the merge rules before it) is declared in the source sequence;
-- the merge rules it relies on are proved and approved the same way.
+  target; `scripts/run_inputs.py [source]` prints every target's facts and files with those comments.
+- The order it needs (the sources and the merge rules before it) is declared in the source sequence.
 
-Turning it on is then only: save the version from `main`'s files, approve it on its merge, activate it, load it. Finding a
-missing proof, input or capture at switch-on means the build was not finished: go back and finish it, and say
-what was missing in the ticket. A rules change makes a new version and a new proof only for what changed
-([Run each long step once](#modes-in-order)); an unchanged proof is carried forward.
-
-**Run each long step once per part** (operator: "Data onboarding
-should not run this many times"). One master part took about ten runs: five
-profiling runs, three test runs and two Proving Runs. Each repeat came
-from a fault found mid-run, or from a re-check that proved nothing new.
-- Profiling, the test run and the Proving Run each run once per part.
-- Before a long run, check what can stop it partway: the reader accepts the
-  format; no size bound, cap or limit is below the data's measured size
-  (profiling gives it); the profiler or engine has no open fix pending.
-  Fix those first.
-- Run a step again only when its input files, its rules or the engine
-  changed and that change has no proof of its own; otherwise carry the last
-  proof forward ([mdm-engineering](../mdm-engineering/SKILL.md#choose-the-cheapest-proof),
-  "Choose the cheapest proof"). Re-run only that step, never the steps
-  before it.
-- Never re-run a step to confirm a result. The first run's report is the
-  evidence.
-- A Proving Run is not repeated after approval when the approved rules
-  differ from the proved copy only in their approval fields.
-- Questions the findings do not answer go to that part's one test or Proving
-  Run. Never run another scan of the data for them.
+**Run each long step once per part.** Profiling and the load each run once. Before a long run, check what can
+stop it partway: the reader accepts the format; no size bound, cap or limit is below the data's measured
+size (profiling gives it). Never re-run a step to confirm a result: the first run's report is the evidence.
+Questions the findings do not answer go to the part's one load in a disposable store, never to another scan
+of the data.
 
 ### discover: profile the whole data set first
 
@@ -265,9 +229,7 @@ edgar-warehouse rules init
 - **Before you run it:** provision the Rules database, roles and owner connection
   through [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
   This command creates the schema, not the database or logins.
-- **Worked:** it prints each migration file with its checksum.
-- **Fails:** the roles are missing, or it is not PostgreSQL 16. Ask the
-  operator.
+- **Worked:** it prints the table it made.
 
 ### migrate: upgrade the Rules Database schema
 
@@ -275,11 +237,7 @@ edgar-warehouse rules init
 edgar-warehouse rules migrate
 ```
 
-This is the same as **init**, run again after a new migration file lands.
-Rerunning it changes nothing. It never moves rules files: that is
-`rules load` (files to the database) and `rules unload` (database to files,
-**without their comments**). Unload only into another folder and compare;
-never unload over the repo's `rules/`.
+This is the same as **init**, run again after a schema change. Rerunning it changes nothing.
 
 ### identify: name the feed, and find out whether it is new
 
@@ -299,10 +257,10 @@ never unload over the repo's `rules/`.
      the repo uses.
 3. Check registration:
    `edgar-warehouse rules status --source <name>`.
-   - An empty list `[]` means it is not registered.
+   - An empty list `[]` means no run has used it yet.
    - `KeyError: 'RULES_DATABASE_URL'` means no database is configured. Log
-     it and go on; registration is only needed at **test**.
-   - An error saying `rules.rule_version` does not exist means the Rules
+     it and go on; it is only needed at **load**.
+   - An error saying `rules.rules_used` does not exist means the Rules
      Database needs **init**.
 4. **Names.** When the repo does not fix a name, derive it from the names
    it already has, and never invent a new pattern:
@@ -347,7 +305,7 @@ Follow [MAP.md](MAP.md) in full when you reach this mode: research the source, i
 Use the [data-quality](../data-quality/SKILL.md) skill on this part, with
 its approved findings and the field each column fills (from **map**):
 **plan** (its `quality` items become the engine's checks; anything else is
-new code, for a ticket), **measure** (on the records **test** builds),
+new code, for a ticket), **measure** (on the records a **load** builds),
 **decide** (each `on_fail` and each fix with the operator, one at a time),
 **mark** (invalid hierarchy rows, with evidence-backed fixes, for the
 steward) and **write** (`rules/sources/<source>/quality.yaml`, never inside
@@ -376,7 +334,7 @@ does not run or activate a pipeline.
    `MAPPING.xlsx`, and its Notes sheet starts with your comments.
 2. Give the workbook to the stewards and the operator. Apply their changes
    through **refining-rules** ("change-mapping"), and repeat until they
-   agree it. Only an agreed mapping goes on to **test**.
+   agree it. Only an agreed mapping goes on to **load**.
 3. Check that it matches the rules:
    `edgar-warehouse rules mapdoc check`. It succeeds
    silently, with exit 0. A difference fails it, and CI too. Commit the
@@ -391,24 +349,10 @@ does not run or activate a pipeline.
    [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
    If no catalog server is reachable, say so; do not skip it silently.
 
-### test: run it on real captured files and record the result
+### check and load
 
-Follow [TEST.md](TEST.md) in full when you reach this mode: qualify on captured files, run a proving run once for anything that matches records, then save and record the test run.
-
-### approve: the operator decides
-
-Follow [APPROVE.md](APPROVE.md). Explain in plain words, ask once, and
-record their exact words.
-
-### switch-on: activate, then hand the run to Bookkeeping
-
-Activate as in [APPROVE.md](APPROVE.md), "Switch on". A source built as above needs nothing before this
-step: if switching on needs a test, an input or a capture that does not exist yet, the build is not finished
-("Built means ready to turn on").
-
-Running it is the **bookkeeping** skill's **run** mode. It submits `rules run --target <target>`
-with an input manifest and its sha256. Run targets in their declared
-dependency order, and report any missing worker as unfinished implementation.
+Follow [LOAD.md](LOAD.md): `rules check`, then `edgar-warehouse load` into a disposable store and then the
+shared one. Running and recovering a run is the **bookkeeping** skill's **run** mode.
 
 ## When a command is missing
 
@@ -420,7 +364,7 @@ Either way, write it in the log.
 
 | Command | State | What to do | Built by |
 |---|---|---|---|
-| Preview (matches against a copy of MDM) | not built | A proving run on a disposable PostgreSQL 16 (**test**) | the rules skill |
+| Preview (matches against a copy of MDM) | not built | A load into a disposable store (**check and load**) | the rules skill |
 | Silver writer to a warehouse store | not built: the writer lands on PostgreSQL 16 only | Land on PostgreSQL 16 (**Two targets**) | a warehouse sink ticket (plan decision 36) |
 | Flat export of a nested part | not built | Land flat parts; record each nested part as a gap | a profiling follow-up |
 | Silver output worker in a pipeline | built: a `silver.land` step lands a reading's table | Add the step after the merge that makes the master ids the rows link to (**Two targets**); `silver land` by hand only for a table whose source has no such step | none |
@@ -444,7 +388,7 @@ These name today's sources only as examples; nothing above depends on them.
   projection") holds them. A list-shaped field: Person's `name_variants[]`.
 - **Another kind's value:** a ticker belongs to Security, not Company.
 - **Joining identifiers:** today `cik` (the one Identifier Contract); the SEC-to-GLEIF waterfall
-  passes (`sec-gleif-name-city-or-postcode`) bind by name with their proofs.
+  passes (`sec-gleif-name-city-or-postcode`) bind by name.
 - **Classification:** SEC types people and firms alike as `other`; the SEC
   Company contract names its rule under `adapter.classification`; a
   `company` verdict in a Person rule is deferred with `probable_kind`
@@ -455,8 +399,7 @@ These name today's sources only as examples; nothing above depends on them.
   `bookkeeping.targets.mastering` (read, prepare, merge, with each step's
   units and input).
 - **Platform facts the SEC Company chain needs:** its code reads the
-  switched-on `sec-company-candidate` from the policy when it loads, so a
-  proving run stamps it into its copy of the policy first (**test**); its
+  switched-on `sec-company-candidate` from the policy when it loads; its
   preparation (`edgar-warehouse mdm prepare-capture --source sec.company`) reads the
   main documents and the exchange catalog; no file is needed (the waterfall pass pairs the stored
   Companies with GLEIF after the load).
@@ -466,7 +409,3 @@ These name today's sources only as examples; nothing above depends on them.
   Company's are layers in `tests/mdm/policy_layers.py` (`LAYERS`, newest
   first). Running only the tests that load the rules misses them: CI
   then fails on the pinned digests.
-- **Proving runs:** `.scratch/company-mastering/research/05_proving_run.py`
-  (`candidate()` stamps the copied policy);
-  `.scratch/company-mastering/research/27_proving_run.py` (a second pass
-  that changes nothing).

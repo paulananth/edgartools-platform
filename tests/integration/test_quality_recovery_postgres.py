@@ -14,6 +14,8 @@ No provider data is read: every document here is invented, and every store is a
 disposable PostgreSQL 16 container.
 """
 from __future__ import annotations
+from edgar_warehouse.rules import frozen
+from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 
 import hashlib
 import json
@@ -99,11 +101,8 @@ def submit(databases, tmp_path, book, report, target):
     for unit in steps["land"]:
         unit["keys"]["silver"] = "recovery_fact"
     manifest = book.artifacts.put(tmp_path.as_uri() + "/submitted", {"version": 2, "steps": steps})
-    saved = databases.rules.save("source", body["source"], "1", body)
-    databases.rules.prove("source", body["source"], "1",
-                          {"digest": saved["digest"], "batch_hash": manifest["sha256"], "passed": True})
-    databases.rules.activate("source", body["source"], "1")
-    rules = databases.rules.resolve("source", body["source"], root=tmp_path.as_uri() + "/rules")
+    saved = frozen.of("source", body["source"], body)
+    rules = Artifacts().put(tmp_path.as_uri() + "/rules", saved)
     rid = book.start(rules_ref=rules, inputs_ref=manifest, target="silver", scope={"test": body["source"]})
     return rid
 

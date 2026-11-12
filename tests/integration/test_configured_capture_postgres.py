@@ -4,6 +4,8 @@ Fixtures are approved fixture Rules, never production SEC acquisition proof.
 Worker renewal invokes public control commands with its restricted login;
 independent readback/admission uses a separate verifier login.
 """
+from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from edgar_warehouse.rules import frozen
 from copy import deepcopy
 import io
 import zipfile
@@ -20,8 +22,7 @@ from edgar_warehouse.bookkeeping.clean.database import grant_profile
 from edgar_warehouse.control_contract import Blocked
 from edgar_warehouse.workers import control, provider_capture as capture, provider_transport as transport
 from edgar_warehouse.workers.__main__ import runtime
-from tests.integration.test_configured_bookkeeping_postgres import databases, expire, config, approved_acquisition
-from tests.support.rules_approval import approve
+from tests.integration.test_configured_bookkeeping_postgres import databases, expire, config, fixture_feed
 
 
 @pytest.fixture
@@ -40,7 +41,7 @@ def setup(databases, tmp_path, monkeypatch, request):
         target['steps'][0]['leases'] = ['output:{destination}']
     name = 'capture-' + uuid4().hex
     baseline = book.artifacts.put(tmp_path.as_uri() + '/baseline', {'offline': True})
-    proof = approved_acquisition(body, name, [], baseline)
+    fixture_feed(body, name, [])
     body['acquisition']['feeds']['fixture']['completeness'].update(required=['ok'], allow_empty=False)
     if getattr(request, 'param', None) == 'with_page':
         body['acquisition']['feeds']['fixture']['page_completeness'] = {
@@ -58,12 +59,8 @@ def setup(databases, tmp_path, monkeypatch, request):
         feed['completeness'].update(format='json_array', required=[])
     elif getattr(request, 'param', None) == 'invalid_native_contract':
         body['acquisition']['feeds']['fixture']['completeness']['required'] = ['x' * 4096]
-    saved = databases.rules.save('source', name, '1', body)
-    databases.rules.prove('source', name, '1', {'digest': saved['digest'], 'batch_hash': baseline['sha256'],
-                                               'passed': True, 'acquisition': proof})
-    approve(databases.approver, 'source', name, '1')
-    databases.rules.activate('source', name, '1')
-    rules = databases.rules.resolve('source', name, root=tmp_path.as_uri() + '/rules')
+    saved = frozen.of('source', name, body)
+    rules = Artifacts().put(tmp_path.as_uri() + '/rules', saved)
 
     def start(previous=None, **changes):
         key = uuid4().hex

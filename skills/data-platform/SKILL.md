@@ -40,26 +40,9 @@ it against the seven, and drop what adds no value:
 [mdm-engineering](../mdm-engineering/SKILL.md#choose-the-cheapest-proof),
 "Choose the cheapest proof", its last row.
 
-## Guide the task to completion
-
-For readiness, cross-reference mapping/lookup, missing proof, draft-to-final
-work, deployment or activation, follow [Completion guide](COMPLETION.md) first.
-Explain the observed state per selected engine, give the ordered remaining steps and keep the task's
-checklist current while carrying them out through the owning skills. Return to
-that checklist after each handoff; naming an owner alone does not finish a step.
-
-A request to create qualification evidence starts from the available draft and
-retained inputs. Discover those inputs and generate the proof from the run;
-an existing final release is not a prerequisite for creating one. Reuse genuine
-matching evidence and authorization already given. Present a concrete tested
-version before requesting its approval, and continue independent authorized work
-while a necessary input or approval is pending.
-
 For catalog restoration, Mapping Documents, entity domains, glossaries, quality
-publication, unclear asset names or coverage of all entities/pipelines, use
+publication, unclear asset names or coverage of all entities and pipelines, use
 [Business catalog](../data-onboarding/CATALOG.md).
-This is configuration metadata publication; source processing and activation
-retain their own gates.
 
 ## Source readiness
 
@@ -67,7 +50,7 @@ When running, recovering or qualifying a source, apply these operator requiremen
 an implementation gap before calling a source ready.
 
 - Qualify retained local captures through genuine provenance, completeness
-  evidence and the normal Rules lifecycle. Local processing qualification can
+  evidence. Local processing qualification can
   precede AWS capture qualification. Provider requests retain their separate
   authorization; missing evidence blocks affected processing.
 - Require the common configuration-driven path through dependencies, reading,
@@ -103,14 +86,13 @@ alerting integration or replace the normal run verifier.
 
 | Step | Mode | Detail in |
 |---|---|---|
-| Start | Explain current state and complete the remaining steps | [Completion guide](COMPLETION.md) |
 | 0 | Setup, once per machine | this file |
 | 1 | Onboard a new feed or kind | [data-onboarding](../data-onboarding/SKILL.md) |
 | 1b | Change a live feed's rules | [refining-rules](../refining-rules/SKILL.md) |
 | 2 | Parse: read captured files with the configured engine | this file, then [bookkeeping RUN](../bookkeeping/RUN.md) |
 | 2b | Combine keyed collections and join configured source extracts | [COMBINING.md](COMBINING.md) |
 | 3 | Master: the parsed records into MDM | this file |
-| 4 | Approve and switch on | [APPROVE](../data-onboarding/APPROVE.md) |
+| 4 | Check the rules files and load | [LOAD](../data-onboarding/LOAD.md) |
 | 5 | Recover a run | [bookkeeping RECOVERY](../bookkeeping/RECOVERY.md), [change-journal](../change-journal/SKILL.md) |
 | 6 | Custom parsing, only when the engine cannot state a field | this file |
 | 7 | Self-check | this file |

@@ -77,7 +77,7 @@ missing, go on and log it.
   - A flag, role or type the source states about a record is evidence for a
     rule, never a key and never a decider on its own: such fields are often
     wrong or partial for the very records that matter.
-- **Every master field reaches MDM.** Before **test**, list each master field
+- **Every master field reaches MDM.** Before **load**, list each master field
   the findings name (and each fact every row repeats about the master) and
   check it is in the kind's fields and the Dataset Contract, and that no
   silver table spec carries it (a link's source key excepted); one found in
@@ -160,7 +160,7 @@ starting from its "Defaults".
   between keys, wherever a choice needs a reason: an operator's answer, a
   field left out, a surprising path.
 - Check it: `edgar-warehouse rules check --source <source>` loads it as
-  `rules save` would, offline. Each file says `ok`, or `refused` with the
+  a run would, offline. Each file says `ok`, or `refused` with the
   error's kind; it checks that the file loads (the loader refuses a value
   YAML would guess), that each Bookkeeping target and the acquisition hold,
   and that the merge rules pass.
@@ -177,7 +177,7 @@ starting from its "Defaults".
   out for a feed onboarded from files already captured. The `bookkeeping`
   section is required: its `mastering` target (version 2, each step with its
   `units` and `input`) is what runs the feed into MDM, and without it nothing
-  is mastered and **test** cannot run it. Write it with the
+  is mastered and **load** cannot run it. Write it with the
   [bookkeeping skill](../bookkeeping/SKILL.md) and its
   [SPEC](../bookkeeping/SPEC.md), shaped like an existing source's target
   (Examples); keep both sections as they are in an existing file.
@@ -204,7 +204,7 @@ of an existing kind's file, and declare:
   publication's time, often none.
 
 Never add the new rules to `automatic_rules` in `rules/merge/policy.yaml`;
-that happens only at **approve**. A matching rule on names is never written
+that is LOAD.md's "A new matching rule". A matching rule on names is never written
 here: it needs a measured proof, which is **refining-rules** work. When a
 source's records can join another source's master only by name (they share
 no issued identifier), list that name matching as its own part in

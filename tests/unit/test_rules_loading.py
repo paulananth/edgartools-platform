@@ -19,6 +19,9 @@ READING = {
 }
 
 
+CURRENT = loading.digest(READING)[:12]  # the version a run of the files as they are carries
+
+
 def capture(folder, *keys):
     folder.mkdir(exist_ok=True)
     (folder / "receipts.jsonl").write_text("".join(json.dumps({"file": k, "sha256": "0" * 64}) + "\n" for k in keys))
@@ -57,8 +60,8 @@ class Recorded:
             return "{}"
         if args[:2] == ("workers", "describe"):
             return json.dumps({"profile": args[2], "runtime": "this-checkout"})
-        if args[:2] == ("rules", "status"):
-            return json.dumps([{"version": "example-2", "status": "active"}, {"version": "example-1", "status": "retired"}])
+        if args[:2] == ("rules", "register"):
+            return "{}"
         if args[:2] == ("bookkeeping", "runs"):
             state = args[args.index("--state") + 1]
             return json.dumps([{"run_id": r, "name": n, "target": t, "created_at": r}
@@ -75,7 +78,7 @@ class Recorded:
 
     def status(self, run_id):
         return {"run": {"submission": {"rules": {"uri": f"file:///frozen/{run_id}", "sha256": "2" * 64},
-                                       "rule_version": self.versions.get(run_id, "example-2")},
+                                       "rule_version": self.versions.get(run_id, CURRENT)},
                         "runtimes": self.pinned.get(run_id, {"source.read": "this-checkout",
                                                              "verify:source.read": "this-checkout"})}}
 
@@ -139,33 +142,6 @@ def test_failed_automatic_preparation_submits_no_bundle(tmp_path, monkeypatch):
     assert not commands.prepared
 
 
-@pytest.mark.parametrize("active", [None, "other-digest", "current-digest"])
-def test_preparation_requires_the_current_source_rules_to_be_active_before_any_pair_write(tmp_path, monkeypatch, active):
-    class SourceVersions(Recorded):
-        def __call__(self, duty, *args):
-            if args[:2] == ("rules", "status"):
-                return json.dumps([] if active is None else [{"status": "active", "version": "example-2",
-                    "digest": loading.digest(found.reading) if active == "current-digest" else active}])
-            return super().__call__(duty, *args)
-
-    commands = SourceVersions()
-    found = loader(tmp_path, monkeypatch, commands)
-    found.reading = copy.deepcopy(found.reading)
-    found.reading["bookkeeping"]["targets"]["by_letter"]["preparation"] = [
-        {"method": "invented", "options": {}}]
-    pairs = []
-    monkeypatch.setattr(loading, "prepare_load", lambda **kw: pairs.append("applied") or [])
-    args = dict(capture=capture(tmp_path / "c", "letters/a.json"), capture_run="capture-1",
-                as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
-    if active == "current-digest":
-        found.load(**args)
-        assert pairs == ["applied"]
-    else:
-        with pytest.raises(driving.RunStopped, match="current Rules digest to be active"):
-            found.load(**args)
-        assert pairs == [] and not commands.prepared
-
-
 def test_a_load_names_the_publication_revision_and_defaults_to_the_first(tmp_path, monkeypatch):
     folder = capture(tmp_path / "c", "letters/a.json")
     named, plain = Recorded(), Recorded()
@@ -218,7 +194,7 @@ def test_a_blocked_run_stops_the_load_before_anything_is_submitted(tmp_path, mon
     assert ("mdm", "prepare-capture") not in commands.calls
 
 
-def test_a_blocked_run_under_retired_rules_stays_as_it_is_and_the_load_goes_on(tmp_path, monkeypatch):
+def test_a_blocked_run_under_other_rules_stays_as_it_is_and_the_load_goes_on(tmp_path, monkeypatch):
     commands = Recorded(open_runs=[("old-rules-1", "example", "by_letter", "blocked")],
                         versions={"old-rules-1": "example-1"})
     folder = capture(tmp_path / "c", "letters/a.json")
@@ -226,7 +202,7 @@ def test_a_blocked_run_under_retired_rules_stays_as_it_is_and_the_load_goes_on(t
     result = loader(tmp_path, monkeypatch, commands).load(
         capture=folder, capture_run="capture-1", as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
 
-    assert result["left_as_they_are"] == {"old-rules-1": "blocked under retired rules version example-1"}
+    assert result["left_as_they_are"] == {"old-rules-1": "blocked under other rules (example-1)"}
     assert not [c for c in commands.calls if c[:2] == ("drive", "old-rules-1")]
     assert [b["run_id"] for b in result["bundles"]] == ["new-1"]
 
@@ -243,11 +219,11 @@ def test_the_plan_names_what_load_would_finish_leave_and_load_and_does_nothing(t
 
     assert plan == {"source": "example", "target": "by_letter", "documents": 3, "bundle_size": 2, "bundles": 2,
                     "finishable_runs": ["old-1"],
-                    "left_as_they_are": {"old-rules-1": "blocked under retired rules version example-1",
+                    "left_as_they_are": {"old-rules-1": "blocked under other rules (example-1)",
                                          "pinned-1": "pinned to other worker code (source.read)"},
                     "blocked": None}
-    # Only reads: the rules status, the runs and their pins. Nothing is prepared, submitted or driven.
-    assert {c[:2] for c in commands.calls} <= {("rules", "status"), ("bookkeeping", "runs"), ("workers", "describe")}
+    # Only reads: the runs and their pins. Nothing is prepared, submitted or driven.
+    assert {c[:2] for c in commands.calls} <= {("bookkeeping", "runs"), ("workers", "describe")}
 
 
 def test_the_plan_reports_a_blocked_run_instead_of_stopping(tmp_path, monkeypatch):

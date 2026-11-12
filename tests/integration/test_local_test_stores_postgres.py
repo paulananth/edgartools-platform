@@ -21,7 +21,6 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
     """The generated connections really run work; silver is never created."""
     from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
     from edgar_warehouse.rules import files
-    from edgar_warehouse.rules.db import Rules
     from edgar_warehouse.workers import PROFILES
     from tests.integration.test_configured_bookkeeping_postgres import config
 
@@ -76,41 +75,28 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
                                        {"l": login, "p": profile, "d": allowed})
                     assert not conn.scalar(text("SELECT pg_has_role(:l,bookkeeping.profile_role(:p,:d),'MEMBER')"),
                                            {"l": login, "p": profile, "d": denied})
-        # Governance can register a genuinely validated invented policy, while
-        # workers and verifiers cannot insert master state directly.
-        policy = {"version": 1, "required_consumers": ["export", "graph"], "automatic_rules": []}
-        rules = Rules(engine("rules", "rules_governance"))
-        saved = rules.save("merge", "platform", "invented", policy)
-        proof = {"digest": saved["digest"], "batch_hash": "a" * 64, "passed": True}
-        rules.prove("merge", "platform", "invented", proof)
-        pending = rules.pending()[0]
-        rules.approve("merge", "platform", "invented", evidence=pending["evidence_hash"],
-                      by="invented operator", words="Approved invented fixture")
-        rules.activate("merge", "platform", "invented", mdm_engine=engine("mdm", "mdm_governance"))
-        # A source that declares no feed of its own (it reads files another source's feed
-        # captures) switches on its pipes and registers its datasets (operator, 2026-10-19).
+        # Governance registers an invented policy and a source's Dataset Contracts from a rules folder,
+        # while workers and verifiers cannot insert master state directly.
+        from edgar_warehouse.rules import frozen
+        root = tmp_path / "rules-root"
+        files.write_policy({"version": 1, "required_consumers": ["export", "graph"], "automatic_rules": []}, root)
+        # A source that declares no feed of its own (it reads files another source's feed captures)
+        # registers its datasets.
         person = files.source("sec.submissions.person")
         assert "acquisition" not in person
-        saved = rules.save("source", "sec.submissions.person", "invented", person)
-        rules.prove("source", "sec.submissions.person", "invented",
-                    {"digest": saved["digest"], "batch_hash": "b" * 64, "passed": True})
-        waiting = next(p for p in rules.pending() if p["name"] == "sec.submissions.person")
-        rules.approve("source", "sec.submissions.person", "invented", evidence=waiting["evidence_hash"],
-                      by="invented operator", words="Approved invented fixture")
-        rules.activate("source", "sec.submissions.person", "invented", mdm_engine=engine("mdm", "mdm_governance"))
-        with engine("mdm", "mdm_governance").connect() as conn:
+        files.write_source(person, root / "sources" / "sec.submissions.person")
+        files.write_source({**person, "source": "invented.other"}, root / "sources" / "invented.other")
+        governance_mdm = engine("mdm", "mdm_governance")
+        with governance_mdm.begin() as conn:
+            first = frozen.register(conn, ["sec.submissions.person"], root)
+        with governance_mdm.begin() as conn:
+            assert frozen.register(conn, ["sec.submissions.person"], root) == first  # again changes nothing
+        with governance_mdm.connect() as conn:
             assert conn.scalar(text("SELECT count(*) FROM mdm.dataset_mapping WHERE source_code=:c"),
                                {"c": "sec.submissions.person.v1"}) == 1
         # Another source cannot register over a dataset Person owns.
-        other = {**person, "source": "invented.other"}
-        saved = rules.save("source", "invented.other", "invented", other)
-        rules.prove("source", "invented.other", "invented",
-                    {"digest": saved["digest"], "batch_hash": "c" * 64, "passed": True})
-        waiting = next(p for p in rules.pending() if p["name"] == "invented.other")
-        rules.approve("source", "invented.other", "invented", evidence=waiting["evidence_hash"],
-                      by="invented operator", words="Approved invented fixture")
-        with pytest.raises(Blocked, match="belongs to source sec.submissions.person"):
-            rules.activate("source", "invented.other", "invented", mdm_engine=engine("mdm", "mdm_governance"))
+        with pytest.raises(Blocked, match="belongs to source sec.submissions.person"), governance_mdm.begin() as conn:
+            frozen.register(conn, ["invented.other"], root)
         for login in ("mdm_runtime", "mdm_verifier", "mdm_governance"):
             reader = engine("mdm", login)
             with reader.connect() as conn:
@@ -138,11 +124,8 @@ def test_five_store_initialization_runs_separate_workers_and_keeps_their_evidenc
             {"keys": {"id": "one", "destination": output}, "input": inp, "output": output, "cursor": None}]})
         body = config()
         body["bookkeeping"]["targets"]["load"] = body["bookkeeping"]["targets"].pop("silver")
-        saved = rules.save("pipeline", "invented-local-load", "1", body)
-        rules.prove("pipeline", "invented-local-load", "1", {"digest": saved["digest"],
-                    "batch_hash": manifest["sha256"], "passed": True})
-        rules.activate("pipeline", "invented-local-load", "1")
-        result = cli("worker", "rules", "run", "--pipeline", "invented-local-load", "--target", "load",
+        files.LAYOUT["pipeline"][1](body, root / "pipelines" / "invented-local-load" / "pipeline.yaml")
+        result = cli("worker", "rules", "run", "--pipeline", "invented-local-load", "--target", "load", "--root", str(root),
                      "--input-manifest", manifest["uri"], "--input-sha256", manifest["sha256"])
         run_id = str(result["run"]["run_id"])
         cli("verifier", "workers", "work", "artifact.copy", run_id, success=False)

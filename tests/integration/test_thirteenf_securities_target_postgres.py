@@ -4,6 +4,8 @@ Invented information tables run through Bookkeeping's claim, lease and verify
 path: read (one unit per file), reduce over every unit, combine, record and
 prepare. No MDM here, so the merge and journal steps are left out; the plan
 test covers them. Every name and number is invented."""
+from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from edgar_warehouse.rules import frozen
 import hashlib
 import json
 from copy import deepcopy
@@ -70,11 +72,8 @@ def run(databases, tmp_path, monkeypatch, tables):
     steps = book.artifacts.json(report["manifest"])["steps"]
     del steps["merge"], steps["land_holding"], steps["processed"]
     manifest = book.artifacts.put(tmp_path.as_uri() + "/submitted", {"version": 2, "steps": steps})
-    saved = databases.rules.save("source", body["source"], "1", body)
-    databases.rules.prove("source", body["source"], "1",
-                          {"digest": saved["digest"], "batch_hash": manifest["sha256"], "passed": True})
-    databases.rules.activate("source", body["source"], "1")
-    rules = databases.rules.resolve("source", body["source"], root=tmp_path.as_uri() + "/rules")
+    saved = frozen.of("source", body["source"], body)
+    rules = Artifacts().put(tmp_path.as_uri() + "/rules", saved)
     rid = book.start(rules_ref=rules, inputs_ref=manifest, target="mastering", scope={"test": body["source"]})
     return book, rid, steps
 

@@ -1,5 +1,7 @@
 """A declared chain on real PG16 (ticket 14, slice 2c): requests read each file
 alone beside their answers, answers read in groups with each file's pair set
+from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from edgar_warehouse.rules import frozen
 from its own request reading, a reduce over every answers reading, the
 Listing currency's line counts, lines and listing read (ticket 138 part B3),
 a combine, the record read over the combine's pieces, and the preparation, all formed by
@@ -95,11 +97,8 @@ def run_target(databases, tmp_path, body, target=TARGET):
     del steps["merge"], steps["processed"]
     manifest = book.artifacts.put(tmp_path.as_uri() + "/submitted", {"version": 2, "steps": steps})
     version = uuid4().hex
-    saved = databases.rules.save("source", "openfigi", version, rules_body)
-    databases.rules.prove("source", "openfigi", version,
-                          {"digest": saved["digest"], "batch_hash": manifest["sha256"], "passed": True})
-    databases.rules.activate("source", "openfigi", version)
-    rules = databases.rules.resolve("source", "openfigi", root=tmp_path.as_uri() + "/rules")
+    saved = frozen.of("source", "openfigi", rules_body)
+    rules = Artifacts().put(tmp_path.as_uri() + "/rules", saved)
     rid = book.start(rules_ref=rules, inputs_ref=manifest, target=target, scope={"test": version})
     state = drive(book, rid, databases.ledger, workers=WORKERS)
     assert state["run"]["state"] == "complete", state

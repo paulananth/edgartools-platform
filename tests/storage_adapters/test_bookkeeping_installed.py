@@ -72,8 +72,7 @@ assert not names & set({DOMAIN!r})
                         "s1": [{"keys": {"id": "0", "destination": counted}, "input": {"from": {"step": "s0", "key": "0"}},
                                 "output": counted, "cursor": {}}]}})
                     rules = artifacts.put(tmp_path.as_uri() + "/rules", {"kind": "pipeline", "name": "invented.installed", "version": "v1",
-                        "body": body, "digest": digest(body), "status": "active", "approval": None,
-                        "proof": {"digest": digest(body), "batch_hash": inputs["sha256"], "passed": True}})
+                        "body": body, "digest": digest(body)})
                     start = subprocess.run([str(python), "-I", "-c", '''
 import json,sys
 from edgar_warehouse.bookkeeping.clean.database import get_engine

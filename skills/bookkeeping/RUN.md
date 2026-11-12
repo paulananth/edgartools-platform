@@ -20,23 +20,13 @@ unsupported required stage is a blocker, not a reason to drop that stage.
 ## Configuration and execution
 
 Select the environment, worker/verifier duties, manifest storage and any
-activation or registration connections through
+registration connections through
 [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
 Keep worker and verifier identities separate; provisioning does not authorize
-execution or Rules activation.
+execution.
 Old run ids are not fallbacks.
 
-For a new or changed Rules body, write only the planned configuration through
-`edgar_warehouse.rules.files`, save a new version, and record the evaluator's
-real exact-digest proof with `rules record-proof`. That command records proof;
-it does not evaluate a Batch Gate. MDM configurations require the person's
-approval of that exact version, recorded through the Data Onboarding skill's Approve
-steps in their name and words. Honor an approval already given for that
-version; when absent, explain the Rules governance requirement and wait for
-the person's approval. Activate through the existing Rules lifecycle.
-Source documents own MDM dataset registration; platform-owned MDM contracts
-still lack handoff support. An existing approved active version can be reused
-when its exact content matches the validated plan.
+A new or changed rules file is checked with `rules check`; the run freezes it ([check and load](../data-onboarding/LOAD.md)).
 
 Submit the selected source/feed's manifest, then run each step's worker and
 verifier, in step order, and finish the run:

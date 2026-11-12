@@ -62,8 +62,8 @@ trusted file in a command-scoped subshell with `set -a` and disable tracing.
 MDM and Bookkeeping migration commands consume their ordinary
 `*_DATABASE_URL` variable as the owner for that command only; other stores'
 migrations consume `*_MIGRATION_DATABASE_URL`. Never leave owner connections
-as runtime defaults. Activation additionally needs
-`RULES_MDM_ACTIVATION_DATABASE_URL` from the governance file; destination
+as runtime defaults. Registering rules in MDM additionally needs
+`MDM_REGISTRATION_DATABASE_URL` from the governance file; destination
 guard setup uses `DESTINATION_MIGRATION_DATABASE_URL` as its owner.
 `PROFILE_DATABASE_URL` is a separately authorized profiling login with access
 to database activity. Configure these only for their requested duty.

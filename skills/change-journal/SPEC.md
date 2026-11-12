@@ -135,9 +135,8 @@ change by pulling the masters changed after its checkpoint).
 
 ## Rules and source-owned evidence
 
-Source files and `rules.rule_version` are the only configuration owners.
-Proof baseline manifest bytes are read back by hash before proving/activating
-a version and during fresh submission/recovery.
+The rules files are the only configuration owner. A run's frozen rules are read back by hash during
+submission and recovery.
 Acquisition proof must qualify every declared feed and its required producer
 counts. Approval covers the exact digest. Dataset registration can pin an
 approved Rules envelope without querying legacy registry tables. Unchanged

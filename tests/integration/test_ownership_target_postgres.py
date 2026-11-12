@@ -6,6 +6,8 @@ that wait for it. The merge here is a stand-in that records itself (MDM's own
 merge has its worker test); what is proven is the order: no landing can be claimed
 before the merge is verified, and every landing then lands its rows in silver.
 Every name and number is invented."""
+from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+from edgar_warehouse.rules import frozen
 import hashlib
 import json
 from copy import deepcopy
@@ -82,11 +84,8 @@ def test_no_landing_is_claimable_before_the_merge_and_each_then_lands_its_rows(d
     assert len(steps["read"]) == 2  # one unit a file
     manifest = book.artifacts.put(tmp_path.as_uri() + "/submitted", {"version": 2, "steps": steps})
     body = {"source": f"ownership-{uuid4().hex}", "bookkeeping": {"version": 2, "targets": {"mastering": target}}}
-    saved = databases.rules.save("source", body["source"], "1", body)
-    databases.rules.prove("source", body["source"], "1",
-                          {"digest": saved["digest"], "batch_hash": manifest["sha256"], "passed": True})
-    databases.rules.activate("source", body["source"], "1")
-    rules = databases.rules.resolve("source", body["source"], root=tmp_path.as_uri() + "/rules")
+    saved = frozen.of("source", body["source"], body)
+    rules = Artifacts().put(tmp_path.as_uri() + "/rules", saved)
     rid = book.start(rules_ref=rules, inputs_ref=manifest, target="mastering", scope={"test": body["source"]})
 
     order = []
