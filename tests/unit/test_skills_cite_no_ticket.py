@@ -10,8 +10,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 TICKET = re.compile(r"\btickets? \d+", re.IGNORECASE)
 KNOWN = {
-    "skills/bookkeeping/SKILL.md": 1,
-    "skills/bookkeeping/SPEC.md": 4,
     "skills/company-financials/SKILL.md": 8,
     "skills/security-master/SKILL.md": 12,
 }

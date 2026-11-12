@@ -74,7 +74,7 @@ its SHA-256 as an immutable draft. Proof pins the body digest and input batch
 hash, and says whether the run passed; a failing run stays a draft with its
 evidence. Versions feeding MDM need a person's approval, which the agent
 records in that person's name with their exact words, the evidence it rests
-on and the recording login (rules skill ticket 14): never without a recorded
+on and the recording login: never without a recorded
 test run, and for a failing one only with the person's overrule reason.
 Status only moves draft → proven → active → retired. One active version per
 kind and name is enforced by a partial unique index.
@@ -170,7 +170,7 @@ needs no writer of its own:
   - `pieces: {step: <combine step>}`: one unit reading that step's verified
     output piece by piece (read version 4).
 
-**Another run's step** (ticket 120). A reading or a lookup that names `{run:
+**Another run's step.** A reading or a lookup that names `{run:
 {source, target, step}}` reads the verified units of that step in the
 complete runs of that source's target, of the reading run's own kind: when
 the manifest is written, they become the slot's list (1..256 units; an output
@@ -185,12 +185,12 @@ publication (no `mdm.prepare`). The target is part of what each file is
 processed under, so two targets over the same files (a source's two Dataset
 Contracts) each process them.
 
-**Which runs, over time** (ticket 121; operator, 2026-10-20: "All runs of
+**Which runs, over time** (operator, 2026-10-20: "All runs of
 latest capture (Recommended)"). A manifest written from a capture names it
 (`capture`, the capture's run id); the run's submission keeps it. A reading
 takes only the runs of the capture the newest complete run was written from,
 so an identifier never comes back from two captures; runs that name no
-capture (written before ticket 121) count as one capture. A run another run
+capture (older manifests) count as one capture. A run another run
 names in a slot is not compacted while that run is not complete (migration
 007); once it completes, compaction treats it as usual, and a later reading
 of a compacted capture finds no units and is refused.
