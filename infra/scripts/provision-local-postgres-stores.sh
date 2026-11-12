@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Provision fresh Bookkeeping, Rules and Change Journal on local PostgreSQL 16.
-# Existing legacy databases are retained unchanged; no history is imported.
+# Provision Bookkeeping, Rules and the Change Journal on local PostgreSQL 16.
+# Existing databases are left unchanged.
 # Set BOOKKEEPING_RUNTIME_PASSWORD, RULES_AGENT_PASSWORD and
 # CHANGE_JOURNAL_RUNTIME_PASSWORD before running. No Rules approval is created.
 set -euo pipefail
 if [[ $# -gt 0 ]]; then
-    echo "Fresh provisioning takes no flags; legacy physical retirement is separate." >&2
+    echo "Provisioning takes no flags." >&2
     exit 2
 fi
 : "${BOOKKEEPING_RUNTIME_PASSWORD:?Set the fresh runtime password}"

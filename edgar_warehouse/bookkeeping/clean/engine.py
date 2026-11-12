@@ -73,7 +73,7 @@ class Bookkeeping:
     def _run(self, run_id: str) -> dict:
         result = storage.run(self.engine, run_id)
         if not result:
-            raise Blocked("Unknown run; legacy runs cannot be resumed")
+            raise Blocked("Unknown run")
         return result[0]
 
     def _static(self, submission: dict):
@@ -105,10 +105,10 @@ class Bookkeeping:
     def _frozen(self, run_id: str):
         runs, stored = storage.frozen(self.engine, run_id)
         if not runs:
-            raise Blocked("Unknown run; legacy runs cannot be resumed")
+            raise Blocked("Unknown run")
         run = runs[0]
         if run["submission"].get("journal") != "change-journal-v1" or run["submission"].get("protocol") != PROTOCOL:
-            raise Blocked("Legacy runs and deliveries must finish on their original stack")
+            raise Blocked("The run was submitted under another protocol or journal")
         try:
             submission = run["submission"]
             if digest(submission) != run["submission_hash"]:
@@ -160,7 +160,7 @@ class Bookkeeping:
             raise Blocked("Submission requires frozen rules whose digest is their body's")
         config = staged(validate(export["body"], target))
         if scope.get("feed") and "acquisition" not in export["body"]:
-            raise Blocked("Retired acquisition feed cannot be submitted")
+            raise Blocked("A feed can be submitted only for rules that declare an acquisition")
         if "acquisition" in export["body"]:
             selected = _authority(export, scope)
             if scope.get("source") != export["name"]:

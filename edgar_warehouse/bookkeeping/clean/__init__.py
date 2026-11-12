@@ -1,4 +1,4 @@
-"""Fresh, source-independent control. Never reads the legacy Bookkeeping DB."""
+"""Source-independent control of runs and their work units."""
 
 from .config import Blocked
 

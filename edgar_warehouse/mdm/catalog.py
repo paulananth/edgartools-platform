@@ -22,7 +22,7 @@ def load(root=None):
 
 def _validate(body):
     expected = {"version", "kinds", "profiles",
-                "reference_tables", "legacy_jurisdiction_table", "pair_comparisons", "legacy_pair_comparison"}
+                "reference_tables", "default_jurisdiction_table", "pair_comparisons", "default_pair_comparison"}
     if (not isinstance(body, dict) or not expected <= set(body)
         or set(body) - expected - {"master_search", "detail_lookups"}
         or not isinstance(body["version"], str) or not body["version"]):
@@ -66,14 +66,14 @@ def _validate(body):
                or set(spec) != {"pin", "target_set", "match_type"}
                or any(not isinstance(value, str) or not value or value.strip() != value for value in spec.values())
                for alias, spec in references.items())
-        or not isinstance(body["legacy_jurisdiction_table"], str)
-        or body["legacy_jurisdiction_table"] not in references):
+        or not isinstance(body["default_jurisdiction_table"], str)
+        or body["default_jurisdiction_table"] not in references):
         raise ValueError("Mastering reference tables name pinned crosswalk selectors and a configured compatibility table")
     comparisons = body["pair_comparisons"]
     if (not isinstance(comparisons, dict) or not comparisons
         or any(not isinstance(alias, str) or not alias or alias.strip() != alias for alias in comparisons)
-        or not isinstance(body["legacy_pair_comparison"], str)
-        or body["legacy_pair_comparison"] not in comparisons):
+        or not isinstance(body["default_pair_comparison"], str)
+        or body["default_pair_comparison"] not in comparisons):
         raise ValueError("Mastering pair comparison names configured selectors and a compatibility profile")
     for pair in comparisons.values():
         _validate_pair_comparison(pair, kinds)

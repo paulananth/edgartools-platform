@@ -1,4 +1,4 @@
-"""Provision only the fresh journal, never legacy ledger tables or history."""
+"""Provision the Change Journal's schema."""
 
 from __future__ import annotations
 

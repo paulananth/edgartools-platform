@@ -125,8 +125,8 @@ for action in (execution.runtime_files, lambda: check_policy({"kinds":{}})):
 @pytest.mark.parametrize("change", ["unknown_default", "unknown_selector", "blank_pin"])
 def test_invalid_reference_selector_is_refused(tmp_path, change):
     body = copy.deepcopy(catalog.CATALOG)
-    alias = body["legacy_jurisdiction_table"]
-    if change == "unknown_default": body["legacy_jurisdiction_table"] = "absent"
+    alias = body["default_jurisdiction_table"]
+    if change == "unknown_default": body["default_jurisdiction_table"] = "absent"
     elif change == "unknown_selector": body["reference_tables"][alias]["sql"] = "forbidden"
     else: body["reference_tables"][alias]["pin"] = " "
     write(tmp_path, body)
@@ -154,7 +154,7 @@ def test_invented_reference_selector_reaches_normal_matching_caller(tmp_path):
     body = copy.deepcopy(catalog.CATALOG)
     body["reference_tables"] = {"invented-alias": {
         "pin": "invented-pin", "target_set": "invented-target", "match_type": "exact"}}
-    body["legacy_jurisdiction_table"] = "invented-alias"
+    body["default_jurisdiction_table"] = "invented-alias"
     write(tmp_path, body)
     program = '''
 from edgar_warehouse.mdm.names import REFERENCE_TABLES, edgar_jurisdiction

@@ -391,13 +391,13 @@ def test_mysql_initial_marker_recovery_requires_original_metadata(database_facto
             assert migrate(owner, runtime_role=role, database_name=owner.url.database)
 
 
-def test_mysql_legacy_caller_held_guard_is_explicitly_unsupported(database_factory):
+def test_mysql_caller_held_guard_is_explicitly_unsupported(database_factory):
     from types import SimpleNamespace
     from sqlalchemy import inspect
     from edgar_warehouse.control_contract import Blocked
     from edgar_warehouse.bookkeeping.clean.destinations import guard, migrate_guard
     if os.environ.get("SKILL_ADAPTER_TEST_ENGINE") != "mysql":
-        pytest.skip("The legacy PostgreSQL deferred-commit guard remains qualified separately")
+        pytest.skip("The PostgreSQL deferred-commit guard has its own tests")
     with database_factory() as (owner, runtime, role):
         before = inspect(owner).get_table_names()
         with pytest.raises(Blocked, match="PostgreSQL"):

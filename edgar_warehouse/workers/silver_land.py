@@ -178,7 +178,7 @@ def execute(envelope: dict, artifacts) -> dict:
         quality_reports = []
         for artifact in _artifacts(envelope, artifacts):  # one pass: what lands is what the receipt counts
             rows = _rows(artifact, keys)
-            # The mutable legacy results file is for direct silver runs only;
+            # The mutable results file is for direct silver runs only;
             # Bookkeeping has its own immutable, attempt-bound receipt.
             landed = land(sink, keys["silver"], rows, ids, record_quality_results=False)
             count += len(rows)

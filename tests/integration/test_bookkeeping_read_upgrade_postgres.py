@@ -34,7 +34,7 @@ def test_migrate_keeps_a_populated_current_store_and_refuses_an_earlier_schema()
             assert Bookkeeping(runtime)._run(rid) == before
             with owner.begin() as conn:
                 conn.exec_driver_sql("COMMENT ON SCHEMA bookkeeping IS '{\"001_control.sql\":\"" + "0" * 64 + "\"}'")
-            with pytest.raises(Blocked, match="earlier schema; rebuild the store"):
+            with pytest.raises(Blocked, match="does not hold this build's schema; rebuild the store"):
                 migrate(owner, runtime_role="read_proof_runtime", existing_only=True)
         finally:
             for engine in (runtime, owner, admin):

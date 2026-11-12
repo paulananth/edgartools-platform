@@ -1,8 +1,7 @@
 """CLI subcommand: `edgar-warehouse mdm ...`, MDM only.
 
 Commands: migrate, check-connectivity,
-prepare-capture, rebuild, rebuild-name-index and rebuild-detail-lookup. The legacy MDM commands and their tables are
-deleted (platform validation slice 2a).
+prepare-capture, rebuild, rebuild-name-index and rebuild-detail-lookup.
 """
 from __future__ import annotations
 

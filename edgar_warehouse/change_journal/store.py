@@ -1,4 +1,4 @@
-"""Versioned journal receipts. No legacy store or MDM connection fallback."""
+"""Versioned journal receipts, on the journal's own connection only."""
 
 from __future__ import annotations
 

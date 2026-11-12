@@ -44,7 +44,7 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False, database_
             raise Blocked("Refusing to adopt an untracked rdm schema")
         checksums = json.loads(saved) if saved else {}
         if checksums and "schema.sql" not in checksums:
-            raise Blocked("This RDM store has an earlier schema; rebuild the store")
+            raise Blocked("This RDM store does not hold this build's schema; rebuild the store")
         if set(checksums) - {p.name for p in paths}:
             raise Blocked("Installed RDM migration is absent from this build")
         for path in paths:

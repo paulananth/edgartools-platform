@@ -1,4 +1,4 @@
-# Shared engine vocabulary and legacy compatibility, delivered with the build.
+# Shared engine vocabulary, delivered with the build.
 # Changing this contract requires qualification; it does not approve or activate rules.
 version: engine-catalog-relationship-types-in-rdm-v1
 master_search:
@@ -45,11 +45,10 @@ reference_tables:
     pin: sec-place-codes
     target_set: iso-3166
     match_type: exact
-legacy_jurisdiction_table: edgar-iso-v1
+default_jurisdiction_table: edgar-iso-v1
 
-# Compatibility selectors for the existing versioned pair primitives.
-# These are build-pinned configuration, not approval or source activation.
-legacy_pair_comparison: existing-name-binding
+# The pair comparison a matching rule uses when it names none.
+default_pair_comparison: existing-name-binding
 pair_comparisons:
   existing-name-binding:
     name_field: name

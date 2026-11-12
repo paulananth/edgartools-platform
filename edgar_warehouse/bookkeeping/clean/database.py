@@ -49,7 +49,7 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False, database_
             raise Blocked("Existing untracked schema; refusing to adopt it")
         checksums = json.loads(saved) if saved else {}
         if checksums and "schema.sql" not in checksums:
-            raise Blocked("This Bookkeeping store has an earlier schema; rebuild the store")
+            raise Blocked("This Bookkeeping store does not hold this build's schema; rebuild the store")
         from .run_storage import execute_ddl
         for path in paths:
             sql = path.read_text()

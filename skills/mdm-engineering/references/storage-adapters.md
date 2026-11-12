@@ -143,7 +143,7 @@ Policy and mapping registration approve their immutable references in their
 existing owner transaction. Qualify an interruption after the durable pending
 marker, failed registration rollback and a populated retry. A previous runtime
 grant or an already-entered call must not bypass the pending marker. A populated
-native store needs a qualified data migration or a fresh rebuild before its
+native store needs a fresh rebuild before its
 writer changes; installing empty replacement tables does not move its records.
 
 An applicable assessment retains its exact prepared business intent separately

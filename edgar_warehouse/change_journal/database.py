@@ -73,10 +73,10 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False, database_
                 "SELECT EXISTS(SELECT 1 FROM pg_tables WHERE schemaname NOT IN ('pg_catalog','information_schema','journal'))"
             )
         ):
-            raise Blocked("Journal database must not contain legacy or business tables")
+            raise Blocked("Journal database must hold only the journal")
         checksums = json.loads(saved) if saved else {}
         if checksums and "schema.sql" not in checksums:
-            raise Blocked("This Change Journal store has an earlier schema; rebuild the store")
+            raise Blocked("This Change Journal store does not hold this build's schema; rebuild the store")
         if set(checksums) - ({p.name for p in paths} | {"003_native_storage"}):
             raise Blocked("Installed journal migration is absent from this build")
         for path in paths:

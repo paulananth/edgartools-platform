@@ -43,7 +43,7 @@ def _read(record: dict, path: str):
 def comparison_profile(rule: dict) -> dict:
     """Candidate retrieval and comparison use the same pinned declaration."""
     assert_current()
-    profile = rule.get("pair_comparison", CATALOG["legacy_pair_comparison"])
+    profile = rule.get("pair_comparison", CATALOG["default_pair_comparison"])
     if not isinstance(profile, str) or profile not in CATALOG["pair_comparisons"]:
         raise Conflict("Name binding names an unknown pair comparison profile")
     return CATALOG["pair_comparisons"][profile]

@@ -18,7 +18,7 @@ def installed(conn):
 
 
 def require_installed(conn):
-    """Admit only complete governed storage; legacy data remains owner controlled."""
+    """Admit only complete governed storage."""
     adapter = installed(conn)
     if adapter is None:
         raise Conflict(
