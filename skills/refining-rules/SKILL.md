@@ -35,7 +35,7 @@ with merge rules.
 | Change what identifies a record inside one source code | A new source code (`….v2`) |
 | Rewrite a batch MDM already took | A new version applies to new batches only |
 | Ask several questions at once | Ask one, in plain words, with your recommendation |
-| Put a master data field in silver, alone or as a copy | Every master data field is on its master in MDM, and only there (operator, 2026-10-28: "silver must not have duplicate fields, it contredits the data governance principle one system of record"): a change that finds one in silver moves it to the kind's fields and the Dataset Contract, then drops it from silver |
+| Put a master data field in silver, alone or as a copy | Every master data field is on its master in MDM, and only there (operator: "silver must not have duplicate fields, it contredits the data governance principle one system of record"): a change that finds one in silver moves it to the kind's fields and the Dataset Contract, then drops it from silver |
 
 When two written decisions disagree, the later operator decision wins. Cite
 both in the log.
@@ -68,8 +68,7 @@ both in the log.
   against data-onboarding's map rules ("Fields"): a date that usually changes
   stays out of MDM unless it adds meaning to the entity or switches it on or
   off; evidence about a transaction or a link goes on the silver row; another
-  kind's identifier stays out; a code's label belongs in RDM (operator,
-  2026-10-22: "Fix 1, 2 date that changes usually should not be in MDM unless
+  kind's identifier stays out; a code's label belongs in RDM (operator: "Fix 1, 2 date that changes usually should not be in MDM unless
   it adds meaning to the entity or turn on or off"). Moving a field the
   engine or a stored table reads (a column, a matching check) is engine work:
   name each reader before you change the contract.
@@ -212,7 +211,7 @@ For example: a cascade pass, a name rule, or records waiting for review.
 5. A rule switched off, or a newer version, leaves the binds it already made
    standing. A correction batch revokes them and the active rules reconsider
    those records (`correction.correction_batch`: revoke, quarantine, lift),
-   but it has no command yet (2026-10-23): log the records it would move, and
+   but it has no command yet: log the records it would move, and
    ask before coding the command.
 6. Update what a rule change moves, in the same branch: the whole policy's
    digest pinned as `policy_digest` in the mastering-records fixture under
@@ -277,7 +276,7 @@ Follow [APPROVE.md](../data-onboarding/APPROVE.md). A new version applies
 to new batches only. Running the feed is the Bookkeeping skill's **run**
 mode.
 
-When the operator asks for a limited test before a switch-on (2026-10-26: "Do limited testing and switch on"): take a slice of the real
+When the operator asks for a limited test before a switch-on ("Do limited testing and switch on"): take a slice of the real
 capture that holds the cases the rule changes (for a merge rule, the answers
 sharing values with the slice), run it through the configured contracts and
 the Merge Stage on a disposable store in every load order the feeds allow,
@@ -294,8 +293,7 @@ Never invent a command.
 
 ## Examples (this repo's sources)
 
-- A provider ruled out: `sec.gov`. A full pass over SEC submissions took
-  about 3 minutes per 1,000 documents on a laptop.
+- A provider ruled out: `sec.gov`.
 - Open work on the live SEC Company and GLEIF pipelines: see data-onboarding's
   Examples, "Unfinished live pipelines" (one list, kept there).
 - Name matching across two sources: SEC Company to GLEIF. The waterfall pass
@@ -303,7 +301,7 @@ Never invent a command.
   reaches the merge through `merge.apply_pairs`); the pass `sec-gleif-name-city-or-postcode` (the older name rules and the passes that compared less are deleted)
   (`cascade_pass@1`; "name and city or postcode" compares `[[city, postcode]]`); the code in
   `edgar_warehouse/mdm/waterfall.py` and `cascade.py`. Name a matching rule by what it compares, never by a pass
-  number (operator, 2026-11-03). A rename or a deletion moves the policy
+  number (operator). A rename or a deletion moves the policy
   digest: add a policy layer in `tests/mdm/policy_layers.py` that restores the
   old form, then run the whole CI set (`tests/unit tests/architecture
   tests/mdm` and the engine and integration files that name the rule), since

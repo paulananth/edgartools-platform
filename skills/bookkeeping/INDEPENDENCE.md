@@ -22,7 +22,7 @@ defines the proposed protocol and transition rules. Follow its failure and
 recovery requirements; loader replacement is not a prerequisite for removing
 control coupling. Existing loaders may remain inside external worker processes.
 
-## Status (mastering to-do 20a and 20b, 2026-10-02)
+## Status (mastering to-do 20a and 20b)
 
 The callback registry, the per-source, MDM and source-input modules, the
 acquisition and source-evidence callbacks and the Journal branches on operation

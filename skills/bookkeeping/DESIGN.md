@@ -1,6 +1,6 @@
 # Bookkeeping without loader dependencies
 
-Owner: Codex. Date: 2026-10-02. Status: proposed design, not implemented.
+Owner: Codex. Status: proposed design, not implemented.
 Inspected main: `417147e8`, including its experiments.
 
 ## Decision

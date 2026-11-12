@@ -114,7 +114,7 @@ hashes and retain retrievable report references. A test run over
 files already captured switches on the source's pipes; its live acquisition is
 switched on apart, with a version whose proof also holds every declared feed's
 genuine manifest, expected and verified producer counts and successful checks
-(operator, 2026-10-19). Unit tests, adapter fixtures and invented records
+(operator). Unit tests, adapter fixtures and invented records
 qualify implementation only.
 
 **Done:** the exact version has a genuine passing proof, or a recorded failing

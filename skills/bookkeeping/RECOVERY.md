@@ -62,7 +62,7 @@ first attempt produced.
    `edgar-warehouse rules catalog publish --bookkeeping-run <run-id>` only
    when the result is wanted in the catalog.
 
-**Measurement.** A disposable resume was measured on 2026-11-09 (ET) over
+**Measurement.** A disposable resume was measured (ET) over
 invented source files in a disposable PostgreSQL 16 container, with no
 provider data: `tests/integration/test_quality_recovery_postgres.py`. Two
 interruption shapes were exercised — a receipt reported and not admitted, and
@@ -71,7 +71,7 @@ with admitted version-2 evidence. Over nine runs the measured resume (reopen,
 work, verify, deliver, finalize) was between 0.146 s and 0.263 s.
 
 That measurement is the evidence the operator's maximum is set against. The
-operator set the maximum recovery time at **5 minutes** on 2026-11-09 (ET),
+operator set the maximum recovery time at **5 minutes**,
 after reviewing the measurement. The measured resume is within that maximum by
 three orders of magnitude.
 

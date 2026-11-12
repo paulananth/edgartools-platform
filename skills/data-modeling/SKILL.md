@@ -27,12 +27,12 @@ check (data-quality), or approve anything.
 | Guess a class, a key, a link or a meaning | Leave it unknown and name the failing tests from the findings |
 | Add a kind, or treat a profile as a kind | A missing kind is an operator ruling |
 | Join records on a lookup-only identifier, or merge on similar names | Records join only through a kind's Identifier Contract or a matching rule the operator switched on |
-| Split one kind into loads by the identifier asked, or pair two identifiers of one master in a source's own rules | One record carries every identifier it has; the Merge Stage looks each one up in the Cross-reference and puts them on one master (operator, 2026-10-25) |
+| Split one kind into loads by the identifier asked, or pair two identifiers of one master in a source's own rules | One record carries every identifier it has; the Merge Stage looks each one up in the Cross-reference and puts them on one master (operator) |
 | Name a new relationship type when an existing one, or its inverse, means the same | Use it, or ask the operator why a second type is needed |
 | Write rules, contracts, quality files, or a code set version | Hand off; drafts in RDM go through data-profiling's RDM steps |
 | Request anything from a provider's live service | Use the captured files and this repo |
 | Propose a domain rule (a key, an order of precedence, a definition) from the captured data alone | First find how a public standard or the main vendors do it. Write it in a research note the next decision reads, mark what is unverified, and follow the standard unless the operator rules otherwise |
-| Write a table spec, or start a build, from its own ticket alone | Review every ticket it builds on and every build ticket that cites it: each ruling since it was written, each dependency it leaves out, each stale "or" a ruling closed, each hard case its test lacks. Record the findings on the spec's ticket and fix the stale tickets in the same change (operator, 2026-10-22: "Check the tickets related to financial review work") |
+| Write a table spec, or start a build, from its own ticket alone | Review every ticket it builds on and every build ticket that cites it: each ruling since it was written, each dependency it leaves out, each stale "or" a ruling closed, each hard case its test lacks. Record the findings on the spec's ticket and fix the stale tickets in the same change (operator: "Check the tickets related to financial review work") |
 
 ## What the platform already says
 
@@ -59,7 +59,7 @@ Read these before deciding, and use their words:
   properties are the kinds at its ends, profiles and whether it is a
   hierarchy, whose child codes are its capacities and whose definition is its
   meaning and source.
-- **Types and reference data live in RDM, never in files** (operator, 2026-11-03: "types and
+- **Types and reference data live in RDM, never in files** (operator: "types and
   reference data must not be in files"). A relationship type, a code list or an earlier version of
   either is a code set version in RDM. A yaml table, a test fixture, a Python or Rust constant or a
   second copy in a test is a copy outside RDM: read the code set (by its pinned version, for a
@@ -94,12 +94,12 @@ Take the class from the approved findings, and check it against the glossary:
 | Metadata | describes the data itself (counts, files, runs) | bookkeeping, not modeled here |
 
 **One system of record: every master data field is on its master in MDM,
-and only there** (operator, 2026-10-28: "all master data fields must be on
-mdm"; operator, 2026-10-28: "silver must not have duplicate fields, it contredits the data governance principle one system of record"). A silver row holds the transaction's own facts and its links to
+and only there** (operator: "all master data fields must be on
+mdm"; operator: "silver must not have duplicate fields, it contredits the data governance principle one system of record"). A silver row holds the transaction's own facts and its links to
 masters (the link's source key, then the master id); it never copies a master
 field, not even the value that row filed. A field MDM lacks moves to MDM
 first; then silver drops it. A row's own unit is not a copy: the currency
-of an amount the row states stays beside that amount (operator, 2026-10-28:
+of an amount the row states stays beside that amount (operator:
 "Keep it on the row (Recommended)"), even when the master also holds a
 currency.
 
@@ -132,8 +132,7 @@ master file is reference data plus a master attribute that holds its codes.
 ### 3. Identity or cross-reference
 
 The Cross-reference is the one table of every identifier a master carries,
-each joined to the master id and marked matching or lookup only (operator,
-2026-10-25: "cross_refrence table must hold all the identifiers", "no need
+each joined to the master id and marked matching or lookup only (operator: "cross_refrence table must hold all the identifiers", "no need
 for identifier table"). For each identifier, decide which it is:
 
 - **Matching:** a namespace the kind's Identifier Contract declares
@@ -360,15 +359,14 @@ Examples only; nothing above depends on them.
   has no CUSIP or ISIN field; the CUSIP answer and the ISIN answer of one
   security share their listing FIGIs, so the FIGI, matching in the
   Cross-reference, puts them on one master id. A ticker and exchange stays
-  lookup only: 17,941 such pairs are on two or more CUSIPs (2026-10-15
-  capture). The one table is built for Security first; the other kinds follow
+  lookup only: many such pairs are on two or more CUSIPs. The one table is built for Security first; the other kinds follow
   in their own tickets.
 - **A grouping as a crosswalk:** the EDGAR place codes (`DE`, `X1`, `XX`)
   carry a `type` (US, CANADIAN, FOREIGN, UNKNOWN). Parent codes `US` and
   `FOREIGN` would make "FOREIGN" a valid state code, so `type` became its own
   code set, `sec-place-types`, with a `broad` crosswalk row from each place
   code; the ISO 3166 codes are `exact` rows to `iso-3166` (`outside`).
-- **Real names:** the review of 2026-10-07 found
+- **Real names:** a review found
   `ACCOUNTING_PARENT` beside `IS_DIRECTLY_CONSOLIDATED_BY`, and
   `REPORTED_ULTIMATE_PARENT` beside `IS_ULTIMATELY_CONSOLIDATED_BY`: invented
   names for what GLEIF's relationship file already names. The operator kept
@@ -381,31 +379,28 @@ Examples only; nothing above depends on them.
 - **Who decides is not who owns:** an adviser's discretion (discretionary or
   non-discretionary, Form ADV Item 5.F) is on its link; ownership is
   `BENEFICIAL_OWNER_OF`.
-- **The Security model (2026-10-25): every rule above, measured.**
-  Counts from the 2026-10-15 OpenFIGI capture and the 2026 Q2 N-PORT
-  holdings; the security-master skill states the rulings.
+- **The Security model: every rule above, applied.**
+  The security-master skill states the rulings and holds the measurements.
   - *One kind, many identifiers.* OpenFIGI had been loaded as a CUSIP target
     and an ISIN target, the ISIN one reading the CUSIP runs, and N-PORT paired
     them again in seven steps. One target, one record per answer with every
     identifier, replaced them.
   - *The identifier's level.* A FIGI exists per trading line, per country
-    (composite) and worldwide (share class). Of 380,047 ISIN answers, any
-    shared listing FIGI pairs 350,867 with one CUSIP answer; the composite
-    pairs 9,184 and the share class 9,032, because 343,236 of 353,491 CUSIP
-    answers carry no composite. The listing FIGI matches; the other two are
+    (composite) and worldwide (share class). A shared listing FIGI
+    pairs nearly every ISIN answer with one CUSIP answer; the composite and
+    the share class pair few, because most CUSIP answers carry no composite. The listing FIGI matches; the other two are
     lookup only.
-  - *Reading a clash.* 80 composite FIGIs sit on two or more CUSIPs: 71 with
-    the same name and type, 9 different; share class 13 and 2. Ticker and
-    exchange: 17,941 pairs on two or more CUSIPs (55,057 CUSIPs), so lookup
-    only.
-  - *Who may join.* 154 filed CUSIP and ISIN pairs (241 holdings) lead to two
-    Securities; they bind by the CUSIP and merge nothing. 24,543 pairs have
+  - *Reading a clash.* Some composite and share-class FIGIs sit on two or more
+    CUSIPs, most with the same name and type, a few different. Many ticker
+    and exchange pairs do too, so lookup only.
+  - *Who may join.* A few filed CUSIP and ISIN pairs lead to two
+    Securities; they bind by the CUSIP and merge nothing. Many pairs have
     only one side known to OpenFIGI, so a filing adds the other identifier
     when no Security holds it.
   - *A child key.* "(master id, exchange code)" repeats: OpenFIGI gives a FIGI
     per trading line, and multi-currency venues carry a line per currency
-    (90% of 292,567 same-venue groups have currency-suffixed tickers). The
-    currency, read from the ticker, still repeats on 71,974 of 2,184,699
+    (most same-venue groups have currency-suffixed tickers). The
+    currency, read from the ticker, still repeats on some
     lines, so the listing FIGI is the key and (master id, exchange, currency)
     an index.
   - *Proving it.* Apple (the common case), an ADR and its ordinary share
