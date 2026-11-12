@@ -17,7 +17,7 @@ the parts connect. The store suggestion is advice only.
 
 ## Silver fields
 
-Operator, 2026-10-17. This is the rule the silver spec follows.
+Operator. This is the rule the silver spec follows.
 
 - A number is a silver field when it is filled on any row. The column profile
   records its minimum, maximum, how many values are zero, how many are
@@ -38,11 +38,11 @@ Operator, 2026-10-17. This is the rule the silver spec follows.
 
 ## Every date, number and identifier has one written shape
 
-Standing rule (operator, 2026-11-04, after a date written `DD-MON-YYYY` was read
+Standing rule (operator, after a date written `DD-MON-YYYY` was read
 into two different shapes by two mappings: "this should be a standing rule on
 the data profiling skill"), worked adaptively and lean against
 [the seven wastes](../data-platform/SKILL.md#the-seven-wastes)
-(operator, 2026-11-04: "use adaptive profiling and be intelligent").
+(operator: "use adaptive profiling and be intelligent").
 
 - **Start from what the profile already holds** (Motion, Over-processing). The
   column profile records each field's shape counts; read them before touching
@@ -105,7 +105,7 @@ break things. A random sample only estimates a rate.
 
 **Coordination note for every LLM:** keep this section when editing the skill;
 read its latest version first, and change it only on the operator's explicit
-instruction. Operator, 2026-10-09: live narration; then "fix the skill to be
+instruction. Operator: live narration; then "fix the skill to be
 more story telling ... i need to know what it is finding no more ... discussion
 and slop".
 
@@ -182,7 +182,7 @@ uv run --with duckdb --with pyyaml python profile_data.py run --name "<data set>
   code counts, so after a fix say which sources it changes and profile only
   those. A database input has no file to fingerprint, so it is always profiled
   again.
-- **One run captures everything** (operator, 2026-10-15: "Do not repeat
+- **One run captures everything** (operator: "Do not repeat
   profiling many times do it once and capture all relevant information for
   mdm rdm data quality data catalog and silver"). The one run's findings are
   the only profiling every later step reads:
