@@ -1,7 +1,7 @@
 # Which initialization timestamps are actually retained?
 
 Type: research
-Status: open
+Status: resolved
 Blocked by:
 
 ## Question
@@ -26,3 +26,22 @@ UTC and in ET. Distinguish what the plan's `initialization_ready_at_et` field ca
 needs a separate `unavailable_reason`. Write the findings to
 `.scratch/measure-prod-mdm-loads/evidence/02-retained-initialization-timestamps.md`. No credentials,
 DSNs or host values.
+
+## Answer
+
+Evidence: [02-retained-initialization-timestamps.md](../evidence/02-retained-initialization-timestamps.md)
+(branch `codex/wayfinder-measure-prod-loads-20261113`, commit `7758ed5b`).
+
+- **Instance request start and end: found exactly.** `CREATE POSTGRES INSTANCE` ran
+  2026-11-10 21:31:51.570 → 21:32:06.340 ET (SUCCESS), from the retained Snowflake query-history
+  export `measure-prod-readonly-20261112T180117Z/query-history-postgres.json`. The instance's own
+  `created_on` is 2026-11-10 21:32:04.947 ET.
+- **Exact READY transition: not found.** The earliest provable observation of `READY` is the
+  2026-11-12 11:53:53 ET `SHOW POSTGRES INSTANCES`; no `DESCRIBE` result body was retained.
+  `ready_transition_at_et` stays `null`; an observation field may carry 2026-11-12 11:53:53 ET
+  labelled as an observation.
+- **Per-store migration durations: not found.** No migration ran through Snowflake SQL, no
+  migration event was retained, and no migration may be re-run to manufacture timings.
+- **Only `build-lookups` command events exist** (5 events in 3 logs) — not initialization.
+- **Consequence:** `end_to_end_from_init_seconds` stays `null`; the report keeps the verified
+  baseline interval as its elapsed measure.

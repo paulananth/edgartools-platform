@@ -39,6 +39,10 @@ whoever runs it.
 ## Decisions so far
 
 <!-- one line per closed ticket; the detail lives in the ticket -->
+- [Is the hosted Snowflake Postgres qualification and credential gate cleared?](issues/01-hosted-qualification-and-credential-gate.md): both gates stay closed, and the live env files still carry the unrotated credentials, so the measurement is retrospective-only.
+- [Which initialization timestamps are actually retained?](issues/02-retained-initialization-timestamps.md): the instance request start and end are exact, but the READY transition and per-store migration durations are unavailable, so the init-to-final interval stays null.
+- [What is the exact source/target inventory and dependency order for this checkout?](issues/03-source-target-inventory-and-dependencies.md): 17 measured names, no hard source dependency in the sequence, and 13 contributing contracts from the merge-kind files.
+- [Which retained runs can be verified, and how does the evidence join?](issues/04-retained-run-evidence-join.md): the Bookkeeping export is the only run-state source, the load logs join to it on run id for half the invocations, and the rebuilt manifest tree is a separate later wave with no verification state.
 
 ## Not yet specified
 

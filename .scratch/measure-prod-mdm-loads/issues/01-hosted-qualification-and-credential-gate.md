@@ -1,7 +1,7 @@
 # Is the hosted Snowflake Postgres qualification and credential gate cleared?
 
 Type: research
-Status: open
+Status: resolved
 Blocked by:
 
 ## Question
@@ -28,3 +28,19 @@ Report, with the evidence path and date for each claim:
 Write the findings to `.scratch/measure-prod-mdm-loads/evidence/01-hosted-qualification-and-credential-gate.md`
 with no credentials, DSNs, host values or record identifiers. Link the file from this ticket's
 answer.
+
+## Answer
+
+Evidence: [01-hosted-qualification-and-credential-gate.md](../evidence/01-hosted-qualification-and-credential-gate.md)
+(branch `codex/wayfinder-measure-prod-loads-20261113`, commit `7758ed5b`).
+
+- **Hosted qualification: uncleared.** `docs/specs/mdm/acceptance.md:5,120-121` and
+  `docs/specs/mdm/state-of-build.md:133-136` both defer Snowflake Postgres qualification, and no
+  newer approved record exists in the checkout. The instance is READY, which is not qualification.
+- **Credential rotation: not evidenced.** The only `RESET ACCESS` hit is a read-only query-history
+  *search*, not a credential change; `create-instance.err` is empty.
+- **The live env files still carry the unrotated credentials.** Fingerprints (value hashes only)
+  show every credential-bearing value in `governance.env` is byte-identical to
+  `governance.env.before-reset-20261112`; only non-credential keys were added on 2026-11-12.
+- **Consequence: the measurement is retrospective-only.** No new production source load may be
+  submitted, and no MDM/Postgres connection may be made with these credentials.

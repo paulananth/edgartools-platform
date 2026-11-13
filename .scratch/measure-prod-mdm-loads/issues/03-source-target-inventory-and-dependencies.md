@@ -1,7 +1,7 @@
 # What is the exact source/target inventory and dependency order for this checkout?
 
 Type: research
-Status: open
+Status: resolved
 Blocked by:
 
 ## Question
@@ -30,3 +30,26 @@ Report:
 
 Write the findings to `.scratch/measure-prod-mdm-loads/evidence/03-source-target-inventory-and-dependencies.md`.
 No source row values, record identifiers or credentials.
+
+## Answer
+
+Evidence: [03-source-target-inventory-and-dependencies.md](../evidence/03-source-target-inventory-and-dependencies.md)
+(branch `codex/wayfinder-measure-prod-loads-20261113`, commit `7758ed5b`).
+
+- **The checkout configures 19 source/target names across 13 sources**, not 16. Excluding the two
+  capture targets leaves **17 measured names**: `sec.nport.security/mastering_other_keys` is the
+  extra one — a real configured target, with its own manifest tree and runs, that is neither a
+  capture target nor a sequence entry. The report-shape ticket must rule on it.
+- **All 13 sequence sources declare `requires: []`.** No source ordering in
+  `rules/source-sequence.yaml` is a hard dependency; `after` is a preference by the file's own
+  header.
+- **The three ordered targets are prose preferences with partial Rules support.** Only
+  `gleif/subfund-pairs` has a Rules-derived wait (it is read inside a pass of its consumer).
+  `iapd.adv/custodians` → `iapd.adv/mastering` and `sec.ownership/security_symbols` after OpenFIGI
+  have no declared cross-target dependency. The report must state the basis it used for ordering.
+- **The entity-kind map comes from `rules/merge/kinds/*.yaml`**: 6 company contracts, 2 person
+  contracts, 4 security contracts, 1 fund_structure contract — **13 contributing contracts**, not the
+  14 the 2026-11-12 snapshot listed. `gleif.reporting_exceptions.v1` is a contract of the GLEIF
+  source but has no rule and is not a company-kind contributor.
+- Step names per target, and each target's mastered dataset → table, are tabulated in the evidence
+  file.
