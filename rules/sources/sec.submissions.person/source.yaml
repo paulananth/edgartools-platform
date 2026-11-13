@@ -118,9 +118,6 @@ bookkeeping:
     mastering:
       extract:
         # The documents in units of at most 8 MiB, each at most max_artifacts.
-        - {name: read, read: null, units: {slices: {bytes: 8388608}}}
+        read: {read: null, units: {slices: {bytes: 8388608}}}
       # Every reading of the bundle as one publication.
-      master:
-        names: {prepare: records}
-        keys: {table: submissions, record_column: record, dataset: sec.submissions.person.v1}
-        readings: {read: {all: read}}
+      master: {names: {prepare: records}, keys: {dataset: sec.submissions.person.v1, record_column: record, table: submissions}}

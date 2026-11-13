@@ -58,81 +58,36 @@ bookkeeping:
     #   observed_at: the observation time (an ISO instant), stamped on each record as its last synced time.
     #   load_mode: how the pages were loaded, stamped on each page receipt.
     mastering:
+      local: true
       # Source read and combine run in the loader's process (no claim, lease or verifier); the run in the
       # database starts at records (ticket 210).
-      local: true
-      run:
-        facts: [capture_run, catalog_run, observed_at, load_mode]
-      steps:
-        - name: main
-          operation: source.read
-          requires: []
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
+      run: {facts: [capture_run, catalog_run, observed_at, load_mode]}
+      extract:
+        main:
+          read: name-count-main.yaml
           units: {slices: {bytes: 8388608}}
-          input:
-            contract: name-count-main.yaml
-            files: "*/submissions/sec/cik=*/main/*"
-            context:
-              cik: {segment: cik, as: integer}
-              sync_run_id: {fact: capture_run}
-              raw_object_id: {receipt: sha256}
-              load_mode: {fact: load_mode}
-              recent_limit: null
-              last_synced_at: {fact: observed_at}
-              bronze_object: "{dir}/{name}"
-        - name: catalog
-          operation: source.read
-          requires: []
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          input:
-            contract: catalog.yaml
-            files: "*/company_tickers_exchange/*"
-            always: true
-            context:
-              sync_run_id: {fact: catalog_run}
-              last_synced_at: {fact: observed_at}
-              source_name: catalog_exchange
-        - name: combine
-          operation: source.combine
-          requires: [main, catalog]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.combined]
+          files: '*/submissions/sec/cik=*/main/*'
+          context:
+            bronze_object: '{dir}/{name}'
+            cik: {as: integer, segment: cik}
+            last_synced_at: {fact: observed_at}
+            load_mode: {fact: load_mode}
+            raw_object_id: {receipt: sha256}
+            recent_limit: null
+            sync_run_id: {fact: capture_run}
+        catalog:
+          read: catalog.yaml
+          files: '*/company_tickers_exchange/*'
+          always: true
+          context: {last_synced_at: {fact: observed_at}, source_name: catalog_exchange, sync_run_id: {fact: catalog_run}}
+        combine:
+          combine: combine-name-count-captured.yaml
           units: {each: main}
-          input:
-            contract: combine-name-count-captured.yaml
-            readings: {main: {step: main}, catalog_exchange: {all: catalog}}
-            bind:
-              APPROVED_COMPANY_CAPTURE_RUN: {fact: capture_run}
-              APPROVED_CATALOG_CAPTURE_RUN: {fact: catalog_run}
-        - name: records
-          operation: mdm.prepare
-          requires: [combine]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, mdm.prepared]
-          input:
-            keys: {table: company, dataset: sec.company.v1}
-            readings: {combined: {all: combine}}
-        - name: merge
-          operation: mastering.merge
-          requires: [records]
-          key: "{batch_id}"
-          leases: ["mdm:consumer:{consumer}"]
-          checks: [input.hash, output.receipt, mdm.committed]
-        # The Change Journal records each file the run processed, once its
-        # merge is verified, so a later run names only changed files (ticket 22).
-        - name: processed
-          operation: journal.record
-          requires: [merge]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, journal.recorded]
-      checks: [manifest.hash, work.accounting, journal.delivered]
+          readings: {main: {step: main}, catalog_exchange: {all: catalog}}
+          bind: {APPROVED_CATALOG_CAPTURE_RUN: {fact: catalog_run}, APPROVED_COMPANY_CAPTURE_RUN: {fact: capture_run}}
+      master: {names: {prepare: records}, keys: {dataset: sec.company.v1, table: company}, readings: {combined: {all: combine}}}
+      # The Change Journal records each file the run processed, once its
+      # merge is verified, so a later run names only changed files (ticket 22).
     merge-batch:
       steps:
         - name: merge

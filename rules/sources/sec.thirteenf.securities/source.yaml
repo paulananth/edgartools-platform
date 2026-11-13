@@ -149,66 +149,15 @@ bookkeeping:
     # the Dataset Contract and merged; each file is then noted in the Change
     # Journal, so an unchanged file is not read again.
     mastering:
-      steps:
-        - name: read
-          operation: source.read
-          requires: []
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          units: {slices: {bytes: 8388608}}
-          input: {context: {accession_number: {segment: accession}}}
-        - name: reduce
-          operation: source.combine
-          requires: [read]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.combined]
-          input: {contract: reduce.yaml, readings: {units: {all: read}}}
-        - name: combine
-          operation: source.combine
-          requires: [reduce]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.combined]
-          input: {contract: combine.yaml, readings: {securities: {step: reduce}}}
-        - name: record
-          operation: source.read
-          requires: [combine]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          input: {contract: record.yaml, pieces: {step: combine}}
-        - name: prepare
-          operation: mdm.prepare
-          requires: [record]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, mdm.prepared]
-          input:
-            keys: {table: security, record_column: record, dataset: sec.thirteenf.securities.v2}
-            readings: {record: {all: record}}
-        - name: merge
-          operation: mastering.merge
-          requires: [prepare]
-          key: "{batch_id}"
-          leases: ["mdm:consumer:{consumer}"]
-          checks: [input.hash, output.receipt, mdm.committed]
+      extract:
+        read: {read: null, units: {slices: {bytes: 8388608}}, context: {accession_number: {segment: accession}}}
+        reduce: {combine: reduce.yaml, readings: {units: {all: read}}}
+        combine: {combine: combine.yaml, readings: {securities: {step: reduce}}}
+        record: record.yaml
+      master: {keys: {dataset: sec.thirteenf.securities.v2, record_column: record, table: security}}
+      silver:
         # The holdings land in silver once the Securities they link to are merged (ticket 183).
-        - name: land_holding
-          operation: silver.land
-          requires: [read, merge]
-          key: "{unit}"
-          leases: ["silver:{silver}"]
-          checks: [input.hash, output.receipt, silver.landed]
-          input: {keys: {table: sec_thirteenf_holding, silver: thirteenf_holding}}
-        - name: processed
-          operation: journal.record
-          requires: [land_holding]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, journal.recorded]
-      checks: [manifest.hash, work.accounting, journal.delivered]
+        - {name: land_holding, land: {silver: thirteenf_holding, table: sec_thirteenf_holding}, requires: [read, merge]}
 dataset_contracts:
   sec.thirteenf.securities.v2:
     contract:

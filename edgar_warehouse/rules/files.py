@@ -161,19 +161,21 @@ def dumps(value: Any) -> str:
     return yaml.dump(value, Dumper=_Dumper, sort_keys=False, allow_unicode=True, width=88)
 
 
-def source(name: str, root: Path | None = None) -> dict:
+def source(name: str, root: Path | None = None, *, steps: bool = True) -> dict:
     """One source's document: `rules/sources/<name>/source.yaml`, with its
     `quality.yaml` beside it when there is one."""
-    return load_source((root or ROOT) / "sources" / name / "source.yaml")
+    return load_source((root or ROOT) / "sources" / name / "source.yaml", steps=steps)
 
 
-def load_source(path: Path) -> dict:
+def load_source(path: Path, *, steps: bool = True) -> dict:
     """A source's Rules document. The feed's quality rule (company mastering
     ticket 22) is its own file and version label, and rides in each Dataset
     Contract it names as `quality`, so one approval and one digest cover the
     mapping and the checks that run with it, as `policy()` does for kinds."""
     from .shape import expand_source
-    body = expand_source(load(path))  # targets written in the one shape, as the steps the engine runs
+    body = load(path)
+    if steps:  # targets written in the one shape, as the steps the engine runs; a reader of another
+        body = expand_source(body)  # commit's file, which may write its targets differently, leaves them
     if isinstance(body, dict) and "mdm" in body:  # the section was named `mdm` until ticket 171
         raise RulesFileError(f"{path}: the `mdm` section is now `dataset_contracts` (ticket 171); rename it")
     quality_path = path.parent / "quality.yaml"

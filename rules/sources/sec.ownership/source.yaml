@@ -27,72 +27,15 @@ bookkeeping:
   version: 2
   targets:
     mastering:
-      steps:
-        - name: read
-          operation: source.read
-          requires: []
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          units: {slices: {bytes: 8388608}}
-          input: {contract: ownership-sgml.yaml, files: "*.txt"}
-        - name: prepare
-          operation: mdm.prepare
-          requires: [read]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, mdm.prepared]
-          input:
-            keys: {table: owner_record, record_column: record, dataset: sec.ownership.reporting_owner.v1}
-            readings: {read: {all: read}}
-        - name: merge
-          operation: mastering.merge
-          requires: [prepare]
-          key: "{batch_id}"
-          leases: ["mdm:consumer:{consumer}"]
-          checks: [input.hash, output.receipt, mdm.committed]
-        - name: land_owner
-          operation: silver.land
-          requires: [read, merge]
-          key: "{unit}"
-          leases: ["silver:{silver}"]
-          checks: [input.hash, output.receipt, silver.landed]
-          input: {keys: {table: reporting_owner, silver: insider_reporting_owner}}
-        - name: land_nd_transaction
-          operation: silver.land
-          requires: [read, merge]
-          key: "{unit}"
-          leases: ["silver:{silver}"]
-          checks: [input.hash, output.receipt, silver.landed]
-          input: {keys: {table: non_derivative_transaction, silver: insider_position}}
-        - name: land_nd_holding
-          operation: silver.land
-          requires: [read, merge]
-          key: "{unit}"
-          leases: ["silver:{silver}"]
-          checks: [input.hash, output.receipt, silver.landed]
-          input: {keys: {table: non_derivative_holding, silver: insider_position}}
-        - name: land_d_transaction
-          operation: silver.land
-          requires: [read, merge]
-          key: "{unit}"
-          leases: ["silver:{silver}"]
-          checks: [input.hash, output.receipt, silver.landed]
-          input: {keys: {table: derivative_transaction, silver: insider_position}}
-        - name: land_d_holding
-          operation: silver.land
-          requires: [read, merge]
-          key: "{unit}"
-          leases: ["silver:{silver}"]
-          checks: [input.hash, output.receipt, silver.landed]
-          input: {keys: {table: derivative_holding, silver: insider_position}}
-        - name: processed
-          operation: journal.record
-          requires: [land_owner, land_nd_transaction, land_nd_holding, land_d_transaction, land_d_holding]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, journal.recorded]
-      checks: [manifest.hash, work.accounting, journal.delivered]
+      extract:
+        read: {read: ownership-sgml.yaml, units: {slices: {bytes: 8388608}}, files: '*.txt'}
+      master: {keys: {dataset: sec.ownership.reporting_owner.v1, record_column: record, table: owner_record}}
+      silver:
+        - {name: land_owner, land: {silver: insider_reporting_owner, table: reporting_owner}, requires: [read, merge]}
+        - {name: land_nd_transaction, land: {silver: insider_position, table: non_derivative_transaction}, requires: [read, merge]}
+        - {name: land_nd_holding, land: {silver: insider_position, table: non_derivative_holding}, requires: [read, merge]}
+        - {name: land_d_transaction, land: {silver: insider_position, table: derivative_transaction}, requires: [read, merge]}
+        - {name: land_d_holding, land: {silver: insider_position, table: derivative_holding}, requires: [read, merge]}
     # The issuer's security (ticket 24; operator, 2026-11-04, "Yes, Form 4 route only"): the trading
     # symbol each filing names finds its Security by ticker. A target prepares one publication, so
     # this one reads only each filing's issuer and symbol (ownership-security-sgml.yaml), far less
@@ -100,7 +43,7 @@ bookkeeping:
     # no Security holds yet waits unbound.
     security_symbols:
       extract:
-        - {name: read_security, read: ownership-security-sgml.yaml, units: {slices: {bytes: 8388608}}, files: '*.txt'}
+        read_security: {read: ownership-security-sgml.yaml, units: {slices: {bytes: 8388608}}, files: '*.txt'}
       master:
         names: {prepare: prepare_security, merge: merge_security}
         keys: {dataset: sec.ownership.security.v2, record_column: record, table: security_record}
