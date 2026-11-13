@@ -132,8 +132,10 @@ not there (**init**).
 
 ### The files are the rules
 
-A source or domain is finished when its rules files pass `rules check` and its capture loads. Nothing else
-stands between the files and a run: no saved version, no test run to record, no approval and no activation.
+A source or domain is finished when changed source, merge and pipeline
+documents pass their scoped checks, changed Source Extracts pass their
+owner-specific tests, the capture loads, and full-tree CI passes. Unchanged
+legacy documents are not reparsed as a side effect of a narrow change.
 
 - The run's inputs are named where the source declares them: each fact and file its target needs, how it is
   produced, and where its captured files are. Write how each is produced in a comment directly above the
@@ -351,8 +353,12 @@ does not run or activate a pipeline.
 
 ### check and load
 
-Follow [LOAD.md](LOAD.md): `rules check`, then `edgar-warehouse load` into a disposable store and then the
-shared one. Running and recovering a run is the **bookkeeping** skill's **run** mode.
+Follow [LOAD.md](LOAD.md): check the changed source with
+`rules check --source <source>` and run owner-specific tests for changed
+Source Extracts. The local guard checks changed merge and pipeline documents;
+CI validates the full Rules tree. Then load into a disposable store and the
+shared one. Running and recovering a run is the **bookkeeping** skill's
+**run** mode.
 
 ## When a command is missing
 

@@ -241,8 +241,11 @@ record's effective time, not a field of the master.
 
 ### check and load
 
-Run `rules check`, then load the change into a disposable store ([LOAD.md](../data-onboarding/LOAD.md)).
-Show what changes, record by record.
+Use [LOAD.md](../data-onboarding/LOAD.md) for the scoped check of the changed
+source. Run the owning tests for any changed Source Extract. The local commit
+guard checks changed merge and pipeline documents; CI checks the full Rules
+tree. Then load the change into a disposable store. Show what changes, record
+by record.
 
 A test of a source prepares with the keys the source itself declares for its
 `mdm.prepare` step, read from the rules file, never keys the test writes. A
