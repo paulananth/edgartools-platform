@@ -27,148 +27,27 @@ bookkeeping:
   version: 2
   targets:
     mastering:
-      run:
-        facts: [published]
-      steps:
-        - name: read_filings
-          operation: source.read
-          requires: []
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          units: {each: file}
-          input:
-            contract: adviser-filings-csv.yaml
-            files: "*.zip"
-            context: {published: {fact: published}}
-        - name: read_custody
-          operation: source.read
-          requires: []
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          units: {each: file}
-          input:
-            contract: custody-csv.yaml
-            files: "*.zip"
-            context: {published: {fact: published}}
-        - name: read_ciks
-          operation: source.read
-          requires: []
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          units: {each: file}
-          input:
-            contract: ciks-csv.yaml
-            files: "*.zip"
-        - name: read_related
-          operation: source.read
-          requires: []
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          units: {each: file}
-          input:
-            contract: related-csv.yaml
-            files: "*.zip"
-        - name: combine
-          operation: source.combine
-          requires: [read_filings, read_custody, read_ciks, read_related]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.combined]
-          input: {contract: combine.yaml, readings: {filings: {all: read_filings}, custody: {all: read_custody}, ciks: {all: read_ciks}, related: {all: read_related}}}
-        - name: record
-          operation: source.read
-          requires: [combine]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          input: {contract: record-filings.yaml, pieces: {step: combine}}
-        - name: prepare
-          operation: mdm.prepare
-          requires: [record]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, mdm.prepared]
-          input:
-            keys: {table: filings, record_column: record, dataset: iapd.adv.filings.v2}
-            readings: {record: {all: record}}
-        - name: merge
-          operation: mastering.merge
-          requires: [prepare]
-          key: "{batch_id}"
-          leases: ["mdm:consumer:{consumer}"]
-          checks: [input.hash, output.receipt, mdm.committed]
+      run: {facts: [published]}
+      extract:
+        read_filings: {read: adviser-filings-csv.yaml, units: {each: file}, files: '*.zip', context: {published: {fact: published}}}
+        read_custody: {read: custody-csv.yaml, units: {each: file}, files: '*.zip', context: {published: {fact: published}}}
+        read_ciks: {read: ciks-csv.yaml, units: {each: file}, files: '*.zip'}
+        read_related: {read: related-csv.yaml, units: {each: file}, files: '*.zip'}
+        combine: {combine: combine.yaml, readings: {filings: {all: read_filings}, custody: {all: read_custody}, ciks: {all: read_ciks}, related: {all: read_related}}}
+        record: record-filings.yaml
+      master: {keys: {dataset: iapd.adv.filings.v2, record_column: record, table: filings}}
+      silver:
         # The amount each custodian holds (Schedule D 5.K(3)(g)) lands in silver once the adviser's
         # filing is mastered here and the custodians are, which the `custodians` target (run first)
         # did: each row finds both Companies by lookup (silver-custody.yaml).
-        - name: land_custody
-          operation: silver.land
-          requires: [read_custody, merge]
-          key: "{unit}"
-          leases: ["silver:{silver}"]
-          checks: [input.hash, output.receipt, silver.landed]
-          input: {keys: {table: custody_facts, silver: adv_custody}}
-        - name: processed
-          operation: journal.record
-          requires: [land_custody]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, journal.recorded]
-      checks: [manifest.hash, work.accounting, journal.delivered]
+        - {name: land_custody, land: {silver: adv_custody, table: custody_facts}, requires: [read_custody, merge]}
     custodians:
-      run:
-        facts: [published]
-      steps:
-        - name: read
-          operation: source.read
-          requires: []
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          units: {each: file}
-          input:
-            contract: custody-csv.yaml
-            files: "*.zip"
-            context: {published: {fact: published}}
-        - name: combine
-          operation: source.combine
-          requires: [read]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.combined]
-          input: {contract: custody-combine.yaml, readings: {custody: {all: read}}}
-        - name: record
-          operation: source.read
-          requires: [combine]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          input: {contract: record-custody.yaml, pieces: {step: combine}}
-        - name: prepare
-          operation: mdm.prepare
-          requires: [record]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, mdm.prepared]
-          input:
-            keys: {table: custody, record_column: record, dataset: iapd.adv.custodians.v1, distinct_on: [custodian_id]}
-            readings: {record: {all: record}}
-        - name: merge
-          operation: mastering.merge
-          requires: [prepare]
-          key: "{batch_id}"
-          leases: ["mdm:consumer:{consumer}"]
-          checks: [input.hash, output.receipt, mdm.committed]
-        - name: processed
-          operation: journal.record
-          requires: [merge]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, journal.recorded]
-      checks: [manifest.hash, work.accounting, journal.delivered]
+      run: {facts: [published]}
+      extract:
+        read: {read: custody-csv.yaml, units: {each: file}, files: '*.zip', context: {published: {fact: published}}}
+        combine: {combine: custody-combine.yaml, readings: {custody: {all: read}}}
+        record: record-custody.yaml
+      master: {keys: {dataset: iapd.adv.custodians.v1, distinct_on: [custodian_id], record_column: record, table: custody}}
 dataset_contracts:
   iapd.adv.filings.v2:
     contract:

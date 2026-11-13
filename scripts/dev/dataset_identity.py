@@ -36,7 +36,7 @@ def moved(name: str, before_root: Path) -> list[str]:
     """The dataset codes of source `name` whose identity differs from the base's."""
     found = []
     try:
-        before = files.source(name, before_root)
+        before = files.source(name, before_root, steps=False)  # only its Dataset Contracts are compared
     except (OSError, files.RulesFileError):  # a new source: nothing registered under its codes yet
         return found
     after = files.source(name)

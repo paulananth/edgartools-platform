@@ -867,192 +867,69 @@ bookkeeping:
   # `lei` runs. OpenFIGI's answers are no longer read (ticket 138).
   targets:
     mastering:
+      heartbeat_seconds: 60
+      lease_seconds: 900
       # Set for the FIGI steps ticket 138 removed (73 s each, measured
       # 2026-10-19); kept until a run shows the default 120 s lease holds.
-      lease_seconds: 900
-      heartbeat_seconds: 60
-      run:
-        facts: [period]
-      steps:
-        - name: submissions
-          operation: source.read
-          requires: []
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
+      run: {facts: [period]}
+      extract:
+        submissions: {read: filings.yaml, units: {each: file}}
+        identifiers: {read: identifiers.yaml, units: {each: file}}
+        holdings:
+          read: null
           units: {each: file}
-          input: {contract: filings.yaml}
-        - name: identifiers
-          operation: source.read
-          requires: []
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
+          lookups:
+            figi: {column: holding, from: identifiers, max_input_bytes: 268435456, max_input_rows: 10000000, table: figi, value_column: figi}
+            isin: {column: holding, from: identifiers, max_input_bytes: 268435456, max_input_rows: 10000000, table: isin, value_column: isin}
+            loanx: {column: holding, from: identifiers, max_input_bytes: 268435456, max_input_rows: 10000000, table: loanx, value_column: loanx}
+            sedol: {column: holding, from: identifiers, max_input_bytes: 268435456, max_input_rows: 10000000, table: sedol, value_column: sedol}
+          context: {period: {fact: period}}
+        issuers:
+          read: issuers.yaml
           units: {each: file}
-          input: {contract: identifiers.yaml}
-        - name: holdings
-          operation: source.read
-          requires: [identifiers]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          units: {each: file}
-          input:
-            context: {period: {fact: period}}
-            lookups:
-              isin: {from: identifiers, table: isin, column: holding, value_column: isin,
-                     max_input_bytes: 268435456, max_input_rows: 10000000}
-              sedol: {from: identifiers, table: sedol, column: holding, value_column: sedol,
-                      max_input_bytes: 268435456, max_input_rows: 10000000}
-              loanx: {from: identifiers, table: loanx, column: holding, value_column: loanx,
-                      max_input_bytes: 268435456, max_input_rows: 10000000}
-              figi: {from: identifiers, table: figi, column: holding, value_column: figi,
-                      max_input_bytes: 268435456, max_input_rows: 10000000}
-        - name: issuers
-          operation: source.read
-          requires: [identifiers, submissions]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          units: {each: file}
-          input:
-            contract: issuers.yaml
-            context: {period: {fact: period}}
-            lookups:
-              isin: {from: identifiers, table: isin, column: holding, value_column: isin,
-                     max_input_bytes: 268435456, max_input_rows: 10000000}
-              sedol: {from: identifiers, table: sedol, column: holding, value_column: sedol,
-                      max_input_bytes: 268435456, max_input_rows: 10000000}
-              loanx: {from: identifiers, table: loanx, column: holding, value_column: loanx,
-                      max_input_bytes: 268435456, max_input_rows: 10000000}
-              figi: {from: identifiers, table: figi, column: holding, value_column: figi,
-                      max_input_bytes: 268435456, max_input_rows: 10000000}
-              filed: {from: submissions, table: filed, column: accession_number, value_column: filed,
-                     max_input_bytes: 67108864, max_input_rows: 1000000}
-              umbrella: {run: {source: gleif, target: subfund-pairs, step: pairs}, table: subfund, column: fund,
-                         value_column: umbrella, max_input_bytes: 67108864, max_input_rows: 1000000}
-        - name: reduce
-          operation: source.combine
-          requires: [holdings]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.combined]
-          input: {contract: reduce.yaml, readings: {holdings: {step: holdings}}}
-        - name: issuer_reduce
-          operation: source.combine
-          requires: [issuers]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.combined]
-          input: {contract: issuer-reduce.yaml, readings: {issuers: {step: issuers}}}
-        - name: combine
-          operation: source.combine
-          requires: [reduce, issuer_reduce]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.combined]
-          input:
-            contract: combine.yaml
-            readings: {securities: {step: reduce}, issuers: {step: issuer_reduce}}
-        - name: record
-          operation: source.read
-          requires: [combine]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          input: {contract: record.yaml, pieces: {step: combine}, context: {batch: first}}
+          lookups:
+            umbrella: {column: fund, max_input_bytes: 67108864, max_input_rows: 1000000, run: {source: gleif, step: pairs, target: subfund-pairs}, table: subfund, value_column: umbrella}
+            figi: {column: holding, from: identifiers, max_input_bytes: 268435456, max_input_rows: 10000000, table: figi, value_column: figi}
+            isin: {column: holding, from: identifiers, max_input_bytes: 268435456, max_input_rows: 10000000, table: isin, value_column: isin}
+            loanx: {column: holding, from: identifiers, max_input_bytes: 268435456, max_input_rows: 10000000, table: loanx, value_column: loanx}
+            sedol: {column: holding, from: identifiers, max_input_bytes: 268435456, max_input_rows: 10000000, table: sedol, value_column: sedol}
+            filed: {column: accession_number, from: submissions, max_input_bytes: 67108864, max_input_rows: 1000000, table: filed, value_column: filed}
+          context: {period: {fact: period}}
+        reduce: {combine: reduce.yaml, readings: {holdings: {step: holdings}}}
+        issuer_reduce: {combine: issuer-reduce.yaml, readings: {issuers: {step: issuers}}}
+        combine: {combine: combine.yaml, readings: {securities: {step: reduce}, issuers: {step: issuer_reduce}}}
+        record: {read: record.yaml, pieces: {step: combine}, context: {batch: first}}
         # Each holding for silver (ticket 79): a lookup row, not an MDM record
         # (operator, 2026-10-22: "Why do you need to merge it it's just a
         # lookup"). The filing's series (holding-series.yaml), its
         # registrant (sec.nport.registrant's) and its date name each row's
         # holder; holding.yaml gives the rows silver-holding.yaml lands.
-        - name: registrants
-          operation: source.read
-          requires: [submissions]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
+        registrants:
+          read: sec.nport.registrant/source.yaml
           units: {each: file}
-          input:
-            contract: sec.nport.registrant/source.yaml
-            lookups:
-              filed: {from: submissions, table: filed, column: accession_number, value_column: filed,
-                      max_input_bytes: 17179869184, max_input_rows: 100000000}
-        - name: series
-          operation: source.read
-          requires: []
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
+          lookups: {filed: {column: accession_number, from: submissions, max_input_bytes: 17179869184, max_input_rows: 100000000, table: filed, value_column: filed}}
+        series: {read: holding-series.yaml, units: {each: file}}
+        holding:
+          read: holding.yaml
           units: {each: file}
-          input: {contract: holding-series.yaml}
-        - name: holding
-          operation: source.read
-          requires: [identifiers, submissions, registrants, series]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          units: {each: file}
-          input:
-            contract: holding.yaml
-            context: {period: {fact: period}}
-            lookups:
-              isin: {from: identifiers, table: isin, column: holding, value_column: isin,
-                     max_input_bytes: 17179869184, max_input_rows: 100000000}
-              sedol: {from: identifiers, table: sedol, column: holding, value_column: sedol,
-                      max_input_bytes: 17179869184, max_input_rows: 100000000}
-              loanx: {from: identifiers, table: loanx, column: holding, value_column: loanx,
-                      max_input_bytes: 17179869184, max_input_rows: 100000000}
-              figi: {from: identifiers, table: figi, column: holding, value_column: figi,
-                      max_input_bytes: 17179869184, max_input_rows: 100000000}
-              series: {from: series, table: series, column: accession_number, value_column: series_id,
-                       max_input_bytes: 17179869184, max_input_rows: 100000000}
-              registrant: {from: registrants, table: filing, column: accession_number, value_column: cik,
-                           max_input_bytes: 17179869184, max_input_rows: 100000000}
-              filed: {from: submissions, table: filed, column: accession_number, value_column: filed,
-                      max_input_bytes: 17179869184, max_input_rows: 100000000}
-              as_of: {from: submissions, table: reported, column: accession_number, value_column: as_of,
-                      max_input_bytes: 17179869184, max_input_rows: 100000000}
-        - name: prepare
-          operation: mdm.prepare
-          requires: [record]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, mdm.prepared]
-          input:
-            keys: {table: security, record_column: record, dataset: sec.nport.security.v2}
-            readings: {record: {all: record}}
-        - name: merge
-          operation: mastering.merge
-          requires: [prepare]
-          key: "{batch_id}"
-          leases: ["mdm:consumer:{consumer}"]
-          checks: [input.hash, output.receipt, mdm.committed]
+          lookups:
+            figi: {column: holding, from: identifiers, max_input_bytes: 17179869184, max_input_rows: 100000000, table: figi, value_column: figi}
+            isin: {column: holding, from: identifiers, max_input_bytes: 17179869184, max_input_rows: 100000000, table: isin, value_column: isin}
+            loanx: {column: holding, from: identifiers, max_input_bytes: 17179869184, max_input_rows: 100000000, table: loanx, value_column: loanx}
+            sedol: {column: holding, from: identifiers, max_input_bytes: 17179869184, max_input_rows: 100000000, table: sedol, value_column: sedol}
+            as_of: {column: accession_number, from: submissions, max_input_bytes: 17179869184, max_input_rows: 100000000, table: reported, value_column: as_of}
+            filed: {column: accession_number, from: submissions, max_input_bytes: 17179869184, max_input_rows: 100000000, table: filed, value_column: filed}
+            registrant: {column: accession_number, from: registrants, max_input_bytes: 17179869184, max_input_rows: 100000000, table: filing, value_column: cik}
+            series: {column: accession_number, from: series, max_input_bytes: 17179869184, max_input_rows: 100000000, table: series, value_column: series_id}
+          context: {period: {fact: period}}
+      master: {requires: [record], keys: {dataset: sec.nport.security.v2, record_column: record, table: security}, readings: {record: {all: record}}}
+      silver:
         # The holdings land in silver once the Securities they link to are merged
         # (ticket 79, as ticket 183 did for 13F): the silver writer finds each
         # row's Security, Fund and registrant Company by lookup.
-        - name: land_holding
-          operation: silver.land
-          requires: [holding, merge]
-          key: "{unit}"
-          leases: ["silver:{silver}"]
-          checks: [input.hash, output.receipt, silver.landed]
-          input: {keys: {table: holding, silver: nport_holding}}
+        - {name: land_holding, land: {silver: nport_holding, table: holding}, requires: [holding, merge]}
         # Links are a silver table, built from the stored records after the merge.
-        - name: links
-          operation: silver.derive
-          requires: [land_holding]
-          key: "{unit}"
-          leases: ["silver:{silver}", "silver:{reads}"]
-          checks: [input.hash, output.receipt, silver.derived]
-          input: {keys: {build: links, silver: relationship, reads: mastering_record}}
-        - name: processed
-          operation: journal.record
-          requires: [links]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, journal.recorded]
-      checks: [manifest.hash, work.accounting, journal.delivered]
+        - {name: links, derive: {build: links, reads: mastering_record, silver: relationship}}
     # The Securities keyed by a SEDOL or a LoanX (ticket 190; operator, 2026-11-04: "Second batch after
     # CUSIP and ISIN"): the same record rules (record.yaml, batch `other`) over the first target's
     # verified combine, published after it has merged, so each finds the Security that already holds its

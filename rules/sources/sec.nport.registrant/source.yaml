@@ -30,69 +30,16 @@ bookkeeping:
   version: 2
   targets:
     mastering:
-      steps:
-        - name: submissions
-          operation: source.read
-          requires: []
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
+      extract:
+        submissions: {read: submissions.yaml, units: {each: file}}
+        filings:
+          read: null
           units: {each: file}
-          input: {contract: submissions.yaml}
-        - name: filings
-          operation: source.read
-          requires: [submissions]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          units: {each: file}
-          input:
-            lookups:
-              filed: {from: submissions, table: filed, column: accession_number, value_column: filed,
-                      max_input_bytes: 67108864, max_input_rows: 1000000}
-        - name: ciks
-          operation: source.combine
-          requires: [filings]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.combined]
-          input: {contract: reduce.yaml, readings: {filings: {all: filings}}}
-        - name: combine
-          operation: source.combine
-          requires: [ciks, filings]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.combined]
-          input: {contract: combine.yaml, readings: {ciks: {step: ciks}, filings: {all: filings}}}
-        - name: record
-          operation: source.read
-          requires: [combine]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          input: {contract: record.yaml, pieces: {step: combine}}
-        - name: prepare
-          operation: mdm.prepare
-          requires: [record]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, mdm.prepared]
-          input:
-            keys: {table: registrant, record_column: record, dataset: sec.nport.registrant.v2}
-            readings: {record: {all: record}}
-        - name: merge
-          operation: mastering.merge
-          requires: [prepare]
-          key: "{batch_id}"
-          leases: ["mdm:consumer:{consumer}"]
-          checks: [input.hash, output.receipt, mdm.committed]
-        - name: processed
-          operation: journal.record
-          requires: [merge]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, journal.recorded]
-      checks: [manifest.hash, work.accounting, journal.delivered]
+          lookups: {filed: {column: accession_number, from: submissions, max_input_bytes: 67108864, max_input_rows: 1000000, table: filed, value_column: filed}}
+        ciks: {combine: reduce.yaml, readings: {filings: {all: filings}}}
+        combine: {combine: combine.yaml, readings: {ciks: {step: ciks}, filings: {all: filings}}}
+        record: record.yaml
+      master: {keys: {dataset: sec.nport.registrant.v2, record_column: record, table: registrant}}
 execution:
   profile: source.read
   workers: 1

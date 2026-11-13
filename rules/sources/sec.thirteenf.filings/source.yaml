@@ -71,6 +71,6 @@ bookkeeping:
     # The managers' Companies are mastered by sec.company, which runs first.
     silver:
       extract:
-        - {name: filings, read: null, units: {slices: {bytes: 8388608}}, files: '*/submissions/sec/cik=*/main/*'}
+        filings: {read: null, units: {slices: {bytes: 8388608}}, files: '*/submissions/sec/cik=*/main/*'}
       silver:
         - {name: land, land: {silver: thirteenf_filing, table: filing}}

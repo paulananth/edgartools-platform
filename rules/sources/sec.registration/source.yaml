@@ -58,7 +58,7 @@ bookkeeping:
     # The captured pages, read and landed in silver (the Company is mastered by sec.company, which runs first).
     silver:
       extract:
-        - {name: read, read: registration-page.yaml, units: {slices: {bytes: 33554432}}, files: '*.capture.zip'}
+        read: {read: registration-page.yaml, units: {slices: {bytes: 33554432}}, files: '*.capture.zip'}
       silver:
         - {name: land_offering, land: {silver: registration_offering, table: offering}}
         - {name: land_statement_line, land: {silver: registration_statement_line, table: statement_line}}

@@ -2,12 +2,14 @@
 
 A target in `source.yaml` says only what is its own:
 
-    extract:   the source's reads and joins, in order (each names its `read` or `combine` rules file)
+    extract:   the passes over the source's files, by name and in order: each names the rules file it reads
+               (`read`) or joins (`combine`) with; a rules file alone is read over the pass before it
     master:    the table and Dataset Contract its records are mastered under (none: nothing is mastered)
     silver:    the tables it lands (`land`) or builds from stored rows (`derive`), in order
 
-and `expand` gives the steps the engine runs. A step's key, leases and checks follow from what it does, so
-no target writes them; the record step always comes last and waits for every step nothing else waits for.
+and `expand` gives the steps the engine runs. A step's key, leases and checks follow from what it does, and
+what a pass waits for follows from what it reads, so no target writes them; the record step always comes last
+and waits for every step nothing else waits for.
 """
 from __future__ import annotations
 
@@ -23,7 +25,6 @@ KINDS = {
 }
 TARGET_CHECKS = ["manifest.hash", "work.accounting", "journal.delivered"]
 SHAPE = frozenset({"extract", "master", "silver"})
-STEP_PARTS = ("requires", "units")  # what a step may say beside its name, its kind and its input
 
 
 class ShapeError(ValueError):
@@ -41,15 +42,25 @@ def _step(kind: str, name: str, requires: list, *, units=None, inputs=None) -> d
     return step
 
 
-def _extract(entry: dict) -> dict:
-    kinds = [kind for kind in ("read", "combine") if kind in entry]
-    if not isinstance(entry, dict) or len(kinds) != 1 or not isinstance(entry.get("name"), str):
-        raise ShapeError("An extract step has a name and one of `read` or `combine`")
+def _waits(inputs: dict) -> list:
+    """The passes a pass reads from, in the order it names them: it waits for those and nothing else."""
+    named = [lookup["from"] for lookup in (inputs.get("lookups") or {}).values() if "from" in lookup]
+    named += [reading.get("step") or reading.get("all") for reading in (inputs.get("readings") or {}).values()]
+    named += [inputs["pieces"]["step"]] if "step" in (inputs.get("pieces") or {}) else []
+    return list(dict.fromkeys(name for name in named if name))
+
+
+def _extract(name: str, entry, before: str | None) -> dict:
+    if isinstance(entry, str) and before:  # the record pass: this rules file over the pass before it
+        entry = {"read": entry, "pieces": {"step": before}}
+    kinds = [kind for kind in ("read", "combine") if isinstance(entry, dict) and kind in entry]
+    if len(kinds) != 1 or "requires" in entry or "name" in entry:
+        raise ShapeError("An extract pass has one of `read` or `combine`; what it waits for follows from what it reads")
     (kind,) = kinds
-    inputs = {key: value for key, value in entry.items() if key not in ("name", kind, *STEP_PARTS)}
+    inputs = {key: value for key, value in entry.items() if key not in (kind, "units")}
     if entry[kind] is not None:  # the rules file it reads with; none is the source's own file
         inputs = {"contract": entry[kind], **inputs}
-    return _step(kind, entry["name"], entry.get("requires", []), units=entry.get("units"), inputs=inputs)
+    return _step(kind, name, _waits(inputs), units=entry.get("units"), inputs=inputs)
 
 
 def _silver(entry: dict, default: list) -> dict:
@@ -67,18 +78,21 @@ def expand(target: dict) -> dict:
         return target
     if "steps" in target:
         raise ShapeError("A target lists steps or is written in the one shape, not both")
-    steps = [_extract(entry) for entry in target.get("extract", [])]
-    if not steps:
-        raise ShapeError("A target extracts at least one file")
+    passes = target.get("extract")
+    if not isinstance(passes, dict) or not passes:
+        raise ShapeError("A target's `extract` names each pass over the source's files, at least one")
+    steps = []
+    for name, entry in passes.items():
+        steps.append(_extract(name, entry, steps[-1]["name"] if steps else None))
     last = [steps[-1]["name"]]
     master = target.get("master")
     if master is not None:
-        if not isinstance(master, dict) or not {"keys", "readings"} <= set(master) \
-                or set(master) - {"keys", "readings", "requires", "names"}:
-            raise ShapeError("`master` has keys and readings")
+        if not isinstance(master, dict) or "keys" not in master or set(master) - {"keys", "readings", "requires", "names"}:
+            raise ShapeError("`master` has keys")
         prepare, merge = (master.get("names") or {}).get("prepare", "prepare"), (master.get("names") or {}).get("merge", "merge")
         steps.append(_step("prepare", prepare, master.get("requires", last),
-                           inputs={"keys": master["keys"], "readings": master["readings"]}))
+                           inputs={"keys": master["keys"],  # it reads the last pass whole unless it says otherwise
+                                   "readings": master.get("readings", {last[0]: {"all": last[0]}})}))
         steps.append(_step("merge", merge, [prepare]))
         last = [merge]
     base = last  # a landing waits for what it lands from; a derived table for the step before it

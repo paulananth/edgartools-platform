@@ -44,68 +44,32 @@ bookkeeping:
     # `umbrella` pair set (ticket 23), so it runs first.
     subfund-pairs:
       extract:
-        - {name: pairs, read: subfund-pairs.yaml, units: {each: file}, files: '*rr-golden-copy*'}
+        pairs: {read: subfund-pairs.yaml, units: {each: file}, files: '*rr-golden-copy*'}
     # Every Level 1 record of one Golden Copy publication through the Merge Stage. GLEIF finds
     # Companies and never creates one: a record that finds none waits in the Stage. The run
     # gives the publication's record count.
     mastering:
       # Prepare whole-publication name pairs before deriving the LEIs this load reads.
       # Actual name binding still follows identifier matching in the common Merge Stage.
+      # This approved declaration names a complete capture and its count; it does not
+      # assert independent provider completeness. Full-file naming is retained in the
+      # captured publisher binding (publication-level1-json.yaml: full_file/GoldenCopy).
       preparation:
         - method: waterfall
           options:
-            kind: company
-            holder_source: sec.company.v1
-            files: "*lei2-golden-copy*"
-            # This approved declaration names a complete capture and its count; it does not
-            # assert independent provider completeness. Full-file naming is retained in the
-            # captured publisher binding (publication-level1-json.yaml: full_file/GoldenCopy).
             completeness: full_publication
-            full_filename: '[0-9]{8}-[0-9]{4}-gleif-goldencopy-lei2-golden-copy[.]json[.]zip'
             count_fact: publication_count
-      run:
-        facts: [publication_count]
-      steps:
-        - name: read
-          operation: source.read
-          requires: []
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          input:
-            contract: level1-json.yaml
-            files: "*lei2-golden-copy*"
-            context: {publication_count: {fact: publication_count}}
-        - name: prepare
-          operation: mdm.prepare
-          requires: [read]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, mdm.prepared]
-          input:
-            keys: {table: level1, record_column: record, dataset: gleif.level1.v1}
-            readings: {read: {all: read}}
-        - name: merge
-          operation: mastering.merge
-          requires: [prepare]
-          key: "{batch_id}"
-          leases: ["mdm:consumer:{consumer}"]
-          checks: [input.hash, output.receipt, mdm.committed]
+            files: '*lei2-golden-copy*'
+            full_filename: '[0-9]{8}-[0-9]{4}-gleif-goldencopy-lei2-golden-copy[.]json[.]zip'
+            holder_source: sec.company.v1
+            kind: company
+      run: {facts: [publication_count]}
+      extract:
+        read: {read: level1-json.yaml, files: '*lei2-golden-copy*', context: {publication_count: {fact: publication_count}}}
+      master: {keys: {dataset: gleif.level1.v1, record_column: record, table: level1}}
+      silver:
         # Links are a silver table, built from the stored records after the merge.
-        - name: links
-          operation: silver.derive
-          requires: [merge]
-          key: "{unit}"
-          leases: ["silver:{silver}", "silver:{reads}"]
-          checks: [input.hash, output.receipt, silver.derived]
-          input: {keys: {build: links, silver: relationship, reads: mastering_record}}
-        - name: processed
-          operation: journal.record
-          requires: [links]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, journal.recorded]
-      checks: [manifest.hash, work.accounting, journal.delivered]
+        - {name: links, derive: {build: links, reads: mastering_record, silver: relationship}}
 bronze:
   family: gleif
 dataset_contracts:

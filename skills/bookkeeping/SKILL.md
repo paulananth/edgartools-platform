@@ -94,6 +94,27 @@ an onboarding gap, not an implicit default. A sequence entry with
 report it as runnable through Bookkeeping. The sequence's `after` value is
 preferred ordering, not a step dependency or a request to run that source.
 
+A target is written in one shape, and the steps follow from it
+(`edgar_warehouse/rules/shape.py`):
+
+```yaml
+<target>:
+  extract:                       # the passes over the source's files, by name and in order
+    rows: {read: rows.yaml, units: {each: file}}
+    joined: {combine: join.yaml, readings: {rows: {all: rows}}}
+    record: record.yaml          # a rules file alone is read over the pass before it
+  master: {keys: {table: <table>, record_column: record, dataset: <dataset>}}
+  silver:
+    - {name: land_facts, land: {table: <table>, silver: <silver table>}}
+```
+
+A pass waits for the passes it reads (`lookups`, `readings`, `pieces`), so no
+target writes a wait, a key, a lease, a check or the record step. Mastering
+reads the last pass whole unless `master.readings` says otherwise. Writing a
+target another way that gives the same steps loads no file again.
+Before a change to a target merges, run each source's end-to-end tests on
+local PostgreSQL (`scripts/dev/adapter_test.sh`), one result per source.
+
 To trace a source into a domain, read its `dataset_contracts` and follow
 their declared kinds to the merge rules. Then follow the source's
 `bookkeeping.targets` steps, inputs, operations and prerequisites to their

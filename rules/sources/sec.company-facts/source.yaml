@@ -16,7 +16,7 @@ bookkeeping:
   targets:
     silver:
       extract:
-        - {name: facts, read: facts.yaml, units: {slices: {bytes: 8388608}}}
+        facts: {read: facts.yaml, units: {slices: {bytes: 8388608}}}
       # Each derived table is rebuilt whole, and only when the Change Journal names a changed file.
       silver:
         - {name: land, land: {silver: company_fact, table: company_fact}}

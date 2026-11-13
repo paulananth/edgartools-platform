@@ -1148,105 +1148,36 @@ bookkeeping:
     # and the ISIN answers are read together, every bundle in parallel, with
     # no order between them; `id_type` is the folder, OpenFIGI's own idType.
     mastering:
-      # Source read and combine run in the loader's process (no claim, lease or
-      # verifier); the run in the database starts at prepare.
       local: true
-      steps:
+      extract:
+        # Source read and combine run in the loader's process (no claim, lease or
+        # verifier); the run in the database starts at prepare.
         # Each request file alone, read beside its answer (its sha256 is in the
         # answer's receipt), so each answer's pair set comes from its own request.
-        - name: requests
-          operation: source.read
-          requires: []
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
+        requests:
+          read: requests.yaml
           units: {each: file}
-          input:
-            contract: requests.yaml
-            files: "id_*/*"
-            beside: {path: "{dir}/{base}.request.json", sha256: request_sha256}
-            context: {batch: "{dir}/{base}"}
+          files: id_*/*
+          beside: {path: '{dir}/{base}.request.json', sha256: request_sha256}
+          context: {batch: '{dir}/{base}'}
         # The answers, 16 files a unit (one composed slot each), each tied to the
         # identifier it was asked for by position, through its request's pairs.
-        - name: answers
-          operation: source.read
-          requires: [requests]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
+        answers:
+          read: null
           units: {groups: 16}
-          input:
-            files: "id_*/*"
-            context: {batch: "{dir}/{base}", id_type: "{dir}"}
-            lookups:
-              asked: {from: requests, table: asked, column: key, value_column: id, max_input_bytes: 1048576, max_input_rows: 1000}
-        - name: reduce
-          operation: source.combine
-          requires: [answers]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.combined]
-          input: {contract: reduce.yaml, readings: {answers: {all: answers}}}
+          files: id_*/*
+          lookups: {asked: {column: key, from: requests, max_input_bytes: 1048576, max_input_rows: 1000, table: asked, value_column: id}}
+          context: {batch: '{dir}/{base}', id_type: '{dir}'}
+        reduce: {combine: reduce.yaml, readings: {answers: {all: answers}}}
         # The Listing currency (ticket 138 part B3): each identifier and
         # exchange's lines, roots and tickers counted; each line beside its
         # group's counts; each listing's detail row with its currency.
-        - name: line_counts
-          operation: source.combine
-          requires: [answers]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.combined]
-          input: {contract: line-counts.yaml, readings: {answers: {all: answers}}}
-        - name: lines
-          operation: source.combine
-          requires: [line_counts, answers]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.combined]
-          input: {contract: lines.yaml, readings: {counts: {step: line_counts}, answers: {all: answers}}}
-        - name: listing
-          operation: source.read
-          requires: [lines]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          input: {contract: listing.yaml, pieces: {step: lines}}
-        - name: combine
-          operation: source.combine
-          requires: [reduce, answers, listing]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.combined]
-          input: {contract: combine.yaml, readings: {counts: {step: reduce}, answers: {all: answers}, listings: {all: listing}}}
-        - name: record
-          operation: source.read
-          requires: [combine]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          input: {contract: record.yaml, pieces: {step: combine}}
-        - name: prepare
-          operation: mdm.prepare
-          requires: [record]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, mdm.prepared]
-          input:
-            keys: {table: security, record_column: record, dataset: openfigi.security.v4}
-            readings: {record: {all: record}}
-        - name: merge
-          operation: mastering.merge
-          requires: [prepare]
-          key: "{batch_id}"
-          leases: ["mdm:consumer:{consumer}"]
-          checks: [input.hash, output.receipt, mdm.committed]
-        - name: processed
-          operation: journal.record
-          requires: [merge]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, journal.recorded]
-      checks: [manifest.hash, work.accounting, journal.delivered]
+        line_counts: {combine: line-counts.yaml, readings: {answers: {all: answers}}}
+        lines: {combine: lines.yaml, readings: {counts: {step: line_counts}, answers: {all: answers}}}
+        listing: listing.yaml
+        combine: {combine: combine.yaml, readings: {counts: {step: reduce}, answers: {all: answers}, listings: {all: listing}}}
+        record: record.yaml
+      master: {keys: {dataset: openfigi.security.v4, record_column: record, table: security}}
 
 dataset_contracts:
   # One contract for both kinds asked (ticket 138): it replaces
