@@ -6,6 +6,10 @@ Blocked by: 03
 
 ## Question
 
+Fact base: [05-entity-kind-fact-base.md](../evidence/05-entity-kind-fact-base.md)
+(branch `codex/wayfinder-measure-prod-loads-20261113`, commit `3aa2a51c`).
+
+
 The report has one row per MDM kind (`company`, `person`, `security`, `fund_structure`). A kind is
 `complete` only when every active source contract contributing that kind and every required link
 step is verified. The plan forbids inferring the source/dataset-to-kind map from source names and
