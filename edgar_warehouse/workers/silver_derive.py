@@ -48,8 +48,9 @@ def _floor(silver, build: str, rows: int) -> None:
     source, table = SOURCES[build], BUILDS[build]
     with silver.connect() as conn:
         read = conn.execute(text(f'select count(*) from silver."{source}"')).scalar()
-        strangers = conn.execute(text(f'select count(distinct company_key) from silver."{table}" where company_key '
-                                      f'not in (select company_key from silver."{source}")')).scalar()
+        strangers = conn.execute(text(  # not exists: `not in` scans the whole source once for every row
+            f'select count(distinct t.company_key) from silver."{table}" t where not exists '
+            f'(select 1 from silver."{source}" s where s.company_key = t.company_key)')).scalar()
     if read and not rows:
         raise ValueError(f"silver.{table} is empty although silver.{source} holds {read} rows")
     if strangers:
