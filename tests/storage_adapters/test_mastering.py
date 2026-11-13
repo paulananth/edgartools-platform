@@ -498,7 +498,7 @@ def test_configured_preparation_pairs_and_merges_through_the_stage(
                                             [filer["assertion_id"]])[0][0])
             assert latest_body["fields"] == filer["fields"]
         from edgar_warehouse.mdm import matching
-        staged_filer = json.loads(db.rows("select body from mastering_stage")[0][0])
+        staged_filer = json.loads(db.rows("select body from mastering_record where assertion_id=%s", [filer["assertion_id"]])[0][0])
         rule = next(r for r in POLICY["kinds"]["company"]["rules"] if r["family"] == "name_binding")
         if not historical:
             assert matching.compare_candidate_records(rule, [(staged_filer, entity)])[0][0], staged_filer["provenance"]
@@ -561,3 +561,12 @@ def test_pair_evidence_keys_and_waiter_release_roll_back_together_and_retry_comp
         monkeypatch.setattr(merge, "_release_waiting", release)
         assert merge.apply_pairs(db, COMPANY, SEC, pair)["records"] == 1
         assert merge.apply_pairs(db, COMPANY, SEC, pair) == {"records": 0}
+
+
+def test_a_merge_keeps_its_file_in_memory_and_leaves_no_working_tables(database_factory):
+    with opened(database_factory) as db:
+        merge.merge_file(db, COMPANY, [record(SEC, "1", cik="0000000001"), record(GLEIF, "2", lei="INVENTEDLEI000000001")])
+        tables = {row[0] for row in db.rows(
+            "select table_name from information_schema.tables where table_name like 'mastering\\_%%'")}
+        assert not {name for name in tables if name.startswith("mastering_stage")}, sorted(tables)
+        assert db.rows("select count(*) from mastering_record")[0][0] == 2
