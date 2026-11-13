@@ -99,10 +99,23 @@ From `rules/sources/<source>/source.yaml` (`dataset_contracts` and each target's
 | `sec.thirteenf.filings` | — (silver only) | — |
 | `sec.registration` | — (silver only) | — |
 
-## 5. Entity kinds — the source-to-kind map comes from the merge kinds, not source names
+## 5. Entity kinds — the map comes from `rules entity-types`, cross-checked against the merge kinds
 
-`rules/merge/kinds/*.yaml` gives each kind its `defaults.sources` and its per-rule `source`.
-This is the authoritative map the plan asks for ("do not infer it from source names"):
+The plan names one authority: "Build the source/dataset-to-kind map from active Dataset Contracts
+returned by `rules entity-types`". That command was run in this checkout (the implementation is
+`edgar_warehouse/rules/cli.py:30`, calling `files.entity_types`, which reads each contract's
+`adapter.kind`, `adapter.classification.kind`, or `adapter.kind_field` + `kind_values`).
+
+`rules entity-types` returns **14 contracts**:
+
+| Kind | Contracts (with how the kind is decided) |
+|---|---|
+| `company` (7) | `gleif.level1.v1` (source field), `gleif.relationships.v1` (fixed), `gleif.reporting_exceptions.v1` (fixed), `iapd.adv.custodians.v1` (fixed), `iapd.adv.filings.v2` (fixed), `sec.company.v1` (rule `sec-company-candidate`), `sec.nport.registrant.v2` (fixed) |
+| `security` (4) | `openfigi.security.v4`, `sec.nport.security.v2`, `sec.ownership.security.v2`, `sec.thirteenf.securities.v2` (all fixed) |
+| `person` (2) | `sec.ownership.reporting_owner.v1` (rule `sec-ownership-person`), `sec.submissions.person.v1` (rule `sec-person-candidate`) |
+| `fund_structure` (1) | `sec.nport.fund.v1` (fixed) |
+
+`rules/merge/kinds/*.yaml` gives each kind its `defaults.sources` and its per-rule `source`:
 
 | Kind | Kind file version | Contributing dataset codes (from `defaults.sources` + rule sources) |
 |---|---|---|
@@ -111,14 +124,30 @@ This is the authoritative map the plan asks for ("do not infer it from source na
 | `security` | `security-2026-11-02.thirteenf-source-is-securities` | `openfigi.security.v4`, `sec.thirteenf.securities.v2`, `sec.nport.security.v2`, `sec.ownership.security.v2` |
 | `fund_structure` | `fund_structure-2026-10-25.one-value-per-identifier` | `sec.nport.fund.v1` |
 
-Every rule source in the four kind files appears in the corresponding `defaults.sources` list —
-no rule source is missing from its kind's list, and no list member lacks a rule. Note that
-`gleif.reporting_exceptions.v1` is a contract of the GLEIF source but is **not** in the company
-kind's source list: it contributes no field and no rule, so it is not a contributing contract for
-kind completion. The 2026-11-12 snapshot listed it as a contract of `gleif/mastering` with no
-retained outcome row; under the merge-kind rule it is not a company-kind contributor.
+### The two authorities differ by exactly one contract
 
-Two sources have **no** kind at all: `sec.company-facts`, `sec.thirteenf.filings`,
+| Kind | `rules entity-types` | merge-kind `defaults.sources` | Difference |
+|---|---|---|---|
+| `company` | 7 | 6 | `gleif.reporting_exceptions.v1` is in entity-types but **not** in the merge kind's source list |
+| `person` | 2 | 2 | — |
+| `security` | 4 | 4 | — |
+| `fund_structure` | 1 | 1 | — |
+
+Every merge-kind rule source appears in the corresponding `defaults.sources` list, and every
+`defaults.sources` member has a rule. The single disagreement is
+`gleif.reporting_exceptions.v1`: the Dataset Contract states its records' entity type is
+`company`, but the company merge kind does not list it — it maps no field and no rule.
+
+**This is the one ambiguity the entity-model ticket must settle.** The two readings differ:
+
+- `rules entity-types` (the plan's named authority) → 14 contracts; the reporting-exceptions
+  contract is a company contributor, and its target `gleif/mastering` counts toward company
+  completeness.
+- merge-kind `defaults.sources` (what actually writes and binds) → 13 contracts; the
+  reporting-exceptions contract contributes no field and no rule, so it does not gate company
+  completeness.
+
+Three sources have **no** kind at all: `sec.company-facts`, `sec.thirteenf.filings`,
 `sec.registration` (silver targets only). `gleif/subfund-pairs`, `iapd.adv/custodians`,
 `sec.ownership/security_symbols` and `sec.nport.security/mastering_other_keys` are *targets*, not
 sources — they carry no kind of their own; their datasets appear under their source's kind.
@@ -136,6 +165,9 @@ arguments from the active Rules and the retained manifest — not a source of th
 2. All 13 sequence sources declare `requires: []`; **no source ordering in the sequence is a hard
    dependency**. The three link orderings are prose preferences with partial Rules support, and
    the report must state the basis it used for ordering.
-3. The entity-kind map is settled by `rules/merge/kinds/*.yaml`: 6 company contracts, 2 person
-   contracts, 4 security contracts, 1 fund_structure contract — 13 contributing contracts, not
-   the 14 the 2026-11-12 snapshot listed (the extra one was `gleif.reporting_exceptions.v1`).
+3. The entity-kind map has **14 contracts** under `rules entity-types` (the plan's named authority:
+   7 company, 4 security, 2 person, 1 fund_structure) and **13** under the merge kinds'
+   `defaults.sources` (6 company, 4 security, 2 person, 1 fund_structure). The single difference is
+   `gleif.reporting_exceptions.v1`, which states `company` in its Dataset Contract but maps no
+   field and no rule in the company kind. The entity-model ticket settles which reading the report
+   uses; either way the report must state the count it used and why.

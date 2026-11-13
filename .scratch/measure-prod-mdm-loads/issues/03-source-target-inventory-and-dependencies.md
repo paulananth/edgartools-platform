@@ -47,9 +47,12 @@ Evidence: [03-source-target-inventory-and-dependencies.md](../evidence/03-source
   `gleif/subfund-pairs` has a Rules-derived wait (it is read inside a pass of its consumer).
   `iapd.adv/custodians` → `iapd.adv/mastering` and `sec.ownership/security_symbols` after OpenFIGI
   have no declared cross-target dependency. The report must state the basis it used for ordering.
-- **The entity-kind map comes from `rules/merge/kinds/*.yaml`**: 6 company contracts, 2 person
-  contracts, 4 security contracts, 1 fund_structure contract — **13 contributing contracts**, not the
-  14 the 2026-11-12 snapshot listed. `gleif.reporting_exceptions.v1` is a contract of the GLEIF
-  source but has no rule and is not a company-kind contributor.
+- **The entity-kind map has two authorities that differ by exactly one contract.**
+  `rules entity-types` — the plan's named authority — was run in this checkout and returns **14
+  contracts**: 7 company, 4 security, 2 person, 1 fund_structure. The merge kinds'
+  `defaults.sources` lists **13**: 6 company, 4 security, 2 person, 1 fund_structure. The single
+  difference is `gleif.reporting_exceptions.v1`, whose Dataset Contract states `company` but which
+  maps no field and no rule in the company kind. The entity-model ticket settles which reading the
+  report uses.
 - Step names per target, and each target's mastered dataset → table, are tabulated in the evidence
   file.
