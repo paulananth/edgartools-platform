@@ -128,49 +128,51 @@ def _waterfall(*, options, capture, folder, facts, as_of, deadline, say, environ
     with registered_store(policy_digest, environment) as store:
         records = [json.loads(b) if isinstance(b, str) else b for (b,) in
                    store.rows("select body from mastering_record where source_code=%s", [options["holder_source"]])]
-        from edgar_warehouse.rules.source_engine import current_record_views
-        current = [r for r in current_record_views(records, as_of).values() if r["kind"] == kind]
-        selected = {r["assertion_id"] for r in current}
-        records = [r for r in records if r["assertion_id"] in selected]
-        filers = waterfall.filers_from_records(current)
-        recipe = files.load(waterfall.GLEIF_READING)
-        inputs = {"version": 1, "archive": archive, "records": count, "options": options, "recipe": recipe,
-                  "filers": population(filers), "policy": policy_digest, "runtime": _runtime()}
-        cache_key = digest(inputs)
-        cache = folder / f"{cache_key}.json"
-        if time.monotonic() >= deadline:
-            raise RunStopped("Automatic preparation reached the load deadline")
-        if cache.exists():
-            result = artifacts.json(json.loads(cache.read_text()))
-            if result["input_digest"] != cache_key:
-                raise RunStopped("Cached waterfall preparation names different inputs")
-            # Reuse projection, not unchecked bytes: a receipt retained beside a damaged capture
-            # must not let the cached answer reach the database. Hash compressed bytes once.
-            with artifacts.verified_stream(archive, max_bytes=recipe["read"]["stream"]["max_input_bytes"]):
-                pass
-        else:
-            wanted = sorted(waterfall.wanted_names(filers))
-            lookup = artifacts.put(folder.as_uri(), {"version": 1, "input": archive, "sets": {"wanted": wanted}})
-            context = artifacts.put(folder.as_uri(), {"version": 1, "input": archive,
-                                                       "values": {"publication_count": count}})
-            reading = project_capture(artifacts, folder, cache_key, recipe,
-                [{"input": archive, "context": context, "lookups": lookup}])
-            publication, pairs = waterfall.declared_pairs(filers, reading, artifacts, count,
-                                                          spec["passes"], over_shared=spec["over_shared"])
-            if publication["archive_sha256"] != archive["sha256"]:
-                raise RunStopped("Waterfall projection names another captured archive")
-            result = {"input_digest": cache_key, "publication": publication, "pairs": pairs}
-            receipt = artifacts.put(folder.as_uri(), result)
-            # Cache only a fully read and verified projection. Retrying after an interrupted apply still applies it.
-            with tempfile.NamedTemporaryFile(mode="w", dir=folder, delete=False) as stream:
-                temporary = Path(stream.name)
-                stream.write(canonical(receipt))
-            try:
-                temporary.replace(cache)
-            finally:
-                temporary.unlink(missing_ok=True)
-        if time.monotonic() >= deadline:
-            raise RunStopped("Automatic preparation reached the load deadline before applying pairs")
+    # No connection is held while the file is read: a hosted store closes one left idle that long.
+    from edgar_warehouse.rules.source_engine import current_record_views
+    current = [r for r in current_record_views(records, as_of).values() if r["kind"] == kind]
+    selected = {r["assertion_id"] for r in current}
+    records = [r for r in records if r["assertion_id"] in selected]
+    filers = waterfall.filers_from_records(current)
+    recipe = files.load(waterfall.GLEIF_READING)
+    inputs = {"version": 1, "archive": archive, "records": count, "options": options, "recipe": recipe,
+              "filers": population(filers), "policy": policy_digest, "runtime": _runtime()}
+    cache_key = digest(inputs)
+    cache = folder / f"{cache_key}.json"
+    if time.monotonic() >= deadline:
+        raise RunStopped("Automatic preparation reached the load deadline")
+    if cache.exists():
+        result = artifacts.json(json.loads(cache.read_text()))
+        if result["input_digest"] != cache_key:
+            raise RunStopped("Cached waterfall preparation names different inputs")
+        # Reuse projection, not unchecked bytes: a receipt retained beside a damaged capture
+        # must not let the cached answer reach the database. Hash compressed bytes once.
+        with artifacts.verified_stream(archive, max_bytes=recipe["read"]["stream"]["max_input_bytes"]):
+            pass
+    else:
+        wanted = sorted(waterfall.wanted_names(filers))
+        lookup = artifacts.put(folder.as_uri(), {"version": 1, "input": archive, "sets": {"wanted": wanted}})
+        context = artifacts.put(folder.as_uri(), {"version": 1, "input": archive,
+                                                   "values": {"publication_count": count}})
+        reading = project_capture(artifacts, folder, cache_key, recipe,
+            [{"input": archive, "context": context, "lookups": lookup}])
+        publication, pairs = waterfall.declared_pairs(filers, reading, artifacts, count,
+                                                      spec["passes"], over_shared=spec["over_shared"])
+        if publication["archive_sha256"] != archive["sha256"]:
+            raise RunStopped("Waterfall projection names another captured archive")
+        result = {"input_digest": cache_key, "publication": publication, "pairs": pairs}
+        receipt = artifacts.put(folder.as_uri(), result)
+        # Cache only a fully read and verified projection. Retrying after an interrupted apply still applies it.
+        with tempfile.NamedTemporaryFile(mode="w", dir=folder, delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(canonical(receipt))
+        try:
+            temporary.replace(cache)
+        finally:
+            temporary.unlink(missing_ok=True)
+    if time.monotonic() >= deadline:
+        raise RunStopped("Automatic preparation reached the load deadline before applying pairs")
+    with registered_store(policy_digest, environment) as store:
         counts = merge.apply_pairs(store, merge.Settings(policy, policy_digest, kind, as_of),
                                    options["holder_source"], result["pairs"], source_records=records)
     say(f"Automatic waterfall preparation: {len(filers)} source records, {count} publication records, "

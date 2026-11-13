@@ -72,6 +72,28 @@ def test_complete_native_capture_prepares_a_unique_pair_and_unchanged_repeat_doe
     assert "content_date" not in repeated["publication"]
 
 
+def test_no_store_connection_is_open_while_the_capture_is_read(tmp_path, monkeypatch):
+    db, opened, real = Store([filer()]), [], preparation.project_capture
+    serve(monkeypatch, db)
+
+    @contextmanager
+    def registered(_, environment):
+        opened.append("open")
+        try:
+            yield db
+        finally:
+            opened.append("closed")
+
+    def reading(*args, **kwargs):
+        assert opened == ["open", "closed"], "the capture is read with a store connection open"
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(preparation, "registered_store", registered)
+    monkeypatch.setattr(preparation, "project_capture", reading)
+    first = run(capture(tmp_path / "capture", [native()]), tmp_path / "prepared")
+    assert first["applied"] == 1 and opened == ["open", "closed", "open", "closed"]
+
+
 @pytest.mark.parametrize("reverse", [False, True])
 def test_current_source_revision_is_selected_by_the_shared_kernel_not_sql_order(tmp_path, monkeypatch, reverse):
     versions = [filer(name="RETIRED NAME", revision=1), filer(revision=2)]
