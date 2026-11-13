@@ -107,12 +107,11 @@ SQL connection. Its complete authorized DSN belongs in private `.env` storage.
 Do not infer it from the SQL account, rotate access to discover it, or run a
 bootstrap/reset command as a URL lookup.
 
-OpenMetadata uses `OPENMETADATA_URL` and `OPENMETADATA_TOKEN`, an authorized
-bot token from private configuration. The local server endpoint is
-`http://127.0.0.1:8585`; confirm the configured instance rather than replacing
-it with that default. Retain the token privately; login/token creation and
-catalog operations belong to the OpenMetadata skill.
+Hosted OpenMetadata uses `OPENMETADATA_URL` and `OPENMETADATA_TOKEN`, an
+authorized bot token from private configuration. The separate local Edgartools
+instance is `http://127.0.0.1:8587`; its endpoint, administrator login and PAT
+come from the repository-root `.env` documented in the
+[OpenMetadata skill](../openmetadata/LOCAL-SERVER.md). Retain all credentials
+privately; login/token creation and catalog operations belong to that skill.
 The server root has no `/api/v1` suffix when passed to `catalog.connect`,
-which appends it. Local initialization may instead use
-`OPENMETADATA_LOGIN_EMAIL` with `OPENMETADATA_LOGIN_PASSWORD` (or the
-supported `OPENMETADATA_PASSWORD` alias) for native login.
+which appends it.

@@ -38,7 +38,15 @@ Read the target's running version from `GET /api/v1/system/version`. The local
 service was verified on 2.0.7; the versioned schemas below match it. When a
 target differs, check that release's schema and API behavior before publishing.
 Treat rolling documentation as concept guidance, not proof of the installed
-API. Use the existing private endpoint and bot credentials.
+API. For the local instance, use its private `.env` login and PAT as described
+in [Local server and rebuilds](LOCAL-SERVER.md); hosted instances use their
+authorized bot credentials.
+
+Run the repository initializer before using the local catalog. It clears all
+active AI Governance entities through the native API and verifies zero active
+entities on readback. The exact collection scope and soft-delete behavior are
+documented in [Local server and rebuilds](LOCAL-SERVER.md). Do not skip this
+step or recreate AI demo objects manually.
 
 ## Native objects and their connections
 
@@ -479,7 +487,7 @@ receipt and any additional qualification in the task record, not this skill.
 
 ## Local server
 
-Read [LOCAL-SERVER.md](LOCAL-SERVER.md) before starting, upgrading or checking the local server, or excluding the bundled demo lineage.
+Read [LOCAL-SERVER.md](LOCAL-SERVER.md) before starting, upgrading or checking the local server, handling `.env` credentials, excluding bundled demo lineage, or clearing AI Governance during initialization.
 
 ## Catalog-only clean rebuild
 

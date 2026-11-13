@@ -6,8 +6,8 @@
 # 127.0.0.1, so it clashes with no local Postgres.
 #
 #   bash infra/openmetadata/init.sh
-#   open http://localhost:8585   (admin@open-metadata.org / admin)
-name: edgartools-catalog
+#   open http://localhost:8587
+name: edgartools-openmetadata
 
 x-server-env: &server-env
   OPENMETADATA_CLUSTER_NAME: openmetadata
@@ -81,7 +81,7 @@ services:
       # Override its bundled example edges so startup cannot restore them.
       - ./no-ai-demo-lineage.json:/opt/openmetadata/json/data/aiGovernance/lineage/ai_governance_lineage.json:ro
     ports:
-      - "127.0.0.1:8585:8585"
+      - "127.0.0.1:${OPENMETADATA_HOST_PORT:-8587}:8585"
     depends_on:
       elasticsearch:
         condition: service_healthy
