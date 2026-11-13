@@ -13,6 +13,7 @@ from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.bookkeeping.clean.config import Blocked, digest, validate, worklist
 from edgar_warehouse.bookkeeping.clean.feeds import resolve_feed
 from edgar_warehouse.rules.files import load
+from edgar_warehouse.rules.shape import expand_source
 
 
 def plan(
@@ -20,7 +21,7 @@ def plan(
 ) -> dict:
     binding = resolve_feed(rules_root, source, feed)
     feed = binding["feed"]
-    document = load(rules_root / "sources" / binding["source"] / "source.yaml")
+    document = expand_source(load(rules_root / "sources" / binding["source"] / "source.yaml"))
     configuration = validate(document, target)
     manifest = Artifacts().json(inputs)
     items = worklist(manifest, configuration)

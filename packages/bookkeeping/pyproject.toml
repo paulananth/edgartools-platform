@@ -45,4 +45,5 @@ bypass-selection = true
 "../../edgar_warehouse/bookkeeping/clean/migrations" = "edgar_warehouse/bookkeeping/clean/migrations"
 "../../edgar_warehouse/rules/__init__.py" = "edgar_warehouse/rules/__init__.py"
 "../../edgar_warehouse/rules/files.py" = "edgar_warehouse/rules/files.py"
+"../../edgar_warehouse/rules/shape.py" = "edgar_warehouse/rules/shape.py"
 "../../edgar_warehouse/rules/acquisition_authority.py" = "edgar_warehouse/rules/acquisition_authority.py"

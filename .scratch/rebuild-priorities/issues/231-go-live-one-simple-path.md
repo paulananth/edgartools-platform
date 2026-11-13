@@ -27,6 +27,9 @@ goes to silver. Rules and configuration are files a person or an agent assembles
 6. **Nothing is made for a load: "no files should be generated or required all must go through merge stage and
    mastering"** (operator, 2026-11-12, on the GLEIF scope limit). A source's records all go to the Merge Stage and
    the matching rules decide there; a load is given no list of which records to take.
+7. **One shape: "simplify all sources to one shape, simplest first"** (operator, 2026-11-12, after the count
+   showed 20 load targets with 19 different step lists). A target says its extract (the source's reads and joins),
+   what it masters and what it lands in silver; the steps follow from that.
 
 ## Checklist
 
@@ -59,6 +62,15 @@ Each part is its own branch and PR, in this order (remove first, then simplify w
   - [ ] The GLEIF relationship, reporting-exception and XML contracts still take `approved_scope`
   - [ ] The `nport_issuer` field and the declared rule `gleif-issuer-lei` that reads it: nothing sets the flag now
   - [ ] The Golden Copy on this machine is saved with `01-` before the publisher's file name, which the preparation refuses; give the load the publisher's name
+- [ ] One shape for every load target (ruling 7): `extract`, `master`, `silver`; the record step and each step's key, leases and checks follow from the shape (`edgar_warehouse/rules/shape.py`). Each conversion must give the target's recorded steps exactly (`tests/unit/test_one_shape.py`, `load_target_steps.json`: all 20 targets recorded from the hand-written lists, each seen to fail once), so a converted source runs the same steps and its documents are not loaded again
+  - [x] (2026-11-12 22:11 ET) The shape and the six simplest targets: SEC persons (34 lines to 8), 13F filings (26 to 5), company facts (45 to 7), registrations (33 to 6), ownership `security_symbols` (32 to 8), GLEIF `subfund-pairs` (19 to 3). Verified by `tests/unit/test_one_shape.py` (30 pass) and the unit, architecture and MDM tests (2,428 pass)
+  - [ ] GLEIF `mastering`, SEC company `mastering`, Form ADV `custodians`
+  - [ ] N-PORT registrants, 13F securities, ownership `mastering`
+  - [ ] Form ADV `mastering`, OpenFIGI, N-PORT funds
+  - [ ] N-PORT securities (16 steps)
+  - [ ] The targets outside the shape: the two `capture` targets, SEC company `merge-batch` and N-PORT securities `mastering_other_keys` (no record step): fold or delete each
+  - [ ] One name for each fixed step (`prepare`, `merge`, `processed`): three targets still name theirs differently, kept for now so no document loads again
+  - [ ] Joins that are pipeline steps today (17 combines, 39 reads) move inside each source's extract, source by source
 - [ ] Words: no reference to a migration from an older system, a legacy path, a cutover or a retired stage in the code, rules, guides, documents and skills
   - [x] (2026-11-12 17:05 ET) Code and tests, the word "legacy": refusals, help texts and docstrings say what the code does today; the engine catalog's two keys are `default_jurisdiction_table` and `default_pair_comparison`; tests that only checked deleted commands and deleted modules stay deleted are removed (`test_retired_commands_stay_unavailable`, the `gold-refresh` lines, `test_retired_submission_loaders.py`). Verified by the unit, architecture and MDM tests
   - [x] (2026-11-12 17:05 ET) Store refusals: MDM no longer looks for an `mdm_v2` schema (check and test removed); every store that is not on this build's schema says "does not hold this build's schema; rebuild the store". Verified by `tests/integration/test_mdm_schema_comments.py` and `test_bookkeeping_read_upgrade_postgres.py`

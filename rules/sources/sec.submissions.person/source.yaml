@@ -116,37 +116,11 @@ bookkeeping:
   version: 2
   targets:
     mastering:
-      steps:
-        - name: read
-          operation: source.read
-          requires: []
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          # The documents in units of at most 8 MiB, each at most max_artifacts.
-          units: {slices: {bytes: 8388608}}
-        - name: records
-          operation: mdm.prepare
-          requires: [read]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, mdm.prepared]
-          # Every reading of the bundle as one publication.
-          input:
-            keys: {table: submissions, record_column: record, dataset: sec.submissions.person.v1}
-            readings: {read: {all: read}}
-        - name: merge
-          operation: mastering.merge
-          requires: [records]
-          key: "{batch_id}"
-          leases: ["mdm:consumer:{consumer}"]
-          checks: [input.hash, output.receipt, mdm.committed]
-        # The Change Journal records each file the run processed, once its
-        # merge is verified, so a later run names only changed files (ticket 22).
-        - name: processed
-          operation: journal.record
-          requires: [merge]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, journal.recorded]
-      checks: [manifest.hash, work.accounting, journal.delivered]
+      extract:
+        # The documents in units of at most 8 MiB, each at most max_artifacts.
+        - {name: read, read: null, units: {slices: {bytes: 8388608}}}
+      # Every reading of the bundle as one publication.
+      master:
+        names: {prepare: records}
+        keys: {table: submissions, record_column: record, dataset: sec.submissions.person.v1}
+        readings: {read: {all: read}}

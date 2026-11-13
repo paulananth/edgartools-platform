@@ -15,47 +15,10 @@ bookkeeping:
   version: 2
   targets:
     silver:
-      steps:
-        - name: facts
-          operation: source.read
-          requires: []
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          # The filers' files in units of at most 8 MiB.
-          units: {slices: {bytes: 8388608}}
-          input: {contract: facts.yaml}
-        - name: land
-          operation: silver.land
-          requires: [facts]
-          key: "{unit}"
-          leases: ["silver:{silver}"]
-          checks: [input.hash, output.receipt, silver.landed]
-          input: {keys: {table: company_fact, silver: company_fact}}
-        # Each derived table is rebuilt whole (both are snapshots), and only when
-        # the Change Journal names a changed file.
-        - name: line_items
-          operation: silver.derive
-          requires: [land]
-          key: "{unit}"
-          # Held while it writes company_line_item and reads company_fact, so another run
-          # cannot land facts or rebuild the table meanwhile.
-          leases: ["silver:{silver}", "silver:{reads}"]
-          checks: [input.hash, output.receipt, silver.derived]
-          input: {keys: {build: line_items, silver: company_line_item, reads: company_fact}}
-        - name: measures
-          operation: silver.derive
-          requires: [line_items]
-          key: "{unit}"
-          leases: ["silver:{silver}", "silver:{reads}"]
-          checks: [input.hash, output.receipt, silver.derived]
-          input: {keys: {build: measures, silver: company_measure, reads: company_line_item}}
-        # The Change Journal records each file the run landed and derived from, so
-        # a later run names only changed files (ticket 22).
-        - name: processed
-          operation: journal.record
-          requires: [measures]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, journal.recorded]
-      checks: [manifest.hash, work.accounting, journal.delivered]
+      extract:
+        - {name: facts, read: facts.yaml, units: {slices: {bytes: 8388608}}}
+      # Each derived table is rebuilt whole, and only when the Change Journal names a changed file.
+      silver:
+        - {name: land, land: {silver: company_fact, table: company_fact}}
+        - {name: line_items, derive: {build: line_items, reads: company_fact, silver: company_line_item}}
+        - {name: measures, derive: {build: measures, reads: company_line_item, silver: company_measure}}
