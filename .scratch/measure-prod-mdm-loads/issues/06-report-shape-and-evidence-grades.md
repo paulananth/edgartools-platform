@@ -6,6 +6,14 @@ Blocked by: 02, 04
 
 ## Question
 
+Resolved so far on this map: the entity-kind model
+([05](05-entity-kind-contribution-model.md)), the retained run evidence and its join
+([04](04-retained-run-evidence-join.md)), the inventory
+([03](03-source-target-inventory-and-dependencies.md)), and the initialization timestamps
+([02](02-retained-initialization-timestamps.md)). This ticket settles how those findings are written
+down.
+
+
 The plan fixes the report's sections but not the shape of a row when the evidence is partial. The
 report must be readable, must never imply a measurement it cannot support, and must reconcile
 `considered = selected + already_processed` while keeping every bundle run ID.
