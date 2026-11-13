@@ -143,7 +143,6 @@ def _release_waiting(store, settings: Settings, arrived: set) -> int:
     waits = sorted(_waiting_sources(settings))
     if not waits:
         return 0
-    store.index_waiting(store.unindexed_waiting(WAITING, waits))  # a store that held waiting records before keys
     tried, released = set(), 0
     while arrived:
         ready = [r for r in store.waiting_for(arrived) if r["subject"] not in tried and r["source_code"] in waits

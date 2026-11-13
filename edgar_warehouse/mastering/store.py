@@ -339,17 +339,6 @@ class Store:
         if rows:
             self.insert("mastering_name_key", ("role", "value", "subject"), sorted(rows))
 
-    def unindexed_waiting(self, reason: str, sources: list) -> list[dict]:
-        """Records that wait with no key yet (a store that held waiting records before keys existed)."""
-        found = []
-        for block in blocks(sources):
-            found += [json.loads(b) for (b,) in self.rows(
-                "select r.body from mastering_review v join mastering_record r on r.subject=v.subject "
-                "where v.reason=%s and v.open_review=1 and r.entity_id is null "
-                f"and r.source_code in ({marks(block)}) and not exists (select 1 from mastering_name_key k "
-                "where k.role='waiting' and k.subject=v.subject)", [reason, *block])]
-        return found
-
     def waiting_for(self, arrived) -> list[dict]:
         """The waiting records that state an identifier a golden record now holds: `arrived` is {(namespace, value)}."""
         subjects = set()
