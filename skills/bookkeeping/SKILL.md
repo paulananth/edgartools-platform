@@ -169,7 +169,7 @@ reach Bookkeeping only through these commands, which print JSON:
 | Command | Who calls it | What it does |
 |---|---|---|
 | `bookkeeping claim <run> --profile P --limit N` | worker | Claims units and prints task envelopes |
-| `bookkeeping renew --envelope -` | worker | Renews the lease while the work runs |
+| `bookkeeping renew --envelope -` | worker | Renews the lease while the work runs. A renewal that cannot reach Bookkeeping is tried again at the next heartbeat; one Bookkeeping refuses stops the work at once |
 | `bookkeeping report --envelope - --candidate URI --sha256 H --checks URI --checks-sha256 H` | worker | Completes the unit: its output and the worker's own check report, bound to that work, with every check the step names. The first report pins the profile's runtime for the run |
 | `bookkeeping fail --envelope - --message M` | worker | Gives the attempt up; the unit waits |
 | `bookkeeping finalize <run>` | operator | Delivers control's events and records the run's checks |
