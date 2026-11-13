@@ -38,21 +38,23 @@ A proposed table in the prepared store is still Silver certified and still has
 no data class. Do not invent a class, a domain, or a certification the data
 model does not name.
 
-A relationship type is vocabulary. Its permitted ends stay on that asset;
-they are not evidence that a relationship exists. A dataset that declares a
-type is not lineage to that type. The
+A relationship type is vocabulary. Read its versioned RDM authority and
+attribute locations in
+[data-modeling](../data-modeling/SKILL.md#what-the-platform-already-says).
+Its permitted ends are not evidence that a relationship exists. A dataset
+that declares a type is not lineage to that type. The
 [openmetadata](../openmetadata/SKILL.md) skill owns its destination mapping.
 The governance picture of a target is the
 [data-governance lineage skill](../data-governance/LINEAGE.md).
 
 ### Confirm relationships before showing them
 
-Show only real, confirmed relationships, never possible relationships. Check
-each relevant evidence layer in the selected environment: mastered links,
-retained source assertions and landed transaction references. Verify the
-installed storage contract rather than querying a legacy copy. An empty MDM
-relationship table does not prove that source-reported associations or
-transaction connections are absent.
+Show only real, confirmed relationship facts, never possible relationships.
+Their evidence may be mastered links in MDM, retained source assertions, or
+landed transaction references in Silver. For a fact projection, check each
+relevant layer in the selected environment against its installed storage
+contract rather than a legacy copy. An empty MDM relationship table does not
+prove that source-reported associations or transaction connections are absent.
 
 For a mastered link, verify retained endpoint masters, exact type and direction,
 committed provenance and applicable business dates. For a source-reported
@@ -69,15 +71,21 @@ implemented worker is not confirmation. Do not expand permitted kinds into
 every possible pair. Keep definitions separately as vocabulary, without
 drawing them as real links on domain or glossary relationship graphs.
 
-Report counts, evidence time, layer and scope. Zero verified facts across the
-relevant layers means show none; an unavailable or incomplete layer means
-unknown, not zero. Keep record values
-and private evidence references out of public artifacts. Before publication,
-compare every proposed relationship with this evidence. If the publisher
-derives links from permitted types alone, report that capability gap and do
-not run it to recreate unsupported links. The destination skill owns scoped
-cleanup and native readback. Metadata readback confirms storage, not business
-truth; both evidence checks are required.
+For a fact projection, report counts, evidence time, layer and scope. Zero
+verified facts means show none; an unavailable or incomplete layer means
+unknown, not zero. Omit affected fact edges when evidence is unknown, not the
+vocabulary, domains, datasets, glossary annotations or genuine dataset/pipeline
+lineage. Keep record values and private evidence references out of public
+artifacts.
+
+The configuration-only `rules catalog plan|publish` path publishes vocabulary
+and metadata lineage, not relationship facts: it emits no domain-to-type or
+identity-to-type fact edges from permitted endpoints. It does not read live
+relationship evidence or prove that facts are absent. Publish that metadata
+without a live-fact prerequisite; any separate fact projection must compare
+each proposed edge with the evidence above. The destination skill owns scoped,
+authorized cleanup and native readback. Readback confirms metadata storage,
+not business truth.
 
 ## Understand the model before publishing
 

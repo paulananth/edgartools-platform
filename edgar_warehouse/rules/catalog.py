@@ -25,9 +25,9 @@ The catalog is one OpenMetadata database service, `edgartools-rules`:
   uses it;
 - one subject domain per mastered kind and per relationship endpoint, the
   glossaries for those domains, and Gold on the master store and Silver on
-  the prepared store. A relationship type is one asset. The glossary
-  Relations Graph is the identity term of the from end linked to that type
-  term, with the type as the edge. A mention in a definition is not a relation.
+  the prepared store. A relationship type is one asset and one vocabulary
+  term. Its allowed endpoint kinds describe the type, not observed links:
+  configuration alone supplies no domain or glossary relationship edges.
 
 `plan` is pure: the rules in, the catalog as data out. `publish` sends it.
 """
@@ -66,7 +66,6 @@ GOLD, SILVER_MARK = "Certification.Gold", "Certification.Silver"
 # that does not start with a domain's display name (ticket 158, ticket 159).
 KIND_HOME = {"Adviser": "company", "Audit Firm": "company", "Fund Company": "company",
              "Fund": "fund_structure", "Fund Series": "fund_structure", "Market/Venue": "market_venue"}
-PLANNED = "(planned: no rule reads this type yet and no link is loaded)"
 RELATIONSHIP_FACTS = (" Each link has a capacity, and holds over one or more dated intervals, "
                       "stated by a filing or observed from one.")
 # The four data classes: tag name, its CONTEXT.md heading, and the words when CONTEXT.md has none.
@@ -88,37 +87,6 @@ def quote(name: str) -> str:
 
 def fqn(*parts: str) -> str:
     return ".".join(quote(p) for p in parts)
-
-
-def glossary_relation_type_name(code: str) -> str:
-    """OpenMetadata relationType is a letter then alphanumerics. A pinned
-    type code uses underscores, so ISSUED_BY is issuedBy on the graph."""
-    parts = [p for p in re.sub(r"[^A-Za-z0-9]+", "_", code).split("_") if p]
-    if not parts:
-        raise ValueError(f"No glossary relation type name in {code!r}")
-    return parts[0].lower() + "".join(p.capitalize() for p in parts[1:])
-
-
-def _glossary_relation_type(name: str, display: str, description: str) -> dict:
-    return {
-        "name": name,
-        "displayName": display,
-        "description": description,
-        "rdfPredicate": f"https://edgartools.org/ontology/{name}",
-        "domain": [],
-        "range": [],
-        "isSymmetric": False,
-        "isTransitive": False,
-        "isFunctional": False,
-        "isInverseFunctional": False,
-        "isReflexive": False,
-        "isIrreflexive": False,
-        "isAsymmetric": True,
-        "isCrossGlossaryAllowed": True,
-        "category": "associative",
-        "isSystemDefined": False,
-        "color": "#067647",
-    }
 
 
 def rules_digest(root: Path) -> str:
@@ -666,19 +634,11 @@ def _governed(pipelines: list[dict], tables: list[dict], table_lineage: list[dic
     return new_tables, new_lineage, edges
 
 
-def _codes_read(root: Path, codes: list[str]) -> set[str]:
-    """The relationship type codes some file under `sources/` names: a type no
-    rule reads is planned, not real."""
-    text = "\n".join(path.read_text(encoding="utf-8") for path in sorted((root / "sources").rglob("*.yaml")))
-    return {code for code in codes if re.search(rf"(?<![A-Za-z0-9_-]){re.escape(code)}(?![A-Za-z0-9_-])", text)}
-
-
-def _relationships(root: Path, policy: dict, read: set[str]) -> tuple[list[dict], list[dict]]:
-    """Pinned type definitions and the declared datasets that supply them."""
-    from .mapdoc import relationship_rows
+def _relationships(root: Path, policy: dict) -> list[dict]:
+    """Pinned vocabulary assets, not evidence that any relationship exists."""
     rows = relationship_rows(root, policy)
     roots = {r["code"]: r for r in rows if r.get("parent_code") is None}
-    tables, lineage = [], []
+    tables = []
     for name, row in sorted(roots.items()):
         props = row.get("properties") or {}
         capacities = [{"code": r["code"], "label": r["label"], "properties": r.get("properties") or {}}
@@ -688,19 +648,17 @@ def _relationships(root: Path, policy: dict, read: set[str]) -> tuple[list[dict]
         roles = ", ".join(item["label"] for item in capacities if item.get("label"))
         text = row.get("definition") or row["label"]
         if origin or destination:
-            text += f" From {origin or 'one subject'} to {destination or 'one subject'}."
+            text += f" Allowed endpoints: from {origin or 'one subject'} to {destination or 'one subject'}."
         if roles:
             text += f" Roles: {roles}."
         text += RELATIONSHIP_FACTS
-        if name not in read:
-            text += " " + PLANNED
         tables.append({"name": name, "displayName": row.get("label") or _display(name),
                        "databaseSchema": fqn(SERVICE, MDM, "relationships"),
                        "description": text,
                        "columns": [{"name": key, "dataType": TEXT,
                                     "description": json.dumps(value, ensure_ascii=False, sort_keys=True)}
                                    for key, value in sorted(props.items())]})
-    return tables, lineage
+    return tables
 
 
 def _display(name: str) -> str:
@@ -779,9 +737,8 @@ def _data_classes(root: Path, tables: list[dict], kinds) -> dict:
             "data_class_marks": sorted(marks, key=lambda item: item["table"])}
 
 
-def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict], read: set[str]) -> dict:
-    """Subject domains, their glossaries, and store certifications. A
-    relationship type is one asset. Its ends are not extra domain links."""
+def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict]) -> dict:
+    """Subject vocabulary and store certifications, without relationship facts."""
     rows = relationship_rows(root, policy)
     kinds = set((policy.get("kinds") or {}))
     ends = set()
@@ -824,13 +781,11 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict], 
               "glossary": home} for heading, description in _context_terms(root)
              if (home := glossary_of(heading)) and not heading.endswith(" Profile")]
     by_term = {term["name"]: term for term in terms}
-    home_of = {}  # a real relationship type's code -> the glossary of its first `from` domain
     for row in roots:
         first = next(iter((row.get("properties") or {}).get("from") or []), None)
         home = ENDPOINT_CATALOG_NAME.get(first, first)
-        if row["code"] not in read or home not in names:
+        if home not in names:
             continue
-        home_of[row["code"]] = home
         by_term[row["code"]] = {
             "name": row["code"], "displayName": row.get("label") or row["code"],
             "description": row.get("definition") or row["label"], "glossary": home,
@@ -858,19 +813,6 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict], 
     glossaries = [{"name": domain["name"], "displayName": domain["displayName"], "description":
                    "The words for this subject, taken from the platform glossary. A projection. Not an approval.",
                    "domains": [domain["name"]]} for domain in domains]
-    domain_lineage = []
-    known = set(names)
-    for row in roots:
-        props = row.get("properties") or {}
-        ends = []
-        for code in (props.get("from") or []) + (props.get("to") or []):
-            domain = ENDPOINT_CATALOG_NAME.get(code, code)
-            if domain in known and domain not in ends:
-                ends.append(domain)
-        table = fqn(SERVICE, MDM, "relationships", row["code"])
-        description = row["code"] + ": " + (row.get("definition") or row["label"])
-        for domain in ends:
-            domain_lineage.append({"domain": domain, "table": table, "description": description})
     identity_of = {}
     by_glossary: dict[str, list[dict]] = defaultdict(list)
     for term in by_term.values():
@@ -884,34 +826,6 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict], 
             chosen = in_glossary[0]
         if chosen is not None:
             identity_of[domain["name"]] = f"{chosen['glossary']}.{quote(chosen['name'])}"
-    glossary_relations = []
-    glossary_relation_types: dict[str, dict] = {}
-    seen_relations = set()
-
-    def add_relation(identity: str | None, type_term: str, relation_type: str,
-                     display: str, description: str) -> None:
-        if not identity or identity == type_term:
-            return
-        key = (identity, type_term, relation_type)
-        if key in seen_relations:
-            return
-        seen_relations.add(key)
-        glossary_relation_types[relation_type] = _glossary_relation_type(
-            relation_type, display, description)
-        glossary_relations.append(
-            {"from": identity, "to": type_term, "relationType": relation_type})
-
-    for row in roots:
-        if row["code"] not in home_of:
-            continue
-        type_term = f"{home_of[row['code']]}.{quote(row['code'])}"
-        relation_type = glossary_relation_type_name(row["code"])
-        display = row["label"]
-        description = row.get("definition") or display
-        props = row.get("properties") or {}
-        for code in props.get("from") or []:
-            domain = ENDPOINT_CATALOG_NAME.get(code, code)
-            add_relation(identity_of.get(domain), type_term, relation_type, display, description)
     def subject_assets(domain: str) -> list[str]:
         prefix = fqn(SERVICE, MDM, MASTER_RECORDS, domain)
         return sorted(name for name, domains_ in membership.items()
@@ -943,9 +857,8 @@ def _meaning(root: Path, policy: dict, tables: list[dict], lineage: list[dict], 
             **_data_classes(root, tables, kinds),
             "glossary_terms": [by_term[name] for name in sorted(by_term)],
             "memberships": memberships, "certifications": certifications,
-            "domain_lineage": domain_lineage, "glossary_relations": glossary_relations,
-            "glossary_relation_types": [glossary_relation_types[name]
-                                        for name in sorted(glossary_relation_types)],
+            "domain_lineage": [], "glossary_relations": [],
+            "glossary_relation_types": [],
             "products": products}
 
 
@@ -1059,10 +972,8 @@ def plan(root: Path | None = None) -> dict:
     silver_schemas, profiled, profiled_lineage = _profiles(root)
     tables += profiled
     lineage += profiled_lineage
-    read = _codes_read(root, [row["code"] for row in relationship_rows(root, policy) if row.get("parent_code") is None])
-    relationship_tables, relationship_lineage = _relationships(root, policy, read)
+    relationship_tables = _relationships(root, policy)
     tables += relationship_tables
-    lineage += relationship_lineage
     bodies = [(path, files.load_source(path)) for path in sorted((root / "sources").glob("*/source.yaml"))]
     # A feed captures one bronze family; a source that declares no feed of its own
     # reads the files of each feed that captures its family (a second kind from
@@ -1158,7 +1069,7 @@ def plan(root: Path | None = None) -> dict:
         "service_lineage": service_lineage,
         "profiles": [mark for mark in _profile_marks(profiles)
                      if mark["table"] in {_table_name(table) for table in tables}],
-        **_meaning(root, policy, tables, lineage, read),
+        **_meaning(root, policy, tables, lineage),
         **_quality(root, tables, kinds),
     }
 
@@ -1283,9 +1194,7 @@ def _upsert(call: Call, endpoint: str, body: dict, expected_name: str | None = N
 
 
 def _allow_several_domains(call: Call) -> None:
-    """A relationship type belongs to every endpoint. The server's default
-    refuses more than one domain, so that rule is switched off when a plan
-    needs it. Other rules stay as the server has them."""
+    """Permit configured multi-domain dataset memberships, preserving other rules."""
     page = call("GET", "/system/settings") or {}
     row = next((item for item in page.get("data") or [] if item.get("config_type") == "entityRulesSettings"), None)
     rules = ((row or {}).get("config_value") or {}).get("entitySemantics") or []
@@ -1431,7 +1340,26 @@ def _publish_vocabulary(plan: dict, call: Call) -> None:
     for term in plan.get("glossary_terms") or []:
         body = {key: term[key] for key in ("name", "displayName", "description", "glossary")}
         expected = f"{body['glossary']}.{quote(body['name'])}"
-        answer = call("PUT", "/glossaryTerms", body) or {}
+        answer = call("GET", "/glossaryTerms/name/" + escape(expected, safe=""),
+                      params={"fields": "relatedTerms"})
+        if answer is None:
+            answer = call("PUT", "/glossaryTerms", body) or {}
+        else:
+            if answer.get("fullyQualifiedName") != expected or not answer.get("id"):
+                raise CatalogError(f"The server returned an unexpected glossary term for {expected}")
+            # PUT omits native relationship fields and can clear human curation.
+            # Only these two vocabulary fields belong to the rules projection.
+            changes = []
+            for key in ("displayName", "description"):
+                equal = (_description_equal(body[key], answer.get(key)) if key == "description"
+                         else body[key] == answer.get(key))
+                if not equal:
+                    changes.append({"op": "add", "path": "/" + key, "value": body[key]})
+            if changes:
+                term_id = answer["id"]
+                answer = call("PATCH", "/glossaryTerms/" + term_id, changes) or {}
+                if answer.get("id") != term_id:
+                    raise CatalogError(f"The server changed the identity of {expected}")
         if answer.get("fullyQualifiedName") != expected:
             raise CatalogError(f"The server named glossary term {expected} {answer.get('fullyQualifiedName')}")
         term["fullyQualifiedName"] = expected
@@ -1439,8 +1367,6 @@ def _publish_vocabulary(plan: dict, call: Call) -> None:
             term["id"] = answer["id"]
     if any(len(item["domains"]) > 1 for item in plan.get("memberships") or []):
         _allow_several_domains(call)
-    _publish_glossary_relation_types(plan, call)
-    _publish_glossary_relations(plan, call)
 
 
 def _draft_terms(plan: dict, call: Call) -> None:
@@ -1458,80 +1384,6 @@ def _draft_terms(plan: dict, call: Call) -> None:
         if not pending:
             return
     raise CatalogError(f"The server keeps {len(pending)} glossary terms out of Draft")
-
-
-def _term_id(call: Call, fqn_name: str, known: dict[str, str]) -> str | None:
-    if fqn_name in known:
-        return known[fqn_name]
-    answer = call("GET", "/glossaryTerms/name/" + escape(fqn_name, safe=".")) or {}
-    found = answer.get("id")
-    if found:
-        known[fqn_name] = found
-    return found
-
-
-def _publish_glossary_relation_types(plan: dict, call: Call) -> None:
-    """The graph draws displayName. Register each pinned type as a camelCase
-    relationType so the edge says Issued by, not Related To."""
-    wanted = {item["name"]: item for item in plan.get("glossary_relation_types") or [] if item.get("name")}
-    if not wanted:
-        return
-    page = call("GET", "/system/settings/glossaryTermRelationSettings") or {}
-    existing = ((page.get("config_value") or {}).get("relationTypes") or [])
-    if not existing:
-        raise CatalogError("The server has no glossary relation types")
-    by_name = {item["name"]: item for item in existing if item.get("name")}
-    for name, spec in wanted.items():
-        current = by_name.get(name) or {}
-        by_name[name] = {**current, **spec, "isSystemDefined": False}
-    call("PUT", "/system/settings", {
-        "config_type": "glossaryTermRelationSettings",
-        "config_value": {"relationTypes": list(by_name.values())},
-    })
-
-
-def _publish_glossary_relations(plan: dict, call: Call) -> None:
-    """The glossary Relations Graph is identity-term to type-term. The edge
-    is the type; the node is the type term. Do not draw the to ends."""
-    known = {term["fullyQualifiedName"]: term["id"]
-             for term in plan.get("glossary_terms") or []
-             if term.get("fullyQualifiedName") and term.get("id")}
-    planned: dict[str, set[tuple[str, str]]] = defaultdict(set)
-    for edge in plan.get("glossary_relations") or []:
-        planned[edge["from"]].add((edge["to"], edge["relationType"]))
-        from_id = _term_id(call, edge["from"], known)
-        to_id = _term_id(call, edge["to"], known)
-        if not from_id or not to_id:
-            raise CatalogError(f"The server has no glossary terms {edge['from']} {edge['to']}")
-        call("POST", f"/glossaryTerms/{from_id}/relations",
-             {"relationType": edge["relationType"], "term": {"id": to_id, "type": "glossaryTerm"}})
-    for identity, wanted in planned.items():
-        from_id = _term_id(call, identity, known)
-        if not from_id:
-            continue
-        body = call("GET", f"/glossaryTerms/{from_id}", params={"fields": "relatedTerms"}) or {}
-        for item in body.get("relatedTerms") or []:
-            other = (item.get("term") or {})
-            other_fqn = other.get("fullyQualifiedName")
-            other_id = other.get("id")
-            relation_type = item.get("relationType")
-            if other_id and (other_fqn, relation_type) not in wanted:
-                call("DELETE", f"/glossaryTerms/{from_id}/relations/{other_id}",
-                     params={"relationType": relation_type})
-
-
-def _drop_invented_domain_edges(plan: dict, call: Call) -> None:
-    """A table on two domains makes the server draw a domain-to-domain edge.
-    That edge is not a relationship type. Remove it."""
-    for domain in plan.get("domains") or []:
-        graph = call("GET", "/lineage/domain/name/" + escape(domain["name"], safe=""),
-                     params={"upstreamDepth": 1, "downstreamDepth": 1}) or {}
-        edges = (graph.get("upstreamEdges") or []) + (graph.get("downstreamEdges") or [])
-        for edge in edges:
-            details = edge.get("lineageDetails") or {}
-            if details.get("source") != "ChildAssets":
-                continue
-            call("DELETE", f"/lineage/domain/{edge['fromEntity']}/domain/{edge['toEntity']}")
 
 
 def _publish_marks(plan: dict, call: Call, ids: dict[str, str]) -> None:
@@ -1776,10 +1628,6 @@ def publish(plan: dict, call: Call, draft_terms: bool = False, results: dict | N
         if name in domains_of:
             body["domains"] = domains_of[name]
         name, answer = name, _upsert(call, "/tables", body)
-        if table["databaseSchema"].endswith(".relationships"):
-            # A put that omits domains leaves the old ends in place, and each
-            # end is stored as another relationship. Clear them.
-            call("PATCH", f"/tables/{answer['id']}", [{"op": "replace", "path": "/domains", "value": []}])
         if answer["fullyQualifiedName"] != name:  # lineage names columns by this name
             raise CatalogError(f"The server named table {name} {answer['fullyQualifiedName']}")
         ids[name] = answer["id"]
@@ -1797,7 +1645,6 @@ def publish(plan: dict, call: Call, draft_terms: bool = False, results: dict | N
             raise CatalogError(f"The server named quality case {expected} {answer.get('fullyQualifiedName')}")
     quality_results_sent = _publish_results(plan, call, results or {})
     _publish_marks(plan, call, ids)
-    _drop_invented_domain_edges(plan, call)
     for product in plan.get("products") or []:
         body = {key: product[key] for key in ("name", "displayName", "description", "domains", "dataProductType")}
         body["tags"] = [{"tagFQN": tag, "source": "Glossary", "labelType": "Manual", "state": "Suggested"}
@@ -1813,10 +1660,6 @@ def publish(plan: dict, call: Call, draft_terms: bool = False, results: dict | N
         if inputs:
             call("PUT", f"/dataProducts/{escape(product['name'], safe='')}/inputPorts/add",
                  {"assets": inputs, "dryRun": False})
-    for edge in plan.get("domain_lineage") or []:
-        call("PUT", "/lineage/domain/name/" + escape(edge["domain"], safe="")
-             + "/table/name/" + escape(edge["table"], safe=""),
-             {"description": edge["description"], "source": "Manual"})
     pipeline_ids = {}
     pipeline_statuses = {}
     pipeline_services = plan.get("pipeline_services") or []

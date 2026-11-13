@@ -1,4 +1,5 @@
 """Catalog coverage follows configuration rather than a fixed entity list."""
+import json
 import shutil
 
 import pytest
@@ -52,14 +53,39 @@ def test_pinned_relationship_types_and_endpoints_are_explicit_in_catalog_and_wor
     plan = catalog.plan(root)
     actual = {t["name"]: t for t in plan["tables"] if t["databaseSchema"] == catalog.fqn(catalog.SERVICE, "mdm", "relationships")}
     assert set(actual) == {r["code"] for r in definitions}
+    terms = {term["name"]: term for term in plan["glossary_terms"]}
+    assert plan["domain_lineage"] == []
+    assert plan["glossary_relations"] == []
+    assert plan["glossary_relation_types"] == []
     for row in definitions:
         table = actual[row["code"]]
+        assert table["displayName"] == row["label"]
+        assert row["definition"] in table["description"]
+        assert {c["name"]: json.loads(c["description"]) for c in table["columns"]} == row["properties"]
+        term = terms[row["code"]]
+        assert term["displayName"] == row["label"]
+        assert term["description"] == row["definition"]
+        assert term["table"] == catalog.fqn(catalog.SERVICE, "mdm", "relationships", row["code"])
         assert {c["name"] for c in table["columns"]} == set(row["properties"])
         for value in row["properties"]["from"] + row["properties"]["to"]:
             shown = catalog._display(catalog.ENDPOINT_CATALOG_NAME.get(value, value))
             assert shown in table["description"]
     sheets = mapdoc.documents(root)[root / "merge" / "relationships.xlsx"][1]
     assert {row[0] for row in sheets["Relationship types"][1:]} == {r["code"] for r in definitions}
+
+
+def test_configuration_only_relationship_vocabulary_preserves_dataset_and_pipeline_lineage():
+    plan = catalog.plan()
+    source = catalog.fqn(catalog.SERVICE, "sources", "sec.company", "sec.company.v1")
+    master = catalog.fqn(catalog.SERVICE, "mdm", "master_records", "company")
+    assert any(edge["from"] == source and edge["to"] == master for edge in plan["lineage"])
+    assert any(edge["inbound"] and edge["table"] == source
+               for edge in plan["service_lineage"] if "table" in edge and edge.get("inbound"))
+    assert any(edge.get("table") == master for edge in plan["service_lineage"])
+    assert not any(".mdm.relationships." in edge["from"] or ".mdm.relationships." in edge["to"]
+                   for edge in plan["lineage"])
+    assert plan["domain_lineage"] == []
+    assert plan["glossary_relations"] == []
 
 
 def test_relationship_metadata_refuses_a_changed_published_pin(tmp_path):

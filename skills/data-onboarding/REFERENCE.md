@@ -181,15 +181,22 @@ export of the Rules Database carries them.
 
 ## Relationship types
 
-Every relationship type MDM masters is a code in RDM code set
-`mdm-relationship-types` (operator: "Use RDM for keeping
-types and other information"). The Mastering Policy pins it
+Every relationship type MDM masters is a code in versioned RDM code set
+`mdm-relationship-types` (operator: "Use RDM for keeping types and other
+information"). It owns the code's label, definition and source, allowed
+endpoints, endpoint profiles, hierarchy rules, capacities and other type
+constraints; see
+[data-modeling](../data-modeling/SKILL.md#what-the-platform-already-says)
+for their attribute locations. The Mapping Document is a generated view, not
+another vocabulary authority. The Mastering Policy pins the code set
 (`relationships: {pin: mdm-relationship-types}` in `rules/merge/policy.yaml`,
 its version and sha256 in `rules/merge/reference-pins.yaml`), so a new version
-is a new pin, a new policy, approved by its digest. A new type needs no code
-change: draft a new code set version (data-profiling, "Reference data") with
-the type as a code whose `definition` is its plain words and source and whose
-`properties` are its rules:
+is a new pin, a new policy, approved by its digest. Inspect that version before
+proposing a missing attribute; change RDM through its approved version workflow,
+never by hand-editing published canonical rows. A new type using supported
+properties needs no code change: draft a new code set version (data-profiling,
+"Reference data") with the type as a code whose `definition` is its plain words
+and source and whose `properties` are its rules:
 
 ```yaml
 code: <TYPE_NAME>
@@ -341,7 +348,11 @@ or fix not in these tables is new code: log it for a ticket.
 ## Mapping Documents
 
 `edgar-warehouse rules mapdoc write|diff|check [--only <source, kind, pipeline or relationships>]`
-works from the rules files alone, with no database.
+generates Mapping Documents from rules and pinned published RDM rows alone,
+with no database. They describe configured mappings, not landed facts or
+mastered relationship evidence. Supported steward edits still use the existing
+review/import workflow into the owning configuration, with Notes retained;
+workbook cells are not an independent relationship-vocabulary authority.
 
 | Workbook | Sheets |
 |---|---|
@@ -383,8 +394,15 @@ same rules again changes nothing.
 The catalog also publishes pinned relationship type definitions and capacities,
 all dataset quality rules, and native pipeline definitions for every source and
 standalone target, with task operations, checks and downstream dependencies.
-These definitions are not activation evidence. `check` reads back the owned
-metadata and lineage, including pipeline tasks, and fails on drift.
+The configuration-only publisher emits vocabulary, not domain-to-type or
+identity-to-type relationship-fact edges from configured endpoint kinds. It
+does not read live relationship evidence. Definitions are not activation or
+fact evidence; unknown facts leave vocabulary and genuine metadata lineage
+publishable. For actual MDM links, retained assertions and landed Silver
+references, follow
+[Confirm relationships before showing them](../data-catalog/SKILL.md#confirm-relationships-before-showing-them).
+`check` reads back the owned metadata and lineage, including pipeline tasks,
+and fails on drift; it does not establish business truth.
 
 Full business completion also requires native entity domains, glossaries,
 meaningful asset/column definitions and associations, and named quality cases.
