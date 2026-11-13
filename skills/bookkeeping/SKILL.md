@@ -99,19 +99,35 @@ A target is written in one shape, and the steps follow from it
 
 ```yaml
 <target>:
-  extract:                       # the passes over the source's files, by name and in order
-    rows: {read: rows.yaml, units: {each: file}}
-    joined: {combine: join.yaml, readings: {rows: {all: rows}}}
-    record: record.yaml          # a rules file alone is read over the pass before it
+  extract: record.yaml           # the source's last rules file; several when silver lands from another
   master: {keys: {table: <table>, record_column: record, dataset: <dataset>}}
   silver:
     - {name: land_facts, land: {table: <table>, silver: <silver table>}}
 ```
 
-A pass waits for the passes it reads (`lookups`, `readings`, `pieces`), so no
-target writes a wait, a key, a lease, a check or the record step. Mastering
-reads the last pass whole unless `master.readings` says otherwise. Writing a
-target another way that gives the same steps loads no file again.
+Each rules file says what it reads in its own `pass` block, so the passes
+follow from the files:
+
+```yaml
+pass:
+  files: "*.zip"                 # a read: which captured files, its units and context
+  units: {each: file}
+  lookups: {filed: {from: dates.yaml, table: filed, column: id, value_column: filed}}
+---
+pass: {readings: {rows: {all: rows.yaml}}}     # a join: the rules files it joins
+---
+pass: {pieces: {step: join.yaml}}              # the record: the join it reads over
+```
+
+A pass is named after its file (`row-counts.yaml` is `row_counts`) unless the
+block names it; the source's own `source.yaml` always names its pass. A pass
+waits for the files it names, so no target writes a wait, a key, a lease, a
+check or the record step. The engine reads a rules file without its `pass`
+block. Mastering reads the last pass whole unless `master.readings` says
+otherwise. `capture: copy` or `capture: provider` is a target that only brings
+files in; `record: false` is a second pass over files another target records.
+Writing a target another way that gives the same steps loads no file again;
+renaming a pass or changing what it reads loads the source once more.
 Before a change to a target merges, run each source's end-to-end tests on
 local PostgreSQL (`scripts/dev/adapter_test.sh`), one result per source.
 

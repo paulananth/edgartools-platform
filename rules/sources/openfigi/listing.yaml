@@ -1,3 +1,5 @@
+pass:
+  pieces: {step: lines.yaml}
 # Every listing as a Security's detail row (ticket 120), with its currency
 # (ticket 138 part B3) and its venue's MIC (source.yaml's `mic`), read over lines.yaml's pieces; combine.yaml collects
 # them by the identifier asked. A line's currency is its ticker's code

@@ -43,8 +43,7 @@ bookkeeping:
     # mastered; the Securities chain reads this step's verified units as its
     # `umbrella` pair set (ticket 23), so it runs first.
     subfund-pairs:
-      extract:
-        pairs: {read: subfund-pairs.yaml, units: {each: file}, files: '*rr-golden-copy*'}
+      extract: subfund-pairs.yaml
     # Every Level 1 record of one Golden Copy publication through the Merge Stage. GLEIF finds
     # Companies and never creates one: a record that finds none waits in the Stage. The run
     # gives the publication's record count.
@@ -64,8 +63,7 @@ bookkeeping:
             holder_source: sec.company.v1
             kind: company
       run: {facts: [publication_count]}
-      extract:
-        read: {read: level1-json.yaml, files: '*lei2-golden-copy*', context: {publication_count: {fact: publication_count}}}
+      extract: level1-json.yaml
       master: {keys: {dataset: gleif.level1.v1, record_column: record, table: level1}}
       silver:
         # Links are a silver table, built from the stored records after the merge.

@@ -7,6 +7,10 @@
 # transactions for silver (`thirteenf_filing`), linked to the manager's Company by CIK; nothing
 # goes to MDM. A holding finds its filing by accession number (`thirteenf_holding.accession_number`).
 source: sec.thirteenf.filings
+pass:
+  name: filings
+  files: '*/submissions/sec/cik=*/main/*'
+  units: {slices: {bytes: 8388608}}
 bronze:
   family: submissions
 execution: {profile: source.read, workers: 1, max_artifacts: 512}
@@ -70,7 +74,6 @@ bookkeeping:
   targets:
     # The managers' Companies are mastered by sec.company, which runs first.
     silver:
-      extract:
-        filings: {read: null, units: {slices: {bytes: 8388608}}, files: '*/submissions/sec/cik=*/main/*'}
+      extract: source.yaml
       silver:
         - {name: land, land: {silver: thirteenf_filing, table: filing}}

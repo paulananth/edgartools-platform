@@ -1,3 +1,9 @@
+pass:
+  readings:
+    filings: {all: adviser-filings-csv.yaml}
+    custody: {all: custody-csv.yaml}
+    ciks: {all: ciks-csv.yaml}
+    related: {all: related-csv.yaml}
 # Each adviser filing with the custodians its Schedule D 5.K(3) names (ticket
 # 75): the custody rows' distinct `custodian_id`s, collected by filing and
 # joined onto the filing as `custodians` (an empty list when it names none).

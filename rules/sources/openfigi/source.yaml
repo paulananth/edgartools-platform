@@ -33,6 +33,13 @@
 # file is at least one piece, and an ISIN file projects about 1.4 MB (measured
 # 2026-10-17 on 8 files), so about 700 MB a reading.
 source: openfigi
+pass:
+  name: answers
+  files: id_*/*
+  units: {groups: 16}
+  context: {batch: '{dir}/{base}', id_type: '{dir}'}
+  lookups:
+    asked: {column: key, from: requests.yaml, max_input_bytes: 1048576, max_input_rows: 1000, table: asked, value_column: id}
 bronze:
   family: openfigi
 acquisition:
@@ -1149,34 +1156,16 @@ bookkeeping:
     # no order between them; `id_type` is the folder, OpenFIGI's own idType.
     mastering:
       local: true
-      extract:
-        # Source read and combine run in the loader's process (no claim, lease or
-        # verifier); the run in the database starts at prepare.
-        # Each request file alone, read beside its answer (its sha256 is in the
-        # answer's receipt), so each answer's pair set comes from its own request.
-        requests:
-          read: requests.yaml
-          units: {each: file}
-          files: id_*/*
-          beside: {path: '{dir}/{base}.request.json', sha256: request_sha256}
-          context: {batch: '{dir}/{base}'}
-        # The answers, 16 files a unit (one composed slot each), each tied to the
-        # identifier it was asked for by position, through its request's pairs.
-        answers:
-          read: null
-          units: {groups: 16}
-          files: id_*/*
-          lookups: {asked: {column: key, from: requests, max_input_bytes: 1048576, max_input_rows: 1000, table: asked, value_column: id}}
-          context: {batch: '{dir}/{base}', id_type: '{dir}'}
-        reduce: {combine: reduce.yaml, readings: {answers: {all: answers}}}
-        # The Listing currency (ticket 138 part B3): each identifier and
-        # exchange's lines, roots and tickers counted; each line beside its
-        # group's counts; each listing's detail row with its currency.
-        line_counts: {combine: line-counts.yaml, readings: {answers: {all: answers}}}
-        lines: {combine: lines.yaml, readings: {counts: {step: line_counts}, answers: {all: answers}}}
-        listing: listing.yaml
-        combine: {combine: combine.yaml, readings: {counts: {step: reduce}, answers: {all: answers}, listings: {all: listing}}}
-        record: record.yaml
+      # Source read and combine run in the loader's process (no claim, lease or
+      # verifier); the run in the database starts at prepare.
+      # Each request file alone, read beside its answer (its sha256 is in the
+      # answer's receipt), so each answer's pair set comes from its own request.
+      # The answers, 16 files a unit (one composed slot each), each tied to the
+      # identifier it was asked for by position, through its request's pairs.
+      # The Listing currency (ticket 138 part B3): each identifier and
+      # exchange's lines, roots and tickers counted; each line beside its
+      # group's counts; each listing's detail row with its currency.
+      extract: record.yaml
       master: {keys: {dataset: openfigi.security.v4, record_column: record, table: security}}
 
 dataset_contracts:

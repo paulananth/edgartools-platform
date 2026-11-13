@@ -19,6 +19,10 @@
 # row per CUSIP; mdm.prepare (table `security`) gives the Dataset Contract one
 # record each.
 source: sec.thirteenf.securities
+pass:
+  name: read
+  units: {slices: {bytes: 8388608}}
+  context: {accession_number: {segment: accession}}
 bronze:
   # The capture family the prototype reading names.
   family: sec.thirteenf_infotable
@@ -149,11 +153,7 @@ bookkeeping:
     # the Dataset Contract and merged; each file is then noted in the Change
     # Journal, so an unchanged file is not read again.
     mastering:
-      extract:
-        read: {read: null, units: {slices: {bytes: 8388608}}, context: {accession_number: {segment: accession}}}
-        reduce: {combine: reduce.yaml, readings: {units: {all: read}}}
-        combine: {combine: combine.yaml, readings: {securities: {step: reduce}}}
-        record: record.yaml
+      extract: record.yaml
       master: {keys: {dataset: sec.thirteenf.securities.v2, record_column: record, table: security}}
       silver:
         # The holdings land in silver once the Securities they link to are merged (ticket 183).

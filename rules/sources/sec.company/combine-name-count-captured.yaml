@@ -1,3 +1,8 @@
+pass:
+  name: combine
+  units: {each: main}
+  bind: {APPROVED_CATALOG_CAPTURE_RUN: {fact: catalog_run}, APPROVED_COMPANY_CAPTURE_RUN: {fact: capture_run}}
+  readings: {main: {step: name-count-main.yaml}, catalog_exchange: {all: catalog.yaml}}
 # Company records from a captured submissions reading and the exchange catalog: main documents, forms,
 # tickers and the business address.
 execution:

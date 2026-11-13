@@ -21,6 +21,12 @@
 # Left out: the report's financial figures (FUND_REPORTED_INFO's other
 # columns), detail of a report, not of the Fund.
 source: sec.nport.fund
+pass:
+  name: filings
+  units: {each: file}
+  lookups:
+    filed: {column: accession_number, from: sec.nport.registrant/submissions.yaml, max_input_bytes: 67108864, max_input_rows: 1000000, table: filed, value_column: filed}
+    registrant: {column: accession_number, from: sec.nport.registrant/source.yaml, max_input_bytes: 268435456, max_input_rows: 1000000, table: filing, value_column: cik}
 bronze:
   family: sec.nport-datasets
 # The quarter's fund series through the Merge Stage (ticket 118). The registrant's
@@ -30,22 +36,7 @@ bookkeeping:
   version: 2
   targets:
     mastering:
-      extract:
-        submissions: {read: sec.nport.registrant/submissions.yaml, units: {each: file}}
-        registrants:
-          read: sec.nport.registrant/source.yaml
-          units: {each: file}
-          lookups: {filed: {column: accession_number, from: submissions, max_input_bytes: 67108864, max_input_rows: 1000000, table: filed, value_column: filed}}
-        filings:
-          read: null
-          units: {each: file}
-          lookups:
-            filed: {column: accession_number, from: submissions, max_input_bytes: 67108864, max_input_rows: 1000000, table: filed, value_column: filed}
-            registrant: {column: accession_number, from: registrants, max_input_bytes: 268435456, max_input_rows: 1000000, table: filing, value_column: cik}
-        series: {combine: reduce.yaml, readings: {filings: {all: filings}}}
-        pairs: {combine: lei-pairs.yaml, readings: {series: {step: series}}}
-        combine: {combine: combine.yaml, readings: {series: {step: series}, pairs: {step: pairs}, filings: {all: filings}}}
-        record: record.yaml
+      extract: record.yaml
       master: {keys: {dataset: sec.nport.fund.v1, record_column: record, table: fund}}
       silver:
         # Links are a silver table, built from the stored records after the merge.

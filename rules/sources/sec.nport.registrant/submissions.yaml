@@ -1,3 +1,5 @@
+pass:
+  units: {each: file}
 # N-PORT's submission rows (SUBMISSION.tsv, one per filing): read once,
 # streamed, to give each filing its filing date as sortable text (YYYY MM DD),
 # a pair set (ticket 91) that source.yaml reads with `member_value`, so each

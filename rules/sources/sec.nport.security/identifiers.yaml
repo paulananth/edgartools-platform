@@ -1,3 +1,5 @@
+pass:
+  units: {each: file}
 # N-PORT's identifier rows (IDENTIFIERS.tsv, one or more per holding): read
 # once, streamed, to build the pair set that gives each holding its ISIN
 # (ticket 91: a derived lookup set with `value_column`; source.yaml reads it

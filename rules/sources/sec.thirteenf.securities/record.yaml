@@ -1,3 +1,5 @@
+pass:
+  pieces: {step: combine.yaml}
 # One flat record per CUSIP (ticket 172), read over combine.yaml's pieces, for
 # mdm.prepare (`record_column: record`). The Dataset Contract's adapter reads
 # the combined row's own paths (name, title, class, classes, figi), so the

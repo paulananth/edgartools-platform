@@ -1,3 +1,8 @@
+pass:
+  files: id_*/*
+  units: {each: file}
+  beside: {path: '{dir}/{base}.request.json', sha256: request_sha256}
+  context: {batch: '{dir}/{base}'}
 # OpenFIGI's mapping requests as captured (ticket 80): each file is a list of
 # up to 100 jobs, {idType, idValue}. One row per job, keyed by the file's batch
 # name and the job's one-based position ("<batch>:<position>"). OpenFIGI answers

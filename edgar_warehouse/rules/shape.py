@@ -2,8 +2,9 @@
 
 A target in `source.yaml` says only what is its own:
 
-    extract:   the passes over the source's files, by name and in order: each names the rules file it reads
-               (`read`) or joins (`combine`) with; a rules file alone is read over the pass before it
+    extract:   the source's last rules file (or files). Each rules file says what it reads in its own `pass`
+               block, so the passes follow from the files; a target may instead name each pass itself
+    capture:   `copy` or `provider`, for a target that only brings files in
     master:    the table and Dataset Contract its records are mastered under (none: nothing is mastered)
     silver:    the tables it lands (`land`) or builds from stored rows (`derive`), in order
 
@@ -22,6 +23,11 @@ KINDS = {
     "land": ("silver.land", "{unit}", ["silver:{silver}"], "silver.landed"),
     "derive": ("silver.derive", "{unit}", ["silver:{silver}", "silver:{reads}"], "silver.derived"),
     "record": ("journal.record", "{unit}", ["artifact:{destination}"], "journal.recorded"),
+}
+# A capture brings files in before any extract: a copy of files already held, or a fetch from the provider.
+CAPTURES = {
+    "copy": ("artifact.copy", "{artifact_id}", ["artifact:{destination}"], []),
+    "provider": ("provider.capture", "{accession_number}", ["provider:sec", "output:{destination}"], ["capture.verified"]),
 }
 TARGET_CHECKS = ["manifest.hash", "work.accounting", "journal.delivered"]
 SHAPE = frozenset({"extract", "master", "silver"})
@@ -63,6 +69,57 @@ def _extract(name: str, entry, before: str | None) -> dict:
     return _step(kind, name, _waits(inputs), units=entry.get("units"), inputs=inputs)
 
 
+def _reads(block: dict):
+    """Every place a pass names another pass: (holder, key)."""
+    for lookup in (block.get("lookups") or {}).values():
+        if "from" in lookup:
+            yield lookup, "from"
+    for reading in (block.get("readings") or {}).values():
+        for key in ("step", "all"):
+            if key in reading:
+                yield reading, key
+    if "step" in (block.get("pieces") or {}):
+        yield block["pieces"], "step"
+
+
+def follow(leaves: list, folder) -> dict:
+    """The passes behind a target's rules files, each after the passes it reads.
+
+    A rules file says what it reads in its own `pass` block: its files, units and context, and the other rules
+    files it looks up, joins or reads over. The target names only the last file (or files); a pass is named
+    after its file unless the block names it.
+    """
+    from . import files
+
+    passes, names = {}, {}
+
+    def visit(ref: str, base) -> str:
+        path = (base / ref) if "/" not in ref else base.parent / ref
+        if path in names:
+            return names[path]
+        block = files.load(path).get("pass")
+        if not isinstance(block, dict):
+            raise ShapeError(f"{path.parent.name}/{path.name} has no `pass` block saying what it reads")
+        block = {key: ({name: dict(item) for name, item in value.items()} if key in ("lookups", "readings")
+                       else dict(value) if key == "pieces" else value) for key, value in block.items()}
+        for holder, key in _reads(block):
+            if not str(holder[key]).endswith(".yaml"):
+                raise ShapeError(f"{path.name}: a pass names the rules file it reads, not {holder[key]!r}")
+            holder[key] = visit(holder[key], path.parent)
+        name = block.pop("name", path.stem.replace("-", "_"))
+        if name in passes:
+            raise ShapeError(f"Two passes of one target are named {name}")
+        contract = None if path == folder / "source.yaml" else path.name if path.parent == folder \
+            else f"{path.parent.name}/{path.name}"
+        passes[name] = {"combine" if "readings" in block else "read": contract, **block}
+        names[path] = name
+        return name
+
+    for leaf in leaves:
+        visit(leaf, folder)
+    return passes
+
+
 def _silver(entry: dict, default: list) -> dict:
     kinds = [kind for kind in ("land", "derive") if kind in entry]
     if not isinstance(entry, dict) or len(kinds) != 1 or not isinstance(entry.get("name"), str) \
@@ -72,15 +129,30 @@ def _silver(entry: dict, default: list) -> dict:
     return _step(kind, entry["name"], entry.get("requires", default), inputs={"keys": entry[kind]})
 
 
-def expand(target: dict) -> dict:
+def _capture(target: dict) -> dict:
+    kind = target["capture"]
+    if kind not in CAPTURES or set(target) & (SHAPE | {"steps"}):
+        raise ShapeError(f"`capture` is one of {sorted(CAPTURES)} and the target's only step")
+    operation, key, leases, checks = CAPTURES[kind]
+    rest = {name: value for name, value in target.items() if name != "capture"}
+    return {**rest, "steps": [{"name": "capture", "operation": operation, "requires": [], "key": key,
+                              "leases": list(leases), "checks": ["input.hash", "output.receipt", *checks]}],
+            "checks": target.get("checks", list(TARGET_CHECKS))}
+
+
+def expand(target: dict, folder=None) -> dict:
     """The target with its steps written out; one that already lists steps is returned as it is."""
+    if isinstance(target, dict) and "capture" in target:
+        return _capture(target)
     if not isinstance(target, dict) or not SHAPE & set(target):
         return target
     if "steps" in target:
         raise ShapeError("A target lists steps or is written in the one shape, not both")
     passes = target.get("extract")
+    if isinstance(passes, (str, list)) and passes and folder is not None:
+        passes = follow([passes] if isinstance(passes, str) else passes, folder)
     if not isinstance(passes, dict) or not passes:
-        raise ShapeError("A target's `extract` names each pass over the source's files, at least one")
+        raise ShapeError("A target's `extract` names its last rules file, or each pass by name")
     steps = []
     for name, entry in passes.items():
         steps.append(_extract(name, entry, steps[-1]["name"] if steps else None))
@@ -99,16 +171,21 @@ def expand(target: dict) -> dict:
     for entry in target.get("silver", []):
         steps.append(_silver(entry, base if "land" in entry else last))
         last = [steps[-1]["name"]]
-    waited = {name for step in steps for name in step["requires"]}
-    leaves = [step["name"] for step in steps if step["name"] not in waited]
-    steps.append(_step("record", (target.get("names") or {}).get("record", "processed"), leaves))
-    rest = {key: value for key, value in target.items() if key not in (*SHAPE, "names")}
-    return {**rest, "steps": steps, "checks": target.get("checks", list(TARGET_CHECKS))}
+    checks = list(TARGET_CHECKS)
+    if target.get("record", True):
+        waited = {name for step in steps for name in step["requires"]}
+        leaves = [step["name"] for step in steps if step["name"] not in waited]
+        steps.append(_step("record", (target.get("names") or {}).get("record", "processed"), leaves))
+    else:  # a second pass over files another target records
+        checks.remove("journal.delivered")
+    rest = {key: value for key, value in target.items() if key not in (*SHAPE, "names", "record")}
+    return {**rest, "steps": steps, "checks": target.get("checks", checks)}
 
 
-def expand_source(body: dict) -> dict:
-    """A source document with every target in the one shape written out."""
+def expand_source(body: dict, folder=None) -> dict:
+    """A source document with every target in the one shape written out. `folder` is the source's rules
+    folder: a target that names its last rules file is followed from there."""
     targets = ((body.get("bookkeeping") or {}).get("targets")) if isinstance(body, dict) else None
     if isinstance(targets, dict):
-        body["bookkeeping"]["targets"] = {name: expand(target) for name, target in targets.items()}
+        body["bookkeeping"]["targets"] = {name: expand(target, folder) for name, target in targets.items()}
     return body

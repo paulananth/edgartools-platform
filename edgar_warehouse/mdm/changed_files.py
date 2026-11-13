@@ -47,12 +47,13 @@ def event_key(source: str, processing: str, key: str, sha256: str) -> str:
 
 def source_rules(source: str) -> dict:
     """The source's rules version: every rules file in its folder, by name. A target is taken as the
-    steps it gives, so writing the same steps another way processes no file again."""
+    steps it gives and a rules file without what its pass reads (the steps hold that), so writing the same
+    steps another way processes no file again."""
     from edgar_warehouse.rules import files as rules_files
     from edgar_warehouse.rules.shape import expand_source
 
     folder = rules_files.ROOT / "sources" / source
-    return {path.name: expand_source(rules_files.load(path)) for path in sorted(folder.glob("*.yaml"))}
+    return {path.name: expand_source(rules_files.contract(path), folder) for path in sorted(folder.glob("*.yaml"))}
 
 
 def unprocessed(journal, source: str, processing: str, files: list[tuple[str, str]]) -> list[str]:

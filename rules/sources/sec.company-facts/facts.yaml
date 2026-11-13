@@ -5,6 +5,8 @@
 # (research 03), ticket 45. `company_fact` gives one row per filed fact, the rows
 # silver lands (silver-company-fact.yaml, ticket 46).
 source: sec.company-facts
+pass:
+  units: {slices: {bytes: 8388608}}
 execution: {profile: source.read, workers: 1, max_artifacts: 512, max_input_bytes: 134217728}
 read:
   format: json

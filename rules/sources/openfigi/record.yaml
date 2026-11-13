@@ -1,3 +1,5 @@
+pass:
+  pieces: {step: combine.yaml}
 # One flat record per identifier asked (ticket 80), read over combine.yaml's
 # pieces, for mdm.prepare (`record_column: record`): a cross-reference is read
 # from a path of the record, so each single value is taken out of its sample

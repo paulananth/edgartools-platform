@@ -40,14 +40,7 @@ bookkeeping:
   version: 2
   targets:
     capture:
-      steps:
-        - name: capture
-          operation: artifact.copy
-          requires: []
-          key: "{artifact_id}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt]
-      checks: [manifest.hash, work.accounting, journal.delivered]
+      capture: copy
     # Company preparation and mastering of one bundle, planned by the generic `load` command
     # (ticket 177): the bundle's documents are the main submissions documents and the exchange
     # ticker catalog; the Name Count is a run file read once per bundle, narrowed to the bundle's
@@ -62,41 +55,10 @@ bookkeeping:
       # Source read and combine run in the loader's process (no claim, lease or verifier); the run in the
       # database starts at records (ticket 210).
       run: {facts: [capture_run, catalog_run, observed_at, load_mode]}
-      extract:
-        main:
-          read: name-count-main.yaml
-          units: {slices: {bytes: 8388608}}
-          files: '*/submissions/sec/cik=*/main/*'
-          context:
-            bronze_object: '{dir}/{name}'
-            cik: {as: integer, segment: cik}
-            last_synced_at: {fact: observed_at}
-            load_mode: {fact: load_mode}
-            raw_object_id: {receipt: sha256}
-            recent_limit: null
-            sync_run_id: {fact: capture_run}
-        catalog:
-          read: catalog.yaml
-          files: '*/company_tickers_exchange/*'
-          always: true
-          context: {last_synced_at: {fact: observed_at}, source_name: catalog_exchange, sync_run_id: {fact: catalog_run}}
-        combine:
-          combine: combine-name-count-captured.yaml
-          units: {each: main}
-          readings: {main: {step: main}, catalog_exchange: {all: catalog}}
-          bind: {APPROVED_CATALOG_CAPTURE_RUN: {fact: catalog_run}, APPROVED_COMPANY_CAPTURE_RUN: {fact: capture_run}}
-      master: {names: {prepare: records}, keys: {dataset: sec.company.v1, table: company}, readings: {combined: {all: combine}}}
+      extract: combine-name-count-captured.yaml
       # The Change Journal records each file the run processed, once its
       # merge is verified, so a later run names only changed files (ticket 22).
-    merge-batch:
-      steps:
-        - name: merge
-          operation: mastering.merge
-          requires: []
-          key: "{batch_id}"
-          leases: ["mdm:consumer:{consumer}"]
-          checks: [input.hash, output.receipt, mdm.committed]
-      checks: [manifest.hash, work.accounting, journal.delivered]
+      master: {names: {prepare: records}, keys: {dataset: sec.company.v1, table: company}, readings: {combined: {all: combine}}}
 bronze:
   family: submissions
 dataset_contracts:

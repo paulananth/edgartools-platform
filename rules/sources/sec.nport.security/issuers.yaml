@@ -1,3 +1,13 @@
+pass:
+  units: {each: file}
+  context: {period: {fact: period}}
+  lookups:
+    umbrella: {column: fund, max_input_bytes: 67108864, max_input_rows: 1000000, run: {source: gleif, step: pairs, target: subfund-pairs}, table: subfund, value_column: umbrella}
+    figi: {column: holding, from: identifiers.yaml, max_input_bytes: 268435456, max_input_rows: 10000000, table: figi, value_column: figi}
+    isin: {column: holding, from: identifiers.yaml, max_input_bytes: 268435456, max_input_rows: 10000000, table: isin, value_column: isin}
+    loanx: {column: holding, from: identifiers.yaml, max_input_bytes: 268435456, max_input_rows: 10000000, table: loanx, value_column: loanx}
+    sedol: {column: holding, from: identifiers.yaml, max_input_bytes: 268435456, max_input_rows: 10000000, table: sedol, value_column: sedol}
+    filed: {column: accession_number, from: filings.yaml, max_input_bytes: 67108864, max_input_rows: 1000000, table: filed, value_column: filed}
 # Each holding's issuer LEI, read once from FUND_REPORTED_HOLDING.tsv for
 # ISSUED_BY (rebuild-priorities ticket 22; operator, 2026-10-16: "By issuer LEI
 # (Recommended)"): by CUSIP (table `security_issuer`), and by ISIN for a

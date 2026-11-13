@@ -1,3 +1,5 @@
+pass:
+  readings: {units: {all: source.yaml}}
 # The 13F Securities of one data set: every CUSIP the information tables name,
 # with one filed issuer name and class title each (ticket 79; operator,
 # 2026-10-14: "A", the Security carries the filed words). A data set is too

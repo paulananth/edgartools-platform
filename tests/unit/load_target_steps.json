@@ -210,7 +210,7 @@
     "leases": [
      "artifact:{destination}"
     ],
-    "name": "read",
+    "name": "read_custody",
     "operation": "source.read",
     "requires": [],
     "units": {
@@ -227,7 +227,7 @@
      "contract": "custody-combine.yaml",
      "readings": {
       "custody": {
-       "all": "read"
+       "all": "read_custody"
       }
      }
     },
@@ -238,7 +238,7 @@
     "name": "combine",
     "operation": "source.combine",
     "requires": [
-     "read"
+     "read_custody"
     ]
    },
    {
@@ -1189,29 +1189,6 @@
    }
   ]
  },
- "sec.company/merge-batch": {
-  "checks": [
-   "manifest.hash",
-   "work.accounting",
-   "journal.delivered"
-  ],
-  "steps": [
-   {
-    "checks": [
-     "input.hash",
-     "output.receipt",
-     "mdm.committed"
-    ],
-    "key": "{batch_id}",
-    "leases": [
-     "mdm:consumer:{consumer}"
-    ],
-    "name": "merge",
-    "operation": "mastering.merge",
-    "requires": []
-   }
-  ]
- },
  "sec.nport.fund/mastering": {
   "checks": [
    "manifest.hash",
@@ -1548,7 +1525,7 @@
     "leases": [
      "artifact:{destination}"
     ],
-    "name": "filings",
+    "name": "registrants",
     "operation": "source.read",
     "requires": [
      "submissions"
@@ -1567,7 +1544,7 @@
      "contract": "reduce.yaml",
      "readings": {
       "filings": {
-       "all": "filings"
+       "all": "registrants"
       }
      }
     },
@@ -1578,7 +1555,7 @@
     "name": "ciks",
     "operation": "source.combine",
     "requires": [
-     "filings"
+     "registrants"
     ]
    },
    {
@@ -1594,7 +1571,7 @@
        "step": "ciks"
       },
       "filings": {
-       "all": "filings"
+       "all": "registrants"
       }
      }
     },
@@ -1606,7 +1583,7 @@
     "operation": "source.combine",
     "requires": [
      "ciks",
-     "filings"
+     "registrants"
     ]
    },
    {
@@ -1714,26 +1691,6 @@
      "source.output"
     ],
     "input": {
-     "contract": "filings.yaml"
-    },
-    "key": "{unit}",
-    "leases": [
-     "artifact:{destination}"
-    ],
-    "name": "submissions",
-    "operation": "source.read",
-    "requires": [],
-    "units": {
-     "each": "file"
-    }
-   },
-   {
-    "checks": [
-     "input.hash",
-     "output.receipt",
-     "source.output"
-    ],
-    "input": {
      "contract": "identifiers.yaml"
     },
     "key": "{unit}",
@@ -1811,6 +1768,50 @@
     "checks": [
      "input.hash",
      "output.receipt",
+     "source.combined"
+    ],
+    "input": {
+     "contract": "reduce.yaml",
+     "readings": {
+      "holdings": {
+       "step": "holdings"
+      }
+     }
+    },
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "name": "reduce",
+    "operation": "source.combine",
+    "requires": [
+     "holdings"
+    ]
+   },
+   {
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "input": {
+     "contract": "filings.yaml"
+    },
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "name": "filings",
+    "operation": "source.read",
+    "requires": [],
+    "units": {
+     "each": "file"
+    }
+   },
+   {
+    "checks": [
+     "input.hash",
+     "output.receipt",
      "source.output"
     ],
     "input": {
@@ -1831,7 +1832,7 @@
       },
       "filed": {
        "column": "accession_number",
-       "from": "submissions",
+       "from": "filings",
        "max_input_bytes": 67108864,
        "max_input_rows": 1000000,
        "table": "filed",
@@ -1883,35 +1884,11 @@
     "operation": "source.read",
     "requires": [
      "identifiers",
-     "submissions"
+     "filings"
     ],
     "units": {
      "each": "file"
     }
-   },
-   {
-    "checks": [
-     "input.hash",
-     "output.receipt",
-     "source.combined"
-    ],
-    "input": {
-     "contract": "reduce.yaml",
-     "readings": {
-      "holdings": {
-       "step": "holdings"
-      }
-     }
-    },
-    "key": "{unit}",
-    "leases": [
-     "artifact:{destination}"
-    ],
-    "name": "reduce",
-    "operation": "source.combine",
-    "requires": [
-     "holdings"
-    ]
    },
    {
     "checks": [
@@ -1997,13 +1974,33 @@
      "source.output"
     ],
     "input": {
+     "contract": "sec.nport.registrant/submissions.yaml"
+    },
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "name": "submissions",
+    "operation": "source.read",
+    "requires": [],
+    "units": {
+     "each": "file"
+    }
+   },
+   {
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "input": {
      "contract": "sec.nport.registrant/source.yaml",
      "lookups": {
       "filed": {
        "column": "accession_number",
        "from": "submissions",
-       "max_input_bytes": 17179869184,
-       "max_input_rows": 100000000,
+       "max_input_bytes": 67108864,
+       "max_input_rows": 1000000,
        "table": "filed",
        "value_column": "filed"
       }
@@ -2058,7 +2055,7 @@
      "lookups": {
       "as_of": {
        "column": "accession_number",
-       "from": "submissions",
+       "from": "filings",
        "max_input_bytes": 17179869184,
        "max_input_rows": 100000000,
        "table": "reported",
@@ -2074,7 +2071,7 @@
       },
       "filed": {
        "column": "accession_number",
-       "from": "submissions",
+       "from": "filings",
        "max_input_bytes": 17179869184,
        "max_input_rows": 100000000,
        "table": "filed",
@@ -2130,7 +2127,7 @@
     "operation": "source.read",
     "requires": [
      "identifiers",
-     "submissions",
+     "filings",
      "registrants",
      "series"
     ],

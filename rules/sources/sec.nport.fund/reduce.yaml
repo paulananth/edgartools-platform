@@ -1,3 +1,6 @@
+pass:
+  name: series
+  readings: {filings: {all: source.yaml}}
 # Each fund series of the quarter's N-PORT rows, with how many filings name it,
 # and the counts that say whether a series and its LEI are one to one (ticket
 # 79, part 3). A series filing no LEI counts under empty text. One source extract: source.yaml's reading, `filings`.

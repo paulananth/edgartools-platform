@@ -1,3 +1,15 @@
+pass:
+  units: {each: file}
+  context: {period: {fact: period}}
+  lookups:
+    figi: {column: holding, from: identifiers.yaml, max_input_bytes: 17179869184, max_input_rows: 100000000, table: figi, value_column: figi}
+    isin: {column: holding, from: identifiers.yaml, max_input_bytes: 17179869184, max_input_rows: 100000000, table: isin, value_column: isin}
+    loanx: {column: holding, from: identifiers.yaml, max_input_bytes: 17179869184, max_input_rows: 100000000, table: loanx, value_column: loanx}
+    sedol: {column: holding, from: identifiers.yaml, max_input_bytes: 17179869184, max_input_rows: 100000000, table: sedol, value_column: sedol}
+    as_of: {column: accession_number, from: filings.yaml, max_input_bytes: 17179869184, max_input_rows: 100000000, table: reported, value_column: as_of}
+    filed: {column: accession_number, from: filings.yaml, max_input_bytes: 17179869184, max_input_rows: 100000000, table: filed, value_column: filed}
+    registrant: {column: accession_number, from: sec.nport.registrant/source.yaml, max_input_bytes: 17179869184, max_input_rows: 100000000, table: filing, value_column: cik}
+    series: {column: accession_number, from: holding-series.yaml, max_input_bytes: 17179869184, max_input_rows: 100000000, table: series, value_column: series_id}
 # Each N-PORT holding as filed: the rows silver lands (ticket 79; finding q5, operator
 # 2026-10-15: "Silver + MDM link (Recommended)"; 2026-10-22: "Why do you need
 # to merge it it's just a lookup"). A holding is a lookup row, not an MDM

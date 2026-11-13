@@ -15,10 +15,9 @@ bookkeeping:
   version: 2
   targets:
     silver:
-      extract:
-        facts: {read: facts.yaml, units: {slices: {bytes: 8388608}}}
-      # Each derived table is rebuilt whole, and only when the Change Journal names a changed file.
+      extract: facts.yaml
       silver:
         - {name: land, land: {silver: company_fact, table: company_fact}}
         - {name: line_items, derive: {build: line_items, reads: company_fact, silver: company_line_item}}
         - {name: measures, derive: {build: measures, reads: company_line_item, silver: company_measure}}
+      # Each derived table is rebuilt whole, and only when the Change Journal names a changed file.

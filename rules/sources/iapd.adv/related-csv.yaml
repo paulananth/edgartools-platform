@@ -1,3 +1,7 @@
+pass:
+  name: read_related
+  files: '*.zip'
+  units: {each: file}
 # The reading of Form ADV Schedule D 7.A (IA_Schedule_D_7A_CIK) in one monthly
 # bulk file: one row per filing and CIK of a related person the adviser names.
 # The CIK is zero-filled to SEC's ten digits, the record key of SEC's Company

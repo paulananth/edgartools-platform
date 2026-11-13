@@ -1,3 +1,5 @@
+pass:
+  readings: {securities: {step: reduce.yaml}, issuers: {step: issuer-reduce.yaml}}
 # One row per Security (table `security`, ticket 120), keyed by its usable
 # CUSIP, else the ISIN of a holding with no usable CUSIP, joined with its filed
 # name, title, share class (ticket 130) and issuer LEI; a CUSIP also with every

@@ -1,3 +1,6 @@
+pass:
+  name: record
+  pieces: {step: combine.yaml}
 # Each adviser filing, with its custodians joined in, as one record for the Dataset Contract
 # iapd.adv.filings.v2 (ticket 176).
 execution: {profile: source.read, workers: 1, max_artifacts: 512}

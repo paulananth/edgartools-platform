@@ -1,5 +1,9 @@
 # Every Level 1 record of the publication is read: the Merge Stage decides what each joins.
 source: gleif.level1
+pass:
+  name: read
+  files: '*lei2-golden-copy*'
+  context: {publication_count: {fact: publication_count}}
 execution: {profile: source.read, workers: 1, max_artifacts: 1}
 read:
   format: json

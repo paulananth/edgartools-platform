@@ -27,8 +27,7 @@ bookkeeping:
   version: 2
   targets:
     mastering:
-      extract:
-        read: {read: ownership-sgml.yaml, units: {slices: {bytes: 8388608}}, files: '*.txt'}
+      extract: ownership-sgml.yaml
       master: {keys: {dataset: sec.ownership.reporting_owner.v1, record_column: record, table: owner_record}}
       silver:
         - {name: land_owner, land: {silver: insider_reporting_owner, table: reporting_owner}, requires: [read, merge]}
@@ -42,12 +41,8 @@ bookkeeping:
     # than the lines. It creates no Security, so OpenFIGI's Securities are mastered first; a symbol
     # no Security holds yet waits unbound.
     security_symbols:
-      extract:
-        read_security: {read: ownership-security-sgml.yaml, units: {slices: {bytes: 8388608}}, files: '*.txt'}
-      master:
-        names: {prepare: prepare_security, merge: merge_security}
-        keys: {dataset: sec.ownership.security.v2, record_column: record, table: security_record}
-        readings: {read: {all: read_security}}
+      extract: ownership-security-sgml.yaml
+      master: {names: {prepare: prepare_security, merge: merge_security}, keys: {dataset: sec.ownership.security.v2, record_column: record, table: security_record}, readings: {read: {all: read_security}}}
       names: {record: processed_security}
 dataset_contracts:
   # The issuer's security a Form 3, 4 or 5 names (ticket 24; operator, 2026-11-04, "Yes, Form 4
