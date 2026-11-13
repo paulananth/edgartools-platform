@@ -365,7 +365,7 @@ def test_dependency_corruption_blocks_downstream_without_execution(databases, tm
     assert book.status(rid)["run"]["state"] == "blocked" and executions == []
 
 
-def fan_in_submission(databases, tmp_path, first=None, declared=None, capture=None, pipeline=None):
+def fan_in_submission(databases, tmp_path, first=None, declared=None, capture=None, pipeline=None, pieces=False):
     """A gathering step whose one input is a document composed from many verified outputs (to-do 20c).
     `first`: the slot `first` names this unit instead (another run's, ticket 120), which the gathering
     step declares as `declared` ({source, target, step}). `capture`: the capture the manifest was
@@ -402,7 +402,8 @@ def fan_in_submission(databases, tmp_path, first=None, declared=None, capture=No
     steps[2]["operation"] = "fixture.gather"
     if declared:
         body["bookkeeping"]["version"] = 2
-        steps[2]["input"] = {"readings": {"one": {"run": declared}}}
+        # A read step names the other run's step as its `pieces`; a combine names it as a reading.
+        steps[2]["input"] = {"pieces": {"run": declared}} if pieces else {"readings": {"one": {"run": declared}}}
     output = (tmp_path / "gather" / "all").as_uri()
     compose = {"document": {"version": 1, "one": {"slot": "first"}, "all": {"slot": "parts"}, "inner": {"slot": "nested"}},
                "slots": {"first": first or {"step": "a_transform", "key": "parsed1"},
@@ -471,6 +472,16 @@ def test_a_slot_reads_another_runs_verified_unit(databases, tmp_path):
     assert state["run"]["state"] == "complete"
     (document,) = gathered
     assert book.artifacts.json(document)["one"] == {k: receipt[k] for k in ("uri", "sha256")}
+
+
+def test_a_step_that_declares_another_runs_step_as_its_pieces_reads_its_unit(databases, tmp_path):
+    """A second pass over another target's verified step declares it as `pieces: {run: ...}`."""
+    earlier, done, selector = earlier_run(databases, tmp_path)
+    book, rid, _, _, gathered = fan_in_submission(
+        databases, tmp_path / "later", first={"run": done, "step": "a_transform", "key": "parsed1"},
+        declared=selector, pieces=True)
+    assert drive(book, rid, databases.ledger, workers=book.workers)["run"]["state"] == "complete"
+    assert len(gathered) == 1
 
 
 def test_a_fill_checks_each_other_run_once_however_many_of_its_units_it_names(databases, tmp_path, monkeypatch):
