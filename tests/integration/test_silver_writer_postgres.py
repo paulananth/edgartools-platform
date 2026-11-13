@@ -297,3 +297,38 @@ def test_interval_text_transport_is_preserved(stores):
     silver.register(owner, config, runtime_role=RUNTIME)
     assert land(PostgresSink(runtime), "visit", [{"visit_id": 1, "duration": "2 days 01:02:03.123456"}])["inserted"] == 1
     assert table(runtime)[1]["duration"] == timedelta(days=2, hours=1, minutes=2, seconds=3, microseconds=123456)
+
+
+def test_two_deliveries_stage_side_by_side_and_only_the_merge_waits(stores):
+    """A delivery still sending its rows does not hold up another delivery to the same table: the table is
+    locked for the merge of staged rows, not while they are staged."""
+    import threading
+
+    owner, runtime, _, _ = stores
+    silver.register(owner, visit_spec(), runtime_role=RUNTIME)
+    sink = PostgresSink(runtime)
+    spec = sink.spec("visit")
+    first, second, third = visits()
+    staging, go, results = threading.Event(), threading.Event(), {}
+
+    def slow_rows():
+        yield first
+        staging.set()  # its first row is staged; the rest have not arrived
+        go.wait(30)
+        yield second
+
+    slow = threading.Thread(target=lambda: results.update(slow=sink.write(spec, slow_rows())))
+    quick = threading.Thread(target=lambda: results.update(quick=sink.write(spec, [third])))
+    slow.start()
+    try:
+        assert staging.wait(30)
+        quick.start()
+        quick.join(15)
+        landed_meanwhile = not quick.is_alive()
+    finally:
+        go.set()
+        slow.join(30)
+        quick.join(30)
+    assert landed_meanwhile, "the quick delivery waited for the slow one to finish sending its rows"
+    assert (results["slow"]["inserted"], results["quick"]["inserted"]) == (2, 1)
+    assert sorted(table(runtime)) == [1, 2, 3]

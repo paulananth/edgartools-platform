@@ -1,5 +1,4 @@
 """One atomic delivery implementation over typed selected-database storage."""
-from contextlib import contextmanager
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -14,21 +13,18 @@ from .tables import bound_row, data_table, staging_name
 BATCH = 1000
 
 
-@contextmanager
-def locked(engine, spec):
-    with engine.begin() as conn:
-        if conn.dialect.name == "postgresql":
-            target = data_table(spec, conn.dialect.name)
-            name = conn.dialect.identifier_preparer.format_table(target)
-            conn.exec_driver_sql(f"LOCK TABLE {name} IN SHARE ROW EXCLUSIVE MODE")
-        elif conn.dialect.name == "mysql":
-            modes = set(conn.scalar(text("SELECT @@session.sql_mode")).split(","))
-            if not modes.intersection({"STRICT_ALL_TABLES", "STRICT_TRANS_TABLES"}):
-                raise Blocked("Silver requires strict MySQL value conversion")
-            conn.execute(text("CALL lock_silver_table(:t)"), {"t": spec["table"]}).close()
-        else:
-            raise Blocked("Silver currently supports PostgreSQL and MySQL")
-        yield conn
+def lock(conn, spec):
+    """One delivery at a time merges into a table: its checks and its writes see no other delivery's rows arrive."""
+    if conn.dialect.name == "postgresql":
+        name = conn.dialect.identifier_preparer.format_table(data_table(spec, conn.dialect.name))
+        conn.exec_driver_sql(f"LOCK TABLE {name} IN SHARE ROW EXCLUSIVE MODE")
+    elif conn.dialect.name == "mysql":
+        modes = set(conn.scalar(text("SELECT @@session.sql_mode")).split(","))
+        if not modes.intersection({"STRICT_ALL_TABLES", "STRICT_TRANS_TABLES"}):
+            raise Blocked("Silver requires strict MySQL value conversion")
+        conn.execute(text("CALL lock_silver_table(:t)"), {"t": spec["table"]}).close()
+    else:
+        raise Blocked("Silver currently supports PostgreSQL and MySQL")
 
 
 class DatabaseSink:
@@ -55,9 +51,14 @@ class DatabaseSink:
             match = and_(target.c._silver_key == func.sha2(cast(func.json_array(*key_values), LargeBinary), 256), match)
         differs = lambda fields: or_(*(target.c[c].is_distinct_from(stage.c[c]) for c in fields))
         try:
-            with locked(self.engine, spec) as conn:
-                if conn.dialect.name == "postgresql": stage.create(conn)
-                else: conn.execute(delete(stage))
+            with self.engine.begin() as conn:
+                # PostgreSQL stages into a table of this session, so deliveries stage side by side and the table is
+                # locked for the merge only; MySQL's staging table is shared, so its lock comes first.
+                staged_alone = conn.dialect.name == "postgresql"
+                if staged_alone: stage.create(conn)
+                else:
+                    lock(conn, spec)
+                    conn.execute(delete(stage))
                 try:
                     count, batch = 0, []
                     for row in rows:
@@ -67,6 +68,7 @@ class DatabaseSink:
                         if len(batch) == BATCH:
                             conn.execute(insert(stage), batch); batch = []
                     if batch: conn.execute(insert(stage), batch)
+                    if staged_alone: lock(conn, spec)
                     if not count and spec["load_mode"] == "snapshot":
                         raise Blocked(f"silver.{spec['table']} is a snapshot: an empty delivery would empty it; refused")
                     group_keys = [stage.c[k] for k in spec["key"]]
@@ -119,7 +121,8 @@ class DatabaseSink:
         if self.engine.dialect.name == "mysql": key = key.collate("utf8mb4_0900_bin")
         changed = 0
         pairs = list(found.items())
-        with locked(self.engine, spec) as conn:
+        with self.engine.begin() as conn:
+            lock(conn, spec)
             for start in range(0, len(pairs), BATCH):
                 batch = dict(pairs[start:start+BATCH])
                 value = case(batch, value=key, else_=column)
