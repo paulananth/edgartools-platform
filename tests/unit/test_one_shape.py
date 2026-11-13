@@ -58,6 +58,7 @@ def test_a_target_says_extract_master_and_silver_and_gets_every_step():
     assert steps[4]["input"]["readings"] == {"record": {"all": "record"}}  # mastering reads the last pass whole
     assert steps[5] == {"name": "merge", "operation": "mastering.merge", "requires": ["prepare"], "key": "{batch_id}",
                         "leases": ["mdm:consumer:{consumer}"], "checks": ["input.hash", "output.receipt", "mdm.committed"]}
+    assert steps[6]["leases"] == ["silver:{silver}:{unit}"]  # a landing unit leases its own part: units land side by side
     assert target["checks"] == ["manifest.hash", "work.accounting", "journal.delivered"]
 
 

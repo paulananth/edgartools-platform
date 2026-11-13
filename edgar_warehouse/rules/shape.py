@@ -20,7 +20,9 @@ KINDS = {
     "combine": ("source.combine", "{unit}", ["artifact:{destination}"], "source.combined"),
     "prepare": ("mdm.prepare", "{unit}", ["artifact:{destination}"], "mdm.prepared"),
     "merge": ("mastering.merge", "{batch_id}", ["mdm:consumer:{consumer}"], "mdm.committed"),
-    "land": ("silver.land", "{unit}", ["silver:{silver}"], "silver.landed"),
+    # A landing unit leases its own part of the table, so a step's units land side by side; the writer's table
+    # lock, held for the merge of its staged rows only, keeps two deliveries apart.
+    "land": ("silver.land", "{unit}", ["silver:{silver}:{unit}"], "silver.landed"),
     "derive": ("silver.derive", "{unit}", ["silver:{silver}", "silver:{reads}"], "silver.derived"),
     "record": ("journal.record", "{unit}", ["artifact:{destination}"], "journal.recorded"),
 }

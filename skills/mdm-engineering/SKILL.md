@@ -247,6 +247,8 @@ until the load ends.
 
 **A store lookup is called before the loop or filter that uses its answer.** A call written inside a comprehension's condition runs once for every item, and each run is a round trip to the store. On a slow merge, sample the worker's session in `pg_stat_activity`: one statement in most samples, restarted each time, is this.
 
+**Lock a table for the write, not while the worker prepares or sends rows.** Stage a delivery in a table of its own session first, then lock and merge; a lock or a lease held over the worker's own work makes a step run one unit at a time however many workers it has.
+
 ## Migrations
 
 - `migrations/schema.sql` is the schema `mdm migrate` creates in an empty
