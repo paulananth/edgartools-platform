@@ -15,8 +15,9 @@ Compose project, waits for health, and calls
 1. Verifies that the endpoint is local HTTP and the server reports 2.0.7.
 2. Generates a shell-safe administrator password and writes the credentials to
    `.env` with restrictive file permissions.
-3. Changes the default administrator password through
-   `PUT /api/v1/users/changePassword`.
+3. Uses the temporary `OPENMETADATA_INITIAL_PASSWORD` from `.env` to change the
+   default administrator password through `PUT /api/v1/users/changePassword`,
+   then removes that temporary entry.
 4. Logs in through `POST /api/v1/users/login`, issues a 30-day personal access
    token through `PUT /api/v1/users/security/token`, and verifies it with
    `GET /api/v1/system/version`.

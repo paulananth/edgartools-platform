@@ -17,9 +17,10 @@ The repository-root `.env` is ignored by Git and must remain mode `0600`.
 `bash infra/openmetadata/init.sh` reads it without printing values. On a fresh
 2.0.7 instance, initialization changes the default administrator password to a
 generated password, issues a 30-day personal access token, stores the login
-and token in `.env`, then verifies that token with an API read. Subsequent runs
-keep a working token. Do not paste or print `.env` values; load the file in a
-private shell when a client needs `OPENMETADATA_URL`,
+and token in `.env`, then verifies that token with an API read. The temporary
+`OPENMETADATA_INITIAL_PASSWORD` value is removed after a successful password
+change. Subsequent runs keep a working token. Do not paste or print `.env`
+values; load the file in a private shell when a client needs `OPENMETADATA_URL`,
 `OPENMETADATA_LOGIN_EMAIL`, `OPENMETADATA_LOGIN_PASSWORD`, or
 `OPENMETADATA_TOKEN`:
 
