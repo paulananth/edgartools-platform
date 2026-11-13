@@ -195,6 +195,8 @@ class _Server:
         if method == "GET" and path.endswith("/tableProfile/latest"):
             found = self.profiles.get(path.removeprefix("/tables/").removesuffix("/tableProfile/latest"))
             return {"profile": found} if found else {}
+        if method == "GET" and path.startswith("/glossaryTerms/name/"):
+            return None
         if method == "GET" and path.startswith("/glossaryTerms/"):
             term_id = path.removeprefix("/glossaryTerms/")
             return {"id": term_id, "entityStatus": "Draft" if term_id in self.draft else "Approved"}
@@ -302,9 +304,6 @@ def test_the_plan_names_domains_glossaries_and_store_certification():
     assert "company" in names and "market_venue" in names and "venue" not in names
     assert not [item for item in plan["memberships"] if item["table"].startswith("edgartools-rules.mdm.relationships.")]
     assert not [edge for edge in plan["lineage"] if edge["to"].startswith("edgartools-rules.mdm.relationships.")]
-    issued = [edge for edge in plan["domain_lineage"] if edge["table"].endswith(".ISSUED_BY")]
-    assert {edge["domain"] for edge in issued} >= {"security", "company"}
-    assert all(edge["domain"] != edge["table"] for edge in plan["domain_lineage"])
     products = {product["name"]: product for product in plan["products"]}
     assert set(products) == {"company_master", "security_master", "company_fundamentals"}
     assert products["company_master"]["domains"] == ["company"]
@@ -330,9 +329,6 @@ def test_the_plan_names_domains_glossaries_and_store_certification():
     assert any(name.startswith("edgartools-rules.silver.") and tag == "Certification.Silver"
                for name, tag in certified.items())
     assert not any(name.startswith("edgartools-rules.sources.") for name in certified)  # a source dataset stays uncertified
-    assert catalog.glossary_relation_type_name("ISSUED_BY") == "issuedBy"
-    assert catalog.glossary_relation_type_name("IS_FUND-MANAGED_BY") == "isFundManagedBy"
-    assert "relatedTo" not in {edge["relationType"] for edge in plan["glossary_relations"]}
 
 
 
@@ -525,24 +521,63 @@ def test_a_relationship_type_is_a_term_of_the_domain_its_from_list_names_first()
             "security.ISSUED_BY", "company.BENEFICIAL_OWNER_OF"} <= fqns
     term = _terms(plan)["person.EMPLOYED_BY"]
     assert term["table"].endswith("relationships.EMPLOYED_BY")
-    company_graph = {edge["to"]: edge["relationType"] for edge in plan["glossary_relations"]
-                     if edge["from"] == "company.Company Identity"}
-    assert company_graph["company.CUSTODIAN"] == "custodian"
-    assert "company.ISSUED_BY" not in company_graph
-    security_graph = {edge["to"]: edge["relationType"] for edge in plan["glossary_relations"]
-                      if edge["from"] == "security.Security Identity"}
-    assert security_graph == {"security.ISSUED_BY": "issuedBy"}
 
 
-def test_a_type_no_rule_reads_stays_an_asset_marked_planned():
+def test_configuration_only_publish_does_not_change_relationship_curation():
     plan = catalog.plan()
-    names = {term["name"] for term in plan["glossary_terms"]}
-    marker = "(planned: no rule reads this type yet and no link is loaded)"
-    tables = _tables(plan)
-    for code in ("AUDITED_BY", "HAS_MARKET_OPERATOR", "IS_SUBSIDIARY_OF"):
-        assert code not in names
-        assert marker in tables[f"edgartools-rules.mdm.relationships.{code}"]["description"]
-    assert marker not in tables["edgartools-rules.mdm.relationships.CUSTODIAN"]["description"]
+    server = _Server(plan)
+    catalog.publish(plan, server)
+    assert not any(path.startswith("/lineage/domain/") for _, path in server.calls)
+    assert not any("/relations" in path for _, path in server.calls)
+    assert not any(op.get("path") == "/domains"
+                   for _, patch in server.patches for op in patch)
+    assert not any(path == "/system/settings/glossaryTermRelationSettings"
+                   for _, path in server.calls)
+
+
+def test_publish_updates_existing_vocabulary_without_clearing_curated_relations():
+    plan = catalog.plan()
+    wanted = _terms(plan)["company.CUSTODIAN"]
+    curated = [{"relationType": "relatedTo", "term": {
+        "id": "human-term", "type": "glossaryTerm", "fullyQualifiedName": "company.Human term"}}]
+
+    class CuratedServer(_Server):
+        def __init__(self, plan):
+            super().__init__(plan)
+            self.term = {**wanted, "fullyQualifiedName": "company.CUSTODIAN", "id": "custodian",
+                         "displayName": "Old name", "description": "Old definition",
+                         "relatedTerms": curated, "entityStatus": "Approved"}
+
+        def __call__(self, method, path, body=None, params=None):
+            if method == "GET" and path.startswith("/glossaryTerms/name/"):
+                if unquote(path.removeprefix("/glossaryTerms/name/")) == self.term["fullyQualifiedName"]:
+                    assert params == {"fields": "relatedTerms"}
+                    self.calls.append((method, path))
+                    return dict(self.term)
+            if method == "PUT" and path == "/glossaryTerms" and body["name"] == wanted["name"]:
+                # Native full updates can clear relationships omitted by the request.
+                self.term.update(body)
+                self.term["relatedTerms"] = body.get("relatedTerms", [])
+                self.calls.append((method, path))
+                return dict(self.term)
+            if method == "PATCH" and path == "/glossaryTerms/custodian":
+                self.calls.append((method, path))
+                self.patches.append((path, body))
+                for op in body:
+                    assert op["path"] in {"/displayName", "/description"}
+                    self.term[op["path"].removeprefix("/")] = op["value"]
+                return dict(self.term)
+            return super().__call__(method, path, body, params)
+
+    server = CuratedServer(plan)
+    catalog.publish(plan, server)
+
+    assert server.term["relatedTerms"] == curated
+    assert server.term["description"] == wanted["description"]
+    assert server.term["displayName"] == wanted["displayName"]
+    assert server.term["entityStatus"] == "Approved"
+    assert server.term["id"] == "custodian"
+    assert not any(body["name"] == wanted["name"] for body in server.term_bodies)
 
 
 def test_only_entity_terms_are_published_as_draft_terms():
@@ -825,10 +860,6 @@ def test_publish_deletes_only_what_the_rules_no_longer_name():
                                  "pipeline_lineage": 0, "pipelines": 0, "pipeline_services": 0}
     inbound = sum(1 for edge in plan["service_lineage"] if edge.get("inbound") or "next" in edge)
     assert sum(1 for method, path in server.calls if (method, path) == ("PUT", "/lineage")) == len(plan["lineage"]) + inbound
-    posts = [path for method, path in server.calls if method == "POST" and path.endswith("/relations")]
-    assert any(path.startswith("/glossaryTerms/Company Identity/") for path in posts)
-    assert len(posts) == len(plan["glossary_relations"])
-    assert ("PUT", "/system/settings") in server.calls
 
 
 def test_publish_removes_stale_owned_pipeline_to_table_edges():

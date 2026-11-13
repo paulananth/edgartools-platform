@@ -104,26 +104,26 @@ definitions are `edgartools-configured-table-check` and
 execute them. A case whose column is on the table uses
 `<#E::table::{fqn}::columns::{column}>`. Any other case uses
 `<#E::table::{fqn}>`. A green publish that omits them is a publisher gap.
-A domain relationship is one pinned relationship type. Read it from the code
-set the data-modeling skill names, `mdm-relationship-types`, pinned in
-`rules/merge/reference-pins.yaml`. Do not copy that list into this skill, and
-do not invent a type.
+Relationship vocabulary comes from the pinned RDM code set
+`mdm-relationship-types`. For the authority and attribute locations, read
+[data-modeling](../data-modeling/SKILL.md#what-the-platform-already-says).
+Do not copy that list into this skill or invent a type.
 
 - A code with no parent is one type and one catalog asset, under
   `mdm.relationships`. Its description is the code's definition, and it states
   the `from` ends, the `to` ends, and the capacities. The rules catalog plan
   already writes that description. Keep it.
-- Keep a type definition as vocabulary even when it has no confirmed links.
-  A rule reading that type does not make a relationship real. Apply
-  data-catalog's **Confirm relationships before showing them** before adding
-  any domain or glossary relationship edge.
+- The configuration-only publisher retains type assets and definitions even
+  without confirmed links. It does not read live relationship evidence and
+  emits no domain-to-type or glossary identity-to-type fact edges. For any
+  separate fact projection, apply data-catalog's **Confirm relationships before
+  showing them**; unknown evidence omits affected fact edges, not other metadata.
 - A child code is a capacity of its parent type. It is not another asset, not
   another domain, and not another relationship.
-- The type is one asset. Do not place that asset on every endpoint domain.
-  Each placement is stored as another relationship, so sixteen types become
-  one link per end. The ends stay on the type. Map an endpoint code that is
-  not a catalog domain name onto the approved catalog name when an end is
-  read: `venue` maps to `market_venue`.
+- The type is one asset. Its allowed ends stay on its description, not domain
+  memberships that turn possibilities into graph edges. Map an endpoint code
+  that is not a catalog domain name onto the approved catalog name when an end
+  is read: `venue` maps to `market_venue`.
 - A profile on an end is a profile, not a domain and not a type.
 - A prepared-store row that points at masters is a transaction. It is not a
   domain relationship. Do not publish a lineage edge from a dataset to a
@@ -139,11 +139,12 @@ do not invent a type.
 
 ### Repair unsupported relationship edges
 
-First check all applicable evidence layers in data-catalog; an empty mastered
-relationship table alone is insufficient. Inventory the
-selected domain and glossary graphs through the native API. Match each edge
-to verified mastered, source-reported or transaction evidence, with its meaning
-and qualification clearly stated, not just a compatible type.
+Inventory the selected domain and glossary graphs through the native API.
+Use data-catalog's **Confirm relationships before showing them** to distinguish
+actual facts from configured possibilities; an empty mastered relationship
+table alone is insufficient. Identify exact publisher-inferred endpoint/type
+edges separately from genuine dataset/pipeline lineage and curated fact edges.
+Unknown evidence is not permission to delete an edge.
 Keep a private before-state of the catalog-owned edges selected for removal.
 
 For an operator-authorized repair, use the native lineage or glossary relation
@@ -154,10 +155,12 @@ unsupported edges are absent and unrelated metadata is preserved. A repeated
 repair must find no further removals. If ownership or evidence is uncertain,
 leave the edge unconfirmed and report it.
 
-Inspect the current publisher before running it again. A publisher that emits
-domain-to-type edges or glossary identity-to-type edges from permitted kinds
-still lacks confirmed-relationship projection. Do not rerun that publication
-path until corrected and tested: a skill update alone is not a runtime guard.
+The corrected configuration-only publisher publishes vocabulary and genuine
+metadata lineage without inferred fact edges; live relationship evidence is
+not a prerequisite for that publication. A skill update alone is not a runtime
+guard: an older publisher that still infers endpoint/type edges must be
+corrected and tested before reusing that path. Normal publication is not
+authorization for unrelated or uncertain edge cleanup.
 
 Place each profiled code set in `rdm.code_sets` and keep a proposed set labeled
 proposed. A profiled identifier kind that is not a declared domain is not a new
@@ -171,10 +174,11 @@ uses it. Do not publish lineage from a dataset to a relationship type.
 A dataset is a member of the kind it becomes. A relationship type is not a
 member of its endpoint domains. Putting the type on each end stores one link
 per end and makes the server draw a domain-to-domain edge for every pair of
-ends. Those edges are not types. Do not create them. If a publish finds a
-domain-to-domain edge whose source is `ChildAssets`, delete it. Disable
-"Multiple Domains are not allowed" (a rule in `entityRulesSettings`) only for an asset that itself is more than
-one kind. Do not disable it to spread a relationship type.
+ends. Those edges are not types. Do not create them. Handle an unsupported
+`ChildAssets` edge through the scoped, operator-authorized repair above; its
+source label alone is not authority to delete it. Disable "Multiple Domains are
+not allowed" (a rule in `entityRulesSettings`) only for an asset that itself is
+more than one kind. Do not disable it to spread a relationship type.
 
 Domains and glossaries are independent native resources; assigning one does not
 create the other. Term annotation uses a tag label whose `source` is `Glossary`;
@@ -198,8 +202,14 @@ Project. Do not author a second glossary, and do not mark a term approved.
 
 Read `CONTEXT.md`. A glossary holds only entity terms: the domain identity
 terms, the kinds of one domain's identity, and the relationship types. The
-description is the definition paragraph plus the Avoid line. Review state on
-an asset is `Suggested`. Create no owners.
+description is the definition paragraph plus the Avoid line. New terms start
+as `Suggested`. Create no owners; preserve existing review status and curation.
+
+Reuse the corrected publisher's glossary-term update path: GET the existing
+identity, then PATCH only `displayName` and `description`; PUT creates a missing
+term. On 2.0.7, a full native PUT without `relatedTerms` can erase existing
+curation. Preserve unrelated term relations and status; remove a relation only
+through the scoped, authorized repair above.
 
 Give each published subject domain its own glossary. Its native name is the
 domain name, and its display name is the domain's display name. A term whose
@@ -222,27 +232,29 @@ other entity term by its kind:
   steps as pipeline tasks on lineage, so a term would repeat them. Do not
   create a glossary named after a `CONTEXT.md` section, and do not copy these
   definitions into Articles.
-- A data class is a `data_class` tag, a code-set grouping is text in the
-  code-set descriptions, and a fact about a relationship (its capacity or its
-  dated interval) is text in the relationship-type descriptions. The publisher
-  writes these; do not edit the live catalog by hand.
+- A data class is a `data_class` tag; a code-set grouping is text in the
+  code-set descriptions. A type's allowed capacities belong in its description,
+  while an actual link's capacity and dated interval remain fact evidence, not
+  type-level claims. The publisher writes the metadata; do not edit the live
+  catalog by hand.
 - A silver field or a silver row set is not a glossary term. Its definition
   goes on the silver column or table. A `CONTEXT.md` entry that describes
   silver data is not published.
 - An umbrella word with no real instance of its own is not a term. Remove it
   from `CONTEXT.md` instead of publishing it.
 
-Publish a term only when real data backs it (operator: "the skill
+Publish a subject term only when real data backs it (operator: "the skill
 must be intelligent, can not create fake domains"). A domain is real when a
-rule reads it, an RDM code set holds it, or a mastered kind exists. A
-relationship type is a glossary term only when a file under `rules/sources/`
-uses its code. A type that `CONTEXT.md` or a ticket plans, with no rule that
-creates it, is not published (`HAS_MARKET_OPERATOR` and
-`IS_SEGMENT_OF_EXCHANGE`, removed: no rule creates either link).
-Test a domain by its own data before ruling it out: the market/venue domain
-looked empty through those two links, but its MIC code set and the listing rules
-make it real. Create a subject domain, its glossary or a term in
-it only for a real domain; never create one to hold planned or invented terms.
+rule reads it, an RDM code set holds it, or a mastered kind exists.
+Relationship vocabulary has a separate inclusion rule: publish every root
+type in the pinned `mdm-relationship-types` version as a glossary term, whether
+or not a source mapping mentions it or any link is loaded. Use its RDM label
+and definition without invented planned/no-link-loaded status text. Its term
+annotation belongs on the type asset; this creates no identity-to-type fact
+edge.
+Qualify each domain from its own data and code sets, not whether its relationship
+types have loaded links. Create a subject domain, its glossary or a term in it
+only for a real domain; never create one to hold planned or invented terms.
 
 ## Context Center
 

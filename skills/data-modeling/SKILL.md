@@ -43,22 +43,27 @@ Read these before deciding, and use their words:
   projects these words and the classes below. It does not decide them, and this
   skill does not publish the catalog. Projection rules are the data-catalog skill.
   Gold and Silver certification of a store is that projection, not a class decision.
-  A domain relationship is one type in `mdm-relationship-types`. The catalog
-  keeps that type as one asset. It does not place the type on each endpoint.
-  Permitted endpoint kinds are vocabulary, not real relationships. Before
-  showing a link, follow data-catalog's **Confirm relationships before showing
-  them**. Distinguish mastered links, source-reported associations and
-  transaction references; an empty relationship table does not erase facts in
-  the other layers. A definition mention or permitted pair is not confirmation.
+  A relationship type is vocabulary; the catalog keeps it as one asset, not
+  a member of every permitted endpoint domain. For actual facts and their
+  evidence layers, follow data-catalog's **Confirm relationships before showing
+  them**. Metadata lineage describes data flow, not a link between masters.
 - `edgar_warehouse/mdm/evidence.py`: `KINDS` (the master kinds) and
   `PROFILE_KINDS` (a profile and the kinds it may hang on).
 - `rules/merge/kinds/<kind>.yaml`, `identifiers`: the kind's Identifier
   Contract, the namespaces that decide identity.
-- RDM code set `mdm-relationship-types` (`rules/reference/published/`, pinned
-  in `rules/merge/reference-pins.yaml`): every relationship type, a code whose
-  properties are the kinds at its ends, profiles and whether it is a
-  hierarchy, whose child codes are its capacities and whose definition is its
-  meaning and source.
+- RDM code set `mdm-relationship-types`, at the version and sha256 pinned in
+  `rules/merge/reference-pins.yaml`: the authority for code → `label` /
+  preferred `labels`, plain-language `definition` and source, allowed endpoint
+  kinds (`properties.from` / `to`), optional endpoint profiles (`from_profile` /
+  `to_profile`), hierarchy rules (`hierarchy`, `cycles`, `one_parent`,
+  `ultimate_parent`, `ultimate_type`) and other type constraints. A capacity is
+  a child code with `parent_code` naming its type and its own label. Read the
+  pinned published rows under `rules/reference/published/`; allowed endpoints
+  describe valid links, not evidence that any link exists. See onboarding's
+  [Relationship types](../data-onboarding/REFERENCE.md#relationship-types) for
+  the property contract and
+  [Mapping Documents](../data-onboarding/REFERENCE.md#mapping-documents) for its
+  generated workbook view.
 - **Types and reference data live in RDM, never in files** (operator: "types and
   reference data must not be in files"). A relationship type, a code list or an earlier version of
   either is a code set version in RDM. A yaml table, a test fixture, a Python or Rust constant or a
