@@ -112,7 +112,7 @@ def merge_file(store, settings: Settings, records: list[dict], *, again: bool = 
     """Merge one file, or nothing if it is done. `again` delivers a finished file a second time."""
     key = file_key([*records, *({"assertion_id": r["deferred_id"]} for r in deferred)])
     try:
-        store.take_lock()
+        store.take_lock(settings.kind)
         if store.file_done(key) and not again:
             store.commit()
             return {"file": key, "skipped": True}
@@ -143,7 +143,6 @@ def _release_waiting(store, settings: Settings, arrived: set) -> int:
     waits = sorted(_waiting_sources(settings))
     if not waits:
         return 0
-    store.index_waiting(store.unindexed_waiting(WAITING, waits))  # a store that held waiting records before keys
     tried, released = set(), 0
     while arrived:
         ready = [r for r in store.waiting_for(arrived) if r["subject"] not in tried and r["source_code"] in waits
@@ -196,7 +195,7 @@ def split_merge(store, settings: Settings, keep: str, gone: str, verdict: dict) 
     """Undo one merge in one transaction: the records return to the master they were first bound to, the
     reversal is stored, and both masters' records are merged again so each holds its own identifiers."""
     try:
-        store.take_lock()
+        store.take_lock(settings.kind)
         refuse_if_split(store, verdict["target"], keep, gone)
         records = [json.loads(body) for _, _, body in store.split(keep, gone)]
         store.add_decision(verdict, keep, gone)
@@ -211,7 +210,6 @@ def split_merge(store, settings: Settings, keep: str, gone: str, verdict: dict) 
 def _merge(store, settings: Settings, records: list[dict], key: str, again: bool, arrived: set | None = None) -> dict:
     """One file of records into golden records. `arrived` collects the identifiers its golden records now hold."""
     check_source_priorities(settings.policy, records)
-    file_no = store.last_file() + 1
     store.load_stage([(r["assertion_id"], r["subject"], r["source_code"], first(r["identifiers"].get("lei")),
                        json.dumps(r, separators=(",", ":"))) for r in records],
                      list({k for r in records for k in name_keys(r, exact_namespaces(settings))}))
@@ -219,7 +217,7 @@ def _merge(store, settings: Settings, records: list[dict], key: str, again: bool
     bound = store.bound(subjects)
     counts = Counter()
     binds = []  # the judgements of this file: name matches (step 6); an identifier join writes none
-    survivors = _match_identifiers(store, settings, records, bound, counts, file_no, binds)
+    survivors = _match_identifiers(store, settings, records, bound, counts, binds)
     named = _match_names(store, settings, records, bound, counts, binds)
     bound.update(named)
     exact = _match_exact_names(store, settings, records, bound, counts, binds)
@@ -235,7 +233,7 @@ def _merge(store, settings: Settings, records: list[dict], key: str, again: bool
     store.add_binds(binds)
     touched = set(held.values()) | survivors
     if touched:
-        found = _write_masters(store, settings, sorted(touched), file_no, counts)
+        found = _write_masters(store, settings, sorted(touched), counts)
         if arrived is not None:
             arrived.update(found)
     if not (again and store.file_done(key)):
@@ -247,17 +245,17 @@ def _rules(settings: Settings) -> list[dict]:
     return [rule for kind, rule in matching.active_rules(settings.policy) if kind == settings.kind]
 
 
-def merge_masters(store, settings: Settings, decision: dict, keep: str, gone: str, file_no: int, stored: bool) -> None:
+def merge_masters(store, settings: Settings, decision: dict, keep: str, gone: str, stored: bool) -> None:
     """Two golden records become one: the older keeps the other's identifiers and records, the other stays as an
     alias, and the decision is written. A rule and a data steward merge the same way."""
     store.repoint(keep, gone)
     if stored:
         alias = {"entity_id": gone, "kind": settings.kind, "canonical_id": keep, "status": "alias"}
-        store.write_masters([(gone, json.dumps(alias))], file_no)
+        store.write_masters([(gone, json.dumps(alias))])
     store.add_decision(decision, keep, gone)
 
 
-def _match_identifiers(store, settings: Settings, records, bound: dict, counts: Counter, file_no: int, binds: list) -> set:
+def _match_identifiers(store, settings: Settings, records, bound: dict, counts: Counter, binds: list) -> set:
     known = [r["subject"] for r in records if r["subject"] in bound]
     plan = plan_record_matches({
         "policy": settings.policy, "assertions": records, "decisions": [], "identities": [], "bound": known,
@@ -301,7 +299,7 @@ def _match_identifiers(store, settings: Settings, records, bound: dict, counts: 
             stored = store.oldest([left, right])
             keep = stored[0] if stored else min(left, right)
             gone = right if keep == left else left
-            merge_masters(store, settings, decision, keep, gone, file_no, gone in stored)
+            merge_masters(store, settings, decision, keep, gone, gone in stored)
             moved[gone] = keep
             survivors.discard(gone)
             survivors.add(keep)
@@ -450,7 +448,7 @@ def _bind_decision(settings: Settings, rule: dict, subject: str, assertion_id, e
             "policy_digest": settings.policy_digest}
 
 
-def _write_masters(store, settings: Settings, entities: list, file_no: int, counts: Counter) -> set:
+def _write_masters(store, settings: Settings, entities: list, counts: Counter) -> set:
     records = [json.loads(body) for body in store.member_bodies(entities)]
     bindings = store.members_bound(entities)
     subjects = sorted({r["subject"] for r in records})
@@ -463,7 +461,7 @@ def _write_masters(store, settings: Settings, entities: list, file_no: int, coun
         "profile_kinds": KINDS})
     for review in reviews:
         counts[str(review.get("reason"))] += 1
-    store.write_masters([(e, json.dumps(body)) for e, body in masters.items()], file_no)
+    store.write_masters([(e, json.dumps(body)) for e, body in masters.items()])
     held = sorted({(namespace, value, e) for e, body in masters.items()
                    for namespace, values in body["identifiers"].items() for value in values})
     store.add_identifiers(held)

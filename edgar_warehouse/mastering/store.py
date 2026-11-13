@@ -8,7 +8,8 @@ from collections import defaultdict
 from pathlib import Path
 
 BLOCK = 2000
-LOCK = "merge"
+STORE, FILE = "merge", "file"  # the lock rows: the whole store (and `merge:<kind>` for a kind), and numbering
+PENDING = 0  # a changed golden record's file number until its transaction commits
 WRITTEN = ("master", "file", "delivery", "identifier", "record", "name_key", "review", "withheld", "deferred",
            "lookup", "lookup_progress")
 
@@ -32,12 +33,29 @@ class Store:
         self.connection = connection
         self.cursor = connection.cursor()
         self.staged: list[tuple] = []  # the file being merged: (assertion_id, subject, source_code, lei, body)
+        self.changed: set[str] = set()  # the golden records this transaction wrote, not yet numbered
 
     def commit(self) -> None:
+        self.number_changes()
         self.connection.commit()
 
     def rollback(self) -> None:
+        self.changed.clear()
         self.connection.rollback()
+
+    def number_changes(self) -> None:
+        """Give what this transaction changed the next file number, as its last step and one transaction at a
+        time. A reader that has seen file N has then seen every change numbered N or less, whichever merge
+        started first: a number given at the start would let a merge that commits late land below a reader."""
+        if not self.changed:
+            return
+        if not self.rows("select name from mastering_lock where name=%s for update", [FILE]):
+            raise RuntimeError("Golden records are written under the store's lock: take it first")
+        number = self.last_file() + 1
+        for block in blocks(sorted(self.changed)):
+            self.cursor.execute(f"update mastering_master set changed_file=%s where changed_file={PENDING} "
+                                f"and entity_id in ({marks(block)})", [number, *block])
+        self.changed.clear()
 
     def close(self) -> None:
         self.connection.close()
@@ -53,11 +71,17 @@ class Store:
                                 + ",".join([one] * len(block)) + self.conflict_nothing,
                                 [value for row in block for value in row])
 
-    def take_lock(self) -> None:
-        """One writer for a whole file. The database frees it when the writer commits or dies."""
-        self.create_lock()
+    def take_lock(self, kind: str | None = None) -> None:
+        """One writer for a kind. A merge shares the store's lock and takes its kind's own, so merges of two kinds
+        run together and two of one kind take turns. With no kind, the whole store: every merge waits (`clear`).
+        The database frees a lock when its holder commits or dies."""
+        names = [STORE, FILE, *([f"{STORE}:{kind}"] if kind else [])]
+        held = {row[0] for row in self.rows(f"select name from mastering_lock where name in ({marks(names)})", names)}
+        self.insert("mastering_lock", ("name",), [(name,) for name in names if name not in held])
         self.commit()
-        self.rows("select name from mastering_lock where name=%s for update", [LOCK])
+        self.rows(f"select name from mastering_lock where name=%s {'for share' if kind else 'for update'}", [STORE])
+        if kind:
+            self.rows("select name from mastering_lock where name=%s for update", [names[-1]])
 
     def file_done(self, key: str) -> bool:
         return bool(self.rows("select 1 from mastering_file where file_key=%s", [key]))
@@ -315,17 +339,6 @@ class Store:
         if rows:
             self.insert("mastering_name_key", ("role", "value", "subject"), sorted(rows))
 
-    def unindexed_waiting(self, reason: str, sources: list) -> list[dict]:
-        """Records that wait with no key yet (a store that held waiting records before keys existed)."""
-        found = []
-        for block in blocks(sources):
-            found += [json.loads(b) for (b,) in self.rows(
-                "select r.body from mastering_review v join mastering_record r on r.subject=v.subject "
-                "where v.reason=%s and v.open_review=1 and r.entity_id is null "
-                f"and r.source_code in ({marks(block)}) and not exists (select 1 from mastering_name_key k "
-                "where k.role='waiting' and k.subject=v.subject)", [reason, *block])]
-        return found
-
     def waiting_for(self, arrived) -> list[dict]:
         """The waiting records that state an identifier a golden record now holds: `arrived` is {(namespace, value)}."""
         subjects = set()
@@ -349,11 +362,13 @@ class Store:
         if rows:
             self.insert("mastering_deferred", ("deferred_id", "source_code", "reason", "blocking", "body"), rows)
 
-    def write_masters(self, rows: list, file_no: int) -> None:
+    def write_masters(self, rows: list) -> None:
+        """Golden records, written or changed. Each changed one is numbered when the transaction commits."""
         for block in blocks(rows):
             self.cursor.execute("insert into mastering_master(entity_id,body,changed_file) values "
-                                + ",".join(["(%s,%s,%s)"] * len(block)) + self.master_upsert,
-                                [value for entity, body in block for value in (entity, body, file_no)])
+                                + ",".join([f"(%s,%s,{PENDING})"] * len(block)) + self.master_upsert,
+                                [value for entity, body in block for value in (entity, body)])
+        self.changed.update(entity for entity, _ in rows)
 
     def changes(self, since: int, after: str = "", limit: int = 1000) -> list[tuple]:
         """One page of what changed after a reader's checkpoint: (file, master id, body)."""
@@ -437,9 +452,6 @@ class Postgres(Store):
                      "where mastering_master.body<>excluded.body")
     review_upsert = " on conflict(subject,reason) do update set assertion_id=excluded.assertion_id,open_review=1"
 
-    def create_lock(self) -> None:
-        self.cursor.execute("insert into mastering_lock(name) values (%s) on conflict do nothing", [LOCK])
-
     def bulk(self, table: str, columns: tuple, rows: list) -> None:
         def clean(value):
             return "\\N" if value is None else value.replace("\\", "\\\\").replace("\t", "\\t").replace("\n", "\\n")
@@ -454,8 +466,10 @@ class MySQL(Store):
                      "if(mastering_master.body=new.body,mastering_master.changed_file,new.changed_file),body=new.body")
     review_upsert = " as new on duplicate key update assertion_id=new.assertion_id,open_review=1"
 
-    def create_lock(self) -> None:
-        self.cursor.execute("insert ignore into mastering_lock(name) values (%s)", [LOCK])
+    def __init__(self, connection):
+        super().__init__(connection)
+        # Each statement reads what is committed, as on PostgreSQL: a number is read after its lock is held.
+        self.cursor.execute("set session transaction isolation level read committed")
 
     def bulk(self, table: str, columns: tuple, rows: list) -> None:
         self.insert(table, columns, rows)

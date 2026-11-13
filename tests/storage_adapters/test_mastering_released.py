@@ -40,13 +40,3 @@ def test_a_waiting_record_is_released_by_a_later_file_of_any_source_and_a_second
         merge.merge_file(db, SECURITY, [arrival], again=True)
         assert db.rows("select count(*) from mastering_record where entity_id is not null")[0][0] == before
         assert waiting(db) == [other["subject"]] and len(live(db)) == 1
-
-
-def test_a_store_that_held_waiting_records_before_keys_existed_releases_them_too(database_factory):
-    with opened(database_factory) as db:
-        asked = not_found("asked", cusip=CUSIP)
-        merge.merge_file(db, SECURITY, [asked])
-        db.cursor.execute("delete from mastering_name_key where role='waiting'")  # as an older store holds them
-        db.commit()
-        merge.merge_file(db, SECURITY, [record(NPORT, CUSIP, "security", cusip=CUSIP)])
-        assert waiting(db) == [] and db.bound([asked["subject"]])[asked["subject"]] in live(db)
