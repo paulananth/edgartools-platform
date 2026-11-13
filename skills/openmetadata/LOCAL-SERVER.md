@@ -54,25 +54,34 @@ objects are soft-deleted. Fix: retain the empty configuration override and
 verify zero demo edges after restart. Lesson: deletion is complete only when
 the producer of unwanted metadata is also suppressed.
 
-Initialization also excludes the two vendor AI demo services and their sample
-children through the native API. The skill's `scripts/initialize.py` inventories
-the children by service, checks that the inventory is complete, soft-deletes
-each child and parent, and requires native readback to confirm active absence
-and retained deleted markers. Keep those markers: the vendor's asset seeder
-checks deleted objects too, so hard deletion would let the examples return.
-Repeating initialization is safe. Preserve unrelated services.
+Initialization clears all active AI Governance resources through the native
+API: AI applications, Governance policies and frameworks, AI-specific intake
+forms and workflow definitions, prompt templates, LLM models and services, MCP
+executions, servers and services. It preserves unrelated governance workflows
+and intake forms. The OpenMetadata skill's `scripts/initialize.py` inventories
+every native collection completely, follows pagination where provided,
+soft-deletes each active entity, and requires native readback to
+confirm zero active entities. It also verifies retained deleted markers for
+entity types whose seeders check tombstones; keep those markers so vendor
+examples cannot return. Repeating initialization is safe. Preserve all
+non-AI services and catalog objects.
 
-Problem: on the pinned 2.0.2 local server, listing LLM models with
-`include=all` returns HTTP 404, while reading a model by ID with
-`include=all` returns its tombstone. Root cause: collection and item reads
-have different deleted-entity behavior in this release. Fix: inventory active
-children by service, require complete pagination, verify each soft-deleted ID
-with `include=all`, then re-list active children. Lesson: qualify deleted-state
-readback for each endpoint shape instead of assuming list and item reads match.
+On this local 2.0.7 instance, `GET /api/v1/governance/workflowInstances`
+returns HTTP 500. Initialization recursively soft-deletes AI-specific workflow
+definitions and verifies their tombstones, but it cannot independently verify
+workflow execution-history records through that endpoint. Do not report those
+history records as cleared.
+
+Problem: collection and item reads can expose deleted entities differently.
+Root cause: OpenMetadata applies endpoint-specific deleted-state behavior.
+Fix: qualify the pinned release's collection and item readbacks, preserve soft
+delete markers, then re-list every active collection. Lesson: confirm active
+absence and tombstone retention using the native endpoint shapes.
 
 Use the existing Docker context and the private `.env` file above. The
 initialization command starts the separate server, waits for health, bootstraps
-and verifies credentials, then requires the demo-service exclusion to pass:
+and verifies credentials, then requires the AI Governance cleanup and readback
+to pass:
 
 ```bash
 bash infra/openmetadata/init.sh
@@ -119,7 +128,11 @@ Keep the `postgresql`, `execute-migrate-all`, and `openmetadata-server` images o
 bash infra/openmetadata/init.sh
 ```
 
-The initializer also performs the idempotent native-API demo exclusion/readback. Its release allowlist is intentionally fail-closed: qualify the target release's API behavior and tests before adding it; unknown releases must not run exclusions. After startup, verify `GET /api/v1/system/version` and the owned entity readbacks, then reindex all search indexes with the container CLI:
+The initializer also performs the idempotent native-API AI Governance
+clearout/readback. Its release allowlist is intentionally fail-closed: qualify
+the target release's API behavior before adding it; unknown releases must not
+run exclusions. After startup, verify `GET /api/v1/system/version` and the
+entity readbacks, then reindex all search indexes with the container CLI:
 
 ```bash
 docker compose -f infra/openmetadata/docker-compose.yml exec -T openmetadata-server ./bootstrap/openmetadata-ops.sh reindex
@@ -256,7 +269,8 @@ initializer, remove only the `OPENMETADATA_PASSWORD_CHANGED` line from the
 private `.env`; this makes the credential bootstrap change the fresh default
 administrator password and issue a new PAT. Keep the remaining endpoint and
 login settings. The initializer waits for PostgreSQL, Elasticsearch,
-migrations, and the server, then verifies credentials and demo exclusion.
+migrations, and the server, then verifies credentials and the complete AI
+Governance clearout.
 Require `GET /api/v1/system/version` to report the configured release. Then
 follow the catalog-only workflow above: read the side-effect-free
 Rules plan, publish the configured catalog, require publisher readback, run the

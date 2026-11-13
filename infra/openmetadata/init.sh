@@ -25,6 +25,7 @@ compose_project=edgartools-openmetadata
 
 docker compose -p "$compose_project" -f "$repo_root/infra/openmetadata/docker-compose.yml" up -d --wait --wait-timeout 1200
 uv run --no-project python "$repo_root/infra/openmetadata/credentials.py" --env-file "$env_file"
+unset OPENMETADATA_INITIAL_PASSWORD
 if [[ -f "$env_file" ]]; then
   set -a
   # Refresh the shell with the token just written by credentials.py.

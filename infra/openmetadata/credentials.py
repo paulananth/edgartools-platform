@@ -137,7 +137,9 @@ def main() -> int:
         try:
             result = json.loads(payload) if payload else None
         except (ValueError, UnicodeDecodeError):
-            raise CredentialError("OpenMetadata returned invalid JSON") from None
+            # Password changes may return a successful plain-text message. The
+            # callers that need structured data validate their required fields.
+            return None
         return result if isinstance(result, dict) else None
 
     def login(email: str, password: str) -> str:
@@ -169,10 +171,6 @@ def main() -> int:
                 "OPENMETADATA_LOGIN_PASSWORD is missing from the private environment file"
             )
         password = configured_password or secure_password()
-        if not password_changed and not initial_password:
-            raise CredentialError(
-                "OPENMETADATA_INITIAL_PASSWORD is missing from the private environment file"
-            )
 
         write_env(
             env_file,
@@ -206,18 +204,26 @@ def main() -> int:
                 pass
 
         if not password_changed:
-            bootstrap_token = login(email, initial_password)
-            call(
-                "PUT",
-                "/users/changePassword",
-                {
-                    "oldPassword": initial_password,
-                    "newPassword": password,
-                    "confirmPassword": password,
-                    "requestType": "SELF",
-                },
-                token=bootstrap_token,
-            )
+            try:
+                access_token = login(email, password)
+            except CredentialError:
+                if not initial_password:
+                    raise CredentialError(
+                        "OPENMETADATA_INITIAL_PASSWORD is missing from the private environment file"
+                    ) from None
+                bootstrap_token = login(email, initial_password)
+                call(
+                    "PUT",
+                    "/users/changePassword",
+                    {
+                        "oldPassword": initial_password,
+                        "newPassword": password,
+                        "confirmPassword": password,
+                        "requestType": "SELF",
+                    },
+                    token=bootstrap_token,
+                )
+                access_token = login(email, password)
             password_changed = True
             write_env(
                 env_file,
@@ -227,7 +233,8 @@ def main() -> int:
                 },
             )
 
-        access_token = login(email, password)
+        else:
+            access_token = login(email, password)
         version = call("GET", "/system/version", token=access_token)
         if not version or version.get("version") != PINNED_VERSION:
             raise CredentialError(
