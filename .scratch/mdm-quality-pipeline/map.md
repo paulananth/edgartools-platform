@@ -1,0 +1,48 @@
+Labels: `wayfinder:map`
+
+## Destination
+
+A ready-to-implement design for executing Company, Person, and Security MDM
+quality checks within their pipeline, retaining verified per-check outcomes in
+Bookkeeping, and publishing genuine results to OpenMetadata with exact readback.
+The map is complete when check scope, execution boundaries, the evidence and
+recovery contract, and catalog projection are decided. It does not change
+production rules or switch on new checks.
+
+## Notes
+
+- `mdm.quality.apply` already runs source `quality.yaml` checks during
+  `mastering.merge` normalization, before a record is merged. `exception`,
+  `withhold`, and `flag` have distinct behaviors; a quality exception does not
+  stop the whole run.
+- The MDM path does not yet publish per-check run evidence. Its existing
+  provenance retains failures, but not a complete pass denominator. The
+  `quality.counts` helper is not wired to a verified MDM receipt.
+- Use DataKitchen TestGen as a test-type reference, not as a second runtime.
+  Keep the Company Financials silver recommendations distinct from Company,
+  Person, and Security master rules. A master identifier-capacity constraint
+  is not automatically a row-level quality test.
+- The completed [Verified Per-Load Quality Evidence map](../openmetadata-quality-evidence/map.md)
+  is the precedent for immutable receipts, Bookkeeping admission, exact result
+  readback, and recovery qualification. This map covers the MDM execution path
+  and its integration with that evidence flow.
+- Consult `skills/data-quality/SKILL.md`, `skills/mdm-engineering/SKILL.md`,
+  `skills/bookkeeping/RECOVERY.md`, and `skills/openmetadata/SKILL.md` while
+  resolving the tickets. Apply the GoF review before MDM code changes.
+
+## Decisions so far
+
+None.
+
+## Not yet specified
+
+- The selected-engine proof matrix and measurable recovery bound for the
+  eventual receipt implementation; sharpen these after the evidence boundary
+  and supported check scopes are decided.
+
+## Out of scope
+
+- Installing or invoking DataKitchen TestGen as a separate production runner.
+- Customizing the OpenMetadata UI or making OpenMetadata execute the checks.
+- Provider acquisition, source activation, production rule changes, or enabling
+  a new evidence format before the required decisions and qualification.
