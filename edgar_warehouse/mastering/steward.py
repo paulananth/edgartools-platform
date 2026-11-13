@@ -119,13 +119,13 @@ def resolve(store, settings_of, *, subject: str, result: str, actor: str, reason
     if not confirm:
         return report
     try:
-        store.take_lock()
-        file_no, counts = store.last_file() + 1, Counter()
+        store.take_lock(settings.kind)
+        counts = Counter()
         if result == "merge":
             keep = ordered[0]
             for gone in ordered[1:]:
                 verdict = _decision("merge", actor, reason, at, left=keep, right=gone, subject=subject)
-                merge.merge_masters(store, settings, verdict, keep, gone, file_no, True)
+                merge.merge_masters(store, settings, verdict, keep, gone, True)
             store.bind_record(subject, keep)
             entity, touched = keep, [keep]
         else:
@@ -137,7 +137,7 @@ def resolve(store, settings_of, *, subject: str, result: str, actor: str, reason
             touched = [entity]
         store.add_decision(_decision("bind", actor, reason, at, subject=subject, entity_id=entity), subject, entity)
         store.close_reviews(CONFLICT, [subject])
-        merge._write_masters(store, settings, touched, file_no, counts)
+        merge._write_masters(store, settings, touched, counts)
         store.finish_file(hashlib.sha256(f"resolve:{subject}:{result}:{at}".encode()).hexdigest(), 1)
         store.commit()
     except BaseException:

@@ -2,7 +2,7 @@
 
 import json
 import re
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from contextlib import contextmanager
 from pathlib import Path
 from threading import Barrier
@@ -317,6 +317,63 @@ def test_two_writers_on_the_same_identifiers_leave_one_master_each(database_fact
             assert all(len(body["subjects"]) == 2 for body in live(db).values())
         finally:
             db.close()
+
+
+@contextmanager
+def two_stores(database_factory):
+    """Two sessions on one mastering store."""
+    with database_factory() as (owner, runtime, role):
+        if owner.dialect.name == "mssql":
+            pytest.skip("Mastering runs on PostgreSQL and MySQL")
+        stores.install(owner, runtime_role=role)
+        opened_ = [open_store(runtime), open_store(runtime)]
+        try:
+            yield opened_
+        finally:
+            for db in opened_:
+                db.rollback()
+                db.close()
+
+
+def test_a_merge_of_another_kind_runs_beside_one_in_flight_and_a_reader_misses_neither(database_factory, monkeypatch):
+    """A Security merge does not wait for a Company merge. The Company merge started first and commits last:
+    its golden record is numbered after the Security's, so a reader that stopped in between still gets it."""
+    with two_stores(database_factory) as (first, second):
+        seen, finish = {}, first.finish_file
+
+        def while_in_flight(key, records):  # the Company's golden record is written and not yet committed
+            pool = ThreadPoolExecutor(1)
+            try:
+                security = record(FIGI, "a", "security", figi=figi("00TSTX05"))
+                seen["merged"] = pool.submit(merge.merge_file, second, SECURITY, [security]).result(timeout=30)
+            finally:
+                pool.shutdown(wait=False)
+            seen["checkpoint"] = max(file_no for file_no, _, _ in second.changes(0))
+            second.commit()
+            finish(key, records)
+
+        monkeypatch.setattr(first, "finish_file", while_in_flight)
+        merge.merge_file(first, COMPANY, [record(SEC, "1", cik="0000000017")])
+        assert seen["merged"]["skipped"] is False and seen["checkpoint"] == 1
+        later = [(file_no, json.loads(body)["kind"]) for file_no, _, body in second.changes(seen["checkpoint"])]
+        assert later == [(2, "company")]
+        assert sorted(body["kind"] for body in live(second).values()) == ["company", "security"]
+
+
+def test_the_whole_store_lock_waits_for_a_merge_in_flight(database_factory):
+    """`clear` takes the whole store: it starts only when no merge of any kind is open."""
+    with two_stores(database_factory) as (first, second):
+        first.take_lock("company")
+        pool = ThreadPoolExecutor(1)
+        try:
+            waiting = pool.submit(second.take_lock)
+            with pytest.raises(TimeoutError):
+                waiting.result(timeout=1)
+            first.commit()
+            waiting.result(timeout=30)
+        finally:
+            first.rollback()
+            pool.shutdown(wait=False)
 
 
 @pytest.mark.parametrize("engine", ["postgresql", "mysql"])
