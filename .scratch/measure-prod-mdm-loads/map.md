@@ -46,6 +46,10 @@ whoever runs it.
 
 - [How is the entity-kind contribution and completion model decided?](issues/05-entity-kind-contribution-model.md): merge kinds gate completeness on 13 contracts, a kind is complete when its sources loaded and links ran, every incomplete kind is partial, and deferred counts are reported but never status-changing.
 
+- [Under what exact conditions may a live production load be submitted, and who authorizes it?](issues/07-live-load-authorization-path.md): the path is closed on evidence - both gates shut - and the rules for reopening it are recorded.
+- [What exactly is the measured-load procedure, run by run?](issues/08-live-load-measurement-procedure.md): the command, the private log, the two durations, the step-interval mapping and the order are specified, and the retrospective branch is named.
+- [How is the private measurement report produced and verified?](issues/09-report-generation-and-verification.md): the report directory, its files, the ten reconciliation checks, the redaction pass and the retention rule are settled.
+
 ## Not yet specified
 
 - The per-target evidence package's shape: how the retained load logs, the

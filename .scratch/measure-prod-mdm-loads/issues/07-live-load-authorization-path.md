@@ -1,7 +1,7 @@
 # Under what exact conditions may a live production load be submitted, and who authorizes it?
 
 Type: grilling
-Status: open
+Status: resolved
 Blocked by: 01
 
 ## Question
@@ -31,3 +31,46 @@ Decide, with the operator:
 
 Record the resolved rule, and if live loads are out of scope, record that and why. Append a one-line
 gist to the map's Decisions so far.
+
+## Answer
+
+Decided 2026-11-13, on the evidence of
+[01-hosted-qualification-and-credential-gate.md](../evidence/01-hosted-qualification-and-credential-gate.md).
+
+### The path is closed, and it is closed on evidence, not on preference
+
+No new production source load may be submitted. Both gates are shut:
+
+- **Hosted qualification** — `docs/specs/mdm/acceptance.md:5,120-121` and
+  `docs/specs/mdm/state-of-build.md:133-136` defer Snowflake Postgres qualification, and no newer
+  approved record exists in the checkout.
+- **Credential rotation** — no rotation record exists, and the live private environment files still
+  carry the unrotated credential set (every credential-bearing value is byte-identical to
+  `governance.env.before-reset-20261112`).
+
+### The rules, so that reopening is mechanical
+
+1. **The measurement is retrospective-only.** The report is built from retained evidence. No
+   production write, no MDM/Postgres connection, no provider request, no capture target.
+2. **A live load becomes permissible only when both gates clear.** The gate check is: a newer
+   approved qualification record naming `EDGARTOOLS_PROD_MDM` as a qualified target, **and**
+   credential-rotation evidence plus private environment files whose credential fingerprints
+   differ from `governance.env.before-reset-20261112`. Either one alone is not enough.
+3. **The authorization unit, if that happens, is one target at a time.** An approval names the exact
+   source, target, retained capture folder, capture run id, and the selected document scope. It
+   covers that one invocation only; a second target needs its own approval.
+4. **A resumed invocation rides its original approval** when the run id and the frozen inputs are
+   unchanged. Changed inputs or a changed rules version make it a new approval.
+5. **`selected = 0` is not a failure.** If normal Change Journal selection yields no documents, no
+   run is submitted; the row records `selected: 0` and the already-processed count, and the
+   historical timing stands.
+6. **The ten-minute estimate is reported before the dispatch**, with the target, the estimate and
+   the expected bundles.
+7. **No competing run over the same resources.** One target at a time, in source-sequence order,
+   then the three link targets ahead of their consumers.
+
+### Why no dispatch is authorized in this session
+
+The plan's own condition — "If no newer approved hosted evidence is found, stop before new
+production writes and finish the retrospective report only" — is met. The ticket's rule 2 is the
+test, and the test fails.
