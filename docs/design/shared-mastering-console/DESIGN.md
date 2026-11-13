@@ -13,6 +13,29 @@ One web page where an operator sees how Company, Person and Security records are
 3. **One page, three kinds.** The same screens serve all three entities, driven by the rules files. No page is written for one kind and copied for another.
 4. **Every claim is something the engine says.** A badge shows a check or a run result, never a guess. A result that is missing says "not recorded".
 
+## Three questions, kept apart
+
+1. **Matching** finds the golden record a new record belongs to.
+2. **Consolidation permission** decides whether two existing golden records may become one. Joining a record to one golden record never grants it.
+3. **Survivorship** picks the value each field shows, after the first two. A source priority never proves identity.
+
+Each screen shows which question a rule answers.
+
+## Where each part lives today
+
+| Part | Code | The console does |
+| --- | --- | --- |
+| Authoring | `rules/` files, `edgar_warehouse/rules/files.py` | Reads and writes through it |
+| Rules in force | `automatic_rules` in `rules/merge/policy.yaml`; a rule listed there with its kind, family, id, version and verdict is allowed | Shows whether each rule is listed. A change in the console never alters a running policy |
+| Check and digest | `files.check_document`, `frozen.of` | Calls them; the browser never decides a file is valid |
+| Registration | `frozen.register` through `rules register` | Nothing; registering stays a command |
+| Rules a run used | `rules_used` (`Rules.history/body`) | Shows them for a run |
+| Merge | `mastering/merge.py` `merge_file` | Never writes a golden record |
+| Stewardship | `mastering/steward.py` `split/resolve` | Preview and confirm only |
+| Catalog | `rules/catalog.py`; OpenMetadata is published to, not authored in | Nothing |
+
+There is no save, prove, approve or activate step for a rule. Older notes and skills that still mention one are wrong; fix them in a separate change, and do not bring the step back to match them.
+
 ## Screens
 
 | Screen | Shows | Needs |
