@@ -65,6 +65,36 @@ def _tuple(row: dict, spec: dict) -> tuple:
     return tuple(str(row.get(name)) for name in spec["key"])
 
 
+DELIVERY_ROWS = 10_000
+
+
+def _deliveries(spec: dict, artifact_rows):
+    """The rows to land together. A landing costs about fifteen database statements whatever its size, and each is a
+    round trip to the silver and MDM stores, so a unit's artifacts land in deliveries of up to DELIVERY_ROWS rather
+    than one each. The outcome is the one each artifact landed alone would give: a snapshot table keeps one delivery
+    for each artifact (a delivery replaces the table's rows); a row repeating a key of the delivery is dropped when
+    equal, and when it differs it starts the next delivery, so the store sees the change as before."""
+    if spec.get("load_mode") == "snapshot":
+        yield from artifact_rows
+        return
+    batch, held = [], {}
+    for rows in artifact_rows:
+        for row in rows:
+            key = _tuple(row, spec)
+            if key in held:
+                if held[key] == row:
+                    continue
+                yield batch
+                batch, held = [], {}
+            batch.append(row)
+            held[key] = row
+        if len(batch) >= DELIVERY_ROWS:
+            yield batch
+            batch, held = [], {}
+    if batch:
+        yield batch
+
+
 def _receipt(count: int, seen: set, quality: dict | None = None) -> bytes:
     """What the reading held for the table: rows, distinct keys and a digest of them."""
     digest = hashlib.sha256(json.dumps(sorted(seen), separators=(",", ":")).encode()).hexdigest()
@@ -176,13 +206,19 @@ def execute(envelope: dict, artifacts) -> dict:
         spec = sink.spec(keys["silver"])
         count, seen = 0, set()
         quality_reports = []
-        for artifact in _artifacts(envelope, artifacts):  # one pass: what lands is what the receipt counts
-            rows = _rows(artifact, keys)
-            # The mutable results file is for direct silver runs only;
+
+        def each_artifact():  # one pass: what lands is what the receipt counts
+            nonlocal count
+            for artifact in _artifacts(envelope, artifacts):
+                rows = _rows(artifact, keys)
+                count += len(rows)
+                seen.update(_tuple(row, spec) for row in rows)
+                yield rows
+
+        for rows in _deliveries(spec, each_artifact()):
+            # The mutable legacy results file is for direct silver runs only;
             # Bookkeeping has its own immutable, attempt-bound receipt.
             landed = land(sink, keys["silver"], rows, ids, record_quality_results=False)
-            count += len(rows)
-            seen.update(_tuple(row, spec) for row in rows)
             if landed.get("quality") is not None:
                 quality_reports.append(landed["quality"])
         quality = None
