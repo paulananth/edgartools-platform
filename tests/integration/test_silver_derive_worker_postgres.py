@@ -4,11 +4,12 @@ here is invented."""
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import json
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
 
 from edgar_warehouse.financials import measures
 from edgar_warehouse.rules import files
@@ -164,6 +165,37 @@ def test_links_land_as_one_row_a_period_and_a_second_run_keeps_them(postgres, mo
         silver_derive.execute(done, store)
         assert json.loads(store.written[out["uri"]])["rows"] == 1
         assert seen[0] == {} and seen[1]["invented"]["periods"][0]["valid_from_basis"] == "observed"
+
+
+@contextlib.contextmanager
+def bare_tables(admin, facts: tuple, lines: tuple):
+    """The two tables the floor reads, holding only company keys (each an expression over 1..count),
+    behind a login with little memory and five seconds for a statement."""
+    with silver_database(admin) as (owner, _):
+        with owner.begin() as conn:
+            conn.execute(text("CREATE SCHEMA silver"))
+            conn.execute(text(f"CREATE TABLE silver.company_fact AS SELECT ({facts[0]})::text AS company_key "
+                              f"FROM generate_series(1, {facts[1]}) n"))
+            conn.execute(text(f"CREATE TABLE silver.company_line_item AS SELECT ({lines[0]})::text AS company_key "
+                              f"FROM generate_series(1, {lines[1]}) n"))
+        small = create_engine(owner.url, connect_args={"options": "-c work_mem=64kB -c statement_timeout=5000"})
+        try:
+            yield small
+        finally:
+            small.dispose()
+
+
+def test_the_floor_is_answered_in_seconds_over_a_source_larger_than_memory(postgres):
+    admin, _ = postgres
+    with bare_tables(admin, ("n % 20000", 400000), ("n % 20000", 20000)) as small:
+        silver_derive._floor(small, "line_items", 20000)
+
+
+def test_the_floor_refuses_a_company_the_source_does_not_hold(postgres):
+    admin, _ = postgres
+    with bare_tables(admin, ("n", 3), ("n", 5)) as small:
+        with pytest.raises(ValueError, match="holds 2 companies that silver.company_fact does not"):
+            silver_derive._floor(small, "line_items", 5)
 
 
 class Policies:

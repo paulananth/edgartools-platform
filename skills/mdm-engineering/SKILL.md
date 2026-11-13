@@ -243,6 +243,8 @@ until the load ends.
 
 **Page by keyset with two range reads, never an `OR`.** `a=%s and b>%s`, then `a>%s`, each ordered and limited, use the index; `a>%s or (a=%s and b>%s)` can scan. Standard SQL does both, so the portable form is the fast one. Time one page on the real store before a build runs over all of them.
 
+**Ask for rows without a match with `not exists`, never `not in (select ...)`.** Over a subquery larger than the statement's memory, `not in` reads the whole subquery once for each row; `not exists` is one anti-join. Both are standard SQL. `not in` also answers nothing when the subquery holds a null.
+
 ## Migrations
 
 - `migrations/schema.sql` is the schema `mdm migrate` creates in an empty
