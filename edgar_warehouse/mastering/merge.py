@@ -410,7 +410,8 @@ def _match_exact_names(store, settings: Settings, records, bound: dict, counts: 
         here = {r["subject"]: r for r in records if reference_of(r, namespace)}
         if not here:
             continue
-        here = {k: v for k, v in here.items() if k not in store.in_review(here, except_reason=WAITING)}
+        held = store.in_review(here, except_reason=WAITING)  # asked once for the batch, never once a record
+        here = {k: v for k, v in here.items() if k not in held}
         if not here:
             continue
         members = {(reference_of(r, namespace), r["subject"], r["source_code"], None) for r in here.values()}
