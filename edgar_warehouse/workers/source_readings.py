@@ -418,6 +418,20 @@ def iter_pieces(ref, artifacts, *, max_bytes, max_rows, allow_lookup_receipts=Fa
         yield chunk, size
 
 
+def iter_artifact_pieces(ref, artifacts, *, max_bytes, max_rows, allow_lookup_receipts=False):
+    """Yield (artifact number, piece, cumulative bytes): each stored piece with the artifact it is of,
+    so a reader that needs one artifact's rows together still holds one piece."""
+    body, size = _index(ref, artifacts, max_bytes, allow_lookup_receipts)
+    if body["version"] == 1:
+        if not isinstance(body.get("artifacts"), list):
+            raise ValueError("A whole reading lists its artifacts")
+        for index, artifact in enumerate(body["artifacts"]):
+            yield index, artifact, size
+        return
+    for index, chunk, size, _ in _partition_chunks(body, artifacts, size=size, max_bytes=max_bytes, max_rows=max_rows):
+        yield index, chunk, size
+
+
 def load(ref, artifacts, *, max_bytes, max_rows, allow_lookup_receipts=False):
     """Return normalized version-1 tables and total authenticated bytes read."""
     body, size = _index(ref, artifacts, max_bytes, allow_lookup_receipts)

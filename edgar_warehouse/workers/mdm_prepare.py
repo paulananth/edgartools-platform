@@ -41,6 +41,7 @@ keys, so a retry writes the same bytes.
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
 from datetime import datetime
 from pathlib import Path
@@ -53,9 +54,9 @@ from . import source_readings
 
 CHECK = "mdm.prepared"
 KEYS = {"table", "dataset", "policy", "consumer", "batch_id", "as_of"}
-# Bounds, not budgets (ticket 83): the input is read one input file at a time
-# and each batch's records file written as it fills, so memory holds one input
-# file's rows and one batch.
+# Bounds, not budgets: the input is read one stored piece at a time and each
+# batch's records file written as it fills, so memory holds one piece, one
+# batch and, with `distinct_on`, the values already seen.
 INPUT_BYTES = 16 * 1024**3
 INPUT_ROWS = 100_000_000
 
@@ -71,10 +72,16 @@ def _lines(rows: list[dict]) -> bytes:
 
 
 def _artifacts(envelope: dict, artifacts):
-    """Each input file of the unit's readings, whole, in order: one source.read
-    output, or a readings list `{"version": 1, "readings": [ref, ...]}` (a
-    composed input naming many). A reading written in pieces is gathered one
-    file at a time; the byte and row bounds are spent across all of them."""
+    """Each input file of the unit's readings, in order, as an iterator of its pieces: one source.read
+    output, or a readings list `{"version": 1, "readings": [ref, ...]}` (a composed input naming many).
+    A reading written in pieces is read one piece at a time; the byte and row bounds are spent across
+    all of them."""
+    for _, pieces in itertools.groupby(_pieces(envelope, artifacts), key=lambda item: item[0]):
+        yield (piece for _, piece in pieces)
+
+
+def _pieces(envelope: dict, artifacts):
+    """(which input file, one piece of it), in order."""
     refs = [envelope["input"]]
     try:  # a readings list is small; a larger input is a reading, read below
         document = artifacts.json(envelope["input"])
@@ -85,42 +92,67 @@ def _artifacts(envelope: dict, artifacts):
             raise ValueError("mdm.prepare reads a readings list (version 1)")
         refs = source_readings.receipts(document["readings"])
     consumed = rows = 0
-    for ref in refs:
+    for number, ref in enumerate(refs):
         used = 0
-        for artifact, used in source_readings.iter_artifacts(
+        for index, piece, used in source_readings.iter_artifact_pieces(
                 ref, artifacts, max_bytes=INPUT_BYTES - consumed, max_rows=INPUT_ROWS - rows,
                 allow_lookup_receipts=True):
-            rows += sum(len(t) for t in artifact["tables"].values() if isinstance(t, list))
+            rows += sum(len(t) for t in piece["tables"].values() if isinstance(t, list))
             if rows > INPUT_ROWS:
                 raise ValueError("mdm.prepare readings exceed their row budget")
-            yield artifact
+            yield (number, index), piece
         consumed += used
 
 
-def _artifact_rows(artifact: dict, keys: dict) -> tuple[str, list[dict], dict]:
-    """One artifact's records, checked: its source digest, its rows and its publication facts."""
+def _artifact_rows(pieces, keys: dict) -> tuple[str, object, dict]:
+    """One artifact's records, checked piece by piece: its source digest, its rows (an iterator) and
+    its publication facts, which its first rows state and every later piece must repeat."""
     record_column = _optional_text(keys, "record_column")
     effective_column = _optional_text(keys, "effective_column")
     distinct_on = _columns(keys, "distinct_on")
     extras = _columns(keys, "record_extras") or []
     if extras and record_column is None:
         raise ValueError("mdm.prepare record_extras needs record_column")
-    rows = artifact["tables"].get(keys["table"])
-    if rows is None:
-        raise ValueError(f"The reading has no table {keys['table']}")
-    if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
-        raise ValueError("mdm.prepare table rows must be objects")
-    # Every row is checked before duplicates are dropped, so a dropped
-    # row cannot hide a bad time or shape.
-    publication = {}
-    if effective_column is not None and rows:
-        publication["effective_at"] = _effective_at(rows, effective_column, keys["as_of"])
-    if record_column is not None and any(not isinstance(row.get(record_column), dict) for row in rows):
-        raise ValueError("mdm.prepare record_column must hold an object in every row")
-    if distinct_on is not None:
-        rows = _first_of_each(rows, distinct_on)
-    if record_column is not None:
-        rows = [_with_extras(row, record_column, extras) for row in rows]
+    seen: set = set()
+
+    def checked(piece: dict) -> tuple[bool, dict, list[dict]]:
+        rows = piece["tables"].get(keys["table"])
+        if rows is None:
+            raise ValueError(f"The reading has no table {keys['table']}")
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            raise ValueError("mdm.prepare table rows must be objects")
+        # Every row is checked before duplicates are dropped, so a dropped
+        # row cannot hide a bad time or shape.
+        stated, held = {}, bool(rows)
+        if effective_column is not None and rows:
+            stated["effective_at"] = _effective_at(rows, effective_column, keys["as_of"])
+        if record_column is not None and any(not isinstance(row.get(record_column), dict) for row in rows):
+            raise ValueError("mdm.prepare record_column must hold an object in every row")
+        if distinct_on is not None:
+            rows = _first_of_each(rows, distinct_on, seen)
+        if record_column is not None:
+            rows = [_with_extras(row, record_column, extras) for row in rows]
+        return held, stated, rows
+
+    source, publication, head = None, {}, []
+    for piece in pieces:  # up to the first piece that holds rows: it states the artifact's time
+        source = source or _source(piece)
+        held, publication, head = checked(piece)
+        if held:
+            break
+
+    def rows():
+        yield from head
+        for piece in pieces:
+            held, stated, more = checked(piece)
+            if held and stated != publication:
+                raise ValueError(f"mdm.prepare {effective_column} must hold one effective time per artifact")
+            yield from more
+
+    return source, rows(), publication
+
+
+def _source(artifact: dict) -> str:
     source = artifact["input"]["sha256"]
     if "context" in artifact:
         reference(artifact["context"])
@@ -131,7 +163,7 @@ def _artifact_rows(artifact: dict, keys: dict) -> tuple[str, list[dict], dict]:
         reference(artifact["lookups"])
         # Rows read against another lookup set are another publication.
         source = hashlib.sha256(f"{source}:lookups:{artifact['lookups']['sha256']}".encode()).hexdigest()
-    return source, rows, publication
+    return source
 
 
 def _published(keys: dict) -> dict | None:
@@ -227,9 +259,9 @@ def _with_extras(row: dict, record_column: str, extras: list[str]) -> dict:
     return {**record, **added} if added else record
 
 
-def _first_of_each(rows: list[dict], columns: list[str]) -> list[dict]:
-    """The first row, in order, of each distinct value of the columns."""
-    seen, kept = set(), []
+def _first_of_each(rows: list[dict], columns: list[str], seen: set) -> list[dict]:
+    """The first row, in order, of each distinct value of the columns not in `seen`, which it adds to."""
+    kept = []
     for row in rows:
         key = json.dumps([row.get(c) for c in columns], sort_keys=True)
         if key not in seen:
