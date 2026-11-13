@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
+import signal
 import sys
 import threading
 import time
@@ -32,6 +34,9 @@ def runtime(module) -> str:
 class Renewal:
     """Keep the lease alive while the work runs; stop before reporting.
 
+    A renewal that cannot reach Bookkeeping is tried again at each heartbeat:
+    the lease outlasts several. A renewal Bookkeeping refuses ends the work.
+
     The renewed proof is also written into the envelope the work holds
     (`claim.proof`), so a destination that fences its own transaction with it
     (MDM, `bookkeeping_guard`) always checks the current lease.
@@ -39,7 +44,7 @@ class Renewal:
 
     def __init__(self, envelope: dict):
         self.envelope, self.error, self.live = envelope, None, envelope
-        self.renewed, self.last = 0, time.monotonic()
+        self.renewed, self.last, self.lost = 0, time.monotonic(), False
         self.stop = threading.Event()
         self.thread = threading.Thread(target=self._run, daemon=True)
 
@@ -49,9 +54,15 @@ class Renewal:
                 self.envelope = control.renew(self.envelope)
                 self.live["claim"] = {**self.live["claim"], "proof": self.envelope["claim"]["proof"]}
                 self.renewed, self.last = self.renewed + 1, time.monotonic()
-            except Exception as exc:  # the report then fails on the stale lease
+                self.error = None
+            except Exception as exc:
                 self.error = exc
-                return
+                if "Stale lease" in str(exc):  # Bookkeeping's own refusal: no report of this work can be taken
+                    self.lost = True
+                    # A real signal, so the work stops now (a sleep or a wait wakes), not after hours nobody can use.
+                    os.kill(os.getpid(), signal.SIGINT)
+                    return
+                # Anything else (a dropped connection, a timeout) is tried again at the next heartbeat.
 
     def state(self) -> str:
         """What a refused lease needs to be told apart: did renewal fail, or did the work meet a stale lease."""
@@ -97,7 +108,11 @@ def work(name: str, run_id: str, reports: str, limit: int) -> int:
                 raise ValueError("A check failed")
             evidence = artifacts.put(reports, control.report_document(envelope, candidate, checks, proofs, digest))
             control.report(renewal.envelope, candidate, evidence)
-        except Exception as exc:
+        except (Exception, KeyboardInterrupt) as exc:
+            if isinstance(exc, KeyboardInterrupt):
+                if renewal is None or not renewal.lost:
+                    raise  # the operator's own interrupt
+                exc = renewal.error
             failed += 1
             state = renewal.state() if renewal is not None else "claimed, not started"
             print(f"{envelope['claim']['step']}/{envelope['claim']['key']}: {exc} [{state}]", file=sys.stderr)
