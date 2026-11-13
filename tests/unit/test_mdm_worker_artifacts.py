@@ -272,3 +272,19 @@ def test_a_merged_batch_is_recorded_in_the_journal_and_skipped_on_the_next_read(
     assert mastering_merge._recorded(Journal(), [key]) == {key: [["f" * 64, "530"], ["9" * 64, "3"]]}
     other = mastering_merge._batch_key("a.b", "e" * 64, {**spec, "sha256": "0" * 64})
     assert mastering_merge._recorded(Journal(), [other]) == {}
+
+
+def test_a_merge_unit_deals_its_batches_out_to_each_process_in_turn():
+    work = [(position, f"key{position}") for position in range(7)]
+    shares = mastering_merge._spread(work, 3)
+    assert shares == [[work[0], work[3], work[6]], [work[1], work[4]], [work[2], work[5]]]
+    assert sorted(item for share in shares for item in share) == work
+
+
+def test_a_merge_unit_uses_one_process_unless_the_environment_names_more(monkeypatch):
+    monkeypatch.delenv("MASTERING_MERGE_PROCESSES", raising=False)
+    assert mastering_merge.processes() == 1
+    monkeypatch.setenv("MASTERING_MERGE_PROCESSES", "4")
+    assert mastering_merge.processes() == 4
+    monkeypatch.setenv("MASTERING_MERGE_PROCESSES", "0")
+    assert mastering_merge.processes() == 1

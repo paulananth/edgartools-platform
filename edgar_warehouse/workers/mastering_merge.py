@@ -8,6 +8,7 @@ lease, keeps writers apart.
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 from collections import defaultdict
 from pathlib import Path
@@ -124,57 +125,91 @@ def _record(journal, envelope: dict, manifest: dict, spec: dict, key: str, files
         pass
 
 
-def execute(envelope: dict, artifacts) -> dict:
+def processes() -> int:
+    """How many processes one merge unit merges its batches on (MASTERING_MERGE_PROCESSES, default 1)."""
+    return max(1, int(os.environ.get("MASTERING_MERGE_PROCESSES", "1")))
+
+
+def _merge_batches(envelope: dict, manifest: dict, folder: str, work: list[tuple[int, str | None]]) -> dict[int, list]:
+    """The batches at these positions through the merge, on this process's own connections; each batch's files."""
     from edgar_warehouse.mastering import merge
     from edgar_warehouse.mastering.store import open_store
     from edgar_warehouse.mdm import changed_files
     from edgar_warehouse.mdm.execution import batch_input
     from edgar_warehouse.mdm.store import Store
 
-    if set(envelope["checks"]) != {CHECK}:
-        raise ValueError(f"mastering.merge verifies {CHECK} only")
     engine = _engine(restricted=True)
     db = open_store(engine)
-    files = []
     known: dict = {}
     settings: dict = {}
-    readings: dict = {}
     journal = changed_files.journal()
+    done: dict[int, list] = {}
     try:
-        with tempfile.TemporaryDirectory(prefix="mastering-") as folder:
-            path, manifest = _stage(envelope, artifacts, Path(folder))
-            keys = {}
-            for batch in manifest["batches"]:
-                spec = batch.get("input")
-                if spec is not None:
-                    keys[id(batch)] = _batch_key(spec["source_code"], _identity(engine, manifest, spec, readings), spec)
-            recorded = _recorded(journal, list(keys.values()))
-            for batch in manifest["batches"]:
-                key = keys.get(id(batch))
-                if key in recorded:
-                    files.extend({"file": name, "records": int(count)} for name, count in recorded[key])
-                    continue
-                start = len(files)
-                found = batch_input(batch, path.parent, Store(engine), policy_digest=manifest["policy_digest"])
-                kinds = defaultdict(list)
-                for record in found["assertions"]:
-                    kinds[record["kind"]].append(record)
-                deferred = found["deferred"]
-                quiet = _quiet(engine, deferred, known)
-                for kind, records in sorted(kinds.items()) or [("", [])]:
-                    if kind not in settings:
-                        settings[kind] = _settings(engine, manifest, kind)
-                    done = merge.merge_file(db, settings[kind], records, deferred=deferred, quiet=quiet)
-                    files.append({"file": done["file"], "records": len(records)})
-                    deferred = ()
-                if key is not None:
-                    _record(journal, envelope, manifest, batch["input"], key, files[start:])
-        files.sort(key=lambda item: item["file"])
-        return artifacts.put_bytes(envelope["output"], json.dumps({"version": 1, "files": files}, sort_keys=True,
-                                                                  separators=(",", ":")).encode())
+        for position, key in work:
+            batch = manifest["batches"][position]
+            found = batch_input(batch, Path(folder), Store(engine), policy_digest=manifest["policy_digest"])
+            kinds = defaultdict(list)
+            for record in found["assertions"]:
+                kinds[record["kind"]].append(record)
+            deferred = found["deferred"]
+            quiet = _quiet(engine, deferred, known)
+            files = []
+            for kind, records in sorted(kinds.items()) or [("", [])]:
+                if kind not in settings:
+                    settings[kind] = _settings(engine, manifest, kind)
+                made = merge.merge_file(db, settings[kind], records, deferred=deferred, quiet=quiet)
+                files.append({"file": made["file"], "records": len(records)})
+                deferred = ()
+            if key is not None:
+                _record(journal, envelope, manifest, batch["input"], key, files)
+            done[position] = files
     finally:
         db.close()
         engine.dispose()
+    return done
+
+
+def _spread(work: list, count: int) -> list[list]:
+    """The work dealt out to `count` processes in turn, so each gets a share of every stretch of the manifest."""
+    return [work[turn::count] for turn in range(count)]
+
+
+def execute(envelope: dict, artifacts) -> dict:
+    from concurrent.futures import ProcessPoolExecutor
+    from multiprocessing import get_context
+
+    from edgar_warehouse.mdm import changed_files
+
+    if set(envelope["checks"]) != {CHECK}:
+        raise ValueError(f"mastering.merge verifies {CHECK} only")
+    engine = _engine(restricted=True)
+    readings: dict = {}
+    journal = changed_files.journal()
+    with tempfile.TemporaryDirectory(prefix="mastering-") as folder:
+        try:
+            path, manifest = _stage(envelope, artifacts, Path(folder))
+            keys = {}
+            for position, batch in enumerate(manifest["batches"]):
+                spec = batch.get("input")
+                if spec is not None:
+                    keys[position] = _batch_key(spec["source_code"], _identity(engine, manifest, spec, readings), spec)
+            recorded = _recorded(journal, list(keys.values()))
+        finally:
+            engine.dispose()
+        done = {position: [{"file": name, "records": int(count)} for name, count in recorded[key]]
+                for position, key in keys.items() if key in recorded}
+        work = [(position, keys.get(position)) for position in range(len(manifest["batches"])) if position not in done]
+        count = min(processes(), len(work))
+        if count <= 1:
+            done.update(_merge_batches(envelope, manifest, str(path.parent), work))
+        else:
+            with ProcessPoolExecutor(count, mp_context=get_context("spawn")) as pool:
+                for part in [pool.submit(_merge_batches, envelope, manifest, str(path.parent), share)
+                             for share in _spread(work, count)]:
+                    done.update(part.result())
+    files = sorted((item for position in sorted(done) for item in done[position]), key=lambda item: item["file"])
+    return artifacts.put_bytes(envelope["output"], json.dumps({"version": 1, "files": files}, sort_keys=True,
+                                                              separators=(",", ":")).encode())
 
 
 def check(envelope: dict, artifacts) -> tuple[dict, list]:
