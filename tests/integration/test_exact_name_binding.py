@@ -140,3 +140,20 @@ def test_a_rule_keyed_on_its_own_cross_reference_creates_only_for_records_that_c
     masters.seed(database.application, [formed("name:WITH-AGAIN", NAME_ONE, NAME_ONE)], policy)
     assert companies(database) == 1
     assert bound(database, CUSTODIANS, "name:WITH-AGAIN") == bound(database, CUSTODIANS, "name:WITH")
+
+
+def test_the_review_lookup_is_asked_once_for_a_batch_however_many_records_it_holds(database, monkeypatch):
+    from edgar_warehouse.mastering.store import Store
+
+    asked, lookup = [], Store.in_review
+
+    def counted(self, subjects, **kwargs):
+        asked.append(len(subjects))
+        return lookup(self, subjects, **kwargs)
+
+    monkeypatch.setattr(Store, "in_review", counted)
+    load(database, [[custodian("name:ONE", NAME_ONE)]])
+    for_one = len(asked)
+    del asked[:]
+    load(database, [[custodian(f"name:{n}", f"{n:02x}" * 32) for n in range(16, 24)]])
+    assert for_one >= 1 and len(asked) == for_one and max(asked) == 8

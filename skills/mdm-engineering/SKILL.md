@@ -245,6 +245,8 @@ until the load ends.
 
 **Ask for rows without a match with `not exists`, never `not in (select ...)`.** Over a subquery larger than the statement's memory, `not in` reads the whole subquery once for each row; `not exists` is one anti-join. Both are standard SQL. `not in` also answers nothing when the subquery holds a null.
 
+**A store lookup is called before the loop or filter that uses its answer.** A call written inside a comprehension's condition runs once for every item, and each run is a round trip to the store. On a slow merge, sample the worker's session in `pg_stat_activity`: one statement in most samples, restarted each time, is this.
+
 ## Migrations
 
 - `migrations/schema.sql` is the schema `mdm migrate` creates in an empty
