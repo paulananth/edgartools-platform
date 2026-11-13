@@ -248,3 +248,27 @@ def test_merge_reads_a_sources_contract_once_a_unit(monkeypatch):
     assert reads == [{"a.b"}]
     mastering_merge._quiet(Engine(), [{"source_code": "c.d"}], known)
     assert reads == [{"a.b"}, {"c.d"}]
+
+
+def test_a_merged_batch_is_recorded_in_the_journal_and_skipped_on_the_next_read():
+    from edgar_warehouse.change_journal.store import ChangeJournal  # noqa: F401  (the real contract validates the event)
+
+    held = {}
+
+    class Journal:
+        def append(self, value):
+            held[value["event_key"]] = {"event": value}
+
+        def get_many(self, producer, keys):
+            return {k: held[k] for k in keys if k in held}
+
+    spec = {"source_code": "a.b", "sha256": "c" * 64, "path": "records.1.jsonl", "publication": {"k": 1}}
+    manifest = {"as_of": "2026-11-13T00:00:00Z", "policy_digest": "d" * 64}
+    key = mastering_merge._batch_key("a.b", "e" * 64, spec)
+    envelope = {"claim": {"run_id": "11111111-1111-4111-8111-111111111111"}}
+    assert mastering_merge._recorded(Journal(), [key]) == {}
+    mastering_merge._record(Journal(), envelope, manifest, spec, key,
+                            [{"file": "f" * 64, "records": 530}, {"file": "9" * 64, "records": 3}])
+    assert mastering_merge._recorded(Journal(), [key]) == {key: [["f" * 64, "530"], ["9" * 64, "3"]]}
+    other = mastering_merge._batch_key("a.b", "e" * 64, {**spec, "sha256": "0" * 64})
+    assert mastering_merge._recorded(Journal(), [other]) == {}

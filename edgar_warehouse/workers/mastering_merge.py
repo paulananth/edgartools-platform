@@ -76,9 +76,58 @@ def _quiet(engine, deferred: list[dict], known: dict) -> dict:
     return {r["source_code"]: known[r["source_code"]] for r in deferred if r["source_code"] in known}
 
 
+EVENT_TYPE = "batch.merged"
+
+
+def _batch_key(source: str, identity: str, spec: dict) -> str:
+    """One batch's Change Journal key: its source, the identity it was read under, its content hash and its file."""
+    return f"{EVENT_TYPE}:{source}:{identity}:{spec['sha256']}:{spec['path']}"
+
+
+def _identity(engine, manifest: dict, spec: dict, known: dict) -> str:
+    """What a batch's records depend on besides its bytes: the reading, the policy and the publication it carries."""
+    from edgar_warehouse.control_contract import digest
+    from edgar_warehouse.mdm.store import current_reading
+
+    code = spec["source_code"]
+    if code not in known:
+        with engine.connect() as conn:
+            found = current_reading(conn, code)
+        known[code] = None if found is None else found[0]
+    return digest({"policy": manifest["policy_digest"], "reading": known[code], "publication": spec["publication"]})
+
+
+def _recorded(journal, keys: list[str]) -> dict[str, list[list]]:
+    """The files of each batch the journal holds, as [file, records]: the batch is not parsed again."""
+    from edgar_warehouse.mdm import changed_files
+
+    found = {}
+    for start in range(0, len(keys), 400):
+        for key, receipt in journal.get_many(changed_files.PRODUCER, keys[start:start + 400]).items():
+            found[key] = [item.split(":") for item in receipt["event"]["scope"]["files"].split(",") if item]
+    return found
+
+
+def _record(journal, envelope: dict, manifest: dict, spec: dict, key: str, files: list[dict]) -> None:
+    """Record a merged batch after its files committed; a batch another run recorded first keeps its record."""
+    from edgar_warehouse.change_journal import JournalConflict
+    from edgar_warehouse.change_journal.store import envelope as event
+    from edgar_warehouse.mdm import changed_files
+
+    value = event(producer=changed_files.PRODUCER, event_key=key, run_id=envelope["claim"]["run_id"],
+                  source=spec["source_code"], feed="mastering", event_type=EVENT_TYPE, occurred_at=manifest["as_of"],
+                  scope={"files": ",".join(f"{f['file']}:{f['records']}" for f in files)},
+                  evidence=[{"uri": f"batch:{spec['path']}", "sha256": spec["sha256"]}])
+    try:
+        journal.append(value)
+    except JournalConflict:
+        pass
+
+
 def execute(envelope: dict, artifacts) -> dict:
     from edgar_warehouse.mastering import merge
     from edgar_warehouse.mastering.store import open_store
+    from edgar_warehouse.mdm import changed_files
     from edgar_warehouse.mdm.execution import batch_input
     from edgar_warehouse.mdm.store import Store
 
@@ -89,10 +138,23 @@ def execute(envelope: dict, artifacts) -> dict:
     files = []
     known: dict = {}
     settings: dict = {}
+    readings: dict = {}
+    journal = changed_files.journal()
     try:
         with tempfile.TemporaryDirectory(prefix="mastering-") as folder:
             path, manifest = _stage(envelope, artifacts, Path(folder))
+            keys = {}
             for batch in manifest["batches"]:
+                spec = batch.get("input")
+                if spec is not None:
+                    keys[id(batch)] = _batch_key(spec["source_code"], _identity(engine, manifest, spec, readings), spec)
+            recorded = _recorded(journal, list(keys.values()))
+            for batch in manifest["batches"]:
+                key = keys.get(id(batch))
+                if key in recorded:
+                    files.extend({"file": name, "records": int(count)} for name, count in recorded[key])
+                    continue
+                start = len(files)
                 found = batch_input(batch, path.parent, Store(engine), policy_digest=manifest["policy_digest"])
                 kinds = defaultdict(list)
                 for record in found["assertions"]:
@@ -105,6 +167,8 @@ def execute(envelope: dict, artifacts) -> dict:
                     done = merge.merge_file(db, settings[kind], records, deferred=deferred, quiet=quiet)
                     files.append({"file": done["file"], "records": len(records)})
                     deferred = ()
+                if key is not None:
+                    _record(journal, envelope, manifest, batch["input"], key, files[start:])
         files.sort(key=lambda item: item["file"])
         return artifacts.put_bytes(envelope["output"], json.dumps({"version": 1, "files": files}, sort_keys=True,
                                                                   separators=(",", ":")).encode())
