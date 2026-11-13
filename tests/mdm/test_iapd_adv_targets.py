@@ -16,7 +16,7 @@ from tests.support.memory_journal import MemoryJournal
 SOURCE = "iapd.adv"
 FACTS = {"published": "2026-09-30T00:00:00Z"}
 STEPS = {"mastering": ["read_filings", "read_custody", "read_ciks", "read_related", "combine", "record", "prepare", "merge", "land_custody", "processed"],
-         "custodians": ["read", "combine", "record", "prepare", "merge", "processed"]}
+         "custodians": ["read_custody", "combine", "record", "prepare", "merge", "processed"]}
 
 
 def key(n: int) -> str:

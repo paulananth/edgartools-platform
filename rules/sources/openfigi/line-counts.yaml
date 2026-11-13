@@ -1,3 +1,5 @@
+pass:
+  readings: {answers: {all: source.yaml}}
 # The Listing currency (ticket 138 part B3): for each identifier asked and
 # exchange (`line_group`, source.yaml's `details`), how many lines OpenFIGI
 # gave, how many roots and how many tickers. listing.yaml reads a line's

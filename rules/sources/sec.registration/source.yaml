@@ -47,18 +47,10 @@ bookkeeping:
     capture:
       lease_seconds: 300
       heartbeat_seconds: 30
-      steps:
-        - name: capture
-          operation: provider.capture
-          requires: []
-          key: "{accession_number}"
-          leases: ["provider:sec", "output:{destination}"]
-          checks: [input.hash, output.receipt, capture.verified]
-      checks: [manifest.hash, work.accounting, journal.delivered]
+      capture: provider
     # The captured pages, read and landed in silver (the Company is mastered by sec.company, which runs first).
     silver:
-      extract:
-        read: {read: registration-page.yaml, units: {slices: {bytes: 33554432}}, files: '*.capture.zip'}
+      extract: registration-page.yaml
       silver:
         - {name: land_offering, land: {silver: registration_offering, table: offering}}
         - {name: land_statement_line, land: {silver: registration_statement_line, table: statement_line}}

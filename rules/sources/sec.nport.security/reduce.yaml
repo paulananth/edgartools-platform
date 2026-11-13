@@ -1,3 +1,5 @@
+pass:
+  readings: {holdings: {step: source.yaml}}
 # The N-PORT Securities of one quarter (ticket 79, part 1): every usable CUSIP
 # and every ISIN of a holding with none, each with its filed words, and every
 # CUSIP and ISIN pair filed on one holding (`pairs`; combine.yaml gives

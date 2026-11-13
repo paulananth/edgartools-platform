@@ -476,11 +476,6 @@ def test_plumbing_steps_and_the_target_pipeline_itself_carry_no_lineage():
     assert {"capture", "combine", "records", "merge"} <= steps
 
 
-def test_a_target_that_only_merges_publishes_its_master_and_reads_nothing():
-    graph = _target_graph(catalog.plan(), "sec.company", "merge-batch")
-    assert graph == {"reads": set(), "writes": {("merge", "mdm.master_records.company")}, "next": set()}
-
-
 def test_a_capture_target_reads_its_feed_and_publishes_nothing():
     graph = _target_graph(catalog.plan(), "sec.company", "capture")
     assert graph == {"reads": {("capture", 'sources."sec.company".submissions')}, "writes": set(), "next": set()}

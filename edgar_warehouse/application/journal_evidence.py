@@ -21,7 +21,7 @@ def plan(
 ) -> dict:
     binding = resolve_feed(rules_root, source, feed)
     feed = binding["feed"]
-    document = expand_source(load(rules_root / "sources" / binding["source"] / "source.yaml"))
+    document = expand_source(load(rules_root / "sources" / binding["source"] / "source.yaml"), rules_root / "sources" / binding["source"])
     configuration = validate(document, target)
     manifest = Artifacts().json(inputs)
     items = worklist(manifest, configuration)

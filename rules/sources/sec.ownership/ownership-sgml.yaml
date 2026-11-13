@@ -3,6 +3,10 @@
 # NUMBER line. The same tables and columns as ownership-xml.yaml (a test holds the
 # two equal): profiling ticket 07.
 source: sec.ownership
+pass:
+  name: read
+  files: '*.txt'
+  units: {slices: {bytes: 8388608}}
 execution: {profile: source.read, workers: 1, max_artifacts: 512}
 read:
   format: xml

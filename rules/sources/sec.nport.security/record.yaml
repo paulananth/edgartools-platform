@@ -1,3 +1,6 @@
+pass:
+  context: {batch: first}
+  pieces: {step: combine.yaml}
 # Each Security row of combine.yaml's output as one record (`record`), read
 # over the combine's pieces, for mdm.prepare (`record_column: record`), as the
 # Dataset Contract sec.nport.security.v2 reads it (ticket 120; operator,

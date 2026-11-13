@@ -1,3 +1,8 @@
+pass:
+  name: read_custody
+  files: '*.zip'
+  units: {each: file}
+  context: {published: {fact: published}}
 # The reading of Form ADV Schedule D 5.K(3) (IA_Schedule_D_5K3) in one monthly
 # bulk file: one row per filing and custodian. A row is keyed by its filing and
 # its row number in the file (53 filings list one custodian twice; every

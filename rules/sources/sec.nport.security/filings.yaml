@@ -1,3 +1,5 @@
+pass:
+  units: {each: file}
 # Each filing's date and as-of date (SUBMISSION.tsv, one row per filing), read
 # once, streamed, to build the pair sets that give each holding its filing's date (ticket 113;
 # operator, 2026-10-19: an ISSUED_BY link starts at "the filing date or

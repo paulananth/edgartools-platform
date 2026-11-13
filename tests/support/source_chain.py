@@ -33,7 +33,7 @@ def read(store: Artifacts, root: Path, body: dict, artifacts: list[dict], versio
 def combine(store: Artifacts, root: Path, contract: Path, readings: dict) -> dict:
     """A combination of named readings under the contract file `contract`."""
     root.mkdir(parents=True, exist_ok=True)
-    manifest = store.put(root.as_uri(), {"version": 1, "contract": store.put(root.as_uri(), files.load(contract)),
+    manifest = store.put(root.as_uri(), {"version": 1, "contract": store.put(root.as_uri(), files.contract(contract)),
                                          "readings": readings})
     task = {"input": manifest, "output": (root / "out.json").as_uri(), "checks": [source_combine.CHECK], "keys": {}}
     out = source_combine.execute(task, store)

@@ -1,3 +1,5 @@
+pass:
+  readings: {answers: {all: source.yaml}}
 # For each identifier asked (ticket 80): its answer (`answers`: found or not
 # found), and how many listings, share classes and US composites OpenFIGI gave it, each with its lexically first member
 # (`sample_limit: 1`), so combine.yaml keeps one only where there is exactly

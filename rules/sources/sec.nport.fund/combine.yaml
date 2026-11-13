@@ -1,3 +1,5 @@
+pass:
+  readings: {series: {step: reduce.yaml}, pairs: {step: lei-pairs.yaml}, filings: {all: source.yaml}}
 # One row per fund series (table `fund`) with its latest filing whole
 # (`latest`: name, LEI and registrant CIK of one filing), latest by filing
 # date, then accession number, and its LEI (`lei`) only when the series files

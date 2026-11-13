@@ -5,6 +5,10 @@
 # "NONE" or "N/A" is no symbol. The root, the accession number and the limits are
 # ownership-sgml.yaml's (a test holds them equal).
 source: sec.ownership
+pass:
+  name: read_security
+  files: '*.txt'
+  units: {slices: {bytes: 8388608}}
 execution: {profile: source.read, workers: 1, max_artifacts: 512}
 read:
   format: xml

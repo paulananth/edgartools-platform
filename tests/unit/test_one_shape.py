@@ -92,6 +92,72 @@ def test_a_target_outside_the_shape_is_refused(target):
         shape.expand(target)
 
 
+def rules_folder(tmp_path, **documents):
+    folder = tmp_path / "invented.source"
+    folder.mkdir()
+    for name, body in documents.items():
+        (folder / f"{name.replace('_', '-')}.yaml").write_text(files.dumps(body))
+    return folder
+
+
+def test_a_target_names_its_last_rules_file_and_the_passes_follow(tmp_path):
+    folder = rules_folder(
+        tmp_path,
+        source={"pass": {"name": "rows", "files": "*.json", "units": {"each": "file"},
+                         "lookups": {"filed": {"from": "dates.yaml", "table": "t"}}}},
+        dates={"pass": {"units": {"each": "file"}}},
+        row_counts={"pass": {"readings": {"rows": {"all": "source.yaml"}}}},
+        join={"pass": {"name": "joined", "readings": {"counts": {"step": "row-counts.yaml"}, "rows": {"all": "source.yaml"}}}},
+        record={"pass": {"pieces": {"step": "join.yaml"}}})
+
+    steps = shape.expand({"extract": "record.yaml", "master": {"keys": {"table": "t", "dataset": "invented.v1"}}}, folder)["steps"]
+
+    assert [(s["name"], s["operation"], s["requires"]) for s in steps] == [
+        ("dates", "source.read", []),                           # each pass after the passes it reads
+        ("rows", "source.read", ["dates"]),                     # the source's own file: named by its block
+        ("row_counts", "source.combine", ["rows"]),             # a pass is named after its file
+        ("joined", "source.combine", ["row_counts", "rows"]),
+        ("record", "source.read", ["joined"]),
+        ("prepare", "mdm.prepare", ["record"]), ("merge", "mastering.merge", ["prepare"]),
+        ("processed", "journal.record", ["merge"])]
+    assert steps[1]["input"] == {"files": "*.json", "lookups": {"filed": {"from": "dates", "table": "t"}}}  # no contract: its own file
+    assert steps[3]["input"] == {"contract": "join.yaml", "readings": {"counts": {"step": "row_counts"}, "rows": {"all": "rows"}}}
+    assert steps[4]["input"] == {"contract": "record.yaml", "pieces": {"step": "joined"}}
+
+
+def test_a_rules_file_with_no_pass_block_is_refused(tmp_path):
+    folder = rules_folder(tmp_path, record={"pass": {"pieces": {"step": "join.yaml"}}}, join={"combine": {}})
+    with pytest.raises(shape.ShapeError, match="join.yaml has no `pass` block"):
+        shape.expand({"extract": "record.yaml"}, folder)
+
+
+def test_a_pass_names_the_rules_file_it_reads_not_a_pass(tmp_path):
+    folder = rules_folder(tmp_path, record={"pass": {"pieces": {"step": "joined"}}})
+    with pytest.raises(shape.ShapeError, match="names the rules file it reads"):
+        shape.expand({"extract": "record.yaml"}, folder)
+
+
+def test_the_engine_reads_a_rules_file_without_its_pass_block(tmp_path):
+    folder = rules_folder(tmp_path, record={"pass": {"pieces": {"step": "join.yaml"}}, "read": {"format": "json"}})
+    assert files.contract(folder / "record.yaml") == {"read": {"format": "json"}}
+
+
+@pytest.mark.parametrize("kind, operation", [("copy", "artifact.copy"), ("provider", "provider.capture")])
+def test_a_capture_target_is_its_one_step(kind, operation):
+    target = shape.expand({"capture": kind, "lease_seconds": 300})
+    assert [(s["name"], s["operation"]) for s in target["steps"]] == [("capture", operation)]
+    assert target["lease_seconds"] == 300 and target["checks"] == ["manifest.hash", "work.accounting", "journal.delivered"]
+    with pytest.raises(shape.ShapeError):
+        shape.expand({"capture": "other"})
+
+
+def test_a_second_pass_over_recorded_files_has_no_record_step():
+    target = shape.expand({"extract": {"record": {"read": "record.yaml", "pieces": {"run": {"source": "s", "target": "t", "step": "c"}}}},
+                           "master": {"keys": {}}, "record": False})
+    assert [s["name"] for s in target["steps"]] == ["record", "prepare", "merge"]
+    assert target["checks"] == ["manifest.hash", "work.accounting"]
+
+
 def test_a_target_that_lists_its_steps_is_left_as_it_is():
     target = {"steps": [{"name": "capture"}], "checks": ["manifest.hash"]}
     assert shape.expand(target) is target

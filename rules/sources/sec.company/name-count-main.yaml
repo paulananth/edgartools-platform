@@ -5,6 +5,18 @@
 # their one consumer (mastering-to-done 28). The other 17 filing columns, and the
 # shape checks on their fields, are left out on purpose; source.yaml keeps them.
 source: sec.company
+pass:
+  name: main
+  files: '*/submissions/sec/cik=*/main/*'
+  units: {slices: {bytes: 8388608}}
+  context:
+    bronze_object: '{dir}/{name}'
+    cik: {as: integer, segment: cik}
+    last_synced_at: {fact: observed_at}
+    load_mode: {fact: load_mode}
+    raw_object_id: {receipt: sha256}
+    recent_limit: null
+    sync_run_id: {fact: capture_run}
 execution:
   profile: source.read
   workers: 1

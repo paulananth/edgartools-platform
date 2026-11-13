@@ -1,3 +1,6 @@
+pass:
+  name: ciks
+  readings: {filings: {all: source.yaml}}
 # Each CIK of the quarter's N-PORT registrant rows, with how many filings name
 # it (ticket 79, part 2). One source extract: source.yaml's reading,
 # `filings`. Pin canonical JSON of this file as the source.combine contract.

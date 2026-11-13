@@ -28,6 +28,15 @@
 # rules/identifiers/cusip.yaml); one failing its check digit stays a CUSIP
 # record and is set aside by the Dataset Contract, counted.
 source: sec.nport.security
+pass:
+  name: holdings
+  units: {each: file}
+  context: {period: {fact: period}}
+  lookups:
+    figi: {column: holding, from: identifiers.yaml, max_input_bytes: 268435456, max_input_rows: 10000000, table: figi, value_column: figi}
+    isin: {column: holding, from: identifiers.yaml, max_input_bytes: 268435456, max_input_rows: 10000000, table: isin, value_column: isin}
+    loanx: {column: holding, from: identifiers.yaml, max_input_bytes: 268435456, max_input_rows: 10000000, table: loanx, value_column: loanx}
+    sedol: {column: holding, from: identifiers.yaml, max_input_bytes: 268435456, max_input_rows: 10000000, table: sedol, value_column: sedol}
 bronze:
   family: sec.nport-datasets
 execution:
@@ -872,56 +881,12 @@ bookkeeping:
       # Set for the FIGI steps ticket 138 removed (73 s each, measured
       # 2026-10-19); kept until a run shows the default 120 s lease holds.
       run: {facts: [period]}
-      extract:
-        submissions: {read: filings.yaml, units: {each: file}}
-        identifiers: {read: identifiers.yaml, units: {each: file}}
-        holdings:
-          read: null
-          units: {each: file}
-          lookups:
-            figi: {column: holding, from: identifiers, max_input_bytes: 268435456, max_input_rows: 10000000, table: figi, value_column: figi}
-            isin: {column: holding, from: identifiers, max_input_bytes: 268435456, max_input_rows: 10000000, table: isin, value_column: isin}
-            loanx: {column: holding, from: identifiers, max_input_bytes: 268435456, max_input_rows: 10000000, table: loanx, value_column: loanx}
-            sedol: {column: holding, from: identifiers, max_input_bytes: 268435456, max_input_rows: 10000000, table: sedol, value_column: sedol}
-          context: {period: {fact: period}}
-        issuers:
-          read: issuers.yaml
-          units: {each: file}
-          lookups:
-            umbrella: {column: fund, max_input_bytes: 67108864, max_input_rows: 1000000, run: {source: gleif, step: pairs, target: subfund-pairs}, table: subfund, value_column: umbrella}
-            figi: {column: holding, from: identifiers, max_input_bytes: 268435456, max_input_rows: 10000000, table: figi, value_column: figi}
-            isin: {column: holding, from: identifiers, max_input_bytes: 268435456, max_input_rows: 10000000, table: isin, value_column: isin}
-            loanx: {column: holding, from: identifiers, max_input_bytes: 268435456, max_input_rows: 10000000, table: loanx, value_column: loanx}
-            sedol: {column: holding, from: identifiers, max_input_bytes: 268435456, max_input_rows: 10000000, table: sedol, value_column: sedol}
-            filed: {column: accession_number, from: submissions, max_input_bytes: 67108864, max_input_rows: 1000000, table: filed, value_column: filed}
-          context: {period: {fact: period}}
-        reduce: {combine: reduce.yaml, readings: {holdings: {step: holdings}}}
-        issuer_reduce: {combine: issuer-reduce.yaml, readings: {issuers: {step: issuers}}}
-        combine: {combine: combine.yaml, readings: {securities: {step: reduce}, issuers: {step: issuer_reduce}}}
-        record: {read: record.yaml, pieces: {step: combine}, context: {batch: first}}
-        # Each holding for silver (ticket 79): a lookup row, not an MDM record
-        # (operator, 2026-10-22: "Why do you need to merge it it's just a
-        # lookup"). The filing's series (holding-series.yaml), its
-        # registrant (sec.nport.registrant's) and its date name each row's
-        # holder; holding.yaml gives the rows silver-holding.yaml lands.
-        registrants:
-          read: sec.nport.registrant/source.yaml
-          units: {each: file}
-          lookups: {filed: {column: accession_number, from: submissions, max_input_bytes: 17179869184, max_input_rows: 100000000, table: filed, value_column: filed}}
-        series: {read: holding-series.yaml, units: {each: file}}
-        holding:
-          read: holding.yaml
-          units: {each: file}
-          lookups:
-            figi: {column: holding, from: identifiers, max_input_bytes: 17179869184, max_input_rows: 100000000, table: figi, value_column: figi}
-            isin: {column: holding, from: identifiers, max_input_bytes: 17179869184, max_input_rows: 100000000, table: isin, value_column: isin}
-            loanx: {column: holding, from: identifiers, max_input_bytes: 17179869184, max_input_rows: 100000000, table: loanx, value_column: loanx}
-            sedol: {column: holding, from: identifiers, max_input_bytes: 17179869184, max_input_rows: 100000000, table: sedol, value_column: sedol}
-            as_of: {column: accession_number, from: submissions, max_input_bytes: 17179869184, max_input_rows: 100000000, table: reported, value_column: as_of}
-            filed: {column: accession_number, from: submissions, max_input_bytes: 17179869184, max_input_rows: 100000000, table: filed, value_column: filed}
-            registrant: {column: accession_number, from: registrants, max_input_bytes: 17179869184, max_input_rows: 100000000, table: filing, value_column: cik}
-            series: {column: accession_number, from: series, max_input_bytes: 17179869184, max_input_rows: 100000000, table: series, value_column: series_id}
-          context: {period: {fact: period}}
+      # Each holding for silver (ticket 79): a lookup row, not an MDM record
+      # (operator, 2026-10-22: "Why do you need to merge it it's just a
+      # lookup"). The filing's series (holding-series.yaml), its
+      # registrant (sec.nport.registrant's) and its date name each row's
+      # holder; holding.yaml gives the rows silver-holding.yaml lands.
+      extract: [record.yaml, holding.yaml]
       master: {requires: [record], keys: {dataset: sec.nport.security.v2, record_column: record, table: security}, readings: {record: {all: record}}}
       silver:
         # The holdings land in silver once the Securities they link to are merged
@@ -935,30 +900,7 @@ bookkeeping:
     # verified combine, published after it has merged, so each finds the Security that already holds its
     # value (records of one batch never match each other). Run it after `mastering`.
     mastering_other_keys:
-      steps:
-        - name: record
-          operation: source.read
-          requires: []
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          input:
-            contract: record.yaml
-            pieces: {run: {source: sec.nport.security, target: mastering, step: combine}}
-            context: {batch: other}
-        - name: prepare
-          operation: mdm.prepare
-          requires: [record]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, mdm.prepared]
-          input:
-            keys: {table: security, record_column: record, dataset: sec.nport.security.v2}
-            readings: {record: {all: record}}
-        - name: merge
-          operation: mastering.merge
-          requires: [prepare]
-          key: "{batch_id}"
-          leases: ["mdm:consumer:{consumer}"]
-          checks: [input.hash, output.receipt, mdm.committed]
-      checks: [manifest.hash, work.accounting]
+      extract:
+        record: {read: record.yaml, pieces: {run: {source: sec.nport.security, target: mastering, step: combine}}, context: {batch: other}}
+      master: {keys: {table: security, record_column: record, dataset: sec.nport.security.v2}}
+      record: false

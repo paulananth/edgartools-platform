@@ -223,7 +223,7 @@ def test_a_step_reads_with_another_sources_rules_file(tmp_path):
     steps = store.json(fund_bundle(tmp_path)["manifest"])["steps"]
     (submissions,) = steps["submissions"]
     contract = store.json(store.json(submissions["input"])["contract"])
-    assert contract == files.load(files.ROOT / "sources" / "sec.nport.registrant" / "submissions.yaml")
+    assert contract == files.contract(files.ROOT / "sources" / "sec.nport.registrant" / "submissions.yaml")
 
 
 def test_another_sources_file_joins_the_processing_identity(tmp_path, monkeypatch):

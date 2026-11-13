@@ -1,3 +1,8 @@
+pass:
+  name: read_filings
+  files: '*.zip'
+  units: {each: file}
+  context: {published: {fact: published}}
 # The reading of Form ADV Part 1A (IA_ADV_Base_A) in one monthly bulk file:
 # one row per filing. June and July 2025 files are windows-1252, later ones
 # UTF-8 (ticket 07). DateSubmitted has two formats (6/24/2025 7:44 to

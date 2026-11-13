@@ -1,3 +1,5 @@
+pass:
+  readings: {counts: {step: reduce.yaml}, answers: {all: source.yaml}, listings: {all: listing.yaml}}
 # One row per identifier asked (ticket 80): its answer (reduce.yaml's `answers`)
 # joined with reduce.yaml's counts (`counts`) where a level
 # has exactly one member (operator, 2026-10-17: "(c) MDM + silver listings

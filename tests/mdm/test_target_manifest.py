@@ -42,7 +42,7 @@ def test_the_declared_writer_builds_persons_mastering_manifest(tmp_path):
     assert {name: len(units) for name, units in steps.items()} == {"read": 1, "records": 1, "merge": 1, "processed": 1}
     read = Artifacts().json(steps["read"][0]["input"])
     assert [a["uri"] for a in read["artifacts"]] == captured(tmp_path)
-    assert Artifacts().json(read["contract"]) == files.load(files.ROOT / "sources" / SOURCE / "source.yaml")
+    assert Artifacts().json(read["contract"]) == files.contract(files.ROOT / "sources" / SOURCE / "source.yaml")
     records = steps["records"][0]
     assert {k: records["keys"][k] for k in ("table", "record_column", "dataset", "revision")} == {
         "table": "submissions", "record_column": "record", "dataset": "sec.submissions.person.v1", "revision": "0"}

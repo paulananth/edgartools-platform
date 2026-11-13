@@ -1,3 +1,5 @@
+pass:
+  readings: {counts: {step: line-counts.yaml}, answers: {all: source.yaml}}
 # The Listing currency (ticket 138 part B3): every listing line of
 # source.yaml's `details`, with its group's counts from line-counts.yaml
 # (lines, roots, tickers), for listing.yaml to decide its currency. Every

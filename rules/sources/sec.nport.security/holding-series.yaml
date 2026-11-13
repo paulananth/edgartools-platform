@@ -1,3 +1,6 @@
+pass:
+  name: series
+  units: {each: file}
 # Each filing's fund series, for holding.yaml's `series` lookup (ticket 79):
 # FUND_REPORTED_INFO's SERIES_ID, upper-cased as sec.nport.fund reads it. A
 # filing with no usable series id ("", "N/A") gives no row, so the lookup never

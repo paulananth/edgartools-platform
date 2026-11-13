@@ -28,13 +28,7 @@ bookkeeping:
   targets:
     mastering:
       run: {facts: [published]}
-      extract:
-        read_filings: {read: adviser-filings-csv.yaml, units: {each: file}, files: '*.zip', context: {published: {fact: published}}}
-        read_custody: {read: custody-csv.yaml, units: {each: file}, files: '*.zip', context: {published: {fact: published}}}
-        read_ciks: {read: ciks-csv.yaml, units: {each: file}, files: '*.zip'}
-        read_related: {read: related-csv.yaml, units: {each: file}, files: '*.zip'}
-        combine: {combine: combine.yaml, readings: {filings: {all: read_filings}, custody: {all: read_custody}, ciks: {all: read_ciks}, related: {all: read_related}}}
-        record: record-filings.yaml
+      extract: record-filings.yaml
       master: {keys: {dataset: iapd.adv.filings.v2, record_column: record, table: filings}}
       silver:
         # The amount each custodian holds (Schedule D 5.K(3)(g)) lands in silver once the adviser's
@@ -43,10 +37,7 @@ bookkeeping:
         - {name: land_custody, land: {silver: adv_custody, table: custody_facts}, requires: [read_custody, merge]}
     custodians:
       run: {facts: [published]}
-      extract:
-        read: {read: custody-csv.yaml, units: {each: file}, files: '*.zip', context: {published: {fact: published}}}
-        combine: {combine: custody-combine.yaml, readings: {custody: {all: read}}}
-        record: record-custody.yaml
+      extract: record-custody.yaml
       master: {keys: {dataset: iapd.adv.custodians.v1, distinct_on: [custodian_id], record_column: record, table: custody}}
 dataset_contracts:
   iapd.adv.filings.v2:

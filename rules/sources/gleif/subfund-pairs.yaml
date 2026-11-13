@@ -5,6 +5,10 @@
 # (Recommended)"). Two columns, no whole record: it feeds a lookup, not MDM.
 # One level only: an umbrella that is itself a sub-fund is not followed.
 source: gleif.relationships
+pass:
+  name: pairs
+  files: '*rr-golden-copy*'
+  units: {each: file}
 execution: {profile: source.read, workers: 1, max_artifacts: 1}
 read:
   format: json

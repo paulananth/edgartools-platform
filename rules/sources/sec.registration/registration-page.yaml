@@ -1,4 +1,8 @@
 source: sec.registration
+pass:
+  name: read
+  files: '*.capture.zip'
+  units: {slices: {bytes: 33554432}}
 execution:
   profile: source.read
   workers: 1

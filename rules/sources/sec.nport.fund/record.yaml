@@ -1,3 +1,5 @@
+pass:
+  pieces: {step: combine.yaml}
 # Each fund row of combine.yaml's output as one record (`record`), read over
 # the combine's pieces, for mdm.prepare (`record_column: record`): the record
 # is the row itself, as the Dataset Contract reads it (ticket 118).

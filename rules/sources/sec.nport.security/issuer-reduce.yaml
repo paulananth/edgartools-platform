@@ -1,3 +1,5 @@
+pass:
+  readings: {issuers: {step: issuers.yaml}}
 # How many issuer LEIs each CUSIP is filed with (ticket 22), and each ISIN of a
 # holding with no usable CUSIP (ticket 102). One source extract:
 # issuers.yaml's reading, `issuers`. Pin canonical JSON of this file as the

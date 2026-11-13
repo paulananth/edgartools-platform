@@ -21,6 +21,11 @@ catalog:
   pipelines:
     mastering:
       display_name: N-PORT registrants to Company
+pass:
+  name: registrants
+  units: {each: file}
+  lookups:
+    filed: {column: accession_number, from: submissions.yaml, max_input_bytes: 67108864, max_input_rows: 1000000, table: filed, value_column: filed}
 bronze:
   family: sec.nport-datasets
 # The quarter's registrants through the Merge Stage (ticket 118): the filing
@@ -30,15 +35,7 @@ bookkeeping:
   version: 2
   targets:
     mastering:
-      extract:
-        submissions: {read: submissions.yaml, units: {each: file}}
-        filings:
-          read: null
-          units: {each: file}
-          lookups: {filed: {column: accession_number, from: submissions, max_input_bytes: 67108864, max_input_rows: 1000000, table: filed, value_column: filed}}
-        ciks: {combine: reduce.yaml, readings: {filings: {all: filings}}}
-        combine: {combine: combine.yaml, readings: {ciks: {step: ciks}, filings: {all: filings}}}
-        record: record.yaml
+      extract: record.yaml
       master: {keys: {dataset: sec.nport.registrant.v2, record_column: record, table: registrant}}
 execution:
   profile: source.read

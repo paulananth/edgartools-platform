@@ -327,7 +327,7 @@ def write_manifest(
         other = name.split("/", 1)[0] if "/" in name else None
         if other == source or other is not None and not (rules_files.ROOT / "sources" / name).is_file():
             raise ValueError(f"Contract {name} names another source's existing rules file, or a file of this source")
-    contracts = {name: rules_files.load(rules_files.ROOT / "sources" / (name if "/" in name else f"{source}/{name}"))
+    contracts = {name: rules_files.contract(rules_files.ROOT / "sources" / (name if "/" in name else f"{source}/{name}"))
                  for name in sorted({_contract(step) for step in steps
                                      if step["operation"] == "source.read" or "contract" in step.get("input", {})})}
     # The run's own inputs, exactly as the target declares them (`run`): facts and files.

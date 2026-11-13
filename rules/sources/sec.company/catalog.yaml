@@ -1,5 +1,9 @@
 # Both raw catalog shapes; offline qualification, no source activation.
 source: sec.company
+pass:
+  files: '*/company_tickers_exchange/*'
+  always: true
+  context: {last_synced_at: {fact: observed_at}, source_name: catalog_exchange, sync_run_id: {fact: catalog_run}}
 execution:
   profile: source.read
   workers: 1

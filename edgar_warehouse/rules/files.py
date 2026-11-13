@@ -161,6 +161,13 @@ def dumps(value: Any) -> str:
     return yaml.dump(value, Dumper=_Dumper, sort_keys=False, allow_unicode=True, width=88)
 
 
+def contract(path: Path) -> Any:
+    """A rules file as the engine reads with it: without its `pass` block, which says what the pass reads
+    and is the planner's, so moving that between files changes no contract."""
+    body = load(path)
+    return {key: value for key, value in body.items() if key != "pass"} if isinstance(body, dict) else body
+
+
 def source(name: str, root: Path | None = None, *, steps: bool = True) -> dict:
     """One source's document: `rules/sources/<name>/source.yaml`, with its
     `quality.yaml` beside it when there is one."""
@@ -175,7 +182,7 @@ def load_source(path: Path, *, steps: bool = True) -> dict:
     from .shape import expand_source
     body = load(path)
     if steps:  # targets written in the one shape, as the steps the engine runs; a reader of another
-        body = expand_source(body)  # commit's file, which may write its targets differently, leaves them
+        body = expand_source(body, path.parent)  # commit's file, which may write its targets differently, leaves them
     if isinstance(body, dict) and "mdm" in body:  # the section was named `mdm` until ticket 171
         raise RulesFileError(f"{path}: the `mdm` section is now `dataset_contracts` (ticket 171); rename it")
     quality_path = path.parent / "quality.yaml"
