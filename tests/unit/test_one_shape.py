@@ -25,6 +25,15 @@ def test_a_target_gives_its_recorded_steps(name):
     assert targets()[name] == STEPS[name]
 
 
+@pytest.mark.parametrize("name", sorted(STEPS))
+def test_the_rules_version_holds_the_steps_not_how_they_are_written(name):
+    # The processing identity is taken from this: a target written in the one shape must not load its files again.
+    from edgar_warehouse.mdm import changed_files
+
+    source, target = name.split("/")
+    assert changed_files.source_rules(source)["source.yaml"]["bookkeeping"]["targets"][target] == STEPS[name]
+
+
 def test_a_target_says_extract_master_and_silver_and_gets_every_step():
     target = shape.expand({
         "extract": [{"name": "read", "read": "fields.yaml", "files": "*.json", "units": {"each": "file"}},
