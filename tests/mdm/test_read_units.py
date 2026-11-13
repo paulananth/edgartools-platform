@@ -157,7 +157,7 @@ def test_a_bundle_larger_than_its_readings_is_not_refused_for_its_bytes(tmp_path
 
 
 def gleif_bundle(tmp_path, **inputs):
-    """GLEIF's declared target over an invented one-file capture, with the run's facts and files."""
+    """GLEIF's declared target over an invented one-file capture, with the run's fact."""
     import hashlib
     capture = tmp_path / "capture"
     capture.mkdir()
@@ -166,28 +166,20 @@ def gleif_bundle(tmp_path, **inputs):
     (capture / "receipts.jsonl").write_text(json.dumps(
         {"bytes": 8, "key": name, "sha256": hashlib.sha256(b"invented").hexdigest()}) + "\n")
     (tmp_path / "documents.json").write_text(json.dumps([name]))
-    (tmp_path / "scope.json").write_text(json.dumps({"ZZ00000000000000000A00": {"selected": True}}))
-    (tmp_path / "issuers.json").write_text("[]")
-    run = {"facts": {"publication_count": 3},
-           "run_files": {"approved_scope": str(tmp_path / "scope.json"), "nport_issuers": str(tmp_path / "issuers.json")},
-           **inputs}
+    run = {"facts": {"publication_count": 3}, **inputs}
     return write_manifest(source="gleif", target="mastering", capture=str(capture), documents=str(tmp_path / "documents.json"),
                           capture_run="c", output=str(tmp_path / "bundle"), as_of="2026-10-19T00:00:00Z", revision=0,
                           journal=MemoryJournal(), **run)
 
 
-def test_a_run_fact_and_run_files_fill_the_reading(tmp_path):
+def test_a_run_fact_fills_the_reading(tmp_path):
     store = Artifacts()
     (read,) = store.json(gleif_bundle(tmp_path)["manifest"])["steps"]["read"]
-    document = store.json(read["input"])
-    assert store.json(document["contract"])["read"]["references"]["approved_scope"] == {
-        "ZZ00000000000000000A00": {"selected": True}}
-    (artifact,) = document["artifacts"]
+    (artifact,) = store.json(read["input"])["artifacts"]
     assert store.json(artifact["context"])["values"] == {"publication_count": 3}
-    assert store.json(artifact["lookups"])["sets"] == {"nport_issuers": []}
 
 
-def test_a_run_without_the_declared_facts_and_files_is_refused(tmp_path):
+def test_a_run_without_the_declared_facts_is_refused(tmp_path):
     with pytest.raises(ValueError, match="takes facts"):
         gleif_bundle(tmp_path, facts={})
 
@@ -207,34 +199,9 @@ def test_run_arguments_read_a_fact_as_json_else_text():
         run_arguments(["n=3", "n=4"], None)
 
 
-def test_a_run_file_that_is_not_json_is_refused(tmp_path):
-    (tmp_path / "bad.json").parent.mkdir(exist_ok=True)
-    (tmp_path / "bad.json").write_text("not json")
-    with pytest.raises(ValueError, match="Run file approved_scope"):
-        gleif_bundle(tmp_path, run_files={"approved_scope": str(tmp_path / "bad.json"),
-                                          "nport_issuers": str(tmp_path / "bad.json")})
-
-
 def test_a_fact_of_another_type_is_refused(tmp_path):
     with pytest.raises(ValueError, match="fact publication_count"):
         gleif_bundle(tmp_path, facts={"publication_count": "abc"})
-
-
-def test_a_lookup_set_file_of_another_shape_is_refused(tmp_path):
-    (tmp_path / "issuers2.json").write_text(json.dumps({"not": "a list"}))
-    (tmp_path / "s2.json").write_text(json.dumps({"ZZ00000000000000000A00": {"selected": True}}))
-    with pytest.raises(ValueError, match="is not lookup set nport_issuers"):
-        gleif_bundle(tmp_path, run_files={"approved_scope": str(tmp_path / "s2.json"),
-                                          "nport_issuers": str(tmp_path / "issuers2.json")})
-
-
-def test_a_reference_the_contract_does_not_declare_empty_is_refused(tmp_path, monkeypatch):
-    body = copy.deepcopy(files.source("gleif"))
-    read = body["bookkeeping"]["targets"]["mastering"]["steps"][0]["input"]
-    read["references"] = {"approved_scoep": {"file": "approved_scope"}}
-    monkeypatch.setattr(files, "source", lambda name, *a, **k: body)
-    with pytest.raises(ValueError, match="reference approved_scoep"):
-        gleif_bundle(tmp_path)
 
 
 def fund_bundle(tmp_path, change=None):

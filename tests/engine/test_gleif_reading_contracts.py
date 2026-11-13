@@ -21,7 +21,8 @@ MEMBERS = ["level1", "relationships", "reporting-exceptions"]
 
 def configured(member, format, *, delta=False):
     rules = files.load(files.ROOT / "sources" / "gleif" / f"{member}-{format}.yaml")
-    rules["read"]["references"]["approved_scope"] = {LEI_A: {"selected": True}, LEI_B: {"selected": True}}
+    if "approved_scope" in rules["read"].get("references", {}):  # JSON Level 1 reads every record
+        rules["read"]["references"]["approved_scope"] = {LEI_A: {"selected": True}, LEI_B: {"selected": True}}
     if format == "xml":
         refs = rules["read"]["stream"]["header_read"]["references"]
         refs["content_dates"] = {DATE: {"valid": True}}
@@ -70,18 +71,13 @@ def archive(rules, member, format, *, delta=False, header_changes=None):
     return output.getvalue()
 
 
-def bound_task(tmp_path, store, body, rules, count=3, issuers=()):
+def bound_task(tmp_path, store, body, rules, count=3):
     envelope = task(tmp_path, store, [body], rules)
     manifest = store.json(envelope["input"])
     ref = manifest["artifacts"][0]
     context = store.put(tmp_path.as_uri(), {"version": 1, "input": ref, "values": {"publication_count": count}})
-    entry = {"input": ref, "context": context}
-    declared = rules["read"].get("lookup_sets") or {}
-    if declared:  # JSON Level 1's issuer set (ticket 22), supplied beside the input
-        entry["lookups"] = store.put(tmp_path.as_uri(), {"version": 1, "input": ref, "sets": {
-            name: sorted(issuers) if name == "nport_issuers" else [] for name in declared}})
-    envelope["input"] = store.put(tmp_path.as_uri(), {**manifest, "version": 3 if declared else 2,
-                                                       "artifacts": [entry]})
+    envelope["input"] = store.put(tmp_path.as_uri(), {**manifest, "version": 2,
+                                                       "artifacts": [{"input": ref, "context": context}]})
     return envelope
 
 
@@ -96,20 +92,12 @@ def test_all_members_preserve_selected_raw_record_and_original_source_position(t
     assert artifact["record_count"] == 3
     table = member.replace("-", "_")
     rows = [row for part in artifact["partitions"] for row in store.json(part["receipt"])["tables"][table]]
-    # JSON Level 1 reads the issuer flag beside the record (ticket 97): none listed, none set.
-    flag = {"nport_issuer": None} if (member, format) == ("level1", "json") else {}
-    assert rows == [{"record": records(member)[1], "source_index": 2, **flag}]
+    if (member, format) == ("level1", "json"):
+        # Every record is read: the Merge Stage, not the read, decides what a record joins.
+        assert rows == [{"record": record, "source_index": n} for n, record in enumerate(records(member), start=1)]
+    else:
+        assert rows == [{"record": records(member)[1], "source_index": 2}]
     assert source_read.check({**envelope, "candidate": receipt}, store) == ({"source.output": True}, [])
-
-
-def test_a_listed_issuer_is_flagged_beside_its_record(tmp_path):
-    store, rules = Artifacts(), configured("level1", "json")
-    receipt = source_read.execute(bound_task(tmp_path, store, archive(rules, "level1", "json"), rules,
-                                             issuers=[LEI_A]), store)
-    rows = [row for part in store.json(receipt)["artifacts"][0]["partitions"]
-            for row in store.json(part["receipt"])["tables"]["level1"]]
-    # The flag is text: the rule tests only that it is there.
-    assert [(row["record"]["LEI"]["$"], row["nport_issuer"]) for row in rows] == [(LEI_A, "true")]
 
 
 @pytest.mark.parametrize("member", MEMBERS)

@@ -252,32 +252,6 @@ class Loader:
             plan["preparation"] = preparation
         return plan
 
-    def derived_files(self, given: list[str], *, folder: Path) -> list[str]:
-        """The run files the target derives and the caller did not give, built from the store now: each one is
-        named as `name=path`, with what it holds and why it is made."""
-        from edgar_warehouse.bookkeeping.clean.config import run_inputs
-        from edgar_warehouse.mastering.store import open_store
-        from edgar_warehouse.mdm.connections import engine_from_environment
-        from edgar_warehouse.rules import derivations
-
-        derived = run_inputs(self.reading["bookkeeping"]["targets"][self.target])["derived"]
-        named = {entry.split("=", 1)[0] for entry in given}
-        wanted = {name: how for name, how in derived.items() if name not in named}
-        if not wanted:
-            return []
-        engine = engine_from_environment("MDM_DATABASE_URL", self.env["worker"], restricted=True)
-        store = open_store(engine)
-        made = []
-        try:
-            for name, how in wanted.items():
-                path, count = derivations.derive(how["method"], name, folder=folder, store=store)
-                self.say(f"Derived {name} by {how['method']}: {count} values. Purpose: {how['purpose']} Why: {how['why']}")
-                made.append(f"{name}={path}")
-        finally:
-            store.close()
-            engine.dispose()
-        return made
-
     def load(self, *, capture: Path, capture_run: str, as_of: str, facts: list[str], run_files: list[str],
              revision: int = 0, force: bool = False) -> dict:
         result = {"source": self.source, "target": self.target, "finished_open_runs": [], "bundles": []}
@@ -311,7 +285,6 @@ class Loader:
         cut = self.cut(capture)
         self.say(f"{self.source} {self.target}: {sum(len(b) for b in cut)} documents in {len(cut)} bundles, "
                  f"{self.at_a_time} at once")
-        run_files = [*run_files, *self.derived_files(run_files, folder=self.root / "derived")]
         extra = [*(a for fact in facts for a in ("--fact", fact)), *(a for f in run_files for a in ("--file", f))]
         if force:
             # Force publish (operator, 2026-11-10): ignore the Change Journal and process every document of the source

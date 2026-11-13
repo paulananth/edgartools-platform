@@ -24,6 +24,9 @@ goes to silver. Rules and configuration are files a person or an agent assembles
 5. **History: "this is version 1.0 so no history"** (operator, 2026-11-12). Nothing in the code, tests, rules,
    skills or documents tells what came before: no earlier digest, no answer read through an undo of a later
    ticket, no ticket number or date in a comment, no refusal that names an older schema or stage.
+6. **Nothing is made for a load: "no files should be generated or required all must go through merge stage and
+   mastering"** (operator, 2026-11-12, on the GLEIF scope limit). A source's records all go to the Merge Stage and
+   the matching rules decide there; a load is given no list of which records to take.
 
 ## Checklist
 
@@ -49,6 +52,13 @@ Each part is its own branch and PR, in this order (remove first, then simplify w
   - [x] (2026-11-12 16:52 ET) RDM, the Change Journal, MDM and silver on PostgreSQL: each store's numbered files are one `migrations/schema.sql` (MDM 30 files, RDM 5, the Change Journal 2, silver 1), applied by `migrate` before any numbered file added later; a store on the earlier files is refused with "rebuild the store". MDM's registration rights are `registration_authority.sql`, and the routine-retirement module went with the files it retired. Verified by dumping a store built each way (`pg_dump -s`): the Change Journal is identical, RDM differs by brackets in one view, MDM by the applied-file record only (36 views, 2 functions, 25 tables, 75 indexes, 15 triggers each way); and by the unit, architecture, MDM, engine, integration and storage-adapter tests
   - [ ] RDM on MySQL: `mysql-v1.sql` and its three follow-up files (`mysql-search-v2`, `mysql-value-v3`, `mysql-properties-v4`) fold into one file
   - [ ] The Change Journal's native-storage statements (applied in code under the key `003_native_storage`) fold into its schema file
+- [ ] Nothing is made for a load (ruling 6)
+  - [x] (2026-11-12 21:55 ET) GLEIF Level 1 reads every record of the publication: the scope file (`approved_scope`, which stopped at the engine's 10,000-row reference limit with about 25,000 LEIs) and the issuer file (`nport_issuers`) are gone from the read and the target, and the read's output bounds hold the whole publication. A record that finds no Company waits in the Stage. The derived-run-file machinery, which only GLEIF used, is deleted (`rules/derivations.py`, `run.derived`, the loader's `derived_files`). Verified by `tests/engine/test_gleif_reading_contracts.py` (every record read, in order), the unit, architecture and MDM tests and the mastering storage-adapter tests
+  - [ ] GLEIF's waterfall preparation still reads the publication a second time and keeps a cached projection beside the load. It becomes a pass over the Stage, which now holds every GLEIF record; for that the staged GLEIF record must keep GLEIF's other names, transliterated names and last update, which it does not today (5,043 of 6,251 earlier name attachments came from those names)
+  - [ ] The run-file option (`load --file`, `run.files`, `projections`, `matches`) has no source using it: delete it with its tests
+  - [ ] The GLEIF relationship, reporting-exception and XML contracts still take `approved_scope`
+  - [ ] The `nport_issuer` field and the declared rule `gleif-issuer-lei` that reads it: nothing sets the flag now
+  - [ ] The Golden Copy on this machine is saved with `01-` before the publisher's file name, which the preparation refuses; give the load the publisher's name
 - [ ] Words: no reference to a migration from an older system, a legacy path, a cutover or a retired stage in the code, rules, guides, documents and skills
   - [x] (2026-11-12 17:05 ET) Code and tests, the word "legacy": refusals, help texts and docstrings say what the code does today; the engine catalog's two keys are `default_jurisdiction_table` and `default_pair_comparison`; tests that only checked deleted commands and deleted modules stay deleted are removed (`test_retired_commands_stay_unavailable`, the `gold-refresh` lines, `test_retired_submission_loaders.py`). Verified by the unit, architecture and MDM tests
   - [x] (2026-11-12 17:05 ET) Store refusals: MDM no longer looks for an `mdm_v2` schema (check and test removed); every store that is not on this build's schema says "does not hold this build's schema; rebuild the store". Verified by `tests/integration/test_mdm_schema_comments.py` and `test_bookkeeping_read_upgrade_postgres.py`

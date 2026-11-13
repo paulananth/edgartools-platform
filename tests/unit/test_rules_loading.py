@@ -111,19 +111,18 @@ def test_each_new_bundle_is_prepared_submitted_and_driven(tmp_path, monkeypatch)
     assert (tmp_path / "m" / "load" / "example" / "by_letter" / "2026-10-25T000000Z" / "bundle-002").is_dir()
 
 
-def test_automatic_preparation_finishes_before_scope_files_and_bundles(tmp_path, monkeypatch):
+def test_automatic_preparation_finishes_before_the_bundles(tmp_path, monkeypatch):
     commands = Recorded()
     found = loader(tmp_path, monkeypatch, commands)
     order = []
     monkeypatch.setattr(loading, "prepare_load", lambda **kw: order.append("pairs") or [{"pairs": 1}], raising=False)
-    monkeypatch.setattr(found, "derived_files", lambda *a, **k: order.append("scope") or [])
     drive = commands.drive
     commands.drive = lambda *a: order.append("merge") or drive(*a)
 
     result = found.load(capture=capture(tmp_path / "c", "letters/a.json"), capture_run="capture-1",
                         as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
 
-    assert order == ["pairs", "scope", "merge"]
+    assert order == ["pairs", "merge"]
     assert result["preparation"] == [{"pairs": 1}]
 
 

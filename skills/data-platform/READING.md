@@ -1313,14 +1313,12 @@ declared page coverage; they do not prove Bookkeeping producer success.
 
 ### The GLEIF Level 1 JSON template
 
-The bundled `gleif/level1-json.yaml` template declares ZIP framing, explicit
-historical numeric/record limits, pinned publication count and a receipt-bound
-source ordinal. Populate `read.references.approved_scope` with the reviewed
-LEIs as `{LEI: {selected: true}}` before submission; the supplied empty map is
-a template, not an approved cohort. Source scope is a frozen reference table
-in the same contract receipt as selection. `record` retains typed source
-fields for MDM interpretation; `source_index` is one-based. Compare provenance
-with the historical zero-based ordinal explicitly before runtime adoption.
+The bundled `gleif/level1-json.yaml` contract declares ZIP framing, explicit
+numeric/record limits, the publication count and a receipt-bound source
+ordinal. It reads every Level 1 record: no scope is given to the read, and the
+Merge Stage decides what each record joins (a record that finds no Company
+waits there). `record` retains typed source fields for MDM interpretation;
+`source_index` is one-based.
 
 The complete archive framing parity result and the captured-sample performance
 measurement do not by themselves prove installed configured projection,
