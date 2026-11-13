@@ -193,6 +193,10 @@ contract and these inputs and holds only declared tables; `mdm.prepare` checks
 each records file against the hash its manifest states. Bookkeeping pins the
 worker's runtime per run and hashes the input and output.
 
+A worker reads a reading one stored piece at a time and writes as it goes; it never gathers a whole
+file. One long operation over a whole file keeps the lease renewal from running, so the lease is lost
+however often it would renew, and the memory it takes goes to swap on the disk.
+
 A target marked `local: true` runs its `source.read` and `source.combine` steps in the loader's own process
 (`rules/local.py`, called by `rules run`). They take no claim, lease or heartbeat and write files with
 receipts, and the content hash is their proof. The run in the database starts at the first later step
