@@ -68,29 +68,9 @@ read:
 bookkeeping:
   version: 2
   targets:
+    # The managers' Companies are mastered by sec.company, which runs first.
     silver:
-      steps:
-        - name: filings
-          operation: source.read
-          requires: []
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          units: {slices: {bytes: 8388608}}
-          input:
-            files: "*/submissions/sec/cik=*/main/*"
-        # The managers' Companies are mastered by sec.company, which runs first.
-        - name: land
-          operation: silver.land
-          requires: [filings]
-          key: "{unit}"
-          leases: ["silver:{silver}"]
-          checks: [input.hash, output.receipt, silver.landed]
-          input: {keys: {table: filing, silver: thirteenf_filing}}
-        - name: processed
-          operation: journal.record
-          requires: [land]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, journal.recorded]
-      checks: [manifest.hash, work.accounting, journal.delivered]
+      extract:
+        - {name: filings, read: null, units: {slices: {bytes: 8388608}}, files: '*/submissions/sec/cik=*/main/*'}
+      silver:
+        - {name: land, land: {silver: thirteenf_filing, table: filing}}

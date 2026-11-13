@@ -172,7 +172,8 @@ def load_source(path: Path) -> dict:
     ticket 22) is its own file and version label, and rides in each Dataset
     Contract it names as `quality`, so one approval and one digest cover the
     mapping and the checks that run with it, as `policy()` does for kinds."""
-    body = load(path)
+    from .shape import expand_source
+    body = expand_source(load(path))  # targets written in the one shape, as the steps the engine runs
     if isinstance(body, dict) and "mdm" in body:  # the section was named `mdm` until ticket 171
         raise RulesFileError(f"{path}: the `mdm` section is now `dataset_contracts` (ticket 171); rename it")
     quality_path = path.parent / "quality.yaml"

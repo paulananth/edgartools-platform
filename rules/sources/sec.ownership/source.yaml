@@ -99,37 +99,13 @@ bookkeeping:
     # than the lines. It creates no Security, so OpenFIGI's Securities are mastered first; a symbol
     # no Security holds yet waits unbound.
     security_symbols:
-      steps:
-        - name: read_security
-          operation: source.read
-          requires: []
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          units: {slices: {bytes: 8388608}}
-          input: {contract: ownership-security-sgml.yaml, files: "*.txt"}
-        - name: prepare_security
-          operation: mdm.prepare
-          requires: [read_security]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, mdm.prepared]
-          input:
-            keys: {table: security_record, record_column: record, dataset: sec.ownership.security.v2}
-            readings: {read: {all: read_security}}
-        - name: merge_security
-          operation: mastering.merge
-          requires: [prepare_security]
-          key: "{batch_id}"
-          leases: ["mdm:consumer:{consumer}"]
-          checks: [input.hash, output.receipt, mdm.committed]
-        - name: processed_security
-          operation: journal.record
-          requires: [merge_security]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, journal.recorded]
-      checks: [manifest.hash, work.accounting, journal.delivered]
+      extract:
+        - {name: read_security, read: ownership-security-sgml.yaml, units: {slices: {bytes: 8388608}}, files: '*.txt'}
+      master:
+        names: {prepare: prepare_security, merge: merge_security}
+        keys: {dataset: sec.ownership.security.v2, record_column: record, table: security_record}
+        readings: {read: {all: read_security}}
+      names: {record: processed_security}
 dataset_contracts:
   # The issuer's security a Form 3, 4 or 5 names (ticket 24; operator, 2026-11-04, "Yes, Form 4
   # route only"): one record per filing, with the issuer CIK and the trading symbol. It files the

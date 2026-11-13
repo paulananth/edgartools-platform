@@ -43,24 +43,8 @@ bookkeeping:
     # mastered; the Securities chain reads this step's verified units as its
     # `umbrella` pair set (ticket 23), so it runs first.
     subfund-pairs:
-      steps:
-        - name: pairs
-          operation: source.read
-          requires: []
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          units: {each: file}
-          input:
-            contract: subfund-pairs.yaml
-            files: "*rr-golden-copy*"
-        - name: processed
-          operation: journal.record
-          requires: [pairs]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, journal.recorded]
-      checks: [manifest.hash, work.accounting, journal.delivered]
+      extract:
+        - {name: pairs, read: subfund-pairs.yaml, units: {each: file}, files: '*rr-golden-copy*'}
     # Every Level 1 record of one Golden Copy publication through the Merge Stage. GLEIF finds
     # Companies and never creates one: a record that finds none waits in the Stage. The run
     # gives the publication's record count.

@@ -57,35 +57,8 @@ bookkeeping:
       checks: [manifest.hash, work.accounting, journal.delivered]
     # The captured pages, read and landed in silver (the Company is mastered by sec.company, which runs first).
     silver:
-      steps:
-        - name: read
-          operation: source.read
-          requires: []
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, source.output]
-          units: {slices: {bytes: 33554432}}
-          input:
-            contract: registration-page.yaml
-            files: "*.capture.zip"
-        - name: land_offering
-          operation: silver.land
-          requires: [read]
-          key: "{unit}"
-          leases: ["silver:{silver}"]
-          checks: [input.hash, output.receipt, silver.landed]
-          input: {keys: {table: offering, silver: registration_offering}}
-        - name: land_statement_line
-          operation: silver.land
-          requires: [read]
-          key: "{unit}"
-          leases: ["silver:{silver}"]
-          checks: [input.hash, output.receipt, silver.landed]
-          input: {keys: {table: statement_line, silver: registration_statement_line}}
-        - name: processed
-          operation: journal.record
-          requires: [land_offering, land_statement_line]
-          key: "{unit}"
-          leases: ["artifact:{destination}"]
-          checks: [input.hash, output.receipt, journal.recorded]
-      checks: [manifest.hash, work.accounting, journal.delivered]
+      extract:
+        - {name: read, read: registration-page.yaml, units: {slices: {bytes: 33554432}}, files: '*.capture.zip'}
+      silver:
+        - {name: land_offering, land: {silver: registration_offering, table: offering}}
+        - {name: land_statement_line, land: {silver: registration_statement_line, table: statement_line}}
