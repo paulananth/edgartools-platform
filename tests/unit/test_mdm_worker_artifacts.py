@@ -225,3 +225,26 @@ def test_rows_read_against_a_lookup_set_are_their_own_publication(tmp_path):
         keys[name] = store.json(candidate)["batches"][0]["input"]["publication"]["publication_key"]
     assert keys["none"] == "fixture.rows:" + hashlib.sha256(b"captured").hexdigest()
     assert len(set(keys.values())) == 3
+
+
+def test_merge_reads_a_sources_contract_once_a_unit(monkeypatch):
+    reads = []
+
+    class Adapter:
+        def dataset_contracts(self, conn, codes):
+            reads.append(set(codes))
+            return {code: {"nonblocking_deferred_reasons": ["why"]} for code in codes}
+
+    class Engine:
+        def connect(self):
+            from contextlib import nullcontext
+            return nullcontext()
+
+    monkeypatch.setattr("edgar_warehouse.database_connections.storage_adapter", lambda: Adapter())
+    known: dict = {}
+    deferred = [{"source_code": "a.b"}]
+    answers = [mastering_merge._quiet(Engine(), deferred, known) for _ in range(3)]
+    assert answers == [{"a.b": {"why"}}] * 3
+    assert reads == [{"a.b"}]
+    mastering_merge._quiet(Engine(), [{"source_code": "c.d"}], known)
+    assert reads == [{"a.b"}, {"c.d"}]

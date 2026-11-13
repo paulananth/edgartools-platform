@@ -64,14 +64,16 @@ def _settings(engine, manifest: dict, kind: str):
     return Settings(policy, manifest["policy_digest"], kind, manifest["as_of"])
 
 
-def _quiet(engine, deferred: list[dict]) -> dict:
+def _quiet(engine, deferred: list[dict], known: dict) -> dict:
+    """The reasons each source leaves quiet; a source's contract is read once a unit, kept in `known`."""
     from edgar_warehouse.database_connections import storage_adapter
 
-    if not deferred:
-        return {}
-    with engine.connect() as conn:
-        contracts = storage_adapter().dataset_contracts(conn, {r["source_code"] for r in deferred})
-    return {code: set(body.get("nonblocking_deferred_reasons", [])) for code, body in contracts.items()}
+    missing = {r["source_code"] for r in deferred} - known.keys()
+    if missing:
+        with engine.connect() as conn:
+            contracts = storage_adapter().dataset_contracts(conn, missing)
+        known.update({code: set(body.get("nonblocking_deferred_reasons", [])) for code, body in contracts.items()})
+    return {r["source_code"]: known[r["source_code"]] for r in deferred if r["source_code"] in known}
 
 
 def execute(envelope: dict, artifacts) -> dict:
@@ -85,6 +87,8 @@ def execute(envelope: dict, artifacts) -> dict:
     engine = _engine(restricted=True)
     db = open_store(engine)
     files = []
+    known: dict = {}
+    settings: dict = {}
     try:
         with tempfile.TemporaryDirectory(prefix="mastering-") as folder:
             path, manifest = _stage(envelope, artifacts, Path(folder))
@@ -94,9 +98,11 @@ def execute(envelope: dict, artifacts) -> dict:
                 for record in found["assertions"]:
                     kinds[record["kind"]].append(record)
                 deferred = found["deferred"]
-                quiet = _quiet(engine, deferred)
+                quiet = _quiet(engine, deferred, known)
                 for kind, records in sorted(kinds.items()) or [("", [])]:
-                    done = merge.merge_file(db, _settings(engine, manifest, kind), records, deferred=deferred, quiet=quiet)
+                    if kind not in settings:
+                        settings[kind] = _settings(engine, manifest, kind)
+                    done = merge.merge_file(db, settings[kind], records, deferred=deferred, quiet=quiet)
                     files.append({"file": done["file"], "records": len(records)})
                     deferred = ()
         files.sort(key=lambda item: item["file"])
