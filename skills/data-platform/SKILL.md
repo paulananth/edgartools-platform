@@ -246,7 +246,7 @@ tables and the records set aside. Nothing feed-specific runs. Read
 [Configured source extract](READING.md) before writing the contract: it covers
 complete JSON records, column arrays, exact source text and frozen references.
 
-1. The feed's pipeline file passes `rules check`.
+1. The changed pipeline document passes the local changed-document guard; CI checks the full Rules tree.
 2. Submit: `edgar-warehouse rules run --pipeline <name> --target <target> --input-manifest <uri> --input-sha256 <sha256>`.
    Keep the `run_id` it prints.
 3. Work, as the worker login:

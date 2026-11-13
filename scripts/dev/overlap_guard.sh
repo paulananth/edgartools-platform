@@ -12,12 +12,17 @@
 # commit its PR merged holds only its uncommitted files: after a squash merge
 # its commits look unmerged, and main may have changed their files since.
 #
-# It also fails on an ET stamp later than the clock in what this branch adds under
-# .scratch/ (scripts/dev/future_stamps.py): a guessed stamp, not a read one. It also fails a changed ticket
-# marked resolved with an open part (scripts/dev/open_parts.py). When this branch changes rules/, it also
-# runs `rules check`: a rules file the engine refuses otherwise fails only in CI.
+# It also fails on an ET stamp later than the clock in what this branch adds
+# under .scratch/ (scripts/dev/future_stamps.py), and on a changed ticket marked
+# resolved with an open part (scripts/dev/open_parts.py).
+# The changed-doc guard validates changed source.yaml/quality.yaml, merge files
+# and pipeline.yaml. It checks Dataset Contract identity and merge-rule versions
+# without expanding unrelated source syntax. Source Extract files use their
+# owner-specific tests; CI retains the full-tree Rules check.
 #
-# Exit 0: no overlap. Exit 1: each overlapping file and who holds it, a future stamp or a refused rules file.
+# Exit 0: no overlap or changed-document guard failures. Exit 1: overlap, a future
+# stamp, an unresolved ticket or a changed Rules document/identity refusal.
+#
 # Usage: bash scripts/dev/overlap_guard.sh  [--base origin/main]
 set -euo pipefail
 
@@ -57,10 +62,8 @@ fi
 if grep -q '^rules/' "$tmp/mine"; then
   python="${TEST_PYTHON:-.venv/bin/python}"
   if [[ -x "$python" ]]; then
-    PYTHONPATH=. "$python" -c 'from edgar_warehouse.cli import main; raise SystemExit(main())' rules check >/dev/null \
-      || { echo "overlap_guard: STOP. A rules file is refused (edgar-warehouse rules check)."; exit 1; }
-    PYTHONPATH=. "$python" scripts/dev/dataset_identity.py "$base" \
-      || { echo "overlap_guard: STOP. A changed source moves a Dataset Contract's identity under the same dataset code."; exit 1; }
+    PYTHONPATH=. "$python" scripts/dev/rules_change_guard.py "$base" "$tmp/mine" --root rules \
+      || { echo "overlap_guard: STOP. A changed Rules document is refused or changes protected identity."; exit 1; }
   else
     echo "overlap_guard: rules changed, not checked: no $python (set TEST_PYTHON)" >&2
   fi

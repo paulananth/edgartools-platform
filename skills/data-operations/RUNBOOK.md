@@ -15,7 +15,7 @@ Copying files into a folder named final establishes neither.
 | Stage | Owner and completion evidence |
 | --- | --- |
 | Author | data-onboarding creates a source; refining-rules changes an existing source/domain. The exact configuration and generated documents are versioned. |
-| Check | `rules check` accepts every file ([LOAD](../data-onboarding/LOAD.md)). |
+| Check | Validate only changed documents locally; CI checks the full Rules tree ([LOAD](../data-onboarding/LOAD.md)). |
 | Deploy | The rules files ship with the image. `rules register` registers the merge rules and Dataset Contracts in the destination's MDM. |
 | Operate | data-operations checks the completed delivery, capacity and dependencies, then submits/resumes and verifies through Bookkeeping and Change Journal. |
 
@@ -64,8 +64,11 @@ for all private connection files, hosted roles, grants and credential handling.
    must read `pin ok`, then `rdm list`.
 5. **Governance logins.** Provision the registration login through
    [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
-6. **Source configurations.** `rules check`, then `rules register` with the registration connection from the
-   central section. Done when it prints a digest for the merge rules and for every Dataset Contract.
+6. **Source configurations.** For a full initial registration, run the
+   unfiltered `rules check` once, then `rules register` with the registration connection from the central
+   section. For a narrow source change, use `rules check --source <source>`.
+   Done when registration prints a digest for the merge rules and every
+   selected Dataset Contract.
 
 7. **Worker logins.** Apply the hosted worker roles, profile grants and
    MDM guard from [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).

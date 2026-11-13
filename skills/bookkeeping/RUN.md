@@ -25,7 +25,10 @@ registration connections through
 Provisioning does not authorize execution.
 Old run ids are not fallbacks.
 
-A new or changed rules file is checked with `rules check`; the run freezes it ([check and load](../data-onboarding/LOAD.md)).
+A source change uses `rules check --source <name>`; changed merge and pipeline
+documents use the local changed-document guard. Changed Source Extracts use
+their owner-specific tests. The run then freezes and validates its own inputs
+([check and load](../data-onboarding/LOAD.md)).
 
 Submit the selected source/feed's manifest, then run each step's worker,
 in step order, and finish the run:

@@ -6,14 +6,21 @@ The files under `rules/` are the rules. A person or an agent assembles them by h
 proved, approved or activated before a run. A run freezes the files it is given under the digest of their
 content, and the Rules Database records that digest, so the rules a past run used can always be read.
 
-## check: one offline check
+## Check the changed Rules documents
+
+For one source, run its scoped offline check:
 
 ```bash
-edgar-warehouse rules check [--source <name>]
+edgar-warehouse rules check --source <name>
 ```
 
-Each file says `ok`, or `refused` with the reason. It needs no database and no capture, and a run makes the
-same check before it starts. Fix every refusal before loading.
+This loads that source as a run would. The unfiltered `rules check` scans the
+whole Rules tree; use it for a full-tree validation, not a narrow edit. The
+local commit guard validates changed `source.yaml`/`quality.yaml`, merge and
+pipeline documents, and checks Dataset Contract identity. It does not parse
+unrelated Source Extract files; run their owner-specific tests when they
+change. CI retains full-tree validation. A refusal in an unchanged legacy
+document is not a reason to weaken or rewrite it during an unrelated change.
 
 For a mapping or a quality rule you want to see at work first, run the configured rules over a few invented
 files with `tests/support/source_chain.py` (`read`, `combine`, `prepare`, then `records`). The test keeps
