@@ -272,6 +272,13 @@ Journal never recorded them): a blocked run frozen under a retired rules
 version, and an open run pinned to other worker code, which no later checkout
 can finish ("Pinned worker runtime changed; start a new run").
 
+### Restart a running load for new code
+
+A restart starts a new run when the worker code changed, so it reads and prepares again and its merge
+passes over every batch it already merged. Price both before stopping a load (measure the read and prepare
+time and the seconds a merged batch costs); restart only when the gain beats that cost, and let a nearly
+finished run finish.
+
 ### Restart one source from empty
 
 A source loaded under rules that no longer fit it (a Dataset Contract that got a new dataset code, a rule that
