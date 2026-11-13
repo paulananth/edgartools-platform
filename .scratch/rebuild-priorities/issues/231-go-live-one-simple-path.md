@@ -94,4 +94,6 @@ Each part is its own branch and PR, in this order (remove first, then simplify w
   - [ ] `CONTEXT.md`: entries that describe the DuckDB silver, ledger epochs and a cutover
 - [ ] The seven wastes: each remaining repeated check, wait or hand-off named and removed, with the function kept shown by the tests
 - [ ] Skills and guides rewritten to the simple path: onboarding a source is assembling its files and running `rules check`
+- [x] 2026-11-13 11:28 ET The second N-PORT securities pass reads the first pass's verified step: a step that declares another run's step as its `pieces` is accepted. Found on the hosted load, where the pass stopped with "Another run's unit is read only from the source, target and step its step declares"; the engine read the declaration from `readings` and `lookups` only, and the one-line extract declares it under `pieces`. Verified: `tests/integration/test_configured_bookkeeping_postgres.py::test_a_step_that_declares_another_runs_step_as_its_pieces_reads_its_unit` failed on the old code with that `Blocked`; 11 other-run tests pass.
+- [ ] Hosted: the second N-PORT securities pass loaded from the fixed code, with its counts and time.
 - [ ] Learning → skill

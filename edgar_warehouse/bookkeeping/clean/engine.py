@@ -275,14 +275,15 @@ class Bookkeeping:
         return resolved
 
     def _other_runs_declared(self, item: dict, context: dict) -> set:
-        """The other runs' steps the item's step declares (`{run: {source, target, step}}` readings and
-        lookups), each `(kind, source, target, step)`: a run reads runs of its own kind."""
+        """The other runs' steps the item's step declares (`{run: {source, target, step}}` readings,
+        lookups and pieces), each `(kind, source, target, step)`: a run reads runs of its own kind."""
         submission = context["run"]["submission"]
         body = self.artifacts.json(submission["rules"])["body"]
         step = next(s for s in body["bookkeeping"]["targets"][submission["target"]]["steps"] if s["name"] == item["step"])
         shape = step.get("input", {})
         return {(submission["kind"], v["run"]["source"], v["run"]["target"], v["run"]["step"])
-                for v in [*shape.get("readings", {}).values(), *shape.get("lookups", {}).values()] if "run" in v}
+                for v in [*shape.get("readings", {}).values(), *shape.get("lookups", {}).values(),
+                          shape.get("pieces") or {}] if "run" in v}
 
     def _compose(self, item: dict, body: dict, context: dict, store: bool, seen: dict,
                  others: dict | None = None) -> dict:
