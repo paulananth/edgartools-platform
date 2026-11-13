@@ -45,6 +45,7 @@ whoever runs it.
 - [Which retained runs can be verified, and how does the evidence join?](issues/04-retained-run-evidence-join.md): the Bookkeeping export is the only run-state source, the load logs join to it on run id for half the invocations, and the rebuilt manifest tree is a separate later wave with no verification state.
 
 - [How is the entity-kind contribution and completion model decided?](issues/05-entity-kind-contribution-model.md): merge kinds gate completeness on 13 contracts, a kind is complete when its sources loaded and links ran, every incomplete kind is partial, and deferred counts are reported but never status-changing.
+
 ## Not yet specified
 
 - The per-target evidence package's shape: how the retained load logs, the
