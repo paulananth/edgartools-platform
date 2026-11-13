@@ -91,19 +91,3 @@ def test_a_file_of_only_set_aside_records_is_merged_with_nothing_released(databa
 
         assert done["skipped"] is False and done["released"] == 0 and done["records"] == 0
         assert db.rows("select count(*) from mastering_deferred") == [(1,)]
-
-
-def test_the_lei_scope_is_every_lei_the_store_holds_or_a_pair_names(database_factory, tmp_path):
-    import json
-
-    from edgar_warehouse.rules import derivations
-
-    with opened(database_factory) as db:
-        joined(db)  # a company, a GLEIF record with a LEI, and the waterfall pair of the company's name
-        path, count = derivations.derive("lei_scope", "approved_scope", folder=tmp_path, store=db)
-
-        scope = json.loads(path.read_text())
-        assert count == len(scope) >= 1 and all(value == {"selected": True} for value in scope.values())
-        (pair,) = [v for (v,) in db.rows("select distinct value from mastering_name_key where role='cascade'")]
-        held = {v for (v,) in db.rows("select distinct lei from mastering_record where lei is not null")}
-        assert pair in scope and held <= set(scope)

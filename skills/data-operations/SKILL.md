@@ -201,25 +201,17 @@ counts.
 the run resumable. Run the same command again. It finishes the open run
 first and never loads a document twice.
 
-### Derive a run input; never ask for what the store can decide
+### A load needs no file made for it
 
-Declared `preparation` operations finish before derived files or new bundles, under the selected worker login.
-They require the current source Rules digest to be active. Complete-set matching may expand the next read's
-scope; binding still follows identifier matching. Reuse a hash-bound cached projection only for identical bytes,
-population, recipe, policy and runtime; an unchanged repeat applies nothing. Keep a completed projection
-for retry after interrupted application. EOF and count verify the declared complete scope; independent
-provider completeness needs publisher evidence.
+A source's records all go to the Merge Stage, and the matching rules decide there what each joins. A load is
+never given a list of which records to take: a record that finds no golden record waits in the Stage, or is
+created, as its entity type's rule says. A target's `run` names only facts the caller must bring (a capture run,
+a time, a count the provider states).
 
-A target's run files and facts are of two kinds: what the caller must bring (a capture, a time, a count the
-provider states) and what the rules and the store decide (a scope, the names a reading keeps, a list that flags
-nothing). The second kind is declared in the target's `run.derived` with a registered method, its `purpose` and its
-`why`, and the loader builds it on every load, go-live or daily, from what the store holds then.
-
-- **Never ask the operator for a derived file.** Ask only when neither the rules nor the store can decide, or a
-  ruling is new, and then ask once, record the ruling in the rules, and let the loader apply it from then on.
-- **A new derived input is one registered method and one declaration** with its purpose and why, tested on invented
-  records; the load says what it derived, how many values and why.
-- **The caller can still give the file** (`--file name=path`): a given file wins over the derived one.
+Declared `preparation` operations finish before new bundles, under the selected worker login. Reuse a hash-bound
+cached projection only for identical bytes, population, recipe, policy and runtime; an unchanged repeat applies
+nothing. EOF and count verify the declared complete scope; independent provider completeness needs publisher
+evidence.
 
 ### An entity type is complete when all its sources are mastered
 

@@ -44,11 +44,7 @@ RUN_KEYS = frozenset({"facts", "files"})
 # `matches` ties a run file to the capture it is run over: its part at a dotted `path` must equal the named
 # property of the capture (`receipts_sha256`: the sha256 of its receipts file), so a Name Count built from
 # another capture is refused before any unit is written (ticket 177, slice 5d).
-# `derived` names, per run file, how the loader builds it when the caller gives none (a set the store decides:
-# a scope, the names a reading keeps): a registered `method`, and the `purpose` and `why` that make the rule explain
-# itself. A derived file is built on every load, so a daily run and a go-live run get the same answer from the
-# store; the operator is asked only when neither the rules nor the store can decide.
-RUN_DECLARED = RUN_KEYS | {"projections", "matches", "derived"}
+RUN_DECLARED = RUN_KEYS | {"projections", "matches"}
 MATCH_PROPERTIES = frozenset({"receipts_sha256"})
 PROJECTION_PARTS = 16
 NAME = r"[a-z][a-z0-9_]*"
@@ -123,14 +119,6 @@ def run_inputs(selected: dict) -> dict:
         raise Blocked("A run file's matches each name a declared file, a dotted path in it and a property of the "
                       f"capture ({sorted(MATCH_PROPERTIES)}): {{file, path, to}}")
     found["matches"] = [dict(m) for m in matches]
-    derived = declared.get("derived", {})
-    if (not isinstance(derived, dict) or any(
-            name not in found["files"] or not isinstance(how, dict) or set(how) != {"method", "purpose", "why"}
-            or not isinstance(how["method"], str) or not re.fullmatch(NAME, how["method"])
-            or any(not isinstance(how[k], str) or not how[k].strip() for k in ("purpose", "why"))
-            for name, how in derived.items())):
-        raise Blocked("A derived run file names a declared file and its {method, purpose, why}, each text")
-    found["derived"] = {name: dict(how) for name, how in sorted(derived.items())}
     return found
 
 

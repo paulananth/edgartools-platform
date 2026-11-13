@@ -1053,7 +1053,8 @@ for member in ["level1", "relationships", "reporting-exceptions"]:
         folder = Path(member + "-" + format).resolve()
         folder.mkdir()
         rules = files.load(files.ROOT / "sources" / "gleif" / f"{member}-{format}.yaml")
-        rules["read"]["references"]["approved_scope"] = {lei:{"selected":True}}
+        if "approved_scope" in rules["read"].get("references", {}):  # JSON Level 1 reads every record
+            rules["read"]["references"]["approved_scope"] = {lei:{"selected":True}}
         row = {"LEI":{"$":lei}}
         if member == "relationships":
             row = {"RelationshipRecord":{"Relationship":{"StartNode":{"NodeID":{"$":lei}},

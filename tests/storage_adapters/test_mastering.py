@@ -464,9 +464,9 @@ def test_the_pass_pairs_and_the_merge_joins_the_company_in_either_order_and_a_se
 
 @pytest.mark.parametrize("gleif_first", [False, True])
 @pytest.mark.parametrize("historical", [False, True])
-def test_normal_configured_preparation_expands_scope_and_merges_through_the_existing_stage(
+def test_configured_preparation_pairs_and_merges_through_the_stage(
         database_factory, tmp_path, monkeypatch, gleif_first, historical):
-    from edgar_warehouse.rules import derivations, preparation
+    from edgar_warehouse.rules import preparation
     from tests.support.waterfall import capture, native
 
     with opened(database_factory) as db:
@@ -477,7 +477,6 @@ def test_normal_configured_preparation_expands_scope_and_merges_through_the_exis
             earlier = placed_filer()
             merge.merge_file(db, COMPANY, [earlier])
         merge.merge_file(db, COMPANY, [filer])
-        assert LEI not in derivations.lei_scope(db) if not gleif_first else LEI in derivations.lei_scope(db)
 
         @contextmanager
         def registered(digest, environment):
@@ -498,7 +497,6 @@ def test_normal_configured_preparation_expands_scope_and_merges_through_the_exis
             latest_body = json.loads(db.rows("select body from mastering_record where assertion_id=%s",
                                             [filer["assertion_id"]])[0][0])
             assert latest_body["fields"] == filer["fields"]
-        assert derivations.lei_scope(db)[LEI] == {"selected": True}
         from edgar_warehouse.mdm import matching
         staged_filer = json.loads(db.rows("select body from mastering_stage")[0][0])
         rule = next(r for r in POLICY["kinds"]["company"]["rules"] if r["family"] == "name_binding")
