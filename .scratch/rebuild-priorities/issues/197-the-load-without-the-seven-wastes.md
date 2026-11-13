@@ -3,7 +3,7 @@
 Priority: 197. Map: [Rebuild priorities](../map.md). Opened 2026-11-05 21:44 ET (operator, 2026-11-05: "make the merge happen
 within milliseconds", then "optimize using 7 wastes the complete job").
 
-Type: task. Status: resolved. Blocked by: none. Reverses the operator's "accept 60 s a batch" recorded in tickets 194 and 196: the six
+Type: task. Status: open (the merge lock, below). Blocked by: none. Reverses the operator's "accept 60 s a batch" recorded in tickets 194 and 196: the six
 plan items of ticket 194 deferred on that ruling are live again and are listed here.
 
 ## Question
@@ -170,3 +170,38 @@ The machine's sleep log shows no sleep during any prototype run, the first `sec.
 - [x] Migrate `local-test-server` to protocol 7 from `main` and resume ticket 153's reload (migration ledger 7 of 7 complete, 2026-11-05 22:44 ET).
 - [x] Learning → skill, part 1: `mdm-engineering` `references/storage-adapters.md`: a generated routine parses its wire once.
 - [x] Learning → skill: `mdm-engineering`, "Choose the cheapest proof": a merge prototype is proved on real batch sizes and whole masters (2026-11-06 10:18 ET).
+
+## Merges take turns on one lock (2026-11-13)
+
+Operator, 2026-11-13: "focus on 197 add what we discussed to improve merging to it", and the store-wide merge lock "goes against 7 wastes remove after testing".
+
+**Measured on the hosted store, while GLEIF companies and N-PORT securities merged at once** (counts only):
+
+| Reading | Value |
+| --- | --- |
+| N-PORT securities merge rate, alone | about 6,500 records a minute |
+| The same merge while GLEIF merged | about 3,100 records a minute |
+| Samples (of 60, one a second) with a session waiting on the lock | 52 |
+
+**What the lock is.** `Store.take_lock` (`edgar_warehouse/mastering/store.py`) selects the one row `mastering_lock('merge')` `for update`. `merge_file`, `clear` and the steward's resolve and split take it, so every merge of every source and every kind is one writer at a time. A merge waiting for it is the waste of waiting; the lock itself is not the waste if it is the only thing keeping two merges apart.
+
+**Why it cannot simply go.** Two things the lock hides:
+
+1. The merge's working tables `mastering_stage`, `mastering_stage_key` and `mastering_stage_bound` are shared plain tables, emptied with `delete from` at the start of each merge. Two merges at once would empty and fill each other's.
+2. A merge numbers its file `max(changed_file) + 1` over `mastering_master`, and silver delivery reads masters by that number as a watermark. Two merges at once would take the same number, or commit out of order and let a delivery pass a change.
+
+**What does not need the lock.** A merge is per kind (`Settings.kind`); `_release_waiting` re-merges only records of its own kind, and a record never joins across kinds. A Company merge and a Security merge touch different golden records. The remaining cross-kind reads (a Security looking up its issuer's identifiers) are reads; a missed identifier makes the Security wait, and the Company's own merge releases it later.
+
+**The change.** (a) The working tables become per-session temporary tables, as the silver writer's staging already is. (b) A file number comes from a sequence the store owns, not from the table's maximum. (c) The lock is taken per kind, in sorted order, by a merge, and for every kind by `clear` and the steward. A merge of two sources of one kind still takes turns. Tested before it is relied on: two concurrent merges of different kinds finish without waiting on each other and give the masters each gives alone; two of one kind give the same masters as one after the other.
+
+**Not done by this change.** One kind with several sources (GLEIF and SEC companies) still takes turns on that kind's lock. Narrowing it to the identifiers a batch touches is its own part, after the per-kind step is measured.
+
+- [ ] Reproduce the wait on local PostgreSQL: two concurrent merges (one Company, one Security) and the time one spends waiting for the other's lock; record the figure here.
+- [ ] Sample one merge for two minutes (`scripts/dev/run_sample.py`): what limits it, the Python process, round trips or the lock.
+- [ ] Working tables per session: `mastering_stage`, `mastering_stage_key`, `mastering_stage_bound` as temporary tables on PostgreSQL and MySQL; the merge tests pass on both.
+- [ ] File number from a sequence: no two merges share one, and a delivery never passes an uncommitted change; a test commits two merges out of order.
+- [ ] Lock per kind: `take_lock(kinds)` in sorted order; `clear` and the steward take every kind. Test one: Company and Security merges run together and give the masters each gives alone. Test two: two Company merges give the same masters as in turn. Each test fails on the old code (the first by waiting, the second only if the working tables are still shared).
+- [ ] Batch the per-record statements of one merge (fewer round trips), measured on the hosted store before and after.
+- [ ] Stage a batch before the lock and hold the lock only for the write.
+- [ ] Hosted: GLEIF companies and N-PORT securities merging together, records a minute each, against 6,500 and 3,100.
+- [ ] Learning → skill: `mdm-engineering` names the rule (a merge takes only the lock of its own kind; its working tables belong to its session).
