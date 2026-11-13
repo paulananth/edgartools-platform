@@ -4,6 +4,38 @@ Part of the `openmetadata` skill: [SKILL.md](SKILL.md) says when to read this.
 
 ## Local server
 
+### Edgartools instance and private credentials
+
+The Edgartools local instance is a separate Compose project named
+`edgartools-openmetadata`, bound to `127.0.0.1:8587`, with its own
+`edgartools-openmetadata_db-data` and `edgartools-openmetadata_es-data`
+volumes. The prior `edgartools-catalog` project on port 8585 is independent;
+starting or initializing this instance must not stop it or remove its volumes.
+The operator handles any retirement of the prior instance separately.
+
+The repository-root `.env` is ignored by Git and must remain mode `0600`.
+`bash infra/openmetadata/init.sh` reads it without printing values. On a fresh
+2.0.7 instance, initialization changes the default administrator password to a
+generated password, issues a 30-day personal access token, stores the login
+and token in `.env`, then verifies that token with an API read. Subsequent runs
+keep a working token. Do not paste or print `.env` values; load the file in a
+private shell when a client needs `OPENMETADATA_URL`,
+`OPENMETADATA_LOGIN_EMAIL`, `OPENMETADATA_LOGIN_PASSWORD`, or
+`OPENMETADATA_TOKEN`:
+
+```bash
+set +x
+set -a
+source .env
+set +a
+```
+
+The `.env` file must contain shell-compatible `KEY=VALUE` assignments. The
+initialization helper refuses non-local endpoints and any server version other
+than 2.0.7. If using a different private environment file, set
+`OPENMETADATA_ENV_FILE` to its path when invoking `init.sh`; keep that file
+outside Git and mode `0600`.
+
 ### Exclude bundled demo lineage
 
 Operator policy excludes vendor demonstration lineage from this platform's
@@ -37,9 +69,9 @@ children by service, require complete pagination, verify each soft-deleted ID
 with `include=all`, then re-list active children. Lesson: qualify deleted-state
 readback for each endpoint shape instead of assuming list and item reads match.
 
-Use the existing Docker context, private login/token environment variables
-described below, and the named volumes. The initialization command starts the
-server, waits for health, then requires the demo-service exclusion to pass:
+Use the existing Docker context and the private `.env` file above. The
+initialization command starts the separate server, waits for health, bootstraps
+and verifies credentials, then requires the demo-service exclusion to pass:
 
 ```bash
 bash infra/openmetadata/init.sh
@@ -65,51 +97,14 @@ named `db-data` and `es-data` volumes carry the catalog, so remove the
 containers, never the volumes, and confirm the PostgreSQL data directory is
 still populated before restarting. The catalog survives the recreate intact.
 
-The tool reads `OPENMETADATA_TOKEN`, or `OPENMETADATA_LOGIN_EMAIL` with
-`OPENMETADATA_LOGIN_PASSWORD` (also accepts `OPENMETADATA_PASSWORD`), privately.
-It refreshes the token through native login when login credentials are present.
-Its result is counts only; a failed exclusion exits nonzero.
-
-A login token of the local account expires within the hour; a publish that
-answers 401 needs a new one. A token that worked for a read can still be
-expired, and the expiry shows up on the first write: a GET answers 200 while
-`PUT /api/v1/services/databaseServices` answers 401 "Expired token!". Refresh and retry the write; the publish is not the failing
-step. When the private credentials are already in the environment, refresh
-without the interactive prompt, base64-encoding the password and writing the
-token to the private token file with a restrictive mode, and print neither the
-password nor the token.
-
-Resolve the endpoint and private credentials through
-[Data Platform connection setup](../data-platform/SKILL.md#connection-urls-and-environment)
-before this token-refresh operation.
-
-Refresh it in the private terminal session, with
-shell tracing off. Enter the local account password only at the hidden prompt;
-the password is base64 encoded for the login API, and neither it nor the returned
-token is printed:
-
-```bash
-set +x
-set -euo pipefail
-# Load the configured endpoint through Data Platform's connection setup.
-read -r -p 'OpenMetadata email: ' OM_LOGIN_EMAIL
-read -r -s -p 'OpenMetadata password: ' OM_LOGIN_PASSWORD
-printf '\n'
-OM_LOGIN_PASSWORD_B64=$(printf '%s' "$OM_LOGIN_PASSWORD" | base64 | tr -d '\n')
-OM_LOGIN_BODY=$(jq -cn --arg email "$OM_LOGIN_EMAIL" --arg password "$OM_LOGIN_PASSWORD_B64" \
-  '{email:$email,password:$password}')
-OPENMETADATA_TOKEN=$(printf '%s' "$OM_LOGIN_BODY" | curl -fsS \
-  -H 'Content-Type: application/json' -X POST \
-  --data-binary @- "$OPENMETADATA_URL/api/v1/users/login" | jq -er '.accessToken')
-export OPENMETADATA_TOKEN
-unset OM_LOGIN_EMAIL OM_LOGIN_PASSWORD OM_LOGIN_PASSWORD_B64 OM_LOGIN_BODY
-```
-
-Keep the variables in the private shell only. Never echo or save the token in
-the repository. The URL passed to `catalog.connect` is the server root; that
-function adds `/api/v1`.
-For longer-lived writable-token requests, consult
-[Token issuance and lifetime](references/TOKEN-LIFECYCLE.md) first.
+The catalog publisher reads `OPENMETADATA_TOKEN` from the private environment.
+The local PAT lasts 30 days; `init.sh` reissues it after it no longer passes
+the API version readback and stores the replacement in `.env`. A publish that
+answers 401 before then requires checking the server version and current `.env`
+token, followed by rerunning initialization. Never put a PAT in a command
+line, terminal output, repository file or PR. See
+[Token issuance and lifetime](references/TOKEN-LIFECYCLE.md) for the pinned
+2.0.7 API contract.
 
 ### Upgrade the local server
 
@@ -232,9 +227,11 @@ Compose project:
 docker compose -f infra/openmetadata/docker-compose.yml ps
 ```
 
-The current Compose file declares project `edgartools-catalog` and volumes
-`db-data` and `es-data`. Confirm their resolved names and project labels; verify
-that only those two volumes are in scope and no unrelated container uses them.
+The Compose file declares project `edgartools-openmetadata` and volumes
+`db-data` and `es-data`. Confirm the resolved names
+`edgartools-openmetadata_db-data` and `edgartools-openmetadata_es-data`, their
+project labels. Verify that only those two volumes are in scope and no
+unrelated container uses them.
 List volumes with the Compose project label, inspect each resolved volume, and
 check consumers with `docker ps -a --filter volume=<resolved-volume-name>`.
 If names, labels, project ownership, or consumers differ, stop and report them
@@ -250,13 +247,17 @@ docker compose -f infra/openmetadata/docker-compose.yml down -v
 Verify the two project volumes are absent, then redeploy:
 
 ```bash
-docker compose -f infra/openmetadata/docker-compose.yml up -d
+bash infra/openmetadata/init.sh
 ```
 
-Wait for PostgreSQL, Elasticsearch, migrations, and `openmetadata-server` to
-report healthy. Read `GET /api/v1/system/version` and require the configured
-version. Create a fresh local administrator token only after the deployment is
-healthy. Then follow the catalog-only workflow above: read the side-effect-free
+The full reset also removed the local administrator state. Before running the
+initializer, remove only the `OPENMETADATA_PASSWORD_CHANGED` line from the
+private `.env`; this makes the credential bootstrap change the fresh default
+administrator password and issue a new PAT. Keep the remaining endpoint and
+login settings. The initializer waits for PostgreSQL, Elasticsearch,
+migrations, and the server, then verifies credentials and demo exclusion.
+Require `GET /api/v1/system/version` to report the configured release. Then
+follow the catalog-only workflow above: read the side-effect-free
 Rules plan, publish the configured catalog, require publisher readback, run the
 independent read-only check, and verify the exact domain and glossary inventory
 plus the absence of any forbidden shared object. Report the server rebuild

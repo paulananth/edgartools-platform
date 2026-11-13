@@ -479,7 +479,7 @@ receipt and any additional qualification in the task record, not this skill.
 
 ## Local server
 
-Read [LOCAL-SERVER.md](LOCAL-SERVER.md) before starting, upgrading or checking the local server, or excluding the bundled demo lineage.
+Read [LOCAL-SERVER.md](LOCAL-SERVER.md) before starting, upgrading or checking the local server, handling `.env` credentials, or excluding the bundled demo lineage.
 
 ## Catalog-only clean rebuild
 
