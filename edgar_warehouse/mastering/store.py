@@ -10,7 +10,7 @@ from pathlib import Path
 BLOCK = 2000
 LOCK = "merge"
 WRITTEN = ("master", "file", "delivery", "identifier", "record", "name_key", "review", "withheld", "deferred",
-           "stage", "stage_key", "stage_bound", "lookup", "lookup_progress")
+           "lookup", "lookup_progress")
 
 
 def marks(items) -> str:
@@ -31,6 +31,7 @@ class Store:
     def __init__(self, connection):
         self.connection = connection
         self.cursor = connection.cursor()
+        self.staged: list[tuple] = []  # the file being merged: (assertion_id, subject, source_code, lei, body)
 
     def commit(self) -> None:
         self.connection.commit()
@@ -90,17 +91,19 @@ class Store:
         return self.rows("select coalesce(max(changed_file),0) from mastering_master")[0][0]
 
     def load_stage(self, records: list, name_keys: list) -> None:
-        self.cursor.execute("delete from mastering_stage")
-        self.bulk("mastering_stage", ("assertion_id", "subject", "source_code", "lei", "body"), records)
+        """The file's records stay in memory for its merge; only its name keys are written."""
+        self.staged = list(records)
         if name_keys:
             self.insert("mastering_name_key", ("role", "value", "subject"), name_keys)
 
     def holders(self, wanted: dict) -> list[tuple]:
-        """Who holds each wanted identifier, by a plain join to the stage."""
-        self.cursor.execute("delete from mastering_stage_key")
-        self.bulk("mastering_stage_key", ("namespace", "value"), [(n, v) for n, values in wanted.items() for v in values])
-        return self.rows("select distinct i.namespace,i.value,i.entity_id from mastering_identifier i "
-                         "join mastering_stage_key s on s.namespace=i.namespace and s.value=i.value")
+        """Who holds each wanted identifier: {namespace: values}."""
+        found = []
+        for namespace, values in wanted.items():
+            for block in blocks(sorted(set(values))):
+                found += self.rows("select distinct namespace,value,entity_id from mastering_identifier "
+                                   f"where namespace=%s and value in ({marks(block)})", [namespace, *block])
+        return found
 
     def identifiers_of(self, entities, namespaces) -> dict:
         """The values each golden record holds of the given identifiers: {entity: {namespace: {values}}}."""
@@ -187,17 +190,41 @@ class Store:
 
     def name_pairs(self, role: str, holder_source: str, source: str, holders: list) -> list[tuple]:
         """(candidate, holder) bodies: a waiting candidate with a holder of this file, then a candidate of this file."""
-        found = []
+        found = set()
+        asked = set(holders)
+        held_here = defaultdict(list)  # holders of this file, by subject
+        for _, subject, held_source, _, body in self.staged:
+            if held_source == holder_source:
+                held_here[subject].append(body)
         if holders:
-            found += self.rows("select c.body,h.body from mastering_stage h join mastering_name_key k on k.role=%s and k.subject=h.subject "
-                               "join mastering_record c on c.lei=k.value and c.entity_id is null "
-                               f"where h.source_code=%s and c.source_code=%s and h.subject in ({marks(holders)})",
-                               [role, holder_source, source, *holders])
-        for table in ("mastering_stage", "mastering_record"):
-            found += self.rows("select c.body,h.body from mastering_stage c join mastering_name_key k on k.role=%s and k.value=c.lei "
-                               f"join {table} h on h.subject=k.subject and h.source_code=%s where c.source_code=%s",
-                               [role, holder_source, source])
-        return list(set(found))
+            keys = []
+            for block in blocks(sorted(s for s in held_here if s in asked)):
+                keys += self.rows(f"select subject,value from mastering_name_key where role=%s and subject in ({marks(block)})",
+                                  [role, *block])
+            waiting = defaultdict(list)  # waiting candidates of the other source, by the value they carry
+            for block in blocks(sorted({value for _, value in keys})):
+                for lei, body in self.rows("select lei,body from mastering_record where entity_id is null and source_code=%s "
+                                           f"and lei in ({marks(block)})", [source, *block]):
+                    waiting[lei].append(body)
+            found.update((candidate, body) for subject, value in keys for candidate in waiting[value]
+                         for body in held_here[subject])
+        here = [(lei, body) for _, _, candidate_source, lei, body in self.staged if candidate_source == source and lei is not None]
+        keys = []
+        for block in blocks(sorted({lei for lei, _ in here})):
+            keys += self.rows(f"select value,subject from mastering_name_key where role=%s and value in ({marks(block)})",
+                              [role, *block])
+        by_value = defaultdict(set)
+        for value, subject in keys:
+            by_value[value].add(subject)
+        stored = defaultdict(list)  # holders already stored, by subject
+        for block in blocks(sorted({subject for _, subject in keys})):
+            for subject, body in self.rows("select subject,body from mastering_record where source_code=%s "
+                                           f"and subject in ({marks(block)})", [holder_source, *block]):
+                stored[subject].append(body)
+        for lei, candidate in here:
+            for subject in by_value[lei]:
+                found.update((candidate, body) for body in [*held_here[subject], *stored[subject]])
+        return list(found)
 
     def lei_held(self, entities) -> dict:
         held = defaultdict(set)
@@ -208,15 +235,16 @@ class Store:
 
     def save_records(self, bound: dict) -> None:
         """The file's records with their masters, in one write. Older rows of the same subjects follow."""
-        self.cursor.execute("delete from mastering_stage_bound")
-        self.bulk("mastering_stage_bound", ("subject", "entity_id"), list(bound.items()))
-        self.cursor.execute(f"insert {self.ignore} into mastering_record(assertion_id,subject,entity_id,bound_id,source_code,lei,body) "
-                            "select s.assertion_id,s.subject,b.entity_id,b.entity_id,s.source_code,s.lei,s.body from mastering_stage s "
-                            "left join mastering_stage_bound b on b.subject=s.subject" + self.conflict_nothing)
-        older = self.rows("select r.assertion_id,b.entity_id from mastering_stage_bound b join mastering_record r "
-                          "on r.subject=b.subject where r.entity_id is null or r.entity_id<>b.entity_id")
+        self.insert("mastering_record", ("assertion_id", "subject", "entity_id", "bound_id", "source_code", "lei", "body"),
+                    [(assertion, subject, bound.get(subject), bound.get(subject), source, lei, body)
+                     for assertion, subject, source, lei, body in self.staged])
+        older = []
+        for block in blocks(sorted(bound)):
+            older += [(bound[subject], bound[subject], assertion) for assertion, subject, entity in self.rows(
+                "select assertion_id,subject,entity_id from mastering_record "
+                f"where subject in ({marks(block)})", block) if entity != bound[subject]]
         self.cursor.executemany("update mastering_record set bound_id=coalesce(bound_id,%s),entity_id=%s where assertion_id=%s",
-                                [(entity, entity, assertion) for assertion, entity in older])
+                                older)
 
     def update_records(self, records: list[tuple[str, str]]) -> None:
         """Retain newly computed matching evidence on the same source assertion, under the file lock."""
@@ -300,11 +328,11 @@ class Store:
 
     def waiting_for(self, arrived) -> list[dict]:
         """The waiting records that state an identifier a golden record now holds: `arrived` is {(namespace, value)}."""
-        self.cursor.execute("delete from mastering_stage_key")
-        self.bulk("mastering_stage_key", ("namespace", "value"), sorted(arrived))
-        subjects = [r[0] for r in self.rows(
-            "select distinct k.subject from mastering_name_key k join mastering_stage_key s "
-            "on k.value=concat(s.namespace,':',s.value) where k.role='waiting'")]
+        subjects = set()
+        for block in blocks(sorted(f"{namespace}:{value}" for namespace, value in arrived)):
+            subjects.update(r[0] for r in self.rows(
+                f"select distinct subject from mastering_name_key where role='waiting' and value in ({marks(block)})", block))
+        subjects = sorted(subjects)
         found = []
         for block in blocks(subjects):
             found += [json.loads(b) for (b,) in self.rows(

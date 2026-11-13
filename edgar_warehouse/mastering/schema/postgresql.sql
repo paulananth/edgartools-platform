@@ -16,9 +16,6 @@ create index if not exists mastering_decision_left on mastering_decision(operati
 create table if not exists mastering_withheld(subject varchar(255) not null, namespace varchar(32) not null, raw varchar(128) not null, primary key(subject, namespace, raw));
 create table if not exists mastering_deferred(deferred_id varchar(128) primary key, source_code varchar(64) not null, reason varchar(64) not null, blocking bigint not null, body text not null);
 create table if not exists mastering_lock(name varchar(32) primary key);
-create table if not exists mastering_stage(assertion_id varchar(128), subject varchar(255), source_code varchar(64), lei varchar(32), body text);
-create table if not exists mastering_stage_key(namespace varchar(32), value varchar(128));
-create table if not exists mastering_stage_bound(subject varchar(255), entity_id char(36));
 create table if not exists mastering_lookup(token char(64) not null, entity_id char(36) not null, primary key(token, entity_id));
 create index if not exists mastering_lookup_entity on mastering_lookup(entity_id);
 create table if not exists mastering_lookup_progress(pin char(64) primary key, changed_file bigint not null, entity_id varchar(36) not null);
