@@ -12,7 +12,8 @@ Add AutoOntology alongside OpenMetadata to make governed data easier to find and
 - `edgar_warehouse.rules.catalog.plan()` derives a deterministic catalog plan from rules. `rules catalog publish` reconciles the OpenMetadata-owned scope from that plan; `rules catalog check` verifies readback. Publishing is not a safe second-writer interface.
 - The current publisher sends metadata one way from rules to OpenMetadata. The checked-in local OpenMetadata stack is pinned to 2.0.7 and is kept separate from the rules and data stores.
 - `skills/data-catalog/references/PORTABILITY.md` already sets the direction for an independent visualization: preserve logical keys, provenance, typed relationships, lineage and destination-specific identity mappings; do not add another metadata database as a prerequisite.
-- No AutoOntology package, configuration, adapter, or product documentation is present in this checkout. Its APIs, formats, security model, deployment, licensing and capabilities are unknown.
+- The upstream [NVIDIA/auto-ontology](https://github.com/NVIDIA/auto-ontology) repository includes three agent skills: [setup](https://github.com/NVIDIA/auto-ontology/blob/main/skills/nvidia-ontology-setup/SKILL.md), [management](https://github.com/NVIDIA/auto-ontology/blob/main/skills/nvidia-ontology-management/SKILL.md), and [query](https://github.com/NVIDIA/auto-ontology/blob/main/skills/nvidia-ontology-query/SKILL.md). They cover runtime/MCP setup, semantic-model management/import/export, and grounded queries with answer validation; they are not an adapter to this repository.
+- This checkout has no AutoOntology runtime or adapter. The upstream skill instructions describe Helm/Compose deployment and MCP/REST access, but the exact release, deployment configuration, and production data scope for this platform remain unselected.
 
 ## Recommended integration shape
 
@@ -83,7 +84,7 @@ After the product contract and isolated qualification pass, prepare a separate d
 
 ## Decisions still required
 
-1. Which exact AutoOntology project and version is intended, and where is its authoritative documentation or repository?
+1. Which AutoOntology release/chart version and deployment mode are intended, and what source data scope may it ingest?
 2. Is it a read-only discovery/visualization layer, an ontology authoring system, or both? The recommendation is read-only initially.
 3. Which users and discovery journeys are in scope, and should OpenMetadata remain the default entry point with links to AutoOntology?
 4. Which environment is intended for the first installation, and what identity, network, retention and synchronization constraints apply?
