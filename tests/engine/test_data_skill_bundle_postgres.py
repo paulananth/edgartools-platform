@@ -325,7 +325,7 @@ def test_source_sequence_runs_from_installed_bundle_without_checkout(installed):
     report = json.loads(delayed.stdout)
     # OpenFIGI is one target since ticket 138, so it is ordered, before Securities.
     assert report["order"] == ["sec.company", "sec.nport.registrant", "sec.company-facts", "sec.registration", "sec.submissions.person",
-                               "sec.nport.fund", "iapd.adv", "sec.ownership", "openfigi", "sec.thirteenf.securities",
+                               "sec.nport.fund", "iapd.adv", "sec.ownership", "sec.ncen.fund", "openfigi", "sec.thirteenf.securities",
                                "sec.nport.security", "sec.thirteenf.filings"]
     assert report["sources"]["gleif"]["status"] == "deferred"
     assert report["runtime_readiness"] == "not_checked"

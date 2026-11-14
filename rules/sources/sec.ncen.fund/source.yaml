@@ -1,0 +1,189 @@
+# SEC Form N-CEN fund series, read for the Fund master (part 1 of the N-CEN
+# onboarding, .scratch/onboarding/sec.ncen/onboarding-log.md), from the
+# approved N-CEN findings (profiling/sec.ncen-2026q1, approved 2026-11-14
+# 09:31 ET; part FUND_REPORTED_INFO.SERIES_ID: 6,471 series over 1,927
+# filings). Rulings it rests on (operator):
+# - 2026-11-14: "Mutual funds and etf must be part of fund entity that must be
+#   tied to a company"; "we need to model reality as close as possible so yes
+#   and yes" (the company a fund ties to is its adviser, from N-CEN); "yes,
+#   use skills, rules, and generic scripts, follow existing architecture"
+#   (the fund series is the existing kind fund_structure, joined by its SEC
+#   series id and its LEI, as N-PORT's series are: "Series id and LEI join
+#   (Recommended)", 2026-10-14).
+# - 2026-11-06: "make it valid with the file date until we fix the data
+#   quality": the filing date is the record's time, an observation.
+# The run, in order: N-CEN's SUBMISSION.tsv and REGISTRANT.tsv carry the
+# columns N-PORT's do, so sec.nport.registrant's own readings give the two pair
+# sets, `filed` (filing to its date) and `registrant` (filing to its
+# registrant's CIK), over this quarter's N-CEN file; this reading streams
+# FUND_REPORTED_INFO.tsv once, one row per series and filing; reduce.yaml lists
+# each series (a row naming no series, 773 over four quarters, is not read: its
+# registrant is the fund); combine.yaml keeps each series' latest filing whole
+# (by date, then accession number: an N-CEN/A restates its filing, 132 over
+# four quarters) and its LEI when one to one (lei-pairs.yaml); record.yaml
+# makes each `fund` row one record; mdm.prepare and the merge follow.
+# Left out: the report's other columns (fund type flags, fees, returns),
+# detail of an annual report, not of the Fund; the series' advisers and share
+# classes are their own parts.
+source: sec.ncen.fund
+pass:
+  name: filings
+  units: {each: file}
+  lookups:
+    filed: {column: accession_number, from: sec.nport.registrant/submissions.yaml, max_input_bytes: 67108864, max_input_rows: 1000000, table: filed, value_column: filed}
+    registrant: {column: accession_number, from: sec.nport.registrant/source.yaml, max_input_bytes: 268435456, max_input_rows: 1000000, table: filing, value_column: cik}
+bronze:
+  family: sec.ncen-datasets
+# The quarter's fund series through the Merge Stage. A bundle is the quarter's
+# data set.
+bookkeeping:
+  version: 2
+  targets:
+    mastering:
+      extract: record.yaml
+      master: {keys: {dataset: sec.ncen.fund.v1, record_column: record, table: fund}}
+execution:
+  profile: source.read
+  workers: 1
+  max_artifacts: 1
+read:
+  format: json
+  limits:
+    max_bytes: 1048576
+    max_records: 1
+  lookup_sets:
+    filed:
+      max_values: 1000000
+      max_bytes: 67108864
+      max_value_bytes: 64
+      pairs: true
+    registrant:
+      max_values: 1000000
+      max_bytes: 67108864
+      max_value_bytes: 64
+      pairs: true
+  tables:
+    filing:
+      each: .
+      # A row naming no series (773 over four quarters, every one blank) is
+      # the registrant's own fund: no Fund record.
+      select: {test: {path: SERIES_ID, kind: truthy}}
+      columns:
+        series_id: {text: {path: SERIES_ID, default: "", transforms: [{case: upper}], null_if: ["", "N/A"]}}
+        accession_number: {text: {path: ACCESSION_NUMBER}}
+        filed:
+          member_value: {lookup: filed, key: {text: {path: ACCESSION_NUMBER}}, on_many: error}
+        cik:
+          member_value: {lookup: registrant, key: {text: {path: ACCESSION_NUMBER}}, on_many: error}
+        name: {text: {path: FUND_NAME, default: "", null_if: [""]}}
+        lei:
+          text:
+            path: LEI
+            default: ""
+            transforms:
+            - {case: upper}
+            null_if: ["", "N/A", "00000000000000000000"]
+        # The same LEI as a key for counting (reduce.yaml): none is empty text,
+        # since a reduction refuses a null key.
+        lei_key:
+          text:
+            path: LEI
+            default: ""
+            transforms:
+            - {case: upper}
+            - {regex_replace: {pattern: '^(N/A|0{20})$', with: ''}}
+  stream:
+    framing: delimited
+    delimited: {format: tsv, encoding: utf-8}
+    container: zip
+    member: FUND_REPORTED_INFO.tsv
+    # Profiling, 2026q1: 7,082 rows; four quarters 14,191.
+    max_input_bytes: 1000000000
+    max_bytes: 100000000
+    max_record: 1048576
+    max_records: 1000000
+    max_depth: 64
+    ordinal_context: null
+    partition_bytes: 8388608
+    partition_records: 100000
+    max_partitions: 1000
+    max_spool_bytes: 1073741824
+    max_output_rows: 1000000
+dataset_contracts:
+  sec.ncen.fund.v1:
+    contract:
+      provider: SEC
+      family: sec.ncen-datasets
+      schema_version: sec-ncen-fund-v1
+      record_key: the fund series' SEC series id; one record per series over the quarter, from its latest filing
+      publication_key: the quarter's N-CEN data set file and the reduction and combine contracts
+      effective_time: the latest filing date as an observation, not the series inception
+      semantics: patch
+      completeness: the fund series of one quarter's N-CEN filings; no retirement by absence
+      nonblocking_deferred_reasons:
+      - missing_record_identity
+      - missing_provisional_file_date
+      - invalid_time
+      adapter:
+        reading:
+          source: sec.ncen.fund
+          read:
+            format: json
+            limits:
+              max_bytes: 33554432
+              max_records: 1
+            assertions:
+            - test:
+                test:
+                  path: .
+                  kind: object
+              reason: Mapped input must be an object
+            - test: {test: {path: filed_at, kind: truthy}}
+              reason: missing_provisional_file_date
+            tables:
+              mapped:
+                each: .
+                columns:
+                  fields:
+                    object:
+                      fields:
+                        name: {value: {path: latest.name, type: text, null_if_blank: true}}
+                  matching:
+                    object:
+                      fields: {}
+          input_fields:
+          - series_id
+          - lei
+          - latest
+          - filed_at
+        version: sec-ncen-fund-2026-11-14.series-and-lei
+        retain_deferred: true
+        source_record_provenance: true
+        kind: fund_structure
+        effective_at: filed_at
+        record_key:
+        - series_id
+        record_key_format: sec_series_id
+        # The series id and the series LEI each join the one Fund holding
+        # them, or create it, as N-PORT's do. The LEI joins only when it is the
+        # one LEI its series files and no other series files it in the quarter
+        # (combine.yaml, `lei`): over four quarters 11 LEIs are filed for two
+        # series and 1 series files two LEIs. Every filed LEI stays as a
+        # lookup-only cross-reference, and the registrant's CIK is lookup only.
+        identifiers:
+          sec_series_id: series_id
+          lei: lei
+        identifier_formats:
+          sec_series_id: sec_series_id
+          lei: lei
+        cross_references:
+          ncen_registrant_cik: latest.cik
+          ncen_series_lei: latest.lei
+        cross_reference_formats:
+          ncen_registrant_cik: sec_cik
+          ncen_series_lei: lei
+        profiles:
+        - role: fund
+          authority: SEC EDGAR
+          registration: series_id
+          valid_from: filed_at
