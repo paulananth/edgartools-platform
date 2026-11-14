@@ -20,8 +20,8 @@
 # each series (a row naming no series, 773 over four quarters, is not read: its
 # registrant is the fund); combine.yaml keeps each series' latest filing whole
 # (by date, then accession number: an N-CEN/A restates its filing, 132 over
-# four quarters) and its LEI when one to one (lei-pairs.yaml); record.yaml
-# makes each `fund` row one record; mdm.prepare and the merge follow.
+# four quarters) and its LEI when one to one (lei-pairs.yaml); each row of
+# advisers-combine.yaml's `fund` table is one record; mdm.prepare and the merge follow.
 # The advisers of each series' latest filing (advisers.yaml, ADVISER.tsv) join
 # it in advisers-combine.yaml: each is a link INVESTMENT_ADVISER_TO from the
 # adviser's own record (rules/sources/sec.ncen.adviser) to the series, in
@@ -48,8 +48,9 @@ bookkeeping:
   version: 2
   targets:
     mastering:
-      extract: record.yaml
-      master: {keys: {dataset: sec.ncen.fund.v1, record_column: record, table: fund}}
+      # The combine's rows are the records, one per series; no record step.
+      extract: advisers-combine.yaml
+      master: {keys: {dataset: sec.ncen.fund.v1, table: fund}}
       silver:
         # The adviser links are a silver table, built from the stored records after the merge.
         - {name: links, derive: {build: links, reads: mastering_record, silver: relationship}}
@@ -80,8 +81,13 @@ read:
       each: .
       columns:
         fund_id: {text: {path: FUND_ID}}
-        filed:
-          member_value: {lookup: filed, key: {text: {path: ACCESSION_NUMBER}}, on_many: error}
+        # The filing date ("YYYY MM DD" in the filing pairs) as an instant.
+        filed_at:
+          transform:
+            value: {member_value: {lookup: filed, key: {text: {path: ACCESSION_NUMBER}}, on_many: error}}
+            transforms:
+            - {regex_replace: {pattern: ' ', with: '-'}}
+            - {pad: {left: '', right: 'T00:00:00+00:00'}}
     filing:
       each: .
       # A row naming no series (773 over four quarters, every one blank) is
@@ -92,8 +98,13 @@ read:
         accession_number: {text: {path: ACCESSION_NUMBER}}
         # The filing's own row id: its advisers (advisers.yaml) name it.
         fund_id: {text: {path: FUND_ID}}
-        filed:
-          member_value: {lookup: filed, key: {text: {path: ACCESSION_NUMBER}}, on_many: error}
+        # The filing date ("YYYY MM DD" in the filing pairs) as an instant.
+        filed_at:
+          transform:
+            value: {member_value: {lookup: filed, key: {text: {path: ACCESSION_NUMBER}}, on_many: error}}
+            transforms:
+            - {regex_replace: {pattern: ' ', with: '-'}}
+            - {pad: {left: '', right: 'T00:00:00+00:00'}}
         cik:
           member_value: {lookup: registrant, key: {text: {path: ACCESSION_NUMBER}}, on_many: error}
         name: {text: {path: FUND_NAME, default: "", null_if: [""]}}
@@ -160,7 +171,7 @@ dataset_contracts:
                   path: .
                   kind: object
               reason: Mapped input must be an object
-            - test: {test: {path: filed_at, kind: truthy}}
+            - test: {test: {path: latest.filed_at, kind: truthy}}
               reason: missing_provisional_file_date
             tables:
               mapped:
@@ -177,14 +188,13 @@ dataset_contracts:
           - series_id
           - lei
           - latest
-          - filed_at
           - advisors
           - subadvisors
         version: sec-ncen-fund-2026-11-14.advisers
         retain_deferred: true
         source_record_provenance: true
         kind: fund_structure
-        effective_at: filed_at
+        effective_at: latest.filed_at
         record_key:
         - series_id
         record_key_format: sec_series_id
@@ -210,7 +220,7 @@ dataset_contracts:
         - role: fund
           authority: SEC EDGAR
           registration: series_id
-          valid_from: filed_at
+          valid_from: latest.filed_at
         # Each adviser the latest filing names: a dated sighting from the
         # adviser's record to the series, held unless N-CEN says "Terminated".
         # An adviser with no CRD makes no link (its item has no source key).
@@ -222,7 +232,7 @@ dataset_contracts:
           source_source: sec.ncen.adviser.v1
           target_key: [series_id]
           target_source: sec.ncen.fund.v1
-          on: filed_at
+          on: latest.filed_at
           held: item.held
           time_format: instant
           scope: SEC N-CEN adviser
@@ -233,7 +243,7 @@ dataset_contracts:
           source_source: sec.ncen.adviser.v1
           target_key: [series_id]
           target_source: sec.ncen.fund.v1
-          on: filed_at
+          on: latest.filed_at
           held: item.held
           time_format: instant
           scope: SEC N-CEN adviser

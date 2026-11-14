@@ -17,8 +17,8 @@ combine:
     lei_once: {source: pairs, table: pairs, key: series_id, value: lei_key, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {lei_series: 1, series_leis: 1}}
     # The latest filing's own row id, as a column, so its advisers can join it
     # (advisers-combine.yaml): a join reads its key from the row it joins.
-    latest_fund_id: {source: filings, table: filing, key: series_id, value: fund_id, mode: last, order_by: [filed, accession_number], distinct: false, skip_null_values: true, checks: {}, where: {}}
-    latest_filing: {source: filings, table: filing, key: series_id, value: ., mode: last, order_by: [filed, accession_number], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    latest_fund_id: {source: filings, table: filing, key: series_id, value: fund_id, mode: last, order_by: [filed_at, accession_number], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    latest_filing: {source: filings, table: filing, key: series_id, value: ., mode: last, order_by: [filed_at, accession_number], distinct: false, skip_null_values: true, checks: {}, where: {}}
   tables:
     fund:
       source: series

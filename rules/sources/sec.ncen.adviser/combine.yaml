@@ -1,23 +1,24 @@
 pass:
-  readings: {crds: {step: reduce.yaml}, advisers: {all: source.yaml}}
-# One row per adviser (table `adviser`) with the row of its latest filing whole
-# (`latest`: name and LEI as that filing gives them), latest by filing date,
-# then filing row id, and its first filing date in the quarter (`first_filed`),
-# from which its adviser role starts. Pin canonical JSON of this file as the
-# source.combine contract.
+  readings: {advisers: {all: source.yaml}}
+# Each adviser row with its adviser's latest row whole (`latest`: name and LEI
+# as that filing gives them), latest by filing date, then filing row id, and
+# its first filing date in the quarter (`first_filed_at`), from which its
+# adviser role starts. Every row of one adviser carries the same values, so the
+# Merge Stage's `distinct_on` keeps any one of them. Pin canonical JSON of this
+# file as the source.combine contract.
 execution:
   profile: source.combine
 combine:
   max_rows: 1000000
   groups:
-    latest_row: {source: advisers, table: adviser, key: crd, value: ., mode: last, order_by: [filed, fund_id], distinct: false, skip_null_values: true, checks: {}, where: {}}
-    first_filed: {source: advisers, table: adviser, key: crd, value: filed, mode: first, order_by: [filed, fund_id], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    latest_row: {source: advisers, table: adviser, key: crd, value: ., mode: last, order_by: [filed_at, fund_id], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    first_filed: {source: advisers, table: adviser, key: crd, value: filed_at, mode: first, order_by: [filed_at, fund_id], distinct: false, skip_null_values: true, checks: {}, where: {}}
   tables:
     adviser:
-      source: crds
-      table: crds
+      source: advisers
+      table: adviser
       checks: {}
       where: {}
       joins:
         latest: {group: latest_row, key: crd, on_missing: error, replace: false}
-        first_filed: {group: first_filed, key: crd, on_missing: error, replace: false}
+        first_filed_at: {group: first_filed, key: crd, on_missing: error, replace: false}

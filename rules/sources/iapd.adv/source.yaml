@@ -28,8 +28,9 @@ bookkeeping:
   targets:
     mastering:
       run: {facts: [published]}
-      extract: record-filings.yaml
-      master: {keys: {dataset: iapd.adv.filings.v2, record_column: record, table: filings}}
+      # The combine's rows are the records; no record step.
+      extract: combine.yaml
+      master: {keys: {dataset: iapd.adv.filings.v2, table: filings}}
       silver:
         # The amount each custodian holds (Schedule D 5.K(3)(g)) lands in silver once the adviser's
         # filing is mastered here and the custodians are, which the `custodians` target (run first)

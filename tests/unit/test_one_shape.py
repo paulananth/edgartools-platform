@@ -179,3 +179,23 @@ def test_a_snapshot_table_cannot_be_landed(tmp_path):
 @pytest.mark.parametrize("mode", ["upsert", "append"])
 def test_any_other_table_is_landed_by_its_units(tmp_path, mode):
     assert _landing(tmp_path, mode)["leases"] == ["silver:{silver}:{unit}"]
+
+
+def _copy_step(columns):
+    return {"pass": {"pieces": {"step": "join.yaml"}}, "read": {"format": "json", "tables": {"t": {"each": "tables.t", "columns": columns}}}}
+
+
+@pytest.mark.parametrize("columns", [{"record": {"value": {"path": "."}}},
+                                     {"record": {"object": {"fields": {"key": {"value": {"path": "key"}}}}}}])
+def test_a_step_that_only_copies_another_steps_rows_is_refused(tmp_path, columns):
+    # The target takes the combine's rows as its records; a step copying them reads and writes every row again.
+    folder = rules_folder(tmp_path, record=_copy_step(columns), join={"pass": {"readings": {}}, "combine": {}})
+    with pytest.raises(shape.ShapeError, match="record.yaml only copies join.yaml's rows"):
+        shape.expand({"extract": "record.yaml"}, folder)
+
+
+def test_a_step_that_computes_from_another_steps_rows_is_kept(tmp_path):
+    computed = {"currency": {"choose": {"condition": {"value": {"path": "one"}}, "then": {"value": {"path": "code"}},
+                                        "else": {"const": {"value": None}}}}}
+    folder = rules_folder(tmp_path, record=_copy_step(computed), join={"pass": {"readings": {}}, "combine": {}})
+    assert [s["name"] for s in shape.expand({"extract": "record.yaml"}, folder)["steps"]][:2] == ["join", "record"]

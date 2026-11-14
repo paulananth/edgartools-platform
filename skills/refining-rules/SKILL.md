@@ -87,6 +87,9 @@ the change. `rules mapdoc check` and CI fail otherwise.
 Adding or removing a field changes two workbooks: the source's
 `MAPPING.xlsx` and its kind's (`rules/merge/kinds/<kind>.xlsx`, "Who wins each
 field"). Regenerate both (`--only <source>`, then `--only <kind>`).
+A change to a source's steps keeps them the fewest that make its records (data-onboarding, "A source extract
+has the fewest steps that make its records"); a step it finds that only reshapes another's rows is folded in the
+same change.
 
 ### change-mapping: a steward changed a Mapping Document
 

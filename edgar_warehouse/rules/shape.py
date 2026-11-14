@@ -86,6 +86,24 @@ def _reads(block: dict):
         yield block["pieces"], "step"
 
 
+def _copies(expr) -> bool:
+    """An expression that only copies a path, or an object of such copies."""
+    if not isinstance(expr, dict) or len(expr) != 1:
+        return False
+    ((call, args),) = expr.items()
+    if call == "value":
+        return isinstance(args, dict) and set(args) == {"path"}
+    return call == "object" and isinstance(args, dict) and set(args) <= {"fields", "omit_nulls"} \
+        and all(_copies(field) for field in (args.get("fields") or {}).values())
+
+
+def _only_copies(read) -> bool:
+    """A reading whose every column copies its input: it reads and writes each row again and adds nothing."""
+    tables = (read or {}).get("tables") or {}
+    columns = [column for table in tables.values() for column in (table.get("columns") or {}).values()]
+    return bool(columns) and all(_copies(column) for column in columns)
+
+
 def follow(leaves: list, folder) -> dict:
     """The passes behind a target's rules files, each after the passes it reads.
 
@@ -101,9 +119,13 @@ def follow(leaves: list, folder) -> dict:
         path = (base / ref) if "/" not in ref else base.parent / ref
         if path in names:
             return names[path]
-        block = files.load(path).get("pass")
+        body = files.load(path)
+        block = body.get("pass")
         if not isinstance(block, dict):
             raise ShapeError(f"{path.parent.name}/{path.name} has no `pass` block saying what it reads")
+        if set(block) - {"name"} == {"pieces"} and _only_copies(body.get("read")):
+            raise ShapeError(f"{path.name} only copies {block['pieces'].get('step')}'s rows: let the target take that "
+                             "step's table (each row is the record), and compute any per-row value in the read")
         block = {key: ({name: dict(item) for name, item in value.items()} if key in ("lookups", "readings")
                        else dict(value) if key == "pieces" else value) for key, value in block.items()}
         for holder, key in _reads(block):
