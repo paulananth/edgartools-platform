@@ -5,10 +5,10 @@
 # from N-CEN). One record per adviser (its CRD number) over the quarter, from
 # the row of its latest filing; the series it advises link to it from
 # sec.ncen.fund (INVESTMENT_ADVISER_TO, in capacity advisor or subadvisor).
-# The run: sec.ncen.fund's own reading gives each filing row (FUND_ID) its
-# filing date (`filed`); this reading streams ADVISER.tsv once; reduce.yaml
-# lists each CRD; combine.yaml keeps its latest row and its first filing date;
-# record.yaml makes each row one record.
+# The run, in two steps: sec.ncen.fund's own reading gives each filing row
+# (FUND_ID) its filing date (`filed_at`); this reading streams ADVISER.tsv once;
+# combine.yaml gives each row its adviser's latest row and first filing date;
+# the Merge Stage takes one record per CRD.
 # Left out: the adviser's state, country and affiliation (detail of one
 # filing's row) and its start and end dates, which only 1,245 and 527 rows of
 # 23,859 state (the links are dated by the filing instead).
@@ -17,15 +17,16 @@ pass:
   name: advisers
   units: {each: file}
   lookups:
-    filed: {column: fund_id, from: sec.ncen.fund/source.yaml, max_input_bytes: 268435456, max_input_rows: 1000000, table: fund_filed, value_column: filed}
+    filed: {column: fund_id, from: sec.ncen.fund/source.yaml, max_input_bytes: 268435456, max_input_rows: 1000000, table: fund_filed, value_column: filed_at}
 bronze:
   family: sec.ncen-datasets
 bookkeeping:
   version: 2
   targets:
     mastering:
-      extract: record.yaml
-      master: {keys: {dataset: sec.ncen.adviser.v1, record_column: record, table: adviser}}
+      # The combine's rows are the records, one per adviser (`distinct_on`); no reduce or record step.
+      extract: combine.yaml
+      master: {keys: {dataset: sec.ncen.adviser.v1, distinct_on: [crd], table: adviser}}
 execution:
   profile: source.read
   workers: 1
@@ -49,7 +50,7 @@ read:
       columns:
         crd: {text: {path: CRD_NUM}}
         fund_id: {text: {path: FUND_ID}}
-        filed:
+        filed_at:
           member_value: {lookup: filed, key: {text: {path: FUND_ID}}, on_many: error}
         name: {text: {path: ADVISER_NAME, default: "", null_if: [""]}}
         lei:
@@ -105,7 +106,7 @@ dataset_contracts:
                   path: .
                   kind: object
               reason: Mapped input must be an object
-            - test: {test: {path: filed_at, kind: truthy}}
+            - test: {test: {path: latest.filed_at, kind: truthy}}
               reason: missing_provisional_file_date
             tables:
               mapped:
@@ -121,13 +122,12 @@ dataset_contracts:
           input_fields:
           - crd
           - latest
-          - filed_at
           - first_filed_at
         version: sec-ncen-adviser-2026-11-14.crd
         retain_deferred: true
         source_record_provenance: true
         kind: company
-        effective_at: filed_at
+        effective_at: latest.filed_at
         record_key:
         - crd
         # The CRD joins the adviser's Form ADV Company (crd-v2 compares it

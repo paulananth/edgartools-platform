@@ -474,39 +474,16 @@
     "checks": [
      "input.hash",
      "output.receipt",
-     "source.output"
-    ],
-    "input": {
-     "contract": "record-filings.yaml",
-     "pieces": {
-      "step": "combine"
-     }
-    },
-    "key": "{unit}",
-    "leases": [
-     "artifact:{destination}"
-    ],
-    "name": "record",
-    "operation": "source.read",
-    "requires": [
-     "combine"
-    ]
-   },
-   {
-    "checks": [
-     "input.hash",
-     "output.receipt",
      "mdm.prepared"
     ],
     "input": {
      "keys": {
       "dataset": "iapd.adv.filings.v2",
-      "record_column": "record",
       "table": "filings"
      },
      "readings": {
-      "record": {
-       "all": "record"
+      "combine": {
+       "all": "combine"
       }
      }
     },
@@ -517,7 +494,7 @@
     "name": "prepare",
     "operation": "mdm.prepare",
     "requires": [
-     "record"
+     "combine"
     ]
    },
    {
@@ -1190,45 +1167,38 @@
   ]
  },
  "sec.ncen.adviser/mastering": {
+  "checks": [
+   "manifest.hash",
+   "work.accounting",
+   "journal.delivered"
+  ],
   "steps": [
    {
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "input": {
+     "contract": "sec.nport.registrant/submissions.yaml"
+    },
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
     "name": "submissions",
     "operation": "source.read",
     "requires": [],
-    "key": "{unit}",
-    "leases": [
-     "artifact:{destination}"
-    ],
-    "checks": [
-     "input.hash",
-     "output.receipt",
-     "source.output"
-    ],
     "units": {
      "each": "file"
-    },
-    "input": {
-     "contract": "sec.nport.registrant/submissions.yaml"
     }
    },
    {
-    "name": "registrants",
-    "operation": "source.read",
-    "requires": [
-     "submissions"
-    ],
-    "key": "{unit}",
-    "leases": [
-     "artifact:{destination}"
-    ],
     "checks": [
      "input.hash",
      "output.receipt",
      "source.output"
     ],
-    "units": {
-     "each": "file"
-    },
     "input": {
      "contract": "sec.nport.registrant/source.yaml",
      "lookups": {
@@ -1241,27 +1211,26 @@
        "value_column": "filed"
       }
      }
-    }
-   },
-   {
-    "name": "filings",
-    "operation": "source.read",
-    "requires": [
-     "submissions",
-     "registrants"
-    ],
+    },
     "key": "{unit}",
     "leases": [
      "artifact:{destination}"
     ],
+    "name": "registrants",
+    "operation": "source.read",
+    "requires": [
+     "submissions"
+    ],
+    "units": {
+     "each": "file"
+    }
+   },
+   {
     "checks": [
      "input.hash",
      "output.receipt",
      "source.output"
     ],
-    "units": {
-     "each": "file"
-    },
     "input": {
      "contract": "sec.ncen.fund/source.yaml",
      "lookups": {
@@ -1282,26 +1251,27 @@
        "value_column": "cik"
       }
      }
-    }
-   },
-   {
-    "name": "advisers",
-    "operation": "source.read",
-    "requires": [
-     "filings"
-    ],
+    },
     "key": "{unit}",
     "leases": [
      "artifact:{destination}"
     ],
+    "name": "filings",
+    "operation": "source.read",
+    "requires": [
+     "submissions",
+     "registrants"
+    ],
+    "units": {
+     "each": "file"
+    }
+   },
+   {
     "checks": [
      "input.hash",
      "output.receipt",
      "source.output"
     ],
-    "units": {
-     "each": "file"
-    },
     "input": {
      "lookups": {
       "filed": {
@@ -1310,46 +1280,24 @@
        "max_input_bytes": 268435456,
        "max_input_rows": 1000000,
        "table": "fund_filed",
-       "value_column": "filed"
+       "value_column": "filed_at"
       }
      }
-    }
-   },
-   {
-    "name": "crds",
-    "operation": "source.combine",
-    "requires": [
-     "advisers"
-    ],
+    },
     "key": "{unit}",
     "leases": [
      "artifact:{destination}"
     ],
-    "checks": [
-     "input.hash",
-     "output.receipt",
-     "source.combined"
+    "name": "advisers",
+    "operation": "source.read",
+    "requires": [
+     "filings"
     ],
-    "input": {
-     "contract": "reduce.yaml",
-     "readings": {
-      "advisers": {
-       "all": "advisers"
-      }
-     }
+    "units": {
+     "each": "file"
     }
    },
    {
-    "name": "combine",
-    "operation": "source.combine",
-    "requires": [
-     "crds",
-     "advisers"
-    ],
-    "key": "{unit}",
-    "leases": [
-     "artifact:{destination}"
-    ],
     "checks": [
      "input.hash",
      "output.receipt",
@@ -1358,47 +1306,22 @@
     "input": {
      "contract": "combine.yaml",
      "readings": {
-      "crds": {
-       "step": "crds"
-      },
       "advisers": {
        "all": "advisers"
       }
      }
-    }
-   },
-   {
-    "name": "record",
-    "operation": "source.read",
-    "requires": [
-     "combine"
-    ],
+    },
     "key": "{unit}",
     "leases": [
      "artifact:{destination}"
     ],
-    "checks": [
-     "input.hash",
-     "output.receipt",
-     "source.output"
-    ],
-    "input": {
-     "contract": "record.yaml",
-     "pieces": {
-      "step": "combine"
-     }
-    }
+    "name": "combine",
+    "operation": "source.combine",
+    "requires": [
+     "advisers"
+    ]
    },
    {
-    "name": "prepare",
-    "operation": "mdm.prepare",
-    "requires": [
-     "record"
-    ],
-    "key": "{unit}",
-    "leases": [
-     "artifact:{destination}"
-    ],
     "checks": [
      "input.hash",
      "output.receipt",
@@ -1407,95 +1330,94 @@
     "input": {
      "keys": {
       "dataset": "sec.ncen.adviser.v1",
-      "record_column": "record",
+      "distinct_on": [
+       "crd"
+      ],
       "table": "adviser"
      },
      "readings": {
-      "record": {
-       "all": "record"
+      "combine": {
+       "all": "combine"
       }
      }
-    }
+    },
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "name": "prepare",
+    "operation": "mdm.prepare",
+    "requires": [
+     "combine"
+    ]
    },
    {
-    "name": "merge",
-    "operation": "mastering.merge",
-    "requires": [
-     "prepare"
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "mdm.committed"
     ],
     "key": "{batch_id}",
     "leases": [
      "mdm:consumer:{consumer}"
     ],
-    "checks": [
-     "input.hash",
-     "output.receipt",
-     "mdm.committed"
+    "name": "merge",
+    "operation": "mastering.merge",
+    "requires": [
+     "prepare"
     ]
    },
    {
-    "name": "processed",
-    "operation": "journal.record",
-    "requires": [
-     "merge"
-    ],
-    "key": "{unit}",
-    "leases": [
-     "artifact:{destination}"
-    ],
     "checks": [
      "input.hash",
      "output.receipt",
      "journal.recorded"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "name": "processed",
+    "operation": "journal.record",
+    "requires": [
+     "merge"
     ]
    }
-  ],
+  ]
+ },
+ "sec.ncen.fund/mastering": {
   "checks": [
    "manifest.hash",
    "work.accounting",
    "journal.delivered"
-  ]
- },
- "sec.ncen.fund/mastering": {
+  ],
   "steps": [
    {
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "input": {
+     "contract": "sec.nport.registrant/submissions.yaml"
+    },
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
     "name": "submissions",
     "operation": "source.read",
     "requires": [],
-    "key": "{unit}",
-    "leases": [
-     "artifact:{destination}"
-    ],
-    "checks": [
-     "input.hash",
-     "output.receipt",
-     "source.output"
-    ],
     "units": {
      "each": "file"
-    },
-    "input": {
-     "contract": "sec.nport.registrant/submissions.yaml"
     }
    },
    {
-    "name": "registrants",
-    "operation": "source.read",
-    "requires": [
-     "submissions"
-    ],
-    "key": "{unit}",
-    "leases": [
-     "artifact:{destination}"
-    ],
     "checks": [
      "input.hash",
      "output.receipt",
      "source.output"
     ],
-    "units": {
-     "each": "file"
-    },
     "input": {
      "contract": "sec.nport.registrant/source.yaml",
      "lookups": {
@@ -1508,27 +1430,26 @@
        "value_column": "filed"
       }
      }
-    }
-   },
-   {
-    "name": "filings",
-    "operation": "source.read",
-    "requires": [
-     "submissions",
-     "registrants"
-    ],
+    },
     "key": "{unit}",
     "leases": [
      "artifact:{destination}"
     ],
+    "name": "registrants",
+    "operation": "source.read",
+    "requires": [
+     "submissions"
+    ],
+    "units": {
+     "each": "file"
+    }
+   },
+   {
     "checks": [
      "input.hash",
      "output.receipt",
      "source.output"
     ],
-    "units": {
-     "each": "file"
-    },
     "input": {
      "lookups": {
       "filed": {
@@ -1548,18 +1469,22 @@
        "value_column": "cik"
       }
      }
-    }
-   },
-   {
-    "name": "series",
-    "operation": "source.combine",
-    "requires": [
-     "filings"
-    ],
+    },
     "key": "{unit}",
     "leases": [
      "artifact:{destination}"
     ],
+    "name": "filings",
+    "operation": "source.read",
+    "requires": [
+     "submissions",
+     "registrants"
+    ],
+    "units": {
+     "each": "file"
+    }
+   },
+   {
     "checks": [
      "input.hash",
      "output.receipt",
@@ -1572,18 +1497,18 @@
        "all": "filings"
       }
      }
-    }
-   },
-   {
-    "name": "pairs",
-    "operation": "source.combine",
-    "requires": [
-     "series"
-    ],
+    },
     "key": "{unit}",
     "leases": [
      "artifact:{destination}"
     ],
+    "name": "series",
+    "operation": "source.combine",
+    "requires": [
+     "filings"
+    ]
+   },
+   {
     "checks": [
      "input.hash",
      "output.receipt",
@@ -1596,20 +1521,18 @@
        "step": "series"
       }
      }
-    }
-   },
-   {
-    "name": "combine",
-    "operation": "source.combine",
-    "requires": [
-     "series",
-     "pairs",
-     "filings"
-    ],
+    },
     "key": "{unit}",
     "leases": [
      "artifact:{destination}"
     ],
+    "name": "pairs",
+    "operation": "source.combine",
+    "requires": [
+     "series"
+    ]
+   },
+   {
     "checks": [
      "input.hash",
      "output.receipt",
@@ -1618,49 +1541,50 @@
     "input": {
      "contract": "combine.yaml",
      "readings": {
-      "series": {
-       "step": "series"
+      "filings": {
+       "all": "filings"
       },
       "pairs": {
        "step": "pairs"
       },
-      "filings": {
-       "all": "filings"
+      "series": {
+       "step": "series"
       }
      }
-    }
-   },
-   {
-    "name": "advisers",
-    "operation": "source.read",
-    "requires": [],
+    },
     "key": "{unit}",
     "leases": [
      "artifact:{destination}"
     ],
+    "name": "combine",
+    "operation": "source.combine",
+    "requires": [
+     "series",
+     "pairs",
+     "filings"
+    ]
+   },
+   {
     "checks": [
      "input.hash",
      "output.receipt",
      "source.output"
     ],
-    "units": {
-     "each": "file"
-    },
     "input": {
      "contract": "advisers.yaml"
-    }
-   },
-   {
-    "name": "advisers_combine",
-    "operation": "source.combine",
-    "requires": [
-     "combine",
-     "advisers"
-    ],
+    },
     "key": "{unit}",
     "leases": [
      "artifact:{destination}"
     ],
+    "name": "advisers",
+    "operation": "source.read",
+    "requires": [],
+    "units": {
+     "each": "file"
+    }
+   },
+   {
     "checks": [
      "input.hash",
      "output.receipt",
@@ -1669,47 +1593,26 @@
     "input": {
      "contract": "advisers-combine.yaml",
      "readings": {
-      "funds": {
-       "step": "combine"
-      },
       "advisers": {
        "all": "advisers"
+      },
+      "funds": {
+       "step": "combine"
       }
      }
-    }
-   },
-   {
-    "name": "record",
-    "operation": "source.read",
-    "requires": [
-     "advisers_combine"
-    ],
+    },
     "key": "{unit}",
     "leases": [
      "artifact:{destination}"
     ],
-    "checks": [
-     "input.hash",
-     "output.receipt",
-     "source.output"
-    ],
-    "input": {
-     "contract": "record.yaml",
-     "pieces": {
-      "step": "advisers_combine"
-     }
-    }
+    "name": "advisers_combine",
+    "operation": "source.combine",
+    "requires": [
+     "combine",
+     "advisers"
+    ]
    },
    {
-    "name": "prepare",
-    "operation": "mdm.prepare",
-    "requires": [
-     "record"
-    ],
-    "key": "{unit}",
-    "leases": [
-     "artifact:{destination}"
-    ],
     "checks": [
      "input.hash",
      "output.receipt",
@@ -1718,43 +1621,41 @@
     "input": {
      "keys": {
       "dataset": "sec.ncen.fund.v1",
-      "record_column": "record",
       "table": "fund"
      },
      "readings": {
-      "record": {
-       "all": "record"
+      "advisers_combine": {
+       "all": "advisers_combine"
       }
      }
-    }
+    },
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "name": "prepare",
+    "operation": "mdm.prepare",
+    "requires": [
+     "advisers_combine"
+    ]
    },
    {
-    "name": "merge",
-    "operation": "mastering.merge",
-    "requires": [
-     "prepare"
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "mdm.committed"
     ],
     "key": "{batch_id}",
     "leases": [
      "mdm:consumer:{consumer}"
     ],
-    "checks": [
-     "input.hash",
-     "output.receipt",
-     "mdm.committed"
+    "name": "merge",
+    "operation": "mastering.merge",
+    "requires": [
+     "prepare"
     ]
    },
    {
-    "name": "links",
-    "operation": "silver.derive",
-    "requires": [
-     "merge"
-    ],
-    "key": "{unit}",
-    "leases": [
-     "silver:{silver}",
-     "silver:{reads}"
-    ],
     "checks": [
      "input.hash",
      "output.receipt",
@@ -1766,29 +1667,34 @@
       "reads": "mastering_record",
       "silver": "relationship"
      }
-    }
+    },
+    "key": "{unit}",
+    "leases": [
+     "silver:{silver}",
+     "silver:{reads}"
+    ],
+    "name": "links",
+    "operation": "silver.derive",
+    "requires": [
+     "merge"
+    ]
    },
    {
-    "name": "processed",
-    "operation": "journal.record",
-    "requires": [
-     "links"
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "journal.recorded"
     ],
     "key": "{unit}",
     "leases": [
      "artifact:{destination}"
     ],
-    "checks": [
-     "input.hash",
-     "output.receipt",
-     "journal.recorded"
+    "name": "processed",
+    "operation": "journal.record",
+    "requires": [
+     "links"
     ]
    }
-  ],
-  "checks": [
-   "manifest.hash",
-   "work.accounting",
-   "journal.delivered"
   ]
  },
  "sec.nport.fund/mastering": {
@@ -3589,39 +3495,16 @@
     "checks": [
      "input.hash",
      "output.receipt",
-     "source.output"
-    ],
-    "input": {
-     "contract": "record.yaml",
-     "pieces": {
-      "step": "combine"
-     }
-    },
-    "key": "{unit}",
-    "leases": [
-     "artifact:{destination}"
-    ],
-    "name": "record",
-    "operation": "source.read",
-    "requires": [
-     "combine"
-    ]
-   },
-   {
-    "checks": [
-     "input.hash",
-     "output.receipt",
      "mdm.prepared"
     ],
     "input": {
      "keys": {
       "dataset": "sec.thirteenf.securities.v2",
-      "record_column": "record",
       "table": "security"
      },
      "readings": {
-      "record": {
-       "all": "record"
+      "combine": {
+       "all": "combine"
       }
      }
     },
@@ -3632,7 +3515,7 @@
     "name": "prepare",
     "operation": "mdm.prepare",
     "requires": [
-     "record"
+     "combine"
     ]
    },
    {

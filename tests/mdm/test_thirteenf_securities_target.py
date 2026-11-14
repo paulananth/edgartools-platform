@@ -1,5 +1,5 @@
 """The 13F Securities' `mastering` target (ticket 172): read the information
-tables, reduce, combine, record, prepare, merge, and record each file in the
+tables, reduce, combine, prepare, merge, and record each file in the
 Change Journal. Every name and number here is invented."""
 import hashlib
 import json
@@ -45,8 +45,8 @@ def recorded(options, report):
 def test_the_mastering_target_has_the_steps_that_prepare_and_merge_the_securities(tmp_path):
     report = write_manifest(**capture(tmp_path, [1, 2]))
     steps = Artifacts().json(report["manifest"])["steps"]
-    assert set(steps) == {"read", "reduce", "combine", "record", "prepare", "merge", "land_holding", "processed"}
-    assert [len(units) for units in steps.values()] == [1, 1, 1, 1, 1, 1, 1, 1]
+    assert set(steps) == {"read", "reduce", "combine", "prepare", "merge", "land_holding", "processed"}
+    assert [len(units) for units in steps.values()] == [1, 1, 1, 1, 1, 1, 1]
     # Ticket 183: each information table lands its holdings in silver after the merge.
     assert steps["land_holding"][0]["keys"]["silver"] == "thirteenf_holding"
     assert steps["prepare"][0]["keys"]["table"] == "security"

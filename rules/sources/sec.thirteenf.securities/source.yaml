@@ -149,12 +149,13 @@ bookkeeping:
   version: 2
   targets:
     # The Securities of one data set (ticket 172): every information table is
-    # read, reduced by CUSIP, combined to one row each, recorded, prepared for
+    # read, reduced by CUSIP, combined to one row each, prepared for
     # the Dataset Contract and merged; each file is then noted in the Change
     # Journal, so an unchanged file is not read again.
     mastering:
-      extract: record.yaml
-      master: {keys: {dataset: sec.thirteenf.securities.v2, record_column: record, table: security}}
+      # The combine's rows are the records, one per CUSIP; no record step.
+      extract: combine.yaml
+      master: {keys: {dataset: sec.thirteenf.securities.v2, table: security}}
       silver:
         # The holdings land in silver once the Securities they link to are merged (ticket 183).
         - {name: land_holding, land: {silver: thirteenf_holding, table: sec_thirteenf_holding}, requires: [read, merge]}

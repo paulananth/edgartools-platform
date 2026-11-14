@@ -5,6 +5,9 @@ records need keyed collections or joins across captured artifacts. The worker
 uses declared column names and immutable source-extract receipts; it has no loader,
 provider, classification or database dependency.
 
+A combine runs only to group or join rows by key: per-row values belong in the read, and preparation takes
+the combine's table directly (data-onboarding, "A source extract has the fewest steps that make its records").
+
 ## Inputs and configuration
 
 A standalone input manifest is an object with `version: 1`, a `contract`

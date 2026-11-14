@@ -142,6 +142,20 @@ legacy documents are not reparsed as a side effect of a narrow change.
   target; `scripts/run_inputs.py [source]` prints every target's facts and files with those comments.
 - The order it needs (the sources and the merge rules before it) is declared in the source sequence.
 
+**A source extract has the fewest steps that make its records**, one where it can. Each step reads and writes
+every row again, so a step earns its place only by work no earlier step can do:
+- **The read** streams each file once and computes every per-row value: a cleaned identifier, a date turned
+  into an instant (`transform` reformats a looked-up value too), a value joined from another reading by a
+  pair set (`member_value`). A file with one row per record needs nothing more: the target prepares the
+  read's table.
+- **A combine** runs only to group or join rows by key: the latest row of a key, the values of its other
+  rows. Its table reads the read's rows directly, and the target prepares the combine's table, one record
+  per key (`distinct_on`), with no record column: each row is the record.
+- **A reduce** stays only where it cuts the rows a later step carries by orders of magnitude; measure the
+  rows with and without it first.
+- **No step only reshapes another step's rows** (a record step): `rules check` refuses a pass that reads only
+  another step's pieces. Move its work into the read, or into the combine's joins.
+
 **Run each long step once per part.** Profiling and the load each run once. Before a long run, check what can
 stop it partway: the reader accepts the format; no size bound, cap or limit is below the data's measured
 size (profiling gives it). Never re-run a step to confirm a result: the first run's report is the evidence.
