@@ -1,7 +1,7 @@
 # Company merge rules: source priority, field rules, the classification rule and
 # the declared SEC-to-GLEIF name rules. Rules are data (operator, 2026-09-24):
 # adding a kind is a new file here, not an edit to a source.
-version: company-2026-10-31.sec-company-source-identity
+version: company-2026-11-14.foreign-private-issuer
 defaults:
   # Shared fields (operator, 2026-09-24): `name` and `address` are one field
   # each across sources, SEC first. SEC fills `address` from its business
@@ -25,7 +25,7 @@ defaults:
   allow_unknown_effective: true
 rules:
 - rule_id: sec-company-candidate
-  version: 2026-11-09.phase-1-listed-operating
+  version: 2026-11-14.listed-operating-or-foreign-issuer
   family: classification
   source: sec.company.v1
   emits:
@@ -103,6 +103,23 @@ rules:
         field: entity_name
         normalizer: conformed
         token_list: person_suffix
+        min_count: 1
+  # A foreign private issuer (operator, 2026-11-14: "yes make the rule change test locally and reload"): SEC
+  # types it "other", and its annual report on Form 20-F or 40-F shows it is an operating company.
+  - step: "10"
+    verdict: company
+    when:
+    - primitive: field_in_set@1
+      args:
+        field: entity_type
+        values:
+        - other
+    - primitive: values_overlap@1
+      args:
+        field: forms
+        values:
+        - 20-F
+        - 40-F
         min_count: 1
   - step: "11"
     verdict: deferred

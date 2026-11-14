@@ -133,7 +133,7 @@ def test_the_sheets_say_what_the_rules_say():
     assert "The SEC company is not already linked to another LEI" in kind["Matching rules"][4][5]
     assert ["jurisdiction", "gleif.level1.v1", "gleif.level1.v1", "Kind default",
             "merge/kinds/company.yaml defaults.sources"] in kind["Who wins each field"]
-    assert len(kind["Classification"]) == 9  # the 8 steps of sec-company-candidate (phase 1, ticket 204)
+    assert len(kind["Classification"]) == 10  # the 9 steps of sec-company-candidate
     # Platform validation 06a: a GLEIF link starts at its child's Level 1 record, read from
     # the GLEIF record as published (L6), not from a row the older reader built.
     links = [row[2:5] for row in found["gleif"]["Fields"] if row[0] == "gleif.relationships.v1"]
