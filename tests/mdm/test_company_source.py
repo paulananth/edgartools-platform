@@ -203,6 +203,7 @@ class TestTheCompanyRule:
             "iapd.adv.filings.v2",
             "iapd.adv.custodians.v1",
             "sec.nport.registrant.v2",
+            "sec.ncen.adviser.v1",
         ]
 
 

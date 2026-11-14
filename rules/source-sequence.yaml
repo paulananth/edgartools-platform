@@ -38,6 +38,12 @@ sources:
     requires: []
     after: [sec.nport.registrant]
   # N-CEN's fund series join the Funds N-PORT made, and create the rest.
+  # N-CEN's advisers join Form ADV's by CRD, and create the rest; the series
+  # that name them link to them (sec.ncen.fund).
+  sec.ncen.adviser:
+    target: mastering
+    requires: []
+    after: [iapd.adv]
   sec.ncen.fund:
     target: mastering
     requires: []

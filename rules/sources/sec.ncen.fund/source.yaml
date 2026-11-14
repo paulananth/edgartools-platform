@@ -22,6 +22,14 @@
 # (by date, then accession number: an N-CEN/A restates its filing, 132 over
 # four quarters) and its LEI when one to one (lei-pairs.yaml); record.yaml
 # makes each `fund` row one record; mdm.prepare and the merge follow.
+# The advisers of each series' latest filing (advisers.yaml, ADVISER.tsv) join
+# it in advisers-combine.yaml: each is a link INVESTMENT_ADVISER_TO from the
+# adviser's own record (rules/sources/sec.ncen.adviser) to the series, in
+# capacity `advisor` or `subadvisor`, N-CEN's own adviser types (RDM
+# mdm-relationship-types 5; operator, 2026-11-14: "yes"). A "Terminated" type
+# is the capacity dropped. Over four quarters 398 series file twice in one
+# quarter and 5 of them name other advisers in the later filing, so only the
+# latest filing's advisers are read.
 # Left out: the report's other columns (fund type flags, fees, returns),
 # detail of an annual report, not of the Fund; the series' advisers and share
 # classes are their own parts.
@@ -42,6 +50,9 @@ bookkeeping:
     mastering:
       extract: record.yaml
       master: {keys: {dataset: sec.ncen.fund.v1, record_column: record, table: fund}}
+      silver:
+        # The adviser links are a silver table, built from the stored records after the merge.
+        - {name: links, derive: {build: links, reads: mastering_record, silver: relationship}}
 execution:
   profile: source.read
   workers: 1
@@ -63,6 +74,14 @@ read:
       max_value_bytes: 64
       pairs: true
   tables:
+    # Every fund row's filing date, a row naming no series too: the advisers'
+    # own reading (sec.ncen.adviser) dates each adviser row by its fund row.
+    fund_filed:
+      each: .
+      columns:
+        fund_id: {text: {path: FUND_ID}}
+        filed:
+          member_value: {lookup: filed, key: {text: {path: ACCESSION_NUMBER}}, on_many: error}
     filing:
       each: .
       # A row naming no series (773 over four quarters, every one blank) is
@@ -71,6 +90,8 @@ read:
       columns:
         series_id: {text: {path: SERIES_ID, default: "", transforms: [{case: upper}], null_if: ["", "N/A"]}}
         accession_number: {text: {path: ACCESSION_NUMBER}}
+        # The filing's own row id: its advisers (advisers.yaml) name it.
+        fund_id: {text: {path: FUND_ID}}
         filed:
           member_value: {lookup: filed, key: {text: {path: ACCESSION_NUMBER}}, on_many: error}
         cik:
@@ -124,6 +145,7 @@ dataset_contracts:
       - missing_record_identity
       - missing_provisional_file_date
       - invalid_time
+      - invalid_field_shape
       adapter:
         reading:
           source: sec.ncen.fund
@@ -156,7 +178,9 @@ dataset_contracts:
           - lei
           - latest
           - filed_at
-        version: sec-ncen-fund-2026-11-14.series-and-lei
+          - advisors
+          - subadvisors
+        version: sec-ncen-fund-2026-11-14.advisers
         retain_deferred: true
         source_record_provenance: true
         kind: fund_structure
@@ -187,3 +211,29 @@ dataset_contracts:
           authority: SEC EDGAR
           registration: series_id
           valid_from: filed_at
+        # Each adviser the latest filing names: a dated sighting from the
+        # adviser's record to the series, held unless N-CEN says "Terminated".
+        # An adviser with no CRD makes no link (its item has no source key).
+        relationships:
+        - type: INVESTMENT_ADVISER_TO
+          capacity: advisor
+          each: advisors
+          source_key: [item.crd]
+          source_source: sec.ncen.adviser.v1
+          target_key: [series_id]
+          target_source: sec.ncen.fund.v1
+          on: filed_at
+          held: item.held
+          time_format: instant
+          scope: SEC N-CEN adviser
+        - type: INVESTMENT_ADVISER_TO
+          capacity: subadvisor
+          each: subadvisors
+          source_key: [item.crd]
+          source_source: sec.ncen.adviser.v1
+          target_key: [series_id]
+          target_source: sec.ncen.fund.v1
+          on: filed_at
+          held: item.held
+          time_format: instant
+          scope: SEC N-CEN adviser

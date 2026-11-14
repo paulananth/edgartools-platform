@@ -23,8 +23,8 @@ def test_a_contract_with_no_entity_type_is_refused_at_registration():
 
 
 def test_every_source_in_the_repo_states_its_entity_types():
-    stated = {code: found for name in ("gleif", "iapd.adv", "openfigi", "sec.company", "sec.ncen.fund", "sec.nport.fund", "sec.nport.registrant",
+    stated = {code: found for name in ("gleif", "iapd.adv", "openfigi", "sec.company", "sec.ncen.adviser", "sec.ncen.fund", "sec.nport.fund", "sec.nport.registrant",
                                        "sec.nport.security", "sec.ownership", "sec.submissions.person", "sec.thirteenf.securities")
               for code, found in files.entity_types(files.source(name)).items()}
-    assert len(stated) == 15
+    assert len(stated) == 16
     assert {v["origin"] for v in stated.values()} == {"fixed", "rule", "source_field"}

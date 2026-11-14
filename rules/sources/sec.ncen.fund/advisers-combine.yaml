@@ -1,0 +1,23 @@
+pass:
+  readings: {funds: {step: combine.yaml}, advisers: {all: advisers.yaml}}
+# Each fund series (combine.yaml's `fund`) with the advisers and sub-advisers of
+# its latest filing (`advisors`, `subadvisors`: advisers.yaml's rows, joined by
+# the filing's row id `fund_id`; an empty list when it names none). Profiling,
+# four quarters: at most 27 advisers on one filing. Pin canonical JSON of this
+# file as the source.combine contract.
+execution:
+  profile: source.combine
+combine:
+  max_rows: 1000000
+  groups:
+    fund_advisors: {source: advisers, table: adviser, key: fund_id, value: ., mode: collect, order_by: [crd], distinct: true, sort_values: false, skip_null_values: true, checks: {}, where: {capacity: advisor}}
+    fund_subadvisors: {source: advisers, table: adviser, key: fund_id, value: ., mode: collect, order_by: [crd], distinct: true, sort_values: false, skip_null_values: true, checks: {}, where: {capacity: subadvisor}}
+  tables:
+    fund:
+      source: funds
+      table: fund
+      checks: {}
+      where: {}
+      joins:
+        advisors: {group: fund_advisors, key: fund_id, on_missing: empty, replace: false}
+        subadvisors: {group: fund_subadvisors, key: fund_id, on_missing: empty, replace: false}

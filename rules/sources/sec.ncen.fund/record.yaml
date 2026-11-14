@@ -1,6 +1,6 @@
 pass:
-  pieces: {step: combine.yaml}
-# Each fund row of combine.yaml's output as one record (`record`), read over
+  pieces: {step: advisers-combine.yaml}
+# Each fund row of advisers-combine.yaml's output as one record (`record`), read over
 # the combine's pieces, for mdm.prepare (`record_column: record`): the record
 # is the row itself, as the Dataset Contract reads it.
 execution: {profile: source.read, workers: 1, max_artifacts: 1}
@@ -17,6 +17,8 @@ read:
               series_id: {value: {path: series_id}}
               lei: {value: {path: lei}}
               latest: {value: {path: latest}}
+              advisors: {value: {path: advisors}}
+              subadvisors: {value: {path: subadvisors}}
               filed_at:
                 choose:
                   condition: {test: {path: latest.filed, kind: truthy}}

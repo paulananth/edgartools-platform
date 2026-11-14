@@ -1189,6 +1189,273 @@
    }
   ]
  },
+ "sec.ncen.adviser/mastering": {
+  "steps": [
+   {
+    "name": "submissions",
+    "operation": "source.read",
+    "requires": [],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "units": {
+     "each": "file"
+    },
+    "input": {
+     "contract": "sec.nport.registrant/submissions.yaml"
+    }
+   },
+   {
+    "name": "registrants",
+    "operation": "source.read",
+    "requires": [
+     "submissions"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "units": {
+     "each": "file"
+    },
+    "input": {
+     "contract": "sec.nport.registrant/source.yaml",
+     "lookups": {
+      "filed": {
+       "column": "accession_number",
+       "from": "submissions",
+       "max_input_bytes": 67108864,
+       "max_input_rows": 1000000,
+       "table": "filed",
+       "value_column": "filed"
+      }
+     }
+    }
+   },
+   {
+    "name": "filings",
+    "operation": "source.read",
+    "requires": [
+     "submissions",
+     "registrants"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "units": {
+     "each": "file"
+    },
+    "input": {
+     "contract": "sec.ncen.fund/source.yaml",
+     "lookups": {
+      "filed": {
+       "column": "accession_number",
+       "from": "submissions",
+       "max_input_bytes": 67108864,
+       "max_input_rows": 1000000,
+       "table": "filed",
+       "value_column": "filed"
+      },
+      "registrant": {
+       "column": "accession_number",
+       "from": "registrants",
+       "max_input_bytes": 268435456,
+       "max_input_rows": 1000000,
+       "table": "filing",
+       "value_column": "cik"
+      }
+     }
+    }
+   },
+   {
+    "name": "advisers",
+    "operation": "source.read",
+    "requires": [
+     "filings"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "units": {
+     "each": "file"
+    },
+    "input": {
+     "lookups": {
+      "filed": {
+       "column": "fund_id",
+       "from": "filings",
+       "max_input_bytes": 268435456,
+       "max_input_rows": 1000000,
+       "table": "fund_filed",
+       "value_column": "filed"
+      }
+     }
+    }
+   },
+   {
+    "name": "crds",
+    "operation": "source.combine",
+    "requires": [
+     "advisers"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.combined"
+    ],
+    "input": {
+     "contract": "reduce.yaml",
+     "readings": {
+      "advisers": {
+       "all": "advisers"
+      }
+     }
+    }
+   },
+   {
+    "name": "combine",
+    "operation": "source.combine",
+    "requires": [
+     "crds",
+     "advisers"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.combined"
+    ],
+    "input": {
+     "contract": "combine.yaml",
+     "readings": {
+      "crds": {
+       "step": "crds"
+      },
+      "advisers": {
+       "all": "advisers"
+      }
+     }
+    }
+   },
+   {
+    "name": "record",
+    "operation": "source.read",
+    "requires": [
+     "combine"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "input": {
+     "contract": "record.yaml",
+     "pieces": {
+      "step": "combine"
+     }
+    }
+   },
+   {
+    "name": "prepare",
+    "operation": "mdm.prepare",
+    "requires": [
+     "record"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "mdm.prepared"
+    ],
+    "input": {
+     "keys": {
+      "dataset": "sec.ncen.adviser.v1",
+      "record_column": "record",
+      "table": "adviser"
+     },
+     "readings": {
+      "record": {
+       "all": "record"
+      }
+     }
+    }
+   },
+   {
+    "name": "merge",
+    "operation": "mastering.merge",
+    "requires": [
+     "prepare"
+    ],
+    "key": "{batch_id}",
+    "leases": [
+     "mdm:consumer:{consumer}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "mdm.committed"
+    ]
+   },
+   {
+    "name": "processed",
+    "operation": "journal.record",
+    "requires": [
+     "merge"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "journal.recorded"
+    ]
+   }
+  ],
+  "checks": [
+   "manifest.hash",
+   "work.accounting",
+   "journal.delivered"
+  ]
+ },
  "sec.ncen.fund/mastering": {
   "steps": [
    {
@@ -1364,10 +1631,58 @@
     }
    },
    {
+    "name": "advisers",
+    "operation": "source.read",
+    "requires": [],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "units": {
+     "each": "file"
+    },
+    "input": {
+     "contract": "advisers.yaml"
+    }
+   },
+   {
+    "name": "advisers_combine",
+    "operation": "source.combine",
+    "requires": [
+     "combine",
+     "advisers"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.combined"
+    ],
+    "input": {
+     "contract": "advisers-combine.yaml",
+     "readings": {
+      "funds": {
+       "step": "combine"
+      },
+      "advisers": {
+       "all": "advisers"
+      }
+     }
+    }
+   },
+   {
     "name": "record",
     "operation": "source.read",
     "requires": [
-     "combine"
+     "advisers_combine"
     ],
     "key": "{unit}",
     "leases": [
@@ -1381,7 +1696,7 @@
     "input": {
      "contract": "record.yaml",
      "pieces": {
-      "step": "combine"
+      "step": "advisers_combine"
      }
     }
    },
@@ -1430,10 +1745,34 @@
     ]
    },
    {
+    "name": "links",
+    "operation": "silver.derive",
+    "requires": [
+     "merge"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "silver:{silver}",
+     "silver:{reads}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "silver.derived"
+    ],
+    "input": {
+     "keys": {
+      "build": "links",
+      "reads": "mastering_record",
+      "silver": "relationship"
+     }
+    }
+   },
+   {
     "name": "processed",
     "operation": "journal.record",
     "requires": [
-     "merge"
+     "links"
     ],
     "key": "{unit}",
     "leases": [

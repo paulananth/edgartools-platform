@@ -21,9 +21,12 @@ series → its adviser (company). The onboarding log is `.scratch/onboarding/sec
 - [x] Plan the parts (2026-11-14 09:50 ET)
 - [ ] ~~Write `profile.yaml`~~ deferred to the first N-CEN silver part: its 79 tables are not landed, and two parts name one table (catalog test, CI on PR 1764)
 - [x] Part 1, fund series: `sec.ncen.fund` into `fund_structure` by series id and LEI, loaded in a disposable store after N-PORT's 2026q2 series: 12,953 records of 12,412 series; 11,895 Funds hold both sources, 512 are new, 1,042 are N-PORT's only; 10 set aside (1 series id shape, 9 LEI check digits), 6 to review (conflicting identifiers), no identifier on two Funds; a second load found nothing to do (2026-11-14 09:50 ET)
-- [ ] Part 1 loaded on the hosted store (the operator's word)
-- [ ] Part 2, advisers: decide how an N-CEN CRD (written with leading zeros) matches a Form ADV CRD
-- [ ] Part 2, advisers: `company` by CRD and LEI, and the series → adviser link `INVESTMENT_ADVISER_TO`
+- [ ] Parts 1 and 2 loaded on the hosted store (the operator's word)
+- [x] Part 2: why no "Terminated" row ended a link: none of the 493 pairs it names is held in an earlier quarter; the sighting that held each is in the year before the four captured quarters (measured on the captures) (2026-11-14 13:07 ET)
+- [x] Part 2, advisers: decide how an N-CEN CRD (written with leading zeros) matches a Form ADV CRD: `normalize_identifier@crd-v2` (operator: "yes"; PR 1766)
+- [x] Part 2: name the link's capacities with N-CEN's own adviser types, `advisor` and `subadvisor`, in RDM `mdm-relationship-types` 5 (operator: "yes but any type must also be added to rdm"; PR 1768) (2026-11-14 13:07 ET)
+- [x] Part 2: a reverse limit counts values as compared, and a restated role keeps its earliest start (operator: "Yes"; PR 1772: tests that failed before) (2026-11-14 13:07 ET)
+- [x] Part 2, advisers: `sec.ncen.adviser` into `company` by CRD (LEI lookup only), and the series → adviser link `INVESTMENT_ADVISER_TO` from `sec.ncen.fund`, loaded in a disposable store with one Form ADV month and four N-CEN quarters: 1,491 advisers, 185 joined Form ADV (all the CRDs that month holds), 20,344 links (12,340 advisor onto 12,214 series, 8,004 subadvisor onto 4,846), 0 held back for a role start; 5 joined advisers in review over Form ADV's own several-CIK rule (2026-11-14 13:07 ET)
 - [ ] Part 3, share classes: decide the issuer of a share class while N-PORT's issuer claim names the umbrella trust (ruling 2026-10-17)
 - [ ] Part 3, share classes: `security` by SEC class id, linked to their series
 - [ ] Part 4, registrant trusts: `company` by CIK, and the series → trust link for series N-PORT does not file

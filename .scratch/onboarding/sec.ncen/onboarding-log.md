@@ -121,3 +121,25 @@ both data sets. Its reduce, LEI pair and combine steps are N-PORT's (a step name
    registrant trusts → `company` (CIK).** Service providers and yearly figures stay out for now.
    Operator, 2026-11-14 09:31 ET: "yes, use skills, rules, and generic scripts, follow existing architecture,
    mdm, bookkeeping, rdm, change journal, db for storage". Recorded with `profile_data.py approve`.
+
+## Part 2: advisers and their links
+
+- ADVISER, four quarters: 23,859 rows, each with a CRD (9 digits with leading zeros); 14,283 Advisor, 9,049
+  Subadvisor, 92 Terminated Advisor, 435 Terminated Subadvisor; 1,495 advisers; at most 27 on one filing, one
+  adviser on up to 606 series; 1,245 rows state a start date and 527 an end date.
+- `sec.ncen.adviser` (`sec.ncen.adviser.v1`, kind `company`): one record per CRD per quarter, from its latest
+  row; identifier `crd` (rule `ncen-adviser-crd`, crd-v2), LEI a lookup-only cross-reference (Form ADV's
+  ruling); the `adviser` role from its first filing in the quarter.
+- `sec.ncen.fund` (`sec-ncen-fund-2026-11-14.advisers`): each series' latest filing's advisers
+  (`advisers.yaml`, joined in `advisers-combine.yaml` by the filing row id: 398 series file twice in one
+  quarter and 5 of them name other advisers later) state `INVESTMENT_ADVISER_TO` from the adviser's record to
+  the series, capacity `advisor` or `subadvisor`, dated by the filing, held unless "Terminated"; a `links`
+  silver step builds them.
+- Gaps found and fixed in the engine (PR 1772): every Form ADV-joined adviser went to review (two spellings of
+  one CRD counted as two values); a role restated each quarter started at the newest quarter, so 10,690
+  links fell outside it.
+- Disposable store, one Form ADV month then N-CEN 2025q4 to 2026q3 with revisions 0 to 3: 1,491 advisers (185
+  joined Form ADV), 20,344 links; no link held back for a role start; 5 joined advisers in review (Form ADV
+  filings listing several CIKs, Form ADV's own rule). No link ended: of the 493 series and adviser pairs a
+  "Terminated" row names, none is held in an earlier quarter (a registrant files once a year, so the sighting
+  that held it is in the year before these four quarters); 29 are held in the same quarter.
