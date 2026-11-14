@@ -142,7 +142,8 @@ def test_default_inventory_accounts_for_each_committed_source(capsys):
     assert set(result["sources"]) == expected_sources
     assert result["order"] == ["sec.company", "gleif", "sec.nport.registrant", "sec.company-facts",
                                "sec.registration", "sec.submissions.person", "sec.nport.fund", "iapd.adv", "sec.ownership", "sec.ncen.fund",
-                               "openfigi", "sec.ncen.adviser", "sec.thirteenf.securities", "sec.nport.security", "sec.thirteenf.filings"]
+                               "openfigi", "sec.ncen.adviser", "sec.thirteenf.securities", "sec.nport.security", "sec.thirteenf.filings",
+                               "sec.ncen.class"]
     # OpenFIGI is one target since ticket 138, and sec.registration has its silver target since ticket 149:
     # every source is configured, none blocked.
     assert {name for name, item in result["sources"].items() if item["status"] == "blocked"} == set()
@@ -151,7 +152,7 @@ def test_default_inventory_accounts_for_each_committed_source(capsys):
 @pytest.mark.parametrize("name", [
     "sec.company", "gleif", "sec.submissions.person", "iapd.adv", "sec.ownership",
     "sec.thirteenf.securities", "sec.nport.registrant", "sec.nport.fund", "sec.ncen.fund", "sec.ncen.adviser", "sec.nport.security", "openfigi",
-    "sec.company-facts", "sec.registration", "sec.thirteenf.filings",
+    "sec.company-facts", "sec.registration", "sec.thirteenf.filings", "sec.ncen.class",
 ])
 def test_each_committed_source_can_be_checked_on_its_own(capsys, name):
     parser = argparse.ArgumentParser()
@@ -163,7 +164,7 @@ def test_each_committed_source_can_be_checked_on_its_own(capsys, name):
     assert code == (0 if name in {"sec.company", "gleif", "sec.submissions.person",
                                   "sec.nport.registrant", "sec.nport.fund", "sec.ncen.fund", "sec.ncen.adviser", "sec.nport.security",
                                   "openfigi", "sec.company-facts", "sec.thirteenf.securities", "sec.thirteenf.filings",
-                                  "sec.ownership", "iapd.adv", "sec.registration"} else 3)
+                                  "sec.ownership", "iapd.adv", "sec.registration", "sec.ncen.class"} else 3)
 
 
 def test_malformed_source_is_reported_without_leaking_its_values(tmp_path, capsys):

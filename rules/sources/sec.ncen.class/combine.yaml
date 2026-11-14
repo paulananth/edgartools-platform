@@ -1,0 +1,20 @@
+pass:
+  readings: {classes: {all: source.yaml}}
+# Each share class row with its class's latest row whole (`latest`: name,
+# ticker, series and date as that filing gives them), latest by filing date, then filing row id. Every row of one class carries the
+# same values, so the Merge Stage's `distinct_on` keeps any one of them. Pin
+# canonical JSON of this file as the source.combine contract.
+execution:
+  profile: source.combine
+combine:
+  max_rows: 1000000
+  groups:
+    latest_row: {source: classes, table: share_class, key: class_id, value: ., mode: last, order_by: [filed_at, fund_id], distinct: false, skip_null_values: true, checks: {}, where: {}}
+  tables:
+    share_class:
+      source: classes
+      table: share_class
+      checks: {}
+      where: {}
+      joins:
+        latest: {group: latest_row, key: class_id, on_missing: error, replace: false}

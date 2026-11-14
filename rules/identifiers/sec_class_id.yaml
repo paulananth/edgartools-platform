@@ -1,0 +1,14 @@
+# SEC class id: the id SEC issues each share class of a fund series ("C" and
+# nine digits, no check digit). Ticket 234, part 3, from the N-CEN findings
+# (SHARES_OUTSTANDING.CLASS_ID, four quarters: 29,008 distinct, every one this
+# shape).
+# A change to this file is a new version: its normalizer gets a new name.
+identifier: sec_class_id
+version: 1
+description: "The letter C and nine digits, issued by SEC to each share class. Upper-cased."
+case: upper
+parts:
+  - length: 1
+    characters: ["C"]
+  - length: 9
+    characters: [digits]

@@ -137,6 +137,7 @@ PINNED = {
     ("cusip", 1): "622c3994cb2c47f427e464085ec8e06b281e6eec9ea0d62f0195ea7af307e826",
     ("isin", 1): "563fbaf4640901d001ff271df72a262eed1cf14cc96e0d8905f8bf63a52e2be1",
     ("sec_series_id", 1): "a6d53f1d27f62d67ac1d446d9322b827b8935dd37bc90a95ce4dcdc53fe46c41",
+    ("sec_class_id", 1): "8865b1457273d0099d315f1cf933233a03fcd202dde58052f08e2e05ab535bbf",
     ("figi", 1): "9a15cdc28dec97a475ea09ae9b1f3b258c58fbccc88e33c9cc28eedacee24fbe",
     ("figi", 2): "040addeb2f49daa51627620eee853785764bbbd30a2ebade302475a89ae48cc3",
     ("sedol", 1): "8fa0cb7dddfcd15e892a5a74dbce6fb19c1c3da1bd9ab9559ce6fa1fb0ba6df3",
@@ -185,6 +186,14 @@ def test_the_sec_series_id_is_s_and_nine_digits():
     assert series.refusal(" s000012345 ") == ("S000012345", None)
     assert series.refusal("S12345")[1] == "invalid_sec_series_id"
     assert series.refusal("C000012345")[1] == "invalid_sec_series_id"
+
+
+def test_the_sec_class_id_is_c_and_nine_digits():
+    # Invented values; the shape is N-CEN's share classes (ticket 234, part 3).
+    share_class = identifier_types.load()["sec_class_id"]
+    assert share_class.refusal(" c000012345 ") == ("C000012345", None)
+    assert share_class.refusal("C12345")[1] == "invalid_sec_class_id"
+    assert share_class.refusal("S000012345")[1] == "invalid_sec_class_id"
 
 
 def test_a_sedol_is_six_digits_or_consonants_and_a_weighted_check_digit():
