@@ -1,6 +1,6 @@
 # 233: Batches of one kind merge in parallel
 
-Type: task. Status: open (design written; build not started). Blocked by: none. Follows ticket 197's open part
+Type: task. Status: open (stopped before building, see "Stopped"). Blocked by: none. Follows ticket 197's open part
 "narrowing [the kind lock] to the identifiers a batch touches".
 
 ## Question
@@ -39,15 +39,30 @@ without a golden record written from stale reads?
 4. **Unchanged.** The store-wide lock `clear` takes, the file number given at commit, and the MySQL path (its
    `get_lock` slots back the same slot numbers).
 
+## Stopped
+
+Stopped before any code (operator, 2026-11-13: "stop here"), for two findings made while starting the build:
+
+- **Slot locks do not work at this batch size.** A batch holds up to 1,000 records with several keys each, so a few
+  thousand keys hashed into a few hundred slots put every batch on nearly every slot: the merge is serial again.
+  A lock per key instead would exceed PostgreSQL's shared lock table.
+- **What would work is larger.** A coordinator holds the kind lock for the unit, groups batches whose key closures
+  (identifiers, name keys, subjects, waiting records, and the identifiers of the golden records they reach) overlap,
+  and deals the groups to processes that merge without the lock, behind a fence that sends any batch reading outside
+  its closure to a serial pass. That is days of work with a duplicate-golden-record risk on any missed lookup path.
+- **The need went away for now.** The hosted GLEIF merge finished at 21:16 ET (6,311 batches, 3,043,084 records,
+  partly from earlier attempts the Change Journal skipped). Daily loads merge only changed records, a few minutes
+  one at a time. Building now would be over-processing.
+
+Reopen when a daily merge or a full reload is measured waiting on the kind lock. The first step then is cheap: compute
+the batch groups read-only for a real manifest and stop if most batches land in one group.
+
 ## Parts
 
-- [ ] Failing test: two concurrent merges of one kind sharing a stored golden record through different identifiers
-      leave one golden record holding both records (fails with the kind lock removed).
-- [ ] Failing test: two concurrent merges sharing a new identifier leave one golden record (the existing two-writer
-      test, run without the kind lock).
-- [ ] Slot locks replace the kind lock in `merge_file`, `split_merge` and the steward's resolve.
-- [ ] Golden record locks with the repeated lookup and a deadlock retry.
-- [ ] Components at preparation (`mdm.prepare` batches).
-- [ ] Measure 8 processes on a 1,000-record local slice, then on the hosted GLEIF merge, against the 77 of 96 waiting.
-- [ ] Learning → skill: `mdm-engineering`, "Writes and transactions": the merge's unit of exclusion is the key and the
-      golden record, not the kind.
+- [x] 2026-11-13 21:27 ET Evidence: the kind lock serializes the hosted GLEIF merge (77 of 96 worker samples waiting), and the
+      tables alone do not replace it (two-writer test without the lock: 3 of 3 failed, `assert 200 == 0`).
+- [ ] ~~Failing tests, slot locks, golden record locks, components at preparation, measurement~~ deferred until a
+      merge is measured waiting on the kind lock: slot locks saturate at 1,000-record batches, and the grouping
+      design is not worth building while daily merges are small (see "Stopped").
+- [x] 2026-11-13 21:27 ET Learning → skill: none. The rule learned (a lock per key must be bounded, and hashed slots saturate on
+      large batches) belongs in `mdm-engineering` only once a design is built and measured.
