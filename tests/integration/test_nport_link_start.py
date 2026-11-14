@@ -84,23 +84,24 @@ def filed_pairs(store, root, raw) -> list[list[str]]:
     return [[row["accession_number"], row["filed"]] for row in rows if row["filed"]]
 
 
-def issuers(store, root, raw, isin, period, umbrella=()):
-    """The issuer source extract, each holding with its filing's date, else the quarter's."""
+def issuers(store, root, raw, isin, period, series=()):
+    """The issuer source extract, each holding with its filing's date, else the quarter's;
+    `series` pairs each fund series' LEI with its SEC series id (sec.nport.fund's reading)."""
     return read(store, root / "issuers", "issuers.yaml", raw, period,
-                lookups={"isin": isin, "sedol": [], "loanx": [], "figi": [], "umbrella": list(umbrella),
+                lookups={"isin": isin, "sedol": [], "loanx": [], "figi": [], "series": list(series),
                                   "filed": filed_pairs(store, root, raw)})
 
 
 def prepared_records(root: Path, period: str, revision: int | None = None,
-                     rows: list[list[str]] = HOLDINGS, umbrella: tuple[list[str], ...] = (),
+                     rows: list[list[str]] = HOLDINGS, series: tuple[list[str], ...] = (),
                      filings: dict[str, str] = FILINGS) -> list[dict]:
-    """The quarter's Security assertions, through the real chain; `umbrella`
-    pairs each fund LEI with the trust it is a sub-fund of."""
+    """The quarter's Security assertions, through the real chain; `series`
+    pairs each fund series' LEI with its SEC series id."""
     store = Artifacts()
     zipped = capture(root, rows, filings)
     raw = store.put_bytes((root / "capture.zip").as_uri(), zipped.read_bytes())
     holdings = read(store, root / "holdings", "source.yaml", raw, period, lookups={"isin": []})
-    issuer_reading = issuers(store, root, raw, [], period, umbrella)
+    issuer_reading = issuers(store, root, raw, [], period, series)
     # The quarter dates nothing in MDM (ticket 113); quarters that follow
     # one another are revisions of one publication (ticket 101).
     return security_records(store, root, holdings, issuer_reading, batch_id=f"check-{period[:10]}",
@@ -206,19 +207,21 @@ def test_an_issuer_reading_with_no_quarter_is_refused(tmp_path):
         issuers(store, tmp_path, raw, [], None)
 
 
-def test_a_fund_series_counts_as_its_umbrella_trust(tmp_path):
-    """Ticket 23 (operator, 2026-10-17: "Umbrella trust (Recommended)"): holdings
-    naming a fund series and its trust give one issuer, the trust; without the
-    pair the two LEIs leave the Security with no link."""
-    trust = "9999000000EXAMPLE113"  # invented
+def test_a_funds_share_is_issued_by_its_fund_series(tmp_path):
+    """Ticket 234 (operator, 2026-11-14: "Yes", replacing "Umbrella trust", 2026-10-17):
+    holdings naming a fund series and its trust give one issuer, the series' Fund
+    (sec.nport.fund's record of its series id), starting at the series holdings'
+    earliest filing; the holding naming the trust counts for nothing. Without the
+    series pair the two LEIs leave the Security with no link."""
+    trust, series = "9999000000EXAMPLE113", "S000000001"  # invented
     holdings = [["A-1", "1", "Example Fund", LEI, "ETF", "ZZ0000013"],
                 ["A-1", "2", "Example Fund", LEI, "ETF", "ZZ0000013"],
                 ["A-2", "3", "Example Trust", trust, "ETF", "ZZ0000013"]]
-    pairs = ([LEI, trust],)
-    (linked,) = prepared_records(tmp_path / "with", Q2, rows=holdings, umbrella=pairs)
-    def targets(record):
-        return [l["target_subject"] for l in record.get("relationships") or [] if l["type"] == "ISSUED_BY"]
+    (linked,) = prepared_records(tmp_path / "with", Q2, rows=holdings, series=([LEI, series],))
+    def issued(record):
+        return [(l["target_subject"], l["valid_from"]) for l in record.get("relationships") or []
+                if l["type"] == "ISSUED_BY"]
 
-    assert targets(linked) == [subject_key(GLEIF, trust)]
+    assert issued(linked) == [(subject_key("sec.nport.fund.v1", series), "2026-06-05T00:00:00+00:00")]
     (unpaired,) = prepared_records(tmp_path / "without", Q2, rows=holdings)
-    assert targets(unpaired) == []
+    assert issued(unpaired) == []
