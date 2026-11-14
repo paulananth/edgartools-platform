@@ -10,6 +10,13 @@ folder, and refuse unless the published bytes equal the repository's file and it
 into the repository. A version RDM already holds is left alone.
 
     uv run python scripts/dev/reload_rdm.py            # uses RDM_DATABASE_URL, never printed
+
+A new version of a published code set is drafted from its newest published rows plus the added codes
+(each a row in the published shape: code, label, definition, parent_code, level, properties), for
+`edgar-warehouse rdm draft --file`; a code already held is refused. Reload first, so the version it
+supersedes is in RDM for `rdm diff`:
+
+    uv run python scripts/dev/reload_rdm.py next <code set> <version> --add <codes.yaml> --out <draft.yaml>
 """
 from __future__ import annotations
 
@@ -122,7 +129,12 @@ WORDS = {
                   "2": ("claude (ticket 182)", None),
                   "3": ("claude (ticket 24)", "This can't be true \"Security with two issuers keep two ISSUED_BY links\" "
                                               "fix the root cause"),
-                  "4": ("claude (Form ADV related persons)", "RELATED_PERSON (Recommended)")}),
+                  "4": ("claude (Form ADV related persons)", "RELATED_PERSON (Recommended)"),
+                  "5": ("claude (ticket 234, N-CEN adviser types)",
+                        "Question: should the two capacities of INVESTMENT_ADVISER_TO be named with N-CEN's own "
+                        "terms, advisor and subadvisor, labelled \"Advisor\" and \"Subadvisor\" as the data set "
+                        "writes them? yes but any type must also be added to rdm maybe this should be in data "
+                        "modeling skill")}),
     "mdm-relationship-types-before-real-names": dict(
         name="MDM relationship types before the real names",
         definition="The table of relationship types as the operator approved it before the types took their real "
@@ -159,6 +171,27 @@ def draft_of(code_set: str, version: str, rows: list[dict], supersedes: str | No
                 for r in rows for lang, kind, label in r["labels"]],
         crosswalk=[{"from_code": r["code"], "to_set": s, "to_version": v, "to_code": c, "match_type": m}
                    for r in rows for s, v, c, m in r["crosswalk"]])
+
+
+def next_draft(code_set: str, version: str, added: list[dict]) -> dict:
+    """The draft of a new version: the newest published version's rows plus the added codes."""
+    previous = max(WORDS[code_set]["versions"], key=int)
+    folder = PUBLISHED / code_set / previous
+    data = (folder / "canonical.jsonl").read_bytes()
+    if hashlib.sha256(data).hexdigest() != json.loads((folder / "pin.json").read_text())["sha256"]:
+        raise Blocked(f"{code_set} {previous}: the repository's file is not its pin")
+    rows = [json.loads(line) for line in data.decode().splitlines()]
+    if refused := sorted({r["code"] for r in added} & {r["code"] for r in rows}):
+        raise Blocked(f"already held in {code_set} {previous}: {refused}")
+    rows += [{"labels": [["en", "preferred", r["label"]]], "crosswalk": [], "parent_code": None, **r} for r in added]
+    words = WORDS[code_set]
+    return {"code_set": {"code_set": code_set}, "version": version, "supersedes": previous,
+            "created_by": "claude (scripts/dev/reload_rdm.py next)",
+            "evidence": {"supersedes": f"rules/reference/published/{code_set}/{previous}",
+                         "added": [r["code"] for r in added]},
+            "usage": [dict(zip(("store", "object", "field", "match"), u)) for u in words.get("usage", ())],
+            "hints": [dict(zip(("kind", "text"), h)) for h in words.get("hints", ())],
+            **draft_of(code_set, version, rows, previous)}
 
 
 def held(rdm: RDM, code_set: str, version: str) -> bool:
@@ -209,4 +242,19 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["next"]:
+        import argparse
+
+        import yaml
+
+        parser = argparse.ArgumentParser(prog="reload_rdm.py next")
+        parser.add_argument("code_set")
+        parser.add_argument("version")
+        parser.add_argument("--add", required=True, type=Path)
+        parser.add_argument("--out", required=True, type=Path)
+        args = parser.parse_args(sys.argv[2:])
+        body = next_draft(args.code_set, args.version, yaml.safe_load(args.add.read_text()) or [])
+        args.out.write_text(yaml.safe_dump(body, sort_keys=False, allow_unicode=True), encoding="utf-8")
+        print(f"{args.out}: {args.code_set} {args.version} supersedes {body['supersedes']}, {len(body['codes'])} codes")
+        sys.exit(0)
     sys.exit(main())
