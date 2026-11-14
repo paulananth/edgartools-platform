@@ -162,3 +162,20 @@ def test_a_second_pass_over_recorded_files_has_no_record_step():
 def test_a_target_that_lists_its_steps_is_left_as_it_is():
     target = {"steps": [{"name": "capture"}], "checks": ["manifest.hash"]}
     assert shape.expand(target) is target
+
+
+def _landing(tmp_path, mode):
+    (tmp_path / "silver-t.yaml").write_text(f"table: t\nload_mode: {mode}\n")
+    return shape.expand({"extract": {"read": {"read": None}},
+                         "silver": [{"name": "land", "land": {"table": "t", "silver": "t"}}]}, tmp_path)["steps"][1]
+
+
+def test_a_snapshot_table_cannot_be_landed(tmp_path):
+    # A snapshot delivery deletes every row it lacks: units landing their own keys would erase each other.
+    with pytest.raises(shape.ShapeError, match="snapshot table; derive it whole"):
+        _landing(tmp_path, "snapshot")
+
+
+@pytest.mark.parametrize("mode", ["upsert", "append"])
+def test_any_other_table_is_landed_by_its_units(tmp_path, mode):
+    assert _landing(tmp_path, mode)["leases"] == ["silver:{silver}:{unit}"]
