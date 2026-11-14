@@ -458,7 +458,7 @@ def _write_masters(store, settings: Settings, entities: list, counts: Counter) -
         "identities": identities, "canonical": {e: e for e in entities}, "bindings": bindings, "quarantined": {},
         "claims": claims, "policy": settings.policy, "overrides": store.overrides(subjects), "decisions": [],
         "as_of": settings.as_of, "policy_digest": settings.policy_digest, "withheld": store.withheld(subjects),
-        "profile_kinds": KINDS})
+        "profile_kinds": KINDS, "normalizers": NORMALIZERS})
     for review in reviews:
         counts[str(review.get("reason"))] += 1
     store.write_masters([(e, json.dumps(body)) for e, body in masters.items()])

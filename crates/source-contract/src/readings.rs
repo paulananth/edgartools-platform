@@ -96,6 +96,13 @@ fn identify_profile_values(profile: &Object) -> Result<String, String> {
     Ok(format!("{:x}", Sha256::digest(bytes)))
 }
 
+/// One role of a subject (role, authority, registration, jurisdiction), whatever its start.
+fn identify_role(profile: &Object) -> Result<String, String> {
+    let mut role = profile.clone();
+    role.remove("valid_from");
+    identify_profile_values(&role)
+}
+
 /// Identify one profile using its identifying text, independent of source or record type.
 pub fn identify_profile(raw: &str) -> Result<String, String> {
     let value: Object = serde_json::from_str(raw).map_err(|_| "Profile requires an object")?;
@@ -169,6 +176,9 @@ pub fn prepare_current_records(
         let mut profile_fields: BTreeMap<String, BTreeMap<String, Object>> = BTreeMap::new();
         let mut seen = BTreeMap::new();
         let mut last = None;
+        // Each role's earliest start over the subject's revisions: a role a later
+        // revision restates keeps the start an earlier one gave it.
+        let mut earliest: BTreeMap<String, (DateTime<FixedOffset>, Document)> = BTreeMap::new();
         for reading in versions {
             let version = (
                 reading.revision.get().to_owned(),
@@ -212,6 +222,13 @@ pub fn prepare_current_records(
             let mut continuing = BTreeMap::new();
             for raw in &reading.profiles {
                 let profile = read_object(raw)?;
+                if let Some(start) = profile.get("valid_from").filter(|value| value.get() != "null") {
+                    let at = read_time(&read_text(start)?)?;
+                    let role = identify_role(&profile)?;
+                    if earliest.get(&role).is_none_or(|(held, _)| at < *held) {
+                        earliest.insert(role, (at, start.clone()));
+                    }
+                }
                 let key = identify_profile_values(&profile)?;
                 let mut values = profile_fields.get(&key).cloned().unwrap_or_default();
                 let changes = profile
@@ -257,6 +274,24 @@ pub fn prepare_current_records(
             last = Some((reading, source_meta));
         }
         let (reading, source_meta) = last.ok_or("Missing retained reading")?;
+        let mut profiles = Vec::with_capacity(reading.profiles.len());
+        for raw in reading.profiles {
+            let mut profile = read_object(&raw)?;
+            let Some((_, start)) = earliest.get(&identify_role(&profile)?) else {
+                profiles.push(raw);
+                continue;
+            };
+            if profile.get("valid_from").is_some_and(|held| held.get() == start.get()) {
+                profiles.push(raw);
+                continue;
+            }
+            let before = identify_profile_values(&profile)?;
+            profile.insert("valid_from".into(), start.clone());
+            if let Some(values) = profile_fields.remove(&before) {
+                profile_fields.insert(identify_profile_values(&profile)?, values);
+            }
+            profiles.push(write_document(&profile)?);
+        }
         result.insert(
             subject,
             CurrentRecord {
@@ -265,7 +300,7 @@ pub fn prepare_current_records(
                 identifiers: reading.identifiers,
                 cross_references: reading.cross_references,
                 details: reading.details,
-                profiles: reading.profiles,
+                profiles,
                 profile_fields,
                 relationships: reading.relationships,
                 assertion_id: reading.assertion_id,
