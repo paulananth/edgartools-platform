@@ -95,7 +95,10 @@ Direct compose startup is only the server-start stage, not completed platform
 initialization. Rerun `bash infra/openmetadata/init.sh` to apply the idempotent
 exclusion and readback to an already running server.
 Keep the helper behind this repository entrypoint; directly invoking a helper
+
 inside the skill directory is checkout-only and fails the installed-skill doctor.
+
+Use `bash infra/scripts/catalog-services.sh start|stop` to start or stop the repository's OpenMetadata stack alongside the sibling AutoOntology checkout. The script uses the private `.env` files, preserves named volumes, and does not stop unrelated containers. Set `AUTO_ONTOLOGY_DIR` only when AutoOntology is not the default sibling directory.
 
 A compose recreate can leave the server wedged: Docker reports "cannot stop
 container: ... tried to kill container, but did not receive an exit event" and
