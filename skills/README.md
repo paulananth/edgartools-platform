@@ -35,6 +35,7 @@ copies them instead: `edgar-warehouse skill install`.
 | Business domains, glossaries, assets and lineage in a catalog | [data-catalog](data-catalog/SKILL.md) |
 | Reading or writing the catalog on OpenMetadata | [openmetadata](openmetadata/SKILL.md) |
 | Setting up AutoOntology above MDM, RDM, and Silver | [auto-ontology](auto-ontology/SKILL.md) |
+| Building business-question interfaces for one or more data products | [auto-ontology-product-query](auto-ontology-product-query/SKILL.md) |
 | **General teaching, not this platform's rules** | |
 | What pipelines, warehouses and data engineering are | [data-engineering-fundamentals](data-engineering-fundamentals/SKILL.md) |
 | Analysing a data set end to end | [data-scientist](data-scientist/SKILL.md) |
