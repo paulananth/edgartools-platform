@@ -237,6 +237,11 @@ Learned the hard way; each is a standing operator rule.
   agents. The skill's own template lists two; add the GoF agent, briefed with
   `/gof-refactor-reviewer`'s instructions on the same diff, and report it under
   its own `## GoF` heading. The pre-code consult does not replace it.
+- **Each review agent's model follows the diff's risk** (operator, 2026-11-14: "can we make all reviewes use
+  haiku if risky use sonnet"): the agent `risky-reviewer` (Sonnet) when the diff touches the Rust engine
+  (`crates/`), merging or mastering code, a store schema or migration, a merge rule, an identifier normalizer
+  or an RDM pin, credentials, connections or deploy code (`infra/`), or changes more than about 300 lines;
+  otherwise the agent `reviewer` (Haiku). Both are in `.claude/agents/`; say which one ran in the review.
 
 ## Shared local data (operator, 2026-10-16)
 
