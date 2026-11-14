@@ -107,6 +107,16 @@ automatic_rules:
   rule_id: nport-fund-lei
   rule_version: 2026-10-15.1
   verdict: bind
+- kind: fund_structure
+  family: binding
+  rule_id: ncen-fund-series
+  rule_version: 2026-11-14.series-id
+  verdict: bind
+- kind: fund_structure
+  family: binding
+  rule_id: ncen-fund-lei
+  rule_version: 2026-11-14.series-lei
+  verdict: bind
 - kind: security
   family: binding
   rule_id: openfigi-security-cusip

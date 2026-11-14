@@ -37,6 +37,11 @@ sources:
     target: mastering
     requires: []
     after: [sec.nport.registrant]
+  # N-CEN's fund series join the Funds N-PORT made, and create the rest.
+  sec.ncen.fund:
+    target: mastering
+    requires: []
+    after: [sec.nport.fund]
   # OpenFIGI first, one load (ticket 138; operator, 2026-10-25: "there
   # should be one processing with all the identifier and this is the first
   # load"): `mastering` reads the CUSIP and the ISIN answers together, every

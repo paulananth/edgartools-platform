@@ -3,11 +3,15 @@
 # (rules/sources/sec.nport.fund). Ruling it rests on (operator, 2026-10-14,
 # N-PORT findings q17): "Series id and LEI join (Recommended)": the Fund is
 # kind fund_structure with the fund profile, joined by its SEC series id and
-# its LEI.
-version: fund_structure-2026-10-25.one-value-per-identifier
+# its LEI. SEC Form N-CEN's series (rules/sources/sec.ncen.fund) join the
+# same way (operator, 2026-11-14 09:31 ET: "yes, use skills, rules, and
+# generic scripts, follow existing architecture"); N-PORT, filed monthly, wins
+# a field over N-CEN, filed once a year.
+version: fund_structure-2026-11-14.ncen-series
 defaults:
   sources:
   - sec.nport.fund.v1
+  - sec.ncen.fund.v1
   allow_unknown_effective: true
 rules:
 # The SEC series id: a record joins the one Fund that holds it, or creates it.
@@ -43,11 +47,43 @@ rules:
   - primitive: identifier_cardinality@1
     args:
       namespace: lei
+# N-CEN's series join by the same two identifiers.
+- rule_id: ncen-fund-series
+  version: 2026-11-14.series-id
+  family: binding
+  source: sec.ncen.fund.v1
+  applies_to_verdict: fund_structure
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: sec_series_id
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: sec_series_id
+- rule_id: ncen-fund-lei
+  version: 2026-11-14.series-lei
+  family: binding
+  source: sec.ncen.fund.v1
+  applies_to_verdict: fund_structure
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: lei
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: lei
 identifiers:
   sec_series_id:
     authority: SEC/EDGAR
     sources:
     - sec.nport.fund.v1
+    - sec.ncen.fund.v1
     # rules/identifiers/sec_series_id.yaml: S and nine digits, upper-cased.
     normalizer: normalize_identifier@sec_series_id-v1
     claim:
@@ -63,6 +99,7 @@ identifiers:
     authority: GLEIF (ISO 17442)
     sources:
     - sec.nport.fund.v1
+    - sec.ncen.fund.v1
     normalizer: normalize_identifier@lei-v1
     claim:
       forward: 1
