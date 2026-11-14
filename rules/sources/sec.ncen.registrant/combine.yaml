@@ -1,0 +1,24 @@
+pass:
+  readings: {registrants: {all: source.yaml}}
+# Each registrant row with its CIK's latest row whole (`latest`: name, LEI,
+# file number and address from one filing, so they never mix two), latest by
+# filing date, then accession number, and its first filing date in the quarter
+# (`first_filed_at`), from which its fund role starts. Every row of one CIK
+# carries the same values, so the Merge Stage's `distinct_on` keeps any one.
+# Pin canonical JSON of this file as the source.combine contract.
+execution:
+  profile: source.combine
+combine:
+  max_rows: 1000000
+  groups:
+    latest_row: {source: registrants, table: filing, key: cik, value: ., mode: last, order_by: [filed_at, accession_number], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    first_filed: {source: registrants, table: filing, key: cik, value: filed_at, mode: first, order_by: [filed_at, accession_number], distinct: false, skip_null_values: true, checks: {}, where: {}}
+  tables:
+    filing:
+      source: registrants
+      table: filing
+      checks: {}
+      where: {}
+      joins:
+        latest: {group: latest_row, key: cik, on_missing: error, replace: false}
+        first_filed_at: {group: first_filed, key: cik, on_missing: error, replace: false}

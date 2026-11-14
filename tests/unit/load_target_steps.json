@@ -1948,6 +1948,152 @@
    }
   ]
  },
+ "sec.ncen.registrant/mastering": {
+  "checks": [
+   "manifest.hash",
+   "work.accounting",
+   "journal.delivered"
+  ],
+  "steps": [
+   {
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "input": {
+     "contract": "sec.nport.registrant/submissions.yaml"
+    },
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "name": "submissions",
+    "operation": "source.read",
+    "requires": [],
+    "units": {
+     "each": "file"
+    }
+   },
+   {
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "input": {
+     "lookups": {
+      "filed": {
+       "column": "accession_number",
+       "from": "submissions",
+       "max_input_bytes": 67108864,
+       "max_input_rows": 1000000,
+       "table": "filed",
+       "value_column": "filed"
+      }
+     }
+    },
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "name": "registrant_rows",
+    "operation": "source.read",
+    "requires": [
+     "submissions"
+    ],
+    "units": {
+     "each": "file"
+    }
+   },
+   {
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.combined"
+    ],
+    "input": {
+     "contract": "combine.yaml",
+     "readings": {
+      "registrants": {
+       "all": "registrant_rows"
+      }
+     }
+    },
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "name": "combine",
+    "operation": "source.combine",
+    "requires": [
+     "registrant_rows"
+    ]
+   },
+   {
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "mdm.prepared"
+    ],
+    "input": {
+     "keys": {
+      "dataset": "sec.ncen.registrant.v1",
+      "distinct_on": [
+       "cik"
+      ],
+      "table": "filing"
+     },
+     "readings": {
+      "combine": {
+       "all": "combine"
+      }
+     }
+    },
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "name": "prepare",
+    "operation": "mdm.prepare",
+    "requires": [
+     "combine"
+    ]
+   },
+   {
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "mdm.committed"
+    ],
+    "key": "{batch_id}",
+    "leases": [
+     "mdm:consumer:{consumer}"
+    ],
+    "name": "merge",
+    "operation": "mastering.merge",
+    "requires": [
+     "prepare"
+    ]
+   },
+   {
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "journal.recorded"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "name": "processed",
+    "operation": "journal.record",
+    "requires": [
+     "merge"
+    ]
+   }
+  ]
+ },
  "sec.nport.fund/mastering": {
   "checks": [
    "manifest.hash",

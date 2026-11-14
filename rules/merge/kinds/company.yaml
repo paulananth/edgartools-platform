@@ -1,7 +1,7 @@
 # Company merge rules: source priority, field rules, the classification rule and
 # the declared SEC-to-GLEIF name rules. Rules are data (operator, 2026-09-24):
 # adding a kind is a new file here, not an edit to a source.
-version: company-2026-11-14.ncen-advisers
+version: company-2026-11-14.ncen-registrants
 defaults:
   # Shared fields (operator, 2026-09-24): `name` and `address` are one field
   # each across sources, SEC first. SEC fills `address` from its business
@@ -25,6 +25,8 @@ defaults:
   # N-CEN's advisers (ticket 234), last: Form ADV, the adviser's own filing,
   # wins every field N-CEN fills.
   - sec.ncen.adviser.v1
+  # N-CEN's registrants (ticket 234, part 4), last: N-PORT's monthly filing wins over N-CEN's yearly one.
+  - sec.ncen.registrant.v1
   allow_unknown_effective: true
 rules:
 - rule_id: sec-company-candidate
@@ -185,6 +187,25 @@ rules:
   - primitive: identifier_cardinality@1
     args:
       namespace: lei
+# An N-CEN registrant (ticket 234, part 4) joins the one Company holding its CIK, or creates it (the registrants that
+# file no N-PORT: closed-end funds, unit trusts). Its stated LEI is lookup only, as an N-CEN adviser's is (operator,
+# 2026-10-09: "Keep LEI, lookup only (Recommended)"): in 2026q1, 25 LEIs are each filed by several registrants (120
+# CIKs, up to 23 on one, a sponsor's LEI), and joining by it merged separate trusts on a disposable store.
+- rule_id: ncen-registrant-cik
+  version: 2026-11-14.cik
+  family: binding
+  source: sec.ncen.registrant.v1
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: cik
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: cik
 # The cascade (company mastering ticket 21; operator, 2026-09-27: "name and
 # address first ... then reduce the fields gradually"). One rule per pass, in
 # order; the Name Count runs the passes once over both whole sources, one to
@@ -548,6 +569,7 @@ identifiers:
     sources:
     - sec.company.v1
     - sec.nport.registrant.v2
+    - sec.ncen.registrant.v1
     # Form ADV filings list the adviser's own CIKs (Item 1.D(3); operator, 2026-11-08: "Both"). They
     # find a Company and never create one (iapd-adv-cik waits), so the creating sources stay SEC's.
     - iapd.adv.filings.v2
