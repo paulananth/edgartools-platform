@@ -31,7 +31,7 @@ def calculate(store, policy: dict, as_of: str, stored: dict) -> tuple[list[dict]
     of the last run by id, so a link keeps a start its current record no longer shows."""
     claims = current_claims(store.linked_records(), as_of, set())
     bound = store.bound(_ends(claims))
-    masters = store.master_bodies(sorted(set(bound.values())))
+    masters = store.master_states(sorted(set(bound.values())))
     store.commit()
     state = SimpleNamespace(bindings=bound, canonical={entity: entity for entity in bound.values()})
     edges, reviews = relationships.project(claims, state, masters, as_of,

@@ -392,9 +392,20 @@ class Store:
             rows += self.rows(page.format("changed_file>%s"), [since, limit - len(rows)])
         return rows
 
-    def linked_records(self) -> list[dict]:
-        return [json.loads(body) for (body,) in self.rows(
-            "select body from mastering_record where body like %s", ['%"relationships":[{%'])]
+    def linked_records(self) -> str:
+        """Every record that states a link, as one JSON array of the stored text: Rust reads it, Python never parses it."""
+        return "[" + ",".join(body for (body,) in self.rows(
+            "select body from mastering_record where body like %s", ['%"relationships":[{%'])) + "]"
+
+    def master_states(self, entities) -> dict:
+        """What a link reads of each golden record (its kind, status and profiles), a block at a time."""
+        found = {}
+        for block in blocks(entities):
+            for entity, body in self.rows(
+                    f"select entity_id,body from mastering_master where entity_id in ({marks(block)})", block):
+                parsed = json.loads(body)
+                found[entity] = {field: parsed[field] for field in ("kind", "status", "profiles") if field in parsed}
+        return found
 
     def master_bodies(self, entities) -> dict:
         found = {}
