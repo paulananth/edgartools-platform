@@ -92,6 +92,15 @@ class TestNormalizers:
             normalizer("normalize_identifier@sec-cik-v2", DOC)("0000320193") == "0000320193"
         )
 
+    def test_a_crd_keeps_every_digit_in_version_1(self):
+        assert normalizer("normalize_identifier@crd-v1", DOC)("000105958") == "000105958"
+
+    def test_a_crd_written_with_leading_zeros_matches_one_written_without(self):
+        """N-CEN writes a CRD as nine digits with leading zeros, Form ADV without them."""
+        crd = normalizer("normalize_identifier@crd-v2", DOC)
+        assert crd("000105958") == crd("105958") == "105958"
+        assert crd("8-129") == "8129"
+
     def test_an_lei_is_upper_cased_and_stripped(self):
         assert (
             normalizer("normalize_identifier@lei-v1", DOC)("hwupkr0mpou8fgxbt394")
