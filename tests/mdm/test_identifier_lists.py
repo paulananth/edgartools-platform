@@ -352,6 +352,7 @@ def masters(reverse, kind="security"):
         "policy": {"kinds": {kind: {"version": "t", "defaults": {"sources": []},
                                     "identifiers": {"figi": {**CONTRACT, "claim": {"forward": 1, "reverse": reverse}}}}}},
         "overrides": [], "decisions": [], "as_of": AS_OF, "policy_digest": "t", "profile_kinds": {},
+        "normalizers": NORMALIZERS,
     })
 
 
@@ -364,6 +365,28 @@ def test_a_master_holds_any_number_of_values_when_the_contract_sets_no_reverse_l
 
 def test_a_master_over_its_reverse_limit_goes_to_review():
     projected, reviews, _ = masters(1)
+    assert projected[HELD]["status"] == "review"
+    assert [r["reason"] for r in reviews] == ["authoritative_identifier_conflict"]
+
+
+def test_one_value_filed_two_ways_counts_once_against_the_reverse_limit():
+    """N-CEN writes a CRD with leading zeros, Form ADV without them (invented values): the one master holding
+    both is under a limit of one value, since `crd-v2` compares them as one; another CRD is still a second."""
+    def held(*crds):
+        claims = {f"s{n}": {"kind": "company", "identifiers": {"crd": crd}} for n, crd in enumerate(crds)}
+        return prepare_master_records({
+            "identities": {HELD: {"entity_id": HELD, "kind": "company"}}, "canonical": {HELD: HELD},
+            "bindings": {subject: HELD for subject in claims}, "quarantined": {}, "claims": claims,
+            "policy": {"kinds": {"company": {"version": "t", "defaults": {"sources": []}, "identifiers": {"crd": {
+                "normalizer": "normalize_identifier@crd-v2", "claim": {"forward": 1, "reverse": 1}}}}}},
+            "overrides": [], "decisions": [], "as_of": AS_OF, "policy_digest": "t", "profile_kinds": {},
+            "normalizers": NORMALIZERS,
+        })
+
+    projected, reviews, _ = held("000123456", "123456")
+    assert projected[HELD]["status"] == "accepted" and reviews == []
+    assert projected[HELD]["identifiers"] == {"crd": ["000123456", "123456"]}
+    projected, reviews, _ = held("000123456", "654321")
     assert projected[HELD]["status"] == "review"
     assert [r["reason"] for r in reviews] == ["authoritative_identifier_conflict"]
 

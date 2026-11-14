@@ -54,3 +54,24 @@ def test_preparation_retains_the_existing_input_time_format_contract():
     expected = current_claims([reading], "2026-10-19T00:00:00+00:00", set())
     assert current_claims([reading], "20261019T000000+0000", set()) == expected
     assert current_claims([reading], "2026-10-19 00:00+00:00", set()) == expected
+
+
+def test_a_role_a_later_revision_restates_keeps_its_earliest_start():
+    """Operator, 2026-11-14: "Yes" (a role restated by later records keeps its earliest known start). Each
+    quarter's record states the adviser role from that quarter's filing (invented values)."""
+    def quarter(revision, start, profiles=None):
+        return assertion(
+            source_code="example.records", record_key="one", publication_key=f"q{revision}", revision=revision,
+            effective_at=start, kind="company", fields={},
+            profiles=profiles if profiles is not None else [
+                {"role": "adviser", "authority": "Invented", "registration": "1", "valid_from": start,
+                 "fields": {"note": f"q{revision}"}}])
+    first, later = quarter(1, "2025-12-01T00:00:00+00:00"), quarter(2, "2026-07-14T00:00:00+00:00")
+    record = current_claims([later, first], "2026-11-14T00:00:00+00:00", set())[first["subject"]]
+    [role] = record["profiles"]
+    assert role["valid_from"] == "2025-12-01T00:00:00+00:00"
+    # Its fields are the latest revision's, under the role as it now reads.
+    assert record["profile_fields"][profile_key(role)]["note"]["value"] == "q2"
+    # A role the latest revision no longer states is not brought back.
+    dropped = quarter(3, "2026-10-01T00:00:00+00:00", profiles=[])
+    assert current_claims([dropped, later, first], "2026-11-14T00:00:00+00:00", set())[first["subject"]]["profiles"] == []

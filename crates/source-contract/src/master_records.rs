@@ -23,6 +23,10 @@ struct Command {
     /// 138 part A2b): another master holds them.
     #[serde(default)]
     withheld: BTreeMap<String, BTreeSet<values::Withheld>>,
+    /// The declared identifier types' normalizers (name to upper-casing), so a
+    /// reverse limit counts values as the matching rules compare them.
+    #[serde(default)]
+    normalizers: IndexMap<String, bool>,
 }
 
 fn decision_changes_record(
@@ -63,6 +67,44 @@ fn read_reverse_limit(policy: &Object, kind: &str, namespace: &str) -> Result<us
         Some(raw) if raw.get() == "null" => Ok(usize::MAX),
         Some(raw) => values::read_value(raw),
     }
+}
+
+/// How many distinct values a master holds in a namespace as its Identifier
+/// Contract's normalizer compares them; as filed when the contract names none.
+fn count_compared(
+    policy: &Object,
+    kind: &str,
+    namespace: &str,
+    candidates: &BTreeSet<String>,
+    declared: &IndexMap<String, bool>,
+) -> Result<usize, String> {
+    let kinds = values::read_object(policy, "kinds")?;
+    let Some(block) = kinds.get(kind) else {
+        return Ok(candidates.len());
+    };
+    let block: Object = values::read_value(block)?;
+    let Some(contract) = values::read_object(&block, "identifiers")?.get(namespace).cloned() else {
+        return Ok(candidates.len());
+    };
+    let contract: Object = values::read_value(&contract)?;
+    if !values::has_value(&contract, "normalizer") {
+        return Ok(candidates.len());
+    }
+    let name = values::read_text(&contract, "normalizer")?;
+    let aliases = Object::from([(
+        "normalizers".into(),
+        values::write_value(&values::read_object(&block, "normalizers")?)?,
+    )]);
+    let mut compared = BTreeSet::new();
+    for value in candidates {
+        compared.insert(crate::record_tests::normalize_value(
+            &name,
+            &values::write_value(value)?,
+            &aliases,
+            declared,
+        )?);
+    }
+    Ok(compared.len())
 }
 
 /// Keep one row per detail key, with the approved source order and all contributors.
@@ -156,6 +198,7 @@ pub fn prepare_master_records(raw: &str) -> Result<String, String> {
         policy_digest,
         withheld,
         profile_kinds,
+        normalizers,
     } = command;
     let mut groups: IndexMap<String, Vec<String>> = IndexMap::new();
     let mut flagged = BTreeSet::new();
@@ -222,8 +265,14 @@ pub fn prepare_master_records(raw: &str) -> Result<String, String> {
         }
         for (namespace, candidates) in &identifiers {
             // The Identifier Contract's reverse claim: how many values of the
-            // namespace one master may hold (none stated: any number).
-            if candidates.len() <= read_reverse_limit(&policy, &kind, namespace)? {
+            // namespace one master may hold (none stated: any number), counted
+            // as its normalizer compares them (one CRD filed with and without
+            // leading zeros is one value), while each is kept as filed.
+            let limit = read_reverse_limit(&policy, &kind, namespace)?;
+            if candidates.len() <= limit {
+                continue;
+            }
+            if count_compared(&policy, &kind, namespace, candidates, &normalizers)? <= limit {
                 continue;
             }
             conflicts.push(Object::from([
