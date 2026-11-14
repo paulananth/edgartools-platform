@@ -408,8 +408,8 @@ def test_a_link_waits_for_its_other_end_and_keeps_its_earliest_start(database_fa
         assert [r["valid_from"] for r in links.rows_of(later)] == [row["valid_from"]]
 
 
-def test_a_link_reads_only_the_kind_and_status_of_its_golden_records(database_factory, monkeypatch):
-    """The links build holds every link end's golden record at once, so it reads two fields of each, never the body."""
+def test_a_link_reads_only_the_kind_status_and_profiles_of_its_golden_records(database_factory, monkeypatch):
+    """The links build holds every link end's golden record at once, so it reads the three fields Rust uses, never the body."""
     custodian = "iapd.adv.custodians.v1"
     link = {"type": "ISSUED_BY", "target_subject": subject_key(custodian, "issuer"), "scope": "invented",
             "valid_from": "2026-03-01T00:00:00+00:00", "valid_to": None, "valid_from_basis": "observed", "properties": {}}
@@ -421,7 +421,7 @@ def test_a_link_reads_only_the_kind_and_status_of_its_golden_records(database_fa
         merge.merge_file(db, COMPANY, [record(custodian, "issuer", lei="529900T8BM49AURSDO55")])
         states = db.master_states(list(live(db)))
         assert sorted(state["kind"] for state in states.values()) == ["company", "security"]
-        assert all(set(state) <= {"kind", "status"} for state in states.values())
+        assert all(set(state) <= {"kind", "status", "profiles"} for state in states.values())
 
         def whole(entities):
             raise AssertionError("the links build read whole golden records")

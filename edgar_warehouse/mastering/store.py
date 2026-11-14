@@ -398,13 +398,13 @@ class Store:
             "select body from mastering_record where body like %s", ['%"relationships":[{%'])) + "]"
 
     def master_states(self, entities) -> dict:
-        """The kind and status of each golden record, read a block at a time: a link needs no more of it."""
+        """What a link reads of each golden record (its kind, status and profiles), a block at a time."""
         found = {}
         for block in blocks(entities):
             for entity, body in self.rows(
                     f"select entity_id,body from mastering_master where entity_id in ({marks(block)})", block):
                 parsed = json.loads(body)
-                found[entity] = {field: parsed[field] for field in ("kind", "status") if field in parsed}
+                found[entity] = {field: parsed[field] for field in ("kind", "status", "profiles") if field in parsed}
         return found
 
     def master_bodies(self, entities) -> dict:
