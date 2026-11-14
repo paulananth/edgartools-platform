@@ -509,3 +509,19 @@ def test_a_renamed_set_or_moved_input_is_profiled_again(tmp_path, capsys):
     assert "reused" not in capsys.readouterr().out
     (out / "findings.yaml").write_text("")  # an empty findings file is no findings
     assert profile_data.main([*argv[:2], "renamed", "--input", f"set={moved}", "--out", str(out)]) == 0
+
+
+def test_two_inputs_holding_tables_of_one_name_are_both_profiled(tmp_path):
+    """Two deliveries of one data set (a quarter each) hold the same member names; each is its own part."""
+    import zipfile
+    for quarter, rows in (("q1", "1,a\n2,b\n"), ("q2", "3,c\n")):
+        with zipfile.ZipFile(tmp_path / f"{quarter}.zip", "w") as archive:
+            archive.writestr("SUBMISSION.tsv", "ID,NAME\n" + rows)
+            archive.writestr("FUND.tsv", "ID,FUND\n" + rows)
+    out = tmp_path / "out"
+    assert profile_data.main(["run", "--name", "two quarters", "--input", f"q1={tmp_path / 'q1.zip'}",
+                              "--input", f"q2={tmp_path / 'q2.zip'}", "--out", str(out)]) == 0
+    findings = yaml.safe_load((out / "findings.yaml").read_text())
+    assert not findings["dataset"].get("not_read")
+    rows = {p["part"]: p["rows"] for p in findings["parts"] if "." not in p["part"]}
+    assert sorted(rows.values()) == [1, 1, 2, 2] and len(rows) == 4

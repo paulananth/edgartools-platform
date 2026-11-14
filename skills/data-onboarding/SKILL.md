@@ -208,7 +208,9 @@ From the approved findings, list one onboarding per part, in this order
 Metadata parts go to Bookkeeping, not here. Show the list to the operator,
 then take the first part through **identify**.
 
-Write the approved findings' public summary into the repo, so the Data
+When a part lands in silver (not before: the summary declares every part a
+silver table, landed or not, and two parts may name one table), write the
+approved findings' public summary into the repo, so the Data
 Catalog shows every part's silver fields, its data quality rules and the code
 sets (names and counts only, never a value from the data):
 
@@ -267,6 +269,11 @@ This is the same as **init**, run again after a schema change. Rerunning it chan
 4. **Names.** When the repo does not fix a name, derive it from the names
    it already has, and never invent a new pattern:
    - one folder per source, even when one reader reads several files;
+   - a data set whose tables carry another source's columns (a sibling
+     data set of the same provider) reads them through that source's own
+     readings, named in `pass.lookups` as `from: <source>/<file>.yaml`, never
+     a copy; a step (`reduce`, `combine`) names files of its own folder, so
+     only those are copied;
    - one source code per file or record type, `<source>.<record type>.v1`;
    - a second kind from the same files gets its own folder named for the
      kind, the way the first one is, and its code is `<folder>.v1`;
@@ -353,6 +360,12 @@ does not run or activate a pipeline.
 
 ### check and load
 
+A data set published as one file per period restates the same records in
+each: load the periods oldest first with `--revision` 0, 1, 2 and so on
+([data-operations](../data-operations/SKILL.md), "A reload whose inputs
+changed"); at one revision the Stage refuses the second period as
+contradictory publications.
+
 Follow [LOAD.md](LOAD.md): check the changed source with
 `rules check --source <source>` and run owner-specific tests for changed
 Source Extracts. The local guard checks changed merge and pipeline documents;
@@ -415,3 +428,16 @@ These name today's sources only as examples; nothing above depends on them.
   Company's are layers in `tests/mdm/policy_layers.py` (`LAYERS`, newest
   first). Running only the tests that load the rules misses them: CI
   then fails on the pinned digests.
+- **What a new source moves:** the source order and the per-source lists in
+  `tests/unit/test_source_sequence.py` and the installed-bundle test
+  (`tests/engine/test_data_skill_bundle_postgres.py`), the entity-type count in
+  `tests/unit/test_entity_types.py`, the target's recorded steps in
+  `tests/unit/load_target_steps.json`, and, when it adds merge rules, the whole
+  policy's digest in `tests/integration/fixtures/company-mastering-records.json`
+  (`digest(files.policy())`, `edgar_warehouse.mdm.store`) and the "Who wins" row of
+  every Mapping Document of the kind's sources.
+- **One identifier, two paddings:** when two sources write one identifier with
+  and without leading zeros (a CRD number), the declared grammar
+  (`rules/identifiers/`) cannot set the zeros aside; a normalizer version that
+  does (`normalize_identifier@crd-v2`) is code, a ticket and the operator's word.
+  The value stays stored as filed.

@@ -689,6 +689,9 @@ def register(con: duckdb.DuckDBPyConnection, name: str, location: str, work: Pat
         tables, aside = found
         for index, table in enumerate(tables):
             _decode(table, work, index)
+            # Two deliveries of one data set (a quarter each) hold the same member names.
+            if _exists(con, table.name):
+                table.name = re.sub(r"[^0-9A-Za-z]+", "_", f"{name}_{table.name}").strip("_")
         return _tabular(con, name, tables, limit, sample, seed, str(path)) + aside
     fmt, records, wrappers = _record_reader(path)
     size = size_of(path)

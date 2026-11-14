@@ -27,5 +27,11 @@ series → its adviser (company). The onboarding log is `.scratch/onboarding/sec
 - [ ] Part 3, share classes: decide the issuer of a share class while N-PORT's issuer claim names the umbrella trust (ruling 2026-10-17)
 - [ ] Part 3, share classes: `security` by SEC class id, linked to their series
 - [ ] Part 4, registrant trusts: `company` by CIK, and the series → trust link for series N-PORT does not file
-- [ ] Profiler: several inputs whose zips hold the same member names collide (`Table with name ... already exists`); its own ticket
-- [ ] Learning → skill
+- [x] Profiler: several inputs whose zips hold the same member names collided (`Table with name ... already exists`); a table whose name an earlier input took now gets its input's name in front (`test_two_inputs_holding_tables_of_one_name_are_both_profiled` failed before with that error) (2026-11-14 10:28 ET)
+- [x] Learning → skill, so far (2026-11-14 10:28 ET):
+  - data-profiling: a data set published per period is profiled once and the other periods compared;
+    read drift against the header lines first; `catalog` waits for a silver part.
+  - data-onboarding: a sibling data set reads through the other source's readings (`from:`); periods load
+    with rising `--revision`; what a new source moves in the tests; one identifier with two paddings
+    needs a normalizer version.
+- [ ] Learning → skill for parts 2 to 4
