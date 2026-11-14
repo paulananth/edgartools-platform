@@ -59,7 +59,7 @@ The worker renews its lease while parsing. A successful write is only a
 candidate; verification recomputes the configured source extract and compares the
 complete destination bytes. Bookkeeping independently checks the input hash,
 output receipt, lease and report bindings before admitting completion.
-The runtime digest includes the worker, protocol client, Rules loader, facade,
+The runtime digest includes the worker, Rules loader, facade,
 value registry and loaded native binary. The YAML itself is pinned in the input.
 
 For qualification only, `file://` references use the same immutable artifact

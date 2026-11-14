@@ -6,7 +6,7 @@ import pytest
 
 from edgar_warehouse.bookkeeping.clean import destinations
 from edgar_warehouse.mdm import binding, cli, connections, execution
-from edgar_warehouse.workers import mastering_merge
+from edgar_warehouse.workers import __main__ as runner, control, mastering_merge
 from edgar_warehouse.workers.__main__ import runtime
 
 
@@ -37,3 +37,19 @@ def test_execution_connection_and_matching_code_change_the_merge_runtime(monkeyp
     monkeypatch.setattr(Path, "read_bytes", execution_edit)
 
     assert runtime(mastering_merge) != before
+
+
+@pytest.mark.parametrize("module", [runner, control])
+def test_a_change_to_the_protocol_client_does_not_change_the_merge_runtime(monkeypatch, module):
+    # A run carries on across a lease or renewal fix: only the step's own code decides what it writes.
+    before = runtime(mastering_merge)
+    changed_file = Path(module.__file__)
+    read_bytes = Path.read_bytes
+
+    def client_edit(path):
+        data = read_bytes(path)
+        return data + b"\n# Protocol client changed.\n" if path == changed_file else data
+
+    monkeypatch.setattr(Path, "read_bytes", client_edit)
+
+    assert runtime(mastering_merge) == before
