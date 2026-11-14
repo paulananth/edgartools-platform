@@ -1,0 +1,51 @@
+pass:
+  units: {each: file}
+# Each adviser row of N-CEN's ADVISER.tsv (Item C.11: the fund's investment
+# advisers and sub-advisers, one row per fund and adviser): the filing's row id
+# it belongs to, the adviser's CRD number as filed, its capacity as N-CEN's
+# adviser type names it (`advisor` or `subadvisor`, the word "Terminated" set
+# aside) and whether it is held (false for a "Terminated" type). Profiling, four
+# quarters: 23,859 rows, every one with a CRD; 14,283 Advisor, 9,049
+# Subadvisor, 92 Terminated Advisor, 435 Terminated Subadvisor.
+execution: {profile: source.read, workers: 1, max_artifacts: 1}
+read:
+  format: json
+  limits:
+    max_bytes: 1048576
+    max_records: 1
+  tables:
+    adviser:
+      each: .
+      select: {test: {path: CRD_NUM, kind: truthy}}
+      columns:
+        fund_id: {text: {path: FUND_ID}}
+        crd: {text: {path: CRD_NUM}}
+        capacity:
+          text:
+            path: ADVISER_TYPE
+            transforms:
+            - {regex_replace: {pattern: '^Terminated ', with: ''}}
+            - tokens: {Advisor: advisor, Subadvisor: subadvisor}
+        # Held unless the type starts "Terminated": the type equals itself with
+        # that word set aside.
+        held:
+          equal:
+            left: {text: {path: ADVISER_TYPE}}
+            right: {text: {path: ADVISER_TYPE, transforms: [{regex_replace: {pattern: '^Terminated ', with: ''}}]}}
+  stream:
+    framing: delimited
+    delimited: {format: tsv, encoding: utf-8}
+    container: zip
+    member: ADVISER.tsv
+    # Profiling, 2026q1: 12,268 rows; four quarters 23,859.
+    max_input_bytes: 1000000000
+    max_bytes: 100000000
+    max_record: 1048576
+    max_records: 1000000
+    max_depth: 64
+    ordinal_context: null
+    partition_bytes: 8388608
+    partition_records: 100000
+    max_partitions: 1000
+    max_spool_bytes: 1073741824
+    max_output_rows: 1000000

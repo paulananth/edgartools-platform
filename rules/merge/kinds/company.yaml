@@ -1,7 +1,7 @@
 # Company merge rules: source priority, field rules, the classification rule and
 # the declared SEC-to-GLEIF name rules. Rules are data (operator, 2026-09-24):
 # adding a kind is a new file here, not an edit to a source.
-version: company-2026-11-14.crd-without-leading-zeros
+version: company-2026-11-14.ncen-advisers
 defaults:
   # Shared fields (operator, 2026-09-24): `name` and `address` are one field
   # each across sources, SEC first. SEC fills `address` from its business
@@ -22,6 +22,9 @@ defaults:
   # fills wins over N-PORT's (a merge-rule change, approved with its Proving
   # Run under the operator's standing words, 2026-10-15).
   - sec.nport.registrant.v2
+  # N-CEN's advisers (ticket 234), last: Form ADV, the adviser's own filing,
+  # wins every field N-CEN fills.
+  - sec.ncen.adviser.v1
   allow_unknown_effective: true
 rules:
 - rule_id: sec-company-candidate
@@ -250,6 +253,25 @@ rules:
   version: 2026-11-08.filings-v2
   family: binding
   source: iapd.adv.filings.v2
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: crd
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: crd
+# An adviser N-CEN names joins the Company holding its CRD (Form ADV's
+# adviser), or creates it (ticket 234; operator, 2026-11-14: "we need to model
+# reality as close as possible so yes and yes"); crd-v2 sets N-CEN's leading
+# zeros aside.
+- rule_id: ncen-adviser-crd
+  version: 2026-11-14.crd
+  family: binding
+  source: sec.ncen.adviser.v1
   applies_to_verdict: company
   emits:
   - bind
@@ -546,6 +568,7 @@ identifiers:
     authority: FINRA Central Registration Depository
     sources:
     - iapd.adv.filings.v2
+    - sec.ncen.adviser.v1
     normalizer: normalize_identifier@crd-v2
     claim:
       forward: 1
