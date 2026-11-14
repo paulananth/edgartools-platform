@@ -330,10 +330,17 @@ def apply(block: dict, fields: dict, matching: dict | None) -> dict:
     for item in block.get("checks") or []:
         # A check's path arguments are read from the record (a second value, such as a parent code).
         args = {k: _get(record, v) if k in _PATH_ARGS else v for k, v in (item.get("args") or {}).items()}
-        if CHECKS[item["test"]][0](_get(record, item["value"]), args):
+        passed = CHECKS[item["test"]][0](_get(record, item["value"]), args)
+        outcome = {"kind": item["test"], "failure_action": item["on_fail"],
+                   "rows_checked": 1, "rows_failed": int(not passed)}
+        result.setdefault("checks", {})[item["id"]] = outcome
+        if passed:
             continue
         if item["on_fail"] == "exception":
-            raise UnsupportedRecord(f"quality_{item['id']}", {"quality": {"check": item["id"], "version": block["version"]}})
+            raise UnsupportedRecord(f"quality_{item['id']}", {
+                "quality": {"check": item["id"], "version": block["version"],
+                            "checks": result["checks"]},
+            })
         key = "withheld" if item["on_fail"] == "withhold" else "flags"
         entry = item["value"] if key == "withheld" else item["id"]
         if entry not in result.setdefault(key, []):

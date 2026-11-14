@@ -7,7 +7,7 @@ not a separate hand-written API procedure.
 
 For each case and load, this publisher sends a result to
 `POST /api/v1/dataQuality/testCases/testCaseResults/{caseFQN}` with `timestamp`,
-`testCaseStatus` (`Success` or `Failed`), `result`, `passedRows`, `failedRows`,
+`testCaseStatus` (`Success`, `Failed` or `Aborted`), `result`, `passedRows`, `failedRows`,
 and `testResultValue`.
 The publisher reads the exact timestamp back with
 `GET /api/v1/dataQuality/testCases/testCaseResults/{caseFQN}?startTs={timestamp}&endTs={timestamp}`
@@ -23,6 +23,12 @@ adjacent millisecond history keys so each load remains distinct. Preserve each
 receipt's original observation time in the result detail; the API timestamp is
 the unique history key, not a replacement for that observation time. Read back
 each exact assigned key before reporting confirmation.
+
+For MDM aggregate results, use the immutable Bookkeeping run creation time as
+the per-run history key. Keep receipt observation times in the load correlation.
+This lets an incomplete `Aborted` result and a later completed result update
+the same timestamp through the bounded correction/readback path instead of
+creating a second result for one run.
 
 Treat an identical result at the same timestamp as an idempotent replay.
 Duplicate or mismatching history is an error to resolve, not a reason to POST
@@ -41,7 +47,7 @@ result row it holds. The response rows carry the server's own fields
 (`timestamp`, `testCaseStatus`, `result`, `passedRows`, `failedRows`,
 `testResultValue`); the `--results` file wants a different shape, so convert
 on the way out. Each entry under a case name carries `rows_checked`,
-`rows_failed`, `on_fail` (`flag` or `exception`) and `at` (an ISO 8601
+`rows_failed`, `on_fail` (`flag`, `withhold` or `exception`) and `at` (an ISO 8601
 instant), plus the optional `correlation`. `passedRows + failedRows` is
 `rows_checked`. The `result` text carries the load reference after `Load: `,
 which is the `correlation`; keep it, because it identifies the load. The
@@ -51,8 +57,12 @@ Remap a case whose source version moved to the plan's current name, then
 republish and require the readback to confirm every result.
 
 This API behavior does not establish that the platform supplied complete,
-verified evidence for the load. Preserve an incomplete run as unknown, and
-publish only results backed by admitted load evidence.
+verified evidence for the load. Publish only counts from Bookkeeping-admitted
+work units. For incomplete evidence, use `Aborted`, include explicit
+incomplete/unknown detail, and report only verified counts; never translate
+unknown into pass or fail. Require the same exact timestamped readback before
+confirming an `Aborted` result. If a check has no verified work-unit evidence,
+do not invent a zero-count result.
 
 ## What the shipped UI shows
 
@@ -72,9 +82,24 @@ Verified in the browser against OpenMetadata 2.0.7.
   (`Last Run Not run yet`, an empty chart, and "We couldn't find any test
   results from Last 30 days.").
 - The result status vocabulary is `Success`, `Failed` and `Aborted` only; the
-  server refuses `Pending` and `Unknown` with HTTP 400. A pending or
-  incomplete load therefore cannot be presented as confirmed publication, and
-  a publisher that refuses incomplete evidence leaves the published history
-  unchanged.
+  server refuses `Pending` and `Unknown` with HTTP 400. Publish incomplete
+  evidence as `Aborted`, with verified counts and explicit unknown detail.
 - The Test Cases list, the Test Suites list and a table's Data Quality panel
   show the last run or a summary only. None of them shows per-load history.
+
+## MDM quality evidence
+
+MDM checks remain in each source's registered quality contract. Every source
+adapter uses the shared evaluator and emits the same versioned evidence shape;
+do not add source-specific result adapters or entity branches. Counts use the
+configured check id and kind, distinguishing `flag`, `withhold`, and
+`exception`. An exception ends evaluation for that record at the failed check;
+later checks are unknown for that record. Missing or incomplete evidence is
+never a pass or fail.
+
+MDM evidence remains opt-in until recovery qualification and operator
+enablement in [Bookkeeping recovery](../../bookkeeping/RECOVERY.md) are
+complete. Bookkeeping admits immutable unit receipts. OpenMetadata is the
+single user-facing results surface; it receives only counts from verified
+work. Incomplete evidence is `Aborted` with explicit incomplete/unknown detail
+and requires exact timestamped readback.

@@ -24,7 +24,8 @@ def test_a_good_cusip_is_kept_as_the_cusip_and_not_flagged():
     record = read(GOOD)
     assert record["identifiers"] == {"cusip": GOOD} and record["provenance"]["record_key"] == GOOD
     assert "identifiers_set_aside" not in record["provenance"]
-    assert "cusip_check_digit" not in str(record["provenance"].get("quality"))
+    assert record["provenance"]["quality"]["checks"]["cusip_check_digit"]["rows_failed"] == 0
+    assert "cusip_check_digit" not in record["provenance"]["quality"]["flags"]
 
 
 def test_a_bad_cusip_is_kept_as_filed_and_flagged():

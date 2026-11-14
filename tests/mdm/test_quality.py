@@ -132,7 +132,32 @@ class TestTheBlock:
 
     def test_a_flag_only_counts(self):
         result = quality.apply(block(), {"street": "N/A"}, {})
-        assert result == {"version": "test-quality-v1", "flags": ["street_known"]}
+        assert result == {"version": "test-quality-v1", "checks": {
+            "street_known": {"kind": "placeholder@1", "failure_action": "flag",
+                             "rows_checked": 1, "rows_failed": 1}},
+            "flags": ["street_known"]}
+
+    def test_check_outcomes_keep_pass_fail_and_action_separate(self):
+        passed = quality.apply(block(), {"street": "1 MAIN ST"}, {})
+        assert passed["checks"]["street_known"] == {
+            "kind": "placeholder@1", "failure_action": "flag", "rows_checked": 1, "rows_failed": 0}
+        withheld = quality.apply(block(checks=[{
+            "id": "street_known", "test": "placeholder@1", "value": "fields.street",
+            "on_fail": "withhold", "args": {"values": ["NA"]},
+        }]), {"street": "N/A"}, {})
+        assert withheld["checks"]["street_known"]["failure_action"] == "withhold"
+        assert withheld["checks"]["street_known"]["rows_failed"] == 1
+
+    def test_exception_retains_its_failure_and_stops_later_check_evaluation(self):
+        rule = block(checks=[
+            {"id": "required", "test": "present@1", "value": "fields.name", "on_fail": "exception"},
+            {"id": "later", "test": "present@1", "value": "fields.other", "on_fail": "flag"},
+        ])
+        with pytest.raises(UnsupportedRecord) as caught:
+            quality.apply(rule, {"name": None}, {})
+        assert caught.value.detail["quality"]["checks"] == {
+            "required": {"kind": "present@1", "failure_action": "exception",
+                         "rows_checked": 1, "rows_failed": 1}}
 
     def test_a_reference_table_is_pinned_by_its_hash(self):
         item = {"id": "state_code_known", "test": "in_reference@1", "value": "fields.state",
@@ -246,7 +271,8 @@ class TestExceptions:
             register_dataset(None, SOURCE_CODE, contract)
 
     def test_every_repo_exception_is_non_blocking(self):
-        for name in ("sec.company", "gleif", "sec.submissions.person", "sec.ownership"):
+        for name in ("sec.company", "gleif", "sec.submissions.person", "sec.ownership",
+                     "iapd.adv", "sec.nport.security", "sec.thirteenf.securities"):
             for entry in files.source(name)["dataset_contracts"].values():
                 if "quality" in entry["contract"]:
                     assert quality.exception_reasons(entry["contract"]["quality"]) <= set(
@@ -284,7 +310,9 @@ def test_a_parent_code_must_agree_with_the_reference_hierarchy(monkeypatch):
             "on_fail": "flag", "args": {"table": "test-groups", "sha256": "a" * 64, "field": "fields.parent_group"}}
     block = {"version": "test-quality-v1", "checks": [item]}
     quality.check_quality(block)
-    assert quality.apply(block, {"group": "leaf", "parent_group": " mid "}, {}) == {"version": "test-quality-v1"}
+    assert quality.apply(block, {"group": "leaf", "parent_group": " mid "}, {}) == {
+        "version": "test-quality-v1", "checks": {"group_under_its_parent": {
+            "kind": "in_hierarchy@1", "failure_action": "flag", "rows_checked": 1, "rows_failed": 0}}}
     assert quality.apply(block, {"group": "LEAF", "parent_group": "TOP"}, {})["flags"] == ["group_under_its_parent"]
     assert quality.apply(block, {"group": "TOP", "parent_group": "MID"}, {})["flags"] == ["group_under_its_parent"]
     for fields in ({"group": "LEAF"}, {"group": "UNKNOWN", "parent_group": "TOP"}, {"parent_group": "TOP"},

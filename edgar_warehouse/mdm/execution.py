@@ -205,4 +205,32 @@ def batch_input(
             )
     if "record_count" in spec and len(result) + len(deferred) != spec["record_count"]:
         raise Conflict("Source member record_count mismatch")
-    return {"assertions": result, "deferred": deferred, "occurrences": occurrences}
+    quality = None
+    block = contract.get("quality")
+    if isinstance(block, dict):
+        records_expected = len(result) + len(deferred)
+        checks = {item["id"]: {"kind": item["test"], "failure_action": item["on_fail"],
+                               "rows_checked": 0, "rows_failed": 0}
+                  for item in block.get("checks") or []}
+        # The same shared quality contract runs for every source adapter. Outcomes
+        # travel in assertion/deferred provenance so a journal replay can reproduce
+        # the receipt from the immutable prepared member and its registered reading.
+        for record in [*result, *deferred]:
+            provenance = record.get("provenance") or {}
+            outcome_map = (provenance.get("quality") or {}).get("checks") or {}
+            for check_id, outcome in (outcome_map or {}).items():
+                if check_id not in checks or (outcome.get("kind"), outcome.get("failure_action")) != (
+                        checks[check_id]["kind"], checks[check_id]["failure_action"]):
+                    raise Conflict("Executed quality outcomes differ from the registered contract")
+                if (type(outcome.get("rows_checked")) is not int or type(outcome.get("rows_failed")) is not int
+                        or not 0 <= outcome["rows_failed"] <= outcome["rows_checked"] <= 2**63 - 1):
+                    raise Conflict("Executed quality counts exceed signed 64-bit storage")
+                checks[check_id]["rows_checked"] += outcome["rows_checked"]
+                checks[check_id]["rows_failed"] += outcome["rows_failed"]
+                if checks[check_id]["rows_checked"] > 2**63 - 1 or checks[check_id]["rows_failed"] > 2**63 - 1:
+                    raise Conflict("Executed quality counts exceed signed 64-bit storage")
+        for outcome in checks.values():
+            outcome["rows_expected"] = records_expected
+            outcome["rows_unknown"] = records_expected - outcome["rows_checked"]
+        quality = {"version": block["version"], "table": code, "checks": checks}
+    return {"assertions": result, "deferred": deferred, "occurrences": occurrences, "quality": quality}

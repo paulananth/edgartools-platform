@@ -21,4 +21,4 @@ def test_the_cohort_records_are_the_recorded_ones():
     import json
 
     actual = json.dumps(cohort()[2], sort_keys=True).encode()
-    assert hashlib.sha256(actual).hexdigest() == "d9988a72cc7525e4ea6559b7d0f9cf7652596de68c7c7bb4ca157df8991d37e1"
+    assert hashlib.sha256(actual).hexdigest() == "2ea20cf72fe8b1d96ccde80f380400a99f564476154b7cbbd657be1bcbbedec7"

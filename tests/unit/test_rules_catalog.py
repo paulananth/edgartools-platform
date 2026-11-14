@@ -1232,8 +1232,7 @@ def test_incomplete_bookkeeping_run_is_reported_pending_without_catalog_writes(c
         "status": "unknown", "run_id": "run-a", "run_complete": False,
         "units_expected": 2, "units_verified": 1, "units_unknown": 1,
         "unknown_units": [{"step": "silver", "work_unit_ref": "opaque-unknown"}],
-        "results": [{"run_id": "run-a", "step": "silver", "work_unit_ref": "opaque-known",
-                     "status": "passed"}]})
+        "results": []})
     monkeypatch.setattr(catalog, "connect", lambda *_args: pytest.fail("unknown evidence cannot contact OpenMetadata"))
 
     code = rules_cli._catalog(Namespace(action="publish", root="rules", draft_terms=False,
@@ -1260,8 +1259,8 @@ def test_incomplete_run_summary_says_not_complete_when_no_units_are_unknown(caps
     assert code == 1
     report = json.loads(capsys.readouterr().out)
     assert report["status"] == "pending"
-    assert "is not complete" in report["summary"]
-    assert "2/2 units verified and 0 unknown" in report["summary"]
+    assert "incomplete/unknown" in report["summary"]
+    assert "No zero-count result was fabricated" in report["summary"]
 
 
 def test_catalog_status_reports_retryable_bookkeeping_failure_on_target_pipeline(capsys, monkeypatch):
