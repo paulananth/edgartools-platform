@@ -315,9 +315,7 @@ def test_source_sequence_runs_from_installed_bundle_without_checkout(installed):
                   "--source", "sec.submissions.person", cwd=root)
     assert single.returncode == 0, single.stderr
     report = json.loads(single.stdout)
-    assert report["order"] == ["sec.company", "sec.nport.registrant", "sec.company-facts", "sec.registration", "sec.submissions.person",
-                               "sec.nport.fund", "sec.ncen.registrant", "iapd.adv", "sec.ownership", "openfigi", "sec.ncen.fund",
-                               "sec.ncen.adviser", "sec.thirteenf.securities", "sec.nport.security", "sec.thirteenf.filings", "sec.ncen.class"] == ["sec.submissions.person"]
+    assert report["order"] == ["sec.submissions.person"]
     assert set(report["sources"]) == {"sec.submissions.person"}
     assert report["runtime_readiness"] == "not_checked"
 
@@ -327,8 +325,9 @@ def test_source_sequence_runs_from_installed_bundle_without_checkout(installed):
     report = json.loads(delayed.stdout)
     # OpenFIGI is one target since ticket 138, so it is ordered, before Securities.
     assert report["order"] == ["sec.company", "sec.nport.registrant", "sec.company-facts", "sec.registration", "sec.submissions.person",
-                               "sec.nport.fund", "iapd.adv", "sec.ownership", "sec.ncen.fund", "openfigi", "sec.ncen.adviser", "sec.thirteenf.securities",
-                               "sec.nport.security", "sec.thirteenf.filings", "sec.ncen.class"]
+                               "sec.nport.fund", "sec.ncen.registrant", "iapd.adv", "sec.ownership", "openfigi", "sec.ncen.fund",
+                               "sec.ncen.adviser", "sec.thirteenf.securities", "sec.nport.security", "sec.thirteenf.filings",
+                               "sec.ncen.class"]
     assert report["sources"]["gleif"]["status"] == "deferred"
     assert report["runtime_readiness"] == "not_checked"
 
