@@ -84,7 +84,7 @@ def test_the_target_reduces_every_read_unit_and_prepares_one_record_per_cusip(da
     assert len(steps["read"]) == 3  # one unit a file
     state = drive(book, rid, databases.ledger, workers=WORKERS)
     assert state["run"]["state"] == "complete"
-    assert state["counts"] == {"verified": 3 + 1 + 1 + 1 + 1}  # read x3, reduce, combine, record, prepare
+    assert state["counts"] == {"verified": 3 + 1 + 1 + 1}  # read x3, reduce, combine, prepare
     lines = (tmp_path / "bundle/prepare/records.0.jsonl").read_text().splitlines()
     # One record a CUSIP over all three units, a CUSIP filed in two files counts both holdings; the bad check digit is
     # kept for the Dataset Contract to set aside, not dropped here.

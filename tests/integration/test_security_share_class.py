@@ -82,14 +82,9 @@ def thirteenf_records(root: Path, rows: str | None = None) -> list[dict]:
     units = [unit(n, rows if n == 1 else "") for n in range(1, 9)]
     securities = chain.combine(store, root / "reduce", folder / "reduce.yaml", {"units": units})
     combined = chain.combine(store, root / "combine", folder / "combine.yaml", {"securities": securities})
-    # record.yaml reads the combine's pieces, as the configured run does (ticket 172).
-    pieces = [store.put((root / "record").as_uri(), {"tables": a["tables"]}) for a in store.json(combined)["artifacts"]]
-    (root / "record").mkdir(parents=True, exist_ok=True)
-    record = chain.read(store, root / "record", {"source": THIRTEENF, **files.load(folder / "record.yaml")}, [
-        {"input": p, "context": store.put((root / "record").as_uri(), {"version": 1, "input": p, "values": {}})}
-        for p in pieces], 2)
-    prepared = chain.prepare(store, root / "mdm", record, {
-        "table": "security", "record_column": "record", "dataset": THIRTEENF_CODE, "policy": "0" * 64,
+    # The combine's rows are the records, as the configured run prepares them.
+    prepared = chain.prepare(store, root / "mdm", combined, {
+        "table": "security", "dataset": THIRTEENF_CODE, "policy": "0" * 64,
         "consumer": "check", "batch_id": "check-class", "as_of": "2026-10-16T00:00:00+00:00"})
     return chain.records(store, root / "mdm", prepared, THIRTEENF_CODE,
                          files.source(THIRTEENF)["dataset_contracts"][THIRTEENF_CODE]["contract"])
