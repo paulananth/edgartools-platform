@@ -272,3 +272,30 @@ def test_lookup_scope_changes_identity_even_when_reduced_values_agree(tmp_path):
         outputs.append(output)
     assert outputs[0]["artifacts"][0]["tables"] == outputs[1]["artifacts"][0]["tables"]
     assert outputs[0]["artifacts"][0]["input"]["sha256"] != outputs[1]["artifacts"][0]["input"]["sha256"]
+
+
+@pytest.mark.parametrize("index_bytes", [10**6, 600])
+def test_a_reduction_streamed_in_batches_writes_the_bytes_of_its_whole_output(tmp_path, monkeypatch, index_bytes):
+    """Small enough, one whole reading; past the index bound, pieces: in each
+    case the bytes the whole output made, though rows arrive a batch at a time."""
+    from edgar_warehouse.workers import source_readings, source_reduction
+    monkeypatch.setattr(source_combine, "OUTPUT_BYTES", index_bytes)
+    monkeypatch.setattr(source_readings, "PART_ROWS", 3)
+    monkeypatch.setattr(source_reduction, "TAKE_ROWS", 2)
+    store = Artifacts()
+    rows = [{"key": f"k{n}", "holder": f"Société {n % 3}", "time": str(n)} for n in range(12)]
+    refs = {"main": reading(store, tmp_path, {"legal": rows, "other": rows[:5]})}
+    body = plan({"legal": member("legal", last="time", limit=2), "other": member("other", exclude="legal")})
+    work = envelope(store, tmp_path, body, refs)
+    written = {}
+    streamed = source_combine._documents(work, store, lambda receipt, data: written.setdefault(receipt["uri"], data))
+
+    manifest, refs, reduce_plan, _ = source_combine._checked(work, store)
+    tables = source_reduction._reduced(reduce_plan, refs, store).finish()
+    expected_pieces = {}
+    whole = source_combine._output(work, manifest, refs, tables,
+                                   lambda receipt, data: expected_pieces.setdefault(receipt["uri"], data),
+                                   max_bytes=reduce_plan["max_output_bytes"])
+    assert streamed == whole
+    assert written == expected_pieces
+    assert bool(written) == (index_bytes == 600)

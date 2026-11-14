@@ -325,3 +325,31 @@ def test_a_ragged_row_refuses_the_whole_stream_before_any_piece_is_published(tmp
     with pytest.raises(SourceRejected, match="malformed"):
         source_read.execute(task(tmp_path, store, [body], delimited_contract(member="A.tsv")), store)
     assert not list(tmp_path.glob("reading.json*"))
+
+
+def test_each_piece_locates_its_tables_and_a_reader_decodes_only_those_it_uses(tmp_path):
+    from edgar_warehouse.workers import source_readings
+    store = Artifacts()
+    rules = contract()
+    rules["read"]["tables"]["texts"] = {"each": ".", "columns": {"text": {"value": {"path": "text"}}}}
+    body = json.dumps({"records": [{"n": i, "text": f"é🦀\"{i}"} for i in range(5)]}, ensure_ascii=False).encode()
+    receipt = source_read.execute(task(tmp_path, store, [body], rules), store)
+    reading = store.json(receipt)["artifacts"][0]
+    for part in reading["partitions"]:
+        data = store.verified(part["receipt"])
+        piece = json.loads(data)
+        assert {name: json.loads(data[start:end]) for name, (start, end, _) in part["tables"].items()} \
+            == piece["tables"]
+        assert {name: count for name, (_, _, count) in part["tables"].items()} \
+            == {name: len(rows) for name, rows in piece["tables"].items()}
+
+    def read(tables, max_rows=100):
+        return [row for _, _, chunk, _ in source_readings.iter_load(
+                    receipt, store, max_bytes=10**6, max_rows=max_rows, tables=tables)
+                for rows in chunk["tables"].values() for row in rows]
+    assert read(["rows"]) == [{"n": i, "index": i + 1} for i in range(5)]
+    assert read(None) == [row for part in reading["partitions"]
+                          for rows in store.json(part["receipt"])["tables"].values() for row in rows]
+    # The rows a reader leaves undecoded still count against its budget.
+    with pytest.raises(ValueError, match="row budget"):
+        read(["rows"], max_rows=9)

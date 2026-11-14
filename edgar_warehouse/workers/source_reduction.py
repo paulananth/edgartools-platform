@@ -99,7 +99,25 @@ def contract(body, refs):
     return plan
 
 
-def tables(plan, refs, artifacts):
+TAKE_ROWS = 50_000
+
+
+def rows(plan, refs, artifacts):
+    """(group names, (group, row) in output order). Every reading is exhausted
+    first; then the rows are taken a batch at a time, so the output is never
+    held whole and each group's state is freed once its rows are out."""
+    engine = _reduced(plan, refs, artifacts)
+    names = engine.close()
+
+    def taken():
+        for name in names:
+            while batch := engine.take(name, TAKE_ROWS):
+                for row in batch:
+                    yield name, row
+    return names, taken()
+
+
+def _reduced(plan, refs, artifacts):
     """Exhaust every reading, then finalize uncapped counts and capped samples.
 
     Rust retains bounded generic state; Python authenticates every stream.
@@ -111,14 +129,18 @@ def tables(plan, refs, artifacts):
     input_bytes = row_count = 0
     for source, value in refs.items():
         selected = [(name, spec) for name, spec in groups.items() if source in _sources(spec)]
+        used = sorted({table for _, spec in selected for table in _selected_tables(spec)})
         for ref in source_readings.receipts(value):  # a name's readings, in order, as one
             consumed = 0
             for _, _, chunk, consumed in source_readings.iter_load(
                     ref, artifacts, max_bytes=plan["max_input_bytes"] - input_bytes,
-                    max_rows=plan["max_rows"] - row_count, allow_lookup_receipts=True):
+                    max_rows=plan["max_rows"] - row_count, allow_lookup_receipts=True, tables=used):
                 if chunk["deferred"]:
                     raise ValueError("Reduction requires resolved deferred records")
-                row_count += sum(len(rows) for rows in chunk["tables"].values())
+                located = (chunk.get("partition") or {}).get("tables")
+                # A located piece gives only the used tables; every table's rows count.
+                row_count += (sum(place[2] for place in located.values()) if located is not None
+                              else sum(len(rows) for rows in chunk["tables"].values()))
                 if row_count > plan["max_rows"]:
                     raise ValueError("Reduction exceeds aggregate input row budget")
                 for name, spec in selected:
@@ -129,4 +151,4 @@ def tables(plan, refs, artifacts):
                         engine.push(name, chunk["tables"][table])
             input_bytes += consumed
     # Only successful exhaustion of every supplied reading permits finalization.
-    return engine.finish()
+    return engine
