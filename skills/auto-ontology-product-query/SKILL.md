@@ -7,7 +7,7 @@ description: Builds and qualifies business-question workflows in NVIDIA AutoOnto
 
 ## Interface contract
 
-Use AutoOntology's existing Chat UI and read-only MCP tools; this skill does not create a new web UI, CLI, or query service. The product list and table membership come from the side-effect-free `edgar-warehouse rules catalog plan`, not live OpenMetadata state or manually copied names. OpenMetadata remains the Rules-derived catalog. Read [AutoOntology setup](../auto-ontology/SKILL.md), [data catalog](../data-catalog/SKILL.md), and the [API integration research](../../docs/research/auto-ontology-api.md) first.
+Use AutoOntology's existing Chat UI and read-only MCP tools; this skill does not create a new web UI, CLI, or query service. The product list and table membership come from the side-effect-free `edgar-warehouse rules catalog plan`, not live OpenMetadata state or manually copied names. OpenMetadata remains the Rules-derived catalog. Read [AutoOntology setup](../auto-ontology/SKILL.md), [data catalog](../data-catalog/SKILL.md), and NVIDIA's [query skill](https://github.com/NVIDIA/auto-ontology/blob/main/skills/nvidia-ontology-query/SKILL.md) first.
 
 Each business fact has one authority: MDM owns mastered identities and relationships, RDM owns approved code sets, Silver owns transaction facts, and repository Rules/`CONTEXT.md` own definitions and processing policy. AutoOntology is a derived query layer. Do not write source data, rules, or OpenMetadata from this workflow.
 
