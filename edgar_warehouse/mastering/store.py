@@ -553,13 +553,20 @@ def open_store(engine) -> Store:
 
 
 def install(engine, *, runtime_role: str) -> None:
-    """Create the tables, then let the runtime merge without changing structure or decisions."""
+    """Create the tables, drop any mastering table the code no longer uses, then let the runtime merge
+    without changing structure or decisions."""
     source = (Path(__file__).parent / "schema" / f"{engine.dialect.name}.sql").read_text()
     grantee = f'"{runtime_role}"' if engine.dialect.name == "postgresql" else f"'{runtime_role}'@'%%'"
+    schema = "current_schema()" if engine.dialect.name == "postgresql" else "database()"
+    used = {f"mastering_{name}" for name in (*WRITTEN, "decision")}
     with engine.begin() as conn:
         for statement in source.split(";"):
             if statement.strip():
                 conn.exec_driver_sql(statement)
+        present = conn.exec_driver_sql(f"select table_name from information_schema.tables where table_schema={schema}")
+        for (name,) in present.fetchall():
+            if name.startswith("mastering_") and name not in used:
+                conn.exec_driver_sql(f"drop table {name}")
         for name in WRITTEN:
             conn.exec_driver_sql(f"grant select,insert,update,delete on mastering_{name} to {grantee}")
         conn.exec_driver_sql(f"grant select,insert on mastering_decision to {grantee}")
