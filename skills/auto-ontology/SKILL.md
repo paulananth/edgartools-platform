@@ -13,6 +13,17 @@ OpenMetadata remains the catalog projection published from repository rules. Aut
 
 The upstream [setup skill](https://github.com/NVIDIA/auto-ontology/blob/main/skills/nvidia-ontology-setup/SKILL.md), [management skill](https://github.com/NVIDIA/auto-ontology/blob/main/skills/nvidia-ontology-management/SKILL.md), and [query skill](https://github.com/NVIDIA/auto-ontology/blob/main/skills/nvidia-ontology-query/SKILL.md) describe the product. Read the versions shipped with the selected release; rolling `main` is not proof of installed behavior. Upstream supports Helm and Docker Compose; it does not provide an `auto-ontology init` CLI. This skill defines the platform's init workflow; never invent a command.
 
+## Local Compose secrets
+
+Clone `NVIDIA/auto-ontology` outside this repository. Compose in that checkout is the installer. Keep a mode `0600`, gitignored `.env` there and in this repository. Copy the required keys into the checkout without printing them.
+
+Required keys: `AUTH_SECRET`, `APP_URL`, `AUTO_ONTOLOGY_ADMIN_EMAIL`, `AUTO_ONTOLOGY_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `PGADMIN_PASSWORD`, and `DEFAULT_MODELS_API_KEY`. Generate the first six when missing. The operator sets the NVIDIA key in their own terminal. A Claude or other provider key is not a substitute: the default stack calls NVIDIA NIM and needs an `nvapi-` key. Prove acceptance with the models endpoint status only. Never print the key or the response body.
+
+For a laptop, set `APP_URL` to `http://127.0.0.1:3000`. Do not publish that origin beyond localhost unless the operator asks for that exact exposure.
+
+Blank `CONNECTION_STRINGS` copied from the upstream example before the first start. A placeholder sample database is not an approved source. Leave it empty until a scoped synthetic source, or a separately approved MDM, RDM, or Silver source, exists. Check host ports `3000`, `3001`, `3002`, `5050`, and `POSTGRES_PORT`, and the fixed container names, before Compose. Do not stop another stack to free them.
+
+
 ## Initialize (preserve by default)
 
 1. Establish the exact target, deployment mode, pinned release/chart, public URL, current resource owner, and whether this is a new install or a reset. Inspect the existing target before changing it. If any value is unknown, stop before writes.
