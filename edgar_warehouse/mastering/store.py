@@ -8,7 +8,7 @@ from collections import defaultdict
 from pathlib import Path
 
 BLOCK = 2000
-STORE, FILE = "merge", "file"  # the lock rows: the whole store (and `merge:<kind>` for a kind), and numbering
+LOCK_CLASS, FILE_KEY = 74821, 2  # advisory-lock class; file numbering is the second key
 PENDING = 0  # a changed golden record's file number until its transaction commits
 WRITTEN = ("master", "file", "delivery", "identifier", "record", "name_key", "review", "withheld", "deferred",
            "lookup", "lookup_progress")
@@ -37,11 +37,17 @@ class Store:
 
     def commit(self) -> None:
         self.number_changes()
-        self.connection.commit()
+        try:
+            self.connection.commit()
+        finally:
+            self.release_locks()
 
     def rollback(self) -> None:
         self.changed.clear()
-        self.connection.rollback()
+        try:
+            self.connection.rollback()
+        finally:
+            self.release_locks()
 
     def number_changes(self) -> None:
         """Give what this transaction changed the next file number, as its last step and one transaction at a
@@ -49,8 +55,7 @@ class Store:
         started first: a number given at the start would let a merge that commits late land below a reader."""
         if not self.changed:
             return
-        if not self.rows("select name from mastering_lock where name=%s for update", [FILE]):
-            raise RuntimeError("Golden records are written under the store's lock: take it first")
+        self.lock_file()
         number = self.last_file() + 1
         for block in blocks(sorted(self.changed)):
             self.cursor.execute(f"update mastering_master set changed_file=%s where changed_file={PENDING} "
@@ -58,6 +63,7 @@ class Store:
         self.changed.clear()
 
     def close(self) -> None:
+        self.release_locks()
         self.connection.close()
 
     def rows(self, sql: str, values=()) -> list[tuple]:
@@ -74,14 +80,22 @@ class Store:
     def take_lock(self, kind: str | None = None) -> None:
         """One writer for a kind. A merge shares the store's lock and takes its kind's own, so merges of two kinds
         run together and two of one kind take turns. With no kind, the whole store: every merge waits (`clear`).
-        The database frees a lock when its holder commits or dies."""
-        names = [STORE, FILE, *([f"{STORE}:{kind}"] if kind else [])]
-        held = {row[0] for row in self.rows(f"select name from mastering_lock where name in ({marks(names)})", names)}
-        self.insert("mastering_lock", ("name",), [(name,) for name in names if name not in held])
-        self.commit()
-        self.rows(f"select name from mastering_lock where name=%s {'for share' if kind else 'for update'}", [STORE])
+        The database frees a lock when its holder commits or dies. There is no lock table."""
+        self.lock_store(exclusive=kind is None)
         if kind:
-            self.rows("select name from mastering_lock where name=%s for update", [names[-1]])
+            self.lock_kind(kind)
+
+    def lock_store(self, *, exclusive: bool) -> None:
+        raise NotImplementedError
+
+    def lock_kind(self, kind: str) -> None:
+        raise NotImplementedError
+
+    def lock_file(self) -> None:
+        raise NotImplementedError
+
+    def release_locks(self) -> None:
+        return
 
     def file_done(self, key: str) -> bool:
         return bool(self.rows("select 1 from mastering_file where file_key=%s", [key]))
@@ -458,6 +472,16 @@ class Postgres(Store):
         text = io.StringIO("".join("\t".join(clean(value) for value in row) + "\n" for row in rows))
         self.cursor.copy_expert(f"copy {table}({','.join(columns)}) from stdin", text)
 
+    def lock_store(self, *, exclusive: bool) -> None:
+        name = "pg_advisory_xact_lock" if exclusive else "pg_advisory_xact_lock_shared"
+        self.rows(f"select {name}(%s, 1)", [LOCK_CLASS])
+
+    def lock_kind(self, kind: str) -> None:
+        self.rows("select pg_advisory_xact_lock(%s, hashtext(%s))", [LOCK_CLASS + 1, kind])
+
+    def lock_file(self) -> None:
+        self.rows("select pg_advisory_xact_lock(%s, %s)", [LOCK_CLASS, FILE_KEY])
+
 
 class MySQL(Store):
     dialect = "mysql"
@@ -465,14 +489,49 @@ class MySQL(Store):
     master_upsert = (" as new on duplicate key update changed_file="
                      "if(mastering_master.body=new.body,mastering_master.changed_file,new.changed_file),body=new.body")
     review_upsert = " as new on duplicate key update assertion_id=new.assertion_id,open_review=1"
+    slots = 32
 
     def __init__(self, connection):
         super().__init__(connection)
+        self.held: list[str] = []
         # Each statement reads what is committed, as on PostgreSQL: a number is read after its lock is held.
         self.cursor.execute("set session transaction isolation level read committed")
 
     def bulk(self, table: str, columns: tuple, rows: list) -> None:
         self.insert(table, columns, rows)
+
+    def _acquire(self, name: str, timeout: int) -> bool:
+        got = self.rows("select get_lock(%s, %s)", [name, timeout])[0][0]
+        if int(got or 0) != 1:
+            return False
+        self.held.append(name)
+        return True
+
+    def lock_store(self, *, exclusive: bool) -> None:
+        names = [f"mastering-store-{slot}" for slot in range(self.slots)]
+        if exclusive:
+            for name in names:
+                if not self._acquire(name, 86400):
+                    raise TimeoutError(f"Mastering lock {name} was not acquired")
+            return
+        for name in names:
+            if self._acquire(name, 0):
+                return
+        if not self._acquire(names[0], 86400):
+            raise TimeoutError("Mastering store lock was not acquired")
+
+    def lock_kind(self, kind: str) -> None:
+        if not self._acquire(f"mastering-kind-{kind}", 86400):
+            raise TimeoutError(f"Mastering lock for {kind} was not acquired")
+
+    def lock_file(self) -> None:
+        if not self._acquire("mastering-file", 86400):
+            raise TimeoutError("Mastering file lock was not acquired")
+
+    def release_locks(self) -> None:
+        for name in self.held:
+            self.cursor.execute("select release_lock(%s)", [name])
+        self.held.clear()
 
 
 def open_store(engine) -> Store:
@@ -493,4 +552,3 @@ def install(engine, *, runtime_role: str) -> None:
         for name in WRITTEN:
             conn.exec_driver_sql(f"grant select,insert,update,delete on mastering_{name} to {grantee}")
         conn.exec_driver_sql(f"grant select,insert on mastering_decision to {grantee}")
-        conn.exec_driver_sql(f"grant select,insert,update on mastering_lock to {grantee}")

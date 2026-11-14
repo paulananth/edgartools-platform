@@ -299,13 +299,13 @@ location: `Path(__file__).parents[N]` and `.parent`. Before the move, grep `pare
   the run first starts, kept in its frozen scope (`mdm.run.scope`), and read
   back on every later call and resume, never resolved again per batch. The
   commit still checks it.
-- A store call that takes the lock commits what came before it, so a step
-  that must be all or nothing (a split, a reversal) is one function that
-  takes the lock first, then does every write, then commits once, and rolls
-  back on any error. Ordering separate calls cannot make it atomic.
+- A store call that takes the lock does not commit. A step that must be all or nothing (a split, a reversal)
+  is one function that takes the lock first, then does every write, then commits once, and rolls back on any
+  error. Ordering separate calls cannot make it atomic.
 - A merge takes the lock of its own kind only (`Store.take_lock(kind)`), so merges of two kinds run together
-  and two of one kind take turns. Its file stays in memory: a shared working table would force one lock for
-  the whole store. Only a whole-store change (`clear`) takes the store's lock, with no kind.
+  and two of one kind take turns. The lock is a database advisory lock, not a table. Its file stays in memory:
+  a shared working table would force one lock for the whole store. Only a whole-store change (`clear`) takes
+  the store's lock, with no kind.
 - A changed golden record gets its file number when its transaction commits, never when it starts. A number
   given at the start lets a merge that commits late land below a reader's checkpoint, and the reader misses it.
 
