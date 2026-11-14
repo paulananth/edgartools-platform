@@ -24,10 +24,10 @@ from . import control, profile as load_profile
 
 
 def runtime(module) -> str:
-    """The digest a run pins for this profile: its code and the protocol client."""
-    here = Path(__file__).parent
+    """The digest a run pins for this profile: the code that decides what its steps write. The protocol client
+    (lease renewal, reporting) is not in it, so a fix there does not abandon an open run."""
     extra = module.runtime_files() if hasattr(module, "runtime_files") else []
-    files = sorted({Path(module.__file__), here / "control.py", here / "__main__.py", *extra})
+    files = sorted({Path(module.__file__), *extra})
     return hashlib.sha256(b"".join(path.read_bytes() for path in files)).hexdigest()
 
 
