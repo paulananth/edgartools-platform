@@ -1047,8 +1047,9 @@ def test_each_identifier_limit_of_a_kind_is_a_check_on_its_master_table():
     assert forward["entityLink"].endswith("mdm.master_records.company>")
     assert forward["testDefinition"] == "edgartools-configured-table-check"
     assert "at most 1 `cik` value" in forward["description"] and "merge/kinds/company.yaml" in reverse["description"]
-    assert "security.cusip-per-master" in cases and not any(n.startswith("security.") and n.endswith("masters-per-value")
-                                                            for n in cases)
+    # A Security holds one SEC class id (ticket 234), the only Security identifier with a limit per master.
+    assert "security.cusip-per-master" in cases and {n for n in cases if n.startswith("security.")
+                                                     and n.endswith("masters-per-value")} == {"security.sec_class_id-masters-per-value"}
 
 
 def test_master_and_reference_tables_are_gold_and_silver_tables_are_silver():

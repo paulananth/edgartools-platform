@@ -48,6 +48,12 @@ sources:
     target: mastering
     requires: []
     after: [sec.nport.fund]
+  # N-CEN's share classes find the Securities N-PORT and OpenFIGI made by ticker, and are issued by
+  # N-CEN's fund series.
+  sec.ncen.class:
+    target: mastering
+    requires: []
+    after: [sec.ncen.fund, sec.nport.security]
   # OpenFIGI first, one load (ticket 138; operator, 2026-10-25: "there
   # should be one processing with all the identifier and this is the first
   # load"): `mastering` reads the CUSIP and the ISIN answers together, every

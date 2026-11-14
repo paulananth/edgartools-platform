@@ -5,7 +5,7 @@
 # FIGI, ticker and SEDOL are lookup only); "Securities only, options aside";
 # "A" (the Security carries the issuer name and class title as filed).
 # The matching rule is on (rules/merge/policy.yaml, automatic_rules) and rests on its Identifier Contract.
-version: security-2026-11-02.thirteenf-source-is-securities
+version: security-2026-11-14.ncen-share-classes
 defaults:
   # The first listed wins each field. Operator, 2026-10-18 (ticket 84): "make
   # openfigi priority 1 and 13f last", then "Name only (Recommended)". OpenFIGI
@@ -20,6 +20,8 @@ defaults:
   - openfigi.security.v4
   - sec.thirteenf.securities.v2
   - sec.nport.security.v2
+  # N-CEN names each share class once a year: after the monthly N-PORT (ticket 234).
+  - sec.ncen.class.v1
   # Last, and it states no field: the Form 4 symbol only finds a Security (ticket 24).
   - sec.ownership.security.v2
   allow_unknown_effective: true
@@ -383,6 +385,43 @@ rules:
   cross_reference: issuer_symbol_id
   on_no_match: mint
   on_several: review
+# A fund's share class from SEC Form N-CEN (ticket 234, part 3; operator, 2026-11-14: "Class id, then ticker
+# (Recommended)"): a class joins the Security holding its SEC class id; else the one Security holding its ticker
+# (OpenFIGI's or N-PORT's, with a CUSIP); else it creates a Security by its class id. A ticker held by several
+# Securities sends the class to review. Measured on four N-CEN quarters against hosted MDM: 3,326 of 25,858 tickers
+# are held by one Security, 19 by several, the rest by none.
+- rule_id: ncen-class-id
+  version: 2026-11-14.class-id
+  family: binding
+  source: sec.ncen.class.v1
+  applies_to_verdict: security
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: sec_class_id
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: sec_class_id
+- rule_id: ncen-class-ticker
+  version: 2026-11-14.ticker-finds
+  family: binding
+  source: sec.ncen.class.v1
+  applies_to_verdict: security
+  emits:
+  - bind
+  on_no_match: wait
+  on_several: review
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: ticker
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: ticker
+      max_per_10k: 5
 identifiers:
   cusip:
     authority: CUSIP Global Services (ANSI X9.6)
@@ -513,6 +552,19 @@ identifiers:
     claim:
       forward: 3
       reverse: null
+    compatibility:
+      field: kind
+      predicate: kind_equal@1
+  # SEC's id of a fund's share class (ticket 234, part 3): one per class, issued by SEC, so one per Security.
+  sec_class_id:
+    authority: SEC/EDGAR
+    sources:
+    - sec.ncen.class.v1
+    # rules/identifiers/sec_class_id.yaml: C and nine digits, upper-cased.
+    normalizer: normalize_identifier@sec_class_id-v1
+    claim:
+      forward: 1
+      reverse: 1
     compatibility:
       field: kind
       predicate: kind_equal@1
