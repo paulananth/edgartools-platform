@@ -17,7 +17,7 @@ The upstream [setup skill](https://github.com/NVIDIA/auto-ontology/blob/main/ski
 
 Clone `NVIDIA/auto-ontology` outside this repository. Compose in that checkout is the installer. Keep a mode `0600`, gitignored `.env` there and in this repository. Copy the required keys into the checkout without printing them.
 
-Required keys: `AUTH_SECRET`, `APP_URL`, `AUTO_ONTOLOGY_ADMIN_EMAIL`, `AUTO_ONTOLOGY_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `PGADMIN_PASSWORD`, and `DEFAULT_MODELS_API_KEY`. Generate the first six when missing. The operator sets the NVIDIA key in their own terminal. A Claude or other provider key is not a substitute: the default stack calls NVIDIA NIM and needs an `nvapi-` key. Prove acceptance with the models endpoint status only. Never print the key or the response body.
+Required keys: `AUTH_SECRET`, `APP_URL`, `AUTO_ONTOLOGY_ADMIN_EMAIL`, `AUTO_ONTOLOGY_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `PGADMIN_PASSWORD`, and `DEFAULT_MODELS_API_KEY`. Generate the first six when missing. The admin email must be an address Better Auth accepts; `@localhost` is rejected at sign-in even after the account is seeded. Recreate the frontend after changing it so seed-admin runs again. The operator sets the NVIDIA key in their own terminal. A Claude or other provider key is not a substitute: the default stack calls NVIDIA NIM and needs an `nvapi-` key. Prove acceptance with the models endpoint status only. Never print the key or the response body.
 
 For a laptop, set `APP_URL` to `http://127.0.0.1:3000`. Do not publish that origin beyond localhost unless the operator asks for that exact exposure.
 
