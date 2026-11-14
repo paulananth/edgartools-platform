@@ -14,6 +14,8 @@ and waits for every step nothing else waits for.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 # What each kind of step is to the engine: its operation, key, leases and checks.
 KINDS = {
     "read": ("source.read", "{unit}", ["artifact:{destination}"], "source.output"),
@@ -122,13 +124,26 @@ def follow(leaves: list, folder) -> dict:
     return passes
 
 
-def _silver(entry: dict, default: list) -> dict:
+def _snapshots(folder) -> set:
+    """The tables of the source's silver specs (`silver-*.yaml`) that are snapshots."""
+    from .files import load
+
+    found = (load(path) for path in sorted(Path(folder).glob("silver-*.yaml"))) if folder is not None else ()
+    return {spec["table"] for spec in found if isinstance(spec, dict) and spec.get("load_mode") == "snapshot"}
+
+
+def _silver(entry: dict, default: list, folder=None) -> dict:
     kinds = [kind for kind in ("land", "derive") if kind in entry]
     if not isinstance(entry, dict) or len(kinds) != 1 or not isinstance(entry.get("name"), str) \
             or set(entry) - {"name", "requires", *kinds}:
         raise ShapeError("A silver step has a name and one of `land` or `derive`")
     (kind,) = kinds
-    return _step(kind, entry["name"], entry.get("requires", default), inputs={"keys": entry[kind]})
+    step = _step(kind, entry["name"], entry.get("requires", default), inputs={"keys": entry[kind]})
+    if kind == "land" and entry["land"].get("silver") in _snapshots(folder):
+        # A snapshot delivery deletes every row it lacks, so units each holding their own keys would erase each other.
+        raise ShapeError(f"{entry['name']}: silver.{entry['land']['silver']} is a snapshot table; derive it whole, "
+                         "do not land it")
+    return step
 
 
 def _capture(target: dict) -> dict:
@@ -171,7 +186,7 @@ def expand(target: dict, folder=None) -> dict:
         last = [merge]
     base = last  # a landing waits for what it lands from; a derived table for the step before it
     for entry in target.get("silver", []):
-        steps.append(_silver(entry, base if "land" in entry else last))
+        steps.append(_silver(entry, base if "land" in entry else last, folder))
         last = [steps[-1]["name"]]
     checks = list(TARGET_CHECKS)
     if target.get("record", True):

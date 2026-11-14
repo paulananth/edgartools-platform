@@ -18,7 +18,7 @@ keep, and which are a second copy of a protection the destination already has?
 - [x] Check the implementation history and the tests for the reason leases were introduced (2026-11-13 ET)
 - [x] Write the recommendation with verification evidence (2026-11-13 ET)
 - [ ] Part 1: remove the artifact-scope lease from the steps whose output the artifact store already protects (branch and PR)
-- [ ] Part 2: give a snapshot silver table one table-scoped lease instead of one lease per landing unit (branch and PR)
+- [x] Part 2: a snapshot silver table cannot be landed by units: `rules check` refuses a `land` step into one (2026-11-13 19:17 ET). The proposed table-scoped lease was tried and does not help: on local PostgreSQL, two units landing different keys one after the other kept only the second unit's row, so the lease only orders the loss. No registered snapshot table is landed today (all three are derived), so the recorded steps are unchanged. Test that failed before: `test_a_snapshot_table_cannot_be_landed` (`DID NOT RAISE ShapeError`).
 - [ ] Part 3: either wire the destination guard into the merge and landing transactions, or delete the unreachable guard path (decision, then branch and PR)
 
 ## 1. What each operation leases, and what already protects it
