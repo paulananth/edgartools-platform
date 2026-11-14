@@ -40,6 +40,14 @@ A part classed reference data becomes a code set version in RDM
      `avoid_when`, `example_question`. Write only what the evidence shows.
    - `created_by`: the agent and this skill. `evidence`: an object (the store
      refuses text): the findings file, and the counts the codes rest on.
+   - **A new version of a published code set** (a code added to a set the
+     policy pins): `scripts/rdm_next_version.py <code set> <version> --add
+     <codes.yaml> --out <draft file>` writes the draft from the published
+     rows plus the added codes (each in the published row shape), and
+     refuses when the published rows do not rebuild their pinned sha256 or an
+     added code is already held. To diff and publish it in a disposable RDM,
+     draft and publish the version it supersedes there first, from the same
+     script with nothing added (its sha256 must equal its pin).
 3. **Draft:** `edgar-warehouse rdm draft --file <draft file>`.
 4. **Ask for approval.** Show the operator the draft and
    `edgar-warehouse rdm diff <code set> <current> <draft>`. Record their

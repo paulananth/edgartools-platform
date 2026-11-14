@@ -163,6 +163,7 @@ def test_version_2_of_the_code_set_adds_only_the_other_capacity():
 
 
 VERSION_3 = "4d9f696384fb3aa72aa0fa9b7dff6a3a22450d010488e6af580dca4658c94e70"
+VERSION_4 = "8ab302e8a54160a858200e8d887f7b97539952be7060270b6af7126476af1a71"
 
 
 def test_version_3_of_the_code_set_adds_only_one_issuer_to_issued_by():
@@ -184,11 +185,25 @@ def test_version_4_of_the_code_set_adds_only_the_related_person():
     from edgar_warehouse.mdm.evidence import KINDS
     from edgar_warehouse.rules.source_engine import prepare_relationship_types
 
-    pin = files.reference_pin("mdm-relationship-types")
-    assert pin["version"] == "4"
+    pin = {**files.reference_pin("mdm-relationship-types"), "version": "4", "sha256": VERSION_4}
     third = {**pin, "version": "3", "sha256": VERSION_3}
     before = prepare_relationship_types(files.published_reference(third), sorted(KINDS))
     after = prepare_relationship_types(files.published_reference(pin), sorted(KINDS))
     assert set(after) - set(before) == {"RELATED_PERSON"}
     assert all(after[n] == before[n] for n in before)
     assert (after["RELATED_PERSON"]["from"], after["RELATED_PERSON"]["to"]) == (["company"], ["company"])
+
+
+def test_version_5_of_the_code_set_adds_only_the_adviser_capacities():
+    """N-CEN's own adviser types as capacities of INVESTMENT_ADVISER_TO (operator, 2026-11-14: "yes")."""
+    from edgar_warehouse.mdm.evidence import KINDS
+    from edgar_warehouse.rules.source_engine import prepare_relationship_types
+
+    pin = files.reference_pin("mdm-relationship-types")
+    assert pin["version"] == "5"
+    fourth = {**pin, "version": "4", "sha256": VERSION_4}
+    before = prepare_relationship_types(files.published_reference(fourth), sorted(KINDS))
+    after = prepare_relationship_types(files.published_reference(pin), sorted(KINDS))
+    assert set(after) == set(before)
+    assert {n for n in before if after[n] != before[n]} == {"INVESTMENT_ADVISER_TO"}
+    assert after["INVESTMENT_ADVISER_TO"] == {**before["INVESTMENT_ADVISER_TO"], "capacities": ["advisor", "subadvisor"]}
