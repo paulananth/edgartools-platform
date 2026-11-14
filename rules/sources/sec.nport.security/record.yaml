@@ -118,12 +118,37 @@ read:
                   values:
                   - {value: {path: lei}}
                   - {value: {path: no_cusip_lei}}
-              issuer:
+              # The issuing fund series (ticket 234) when the holdings name one;
+              # else the issuer's LEI, for a Company (or a series no N-PORT
+              # filing of the quarter names).
+              issuer_series:
                 coalesce:
                   skip: "null"
                   values:
-                  - {value: {path: issuer}}
-                  - {value: {path: no_cusip_issuer}}
+                  - {value: {path: issuer_series}}
+                  - {value: {path: no_cusip_issuer_series}}
+              series_filed:
+                coalesce:
+                  skip: "null"
+                  values:
+                  - {value: {path: series_filed}}
+                  - {value: {path: no_cusip_series_filed}}
+              issuer:
+                choose:
+                  condition:
+                    test: {path: issuer_series, kind: present}
+                  then: {value: {path: NO_SUCH_FIELD}}
+                  else:
+                    choose:
+                      condition:
+                        test: {path: no_cusip_issuer_series, kind: present}
+                      then: {value: {path: NO_SUCH_FIELD}}
+                      else:
+                        coalesce:
+                          skip: "null"
+                          values:
+                          - {value: {path: issuer}}
+                          - {value: {path: no_cusip_issuer}}
               filed:
                 coalesce:
                   skip: "null"

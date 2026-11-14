@@ -33,6 +33,12 @@ combine:
     # The issuer's LEI only when every holding of the CUSIP that states one
     # states the same (operator, 2026-10-16: "By issuer LEI (Recommended)");
     # `one` never chooses.
+    # The fund series that issues the CUSIP, when its holdings name exactly one
+    # (ticket 234), with the earliest filing that names it.
+    cusip_series: {source: issuers, table: cusip_series, key: cusip, value: series_sample, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {series: 1}}
+    cusip_series_filed: {source: issuers, table: cusip_series_filed, key: cusip, value: filed_sample, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
+    no_cusip_series: {source: issuers, table: no_cusip_series, key: no_cusip_key, value: series_sample, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {series: 1}}
+    no_cusip_series_filed: {source: issuers, table: no_cusip_series_filed, key: no_cusip_key, value: filed_sample, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {}}
     cusip_issuer: {source: issuers, table: cusip_issuers, key: cusip, value: issuer_sample, mode: one, order_by: [], distinct: false, skip_null_values: true, checks: {}, where: {issuers: 1}}
     # The earliest filing date of the CUSIP's holdings that name an issuer
     # (ticket 113): the ISSUED_BY link's start.
@@ -72,6 +78,10 @@ combine:
         sedol: {group: filed_sedols, key: key, on_missing: skip, replace: false}
         loanx: {group: filed_loanxs, key: key, on_missing: skip, replace: false}
         issuer: {group: cusip_issuer, key: key, on_missing: skip, replace: false}
+        issuer_series: {group: cusip_series, key: key, on_missing: skip, replace: false}
+        series_filed: {group: cusip_series_filed, key: key, on_missing: skip, replace: false}
+        no_cusip_issuer_series: {group: no_cusip_series, key: key, on_missing: skip, replace: false}
+        no_cusip_series_filed: {group: no_cusip_series_filed, key: key, on_missing: skip, replace: false}
         filed: {group: cusip_filed, key: key, on_missing: skip, replace: false}
         no_cusip_name: {group: no_cusip_name, key: key, on_missing: skip, replace: false}
         no_cusip_title: {group: no_cusip_title, key: key, on_missing: skip, replace: false}

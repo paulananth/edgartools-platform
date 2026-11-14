@@ -801,6 +801,8 @@ dataset_contracts:
           - loanx
           - figi
           - issuer
+          - issuer_series
+          - series_filed
           - filed
           - asset_category
           - issuer_type
@@ -811,7 +813,8 @@ dataset_contracts:
         # v3 (ticket 138): a CUSIP's record carries every ISIN filed with it.
         # v4 (ticket 138): and the six facts its holdings file most.
         # v5 (ticket 199): an ISSUED_BY start is observed, not stated.
-        version: sec-nport-security-v7
+        # v8 (ticket 234): a fund's share is issued by its fund series.
+        version: sec-nport-security-v8
         retain_deferred: true
         source_record_provenance: true
         kind: security
@@ -851,7 +854,18 @@ dataset_contracts:
         # (ticket 22; operator, 2026-10-16: "By issuer LEI (Recommended)"): the
         # link names GLEIF's record of that LEI, and waits until that record is
         # mastered. A Security filed with no LEI, or with two, has no link.
+        # A fund's share is issued by its fund series (ticket 234; operator,
+        # 2026-11-14: "Yes"): the link names sec.nport.fund's record of that
+        # series; the series reaches its trust by IS_SUBFUND_OF.
         relationships:
+        - type: ISSUED_BY
+          each: issuer_series
+          target_key: [item.issuer_series]
+          target_source: sec.nport.fund.v1
+          valid_from: series_filed.0.filed
+          date_basis: observed
+          time_format: date
+          scope: SEC N-PORT issuer
         - type: ISSUED_BY
           each: issuer
           target_key: [item.issuer_lei]
@@ -872,8 +886,9 @@ bookkeeping:
   # target (`mastering`) for its one Dataset Contract: every Security in one run
   # (ticket 120; `mastering_isin` retired with sec.nport.security_isin.v1). One
   # input comes from another run (ticket 120; operator, 2026-10-19: "Read
-  # another run (Recommended)"): the umbrella pair set from GLEIF's
-  # `lei` runs. OpenFIGI's answers are no longer read (ticket 138).
+  # another run (Recommended)"); the umbrella pair set from GLEIF's runs is
+  # no longer read (ticket 234: a share's issuer is its series). OpenFIGI's
+  # answers are no longer read (ticket 138).
   targets:
     mastering:
       heartbeat_seconds: 60
