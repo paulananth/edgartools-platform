@@ -34,12 +34,14 @@ production rules or switch on new checks.
 
 - [Decide the MDM Quality Inventory and Scope](issues/01-decide-mdm-quality-inventory-and-scope.md): approved the current source-check inventory, evidence threshold, permitted grains, and unresolved-action policy; no additional evidence-backed check or new check kind is identified.
 - [Decide MDM Check Execution Boundaries](issues/02-decide-mdm-check-execution-boundaries.md): retained current per-record checks in `mastering.merge`; bounded full-publication checks run pre-merge, and persisted-master checks run read-only after merges on a consistent snapshot.
+- [Decide MDM Quality Evidence and Bookkeeping Admission](issues/03-decide-mdm-quality-evidence-and-bookkeeping-admission.md): implemented a source-contract-driven, immutable unit receipt; admitted counts remain distinct from pipeline completion, and receipt v1 stays behind recovery qualification and an explicit switch.
+- [Decide OpenMetadata Projection and Readback](issues/04-decide-openmetadata-projection-and-readback.md): reuses source-contract-generated test cases, maps incomplete admitted evidence to `Aborted`, and requires exact timestamped readback.
 
 ## Not yet specified
 
-- The selected-engine proof matrix and measurable recovery bound for the
-  eventual receipt implementation; sharpen these after the evidence boundary
-  and supported check scopes are decided.
+- Disposable recovery qualification for MDM receipt v1 and operator enablement.
+  Until that evidence is recorded, leave `mdm.quality.evidence.v1` out of
+  production targets and `MDM_QUALITY_EVIDENCE_V1` unset.
 
 ## Out of scope
 

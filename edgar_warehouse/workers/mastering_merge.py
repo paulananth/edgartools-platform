@@ -8,12 +8,21 @@ lease, keeps writers apart.
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import tempfile
 from collections import defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 
 CHECK = "mdm.committed"
+QUALITY_CHECK = "mdm.quality.evidence.v1"
+QUALITY_SETTING = "MDM_QUALITY_EVIDENCE_V1"
+
+
+def _quality_enabled(checks: set[str]) -> None:
+    if QUALITY_CHECK in checks and os.environ.get(QUALITY_SETTING) != "enabled":
+        raise ValueError(f"{QUALITY_CHECK} requires {QUALITY_SETTING}=enabled after recovery qualification")
 
 
 def runtime_files() -> list[Path]:
@@ -130,8 +139,19 @@ def processes() -> int:
     return max(1, int(os.environ.get("MASTERING_MERGE_PROCESSES", "1")))
 
 
-def _merge_batches(envelope: dict, manifest: dict, folder: str, work: list[tuple[int, str | None]]) -> dict[int, list]:
-    """The batches at these positions through the merge, on this process's own connections; each batch's files."""
+def _quality_identity(envelope: dict) -> dict:
+    claim = envelope.get("claim") or {}
+    if any(not isinstance(claim.get(field), str) or not claim[field]
+           for field in ("run_id", "step", "key")):
+        raise ValueError("MDM quality evidence requires a Bookkeeping run, step and unit")
+    reference = hashlib.sha256(json.dumps([claim["run_id"], claim["step"], claim["key"]],
+                                         separators=(",", ":")).encode()).hexdigest()[:24]
+    return {"run_id": claim["run_id"], "step": claim["step"], "work_unit_ref": reference}
+
+
+def _merge_batches(envelope: dict, manifest: dict, folder: str, work: list[tuple[int, str | None]],
+                   mapping_versions: dict[str, int]) -> dict[int, dict]:
+    """Merge these batches and return their files plus contract-driven check counts."""
     from edgar_warehouse.mastering import merge
     from edgar_warehouse.mastering.store import open_store
     from edgar_warehouse.mdm import changed_files
@@ -143,11 +163,13 @@ def _merge_batches(envelope: dict, manifest: dict, folder: str, work: list[tuple
     known: dict = {}
     settings: dict = {}
     journal = changed_files.journal()
-    done: dict[int, list] = {}
+    done: dict[int, dict] = {}
     try:
         for position, key in work:
             batch = manifest["batches"][position]
-            found = batch_input(batch, Path(folder), Store(engine), policy_digest=manifest["policy_digest"])
+            found = batch_input(batch, Path(folder), Store(engine), policy_digest=manifest["policy_digest"],
+                                mapping_versions=mapping_versions)
+            quality = found.get("quality")
             kinds = defaultdict(list)
             for record in found["assertions"]:
                 kinds[record["kind"]].append(record)
@@ -162,11 +184,64 @@ def _merge_batches(envelope: dict, manifest: dict, folder: str, work: list[tuple
                 deferred = ()
             if key is not None:
                 _record(journal, envelope, manifest, batch["input"], key, files)
-            done[position] = files
+            done[position] = {"files": files, "quality": quality}
     finally:
         db.close()
         engine.dispose()
     return done
+
+
+def _quality_for_recorded(envelope: dict, manifest: dict, folder: str, positions: list[int],
+                          mapping_versions: dict[str, int]) -> dict[int, dict]:
+    """Recompute read-only outcomes for journal-skipped batches under the same reading identity."""
+    from edgar_warehouse.mdm.execution import batch_input
+    from edgar_warehouse.mdm.store import Store
+
+    engine = _engine(restricted=True)
+    try:
+        store = Store(engine)
+        return {position: {"files": [], "quality": batch_input(
+            manifest["batches"][position], Path(folder), store,
+            policy_digest=manifest["policy_digest"], mapping_versions=mapping_versions).get("quality")}
+                for position in positions}
+    finally:
+        engine.dispose()
+
+
+def _quality_receipt(envelope: dict, outcomes: list[dict | None], observed_at: str) -> dict:
+    identity = _quality_identity(envelope)
+    grouped = {}
+    for outcome in outcomes:
+        if not outcome:
+            continue
+        source = outcome["table"]
+        target = grouped.setdefault(source, {"table": source, "rule_version": outcome["version"], "checks": {}})
+        if target["rule_version"] != outcome["version"]:
+            raise ValueError("One source unit contains conflicting quality versions")
+        for name, check in outcome["checks"].items():
+            item = target["checks"].setdefault(name, {"kind": check["kind"],
+                "failure_action": check["failure_action"], "rows_checked": 0,
+                "rows_failed": 0, "rows_expected": 0, "rows_unknown": 0})
+            if (item["kind"], item["failure_action"]) != (check["kind"], check["failure_action"]):
+                raise ValueError("One source unit contains conflicting check definitions")
+            for field in ("rows_checked", "rows_failed", "rows_expected", "rows_unknown"):
+                if check[field] < 0 or item[field] > 2**63 - 1 - check[field]:
+                    raise ValueError("MDM quality evidence count exceeds signed 64-bit storage")
+                item[field] += check[field]
+    return {"version": 1, **identity, "observed_at": observed_at,
+            "sources": [grouped[key] for key in sorted(grouped)]}
+
+
+def _retained_observation(envelope: dict, artifacts, quality_identity: dict) -> str | None:
+    try:
+        receipt = json.loads(artifacts.read(envelope["output"]))
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return None
+    quality = receipt.get("quality") if isinstance(receipt, dict) else None
+    if not isinstance(quality, dict) or any(quality.get(key) != value for key, value in quality_identity.items()):
+        return None
+    value = quality.get("observed_at")
+    return value if isinstance(value, str) and value else None
 
 
 def _spread(work: list, count: int) -> list[list]:
@@ -180,8 +255,10 @@ def execute(envelope: dict, artifacts) -> dict:
 
     from edgar_warehouse.mdm import changed_files
 
-    if set(envelope["checks"]) != {CHECK}:
-        raise ValueError(f"mastering.merge verifies {CHECK} only")
+    checks = set(envelope["checks"])
+    if checks not in ({CHECK}, {CHECK, QUALITY_CHECK}):
+        raise ValueError(f"mastering.merge verifies {CHECK}, with optional {QUALITY_CHECK}")
+    _quality_enabled(checks)
     engine = _engine(restricted=True)
     readings: dict = {}
     journal = changed_files.journal()
@@ -196,19 +273,29 @@ def execute(envelope: dict, artifacts) -> dict:
             recorded = _recorded(journal, list(keys.values()))
         finally:
             engine.dispose()
-        done = {position: [{"file": name, "records": int(count)} for name, count in recorded[key]]
+        done = {position: {"files": [{"file": name, "records": int(count)} for name, count in recorded[key]],
+                           "quality": None}
                 for position, key in keys.items() if key in recorded}
         work = [(position, keys.get(position)) for position in range(len(manifest["batches"])) if position not in done]
+        if QUALITY_CHECK in checks and done:
+            done.update(_quality_for_recorded(envelope, manifest, str(path.parent), sorted(done), readings))
         count = min(processes(), len(work))
         if count <= 1:
-            done.update(_merge_batches(envelope, manifest, str(path.parent), work))
+            done.update(_merge_batches(envelope, manifest, str(path.parent), work, readings))
         else:
             with ProcessPoolExecutor(count, mp_context=get_context("spawn")) as pool:
-                for part in [pool.submit(_merge_batches, envelope, manifest, str(path.parent), share)
+                for part in [pool.submit(_merge_batches, envelope, manifest, str(path.parent), share, readings)
                              for share in _spread(work, count)]:
                     done.update(part.result())
-    files = sorted((item for position in sorted(done) for item in done[position]), key=lambda item: item["file"])
-    return artifacts.put_bytes(envelope["output"], json.dumps({"version": 1, "files": files}, sort_keys=True,
+    files = sorted((item for position in sorted(done) for item in done[position]["files"]), key=lambda item: item["file"])
+    receipt = {"version": 1, "files": files}
+    if QUALITY_CHECK in checks:
+        identity = _quality_identity(envelope)
+        previous = _retained_observation(envelope, artifacts, identity)
+        observed_at = previous or datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+        receipt["quality"] = _quality_receipt(
+            envelope, [done[position]["quality"] for position in sorted(done)], observed_at)
+    return artifacts.put_bytes(envelope["output"], json.dumps(receipt, sort_keys=True,
                                                               separators=(",", ":")).encode())
 
 
@@ -217,7 +304,12 @@ def check(envelope: dict, artifacts) -> tuple[dict, list]:
 
     if envelope["candidate"]["uri"] != envelope["output"]:
         raise ValueError("Candidate URI differs from the intended output")
-    claimed = json.loads(artifacts.verified(envelope["candidate"], max_bytes=64 * 1024 * 1024))["files"]
+    receipt = json.loads(artifacts.verified(envelope["candidate"], max_bytes=64 * 1024 * 1024))
+    claimed = receipt["files"]
+    requested = set(envelope["checks"])
+    if requested not in ({CHECK}, {CHECK, QUALITY_CHECK}):
+        raise ValueError(f"mastering.merge verifies {CHECK}, with optional {QUALITY_CHECK}")
+    _quality_enabled(requested)
     engine = _engine(restricted=False)
     db = open_store(engine)
     try:
@@ -227,4 +319,14 @@ def check(envelope: dict, artifacts) -> tuple[dict, list]:
         engine.dispose()
     if len(held) != len({item["file"] for item in claimed}) or any(held[i["file"]] != i["records"] for i in claimed):
         raise ValueError("The receipt differs from what mastering holds")
-    return {CHECK: True}, []
+    verified = {CHECK: True}
+    if QUALITY_CHECK in requested:
+        quality = receipt.get("quality")
+        identity = _quality_identity(envelope)
+        if (not isinstance(quality, dict) or quality.get("version") != 1
+                or any(quality.get(key) != value for key, value in identity.items())
+                or not isinstance(quality.get("observed_at"), str)
+                or not isinstance(quality.get("sources"), list)):
+            raise ValueError("MDM quality evidence receipt is absent or mismatched")
+        verified[QUALITY_CHECK] = True
+    return verified, []

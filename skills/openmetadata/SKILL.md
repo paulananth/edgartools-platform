@@ -433,12 +433,18 @@ history. `publish` and `check` confirm either input through the exact timestamp
 history readback in
 [Quality result history](references/QUALITY-RESULT-HISTORY.md). `check` reports
 "result changed, publish again" when that readback differs. A failed result
-opens an incident. Only silver checks write this legacy file so far; the source
-checks and master identifier limits do not.
+opens an incident. Only silver checks write this legacy file; MDM source
+quality rules use Bookkeeping-admitted evidence instead of this latest-only
+file. Source identifier limits remain mastering invariants, not native quality
+cases.
 
-For per-load results from a completed Bookkeeping run, use
+For per-load results from a Bookkeeping run, use
 `edgar-warehouse rules catalog publish --bookkeeping-run RUN_ID`. That command
-also reconciles the configured catalog plan.
+also reconciles the configured catalog plan. MDM evidence is enabled only by
+its frozen check and the qualified recovery gate in
+[Bookkeeping recovery](../bookkeeping/RECOVERY.md). Incomplete admitted work is
+published as `Aborted` with counts from verified work only and explicit
+unknown detail; require exact timestamped readback before confirmation.
 
 Probe the API with a throwaway case on a real table, never a real case, and
 delete the case and its empty suite (`DELETE /dataQuality/testCases/{id}?hardDelete=true&recursive=true`,

@@ -1223,18 +1223,34 @@ def _case_fqn(case: dict) -> str:
 
 
 def _result_body(result: dict) -> dict:
-    """A silver load's report of one check, as the server's test case result."""
+    """An admitted quality outcome, as the server's test case result."""
     checked, failed = result["rows_checked"], result["rows_failed"]
     if (type(checked) is not int or type(failed) is not int or not 0 <= failed <= checked <= 2**63 - 1
-            or result.get("on_fail") not in ("flag", "exception")):
+            or result.get("on_fail") not in ("flag", "withhold", "exception")
+            or result.get("status", "passed") not in ("passed", "failed", "unknown")):
         raise CatalogError(f"The result of {result.get('table')}.{result.get('check')} fails {failed} of {checked} rows")
     correlation = result.get("correlation")
     if correlation is not None and (not isinstance(correlation, str) or len(correlation) > 512):
         raise CatalogError("The quality result has an invalid load reference")
-    detail = f"{failed} of {checked} rows failed ({result['on_fail']})."
+    detail = f"{failed} of {checked} evaluated rows failed ({result['on_fail']})."
+    if result.get("status") == "unknown":
+        unknown = result.get("rows_unknown", 0)
+        if type(unknown) is not int or unknown < 0 or unknown > 2**63 - 1:
+            raise CatalogError("The incomplete quality result has invalid unknown-row count")
+        units_unknown = result.get("units_unknown", 0)
+        if type(units_unknown) is not int or units_unknown < 0 or units_unknown > 2**63 - 1:
+            raise CatalogError("The incomplete quality result has invalid unknown-unit count")
+        detail = (f"Incomplete/unknown: {checked} verified rows evaluated, {unknown} rows not evaluated, "
+                  f"{units_unknown} work units unconfirmed; {failed} failed.")
+    if result.get("rule_version"):
+        detail += f" Rule version: {result['rule_version']}."
     if correlation:
         detail += f" Load: {correlation}."
-    return {"timestamp": _millis(result["at"]), "testCaseStatus": "Failed" if failed else "Success",
+    status = result.get("status", "passed")
+    if (status == "passed" and failed != 0) or (status == "failed" and failed == 0):
+        raise CatalogError("The quality result status disagrees with its verified counts")
+    return {"timestamp": _millis(result["at"]),
+            "testCaseStatus": "Aborted" if status == "unknown" else ("Failed" if failed else "Success"),
             "result": detail,
             "passedRows": checked - failed, "failedRows": failed,
             "testResultValue": [{"name": "rowsChecked", "value": str(checked)},

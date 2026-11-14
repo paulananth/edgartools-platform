@@ -375,3 +375,20 @@ and profiling proposals as proposals. Do not translate engine checks into guesse
 SQL or manufacture pass/fail results. Result publication requires genuine matched
 execution evidence. A quality description in a column is not native test-case
 coverage; missing publisher support is an implementation gap.
+
+### MDM execution evidence
+
+MDM checks remain in each source's registered quality contract. All source
+adapters use the shared quality evaluator and emit the same versioned evidence
+shape; do not add source-specific result adapters or entity branches. Counts
+identify checks by the configured check id and check kind, and distinguish
+`flag`, `withhold`, and `exception`. An exception ends evaluation for that
+record at the failed check; later checks are unknown for that record. Missing
+or incomplete evidence is never a pass or fail.
+
+MDM evidence is opt-in and stays disabled until the recovery qualification and
+operator enablement in [Bookkeeping recovery](../bookkeeping/RECOVERY.md) are
+complete. Bookkeeping admits immutable unit receipts. OpenMetadata is the
+single user-facing results surface; it receives only counts from verified
+work, and incomplete evidence is recorded as `Aborted` with explicit
+incomplete/unknown detail and exact readback.

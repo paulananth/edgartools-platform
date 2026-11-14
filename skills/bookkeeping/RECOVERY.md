@@ -77,6 +77,29 @@ The feature stays disabled until the operator authorizes enablement; this
 maximum records the gate the measurement must meet, not the authorization
 itself.
 
+### MDM quality evidence v1
+
+MDM quality evidence is opt-in through the frozen `mastering.merge` check
+`mdm.quality.evidence.v1` and requires `MDM_QUALITY_EVIDENCE_V1=enabled` in
+the worker environment. Keep both unset/unconfigured until the recovery path
+has been exercised on a disposable run and the operator authorizes enablement.
+Definitions come from each registered source contract's quality rules; no
+source or mastered-entity adapter may define its own result shape. The receipt
+contains source contract code, quality version, check identity/action, bounded
+counts, an opaque work-unit reference and observation time. It contains no
+record values or provider record identifiers.
+
+The worker re-reads journal-skipped input batches under the same registered
+reading identity to reproduce their quality counts without repeating the
+merge. A retry reuses the observation time retained in its immutable output.
+Bookkeeping admits only verified receipts with matching run/step/unit identity
+and valid counts. Missing receipts or unchecked rows remain unknown. Keep
+quality status separate from the run's completion status. OpenMetadata may
+show `Aborted` for incomplete evidence, with counts from verified work only;
+its exact timestamped readback is required before publication is confirmed.
+This receipt version has not yet passed recovery qualification and remains
+disabled by default.
+
 ## General run recovery
 
 These operational cases cover existing runs; they do not demonstrate a

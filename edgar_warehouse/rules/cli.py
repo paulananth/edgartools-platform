@@ -344,23 +344,6 @@ def _catalog(args):
     try:
         if getattr(args, "bookkeeping_run", None):
             quality_summary = _bookkeeping_quality(args.bookkeeping_run)
-            if quality_summary.get("status") == "unknown":
-                report = {"ok": False, "status": "pending", "failed_stage": "quality_evidence",
-                          "plan": {"status": "ready", "counts": counts},
-                          "publish": {"status": "not_run"}, "readback": {"status": "not_run"},
-                          "quality": quality_summary,
-                          "cause": "Bookkeeping quality evidence is unknown or incomplete",
-                          "next_action": "Finish or reconcile the Bookkeeping run, then retry publication."}
-                if not quality_summary.get("run_complete"):
-                    report["summary"] = (f"PENDING: Bookkeeping run {args.bookkeeping_run} is not complete; "
-                                         f"{quality_summary['units_verified']}/{quality_summary['units_expected']} "
-                                         f"units verified and {quality_summary['units_unknown']} unknown. "
-                                         "Complete run verification before publishing.")
-                else:
-                    report["summary"] = (f"PENDING: Bookkeeping run {args.bookkeeping_run} has "
-                                         f"{quality_summary['units_unknown']} unknown unit(s); "
-                                         "complete verification before publishing.")
-                return _catalog_output(report)
             from edgar_warehouse.bookkeeping.clean.quality import catalog_results
             results = catalog_results(quality_summary)
         else:
@@ -440,9 +423,12 @@ def _catalog(args):
                                          "table-to-table lineage", "pipeline-to-table lineage"]},
                   "next_action": None if result["ok"] else
                       "Review readback differences, then rerun `rules catalog publish` and `check`."}
+        quality_label = ("quality evidence is incomplete/unknown; verified counts only" if quality_summary and
+                         quality_summary.get("status") == "unknown" else None)
         report["summary"] = (f"CONFIRMED: readback from {endpoint} matches its checked scope; "
                              f"{_catalog_counts_text(counts)}; "
-                             f"{result.get('quality_results_confirmed', 0)} per-load quality result(s) confirmed." if result["ok"] else
+                             f"{result.get('quality_results_confirmed', 0)} per-load quality result(s) confirmed"
+                             f"{'; ' + quality_label if quality_label else ''}." if result["ok"] else
                              f"PARTIAL: readback from {endpoint} found {len(result['differences'])} difference(s). "
                              "Review the differences and reconcile the catalog.")
         return _catalog_output(report)
@@ -514,6 +500,7 @@ def _catalog(args):
         report["summary"] = (f"CONFIRMED: publish and checked readback scope matched at {endpoint}; "
                              f"{_catalog_counts_text(counts)}. Removed {_catalog_removed_text(sent['removed'])}; "
                              f"{verified.get('quality_results_confirmed', 0)} per-load quality result(s) confirmed; "
+                             f"{'quality evidence is incomplete/unknown with verified counts only; ' if quality_summary and quality_summary.get('status') == 'unknown' else ''}"
                              "created/updated counts unavailable.")
     else:
         report["failed_stage"] = "readback"
