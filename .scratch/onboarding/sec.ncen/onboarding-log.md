@@ -64,7 +64,9 @@ the fiscal years that ended in it (2026q1 is the peak). Kept for the parts:
 ## Parts, in order (plan-parts)
 
 1. **Fund series** (`sec.ncen.fund`, `sec.ncen.fund.v1`, kind `fund_structure`): FUND_REPORTED_INFO, joined
-   by series id and LEI. `profile.yaml` (the public summary, names and counts only) is in this folder.
+   by series id and LEI. No `profile.yaml` yet: the approved findings' summary declares 79 silver tables, none
+   landed or registered, and two of its parts name one table, so the catalog's profile check fails on it
+   (`tests/unit/test_rules_catalog.py`, CI on PR 1764). It is written when an N-CEN part lands in silver.
 2. **Advisers** (kind `company`, by CRD and LEI) and the series → adviser link `INVESTMENT_ADVISER_TO`
    (already in RDM's `mdm-relationship-types`; its definition names N-CEN). Blocked on a question: N-CEN
    writes a CRD with leading zeros and `normalize_identifier@crd-v1` keeps every digit, so no N-CEN CRD

@@ -18,7 +18,8 @@ series → its adviser (company). The onboarding log is `.scratch/onboarding/sec
 - [x] Capture four quarters of the N-CEN data sets with the operator's permission; receipts by `capture_receipts.py` (2026-11-14 09:50 ET)
 - [x] Profile 2026q1 and record the operator's approval of the findings (`profile_data.py approve`) (2026-11-14 09:50 ET)
 - [x] Compare the other three quarters with the approved findings: no drift on a column the parts read (2026-11-14 09:50 ET)
-- [x] Plan the parts and write `profile.yaml` (2026-11-14 09:50 ET)
+- [x] Plan the parts (2026-11-14 09:50 ET)
+- [ ] ~~Write `profile.yaml`~~ deferred to the first N-CEN silver part: its 79 tables are not landed, and two parts name one table (catalog test, CI on PR 1764)
 - [x] Part 1, fund series: `sec.ncen.fund` into `fund_structure` by series id and LEI, loaded in a disposable store after N-PORT's 2026q2 series: 12,953 records of 12,412 series; 11,895 Funds hold both sources, 512 are new, 1,042 are N-PORT's only; 10 set aside (1 series id shape, 9 LEI check digits), 6 to review (conflicting identifiers), no identifier on two Funds; a second load found nothing to do (2026-11-14 09:50 ET)
 - [ ] Part 1 loaded on the hosted store (the operator's word)
 - [ ] Part 2, advisers: decide how an N-CEN CRD (written with leading zeros) matches a Form ADV CRD
