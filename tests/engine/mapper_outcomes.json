@@ -39,7 +39,7 @@
  ],
  "gleif/normalize/valid": [
   "assertion",
-  "de132d9524a8bc92d2067fb6583b651b0fe5c5c9506273970f2ac418161875ce"
+  "4f1208552018aad26b372358e5e594f28a8f87217f70b0383086a75a0bf4c537"
  ],
  "gleif/parents/'plain text'": "0803fff15876616e80bf448856a145a1b25091c95158cdadc098fdc86bab9937",
  "gleif/parents/0": "0803fff15876616e80bf448856a145a1b25091c95158cdadc098fdc86bab9937",
@@ -161,16 +161,16 @@
  "sec/normalize/sec.company/blank_name": [
   "deferred",
   "quality_name_present",
-  "212ec0ff044695bf34d90d3c68333b779dcf0da93bff78c92b2ea0158193b071",
+  "ec8fa74e1d2682f0eb0d4cbb4a166fe33bd0dadf206d7035786b96a240ce3560",
   null
  ],
  "sec/normalize/sec.company/unknown_fields": [
   "assertion",
-  "5c38d67247cb88b014c233f85196122997c360b3e6f2d26140e5ad14d4f40540"
+  "d1647f08b431a1b42cbf5e15b6338c0d0b34c195d1084b0d6262a56ef7c7788d"
  ],
  "sec/normalize/sec.company/valid": [
   "assertion",
-  "5c38d67247cb88b014c233f85196122997c360b3e6f2d26140e5ad14d4f40540"
+  "d1647f08b431a1b42cbf5e15b6338c0d0b34c195d1084b0d6262a56ef7c7788d"
  ],
  "sec/normalize/sec.submissions.person/bad_identity": [
   "deferred",
@@ -192,11 +192,11 @@
  ],
  "sec/normalize/sec.submissions.person/unknown_fields": [
   "assertion",
-  "5524a2b31ca49f427485346da5c259eeaac93c73979bc22dd6935309cbeb36b6"
+  "986184d1a6601c369b4f921e2bce7e855ffae58d05ae0be60e2d2842e90f8633"
  ],
  "sec/normalize/sec.submissions.person/valid": [
   "assertion",
-  "5524a2b31ca49f427485346da5c259eeaac93c73979bc22dd6935309cbeb36b6"
+  "986184d1a6601c369b4f921e2bce7e855ffae58d05ae0be60e2d2842e90f8633"
  ],
  "sec/timestamps": "e9f271d5b49dee42c6011338cbe2e550b545abfc4df835ec5d58a8d132de9b84"
 }

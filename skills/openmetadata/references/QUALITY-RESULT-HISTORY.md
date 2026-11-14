@@ -86,3 +86,20 @@ Verified in the browser against OpenMetadata 2.0.7.
   evidence as `Aborted`, with verified counts and explicit unknown detail.
 - The Test Cases list, the Test Suites list and a table's Data Quality panel
   show the last run or a summary only. None of them shows per-load history.
+
+## MDM quality evidence
+
+MDM checks remain in each source's registered quality contract. Every source
+adapter uses the shared evaluator and emits the same versioned evidence shape;
+do not add source-specific result adapters or entity branches. Counts use the
+configured check id and kind, distinguishing `flag`, `withhold`, and
+`exception`. An exception ends evaluation for that record at the failed check;
+later checks are unknown for that record. Missing or incomplete evidence is
+never a pass or fail.
+
+MDM evidence remains opt-in until recovery qualification and operator
+enablement in [Bookkeeping recovery](../../bookkeeping/RECOVERY.md) are
+complete. Bookkeeping admits immutable unit receipts. OpenMetadata is the
+single user-facing results surface; it receives only counts from verified
+work. Incomplete evidence is `Aborted` with explicit incomplete/unknown detail
+and requires exact timestamped readback.
