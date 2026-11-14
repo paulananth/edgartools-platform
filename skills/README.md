@@ -34,6 +34,7 @@ copies them instead: `edgar-warehouse skill install`.
 | What counts as governed data, and what belongs on a lineage graph | [data-governance](data-governance/SKILL.md) |
 | Business domains, glossaries, assets and lineage in a catalog | [data-catalog](data-catalog/SKILL.md) |
 | Reading or writing the catalog on OpenMetadata | [openmetadata](openmetadata/SKILL.md) |
+| Setting up AutoOntology above MDM, RDM, and Silver | [auto-ontology](auto-ontology/SKILL.md) |
 | **General teaching, not this platform's rules** | |
 | What pipelines, warehouses and data engineering are | [data-engineering-fundamentals](data-engineering-fundamentals/SKILL.md) |
 | Analysing a data set end to end | [data-scientist](data-scientist/SKILL.md) |
