@@ -159,7 +159,7 @@ uv run --with duckdb --with pyyaml python profile_data.py --help
 | quality | Every data quality rule each part needs on every load, with the rows that fail it: a defect when above 0, a rule the clean data passes at 0 (a key column filled, an identifier's one shape or check digit, a link that resolves, a code list); masked examples; each invalid hierarchy row marked with an evidence-backed fix or "needs steward" | `quality`, `invalid_rows.jsonl` |
 | code sets | The RDM code sets the data set needs: each existing or proposed set, the columns that use it, how many codes | `code_sets` |
 | suggest-store, silver | Advice: MDM, RDM, MDM relationships, silver, bookkeeping; a silver table spec per part under "Silver fields" (a master's rows also carry their own MDM id) | `store_suggestion`, `silver` |
-| catalog | From approved findings, the public summary the Data Catalog shows: every part's silver fields and quality rules, and the code sets; names and counts only | `rules/sources/<source>/profile.yaml` |
+| catalog | From approved findings, the public summary the Data Catalog shows: every part's silver fields and quality rules, and the code sets; names and counts only. Write it once the source lands a part in silver: it declares every part as a silver table, landed or not, and two parts may name one table, which the catalog's profile check refuses | `rules/sources/<source>/profile.yaml` |
 | report | `REPORT.md` and `findings.yaml` | files |
 | approve | Records the operator's approval in their exact words | `approval` |
 | rank sources | Several sources of one kind, joined on the identifier they share: per field, how much each fills, how often it states one value, how often each pair agrees; a recommended source order (`rank_sources.py`, below) | `ranking.yaml`, `RANKING.md` |
@@ -199,6 +199,12 @@ uv run --with duckdb --with pyyaml python profile_data.py run --name "<data set>
   again:
   - pass every input of the data set in one run, so links between its parts
     are measured;
+  - a data set published as one file per period (a quarter, a month) with the
+    same tables: profile one delivery, the largest, and `compare` each other
+    one against its approved findings. Run as several inputs, each delivery's
+    tables are parts of their own (a table whose name an earlier input took
+    gets its input's name in front), and keys and classes are counted per
+    delivery, not over the data set;
   - pass the existing kinds (`--kinds`);
   - check that no limit is below the inputs' sizes.
 
@@ -370,6 +376,16 @@ keeping its key between deliveries), snapshot-or-changes and the refresh rate
 need two deliveries: a single run leaves them for `compare`, which
 measures them from each part's key sample (`deliveries` in `drift.yaml`).
 Versions per key are measured in one delivery when the key holds a time.
+
+**Read drift against the files first.** Before acting on a `column_new` or
+`column_missing` item, compare the header lines of the part's table in the
+approved delivery and the new one. When they match, a column new or missing
+on a derived part (`<PART>.<COLUMN>`, an entity found inside a part) is how
+the profiler cut that part from this delivery's values, not a change in the
+file. Volume, fill and distribution items follow what each delivery covers: a
+yearly report lands in the period its year ended, so periods differ in size
+and mix. Keep the items on the columns the onboarded parts read, and write
+them to the log by name and count, never a code or value from the data.
 
 ## Examples
 
