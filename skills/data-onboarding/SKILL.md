@@ -142,8 +142,11 @@ legacy documents are not reparsed as a side effect of a narrow change.
   target; `scripts/run_inputs.py [source]` prints every target's facts and files with those comments.
 - The order it needs (the sources and the merge rules before it) is declared in the source sequence.
 
-**A source extract has the fewest steps that make its records**, one where it can. Each step reads and writes
-every row again, so a step earns its place only by work no earlier step can do:
+**A source extract has the fewest steps that make its records**, one per destination where it can. MDM and
+silver are two paths: a source that feeds both splits into at least two, one to MDM and one to silver, never
+one step holding both (each reader then parses only its own rows, and each step's memory is only its own state).
+Within one path, each step reads and writes every row again, so a step earns its place only by work no earlier
+step can do:
 - **The read** streams each file once and computes every per-row value: a cleaned identifier, a date turned
   into an instant (`transform` reformats a looked-up value too), a value joined from another reading by a
   pair set (`member_value`). A file with one row per record needs nothing more: the target prepares the
@@ -152,7 +155,8 @@ every row again, so a step earns its place only by work no earlier step can do:
   rows. Its table reads the read's rows directly, and the target prepares the combine's table, one record
   per key (`distinct_on`), with no record column: each row is the record.
 - **A reduce** stays only where it cuts the rows a later step carries by orders of magnitude; measure the
-  rows with and without it first.
+  rows with and without it first. Two reduces stay two when one would hold both states at once: a step's
+  memory is the sum of what it keeps, so measure the peak before folding them.
 - **No step only reshapes another step's rows** (a record step): `rules check` refuses a pass that reads only
   another step's pieces. Move its work into the read, or into the combine's joins.
 
