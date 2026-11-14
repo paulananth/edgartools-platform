@@ -238,11 +238,11 @@ class ReductionEngine:
         return self._engine.finish()
 
 
-def prepare_current_records(readings: list[dict], as_of: str, retired: set[str]) -> dict:
-    """Transport retained readings to Rust without interpreting their values."""
-    return json.loads(source_contract.prepare_current_records(
-        json.dumps(readings, ensure_ascii=False, separators=(",", ":"), allow_nan=False),
-        as_of, sorted(retired)))
+def prepare_current_records(readings: list[dict] | str, as_of: str, retired: set[str]) -> dict:
+    """Transport retained readings to Rust without interpreting their values; stored JSON text goes as it is."""
+    text = readings if isinstance(readings, str) else json.dumps(
+        readings, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+    return json.loads(source_contract.prepare_current_records(text, as_of, sorted(retired)))
 
 
 def current_record_views(readings: list[dict], as_of: str) -> dict:

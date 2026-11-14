@@ -408,6 +408,30 @@ def test_a_link_waits_for_its_other_end_and_keeps_its_earliest_start(database_fa
         assert [r["valid_from"] for r in links.rows_of(later)] == [row["valid_from"]]
 
 
+def test_a_link_reads_only_the_kind_and_status_of_its_golden_records(database_factory, monkeypatch):
+    """The links build holds every link end's golden record at once, so it reads two fields of each, never the body."""
+    custodian = "iapd.adv.custodians.v1"
+    link = {"type": "ISSUED_BY", "target_subject": subject_key(custodian, "issuer"), "scope": "invented",
+            "valid_from": "2026-03-01T00:00:00+00:00", "valid_to": None, "valid_from_basis": "observed", "properties": {}}
+    share = assertion(source_code=NPORT, record_key="share", publication_key="invented", revision=1, effective_at=None,
+                      kind="security", fields={"name": "INVENTED SHARE"}, identifiers={"cusip": "037833100"},
+                      relationships=[link])
+    with opened(database_factory) as db:
+        merge.merge_file(db, SECURITY, [share])
+        merge.merge_file(db, COMPANY, [record(custodian, "issuer", lei="529900T8BM49AURSDO55")])
+        states = db.master_states(list(live(db)))
+        assert sorted(state["kind"] for state in states.values()) == ["company", "security"]
+        assert all(set(state) <= {"kind", "status"} for state in states.values())
+
+        def whole(entities):
+            raise AssertionError("the links build read whole golden records")
+
+        monkeypatch.setattr(db, "master_bodies", whole)
+        edges, waiting = links.calculate(db, POLICY, AS_OF, {})
+        assert not waiting
+        assert [row["relationship_type"] for row in links.rows_of(edges)] == ["ISSUED_BY"]
+
+
 PERSON = merge.Settings(POLICY, "invented-digest", "person", AS_OF)
 FUND = merge.Settings(POLICY, "invented-digest", "fund_structure", AS_OF)
 PERSON_SOURCE, FUND_SOURCE = "sec.submissions.person.v1", "sec.nport.fund.v1"

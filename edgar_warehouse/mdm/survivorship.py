@@ -22,7 +22,7 @@ def profile_key(profile):
 
 
 def current_claims(
-    assertions: list[dict], as_of: str, retired: set[str]
+    assertions: list[dict] | str, as_of: str, retired: set[str]
 ) -> dict[str, dict]:
     """Prepare current records once, independently of the database selected."""
     try:
