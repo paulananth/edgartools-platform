@@ -40,7 +40,7 @@ def policy_body() -> dict:
     return cusip.policy_body()
 
 
-def prepared_records(root: Path, umbrella: tuple[list[str], ...] = (),
+def prepared_records(root: Path, series: tuple[list[str], ...] = (),
                      with_cusip: list[str] = WITH_CUSIP) -> list[dict]:
     store = Artifacts()
     root.mkdir(parents=True, exist_ok=True)
@@ -52,7 +52,7 @@ def prepared_records(root: Path, umbrella: tuple[list[str], ...] = (),
                    + "".join(f"{a}\t{d}\n" for a, d in cusip.FILINGS.items()))
     raw = store.put_bytes((root / "capture.zip").as_uri(), body.getvalue())
     holdings = cusip.read(store, root / "holdings", "source.yaml", raw, cusip.Q2, lookups={"isin": PAIRS})
-    issuers = cusip.issuers(store, root, raw, PAIRS, cusip.Q2, umbrella)
+    issuers = cusip.issuers(store, root, raw, PAIRS, cusip.Q2, series)
     return cusip.security_records(store, root, holdings, issuers, batch_id="check-isin")
 
 
@@ -73,14 +73,16 @@ def test_an_isin_only_security_links_to_its_one_issuer(database, tmp_path):
     assert [(p["valid_from"], p["valid_from_basis"]) for p in only["periods"]] == [(cusip.MAY28, "observed")]
 
 
-def test_an_isin_counts_a_fund_series_as_its_umbrella_trust(tmp_path):
-    """Ticket 23 on the ISIN table: TWO's holdings name two LEIs; with the
-    second a sub-fund of the first, TWO has one issuer, the umbrella."""
-    records = prepared_records(tmp_path, umbrella=([OTHER, LEI],))
+def test_an_isin_only_share_is_issued_by_the_fund_series_its_holdings_name(tmp_path):
+    """Ticket 234 on the ISIN table: TWO's holdings name two LEIs, one a fund series'
+    (invented series id); TWO is issued by that series' Fund, as is the CUSIP whose
+    holding names the series; ONE keeps its Company issuer by LEI."""
+    series = "S000000002"  # invented
+    records = prepared_records(tmp_path, series=([OTHER, series],))
     targets = {r["provenance"]["record_key"]: [l["target_subject"] for l in r.get("relationships") or []
                                                if l["type"] == "ISSUED_BY"] for r in records}
-    assert targets == {ONE: [subject_key(cusip.GLEIF, LEI)], TWO: [subject_key(cusip.GLEIF, LEI)], NONE: [],
-                       CUSIP: [subject_key(cusip.GLEIF, LEI)]}  # its issuer, a sub-fund, counts as the umbrella
+    assert targets == {ONE: [subject_key(cusip.GLEIF, LEI)], TWO: [subject_key("sec.nport.fund.v1", series)],
+                       NONE: [], CUSIP: [subject_key("sec.nport.fund.v1", series)]}
 
 
 def test_a_cusips_record_carries_every_isin_filed_with_it_and_an_isin_only_one_keeps_its_own(tmp_path):

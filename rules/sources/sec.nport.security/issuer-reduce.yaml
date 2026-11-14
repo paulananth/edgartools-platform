@@ -15,6 +15,43 @@ reduce:
   max_output_rows: 1000000
   max_output_bytes: 268435456
   groups:
+    # The fund series each CUSIP's holdings name (ticket 234), and each ISIN's.
+    cusip_series:
+      source: issuers
+      table: security_series
+      keys: [cusip]
+      mode: members
+      member: issuer_series
+      count: series
+      sample: series_sample
+      sample_limit: 1
+    no_cusip_series:
+      source: issuers
+      table: no_cusip_series
+      keys: [no_cusip_key]
+      mode: members
+      member: issuer_series
+      count: series
+      sample: series_sample
+      sample_limit: 1
+    cusip_series_filed:
+      source: issuers
+      table: security_series
+      keys: [cusip]
+      mode: members
+      member: filed
+      count: filings
+      sample: filed_sample
+      sample_limit: 1
+    no_cusip_series_filed:
+      source: issuers
+      table: no_cusip_series
+      keys: [no_cusip_key]
+      mode: members
+      member: filed
+      count: filings
+      sample: filed_sample
+      sample_limit: 1
     cusip_issuers:
       source: issuers
       table: security_issuer
