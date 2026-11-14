@@ -369,6 +369,17 @@ def _catalog(args):
         report["summary"] = "FAILED: cannot read Bookkeeping quality evidence. Check Bookkeeping access and retry."
         return _catalog_output(report)
 
+    if quality_summary and quality_summary.get("status") == "unknown" and not results:
+        report = {"ok": False, "status": "pending", "failed_stage": "quality_evidence",
+                  "plan": {"status": "ready", "counts": counts},
+                  "publish": {"status": "not_run"}, "readback": {"status": "not_run"},
+                  "quality": quality_summary,
+                  "cause": "No verified per-check counts are available for this incomplete run",
+                  "next_action": "Complete or reconcile work and retry; no zero-count result was fabricated."}
+        report["summary"] = (f"PENDING: Bookkeeping run {quality_summary.get('run_id')} is incomplete/unknown; "
+                              "there are no verified check counts to publish. No zero-count result was fabricated.")
+        return _catalog_output(report)
+
     url, token = os.environ.get("OPENMETADATA_URL"), os.environ.get("OPENMETADATA_TOKEN")
     endpoint = catalog.endpoint_identity(url)
     if not url or not token:

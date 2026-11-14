@@ -208,6 +208,15 @@ def _quality_for_recorded(envelope: dict, manifest: dict, folder: str, positions
         engine.dispose()
 
 
+def _attach_replayed_quality(done: dict[int, dict], replayed: dict[int, dict]) -> dict[int, dict]:
+    """Attach recomputed outcomes without discarding the journal's committed-file receipt."""
+    for position, value in replayed.items():
+        if position not in done:
+            raise ValueError("Replayed quality names a batch without a committed merge receipt")
+        done[position] = {**done[position], "quality": value["quality"]}
+    return done
+
+
 def _quality_receipt(envelope: dict, outcomes: list[dict | None], observed_at: str) -> dict:
     identity = _quality_identity(envelope)
     grouped = {}
@@ -278,7 +287,8 @@ def execute(envelope: dict, artifacts) -> dict:
                 for position, key in keys.items() if key in recorded}
         work = [(position, keys.get(position)) for position in range(len(manifest["batches"])) if position not in done]
         if QUALITY_CHECK in checks and done:
-            done.update(_quality_for_recorded(envelope, manifest, str(path.parent), sorted(done), readings))
+            replayed_quality = _quality_for_recorded(envelope, manifest, str(path.parent), sorted(done), readings)
+            done = _attach_replayed_quality(done, replayed_quality)
         count = min(processes(), len(work))
         if count <= 1:
             done.update(_merge_batches(envelope, manifest, str(path.parent), work, readings))

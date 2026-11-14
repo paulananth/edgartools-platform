@@ -5,11 +5,11 @@ Labels: `wayfinder:grilling`
 
 ## Checklist
 
-- [x] Implement immutable per-work-unit MDM quality evidence with check identities, counts, and failure actions. 2026-11-13 21:15 ET
-- [x] Integrate Bookkeeping admission, unknown handling, and retry-safe recovery behavior. 2026-11-13 21:15 ET
-- [x] Record the approved evidence and enablement contract in this ticket. 2026-11-13 21:15 ET
-- [x] Validate syntax and patch whitespace with `uv run --no-project python -m py_compile ...` and `git diff --check`; CI remains outstanding. 2026-11-13 21:15 ET
-- [x] Learning → skill: update the shared data-quality and Bookkeeping recovery skills; all source adapters use the registered source quality contract and one receipt shape. 2026-11-13 21:15 ET
+- [x] Implement immutable per-work-unit MDM quality evidence with check identities, counts, and failure actions. 2026-11-13 21:39 ET
+- [x] Integrate Bookkeeping admission, unknown handling, and retry-safe recovery behavior. 2026-11-13 21:39 ET
+- [x] Record the approved evidence and enablement contract in this ticket. 2026-11-13 21:39 ET
+- [x] Validate 246 targeted Company, Person, Security, Bookkeeping, and catalog tests, syntax, and `git diff --check`; CI remains outstanding. The wider MDM folder run was stopped at its five-minute cap. 2026-11-13 21:39 ET
+- [x] Learning → skill: update the shared data-quality and Bookkeeping recovery skills; all source adapters use the registered source quality contract and one receipt shape. 2026-11-13 21:39 ET
 
 # Decide MDM Quality Evidence and Bookkeeping Admission
 

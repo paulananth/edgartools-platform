@@ -5,11 +5,11 @@ Labels: `wayfinder:grilling`
 
 ## Checklist
 
-- [x] Reuse the existing native test cases for each configured MDM check and map results to their source assets. 2026-11-13 21:15 ET
-- [x] Publish complete and incomplete MDM run outcomes with exact timestamped readback and replay safety. 2026-11-13 21:15 ET
-- [x] Record the approved OpenMetadata projection and incomplete-evidence contract in this ticket. 2026-11-13 21:15 ET
-- [x] Validate syntax and patch whitespace with `uv run --no-project python -m py_compile ...` and `git diff --check`; CI remains outstanding. 2026-11-13 21:15 ET
-- [x] Learning → skill: update the shared OpenMetadata result-history instructions for `Aborted` and exact readback. 2026-11-13 21:15 ET
+- [x] Reuse the existing native test cases for each configured MDM check and map results to their source assets. 2026-11-13 21:39 ET
+- [x] Publish complete and incomplete MDM run outcomes with exact timestamped readback and replay safety. 2026-11-13 21:39 ET
+- [x] Record the approved OpenMetadata projection and incomplete-evidence contract in this ticket. 2026-11-13 21:39 ET
+- [x] Validate 246 targeted Company, Person, Security, Bookkeeping, and catalog tests, syntax, and `git diff --check`; CI remains outstanding. The wider MDM folder run was stopped at its five-minute cap. 2026-11-13 21:39 ET
+- [x] Learning → skill: update the shared OpenMetadata result-history instructions for `Aborted` and exact readback. 2026-11-13 21:39 ET
 
 # Decide OpenMetadata Projection and Readback for MDM Quality
 

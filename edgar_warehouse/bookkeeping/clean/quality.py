@@ -97,6 +97,11 @@ def _aggregate_silver(bookkeeping, run_id: str) -> dict:
             total["rows_checked"] += result["rows_checked"]
             total["rows_failed"] += result["rows_failed"]
 
+    if unknown_units or not complete_run:
+        for result in results:
+            result["status"] = "unknown"
+            result["units_unknown"] = len(unknown_units)
+
     check_totals = []
     for total in totals.values():
         total["status"] = "unknown" if unknown_units or not complete_run else (
@@ -116,7 +121,7 @@ def _aggregate_mdm(bookkeeping, run_id: str, run: dict, steps: dict, expected_it
     work = storage.work(bookkeeping.engine, run_id, ordered=True)
     by_identity = {(item["step"], item["unit_key"]): item for item in work if item["step"] in steps}
     complete_run = run.get("state") == "complete"
-    unknown_units, results, totals = [], [], {}
+    unknown_units, unit_results, totals = [], [], {}
     for step, key in sorted(expected):
         item = by_identity.get((step, key))
         reference = work_unit_reference(run_id, step, key)
@@ -157,7 +162,7 @@ def _aggregate_mdm(bookkeeping, run_id: str, run: dict, steps: dict, expected_it
                           "rows_unknown": outcome["rows_unknown"],
                           "status": "unknown" if outcome["rows_unknown"] or not complete_run else
                                     ("failed" if outcome["rows_failed"] else "passed")}
-                results.append(result)
+                unit_results.append(result)
                 agg_key = (step, table, check)
                 total = totals.setdefault(agg_key, {"step": step, "table": table, "check": check,
                     "rule_version": rule_version, "kind": outcome["kind"],
@@ -170,14 +175,54 @@ def _aggregate_mdm(bookkeeping, run_id: str, run: dict, steps: dict, expected_it
                 total["units"] += 1
                 if total["units"] > MAX_COUNT:
                     raise Blocked("Aggregated MDM quality unit count exceeds signed 64-bit storage")
-    incomplete = bool(unknown_units) or not complete_run
+    unknown_steps = {unit["step"] for unit in unknown_units}
     checks = []
     for total in totals.values():
-        total["status"] = "unknown" if incomplete or total["rows_unknown"] else (
+        total["status"] = "unknown" if total["step"] in unknown_steps or not complete_run or total["rows_unknown"] else (
             "failed" if total["rows_failed"] else "passed")
         checks.append(total)
-    status = "unknown" if incomplete or not checks or any(item["status"] == "unknown" for item in checks) else (
+    status = "unknown" if not checks or any(item["status"] == "unknown" for item in checks) else (
         "failed" if any(item["rows_failed"] for item in checks) else "passed")
+    by_case = {}
+    for result in unit_results:
+        case = (result["table"], result["check"])
+        target = by_case.setdefault(case, {"table": result["table"], "check": result["check"],
+            "rule_versions": set(), "kinds": set(), "actions": set(), "steps": set(), "refs": set(),
+            "timestamps": [], "rows_checked": 0, "rows_failed": 0, "rows_unknown": 0,
+            "status": "passed"})
+        target["rule_versions"].add(result["rule_version"])
+        target["kinds"].add(result["kind"])
+        target["actions"].add(result["failure_action"])
+        target["steps"].add(result["step"])
+        target["refs"].add(result["work_unit_ref"])
+        target["timestamps"].append(result["observed_at"])
+        for field in ("rows_checked", "rows_failed", "rows_unknown"):
+            if target[field] > MAX_COUNT - result[field]:
+                raise Blocked("Aggregated MDM quality counts exceed signed 64-bit storage")
+            target[field] += result[field]
+        if result["status"] == "unknown":
+            target["status"] = "unknown"
+        elif result["status"] == "failed" and target["status"] != "unknown":
+            target["status"] = "failed"
+    results = []
+    for target in by_case.values():
+        if target["steps"] & unknown_steps or not complete_run:
+            target["status"] = "unknown"
+        if any(len(target[field]) != 1 for field in ("rule_versions", "kinds", "actions")):
+            raise Blocked("One OpenMetadata quality case maps to conflicting MDM check contracts")
+        refs = sorted(target["refs"])
+        ref = hashlib.sha256(json.dumps(refs, separators=(",", ":")).encode()).hexdigest()[:24]
+        observed = max(datetime.fromisoformat(value).astimezone(timezone.utc)
+                       for value in target["timestamps"])
+        results.append({"run_id": run_id, "step": ",".join(sorted(target["steps"])),
+            "work_unit_ref": ref, "attempt": "aggregate", "table": target["table"],
+            "check": target["check"], "rule_version": next(iter(target["rule_versions"])),
+            "kind": next(iter(target["kinds"])), "failure_action": next(iter(target["actions"])),
+            "observed_at": observed.isoformat(timespec="milliseconds"),
+            "rows_checked": target["rows_checked"], "rows_failed": target["rows_failed"],
+            "rows_unknown": target["rows_unknown"],
+            "units_unknown": sum(unit["step"] in target["steps"] for unit in unknown_units),
+            "status": target["status"]})
     return {"quality_type": "mdm", "status": status, "run_id": run_id,
             "run_complete": complete_run, "units_expected": len(expected),
             "units_verified": len(expected) - len(unknown_units), "units_unknown": len(unknown_units),
@@ -249,11 +294,10 @@ def catalog_results(summary: dict) -> dict:
             entries.append({"table": item["table"], "check": item["check"],
                             "on_fail": item["failure_action"], "at": at,
                             "rows_checked": item["rows_checked"], "rows_failed": item["rows_failed"],
-                            "status": ("unknown" if summary.get("status") == "unknown" else
-                                       item.get("status", "failed" if item["rows_failed"] else "passed")),
+                            "status": item.get("status", "failed" if item["rows_failed"] else "passed"),
                             "rule_version": item.get("rule_version"),
                             "rows_unknown": item.get("rows_unknown", 0),
-                            "units_unknown": summary.get("units_unknown", 0),
+                            "units_unknown": item.get("units_unknown", summary.get("units_unknown", 0)),
                             "correlation": (f"Bookkeeping run {item['run_id']}, step {item['step']}, "
                                             f"unit {item['work_unit_ref']}, attempt {item['attempt']}; "
                                             f"observed at {item['observed_at']}")})

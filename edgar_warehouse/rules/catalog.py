@@ -1227,7 +1227,7 @@ def _result_body(result: dict) -> dict:
     checked, failed = result["rows_checked"], result["rows_failed"]
     if (type(checked) is not int or type(failed) is not int or not 0 <= failed <= checked <= 2**63 - 1
             or result.get("on_fail") not in ("flag", "withhold", "exception")
-            or result.get("status", "passed") not in ("passed", "failed", "unknown")):
+            or result.get("status", "failed" if failed else "passed") not in ("passed", "failed", "unknown")):
         raise CatalogError(f"The result of {result.get('table')}.{result.get('check')} fails {failed} of {checked} rows")
     correlation = result.get("correlation")
     if correlation is not None and (not isinstance(correlation, str) or len(correlation) > 512):
@@ -1246,7 +1246,7 @@ def _result_body(result: dict) -> dict:
         detail += f" Rule version: {result['rule_version']}."
     if correlation:
         detail += f" Load: {correlation}."
-    status = result.get("status", "passed")
+    status = result.get("status", "failed" if failed else "passed")
     if (status == "passed" and failed != 0) or (status == "failed" and failed == 0):
         raise CatalogError("The quality result status disagrees with its verified counts")
     return {"timestamp": _millis(result["at"]),
