@@ -1,6 +1,6 @@
 # 232: Are the Bookkeeping step leases redundant with the destinations they protect?
 
-Type: task. Status: open (audit complete; three changes proposed below).
+Type: task. Status: open (audit complete; part 2 done, part 1 deferred, part 3 open).
 
 ## Question
 
@@ -17,7 +17,7 @@ keep, and which are a second copy of a protection the destination already has?
 - [x] Evaluate each case against the seven wastes, including whether leases remain necessary for recovery and fencing (2026-11-13 ET)
 - [x] Check the implementation history and the tests for the reason leases were introduced (2026-11-13 ET)
 - [x] Write the recommendation with verification evidence (2026-11-13 ET)
-- [ ] Part 1: remove the artifact-scope lease from the steps whose output the artifact store already protects (branch and PR)
+- [ ] ~~Part 1: remove the artifact-scope lease from the steps whose output the artifact store already protects (branch and PR)~~ deferred (2026-11-13 19:24 ET): the lease is the only exclusion of a second worker on a unit, so it cannot be dropped alone. Local PostgreSQL probes: a step with no leases is refused at submit (`Blocked: A step must declare its conflicting resources`), `bookkeeping.claim_unit` raises `Missing resources` for a unit without them, and a second claim of a held unit is refused only because of the lease (the claim never checks the work item's `running` state). A unit-named lease in its place keeps the same claim, heartbeat and renewal, so saves nothing. A real saving is steps with no lease at all, excluded by the work item's own state: a change to the claim, heartbeat and completion-authority path, to be its own ticket if wanted.
 - [x] Part 2: a snapshot silver table cannot be landed by units: `rules check` refuses a `land` step into one (2026-11-13 19:17 ET). The proposed table-scoped lease was tried and does not help: on local PostgreSQL, two units landing different keys one after the other kept only the second unit's row, so the lease only orders the loss. No registered snapshot table is landed today (all three are derived), so the recorded steps are unchanged. Test that failed before: `test_a_snapshot_table_cannot_be_landed` (`DID NOT RAISE ShapeError`).
 - [ ] Part 3: either wire the destination guard into the merge and landing transactions, or delete the unreachable guard path (decision, then branch and PR)
 
@@ -29,14 +29,14 @@ inventory below is the whole repository (read with `shape.expand_source`, 14 rul
 
 | Operation | Lease scope | Destination protection that already exists | Verdict |
 | --- | --- | --- | --- |
-| `artifact.copy` | `artifact:{destination}` | `Artifacts.put_bytes` never overwrites: a different byte at the same URI fails the work, the same bytes reconcile (`edgar_warehouse/bookkeeping/clean/artifacts.py:173-207`) | remove |
-| `source.read` | `artifact:{destination}` | same immutable artifact store; the read output is a deterministic function of the frozen input | remove |
-| `source.combine` | `artifact:{destination}` | same immutable artifact store | remove |
-| `mdm.prepare` | `artifact:{destination}` | same immutable artifact store; the manifest is a deterministic function of the frozen reading | remove |
+| `artifact.copy` | `artifact:{destination}` | `Artifacts.put_bytes` never overwrites: a different byte at the same URI fails the work, the same bytes reconcile (`edgar_warehouse/bookkeeping/clean/artifacts.py:173-207`) | keep: it is the unit's only exclusion (see part 1) |
+| `source.read` | `artifact:{destination}` | same immutable artifact store; the read output is a deterministic function of the frozen input | keep: it is the unit's only exclusion (see part 1) |
+| `source.combine` | `artifact:{destination}` | same immutable artifact store | keep: it is the unit's only exclusion (see part 1) |
+| `mdm.prepare` | `artifact:{destination}` | same immutable artifact store; the manifest is a deterministic function of the frozen reading | keep: it is the unit's only exclusion (see part 1) |
 | `mastering.merge` | `mdm:consumer:{consumer}` | `mastering_lock` row held `FOR UPDATE` for the whole merge, one writer at a time (`edgar_warehouse/mastering/store.py:56-60`, taken in `mastering/merge.py:115`); `mastering_file` makes a file's merge idempotent by its own key (`mastering/store.py:62-63`, `merge.py:116-118`) | keep (see §4) |
 | `silver.land` | `silver:{silver}:{unit}` | `LOCK TABLE ... IN SHARE ROW EXCLUSIVE` for the merge of the staged rows only, and `PRIMARY KEY` on the spec's key (`edgar_warehouse/silver_writer/relational.py:18-33,74-100`; `silver_writer/database.py:99`) | keep, but **scope is wrong for snapshot tables** (§3) |
 | `silver.derive` | `silver:{silver}`, `silver:{reads}` | none: a derive rebuilds its whole table and a snapshot delivery deletes every row the delivery lacks | keep |
-| `journal.record` | `artifact:{destination}` | the Change Journal's own `UNIQUE (producer, event_key)` and its immutable-event trigger; a content conflict raises `JournalConflict` and the worker settles each file singly (`edgar_warehouse/change_journal/migrations/schema.sql:159-161`, `workers/journal_record.py:73-83`) | remove |
+| `journal.record` | `artifact:{destination}` | the Change Journal's own `UNIQUE (producer, event_key)` and its immutable-event trigger; a content conflict raises `JournalConflict` and the worker settles each file singly (`edgar_warehouse/change_journal/migrations/schema.sql:159-161`, `workers/journal_record.py:73-83`) | keep: it is the unit's only exclusion (see part 1) |
 | `provider.capture` | `provider:sec`, `output:{destination}` | none: an HTTP request to a provider is an external effect with no atomic destination to protect it | keep |
 
 Two of these were already narrowed once: source read and combine run locally and take no lease at
@@ -102,7 +102,7 @@ this audit; the fix is the same either way, and the change is a one-line scope c
 | --- | --- | --- |
 | Waiting | A claim on a held resource waits for the retry policy's backoff and then leaves the unit waiting (`engine.py:191-215`); a lost lease stops the work outright after the renewal thread sees "Stale lease" | Nothing extra on the artifact steps: the artifact store already refuses a conflicting write |
 | Motion | Every unit of every step pays a claim, a heartbeat thread, and a renewal round trip to the control store; the GLEIF load lost its lease twice this way and once ran 2 h 8 min past the loss (ticket 231 checklist, 2026-11-13 01:07 ET) | The merge, derive, landing and capture cases need *some* exclusion; a lease is the only one that spans a step's whole work |
-| Over-processing | The artifact-scope lease is taken for every unit of every reading step, to exclude a second worker from writing an output path that is already unique to that unit | Nothing: the output path is per unit and the store refuses to overwrite it |
+| Over-processing | The artifact-scope lease is taken for every unit of every reading step, to exclude a second worker from writing an output path that is already unique to that unit | The one exclusion of a second worker on the unit: `claim_unit` takes it from the lease rows alone, and a step with none is refused (part 1, probed locally). The cost is the claim, heartbeat and renewal, which a unit-named lease would keep |
 | Over-production | The guard schema, the `init-guard` command, `destinations.guard`, `Store.lease_authority` and `prepared.authority` exist for a destination-fenced transaction that no worker performs | Nothing today; it is either wired or deleted (§3 of the checklist) |
 | Defects | A lease that expires mid-work produces a report Bookkeeping refuses ("Stale lease"), after the destination write has already happened; the two stores are separate databases, so the refusal is a late, confusing failure | The merge and landing cases still need their exclusion, but from the destination's own lock, not from a late refusal |
 | Transport, Inventory | no lease-specific cost | — |
@@ -126,21 +126,22 @@ this audit; the fix is the same either way, and the change is a one-line scope c
   by side.
 - Ticket 231's run-checks part explicitly kept "leases and fencing" when the verifier duty went.
 
-The original reason still holds for the four operations in §1 marked keep. It does not hold for the
-five artifact-scope leases, and the guard half of the original design is currently unreachable.
+The original reason still holds for every operation in §1, the five artifact-scope leases included: the
+lease is the exclusion of a second worker on a unit. The guard half of the original design is currently
+unreachable.
 
 ## 6. Recommendation
 
 | Lease scope | Action |
 | --- | --- |
-| `artifact:{destination}` on `artifact.copy`, `source.read`, `source.combine`, `mdm.prepare`, `journal.record` | **Remove.** The artifact store and the Change Journal already refuse a conflicting write; the scope excludes a second worker from a path only that worker owns. Change: drop the scope from `rules/shape.py`, keep the `leases` list non-empty by construction (the work-unit key remains the identity). |
+| `artifact:{destination}` on `artifact.copy`, `source.read`, `source.combine`, `mdm.prepare`, `journal.record` | **Keep.** The scope is the one exclusion of a second worker on a unit; the artifact store and the Change Journal refuse a conflicting write but do not stop two workers running the unit. Dropping it alone leaves a step with no lease, which Bookkeeping refuses. A saving needs lease-free steps (the work item's own state as the exclusion), its own ticket. |
 | `silver:{silver}:{unit}` on `silver.land` | **Keep, and re-scope**: one lease for the whole table when the table is a snapshot, per unit otherwise. |
 | `silver:{silver}`, `silver:{reads}` on `silver.derive` | **Keep.** A derive rebuilds its whole table; nothing in silver excludes a second rebuild. |
 | `mdm:consumer:{consumer}` on `mastering.merge` | **Keep.** The merge's store-wide lock serialises the writes but does not stop two runs from merging the same consumer's batch and publishing twice; the file-level idempotency covers a retry, not two concurrent runs. |
 | `provider:sec`, `output:{destination}` on `provider.capture` | **Keep.** An HTTP request to a provider has no atomic destination to protect it. |
 | The destination guard (`bookkeeping_guard.authorize`, `Store.lease_authority`, `prepared.authority`, `bookkeeping init-guard`) | **Decide:** wire it into the merge and landing transactions, where a stale worker can still write, or delete it. Today it is installed and unreachable. |
 
-Removing the five artifact-scope leases does not remove the `bookkeeping.lease` table or the
+Part 1 (deferred) would have removed the five artifact-scope leases; that would not have removed the `bookkeeping.lease` table or the
 authority checks: the merge, landing, derive and capture leases stay, and Bookkeeping's completion
 authority check is unchanged. The control store's five-table shape is asserted by
 `tests/integration/test_configured_bookkeeping_postgres.py:141-149`.
