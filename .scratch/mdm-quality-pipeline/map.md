@@ -32,7 +32,7 @@ production rules or switch on new checks.
 
 ## Decisions so far
 
-None.
+- [Decide the MDM Quality Inventory and Scope](issues/01-decide-mdm-quality-inventory-and-scope.md): approved the current source-check inventory, evidence threshold, permitted grains, and unresolved-action policy; no additional evidence-backed check or new check kind is identified.
 
 ## Not yet specified
 
