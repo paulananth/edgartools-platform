@@ -8,7 +8,7 @@ Labels: `wayfinder:grilling`
 - [x] Reuse the existing native test cases for each configured MDM check and map results to their source assets. 2026-11-13 21:39 ET
 - [x] Publish complete and incomplete MDM run outcomes with exact timestamped readback and replay safety. 2026-11-13 21:39 ET
 - [x] Record the approved OpenMetadata projection and incomplete-evidence contract in this ticket. 2026-11-13 21:39 ET
-- [x] Validate 246 targeted Company, Person, Security, Bookkeeping, and catalog tests, syntax, and `git diff --check`; CI remains outstanding. The wider MDM folder run was stopped at its five-minute cap. 2026-11-13 21:39 ET
+- [x] Validate 246 Company, Person, Security, Bookkeeping, and catalog tests, then 171 focused tests after the final projection fixes; syntax and `git diff --check` pass. CI remains outstanding. The wider MDM folder run was stopped at its five-minute cap. 2026-11-13 21:47 ET
 - [x] Learning → skill: update the shared OpenMetadata result-history instructions for `Aborted` and exact readback. 2026-11-13 21:39 ET
 
 # Decide OpenMetadata Projection and Readback for MDM Quality
@@ -44,12 +44,22 @@ the check configuration.
   adapter.
 - Publish `rows_checked`, `rows_failed`, the configured failure action, the
   quality rule version in result detail, observation/load correlation, and a
-  status derived only from admitted evidence. Complete outcomes map to
+  status derived only from admitted evidence. Bookkeeping keeps its immutable
+  per-unit evidence; OpenMetadata receives one stable aggregate per source
+  check and run, with counts summed only from verified unit receipts and the
+  latest retained receipt time as its timestamp. Complete outcomes map to
   `Success` or `Failed`. Incomplete evidence maps to `Aborted`; only verified
   counts are included and the detail states the unknown row/work-unit counts.
+  An MDM target's missing receipt makes its check outcomes unknown because that
+  step's declared source scope cannot be proven complete. Keep source scopes in
+  target Rules; do not add entity/source branches. If a future target combines
+  independent source scopes, extend its declared expected-scope evidence before
+  enabling partial per-source outcomes.
 - Preserve stable run/step/opaque-unit identity. On replay, an identical
   same-timestamp result is idempotent. A duplicate or mismatch is an error;
-  the publisher may perform one timestamp-specific correction and must then
+  duplicate MDM aggregate results for the same catalog case are refused rather
+  than assigned synthetic timestamps. The publisher may perform one
+  timestamp-specific correction and must then
   read back exactly one row matching timestamp, status, result text, row
   counts and values before confirming publication.
 - If no work-unit evidence exists for a check, do not invent a zero-count

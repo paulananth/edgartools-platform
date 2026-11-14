@@ -132,6 +132,19 @@ def test_mdm_units_project_to_one_stable_per_run_case_result(storage_work):
     assert entries[0]["rows_checked"] == 20
     assert entries[0]["rows_failed"] == 1
     assert entries[0]["rule_version"] == "source-quality-v1"
+    assert entries[0]["at"] == "2026-11-06T12:00:00.000+00:00"
+
+
+def test_duplicate_aggregated_case_result_is_rejected_instead_of_moving_timestamp():
+    common = {"run_id": "run-a", "step": "merge", "attempt": "aggregate",
+              "table": "sample_source.v1", "check": "record_name_present", "kind": "present@1",
+              "failure_action": "exception", "observed_at": "2026-11-06T12:00:00+00:00",
+              "rows_checked": 1, "rows_failed": 0, "status": "passed"}
+    summary = {"status": "passed", "results": [
+        {**common, "work_unit_ref": "aggregate-ref-a"}, {**common, "work_unit_ref": "aggregate-ref-b"}]}
+
+    with pytest.raises(Blocked, match="collides with another result"):
+        quality.catalog_results(summary)
 
 
 def test_missing_mdm_unit_projects_verified_counts_as_unknown(storage_work):

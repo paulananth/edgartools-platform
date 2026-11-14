@@ -252,8 +252,17 @@ def aggregate(bookkeeping, run_id: str) -> dict:
     results = [result for summary in summaries for result in summary.get("results", [])]
     statuses = [summary["status"] for summary in summaries]
     status = "unknown" if "unknown" in statuses else ("failed" if "failed" in statuses else "passed")
-    expected = sum(summary.get("units_expected", 0) for summary in summaries)
-    verified = sum(summary.get("units_verified", 0) for summary in summaries)
+    expected = verified = 0
+    for summary in summaries:
+        next_expected, next_verified = summary.get("units_expected", 0), summary.get("units_verified", 0)
+        if (type(next_expected) is not int or type(next_verified) is not int
+                or not 0 <= next_verified <= next_expected <= MAX_COUNT
+                or expected > MAX_COUNT - next_expected or verified > MAX_COUNT - next_verified):
+            raise Blocked("Aggregated quality work-unit counts exceed signed 64-bit storage")
+        expected += next_expected
+        verified += next_verified
+    if len(unknown) > MAX_COUNT:
+        raise Blocked("Aggregated unknown work-unit count exceeds signed 64-bit storage")
     return {"status": status, "run_id": run_id, "run_complete": run.get("state") == "complete",
             "units_expected": expected, "units_verified": verified, "units_unknown": len(unknown),
             "unknown_units": unknown, "results": results, "checks": checks}
@@ -285,10 +294,13 @@ def catalog_results(summary: dict) -> dict:
     for name, items in grouped.items():
         items.sort(key=lambda row: (row["_timestamp"], row["step"], row["work_unit_ref"], row["attempt"]))
         entries = []
+        if any(item["attempt"] == "aggregate" for item in items) and len(items) != 1:
+            raise Blocked("An aggregated per-run quality result collides with another result for its case")
         previous = None
         for item in items:
             timestamp = int(item["_timestamp"].timestamp() * 1000)
-            timestamp = max(timestamp, previous + 1 if previous is not None else timestamp)
+            if item["attempt"] != "aggregate":
+                timestamp = max(timestamp, previous + 1 if previous is not None else timestamp)
             previous = timestamp
             at = datetime.fromtimestamp(timestamp / 1000, tz=timezone.utc).isoformat(timespec="milliseconds")
             entries.append({"table": item["table"], "check": item["check"],
