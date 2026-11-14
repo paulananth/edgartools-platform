@@ -44,10 +44,15 @@ sources:
     target: mastering
     requires: []
     after: [iapd.adv]
+  # N-CEN's registrants join the Companies N-PORT's registrants made, and create the rest; the series link to them.
+  sec.ncen.registrant:
+    target: mastering
+    requires: []
+    after: [sec.nport.registrant]
   sec.ncen.fund:
     target: mastering
     requires: []
-    after: [sec.nport.fund]
+    after: [sec.nport.fund, sec.ncen.registrant]
   # N-CEN's share classes find the Securities N-PORT and OpenFIGI made by ticker, and are issued by
   # N-CEN's fund series.
   sec.ncen.class:

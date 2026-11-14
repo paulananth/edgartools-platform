@@ -190,7 +190,7 @@ dataset_contracts:
           - latest
           - advisors
           - subadvisors
-        version: sec-ncen-fund-2026-11-14.advisers
+        version: sec-ncen-fund-2026-11-14.registrant-trust
         retain_deferred: true
         source_record_provenance: true
         kind: fund_structure
@@ -225,6 +225,15 @@ dataset_contracts:
         # adviser's record to the series, held unless N-CEN says "Terminated".
         # An adviser with no CRD makes no link (its item has no source key).
         relationships:
+        # The series' registrant trust (sec.ncen.registrant's record of the
+        # latest filing's CIK), as N-PORT's series link to theirs.
+        - type: IS_SUBFUND_OF
+          target_key: [latest.cik]
+          target_source: sec.ncen.registrant.v1
+          valid_from: latest.filed_at
+          date_basis: observed
+          time_format: instant
+          scope: SEC N-CEN fund series
         - type: INVESTMENT_ADVISER_TO
           capacity: advisor
           each: advisors

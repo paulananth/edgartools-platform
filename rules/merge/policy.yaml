@@ -64,6 +64,11 @@ automatic_rules:
   verdict: bind
 - kind: company
   family: binding
+  rule_id: ncen-registrant-cik
+  rule_version: 2026-11-14.cik
+  verdict: bind
+- kind: company
+  family: binding
   rule_id: iapd-adv-cik
   rule_version: 2026-11-08.adviser-cik-filings-v2
   verdict: bind
