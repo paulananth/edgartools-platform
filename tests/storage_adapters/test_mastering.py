@@ -289,6 +289,20 @@ def test_each_kind_of_difference_between_two_masters_is_named():
         assert rebuild.differences(old, {**old, "fields": {"name": {**field, **change}}}) == [seen]
 
 
+def test_install_drops_a_mastering_table_the_code_no_longer_uses(database_factory):
+    with database_factory() as (owner, runtime, role):
+        if owner.dialect.name == "mssql":
+            pytest.skip("Mastering runs on PostgreSQL and MySQL")
+        stores.install(owner, runtime_role=role)
+        with owner.begin() as conn:
+            conn.exec_driver_sql("create table mastering_unused(name varchar(16) primary key)")
+        stores.install(owner, runtime_role=role)
+        with owner.connect() as conn:
+            tables = {name for (name,) in conn.exec_driver_sql("select table_name from information_schema.tables")}
+        assert "mastering_unused" not in tables
+        assert {f"mastering_{name}" for name in (*stores.WRITTEN, "decision")} <= tables
+
+
 def test_two_writers_on_the_same_identifiers_leave_one_master_each(database_factory):
     with database_factory() as (owner, runtime, role):
         if owner.dialect.name == "mssql":
