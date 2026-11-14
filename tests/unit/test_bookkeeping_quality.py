@@ -23,7 +23,7 @@ class Bookkeeping:
         self.engine = object()
         self.rows = rows
         self.artifacts = Artifacts(receipts)
-        self.run = {"state": state}
+        self.run = {"state": state, "created_at": "2026-11-06T11:00:00+00:00"}
         self.config = {"steps": [{"name": "land", "operation": "silver.land",
                                   "checks": [quality.QUALITY_CHECK]}]}
         self.expected = expected or [{"step": "land", "key": row["unit_key"]} for row in rows]
@@ -132,7 +132,7 @@ def test_mdm_units_project_to_one_stable_per_run_case_result(storage_work):
     assert entries[0]["rows_checked"] == 20
     assert entries[0]["rows_failed"] == 1
     assert entries[0]["rule_version"] == "source-quality-v1"
-    assert entries[0]["at"] == "2026-11-06T12:00:00.000+00:00"
+    assert entries[0]["at"] == "2026-11-06T11:00:00.000+00:00"
 
 
 def test_duplicate_aggregated_case_result_is_rejected_instead_of_moving_timestamp():
@@ -163,6 +163,18 @@ def test_missing_mdm_unit_projects_verified_counts_as_unknown(storage_work):
     assert entry["status"] == "unknown"
     assert entry["rows_checked"] == 10
     assert entry["units_unknown"] == 1
+    first_timestamp = entry["at"]
+
+    later = {**row("unit-b", "attempt-b", "memory://b"), "step": "merge"}
+    storage_work.rows.append(later)
+    bookkeeping.artifacts.receipts["memory://b"] = mdm_receipt("unit-b", 0)
+    bookkeeping.run["state"] = "complete"
+    completed = quality.aggregate(bookkeeping, "run-a")
+    complete_entry = quality.catalog_results(completed)["sample_source.v1.record_name_present"][0]
+
+    assert complete_entry["status"] == "passed"
+    assert complete_entry["rows_checked"] == 20
+    assert complete_entry["at"] == first_timestamp
 
 
 def test_catalog_results_keep_historical_unit_correlation_and_unique_timestamps():

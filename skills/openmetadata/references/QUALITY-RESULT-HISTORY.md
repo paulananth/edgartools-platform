@@ -24,6 +24,12 @@ receipt's original observation time in the result detail; the API timestamp is
 the unique history key, not a replacement for that observation time. Read back
 each exact assigned key before reporting confirmation.
 
+For MDM aggregate results, use the immutable Bookkeeping run creation time as
+the per-run history key. Keep receipt observation times in the load correlation.
+This lets an incomplete `Aborted` result and a later completed result update
+the same timestamp through the bounded correction/readback path instead of
+creating a second result for one run.
+
 Treat an identical result at the same timestamp as an idempotent replay.
 Duplicate or mismatching history is an error to resolve, not a reason to POST
 again blindly. On OpenMetadata 2.0.2, a timestamp-specific `PATCH` can correct

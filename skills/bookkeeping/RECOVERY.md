@@ -97,6 +97,10 @@ and valid counts. Missing receipts or unchecked rows remain unknown. Keep
 quality status separate from the run's completion status. OpenMetadata may
 show `Aborted` for incomplete evidence, with counts from verified work only;
 its exact timestamped readback is required before publication is confirmed.
+Use the immutable Bookkeeping run creation time as the per-check history key
+so a later complete result for the same run corrects the earlier `Aborted`
+row at that timestamp. Keep receipt observation times in the result
+correlation.
 This receipt version has not yet passed recovery qualification and remains
 disabled by default.
 

@@ -29,6 +29,20 @@ def work_unit_reference(run_id: str, step: str, key: str) -> str:
     return hashlib.sha256(binding).hexdigest()[:24]
 
 
+def _history_timestamp(value) -> str:
+    """A run's immutable creation time is its stable catalog history key."""
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value)
+        except ValueError as exc:
+            raise Blocked("Bookkeeping run has an invalid creation time") from exc
+    if not isinstance(value, datetime):
+        raise Blocked("Bookkeeping run has no creation time for quality history")
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat(timespec="milliseconds")
+
+
 def _aggregate_silver(bookkeeping, run_id: str) -> dict:
     """Return per-unit silver results plus a load summary; incomplete evidence is unknown."""
     run, config, _, expected_items = bookkeeping._frozen(run_id)
@@ -224,6 +238,7 @@ def _aggregate_mdm(bookkeeping, run_id: str, run: dict, steps: dict, expected_it
             "units_unknown": sum(unit["step"] in target["steps"] for unit in unknown_units),
             "status": target["status"]})
     return {"quality_type": "mdm", "status": status, "run_id": run_id,
+            "history_at": _history_timestamp(run.get("created_at")),
             "run_complete": complete_run, "units_expected": len(expected),
             "units_verified": len(expected) - len(unknown_units), "units_unknown": len(unknown_units),
             "unknown_units": unknown_units, "results": results, "checks": checks}
@@ -264,6 +279,7 @@ def aggregate(bookkeeping, run_id: str) -> dict:
     if len(unknown) > MAX_COUNT:
         raise Blocked("Aggregated unknown work-unit count exceeds signed 64-bit storage")
     return {"status": status, "run_id": run_id, "run_complete": run.get("state") == "complete",
+            "history_at": _history_timestamp(run.get("created_at")),
             "units_expected": expected, "units_verified": verified, "units_unknown": len(unknown),
             "unknown_units": unknown, "results": results, "checks": checks}
 
@@ -302,7 +318,9 @@ def catalog_results(summary: dict) -> dict:
             if item["attempt"] != "aggregate":
                 timestamp = max(timestamp, previous + 1 if previous is not None else timestamp)
             previous = timestamp
-            at = datetime.fromtimestamp(timestamp / 1000, tz=timezone.utc).isoformat(timespec="milliseconds")
+            at = (summary.get("history_at") if item["attempt"] == "aggregate" else None)
+            if not at:
+                at = datetime.fromtimestamp(timestamp / 1000, tz=timezone.utc).isoformat(timespec="milliseconds")
             entries.append({"table": item["table"], "check": item["check"],
                             "on_fail": item["failure_action"], "at": at,
                             "rows_checked": item["rows_checked"], "rows_failed": item["rows_failed"],
