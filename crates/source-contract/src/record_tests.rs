@@ -63,12 +63,16 @@ pub(crate) fn normalize_value(
         "normalize_text@sec-legal-form-kept-v1" => Ok(matching_values::prepare_name(&text, true)),
         "normalize_identifier@sec-cik-v1"
         | "normalize_identifier@sec-cik-v2"
-        | "normalize_identifier@crd-v1" => {
+        | "normalize_identifier@crd-v1"
+        | "normalize_identifier@crd-v2" => {
             let text: String = text
                 .chars()
                 .filter(|ch| get_general_category(*ch) == GeneralCategory::DecimalNumber)
                 .collect();
-            Ok(if resolved == "normalize_identifier@sec-cik-v1" {
+            // CRD v2: N-CEN writes a CRD with leading zeros, Form ADV without them.
+            Ok(if resolved == "normalize_identifier@sec-cik-v1"
+                || resolved == "normalize_identifier@crd-v2"
+            {
                 text.trim_start_matches('0').into()
             } else {
                 text

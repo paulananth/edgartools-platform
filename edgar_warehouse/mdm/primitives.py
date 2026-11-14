@@ -65,6 +65,7 @@ NORMALIZERS: dict[str, Callable[[Any], str]] = {
     "normalize_identifier@sec-cik-v1": partial(prepare_matching_value, "normalize_identifier@sec-cik-v1"),
     "normalize_identifier@sec-cik-v2": partial(prepare_matching_value, "normalize_identifier@sec-cik-v2"),
     "normalize_identifier@crd-v1": partial(prepare_matching_value, "normalize_identifier@crd-v1"),
+    "normalize_identifier@crd-v2": partial(prepare_matching_value, "normalize_identifier@crd-v2"),
     "normalize_identifier@lei-v1": partial(prepare_matching_value, "normalize_identifier@lei-v1"),
     # Ticket 08: a name with its legal form kept, for the SEC-to-GLEIF
     # matching rule. SEC's variant drops the state tag of a conformed name.
