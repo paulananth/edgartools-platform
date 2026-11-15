@@ -34,9 +34,11 @@ A target says how much Bookkeeping it uses, in its source file, one setting for 
 
 What a coarser grain gives up, and what already stands in for it:
 
-- **Lease fencing between two writers of one unit.** The destinations protect themselves (ticket 232), and the chain refuses
-  a second load of one source and target; the MDM guard that checks a lease proof (`bookkeeping_guard`) needs a decision
-  for `bundle`, `load` and `off`: keep it for the merge only, or fence the merge with the kind lock alone.
+- **A lease's exclusion of a second writer of one unit.** The destinations protect themselves (ticket 232): the artifact store
+  never overwrites, the kind lock serializes a merge, a silver table has its lock and key, the journal a unique key. No
+  destination checks a lease proof: the guard that would (`bookkeeping_guard`, `destinations.guard`) has no caller, and ticket
+  232 part 3 deletes it. So dropping the lease gives up only that one unit is not done twice, and the chain already refuses a
+  second load of one source and target.
 - **Per-unit retry and audit.** A rerun skips the files the Change Journal records (a file is recorded once its merge is
   verified), and every step is a deterministic function of its input.
 - **Parallel workers on one step.** `off` and `load` run a step in the loader's process (it can still use its own threads).
@@ -48,7 +50,7 @@ units are long and where a unit-level resume earns its cost.
 
 ## Checklist
 
-- [ ] The operator's rulings on the table above: the default grain, the sources that turn it off, and the MDM guard for the coarser grains (one question at a time, with a recommendation)
+- [ ] The operator's rulings on the table above: the default grain and the sources that turn it off (one question at a time, with a recommendation)
 - [ ] The setting in the source file's target (`bookkeeping:`), validated by `rules check`, in the Mapping Documents' pipeline sheet (`rules mapdoc write`), and in `rules/shape.py`'s expansion
 - [ ] Failing tests first: a target at `off` takes no claim, lease or report and a rerun skips what the Change Journal recorded; at `bundle` a step is one unit; at `load` one run
 - [ ] `off` and `load`: the loader runs the steps (generalizing `local: true`); a stopped load resumes from the journal

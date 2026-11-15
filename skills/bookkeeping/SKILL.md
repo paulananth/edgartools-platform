@@ -220,8 +220,8 @@ merge lock, a table lock and key, a unique key) makes a lease on it a second cop
 
 Keep `unit` where one unit is long and a unit-level resume earns its cost; use `off` or `load` where every step is a
 deterministic function of its input and the destination protects itself (a silver-only landing, a one-document delivery).
-A grain that drops the lease needs a decision for any destination that checks a lease proof (the MDM guard): fence it by its
-own lock, or keep the grain at `bundle`. Not built: every target runs at `unit` grain, `rules check` refuses a `bookkeeping`
+No destination checks a lease proof, so a grain that drops the lease gives up only that one unit is not done twice (the
+destinations refuse a conflicting write themselves). Not built: every target runs at `unit` grain, `rules check` refuses a `bookkeeping`
 setting on a target, and `local: true` is the only step that runs without a claim. Measure a target's statements before
 choosing a grain (data-operations, "Resource sizing").
 

@@ -71,7 +71,6 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    from their ordinary variable, for that command only; the others read their `*_MIGRATION_DATABASE_URL`:
    ```bash
    env MDM_DATABASE_URL="$MDM_MIGRATION_DATABASE_URL" edgar-warehouse mdm migrate --application-role mdm_runtime
-   env DESTINATION_MIGRATION_DATABASE_URL="$MDM_MIGRATION_DATABASE_URL" edgar-warehouse bookkeeping init-guard --runtime-role mdm_runtime
    edgar-warehouse rdm init --runtime-role rdm_runtime
    env BOOKKEEPING_DATABASE_URL="$BOOKKEEPING_MIGRATION_DATABASE_URL" edgar-warehouse bookkeeping init --runtime-role bookkeeping_control
    edgar-warehouse change-journal init --runtime-role change_journal_runtime
