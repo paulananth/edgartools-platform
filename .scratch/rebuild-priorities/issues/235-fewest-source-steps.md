@@ -73,4 +73,8 @@ hosted run reprocesses its files. Nothing runs on the hosted store without the o
   laptop); worker peak 4.4 GB (2026-11-14 21:40 ET)
 - [ ] N-PORT security: one reading of SUBMISSION.tsv per path (it is read twice in each)
 - [ ] ~~A lookup read from another source's run~~ deferred: engine code, waits for the operator's word
+- [x] The seven wastes are the design check for a source extract (operator, 2026-11-15: "update the source extract
+  functionality skill to use 7 wastes as part of desigh"): data-onboarding, "Design a source extract against the
+  seven wastes", a table of what each waste looks like in an extract and what to do instead; skill lints pass
+  (2026-11-15 06:40 ET)
 - [ ] Learning → skill

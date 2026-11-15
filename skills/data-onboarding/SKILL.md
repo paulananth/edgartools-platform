@@ -162,6 +162,23 @@ step can do:
 - **No step only reshapes another step's rows** (a record step): `rules check` refuses a pass that reads only
   another step's pieces. Move its work into the read, or into the combine's joins.
 
+**Design a source extract against [the seven wastes](../data-platform/SKILL.md#the-seven-wastes)**, a new
+one and each rework. Before changing a step, write down every target's steps and what each one reads and
+keeps, name the waste each step holds, and propose the fold or split that removes it:
+
+| Waste | In a source extract | Instead |
+|---|---|---|
+| Transport | A step that writes rows only so that the next step reads them again | Fold it into the read, or into the combine's joins |
+| Inventory | One step's output holding both paths' rows, or two reduces' states at once | One path per destination; keep two reduces when one would hold both |
+| Motion | A second read of the same files, for a table the first read could emit | One read emits every table its path uses |
+| Waiting | A silver landing that waits for a merge | Silver finds masters by lookup; `silver refresh-ids` fills an id that was not mastered yet |
+| Over-processing | A combine or a record step computing what the read could, or a read emitting tables its path never uses | Compute per-row values in the read; give each path the tables it lands |
+| Over-production | A reduce that does not cut rows by orders of magnitude; a target, table or column no reader uses | Measure the rows with and without it; delete what nothing reads |
+| Defects | A fold that is not proved, or a proof that ran an old engine build | Compare the records and the silver rows with main's, on disposable stores, with today's engine |
+
+A step the engine cannot fold yet (for example, a combine that would need an expression) stays as it is.
+Name the engine limit that keeps it, and leave the engine change for the operator to approve.
+
 **Run each long step once per part.** Profiling and the load each run once. Before a long run, check what can
 stop it partway: the reader accepts the format; no size bound, cap or limit is below the data's measured
 size (profiling gives it). Never re-run a step to confirm a result: the first run's report is the evidence.
