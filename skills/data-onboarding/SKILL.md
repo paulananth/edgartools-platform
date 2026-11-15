@@ -459,3 +459,11 @@ These name today's sources only as examples; nothing above depends on them.
   (`rules/identifiers/`) cannot set the zeros aside; a normalizer version that
   does (`normalize_identifier@crd-v2`) is code, a ticket and the operator's word.
   The value stays stored as filed.
+- **An identifier a filer states about itself** (an LEI on an SEC form) joins records only where it is one to
+  one in the files: count the keys per value both ways before making it a matching rule. A value several
+  filers state (one LEI filed under several CIKs) is lookup only; a join by it puts distinct companies on one
+  master.
+- **A secondary key** (a ticker) finds a master only where one master holds it; a value several hold goes to
+  review, and a record with neither key creates a master by its own primary key.
+- **A link's capacity** is the source's own term (N-CEN's `advisor`, `subadvisor`), added to RDM's
+  relationship types in the same change.
