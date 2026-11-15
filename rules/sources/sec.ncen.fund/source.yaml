@@ -14,8 +14,8 @@
 #   quality": the filing date is the record's time, an observation.
 # The run, in order: N-CEN's SUBMISSION.tsv and REGISTRANT.tsv carry the
 # columns N-PORT's do, so sec.nport.registrant's own readings give the two pair
-# sets, `filed` (filing to its date) and `registrant` (filing to its
-# registrant's CIK), over this quarter's N-CEN file; this reading streams
+# sets, `filed` (filing to its date, submissions.yaml) and `registrant` (filing to its
+# registrant's CIK, registrant-keys.yaml), over this quarter's N-CEN file; this reading streams
 # FUND_REPORTED_INFO.tsv once, one row per series and filing; reduce.yaml lists
 # each series (a row naming no series, 773 over four quarters, is not read: its
 # registrant is the fund); combine.yaml keeps each series' latest filing whole
@@ -39,7 +39,7 @@ pass:
   units: {each: file}
   lookups:
     filed: {column: accession_number, from: sec.nport.registrant/submissions.yaml, max_input_bytes: 67108864, max_input_rows: 1000000, table: filed, value_column: filed}
-    registrant: {column: accession_number, from: sec.nport.registrant/source.yaml, max_input_bytes: 268435456, max_input_rows: 1000000, table: filing, value_column: cik}
+    registrant: {column: accession_number, from: sec.nport.registrant/registrant-keys.yaml, max_input_bytes: 268435456, max_input_rows: 1000000, table: registrant, value_column: cik}
 bronze:
   family: sec.ncen-datasets
 # The quarter's fund series through the Merge Stage. A bundle is the quarter's

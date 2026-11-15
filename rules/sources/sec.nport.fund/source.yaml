@@ -10,7 +10,7 @@
 #   while the true start remains unknown.
 # The run, in order: sec.nport.registrant's readings give two pair sets,
 # `filed` (filing to its date, submissions.yaml) and `registrant` (filing to
-# its registrant's CIK, its `filing` table); this reading streams
+# its registrant's CIK, registrant-keys.yaml); this reading streams
 # FUND_REPORTED_INFO.tsv once, one row per filing; reduce.yaml lists each
 # series (a filing naming no series, 729 in 2026q2, is not read: its
 # registrant is the fund); combine.yaml keeps each series' latest filing whole
@@ -26,7 +26,7 @@ pass:
   units: {each: file}
   lookups:
     filed: {column: accession_number, from: sec.nport.registrant/submissions.yaml, max_input_bytes: 67108864, max_input_rows: 1000000, table: filed, value_column: filed}
-    registrant: {column: accession_number, from: sec.nport.registrant/source.yaml, max_input_bytes: 268435456, max_input_rows: 1000000, table: filing, value_column: cik}
+    registrant: {column: accession_number, from: sec.nport.registrant/registrant-keys.yaml, max_input_bytes: 268435456, max_input_rows: 1000000, table: registrant, value_column: cik}
 bronze:
   family: sec.nport-datasets
 # The quarter's fund series through the Merge Stage (ticket 118). The registrant's
