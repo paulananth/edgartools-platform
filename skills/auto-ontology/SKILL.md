@@ -24,6 +24,24 @@ table boundary; stop ingestion until exact reader grants and imported-table
 identity checks are qualified. Existing sampling authorization covers only
 eligible tables; it does not authorize internal tables.
 
+Resolve the configured exposure tag and its approved table assignments from
+the same requirements/mapping version the mirror workflow uses. Only explicit,
+approved assignments select a table; absent, pending, declined or stale
+assignments and an empty selection never widen to a schema. Map selected
+assets to exact physical source tables before granting reads or starting
+ingestion. Data-class, layer and certification labels do not substitute for
+the exposure tag. Manual OpenMetadata tags cannot expand configuration.
+
+Compare imported table identities and effective SELECT privileges against
+that exact tagged set, not only store membership or counts. On unexpected
+tables or tag removal, stop further ingestion/compilation for the affected
+scope and report remaining imported state and grants. Do not claim a tag
+change deletes imported data or embeddings; any cleanup retains its normal
+authorization and ownership checks. Keep generic selection and verification
+helpers in this skill's `scripts/` or the application package; `infra/` only
+wires the deployment. Existing schema-scoped helpers remain unqualified for
+tag-based selection until the exact-table enforcement is implemented.
+
 **AutoOntology imports only MDM, RDM and Silver. Nothing else.** Rules,
 Bookkeeping, Change Journal, raw captures, provider endpoints, Snowflake Gold
 and OpenMetadata itself are excluded. The complete source list is

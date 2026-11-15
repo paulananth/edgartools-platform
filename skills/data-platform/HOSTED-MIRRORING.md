@@ -46,10 +46,34 @@ skill. Do not silently change source types to get past pre-flight.
 
 ## Creation and verification
 
+### Resolve approved exposure tags
+
+Read the configured exposure-tag identity and table assignments from the
+approved requirements/mapping version described in
+[Final exposable tables](FINAL-TABLES.md). Select only tables explicitly carrying
+that approved tag in configuration. An absent, pending, declined or stale
+assignment selects nothing; a data-class or certification tag is insufficient.
+Resolve each selected asset to its exact source database/schema/table and
+check its final-output role and current/history scope. Unknown identities,
+missing physical tables or an unsupported selector block creation; an empty
+selection never falls back to the schema.
+
+OpenMetadata displays these assignments, but its manual tags cannot add tables
+to the selection. Report its tag-projection/readback separately from physical
+mirror readiness. List both included and excluded tables with their requirement
+and mapping references in the create plan. Keep reusable tag-resolution helpers
+with the owning skill or application package, never under `infra/`.
+
 Apply [Final exposable tables](FINAL-TABLES.md) first. Use explicit
 `postgres_tables` with `postgres_schemas => NULL`; only configured final master
 and silver outputs are in scope. Schema-wide mirroring cannot enforce this
 boundary. Verify the exact physical table list, not only table counts.
+
+Use the same tag-resolved list for additions and verification. Adding a tag
+does not itself call `ALTER_MIRROR`; follow the normal add-table workflow.
+Removing a tag makes the table ineligible for further configured exposure,
+but does not erase an existing mirror or its data. Report the discrepancy and
+obtain the existing removal approval before `remove_tables` or any drop.
 
 After verified pre-flight, follow the mirror sub-skill's grant sequence and
 present each mirror, source database/schema, target database, refresh interval,

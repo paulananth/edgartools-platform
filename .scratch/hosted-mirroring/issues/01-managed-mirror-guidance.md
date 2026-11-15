@@ -65,3 +65,16 @@ and mappings. The exact proposed table list is included in the existing
 requirements-and-mapping approval, with no separate tagging approval round.
 The profiling/modeling skills and modeling requirements now state that boundary.
 Final Standards and Spec reviews found no conflicting approval rule.
+
+## Tag-controlled consumer skills
+
+- [x] Update hosted mirroring, OpenMetadata and AutoOntology guidance to resolve approved exposure tags into exact physical table lists; missing/pending/stale assignments deny selection and never fall back to schemas, 2026-11-15 07:06 ET.
+- [x] Update the installed snowflake-postgres mirror sub-skill with the same optional tag-controlled workflow and validate its frontmatter, 2026-11-15 07:06 ET.
+- [x] Keep reusable helpers with owning skills and preserve unrelated checkout WIP; no new infrastructure helper or live operation, 2026-11-15 07:06 ET.
+- [x] Verify 113 genericity/path checks, isolated bundle portability, diff formatting and Standards/Spec/GoF review, 2026-11-15 07:06 ET.
+- [ ] Publish the tag-controlled skill update and verify final-head CI.
+- [x] Learning → skill: exact tag selection, independently verified OpenMetadata projection and explicit reconciliation for removed tags, 2026-11-15 07:06 ET.
+
+The installed mirror skill is a local installation update; the supplied archive
+is unchanged. Tag assignment, selector implementation and live publication
+remain outside this skills-only task.
