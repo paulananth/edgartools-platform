@@ -35,10 +35,11 @@ def test_every_target_that_loads_a_capture_is_in_the_chain():
     assert set(targets()) <= {(s["source"], s["target"]) for s in STEPS}
 
 
-def test_each_step_gives_every_fact_its_target_declares():
+def test_each_step_gives_exactly_the_facts_its_target_declares():
+    """A fact the target does not declare is refused when the load starts (a second-batch target took none)."""
     for step in STEPS:
         declared = set((targets()[(step["source"], step["target"])].get("run") or {}).get("facts") or [])
-        assert declared <= set(step.get("facts") or {}), step["name"]
+        assert set(step.get("facts") or {}) == declared, step["name"]
 
 
 def test_a_later_delivery_of_one_source_carries_the_next_revision():
