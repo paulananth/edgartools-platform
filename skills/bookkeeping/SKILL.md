@@ -216,7 +216,7 @@ merge lock, a table lock and key, a unique key) makes a lease on it a second cop
 | `unit` | every unit of every step: claim, lease, heartbeat, check, report | the unit | nothing; the most cost |
 | `bundle` | one run for a bundle, one unit a step; its units run inside the worker | the step of a bundle | a lease and a report for each unit |
 | `load` | one run for the load, one unit | the load, skipping the files the journal records | per-bundle progress in `status` |
-| `off` | nothing: the loader runs the steps itself, as `local: true` does for read and combine | the file | fencing, retry audit and parallel workers |
+| `off` | the run's start and its completion only (one run row, so the catalog still shows the run); the loader runs the steps itself, as `local: true` does for read and combine | the file | fencing, retry audit and parallel workers |
 
 Keep `unit` where one unit is long and a unit-level resume earns its cost; use `off` or `load` where every step is a
 deterministic function of its input and the destination protects itself (a silver-only landing, a one-document delivery).
