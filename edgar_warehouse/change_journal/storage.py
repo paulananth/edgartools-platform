@@ -71,6 +71,11 @@ def record_events(engine, items):
         "mssql": "EXEC journal.record_event @body=:b,@content_hash=:h"}[name]
     with engine.begin() as conn:
         assert_ready(conn)
+        if name == "postgresql" and items:
+            # One statement for the file set: a hosted store costs a round trip a statement.
+            conn.execute(text("SELECT journal.record_event(t.b,t.h) FROM unnest(CAST(:b AS text[]),CAST(:h AS text[])) AS t(b,h)"),
+                         {"b": [body for body, _ in items], "h": [content_hash for _, content_hash in items]})
+            return
         for body, content_hash in items:
             conn.execute(text(statement), {"b": body, "h": content_hash})
 

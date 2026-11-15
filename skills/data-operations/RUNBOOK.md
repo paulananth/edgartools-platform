@@ -221,7 +221,7 @@ unknown, wait/report the missing estimate; do not force it or reject the source.
 
 On a hosted store a bundle's time is its statements times the round trip (tens of milliseconds each), not its computation
 and not a lock. Before adding parallelism or blaming a lock, count one bundle's statements on a disposable local store with
-statement logging (`log_statement = 'all'`) and group them by shape: a lock shows as sessions waiting on it for long, so
+statement logging (`log_statement = 'all'`; `<this skill>/scripts/count_statements.py` groups them by shape): a lock shows as sessions waiting on it for long, so
 sample who waits and how old the holder's transaction is.
 
 Increasing `workers work --limit` changes the work bound of that invocation; it
