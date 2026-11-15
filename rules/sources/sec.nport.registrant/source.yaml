@@ -10,9 +10,9 @@
 #   "investment", 688 "other" with no category), so none would exist.
 # The run, in order: submissions.yaml gives the pair set `filed` (filing to
 # its date); this reading streams REGISTRANT.tsv once, one row per filing,
-# with its date; reduce.yaml lists each CIK; combine.yaml keeps each CIK's
+# with its date as an instant; combine.yaml gives each filing its CIK's first and
 # latest filing whole (by date, then accession number), so a name and an address
-# never mix two filings; record.yaml makes each `registrant` row one record; mdm.prepare,
+# never mix two filings; mdm.prepare keeps one `registrant` row per CIK as its record;
 # the merge and the processed record follow (the `mastering` target below).
 # Left out: the phone number (personal, profiling). An LEI of all zeros is a
 # stand-in for none (4 registrants, profiling) and is blank here.
@@ -35,8 +35,10 @@ bookkeeping:
   version: 2
   targets:
     mastering:
-      extract: record.yaml
-      master: {keys: {dataset: sec.nport.registrant.v2, record_column: record, table: registrant}}
+      # The combine's rows are the records, one per CIK (`distinct_on`): every filing of a CIK carries the same
+      # first and latest filing, so the one kept is any of them.
+      extract: combine.yaml
+      master: {keys: {dataset: sec.nport.registrant.v2, table: registrant, distinct_on: [cik]}}
 execution:
   profile: source.read
   workers: 1
@@ -60,6 +62,18 @@ read:
         accession_number: {text: {path: ACCESSION_NUMBER}}
         filed:
           member_value: {lookup: filed, key: {text: {path: ACCESSION_NUMBER}}, on_many: error}
+        # The filing date ("YYYY MM DD" in the filing pairs) as an instant, and the start facts: observed from
+        # the filing, provisional (operator, 2026-11-06: the filing date is a provisional observed start).
+        filed_at:
+          transform:
+            value: {member_value: {lookup: filed, key: {text: {path: ACCESSION_NUMBER}}, on_many: error}}
+            transforms:
+            - {regex_replace: {pattern: ' ', with: '-'}}
+            - {pad: {left: '', right: 'T00:00:00+00:00'}}
+            # A blank date stays blank: the contract sets its record aside (missing_provisional_file_date).
+            - {regex_replace: {pattern: '^T00:00:00[+]00:00$', with: ''}}
+        date_basis: {const: {value: observed}}
+        date_is_provisional: {const: {value: true}}
         name: {text: {path: REGISTRANT_NAME, default: "", null_if: [""]}}
         file_number: {text: {path: FILE_NUM, default: "", null_if: [""]}}
         lei:
@@ -122,9 +136,9 @@ dataset_contracts:
                   path: .
                   kind: object
               reason: Mapped input must be an object
-            - test: {test: {path: filed_at, kind: truthy}}
+            - test: {test: {path: latest.filed_at, kind: truthy}}
               reason: missing_provisional_file_date
-            - test: {test: {path: profile_start, kind: truthy}}
+            - test: {test: {path: first.filed_at, kind: truthy}}
               reason: missing_provisional_file_date
             tables:
               mapped:
@@ -148,20 +162,16 @@ dataset_contracts:
                   matching:
                     object:
                       fields:
-                        registration_start_date_basis: {value: {path: date_basis, type: text}}
+                        registration_start_date_basis: {value: {path: latest.date_basis, type: text}}
           input_fields:
           - cik
           - latest
           - first
-          - filed_at
-          - profile_start
-          - date_basis
-          - date_is_provisional
         version: sec-nport-registrant-2026-11-10.lei-searched
         retain_deferred: true
         source_record_provenance: true
         kind: company
-        effective_at: filed_at
+        effective_at: latest.filed_at
         record_key:
         - cik
         record_key_format: sec_cik
@@ -188,7 +198,7 @@ dataset_contracts:
         - role: fund
           authority: SEC EDGAR
           registration: cik
-          valid_from: profile_start
+          valid_from: first.filed_at
           fields:
-            source_start_date_basis: date_basis
-            source_start_date_is_provisional: date_is_provisional
+            source_start_date_basis: latest.date_basis
+            source_start_date_is_provisional: latest.date_is_provisional

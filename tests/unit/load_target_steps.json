@@ -2423,35 +2423,8 @@
      "source.combined"
     ],
     "input": {
-     "contract": "reduce.yaml",
-     "readings": {
-      "filings": {
-       "all": "registrants"
-      }
-     }
-    },
-    "key": "{unit}",
-    "leases": [
-     "artifact:{destination}"
-    ],
-    "name": "ciks",
-    "operation": "source.combine",
-    "requires": [
-     "registrants"
-    ]
-   },
-   {
-    "checks": [
-     "input.hash",
-     "output.receipt",
-     "source.combined"
-    ],
-    "input": {
      "contract": "combine.yaml",
      "readings": {
-      "ciks": {
-       "step": "ciks"
-      },
       "filings": {
        "all": "registrants"
       }
@@ -2464,30 +2437,7 @@
     "name": "combine",
     "operation": "source.combine",
     "requires": [
-     "ciks",
      "registrants"
-    ]
-   },
-   {
-    "checks": [
-     "input.hash",
-     "output.receipt",
-     "source.output"
-    ],
-    "input": {
-     "contract": "record.yaml",
-     "pieces": {
-      "step": "combine"
-     }
-    },
-    "key": "{unit}",
-    "leases": [
-     "artifact:{destination}"
-    ],
-    "name": "record",
-    "operation": "source.read",
-    "requires": [
-     "combine"
     ]
    },
    {
@@ -2499,12 +2449,14 @@
     "input": {
      "keys": {
       "dataset": "sec.nport.registrant.v2",
-      "record_column": "record",
+      "distinct_on": [
+       "cik"
+      ],
       "table": "registrant"
      },
      "readings": {
-      "record": {
-       "all": "record"
+      "combine": {
+       "all": "combine"
       }
      }
     },
@@ -2515,7 +2467,7 @@
     "name": "prepare",
     "operation": "mdm.prepare",
     "requires": [
-     "record"
+     "combine"
     ]
    },
    {

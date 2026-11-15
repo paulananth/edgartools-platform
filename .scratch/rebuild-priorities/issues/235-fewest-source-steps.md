@@ -39,7 +39,12 @@ hosted run reprocesses its files. Nothing runs on the hosted store without the o
 - [x] N-CEN fund stays at 8: its adviser combine keys on `fund_id`, which the main combine adds by a join, and a
   join reads its key from the base row only (`combination.rs`); folding it needs that engine line changed, the
   operator's word (2026-11-14 22:03 ET)
-- [ ] Fold N-PORT registrant `record.yaml`
+- [x] Fold N-PORT registrant `record.yaml` and its reduce (operator, 2026-11-14: "agreed", after the seven-wastes
+  review): the read makes the filing date an instant and carries the start facts; the combine is based on the
+  filings, joins each CIK's first and latest filing and drops the filing's own columns; mdm.prepare keeps one row
+  per CIK (`distinct_on`). 5 extract steps to 3. Proved on 2026q2, main against this branch, registrants then
+  funds: 1,947 registrant and 12,937 Fund records equal body for body, 14,880 masters, 7 set aside, 0 reviews,
+  12,891 IS_SUBFUND_OF links with equal dates (2026-11-14 22:17 ET)
 - [ ] ~~Fold OpenFIGI `record.yaml`~~ not possible in rules: it chooses by condition, which a combine cannot (see above)
 - [ ] Fold Form ADV `record-custody.yaml` (it computes the custodian id)
 - [ ] OpenFIGI `listing.yaml` stays: it computes each listing's currency from counts a combine joined, which no
