@@ -136,6 +136,8 @@ edgar-warehouse load \
 
 - `--stores` is the stores folder configured through
   [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
+- **A proof runs today's engine.** Rebase its branch onto `origin/main`, then `uv sync --reinstall-package
+  source-contract` (a plain sync keeps the built engine); a branch cut just before an engine merge measures the old one.
 - **Create a store from an up-to-date checkout, and keep its lifecycle there.** `up` refuses a checkout
   behind `origin/main`, and a store belongs to the checkout that created it: `up`, `stop`, `backup` and `copy`
   from another checkout stop at "Environment belongs to another worktree". A stale untracked skill link
