@@ -11,6 +11,11 @@ SPEC = importlib.util.spec_from_file_location("load_chain", ROOT / "skills/data-
 chain = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(chain)
 STEPS = yaml.safe_load((ROOT / "rules/load-chain.yaml").read_text())["steps"]
+INFER = importlib.util.spec_from_file_location("infer_dependencies", ROOT / "skills/data-operations/scripts/infer_dependencies.py")
+infer = importlib.util.module_from_spec(INFER)
+INFER.loader.exec_module(infer)
+INFERRED = infer.infer()
+BY_NAME = {step["name"]: step for step in STEPS}
 
 
 def targets():
@@ -98,3 +103,74 @@ def test_a_step_waits_for_what_another_lane_has_done(tmp_path):
     state.write_text("11-15 14:00:00 ET alpha done: x\n11-15 14:01:00 ET beta attempt 1 start\n")
     assert chain.done_steps(state) == {"alpha"}
     assert chain.done_steps(tmp_path / "none.log") == set()
+
+
+def key(step):
+    return f"{step['source']}/{step['target']}"
+
+
+def ancestors(name):
+    """Every step that must be done before this one: its lane's earlier steps and what each waits for."""
+    before = {}
+    last = {}
+    for step in STEPS:
+        before[step["name"]] = set(step.get("waits_for") or [])
+        if step["lane"] in last:
+            before[step["name"]].add(last[step["lane"]])
+        last[step["lane"]] = step["name"]
+    found, todo = set(), [name]
+    while todo:
+        for earlier in before[todo.pop()]:
+            if earlier not in found:
+                found.add(earlier)
+                todo.append(earlier)
+    return found
+
+
+def steps_of(source, like=None):
+    """The chain steps of one source that master (a target with a kind of its own). A step of a quarterly delivery needs
+    only the same delivery's steps of another source that has one (the same capture folder name), else all of them."""
+    found = [s for s in STEPS if s["source"] == source and INFERRED[key(s)]["kinds"]]
+    same = [s for s in found if like and s["capture"].split("/")[-1] == like["capture"].split("/")[-1]]
+    return [s["name"] for s in (same or found)]
+
+
+def builders():
+    return [s for s in STEPS if INFERRED[key(s)]["builds_links"]]
+
+
+def test_a_target_that_reads_another_runs_step_follows_that_target():
+    for step in STEPS:
+        for after in INFERRED[key(step)]["after_target"]:
+            earlier = [s["name"] for s in STEPS if s["source"] == step["source"] and s["target"] == after]
+            assert earlier and set(earlier) <= ancestors(step["name"]), step["name"]
+
+
+def test_the_last_links_build_follows_every_source_that_states_links():
+    """The links table is rebuilt whole from every stored record at each build, so the last build shows only the links
+    whose masters exist by then."""
+    final = builders()[-1]
+    for step in STEPS:
+        if INFERRED[key(step)]["states_links_to"] and step["name"] != final["name"]:
+            assert step["name"] in ancestors(final["name"]), step["name"]
+
+
+def test_a_load_follows_the_sources_its_rules_prefer_and_the_masters_its_links_end_at():
+    final_source = builders()[-1]["source"]
+    for step in STEPS:
+        item = INFERRED[key(step)]
+        wanted = set(item["prefer_after"]) | (set(item["states_links_to"]) - {final_source})
+        for source in wanted - {step["source"]}:
+            assert set(steps_of(source, step)) <= ancestors(step["name"]), (step["name"], source)
+
+
+def test_every_wait_is_explained_by_what_the_rules_declare():
+    final = builders()[-1]["name"]
+    for step in STEPS:
+        item = INFERRED[key(step)]
+        for waited in step.get("waits_for") or []:
+            other = BY_NAME[waited]
+            explained = (other["source"] in item["prefer_after"] or other["source"] in item["states_links_to"]
+                         or (other["source"] == step["source"] and other["target"] in item["after_target"])
+                         or (step["name"] == final and INFERRED[key(other)]["states_links_to"]))
+            assert explained, (step["name"], waited)

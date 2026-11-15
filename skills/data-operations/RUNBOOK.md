@@ -116,21 +116,45 @@ in its attempts and names why in that step's log. After the last step it builds 
 table's master ids (`--finish` runs only those). Check a running chain every 30 minutes; a step that stops reports at its
 check, never on a tighter loop.
 
-**Several loads at once.** The steps are in lanes (`lane` in the chain file), and one process per lane runs them together:
+### Dependencies between loads
+
+Loads depend on each other only as the rules say, and `python <this skill>/scripts/infer_dependencies.py` prints it from
+the rules files: nothing here comes from a machine's size. No source needs another loaded first: the Merge Stage holds a
+record that finds no master and releases it when a later file gives one, so a load that runs early is never wrong. The
+rules state three kinds of ordering:
+
+- **Must** (a load leaves something out otherwise). A target that reads another run's step of its own source follows that
+  target. The links table is rebuilt whole from every stored record at each build, so a build shows only the links whose
+  masters exist when it runs: the last build follows every source whose contract states links. The lookups and each silver
+  table's master ids follow every load (`--finish`).
+- **Prefer** (records wait, or a link is missing, until the other load is done; never wrong, only later). A source with a
+  matching rule that waits follows the source the rule names (`holder_source`), else the sources whose minting rules use the
+  same identifier namespace, else the sources that mint its kind. A source whose links point at another source's masters
+  follows it. Two sources that each prefer the other have no order to keep.
+- **Alone** (these take turns; they are not dependencies). Merges of one kind of master data, the targets that build the
+  links table (one lease), and two loads of one source and target (their outputs would collide).
+
+Everything else runs at the same time. The chain file turns that into lanes: `lane` marks steps that may run together,
+`waits_for` is exactly the edges above that cross lanes, and a test holds the chain equal to the inference, so a rule change
+that adds a dependency fails the test until the chain follows it.
 
 ```bash
-for lane in A P S C L D O; do python <this skill>/scripts/load_chain.py --lane $lane & done   # A first; the others wait for it
+for lane in A P S C L O D; do python <this skill>/scripts/load_chain.py --lane $lane & done   # one process per lane
 python <this skill>/scripts/load_chain.py --finish          # once every lane reports its last step done
 ```
 
-What may overlap follows from how the store works, so a lane is a rule, not a guess: merges of one kind of master data
-take turns, so lanes of different kinds (Persons, Securities, Companies) overlap and two lanes of one kind only queue;
-every step that builds the links table shares one lease, so those steps are one lane; a silver-only load merges nothing.
-A step waits for the steps of other lanes it needs (`waits_for`), and for any other load of its own source and target to
-end, because two loads of one target write the same outputs. Size the number of lanes at the execution boundary
-([Resource sizing](#resource-sizing)): the loads wait mostly on the hosted store's round trips, so CPU and memory, not
-the store's 500 connections, are what to read before adding a lane (this Mac: CPU two-thirds idle and about 1 GB resident
-with five lanes working).
+A step waits for the steps of other lanes it needs, and for any other load of its own source and target to end.
+
+#### Examples: this store's dependencies
+
+From the shipped rules: no source is a must for another, and a source that only finds (never mints) is GLEIF, which
+follows the SEC Company masters its rule names. The links table is built by the N-PORT fund, N-PORT security, N-CEN
+fund, N-CEN class and GLEIF targets, and its contracts are stated by those and by Form ADV and ownership, so GLEIF, the
+last build, follows Form ADV and ownership. Form ADV follows the Company registrants (SEC Company, N-PORT and N-CEN),
+ownership follows SEC Company, and ownership's ticker symbols follow OpenFIGI, 13F and N-PORT securities. OpenFIGI,
+13F securities and N-PORT security each prefer the others: either order. SEC persons, the silver-only sources and each
+quarter's N-CEN registrants and advisers have nothing to follow, so they start at once.
+
 
 ## Delivery availability
 

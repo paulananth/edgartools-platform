@@ -1,16 +1,13 @@
 # The order a fresh store is loaded in: every captured source and target, each one's capture, facts, revision and
-# workers, read by `skills/data-operations/scripts/load_chain.py` (RUNBOOK, "Load a fresh store"). Masters come first and
-# each source's silver target last, so silver rows find their masters as they land. A source's later delivery is a new
-# publication and carries the next `revision`. `capture` is a folder under the captures root (or the proving root where
-# `capture_root: proving`); `{run}` in a fact is the chain's run label. `minutes` bounds one attempt, which carries on
-# where the last stopped.
-# Steps that may run at the same time are in different `lane`s, and `waits_for` names a step of another lane that must be
-# done first. Each lane runs its steps in file order (`load_chain.py --lane <name>`), so every lane can start at once. What
-# may overlap, from how the store works: merges of one kind of master data take turns (a lane of Securities and a lane of
-# Persons overlap; two lanes of one kind only queue), every step that builds the links table shares one lease (those are one
-# lane), and a silver-only load merges nothing. A the Companies every other lane needs; P persons; S securities (OpenFIGI,
-# 13F); C companies (ADV, N-CEN registrants and advisers); L the steps that build links, then GLEIF, which waits for the
-# Companies; O ownership, which waits for the Persons; D the silver-only sources.
+# workers, read by `skills/data-operations/scripts/load_chain.py` (RUNBOOK, "Load a fresh store"). A source's later
+# delivery is a new publication and carries the next `revision`. `capture` is a folder under the captures root (or the
+# proving root where `capture_root: proving`); `{run}` in a fact is the chain's run label. `minutes` bounds one attempt,
+# which carries on where the last stopped.
+# Steps that may run at the same time are in different `lane`s, and `waits_for` names a step of another lane that must
+# be done first. Each lane runs its steps in file order (`load_chain.py --lane <name>`), so every lane can start at once.
+# Every `waits_for` and every lane's order comes from `infer_dependencies.py` (what the rules declare; a test holds the two
+# equal), never from a machine's size. A the Companies the others follow; P the Persons; S the Securities; C the other
+# Companies; L the targets that build the links table, then GLEIF, the last build; O ownership; D the silver-only sources.
 version: 1
 steps:
   - name: company
@@ -47,7 +44,6 @@ steps:
     attempts: 3
   - name: person
     lane: P
-    waits_for: [nport-fund]
     source: sec.submissions.person
     target: mastering
     capture: sec.submissions.company/all-76230
@@ -55,9 +51,127 @@ steps:
     bundles: 2
     minutes: 300
     attempts: 5
+  - name: openfigi-answers
+    lane: S
+    source: openfigi
+    target: mastering
+    capture: openfigi/2026q2-nport
+    revision: 0
+    workers: 1
+    bundles: 3
+    minutes: 420
+    attempts: 8
+  - name: openfigi-tickers
+    lane: S
+    source: openfigi
+    target: mastering
+    capture: openfigi/form4-tickers-20261109
+    revision: 1
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: 13f-securities
+    lane: S
+    source: sec.thirteenf.securities
+    target: mastering
+    capture: sec.thirteenf.securities/p07-cohort
+    workers: 2
+    bundles: 1
+    minutes: 90
+    attempts: 3
+  - name: 13f-securities-silver
+    lane: S
+    source: sec.thirteenf.securities
+    target: silver
+    capture: sec.thirteenf.securities/p07-cohort
+    workers: 2
+    bundles: 1
+    minutes: 90
+    attempts: 3
+  - name: ncen-registrant-2025q4
+    lane: C
+    source: sec.ncen.registrant
+    target: mastering
+    capture: sec.ncen-datasets/2025q4
+    revision: 0
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: ncen-registrant-2026q1
+    lane: C
+    source: sec.ncen.registrant
+    target: mastering
+    capture: sec.ncen-datasets/2026q1
+    revision: 1
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: ncen-registrant-2026q2
+    lane: C
+    source: sec.ncen.registrant
+    target: mastering
+    capture: sec.ncen-datasets/2026q2
+    revision: 2
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: ncen-registrant-2026q3
+    lane: C
+    source: sec.ncen.registrant
+    target: mastering
+    capture: sec.ncen-datasets/2026q3
+    revision: 3
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: ncen-adviser-2025q4
+    lane: C
+    source: sec.ncen.adviser
+    target: mastering
+    capture: sec.ncen-datasets/2025q4
+    revision: 0
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: ncen-adviser-2026q1
+    lane: C
+    source: sec.ncen.adviser
+    target: mastering
+    capture: sec.ncen-datasets/2026q1
+    revision: 1
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: ncen-adviser-2026q2
+    lane: C
+    source: sec.ncen.adviser
+    target: mastering
+    capture: sec.ncen-datasets/2026q2
+    revision: 2
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: ncen-adviser-2026q3
+    lane: C
+    source: sec.ncen.adviser
+    target: mastering
+    capture: sec.ncen-datasets/2026q3
+    revision: 3
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
   - name: adv-custodians-03
     lane: C
-    waits_for: [nport-fund]
+    waits_for: [nport-registrant]
     source: iapd.adv
     target: custodians
     capture: iapd.adv/p07-2026-03
@@ -104,42 +218,26 @@ steps:
     bundles: 1
     minutes: 60
     attempts: 3
-  - name: ncen-registrant-2025q4
+  - name: adv-silver-03
     lane: C
-    source: sec.ncen.registrant
-    target: mastering
-    capture: sec.ncen-datasets/2025q4
+    source: iapd.adv
+    target: silver
+    capture: iapd.adv/p07-2026-03
     revision: 0
+    facts:
+      published: "2026-03-31T00:00:00+00:00"
     workers: 1
     bundles: 1
     minutes: 60
     attempts: 3
-  - name: ncen-registrant-2026q1
+  - name: adv-silver-06
     lane: C
-    source: sec.ncen.registrant
-    target: mastering
-    capture: sec.ncen-datasets/2026q1
+    source: iapd.adv
+    target: silver
+    capture: iapd.adv/p07-2026-06
     revision: 1
-    workers: 1
-    bundles: 1
-    minutes: 60
-    attempts: 3
-  - name: ncen-registrant-2026q2
-    lane: C
-    source: sec.ncen.registrant
-    target: mastering
-    capture: sec.ncen-datasets/2026q2
-    revision: 2
-    workers: 1
-    bundles: 1
-    minutes: 60
-    attempts: 3
-  - name: ncen-registrant-2026q3
-    lane: C
-    source: sec.ncen.registrant
-    target: mastering
-    capture: sec.ncen-datasets/2026q3
-    revision: 3
+    facts:
+      published: "2026-06-30T00:00:00+00:00"
     workers: 1
     bundles: 1
     minutes: 60
@@ -188,79 +286,9 @@ steps:
     bundles: 1
     minutes: 60
     attempts: 3
-  - name: ncen-adviser-2025q4
-    lane: C
-    source: sec.ncen.adviser
-    target: mastering
-    capture: sec.ncen-datasets/2025q4
-    revision: 0
-    workers: 1
-    bundles: 1
-    minutes: 60
-    attempts: 3
-  - name: ncen-adviser-2026q1
-    lane: C
-    source: sec.ncen.adviser
-    target: mastering
-    capture: sec.ncen-datasets/2026q1
-    revision: 1
-    workers: 1
-    bundles: 1
-    minutes: 60
-    attempts: 3
-  - name: ncen-adviser-2026q2
-    lane: C
-    source: sec.ncen.adviser
-    target: mastering
-    capture: sec.ncen-datasets/2026q2
-    revision: 2
-    workers: 1
-    bundles: 1
-    minutes: 60
-    attempts: 3
-  - name: ncen-adviser-2026q3
-    lane: C
-    source: sec.ncen.adviser
-    target: mastering
-    capture: sec.ncen-datasets/2026q3
-    revision: 3
-    workers: 1
-    bundles: 1
-    minutes: 60
-    attempts: 3
-  - name: openfigi-answers
-    lane: S
-    waits_for: [nport-fund]
-    source: openfigi
-    target: mastering
-    capture: openfigi/2026q2-nport
-    revision: 0
-    workers: 1
-    bundles: 3
-    minutes: 420
-    attempts: 8
-  - name: openfigi-tickers
-    lane: S
-    source: openfigi
-    target: mastering
-    capture: openfigi/form4-tickers-20261109
-    revision: 1
-    workers: 1
-    bundles: 1
-    minutes: 60
-    attempts: 3
-  - name: 13f-securities
-    lane: S
-    source: sec.thirteenf.securities
-    target: mastering
-    capture: sec.thirteenf.securities/p07-cohort
-    workers: 2
-    bundles: 1
-    minutes: 90
-    attempts: 3
   - name: nport-security
     lane: L
-    waits_for: [13f-securities]
+    waits_for: [nport-fund]
     source: sec.nport.security
     target: mastering
     capture: sec.nport-datasets/2026q2
@@ -283,6 +311,7 @@ steps:
     attempts: 3
   - name: ncen-class-2025q4
     lane: L
+    waits_for: [openfigi-tickers, 13f-securities]
     source: sec.ncen.class
     target: mastering
     capture: sec.ncen-datasets/2025q4
@@ -321,25 +350,16 @@ steps:
     bundles: 1
     minutes: 60
     attempts: 3
-  - name: ownership
-    lane: O
-    waits_for: [person, openfigi-tickers]
-    source: sec.ownership
-    target: mastering
-    capture: sec.ownership/p07-cohort
+  - name: nport-security-silver
+    lane: L
+    source: sec.nport.security
+    target: silver
+    capture: sec.nport-datasets/2026q2
+    facts:
+      period: "2026-06-30T00:00:00+00:00"
     workers: 1
     bundles: 1
-    minutes: 300
-    attempts: 8
-  - name: ownership-symbols
-    lane: O
-    waits_for: [openfigi-tickers]
-    source: sec.ownership
-    target: security_symbols
-    capture: sec.ownership/p07-cohort
-    workers: 1
-    bundles: 1
-    minutes: 60
+    minutes: 240
     attempts: 3
   - name: gleif-pairs
     lane: L
@@ -352,7 +372,7 @@ steps:
     attempts: 3
   - name: gleif
     lane: L
-    waits_for: [ncen-class-2026q3, adv-silver-06]
+    waits_for: [adv-mastering-06, ownership]
     source: gleif
     target: mastering
     capture: gleif/20260911-1600-publisher
@@ -362,26 +382,22 @@ steps:
     bundles: 1
     minutes: 240
     attempts: 40
-  - name: adv-silver-03
-    lane: C
-    source: iapd.adv
-    target: silver
-    capture: iapd.adv/p07-2026-03
-    revision: 0
-    facts:
-      published: "2026-03-31T00:00:00+00:00"
+  - name: ownership
+    lane: O
+    waits_for: [company]
+    source: sec.ownership
+    target: mastering
+    capture: sec.ownership/p07-cohort
     workers: 1
     bundles: 1
-    minutes: 60
-    attempts: 3
-  - name: adv-silver-06
-    lane: C
-    source: iapd.adv
-    target: silver
-    capture: iapd.adv/p07-2026-06
-    revision: 1
-    facts:
-      published: "2026-06-30T00:00:00+00:00"
+    minutes: 300
+    attempts: 8
+  - name: ownership-symbols
+    lane: O
+    waits_for: [openfigi-tickers, 13f-securities, nport-security-other-keys]
+    source: sec.ownership
+    target: security_symbols
+    capture: sec.ownership/p07-cohort
     workers: 1
     bundles: 1
     minutes: 60
@@ -395,29 +411,8 @@ steps:
     bundles: 1
     minutes: 300
     attempts: 3
-  - name: 13f-securities-silver
-    lane: S
-    source: sec.thirteenf.securities
-    target: silver
-    capture: sec.thirteenf.securities/p07-cohort
-    workers: 2
-    bundles: 1
-    minutes: 90
-    attempts: 3
-  - name: nport-security-silver
-    lane: L
-    source: sec.nport.security
-    target: silver
-    capture: sec.nport-datasets/2026q2
-    facts:
-      period: "2026-06-30T00:00:00+00:00"
-    workers: 1
-    bundles: 1
-    minutes: 240
-    attempts: 3
   - name: 13f-filings
     lane: D
-    waits_for: [nport-fund]
     source: sec.thirteenf.filings
     target: silver
     capture: sec.thirteenf.filings/p07-managers

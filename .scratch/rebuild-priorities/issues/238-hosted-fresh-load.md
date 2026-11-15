@@ -74,9 +74,23 @@ runbook".
 | `doctor` checks four of the six stores | Defect (unproved) | The runbook says which steps prove RDM and silver; extending `doctor` is left |
 | The rules skill text still told a reader to provision `rules_governance` and approver roles for an activation that no longer exists | Over-production | The connection section names only the registration login |
 
-Left as found: the instance still holds `rules_governance` and `rules_approver` (legacy roles, nothing uses them) and three
-`discovery_reader_*` logins whose CONNECT grants were put back; the code set `mdm-relationship-types-before-real-names`
-restored from git names a history the version 1.0 ruling removes (its own change).
+Left as found: the three `discovery_reader_*` logins keep the CONNECT grants they had; the code set
+`mdm-relationship-types-before-real-names` restored from git names a history the version 1.0 ruling removes (its own
+change).
+
+## Dependencies (operator, 2026-11-15: "Infer dependency and document in the run book. This is not depend on machine capacity")
+
+- [x] `infer_dependencies.py` reads the rules (merge rules' `on_no_match` and `holder_source`, contracts' and silver tables'
+  link targets, `pieces`, the targets that build the links table) and prints must, prefer, either-order and alone
+  (2026-11-15 14:43 ET)
+- [x] `rules/load-chain.yaml` follows it: every `waits_for` and lane order is an inferred edge, and tests hold the two equal
+  (changing one wait fails the test it should: the last links build must follow every source that states links)
+- [x] Found by the inference: the links table is rebuilt whole at each build, so the last build must follow every source
+  whose contract states links. My first lanes let GLEIF, the last build, run before ownership; it now waits for ownership
+  and Form ADV. A wait I had added by hand (persons before ownership) is not a dependency and is gone; the loads of one kind
+  of master data only take turns
+- [x] The runbook's "Dependencies between loads" states the rules without a word about capacity; this store's dependencies
+  are under its Examples heading (2026-11-15 14:43 ET)
 
 ## Load (hosted; `python skills/data-operations/scripts/load_chain.py`)
 
