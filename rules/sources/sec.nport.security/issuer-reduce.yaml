@@ -1,14 +1,14 @@
 pass:
-  readings: {issuers: {step: issuers.yaml}}
+  readings: {issuers: {step: source.yaml}}
 # How many issuer LEIs each CUSIP is filed with (ticket 22), and each ISIN of a
-# holding with no usable CUSIP (ticket 102). One source extract:
-# issuers.yaml's reading, `issuers`. Pin canonical JSON of this file as the
+# holding with no usable CUSIP (ticket 102). One source extract: the holdings reading
+# (source.yaml), its issuer tables (`issuers`); reduce.yaml reads its Security tables. Pin canonical JSON of this file as the
 # source.combine contract.
 execution:
   profile: source.combine
 reduce:
-  max_rows: 10000000
-  max_input_bytes: 4294967296
+  max_rows: 40000000
+  max_input_bytes: 17179869184
   max_state_bytes: 1073741824
   max_keys: 1000000
   max_members: 2000000

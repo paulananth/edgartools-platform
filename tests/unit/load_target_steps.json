@@ -2616,90 +2616,6 @@
      "source.output"
     ],
     "input": {
-     "context": {
-      "period": {
-       "fact": "period"
-      }
-     },
-     "lookups": {
-      "figi": {
-       "column": "holding",
-       "from": "identifiers",
-       "max_input_bytes": 268435456,
-       "max_input_rows": 10000000,
-       "table": "figi",
-       "value_column": "figi"
-      },
-      "isin": {
-       "column": "holding",
-       "from": "identifiers",
-       "max_input_bytes": 268435456,
-       "max_input_rows": 10000000,
-       "table": "isin",
-       "value_column": "isin"
-      },
-      "loanx": {
-       "column": "holding",
-       "from": "identifiers",
-       "max_input_bytes": 268435456,
-       "max_input_rows": 10000000,
-       "table": "loanx",
-       "value_column": "loanx"
-      },
-      "sedol": {
-       "column": "holding",
-       "from": "identifiers",
-       "max_input_bytes": 268435456,
-       "max_input_rows": 10000000,
-       "table": "sedol",
-       "value_column": "sedol"
-      }
-     }
-    },
-    "key": "{unit}",
-    "leases": [
-     "artifact:{destination}"
-    ],
-    "name": "holdings",
-    "operation": "source.read",
-    "requires": [
-     "identifiers"
-    ],
-    "units": {
-     "each": "file"
-    }
-   },
-   {
-    "checks": [
-     "input.hash",
-     "output.receipt",
-     "source.combined"
-    ],
-    "input": {
-     "contract": "reduce.yaml",
-     "readings": {
-      "holdings": {
-       "step": "holdings"
-      }
-     }
-    },
-    "key": "{unit}",
-    "leases": [
-     "artifact:{destination}"
-    ],
-    "name": "reduce",
-    "operation": "source.combine",
-    "requires": [
-     "holdings"
-    ]
-   },
-   {
-    "checks": [
-     "input.hash",
-     "output.receipt",
-     "source.output"
-    ],
-    "input": {
      "contract": "sec.nport.registrant/submissions.yaml"
     },
     "key": "{unit}",
@@ -2818,7 +2734,6 @@
        "fact": "period"
       }
      },
-     "contract": "issuers.yaml",
      "lookups": {
       "figi": {
        "column": "holding",
@@ -2874,11 +2789,11 @@
     "leases": [
      "artifact:{destination}"
     ],
-    "name": "issuers",
+    "name": "holdings",
     "operation": "source.read",
     "requires": [
-     "filings",
      "identifiers",
+     "filings",
      "filing_dates"
     ],
     "units": {
@@ -2892,10 +2807,34 @@
      "source.combined"
     ],
     "input": {
+     "contract": "reduce.yaml",
+     "readings": {
+      "holdings": {
+       "step": "holdings"
+      }
+     }
+    },
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "name": "reduce",
+    "operation": "source.combine",
+    "requires": [
+     "holdings"
+    ]
+   },
+   {
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.combined"
+    ],
+    "input": {
      "contract": "issuer-reduce.yaml",
      "readings": {
       "issuers": {
-       "step": "issuers"
+       "step": "holdings"
       }
      }
     },
@@ -2906,7 +2845,7 @@
     "name": "issuer_reduce",
     "operation": "source.combine",
     "requires": [
-     "issuers"
+     "holdings"
     ]
    },
    {
