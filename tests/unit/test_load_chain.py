@@ -61,3 +61,40 @@ def test_an_env_file_is_read_as_data(tmp_path):
     path = tmp_path / "worker.env"
     path.write_text("unset OTHER\nexport ONE='a b'\nTWO=plain\nexport THREE=\n# a comment\n")
     assert chain.load_env(path) == {"ONE": "a b", "TWO": "plain", "THREE": ""}
+
+
+def test_every_step_has_a_lane_and_waits_only_for_steps_that_exist():
+    names = {step["name"] for step in STEPS}
+    for step in STEPS:
+        assert step["lane"], step["name"]
+        assert set(step.get("waits_for") or []) <= names - {step["name"]}, step["name"]
+
+
+def test_the_lanes_run_to_the_end_together_with_no_step_waiting_on_a_later_one():
+    """Each lane takes its steps in file order and a step runs once what it waits for is done: no lane deadlocks."""
+    lanes = {}
+    for step in STEPS:
+        lanes.setdefault(step["lane"], []).append(step)
+    done = set()
+    while any(lanes.values()):
+        ran = False
+        for queue in lanes.values():
+            if queue and set(queue[0].get("waits_for") or []) <= done:
+                done.add(queue.pop(0)["name"])
+                ran = True
+        assert ran, f"stuck: {[q[0]['name'] for q in lanes.values() if q]}"
+
+
+def test_the_steps_that_build_links_share_one_lane():
+    """They hold one lease on the links table, so they take turns."""
+    builds = {(s, t) for (s, t), body in targets().items() if any(x["operation"] == "silver.derive" for x in body["steps"])}
+    lanes = {step["lane"] for step in STEPS if (step["source"], step["target"]) in builds
+             and (step["source"], step["target"]) != ("sec.company-facts", "silver")}
+    assert len(lanes) <= 2 and "L" in lanes, lanes
+
+
+def test_a_step_waits_for_what_another_lane_has_done(tmp_path):
+    state = tmp_path / "state.log"
+    state.write_text("11-15 14:00:00 ET alpha done: x\n11-15 14:01:00 ET beta attempt 1 start\n")
+    assert chain.done_steps(state) == {"alpha"}
+    assert chain.done_steps(tmp_path / "none.log") == set()

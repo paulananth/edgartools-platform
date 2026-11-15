@@ -80,7 +80,7 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    ```
    `init` is the whole step on a fresh store; `migrate` follows an `init` only when a later schema file arrives. Done when
    each prints its schema file's checksum.
-4. **RDM codes.** With `worker.env` sourced, `python skills/data-operations/scripts/rdm_restore_published.py --by <name>
+4. **RDM codes.** With `worker.env` sourced, `python <this skill>/scripts/rdm_restore_published.py --by <name>
    --words "<their exact words>"` (the operator's words go in the approval record). Done when every pin reads `pin ok`.
 5. **Registration login.** With the owner connection, `env MDM_DATABASE_URL="$MDM_MIGRATION_DATABASE_URL" edgar-warehouse
    mdm grant-registration --role mdm_governance`. It lets the restricted login read the stored records and write the
@@ -105,9 +105,9 @@ A missing grant or login that a command names is a gap to fix through the centra
 `scripts/load_chain.py` runs it, so a store is loaded the same way every time and nobody rewrites the list:
 
 ```bash
-python skills/data-operations/scripts/load_chain.py --plan     # documents and bundles per step; writes nothing
-python skills/data-operations/scripts/load_chain.py            # the chain; stays awake; each step runs until it reports Done
-python skills/data-operations/scripts/load_chain.py --from <step>   # carry on; a step that is done costs one call
+python <this skill>/scripts/load_chain.py --plan     # documents and bundles per step; writes nothing
+python <this skill>/scripts/load_chain.py            # the chain; stays awake; each step runs until it reports Done
+python <this skill>/scripts/load_chain.py --from <step>   # carry on; a step that is done costs one call
 ```
 
 Masters come first and each source's silver target last, so silver rows find their masters as they land. A source's later
@@ -115,6 +115,22 @@ delivery is a new publication and carries the next `--revision`. The chain stops
 in its attempts and names why in that step's log. After the last step it builds the lookups and fills each silver
 table's master ids (`--finish` runs only those). Check a running chain every 30 minutes; a step that stops reports at its
 check, never on a tighter loop.
+
+**Several loads at once.** The steps are in lanes (`lane` in the chain file), and one process per lane runs them together:
+
+```bash
+for lane in A P S C L D O; do python <this skill>/scripts/load_chain.py --lane $lane & done   # A first; the others wait for it
+python <this skill>/scripts/load_chain.py --finish          # once every lane reports its last step done
+```
+
+What may overlap follows from how the store works, so a lane is a rule, not a guess: merges of one kind of master data
+take turns, so lanes of different kinds (Persons, Securities, Companies) overlap and two lanes of one kind only queue;
+every step that builds the links table shares one lease, so those steps are one lane; a silver-only load merges nothing.
+A step waits for the steps of other lanes it needs (`waits_for`), and for any other load of its own source and target to
+end, because two loads of one target write the same outputs. Size the number of lanes at the execution boundary
+([Resource sizing](#resource-sizing)): the loads wait mostly on the hosted store's round trips, so CPU and memory, not
+the store's 500 connections, are what to read before adding a lane (this Mac: CPU two-thirds idle and about 1 GB resident
+with five lanes working).
 
 ## Delivery availability
 

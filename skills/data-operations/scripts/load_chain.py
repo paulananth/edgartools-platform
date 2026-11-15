@@ -6,7 +6,8 @@
     python load_chain.py                      the whole chain, then the lookups and each silver table's master ids
     python load_chain.py --from <step>        carry on from a step (a done step costs one call: nothing is loaded twice)
     python load_chain.py --only <step>        one step
-    python load_chain.py --finish             only what follows the loads
+    python load_chain.py --lane <name>        the steps of one lane; run several lanes at once (see the chain file)
+    python load_chain.py --finish             only what follows the loads, once every lane is done
 
 Each step is the same resumable `load` command, run again until it finishes (a stopped attempt names why in its log and
 the next carries on from where it stopped). The chain stops at the first step that does not finish in its attempts.
@@ -21,6 +22,7 @@ import re
 import shlex
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -81,8 +83,29 @@ def plan(step: dict, env: dict) -> str:
         return "no plan: " + (done.stderr.strip().splitlines() or ["?"])[-1][:140]
 
 
+def done_steps(state: Path) -> set[str]:
+    """The steps any lane has finished, read from the shared state file."""
+    return set(re.findall(r" ET (\S+) done:", state.read_text())) if state.exists() else set()
+
+
+def wait_for(step: dict, state: Path, poll: int = 30) -> None:
+    """Hold a step until the steps of other lanes it needs are done, and until no other load of its target is running
+    (two loads of one source and target at once write the same outputs)."""
+    needed = set(step.get("waits_for") or [])
+    if needed - done_steps(state):
+        note(f"{step['name']} waits for {', '.join(sorted(needed - done_steps(state)))}", state)
+    while needed - done_steps(state):
+        time.sleep(poll)
+    pattern = f"edgar-warehouse load .*--source {re.escape(step['source'])} --target {re.escape(step['target'])}( |$)"
+    if subprocess.run(["pgrep", "-f", pattern], capture_output=True).returncode == 0:
+        note(f"{step['name']} waits for another load of its source and target to end", state)
+        while subprocess.run(["pgrep", "-f", pattern], capture_output=True).returncode == 0:
+            time.sleep(poll)
+
+
 def attempt_loop(step: dict, env: dict, state: Path) -> bool:
     name, log = step["name"], LOGS / f"chain-{RUN}-{step['name']}.log"
+    wait_for(step, state)
     for attempt in range(1, step["attempts"] + 1):
         note(f"{name} attempt {attempt} start", state)
         code = run(["load", *arguments(step)], env, log)
@@ -117,6 +140,7 @@ def main() -> int:
         parser.add_argument(f"--{flag}", action="store_true")
     parser.add_argument("--from", dest="start")
     parser.add_argument("--only")
+    parser.add_argument("--lane")
     args = parser.parse_args()
     steps = yaml.safe_load((ROOT / "rules/load-chain.yaml").read_text())["steps"]
     names = [step["name"] for step in steps]
@@ -124,9 +148,12 @@ def main() -> int:
         if chosen and chosen not in names:
             print(f"No step named {chosen}", file=sys.stderr)
             return 2
+    if args.lane and args.lane not in {step["lane"] for step in steps}:
+        print(f"No lane named {args.lane}", file=sys.stderr)
+        return 2
     if args.list:
         for step in steps:
-            print(f"{step['name']:30} {step['source']} {step['target']} {step['capture']}")
+            print(f"{step['lane']} {step['name']:30} {step['source']} {step['target']} {step['capture']}")
         return 0
     env = {**os.environ, **load_env(STORES / "worker.env")}
     LOGS.mkdir(parents=True, exist_ok=True)
@@ -141,11 +168,11 @@ def main() -> int:
         started = args.start is None
         for step in steps:
             started = started or step["name"] == args.start
-            if not started or (args.only and step["name"] != args.only):
+            if not started or (args.only and step["name"] != args.only) or (args.lane and step["lane"] != args.lane):
                 continue
             if not attempt_loop(step, env, state):
                 return 1
-        if args.only:
+        if args.only or args.lane:
             return 0
     finish(env, state)
     return 0
