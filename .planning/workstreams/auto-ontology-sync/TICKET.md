@@ -6,7 +6,7 @@
 - [x] Import only three approved databases; native API and local embedding-store readback confirm 91 tables, 960 columns, 1051 embeddings. {{now}}
 - [x] Verify denied DML for all three readers: DELETE WHERE false in explicit read-write transactions returns 42501; script regressions cover private shell parsing, reader reuse/target checks, model overrides and rejected privilege/TLS states. {{now}}
 - [x] Standards: private values excluded, generic source list, least privileges and no source-data writes; Spec: only three approved sources, exact inventory/embedding readback; GoF: retain lifecycle facade, no additional pattern justified by history. {{now}}
-- [ ] Publish validated scripts and skill in PR.
+- [x] Publish validated scripts and skill in PR #1791; all requested implementation and local validation complete. {{now}}
 - [x] Learning → skill: source boundary, generic sync, private credentials, embedding preflight and readback. {{now}}
 
 Runtime qualification used the sibling checkout at commit `8ff3060`; refreshed application containers without removing volumes. Semantic compilation and business-query qualification were not performed; catalog sync and stored embeddings are confirmed.
