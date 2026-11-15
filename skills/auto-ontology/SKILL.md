@@ -21,7 +21,7 @@ Required keys: `AUTH_SECRET`, `APP_URL`, `AUTO_ONTOLOGY_ADMIN_EMAIL`, `AUTO_ONTO
 
 For a laptop, set `APP_URL` to `http://127.0.0.1:3000`. Do not publish that origin beyond localhost unless the operator asks for that exact exposure.
 
-Blank `CONNECTION_STRINGS` copied from the upstream example before the first start. A placeholder sample database is not an approved source. Leave it empty until a scoped synthetic source, or a separately approved MDM, RDM, or Silver source, exists. Check host ports `3000`, `3001`, `3002`, `5050`, and `POSTGRES_PORT`, and the fixed container names, before Compose. Do not stop another stack to free them.
+Blank `CONNECTION_STRINGS` copied from the upstream example before the first start. A placeholder sample database is not an approved source. Leave it empty until a scoped synthetic source, or a separately approved MDM, RDM, or Silver source, exists. Check host ports `3000`, `3001`, `3002`, `5050`, and `POSTGRES_PORT`, and the fixed container names, before Compose. Do not stop another stack to free them. Start and stop the sibling stack through `bash infra/scripts/catalog-services.sh start|stop`; set `AUTO_ONTOLOGY_DIR` only when the checkout is not the default sibling directory.
 
 
 ## Initialize (preserve by default)
