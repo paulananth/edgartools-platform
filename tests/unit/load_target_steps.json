@@ -1208,7 +1208,7 @@
      "source.output"
     ],
     "input": {
-     "contract": "sec.nport.registrant/source.yaml",
+     "contract": "sec.ncen.fund/fund-keys.yaml",
      "lookups": {
       "filed": {
        "column": "accession_number",
@@ -1224,7 +1224,7 @@
     "leases": [
      "artifact:{destination}"
     ],
-    "name": "registrants",
+    "name": "fund_keys",
     "operation": "source.read",
     "requires": [
      "submissions"
@@ -1240,51 +1240,10 @@
      "source.output"
     ],
     "input": {
-     "contract": "sec.ncen.fund/source.yaml",
-     "lookups": {
-      "filed": {
-       "column": "accession_number",
-       "from": "submissions",
-       "max_input_bytes": 67108864,
-       "max_input_rows": 1000000,
-       "table": "filed",
-       "value_column": "filed"
-      },
-      "registrant": {
-       "column": "accession_number",
-       "from": "registrants",
-       "max_input_bytes": 268435456,
-       "max_input_rows": 1000000,
-       "table": "filing",
-       "value_column": "cik"
-      }
-     }
-    },
-    "key": "{unit}",
-    "leases": [
-     "artifact:{destination}"
-    ],
-    "name": "filings",
-    "operation": "source.read",
-    "requires": [
-     "submissions",
-     "registrants"
-    ],
-    "units": {
-     "each": "file"
-    }
-   },
-   {
-    "checks": [
-     "input.hash",
-     "output.receipt",
-     "source.output"
-    ],
-    "input": {
      "lookups": {
       "filed": {
        "column": "fund_id",
-       "from": "filings",
+       "from": "fund_keys",
        "max_input_bytes": 268435456,
        "max_input_rows": 1000000,
        "table": "fund_filed",
@@ -1299,7 +1258,7 @@
     "name": "advisers",
     "operation": "source.read",
     "requires": [
-     "filings"
+     "fund_keys"
     ],
     "units": {
      "each": "file"
@@ -1427,7 +1386,7 @@
      "source.output"
     ],
     "input": {
-     "contract": "sec.nport.registrant/source.yaml",
+     "contract": "sec.ncen.fund/fund-keys.yaml",
      "lookups": {
       "filed": {
        "column": "accession_number",
@@ -1443,7 +1402,7 @@
     "leases": [
      "artifact:{destination}"
     ],
-    "name": "registrants",
+    "name": "fund_keys",
     "operation": "source.read",
     "requires": [
      "submissions"
@@ -1459,51 +1418,10 @@
      "source.output"
     ],
     "input": {
-     "contract": "sec.ncen.fund/source.yaml",
-     "lookups": {
-      "filed": {
-       "column": "accession_number",
-       "from": "submissions",
-       "max_input_bytes": 67108864,
-       "max_input_rows": 1000000,
-       "table": "filed",
-       "value_column": "filed"
-      },
-      "registrant": {
-       "column": "accession_number",
-       "from": "registrants",
-       "max_input_bytes": 268435456,
-       "max_input_rows": 1000000,
-       "table": "filing",
-       "value_column": "cik"
-      }
-     }
-    },
-    "key": "{unit}",
-    "leases": [
-     "artifact:{destination}"
-    ],
-    "name": "filings",
-    "operation": "source.read",
-    "requires": [
-     "submissions",
-     "registrants"
-    ],
-    "units": {
-     "each": "file"
-    }
-   },
-   {
-    "checks": [
-     "input.hash",
-     "output.receipt",
-     "source.output"
-    ],
-    "input": {
      "lookups": {
       "filed": {
        "column": "fund_id",
-       "from": "filings",
+       "from": "fund_keys",
        "max_input_bytes": 268435456,
        "max_input_rows": 1000000,
        "table": "fund_filed",
@@ -1511,10 +1429,10 @@
       },
       "series": {
        "column": "fund_id",
-       "from": "filings",
+       "from": "fund_keys",
        "max_input_bytes": 268435456,
        "max_input_rows": 1000000,
-       "table": "filing",
+       "table": "fund_series",
        "value_column": "series_id"
       }
      }
@@ -1526,7 +1444,7 @@
     "name": "classes",
     "operation": "source.read",
     "requires": [
-     "filings"
+     "fund_keys"
     ],
     "units": {
      "each": "file"

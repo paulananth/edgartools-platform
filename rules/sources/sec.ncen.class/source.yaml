@@ -21,8 +21,8 @@ pass:
   name: classes
   units: {each: file}
   lookups:
-    filed: {column: fund_id, from: sec.ncen.fund/source.yaml, max_input_bytes: 268435456, max_input_rows: 1000000, table: fund_filed, value_column: filed_at}
-    series: {column: fund_id, from: sec.ncen.fund/source.yaml, max_input_bytes: 268435456, max_input_rows: 1000000, table: filing, value_column: series_id}
+    filed: {column: fund_id, from: sec.ncen.fund/fund-keys.yaml, max_input_bytes: 268435456, max_input_rows: 1000000, table: fund_filed, value_column: filed_at}
+    series: {column: fund_id, from: sec.ncen.fund/fund-keys.yaml, max_input_bytes: 268435456, max_input_rows: 1000000, table: fund_series, value_column: series_id}
 bronze:
   family: sec.ncen-datasets
 bookkeeping:
