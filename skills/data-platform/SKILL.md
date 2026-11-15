@@ -105,6 +105,11 @@ the sole owner of these instructions; other skills link here.
 
 ## 0. Setup
 
+For Snowflake-hosted PostgreSQL and managed mirrors into native Snowflake
+tables, read [Hosted PostgreSQL mirroring](HOSTED-MIRRORING.md). It routes to
+the installed `snowflake-postgres` skill; hosting, resizing and mirror creation
+have separate readiness and approval gates.
+
 For persistent local agent environments, baseline promotion or recovery, read
 [Local testing](LOCAL-TESTING.md). It defines automatic promotion after verified
 checks and points to the repository lifecycle script.
