@@ -42,8 +42,11 @@ def fund_row(filed_at='2026-05-15T00:00:00+00:00'):
 
 
 def registrant_row():
-    return {'cik': '0000000001', 'latest': {'name': 'Invented Registrant', 'filed': '2026 05 20'},
-            'first': {'filed': '2026 04 10'}}
+    """A `registrant` row as the combine gives it: the first and latest filing as the read made them."""
+    def filing(filed_at, **fields):
+        return {'filed_at': filed_at, 'date_basis': 'observed', 'date_is_provisional': 'true', **fields}
+    return {'cik': '0000000001', 'latest': filing('2026-05-20T00:00:00+00:00', name='Invented Registrant'),
+            'first': filing('2026-04-10T00:00:00+00:00')}
 
 
 def projected(fund, company, *, resolved=True, target_profile=True):
@@ -107,7 +110,7 @@ def test_a_missing_or_invalid_filing_date_never_becomes_today(tmp_path, filed, e
 ])
 def test_registrant_requires_valid_filing_and_registration_observations(tmp_path, filing, filed, exception, message):
     row = registrant_row()
-    row[filing]['filed'] = filed
+    row[filing]['filed_at'] = filed
     fund = normalized(tmp_path, 'sec.nport.fund', 'fund', fund_row())
     with pytest.raises(exception, match=message):
         company = normalized(tmp_path, 'sec.nport.registrant', 'registrant', row)
