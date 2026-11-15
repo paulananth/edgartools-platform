@@ -37,4 +37,10 @@ hosted run reprocesses its files. Nothing runs on the hosted store without the o
 - [ ] N-PORT security reads one quarter's zip nine times, one table a read (2026q2 on a disposable store: about
   23 of its 60 minutes); find whether one read step can give several tables from several members of a zip, and fold
   them
+- [ ] N-PORT security in two paths (operator, 2026-11-14: "make it two split one to mdm and one to silver", then
+  "rework the extracts one source at a time, starting with N-PORT security yes"): `mastering` (11 extract steps,
+  MDM and its links) and `silver` (6 extract steps, the holdings); every step's body is main's, only divided
+  (`load_target_steps.json`); the four small reads both need (identifiers, filing dates, submissions,
+  registrants) run in each. Prove on 2026q2: silver loaded first, then MDM; counts against main's
+  (420,690 Securities; 5,347,869 holdings)
 - [ ] Learning → skill

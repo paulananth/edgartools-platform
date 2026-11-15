@@ -896,20 +896,22 @@ bookkeeping:
       # Set for the FIGI steps ticket 138 removed (73 s each, measured
       # 2026-10-19); kept until a run shows the default 120 s lease holds.
       run: {facts: [period]}
-      # Each holding for silver (ticket 79): a lookup row, not an MDM record
-      # (operator, 2026-10-22: "Why do you need to merge it it's just a
-      # lookup"). The filing's series (holding-series.yaml), its
-      # registrant (sec.nport.registrant's) and its date name each row's
-      # holder; holding.yaml gives the rows silver-holding.yaml lands.
-      extract: [record.yaml, holding.yaml]
+      extract: [record.yaml]
       master: {requires: [record], keys: {dataset: sec.nport.security.v2, record_column: record, table: security}, readings: {record: {all: record}}}
       silver:
-        # The holdings land in silver once the Securities they link to are merged
-        # (ticket 79, as ticket 183 did for 13F): the silver writer finds each
-        # row's Security, Fund and registrant Company by lookup.
-        - {name: land_holding, land: {silver: nport_holding, table: holding}, requires: [holding, merge]}
         # Links are a silver table, built from the stored records after the merge.
         - {name: links, derive: {build: links, reads: mastering_record, silver: relationship}}
+    # Each holding for silver (ticket 79): a lookup row, not an MDM record (operator, 2026-10-22: "Why do you
+    # need to merge it it's just a lookup"), and its own path, apart from MDM's (operator, 2026-11-14: "make it
+    # two split one to mdm and one to silver"). The filing's series (holding-series.yaml), its registrant
+    # (sec.nport.registrant's) and its date name each row's holder; holding.yaml gives the rows. The silver
+    # writer finds each row's Security, Fund and registrant Company by lookup, and a row whose master is not
+    # mastered yet keeps an empty id for `silver refresh-ids`, so this target needs no MDM run before it.
+    silver:
+      run: {facts: [period]}
+      extract: holding.yaml
+      silver:
+        - {name: land_holding, land: {silver: nport_holding, table: holding}}
     # The Securities keyed by a SEDOL or a LoanX (ticket 190; operator, 2026-11-04: "Second batch after
     # CUSIP and ISIN"): the same record rules (record.yaml, batch `other`) over the first target's
     # verified combine, published after it has merged, so each finds the Security that already holds its
