@@ -13,6 +13,10 @@ OpenMetadata remains the catalog projection published from repository rules. Aut
 
 The upstream [setup skill](https://github.com/NVIDIA/auto-ontology/blob/main/skills/nvidia-ontology-setup/SKILL.md), [management skill](https://github.com/NVIDIA/auto-ontology/blob/main/skills/nvidia-ontology-management/SKILL.md), and [query skill](https://github.com/NVIDIA/auto-ontology/blob/main/skills/nvidia-ontology-query/SKILL.md) describe the product. Read the versions shipped with the selected release; rolling `main` is not proof of installed behavior. Upstream supports Helm and Docker Compose; it does not provide an `auto-ontology init` CLI. This skill defines the platform's init workflow; never invent a command.
 
+## Resource ownership and evidence
+
+An image cache is not a running deployment. For local Compose, confirm active containers with `docker ps`; image labels show build/project provenance, while container labels identify the owning worktree or Compose project. Treat a cached AutoOntology image, pgvector image, or pgAdmin image as unused until a running container and Compose project prove otherwise. Keep AutoOntology's application images and volumes separate from OpenMetadata's server, metadata database, and search images.
+
 ## Local Compose secrets
 
 Clone `NVIDIA/auto-ontology` outside this repository. Compose in that checkout is the installer. Keep a mode `0600`, gitignored `.env` there and in this repository. Copy the required keys into the checkout without printing them.
