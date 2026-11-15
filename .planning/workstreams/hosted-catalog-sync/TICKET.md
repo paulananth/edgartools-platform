@@ -6,3 +6,5 @@
 - [x] Learning → skill: record standing sampling/NVIDIA consent, private URL storage, shell loading, effective privilege checks and physical-ingestion distinction. {{now}}
 - [ ] Sync and verify both consumers from hosted stores: blocked on valid SELECT-only consumer connections and qualified physical ingestion.
 - [x] Validate skill genericity and guide paths: 109 tests passed; overlap guard clear. {{now}}
+
+- [x] Remove the 32 operator-selected aliases from the private shared environment; retain eight standard store/service variables and simplify CONNECTIONS.md. Verified names only; file mode 0600. {{now}}
