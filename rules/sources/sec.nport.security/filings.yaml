@@ -1,5 +1,5 @@
 pass:
-  # Named apart from sec.nport.fund's `filings`, which issuers.yaml reads too.
+  # Named apart from sec.nport.fund's `filings`, which the holdings reading reads too.
   name: filing_dates
   units: {each: file}
 # Each filing's date and as-of date (SUBMISSION.tsv, one row per filing), read

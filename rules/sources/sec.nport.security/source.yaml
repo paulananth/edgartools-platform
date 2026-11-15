@@ -23,7 +23,8 @@
 # `member_value` (none when the holding has none or several); reduce.yaml
 # groups by CUSIP, by ISIN and by pair; reduce.yaml's `keys` lists each
 # Security once by its one key; combine.yaml joins the filed words and every
-# ISIN filed with a CUSIP onto each; mdm.prepare reads table `security`.
+# ISIN filed with a CUSIP onto each; mdm.prepare reads table `security`. The same
+# read writes the issuer tables issuer-reduce.yaml groups.
 # A usable CUSIP is filed and not a stand-in (000000000, 999999999:
 # rules/identifiers/cusip.yaml); one failing its check digit stays a CUSIP
 # record and is set aside by the Dataset Contract, counted.
@@ -37,6 +38,8 @@ pass:
     isin: {column: holding, from: identifiers.yaml, max_input_bytes: 268435456, max_input_rows: 10000000, table: isin, value_column: isin}
     loanx: {column: holding, from: identifiers.yaml, max_input_bytes: 268435456, max_input_rows: 10000000, table: loanx, value_column: loanx}
     sedol: {column: holding, from: identifiers.yaml, max_input_bytes: 268435456, max_input_rows: 10000000, table: sedol, value_column: sedol}
+    series: {column: lei_key, from: sec.nport.fund/source.yaml, max_input_bytes: 268435456, max_input_rows: 1000000, table: filing, value_column: series_id}
+    filed: {column: accession_number, from: filings.yaml, max_input_bytes: 67108864, max_input_rows: 1000000, table: filed, value_column: filed}
 bronze:
   family: sec.nport-datasets
 execution:
@@ -69,6 +72,9 @@ read:
       max_bytes: 268435456
       max_value_bytes: 64
       pairs: true
+    series: {max_values: 1000000, max_bytes: 67108864, max_value_bytes: 64, pairs: true}
+    # Each filing's date by its accession number (filings.yaml, ticket 113).
+    filed: {max_values: 1000000, max_bytes: 67108864, max_value_bytes: 64, pairs: true}
   # The quarter's data set period (an instant with its zone), supplied by the
   # run: a column of the holdings for silver; it dates no publication in MDM
   # (operator, 2026-10-19: "if at all it should be captured in silver not on
@@ -680,6 +686,218 @@ read:
             else:
               const:
                 value: ''
+    # Each holding's issuer LEI, for ISSUED_BY (rebuild-priorities ticket 22; operator, 2026-10-16: "By issuer
+    # LEI (Recommended)"), in this one read of FUND_REPORTED_HOLDING.tsv (operator, 2026-11-14: fold the issuers
+    # read into the holdings read): by CUSIP (`security_issuer`), and by ISIN for a holding with no usable CUSIP
+    # (`no_cusip_issuer`, ticket 102). An issuer LEI not 20 letters and digits ending in two digits, or a holding
+    # with no CUSIP or ISIN to hang it on, is not read. A fund's share is issued by its fund series (ticket 234;
+    # operator, 2026-11-14: "Yes"): the `series` pair set (sec.nport.fund's reading: each series' LEI to its
+    # SEC series id, none for an LEI two series file) turns a filed series LEI into its series id, in
+    # `security_series` and `no_cusip_series`; the LEI tables keep only the holdings that name no series. The
+    # same expressions are in both pairs of tables: keep them in step. issuer-reduce.yaml reads these four.
+    security_issuer:
+      each: .
+      select:
+        choose:
+          condition:
+            equal:
+              left:
+                text:
+                  path: ISSUER_CUSIP
+                  default: ""
+                  transforms: [{case: upper}]
+                  null_if: ["", "000000000", "999999999"]
+              right: {value: {path: NO_SUCH_COLUMN}}
+          then: {value: {path: NO_SUCH_COLUMN}}
+          else:
+            choose:
+              condition:
+                equal:
+                  left:
+                    text:
+                      path: ISSUER_LEI
+                      default: ""
+                      transforms:
+                      - {case: upper}
+                      - {regex_replace: {pattern: '^.*[^A-Z0-9].*$|^.{0,19}$|^.{21,}$|^.{18}[A-Z].$|^.{19}[A-Z]$|^0{20}$', with: ''}}
+                      null_if: [""]
+                  right: {value: {path: NO_SUCH_COLUMN}}
+              then: {value: {path: NO_SUCH_COLUMN}}
+              else:
+                # A holding naming a fund series goes to `security_series`.
+                equal:
+                  left: {member_value: {lookup: series, key: {text: {path: ISSUER_LEI, default: "", transforms: [{case: upper}]}}, on_many: "null"}}
+                  right: {value: {path: NO_SUCH_COLUMN}}
+      columns:
+        cusip:
+          text:
+            path: ISSUER_CUSIP
+            default: ""
+            transforms: [{case: upper}]
+        # The holding's filing date (YYYY-MM-DD), else the quarter's: an
+        # ISSUED_BY link starts at the earliest (ticket 113).
+        filed:
+          coalesce:
+            skip: "null"
+            values:
+            - member_value: {lookup: filed, key: {text: {path: ACCESSION_NUMBER}}, on_many: "null"}
+            - transform: {value: {context: {name: period}}, transforms: [{regex_replace: {pattern: 'T.*$', with: ''}}]}
+        issuer_lei: {text: {path: ISSUER_LEI, default: "", transforms: [{case: upper}]}}
+    security_series:
+      each: .
+      select:
+        choose:
+          condition:
+            equal:
+              left:
+                text:
+                  path: ISSUER_CUSIP
+                  default: ""
+                  transforms: [{case: upper}]
+                  null_if: ["", "000000000", "999999999"]
+              right: {value: {path: NO_SUCH_COLUMN}}
+          then: {value: {path: NO_SUCH_COLUMN}}
+          else:
+            choose:
+              condition:
+                equal:
+                  left:
+                    text:
+                      path: ISSUER_LEI
+                      default: ""
+                      transforms:
+                      - {case: upper}
+                      - {regex_replace: {pattern: '^.*[^A-Z0-9].*$|^.{0,19}$|^.{21,}$|^.{18}[A-Z].$|^.{19}[A-Z]$|^0{20}$', with: ''}}
+                      null_if: [""]
+                  right: {value: {path: NO_SUCH_COLUMN}}
+              then: {value: {path: NO_SUCH_COLUMN}}
+              else:
+                choose:
+                  condition:
+                    equal:
+                      left: {member_value: {lookup: series, key: {text: {path: ISSUER_LEI, default: "", transforms: [{case: upper}]}}, on_many: "null"}}
+                      right: {value: {path: NO_SUCH_COLUMN}}
+                  then: {value: {path: NO_SUCH_COLUMN}}
+                  else: {test: {path: HOLDING_ID, kind: present}}
+      columns:
+        cusip:
+          text:
+            path: ISSUER_CUSIP
+            default: ""
+            transforms: [{case: upper}]
+        # The holding's filing date (YYYY-MM-DD), else the quarter's: an
+        # ISSUED_BY link starts at the earliest (ticket 113).
+        filed:
+          coalesce:
+            skip: "null"
+            values:
+            - member_value: {lookup: filed, key: {text: {path: ACCESSION_NUMBER}}, on_many: "null"}
+            - transform: {value: {context: {name: period}}, transforms: [{regex_replace: {pattern: 'T.*$', with: ''}}]}
+        issuer_series: {member_value: {lookup: series, key: {text: {path: ISSUER_LEI, default: "", transforms: [{case: upper}]}}, on_many: "null"}}
+    no_cusip_issuer:
+      each: .
+      select:
+        choose:
+          condition:
+            equal:
+              left:
+                text:
+                  path: ISSUER_CUSIP
+                  default: ""
+                  transforms: [{case: upper}]
+                  null_if: ["", "000000000", "999999999"]
+              right: {value: {path: NO_SUCH_COLUMN}}
+          then:
+            choose:
+              condition:
+                equal:
+                  left: {coalesce: {skip: "null", values: [{member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}}, {member_value: {lookup: sedol, key: {text: {path: HOLDING_ID}}, on_many: "null"}}, {member_value: {lookup: loanx, key: {text: {path: HOLDING_ID}}, on_many: "null"}}, {member_value: {lookup: figi, key: {text: {path: HOLDING_ID}}, on_many: "null"}}]}}
+                  right: {value: {path: NO_SUCH_COLUMN}}
+              then: {value: {path: NO_SUCH_COLUMN}}
+              else:
+                choose:
+                  condition:
+                    equal:
+                      left:
+                        text:
+                          path: ISSUER_LEI
+                          default: ""
+                          transforms:
+                          - {case: upper}
+                          - {regex_replace: {pattern: '^.*[^A-Z0-9].*$|^.{0,19}$|^.{21,}$|^.{18}[A-Z].$|^.{19}[A-Z]$|^0{20}$', with: ''}}
+                          null_if: [""]
+                      right: {value: {path: NO_SUCH_COLUMN}}
+                  then: {value: {path: NO_SUCH_COLUMN}}
+                  else:
+                    equal:
+                      left: {member_value: {lookup: series, key: {text: {path: ISSUER_LEI, default: "", transforms: [{case: upper}]}}, on_many: "null"}}
+                      right: {value: {path: NO_SUCH_COLUMN}}
+          else: {value: {path: NO_SUCH_COLUMN}}
+      columns:
+        no_cusip_key: {coalesce: {skip: "null", values: [{member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}}, {member_value: {lookup: sedol, key: {text: {path: HOLDING_ID}}, on_many: "null"}}, {member_value: {lookup: loanx, key: {text: {path: HOLDING_ID}}, on_many: "null"}}, {member_value: {lookup: figi, key: {text: {path: HOLDING_ID}}, on_many: "null"}}]}}
+        # The holding's filing date (YYYY-MM-DD), else the quarter's: an
+        # ISSUED_BY link starts at the earliest (ticket 113).
+        filed:
+          coalesce:
+            skip: "null"
+            values:
+            - member_value: {lookup: filed, key: {text: {path: ACCESSION_NUMBER}}, on_many: "null"}
+            - transform: {value: {context: {name: period}}, transforms: [{regex_replace: {pattern: 'T.*$', with: ''}}]}
+        issuer_lei: {text: {path: ISSUER_LEI, default: "", transforms: [{case: upper}]}}
+    no_cusip_series:
+      each: .
+      select:
+        choose:
+          condition:
+            equal:
+              left:
+                text:
+                  path: ISSUER_CUSIP
+                  default: ""
+                  transforms: [{case: upper}]
+                  null_if: ["", "000000000", "999999999"]
+              right: {value: {path: NO_SUCH_COLUMN}}
+          then:
+            choose:
+              condition:
+                equal:
+                  left: {coalesce: {skip: "null", values: [{member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}}, {member_value: {lookup: sedol, key: {text: {path: HOLDING_ID}}, on_many: "null"}}, {member_value: {lookup: loanx, key: {text: {path: HOLDING_ID}}, on_many: "null"}}, {member_value: {lookup: figi, key: {text: {path: HOLDING_ID}}, on_many: "null"}}]}}
+                  right: {value: {path: NO_SUCH_COLUMN}}
+              then: {value: {path: NO_SUCH_COLUMN}}
+              else:
+                choose:
+                  condition:
+                    equal:
+                      left:
+                        text:
+                          path: ISSUER_LEI
+                          default: ""
+                          transforms:
+                          - {case: upper}
+                          - {regex_replace: {pattern: '^.*[^A-Z0-9].*$|^.{0,19}$|^.{21,}$|^.{18}[A-Z].$|^.{19}[A-Z]$|^0{20}$', with: ''}}
+                          null_if: [""]
+                      right: {value: {path: NO_SUCH_COLUMN}}
+                  then: {value: {path: NO_SUCH_COLUMN}}
+                  else:
+                    choose:
+                      condition:
+                        equal:
+                          left: {member_value: {lookup: series, key: {text: {path: ISSUER_LEI, default: "", transforms: [{case: upper}]}}, on_many: "null"}}
+                          right: {value: {path: NO_SUCH_COLUMN}}
+                      then: {value: {path: NO_SUCH_COLUMN}}
+                      else: {test: {path: HOLDING_ID, kind: present}}
+          else: {value: {path: NO_SUCH_COLUMN}}
+      columns:
+        no_cusip_key: {coalesce: {skip: "null", values: [{member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}}, {member_value: {lookup: sedol, key: {text: {path: HOLDING_ID}}, on_many: "null"}}, {member_value: {lookup: loanx, key: {text: {path: HOLDING_ID}}, on_many: "null"}}, {member_value: {lookup: figi, key: {text: {path: HOLDING_ID}}, on_many: "null"}}]}}
+        # The holding's filing date (YYYY-MM-DD), else the quarter's: an
+        # ISSUED_BY link starts at the earliest (ticket 113).
+        filed:
+          coalesce:
+            skip: "null"
+            values:
+            - member_value: {lookup: filed, key: {text: {path: ACCESSION_NUMBER}}, on_many: "null"}
+            - transform: {value: {context: {name: period}}, transforms: [{regex_replace: {pattern: 'T.*$', with: ''}}]}
+        issuer_series: {member_value: {lookup: series, key: {text: {path: ISSUER_LEI, default: "", transforms: [{case: upper}]}}, on_many: "null"}}
   stream:
     framing: delimited
     delimited:

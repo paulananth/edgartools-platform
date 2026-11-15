@@ -56,8 +56,8 @@ def read(store, root, contract_file, raw, period, lookups=None):
     context = store.put(root.as_uri(), {"version": 1, "input": raw, "values": {"period": period} if period else {}})
     entry = {"input": raw, "context": context}
     if lookups is not None:
-        if contract_file == "source.yaml":  # the holdings reading declares a SEDOL and a LoanX set too (ticket 125)
-            lookups = {"sedol": [], "loanx": [], "figi": [], **lookups}
+        if contract_file == "source.yaml":  # the holdings reading declares every set its tables read
+            lookups = {"sedol": [], "loanx": [], "figi": [], "series": [], "filed": [], **lookups}
         entry["lookups"] = store.put(root.as_uri(), {"version": 1, "input": raw, "sets": lookups})
     return chain.read(store, root, body, [entry], 3 if lookups is not None else 2)
 
@@ -85,9 +85,9 @@ def filed_pairs(store, root, raw) -> list[list[str]]:
 
 
 def issuers(store, root, raw, isin, period, series=()):
-    """The issuer source extract, each holding with its filing's date, else the quarter's;
-    `series` pairs each fund series' LEI with its SEC series id (sec.nport.fund's reading)."""
-    return read(store, root / "issuers", "issuers.yaml", raw, period,
+    """The holdings source extract with its issuer tables, each holding with its filing's date, else the
+    quarter's; `series` pairs each fund series' LEI with its SEC series id (sec.nport.fund's reading)."""
+    return read(store, root / "issuers", "source.yaml", raw, period,
                 lookups={"isin": isin, "sedol": [], "loanx": [], "figi": [], "series": list(series),
                                   "filed": filed_pairs(store, root, raw)})
 
