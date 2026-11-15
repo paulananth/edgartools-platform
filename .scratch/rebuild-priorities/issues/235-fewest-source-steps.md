@@ -95,4 +95,15 @@ hosted run reprocesses its files. Nothing runs on the hosted store without the o
   one target against the split, silver run first: records equal (5,759; 5,759 masters; 0 set aside; 0 reviews),
   283,725 holdings equal column by column but `loaded_at`, and 283,725 Security ids filled by `refresh-ids` as on
   main; main 33 s, split 22 s + 20 s (2026-11-15 07:09 ET)
+- [x] SEC company stays at 3 extract steps (seven wastes, 2026-11-15): two reads of different files (the main
+  documents, the exchange catalog) and a combine that joins several ranked tickers to each CIK, which a read's
+  pair set cannot (one value a key); no silver path to split (2026-11-15 07:31 ET)
+- [x] N-CEN registrant stays at 3: the submissions read (the filing dates are another member file), the
+  registrant read, and the combine that groups by CIK for the latest filing and the first date (2026-11-15 07:31 ET)
+- [x] N-CEN adviser and class from 5 extract steps to 4 (operator, 2026-11-15: "Add it (Recommended)"): both read
+  REGISTRANT.tsv only because N-CEN fund's read declares a registrant lookup they never use, which also made a
+  change to N-PORT registrant's rules reprocess them; `sec.ncen.fund/fund-keys.yaml` gives each fund row's filing
+  date and series with the filing-date lookup alone. Proof on 2026q2, main against the branch on disposable stores
+  (fund mastered first so class's links have endpoints): records equal per dataset (554 advisers, 5,137 classes,
+  2,054 funds; 1 set aside; 0 reviews), 8,580 links equal once each id is mapped to its records (2026-11-15 07:31 ET)
 - [ ] Learning → skill
