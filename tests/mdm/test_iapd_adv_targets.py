@@ -1,6 +1,6 @@
-"""The Form ADV bulk file's two targets (ticket 176): `mastering` masters the adviser filings
-with their custodians joined in, `custodians` masters one record per custodian; each ends in
-the Change Journal. Every name and number here is invented."""
+"""The Form ADV bulk file's three targets, one path each: `mastering` masters the adviser filings
+with their custodians joined in, `custodians` masters one record per custodian, `silver` lands the
+custody amounts; each ends in the Change Journal. Every name and number here is invented."""
 import hashlib
 import json
 from uuid import uuid4
@@ -15,8 +15,9 @@ from tests.support.memory_journal import MemoryJournal
 
 SOURCE = "iapd.adv"
 FACTS = {"published": "2026-09-30T00:00:00Z"}
-STEPS = {"mastering": ["read_filings", "read_custody", "read_ciks", "read_related", "combine", "prepare", "merge", "land_custody", "processed"],
-         "custodians": ["read_custody", "combine", "record", "prepare", "merge", "processed"]}
+STEPS = {"mastering": ["read_filings", "read_custody", "read_ciks", "read_related", "combine", "prepare", "merge", "processed"],
+         "custodians": ["read_custody", "prepare", "merge", "processed"],
+         "silver": ["read_custody", "land_custody", "processed"]}
 
 
 def key(n: int) -> str:
@@ -49,7 +50,8 @@ def recorded(options, report):
 def test_each_target_has_its_steps_and_ends_in_the_change_journal(tmp_path, target):
     steps = Artifacts().json(write_manifest(**capture(tmp_path, target, [8, 9]))["manifest"])["steps"]
     assert set(steps) == set(STEPS[target])
-    assert len(steps["merge"]) == 1 and len(steps["prepare"]) == 1
+    if "merge" in steps:
+        assert len(steps["merge"]) == 1 and len(steps["prepare"]) == 1
     recorded_files = Artifacts().json(steps["processed"][0]["input"])["files"]
     assert [f["key"] for f in recorded_files] == [key(8), key(9)]
 
@@ -83,9 +85,10 @@ def test_recording_the_filings_does_not_skip_the_custodians_of_the_same_file(tmp
     assert write_manifest(**custodians)["manifest"] is not None  # each target keeps its own record of the file
 
 
-def test_the_amount_each_custodian_holds_lands_in_silver_after_the_filings_merge(tmp_path):
-    """Ticket 01: the custody rows are read once (read_custody) and landed in `adv_custody` once the adviser's
-    filing is mastered; the journal records the file only after the landing."""
-    steps = Artifacts().json(write_manifest(**capture(tmp_path, "mastering", [8, 9]))["manifest"])["steps"]
+def test_the_amount_each_custodian_holds_lands_in_silver_on_its_own_path(tmp_path):
+    """MDM and silver are two paths: the `silver` target reads the custody rows and lands them in `adv_custody`
+    with no merge before it; the journal records the file only after the landing."""
+    steps = Artifacts().json(write_manifest(**capture(tmp_path, "silver", [8, 9]))["manifest"])["steps"]
     assert len(steps["land_custody"]) == len(steps["read_custody"])  # each read unit lands its own rows
     assert {(u["keys"]["table"], u["keys"]["silver"]) for u in steps["land_custody"]} == {("custody_facts", "adv_custody")}
+    assert "merge" not in steps and "prepare" not in steps
