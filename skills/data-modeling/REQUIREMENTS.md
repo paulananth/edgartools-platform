@@ -31,6 +31,11 @@ a contract or starts a load, and reviews the model itself. In scope:
 - **Transaction parts:** the silver spec data-profiling wrote (grain, key,
   links to masters, time columns, load mode), as advice.
 - **Time:** business time and recorded time kept apart for every part.
+- **Final exposable outputs:** from requirements, mappings and approved profile
+  evidence, propose the final master/silver table list and each output's
+  current/history scope. Include it in the existing requirements-and-mapping
+  approval; one approved configuration guides mirroring, AutoOntology and the
+  OpenMetadata projection. Data modeling proposes and never approves or activates.
 - **Child parts:** a part a master has many of, on the master id, with a key
   proven unique on the data (the provider's own unit first).
 - **Proving the model:** archetype cases run in memory over the captures in

@@ -86,6 +86,26 @@ edgar-warehouse rdm describe <code set>                  # its meaning, version,
 
 ## Decision rules
 
+### Final outputs and exposure
+
+Use [Data profiling's exposure evidence](../data-profiling/SKILL.md#exposure-tags-follow-requirements-and-mappings)
+and [Final exposable tables](../data-platform/FINAL-TABLES.md) when defining
+outputs for managed mirroring and AutoOntology. From the requirements and
+source-to-final mapping, define each final master or silver table's purpose,
+grain, keys, fields, links and time scope. Decide current-only or approved
+history per output from its requirement, not a platform-wide default. Keep
+drafts, candidates, processing metadata and mixed internal/final outputs out
+of the proposed exposure list; missing evidence stays unknown.
+
+Present that exact list, its reasons and exclusions within the existing
+requirements-and-mapping approval, with profiling evidence. The operator's
+decision covers the included list/version; do not add another tagging approval
+round. This skill proposes structure and never approves it. Onboarding records
+the approved mapping and selection in configuration after physical verification;
+OpenMetadata projects that selection and both consumers use it. A changed
+requirement or mapping reopens affected entries. Consumer activation and
+billable mirror creation retain their own gates.
+
 ### 1. Class
 
 Take the class from the approved findings, and check it against the glossary:

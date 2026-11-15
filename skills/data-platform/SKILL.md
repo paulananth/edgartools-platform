@@ -105,6 +105,16 @@ the sole owner of these instructions; other skills link here.
 
 ## 0. Setup
 
+Before selecting tables for managed mirroring or AutoOntology, apply
+[Final exposable tables](FINAL-TABLES.md): one configuration-owned table list
+for both consumers, projected into OpenMetadata.
+
+Reusable workflow helpers live in the owning skill's `scripts/` directory or
+the application package, not `infra/`. Keep only deployment wiring under
+`infra/`; pass deployment configuration explicitly to generic helpers.
+Before shipping a skill, verify its links in an isolated installed skill tree:
+a checkout can hide a missing helper by resolving a link back into `infra/`.
+
 For Snowflake-hosted PostgreSQL and managed mirrors into native Snowflake
 tables, read [Hosted PostgreSQL mirroring](HOSTED-MIRRORING.md). It routes to
 the installed `snowflake-postgres` skill; hosting, resizing and mirror creation

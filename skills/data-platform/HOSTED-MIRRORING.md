@@ -19,8 +19,8 @@ DESCRIBE `access_roles` out of output. Report counts and metadata only.
   current credit rates and failover impact for explicit approval. Verify the
   resulting family and READY state; an accepted ALTER is not completion.
   Keep the approved change in a committed script or infrastructure definition.
-  In a repository checkout, the reusable SQL template is
-  [resize_instance.sql](../../infra/snowflake/postgres/resize_instance.sql).
+  The reusable SQL template lives with this skill:
+  [resize_instance.sql](scripts/resize_instance.sql).
   Execute it through Snow CLI with an explicit connection and role,
   `--enable-templating JINJA`, and reviewed literal variables. Before rendering,
   require `instance_name` to match `^[A-Za-z_][A-Za-z0-9_]*$` and choose
@@ -45,6 +45,11 @@ creation. Report JSON-to-string and other fallback mappings from the owning
 skill. Do not silently change source types to get past pre-flight.
 
 ## Creation and verification
+
+Apply [Final exposable tables](FINAL-TABLES.md) first. Use explicit
+`postgres_tables` with `postgres_schemas => NULL`; only configured final master
+and silver outputs are in scope. Schema-wide mirroring cannot enforce this
+boundary. Verify the exact physical table list, not only table counts.
 
 After verified pre-flight, follow the mirror sub-skill's grant sequence and
 present each mirror, source database/schema, target database, refresh interval,

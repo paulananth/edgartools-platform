@@ -36,6 +36,50 @@ Operator. This is the rule the silver spec follows.
   `silver`. The tests stay in the findings. The run still writes the silver
   fields. It does not stop to ask which class the part is.
 
+## Exposure tags follow requirements and mappings
+
+For managed mirroring and AutoOntology, apply
+[Final exposable tables](../data-platform/FINAL-TABLES.md). Only final MDM
+master, RDM master and silver outputs may be eligible. A profiled class,
+store suggestion, table name or catalog certification is not an exposure tag.
+
+Reuse the one profile's evidence. In `REPORT.md` and the onboarding handoff,
+trace each candidate output to the requirement it serves and the source-to-final
+mapping: source part/fields, transformations, destination table/fields, grain,
+keys, master links, time roles, sensitivity and applicable quality checks.
+Reference the requirements and mapping versions. Where mapping or approval is
+not yet available, record the candidate and the missing evidence; do not tag it
+as final. Do not add unsupported fields to `findings.yaml` or a table spec.
+
+Data-modeling defines the final outputs and each output's current/history
+scope from the requirements and mappings, using this profile's evidence.
+After the review below is approved, onboarding verifies the final
+physical table and records eligibility in the authoritative configuration.
+That one selection guides both consumers and is projected into OpenMetadata.
+An intermediate output or a table mixing final and draft/internal rows stays
+ineligible until the final-output boundary is resolved. Missing requirements,
+unmapped required fields or unresolved sensitivity/quality decisions block the
+tag. A tag never substitutes for source qualification or consumer approval.
+
+**Human review checkpoint:** include the candidate-table list in the existing
+requirements-and-mapping approval, backed by `REPORT.md`; do not add a separate
+table-tagging approval round. Before recording approved eligibility, show each table's
+purpose, requirement and mapping versions, final physical output, mapped
+fields, current/history scope, sensitivity/quality findings and exclusions.
+Record approval of the requirements, mapping and included concrete table list
+with the operator's exact words against their versions; pending or declined
+entries remain ineligible. A prior approval that did not include the table
+list does not approve exposure. A changed mapping or requirement
+reopens only the affected selection for review. Mirror creation retains its
+separate billable-operation approval. This defines the review checkpoint;
+it does not claim an implemented tagging screen or approval API.
+
+This skill supplies evidence; it does not grant access, apply live tags, create
+mirrors or start ingestion. Reuse approved findings without another data scan;
+a changed requirement or mapping triggers review of the affected selection.
+Until the runtime supports this configured table selection and tag projection,
+report the gap and stop the affected consumer workflow.
+
 ## Every date, number and identifier has one written shape
 
 Standing rule (operator, after a date written `DD-MON-YYYY` was read

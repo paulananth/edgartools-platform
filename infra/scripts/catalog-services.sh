@@ -18,7 +18,7 @@ ao_compose="$auto_root/docker-compose.yml"
 case "${1:-}" in
   sync-auto)
     : "${CATALOG_OWNER_ENV:?Set the private migration-role environment file path}"
-    uv run --no-project --with 'psycopg[binary]' python "$repo_root/infra/scripts/catalog-readers.py" \
+    uv run --no-project --with 'psycopg[binary]' python "$repo_root/skills/auto-ontology/scripts/catalog-readers.py" \
       --config "${CATALOG_SOURCES_CONFIG:-$repo_root/infra/catalog-sources.json}" \
       --owner-env "$CATALOG_OWNER_ENV" \
       --reader-env "${CATALOG_READER_ENV:-$HOME/.local/share/edgartools/auto-ontology/reader.env}" \
