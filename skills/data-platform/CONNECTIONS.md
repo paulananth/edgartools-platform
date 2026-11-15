@@ -29,6 +29,16 @@ not variables applications automatically select. Preserve the original role
 files and refresh saved values from them when connections change; do not
 combine credentials or silently substitute an owner for a runtime login.
 
+## Local catalog endpoint inventory
+
+Keep every database and service URL in the private local connection catalog,
+mode `0600`. `OPENMETADATA_URL` selects the catalog root;
+`AUTO_ONTOLOGY_API_URL` selects the AutoOntology public web gateway. Runtime
+`.env` files remain private. Skills contain variable names and file locations,
+not live hosted addresses or credentials. Inventory assignment names only when
+the operator asks to list variables without values. Load shell-compatible
+assignments with shell sourcing; preserve escaped characters in complete URLs.
+
 ## Database connections and duties
 
 Each store uses its own database and URL; never derive another store's URL

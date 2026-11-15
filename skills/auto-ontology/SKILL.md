@@ -13,6 +13,42 @@ OpenMetadata remains the catalog projection published from repository rules. Aut
 
 The upstream [setup skill](https://github.com/NVIDIA/auto-ontology/blob/main/skills/nvidia-ontology-setup/SKILL.md), [management skill](https://github.com/NVIDIA/auto-ontology/blob/main/skills/nvidia-ontology-management/SKILL.md), and [query skill](https://github.com/NVIDIA/auto-ontology/blob/main/skills/nvidia-ontology-query/SKILL.md) describe the product. Read the versions shipped with the selected release; rolling `main` is not proof of installed behavior. Upstream supports Helm and Docker Compose; it does not provide an `auto-ontology init` CLI. This skill defines the platform's init workflow; never invent a command.
 
+## Hosted sync authorization and private configuration
+
+The operator authorized the local AutoOntology consumer to sample the hosted
+MDM, RDM and Silver stores and send sampled values to NVIDIA inference. Retain
+this authorization for that source/destination scope; do not ask again on each
+sync. Read-only source access and verified scope remain required. An unavailable
+or overprivileged credential is a connection blocker, not missing operator
+consent. Report it without asking the operator to repeat this authorization.
+
+Keep all database and service URLs in the private local connection catalog
+`~/.local/share/edgartools/.env`, mode `0600`, following
+[CONNECTIONS.md](../data-platform/CONNECTIONS.md). Use `AUTO_ONTOLOGY_API_URL` for
+the public web gateway and `OPENMETADATA_URL` for the selected catalog root.
+Store the sibling stack's runtime settings in its gitignored, mode-0600 `.env`.
+Document variable names and file locations in skills; keep actual hosted
+addresses, passwords and tokens only in private local configuration. When asked
+for an inventory, print assignment names only, never values or raw file lines.
+
+Load shell-compatible configuration with tracing disabled and `set -a; source
+<private-file>; set +a`. These files may contain shell-escaped URL characters;
+splitting assignments and stripping quotes leaves backslashes in passwords or
+database names and causes misleading authentication or missing-database errors.
+
+Before sync, check each approved database with its own complete saved URL and
+SELECT-only consumer login. Verify effective privileges, including inherited
+roles, across all exposed schemas; a variable called `VERIFIER` is not proof of
+read-only access. Use a read-only transaction for inspection. If authentication
+fails or any writable relations are exposed, retain the current consumer state
+and report which store needs a valid SELECT-only connection. Never substitute
+worker, governance or owner credentials into the consumer.
+
+OpenMetadata's `rules catalog publish` projects configured metadata. It does
+not introspect or sync live hosted PostgreSQL tables. A physical catalog sync
+requires a separately qualified native PostgreSQL ingestion path and readback;
+report configuration publication and physical source ingestion separately.
+
 ## Resource ownership and evidence
 
 An image cache is not a running deployment. For local Compose, confirm active containers with `docker ps`; image labels show build/project provenance, while container labels identify the owning worktree or Compose project. Treat a cached AutoOntology image, pgvector image, or pgAdmin image as unused until a running container and Compose project prove otherwise. Keep AutoOntology's application images and volumes separate from OpenMetadata's server, metadata database, and search images.
@@ -32,7 +68,7 @@ Blank `CONNECTION_STRINGS` copied from the upstream example before the first sta
 
 1. Establish the exact target, deployment mode, pinned release/chart, public URL, current resource owner, and whether this is a new install or a reset. Inspect the existing target before changing it. If any value is unknown, stop before writes.
 2. Keep AutoOntology's own application/ontology/vector state in storage separate from the MDM, RDM, and Silver databases. Never point its migrations at a platform store. Use private mode-0600 configuration for credentials; never place secrets in chat, command arguments, logs, or Git.
-3. Use a disposable, invented-data target first. Read the selected release's ingestion behavior: AutoOntology may profile columns and sample values, generate embeddings, and call NVIDIA NIM. Obtain explicit approval for any external inference request and verify what data leaves the selected environment.
+3. Use a disposable, invented-data target first. Read the selected release's ingestion behavior: AutoOntology may profile columns and sample values, generate embeddings, and call NVIDIA NIM. Apply the standing hosted-sync authorization above within its recorded scope; obtain approval only for a new source or inference destination, and verify what data leaves the selected environment.
 4. Before adding platform sources, obtain separate SELECT-only credentials scoped to the approved MDM, RDM, and Silver databases/tables. Do not use `MDM_DATABASE_URL`, `RDM_DATABASE_URL`, or `SILVER_DATABASE_URL` runtime credentials as AutoOntology credentials. If a read-only account or bounded scope is unavailable, stop; do not grant write access or broaden scope.
 5. Verify the selected release's schema/table allowlists and sample-value controls. Upstream documents that environment `CONNECTION_STRINGS` has no table filters and that full table-level scoping is not yet guaranteed. If the required scope or sensitive-value exclusion cannot be proved, connect only synthetic data; do not connect hosted or production stores.
 6. Follow the matching upstream Helm or Compose procedure. For Compose, inspect fixed `container_name` values and host ports first: the upstream stack uses PostgreSQL, UI, backend, ingestion, and pgAdmin ports and can collide with existing containers. Use a reviewed, version-matched override or an isolated target; never stop or reconfigure shared platform containers to make it fit.
