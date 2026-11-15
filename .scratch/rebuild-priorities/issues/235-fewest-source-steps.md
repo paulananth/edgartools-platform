@@ -71,7 +71,15 @@ hosted run reprocesses its files. Nothing runs on the hosted store without the o
   field (only the publication key differs, which names the changed contracts); MDM path 21 min (19 before: with
   two workers the two reads had run side by side, so the fold saves a pass of work, not wall time on this
   laptop); worker peak 4.4 GB (2026-11-14 21:40 ET)
-- [ ] N-PORT security: one reading of SUBMISSION.tsv per path (the silver path reads it once since registrant-keys.yaml, below; the MDM path still reads it twice: `submissions` for N-PORT fund's read, `filing_dates` for the holdings)
+- [x] N-PORT security: one reading of SUBMISSION.tsv per path (operator, 2026-11-15: "Add it (Recommended)"): the
+  silver path reads it once since registrant-keys.yaml; the MDM path read it twice only because it ran N-PORT fund's
+  whole read (with its submissions and registrant reads) for one pair set, a series' LEI to its series id.
+  `series-keys.yaml` gives that set with no lookup: the MDM path goes from 10 extract steps to 8, its three reads run
+  side by side, and N-PORT fund's and registrant's rules no longer reprocess it. Proof on 2026q2: the pairs equal
+  N-PORT fund's (13,687 rows, 12,892 LEIs); main against the branch on disposable stores, run side by side (24 min
+  to the merge and links; 8.5 min of it the merge, slowed by two loads on one laptop): 420,690 Security, 12,937
+  Fund and 1,947 registrant records equal per dataset, 409,550 masters grouping the same records, 8 set aside,
+  4 reviews, 15,355 links equal once ids are mapped to records (2026-11-15 12:33 ET)
 - [ ] ~~A lookup read from another source's run~~ deferred: engine code, waits for the operator's word
 - [x] The seven wastes are the design check for a source extract (operator, 2026-11-15: "update the source extract
   functionality skill to use 7 wastes as part of desigh"): data-onboarding, "Design a source extract against the
