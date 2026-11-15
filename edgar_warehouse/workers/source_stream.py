@@ -17,6 +17,23 @@ def _encode(value):
                       sort_keys=True, allow_nan=False).encode()
 
 
+def _encode_piece(piece):
+    """(bytes, where each table's rows sit): `_encode(piece)`'s bytes, built a
+    table at a time so each non-empty table's array is located as
+    [start, end, rows]; a reader decodes only the tables it uses."""
+    data = bytearray(b'{"deferred":' + _encode(piece["deferred"]) + b',"tables":{')
+    offsets = {}
+    for number, name in enumerate(sorted(piece["tables"])):
+        rows = piece["tables"][name]
+        data += (b"," if number else b"") + _encode(name) + b":"
+        start = len(data)
+        data += _encode(rows)
+        if rows:
+            offsets[name] = [start, len(data), len(rows)]
+    data += b'},"version":' + _encode(piece["version"]) + b"}"
+    return bytes(data), offsets
+
+
 def output(envelope, artifacts, documents, context_for, lookup_for, *, publish, max_index_bytes):
     manifest, contract, execution, inputs = documents
     traversal = Traversal(contract, archive_policy="configured")
@@ -41,7 +58,7 @@ def output(envelope, artifacts, documents, context_for, lookup_for, *, publish, 
                 nonlocal pending, pending_count, pending_size
                 if not pending_count:
                     return
-                data = _encode(pending)
+                data, offsets = _encode_piece(pending)
                 if len(data) != pending_size:
                     raise ValueError("Projected partition size differs from incremental accounting")
                 if len(data) > spec["partition_bytes"]:
@@ -52,8 +69,10 @@ def output(envelope, artifacts, documents, context_for, lookup_for, *, publish, 
                 spool.write(data)
                 sha = hashlib.sha256(data).hexdigest()
                 receipt = {"uri": f"{envelope['output']}.parts/{sha}.json", "sha256": sha}
-                parts.append({"receipt": receipt, "first_ordinal": first,
-                              "record_count": pending_count, "bytes": len(data)})
+                part = {"receipt": receipt, "first_ordinal": first, "record_count": pending_count, "bytes": len(data)}
+                if not pending["deferred"]:  # a piece with deferred records is read whole
+                    part["tables"] = offsets
+                parts.append(part)
                 staged.append((offset, len(data), receipt))
                 pending = {"version": 1, "tables": {name: [] for name in pending["tables"]}, "deferred": []}
                 pending_count = 0

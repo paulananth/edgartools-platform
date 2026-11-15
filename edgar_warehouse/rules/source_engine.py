@@ -237,6 +237,14 @@ class ReductionEngine:
     def finish(self) -> dict[str, list[dict]]:
         return self._engine.finish()
 
+    def close(self) -> list[str]:
+        """End accumulation; the groups, in plan order, to take one at a time."""
+        return self._engine.close()
+
+    def take(self, group: str, limit: int) -> list[dict]:
+        """The group's next `limit` rows by key; an empty list ends it and frees its state."""
+        return self._engine.take(group, limit)
+
 
 def prepare_current_records(readings: list[dict] | str, as_of: str, retired: set[str]) -> dict:
     """Transport retained readings to Rust without interpreting their values; stored JSON text goes as it is."""

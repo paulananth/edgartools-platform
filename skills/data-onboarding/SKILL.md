@@ -156,7 +156,9 @@ step can do:
   per key (`distinct_on`), with no record column: each row is the record.
 - **A reduce** stays only where it cuts the rows a later step carries by orders of magnitude; measure the
   rows with and without it first. Two reduces stay two when one would hold both states at once: a step's
-  memory is the sum of what it keeps, so measure the peak before folding them.
+  memory is the sum of what it keeps (its output streams out a batch at a time), so measure the peak before
+  folding them. On macOS the peak is the physical footprint (`vmmap --summary <pid>`), not RSS, which hides
+  what swap holds.
 - **No step only reshapes another step's rows** (a record step): `rules check` refuses a pass that reads only
   another step's pieces. Move its work into the read, or into the combine's joins.
 

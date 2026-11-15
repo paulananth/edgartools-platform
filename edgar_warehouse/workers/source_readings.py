@@ -91,8 +91,40 @@ def receipts(value) -> list[dict]:
     return refs
 
 
-def _partition_chunks(body, artifacts, *, size, max_bytes, max_rows):
-    """Yield authenticated chunks; exhaustion is required before publication."""
+def _offsets(part, names, size):
+    """A piece's table locations, [start, end, rows] each, in order and inside its bytes."""
+    offsets, at = part["tables"], 0
+    if not isinstance(offsets, dict) or not set(offsets) <= set(names):
+        raise ValueError("Partition table offsets name undeclared tables")
+    for name in sorted(offsets):
+        place = offsets[name]
+        if (not isinstance(place, list) or len(place) != 3
+                or not all(_integer(value, 0, size) for value in place)
+                or not at <= place[0] < place[1] <= size or not 1 <= place[2] <= PART_ROWS):
+            raise ValueError("Partition table offsets must lie in order inside the piece")
+        at = place[1]
+    return offsets
+
+
+def _selected(data, offsets, selected):
+    """Only the selected tables' rows, each decoded from its own slice of the piece."""
+    found = {}
+    for name in selected:
+        if name not in offsets:
+            found[name] = []
+            continue
+        start, end, count = offsets[name]
+        rows = json_value(data[start:end])
+        if not isinstance(rows, list) or len(rows) != count:
+            raise ValueError("Partition table offsets differ from the piece's rows")
+        found[name] = rows
+    return found
+
+
+def _partition_chunks(body, artifacts, *, size, max_bytes, max_rows, tables=None):
+    """Yield authenticated chunks; exhaustion is required before publication.
+    `tables`, when given, are the only tables a consumer uses: a piece that
+    locates its tables has just those decoded (other rows still count)."""
     rows = 0
     for index, artifact in enumerate(body["artifacts"]):
         required = {"input", "record_count", "expanded_bytes", "table_names", "partitions"}
@@ -112,7 +144,9 @@ def _partition_chunks(body, artifacts, *, size, max_bytes, max_rows):
         # Validate complete range accounting before exposing a prefix. Content
         # authentication still proceeds one bounded partition at a time.
         for part in artifact["partitions"]:
-            if (not isinstance(part, dict) or set(part) != {"receipt", "first_ordinal", "record_count", "bytes"}
+            if (not isinstance(part, dict)
+                    or not {"receipt", "first_ordinal", "record_count", "bytes"} <= set(part) <= {
+                        "receipt", "first_ordinal", "record_count", "bytes", "tables"}
                     or not _integer(part["first_ordinal"], 1, ARTIFACT_ROWS)
                     or part["first_ordinal"] != ordinal
                     or not _integer(part["record_count"], 1, PART_ROWS)
@@ -131,6 +165,14 @@ def _partition_chunks(body, artifacts, *, size, max_bytes, max_rows):
             if len(data) != part["bytes"]:
                 raise ValueError("Partition byte receipt differs from actual content")
             size += len(data)
+            if tables is not None and "tables" in part:
+                offsets = _offsets(part, names, len(data))
+                rows += sum(place[2] for place in offsets.values())
+                if rows > max_rows:
+                    raise ValueError("Partitioned reading exceeds consumer row budget")
+                chosen = [name for name in tables if name in names]
+                yield index, {**artifact, "tables": _selected(data, offsets, chosen), "deferred": []}, size, part
+                continue
             chunk = json_value(data)
             if (not isinstance(chunk, dict) or set(chunk) != {"version", "tables", "deferred"}
                     or type(chunk["version"]) is not int or chunk["version"] != 1
@@ -164,7 +206,7 @@ def _event(body, ref, index, chunk, size, part=None):
     return header, index, {**metadata, "tables": chunk["tables"], "deferred": chunk["deferred"]}, size
 
 
-def iter_load(ref, artifacts, *, max_bytes, max_rows, allow_lookup_receipts=False):
+def iter_load(ref, artifacts, *, max_bytes, max_rows, allow_lookup_receipts=False, tables=None):
     """Yield (reading header, artifact index, chunk, cumulative bytes).
 
     Tables in a chunk contain only that partition's rows. Original input,
@@ -180,16 +222,17 @@ def iter_load(ref, artifacts, *, max_bytes, max_rows, allow_lookup_receipts=Fals
         raise ValueError("Reading iteration requires explicit byte and row budgets")
     private_ref = copy.deepcopy(ref)
     body, size = _index(private_ref, artifacts, min(max_bytes, INDEX_BYTES), allow_lookup_receipts)
-    yield from _iter_loaded(body, private_ref, artifacts, size=size, max_bytes=max_bytes, max_rows=max_rows)
+    yield from _iter_loaded(body, private_ref, artifacts, size=size, max_bytes=max_bytes, max_rows=max_rows,
+                            tables=tables)
 
 
-def _iter_loaded(body: Any, private_ref, artifacts, *, size, max_bytes, max_rows):
+def _iter_loaded(body: Any, private_ref, artifacts, *, size, max_bytes, max_rows, tables=None):
     """Traverse a private authenticated index without reopening it."""
     if "contract" in body:
         reference(body["contract"])
     if body["version"] == 2:
         for index, chunk, size, part in _partition_chunks(
-                body, artifacts, size=size, max_bytes=max_bytes, max_rows=max_rows):
+                body, artifacts, size=size, max_bytes=max_bytes, max_rows=max_rows, tables=tables):
             yield _event(body, private_ref, index, chunk, size, part)
         return
     # Inline readings retain their authenticated document boundary (at most MAX_ARTIFACTS documents).
@@ -463,6 +506,14 @@ def pieces(output_uri: str, evidence: dict, tables: dict, deferred: list, names:
     index. Only one row larger than a piece is refused."""
     items = [(name, row) for name in names for row in tables.get(name, [])]
     items += [(None, item) for item in deferred]
+    parts, count = cut(output_uri, items, names, sink)
+    return {**evidence, "record_count": count, "expanded_bytes": max(1, input_bytes),
+            "table_names": names, "partitions": parts}
+
+
+def cut(output_uri: str, items, names: list[str], sink) -> tuple[list[dict], int]:
+    """(partitions, rows): `items`, (table name or None for a deferred record, row) in
+    order, cut into pieces as `pieces` does; an iterator is consumed as it is cut."""
     parts, ordinal = [], 1
 
     def fresh():
@@ -493,6 +544,4 @@ def pieces(output_uri: str, evidence: dict, tables: dict, deferred: list, names:
         size, count = size + extra, count + 1
     if count:
         flush(pending, count)
-    entry = {**evidence, "record_count": ordinal - 1, "expanded_bytes": max(1, input_bytes),
-             "table_names": names, "partitions": parts}
-    return entry
+    return parts, ordinal - 1

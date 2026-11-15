@@ -401,6 +401,15 @@ impl PyReduction {
         let tables = py.allow_threads(|| self.inner.finish()).map_err(PyValueError::new_err)?;
         json_to_py(py, &tables)
     }
+
+    fn close(&mut self) -> PyResult<Vec<String>> {
+        self.inner.close().map_err(PyValueError::new_err)
+    }
+
+    fn take(&mut self, py: Python<'_>, group: &str, limit: usize) -> PyResult<PyObject> {
+        let rows = py.allow_threads(|| self.inner.take(group, limit)).map_err(PyValueError::new_err)?;
+        json_to_py(py, &serde_json::Value::Array(rows))
+    }
 }
 
 struct PythonReader(Py<PyAny>);

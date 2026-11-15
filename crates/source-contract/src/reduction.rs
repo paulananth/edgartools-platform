@@ -70,6 +70,9 @@ pub struct Reduction {
     bytes: usize,
     failed: bool,
     finished: bool,
+    taken: std::collections::HashSet<String>,
+    // The group being taken: its sorted keys and the next position.
+    cursor: Option<(String, Vec<Key>, usize)>,
 }
 
 fn name(text: &str) -> bool {
@@ -256,6 +259,8 @@ impl Reduction {
             bytes: 0,
             failed: false,
             finished: false,
+            taken: std::collections::HashSet::new(),
+            cursor: None,
         })
     }
 
@@ -373,6 +378,25 @@ impl Reduction {
     }
 
     pub fn finish(&mut self) -> Result<Value, String> {
+        let names = self.close()?;
+        let mut result = Map::new();
+        for name in names {
+            let mut rows = Vec::new();
+            loop {
+                let batch = self.take(&name, usize::MAX)?;
+                if batch.is_empty() {
+                    break;
+                }
+                rows.extend(batch);
+            }
+            result.insert(name, Value::Array(rows));
+        }
+        Ok(Value::Object(result))
+    }
+
+    /// Ends accumulation and returns the groups in plan order. Each group is then
+    /// taken in batches with `take`, in that order, so the output is never held whole.
+    pub fn close(&mut self) -> Result<Vec<String>, String> {
         self.ready()?;
         // Failed finish must never make partially accumulated state reusable.
         self.finished = true;
@@ -380,81 +404,125 @@ impl Reduction {
             self.invalidate();
             return Err("Reduction exceeds output row budget".into());
         }
-        let mut result = Map::new();
-        for (name, spec) in &self.plan.groups {
-            let mut keys: Vec<_> = self.state[name].iter().collect();
-            keys.sort_unstable_by(|(a, _), (b, _)| a.cmp(b));
-            let mut output = Vec::with_capacity(keys.len());
-            for (key, entry) in keys {
-                let mut row: Map<String, Value> = spec
-                    .keys
-                    .iter()
-                    .zip(key)
-                    .map(|(column, value)| (column.clone(), Value::String(value.clone())))
-                    .collect();
-                match entry {
-                    Entry::Count(n) => {
-                        row.insert(spec.count.clone(), Value::from(*n));
+        Ok(self.plan.groups.keys().cloned().collect())
+    }
+
+    /// The next `limit` rows of a group, sorted by key; an empty batch ends it.
+    /// A group's state is freed after its last batch, unless a group not yet
+    /// taken excludes it: that state goes when its last excluder ends.
+    pub fn take(&mut self, name: &str, limit: usize) -> Result<Vec<Value>, String> {
+        if self.failed || !self.finished {
+            return Err("Reduction groups are taken only after a successful close".into());
+        }
+        if self.cursor.as_ref().is_none_or(|(current, _, _)| current != name) {
+            if self.cursor.is_some() || self.taken.contains(name) {
+                return Err("Reduction groups are taken once each, one at a time".into());
+            }
+            let mut keys: Vec<Key> = self
+                .state
+                .get(name)
+                .ok_or("Unknown reduction group")?
+                .keys()
+                .cloned()
+                .collect();
+            keys.sort_unstable();
+            self.cursor = Some((name.to_owned(), keys, 0));
+        }
+        let (_, keys, at) = self.cursor.as_ref().unwrap();
+        let end = keys.len().min(at.saturating_add(limit));
+        let batch = keys[*at..end]
+            .iter()
+            .map(|key| self.row(name, key))
+            .collect::<Vec<_>>();
+        if batch.is_empty() {
+            self.cursor = None;
+            self.taken.insert(name.to_owned());
+            self.release(name);
+        } else if let Some((_, _, at)) = self.cursor.as_mut() {
+            *at = end;
+        }
+        Ok(batch)
+    }
+
+    fn release(&mut self, name: &str) {
+        let mut groups = vec![name.to_owned()];
+        groups.extend(self.plan.groups[name].exclude.clone());
+        for group in groups {
+            let pending = self.plan.groups.iter().any(|(other, spec)| {
+                !self.taken.contains(other) && spec.exclude.as_deref() == Some(group.as_str())
+            });
+            if self.taken.contains(&group) && !pending {
+                if let Some(state) = self.state.get_mut(&group) {
+                    *state = HashMap::new();
+                }
+            }
+        }
+    }
+
+    fn row(&self, name: &str, key: &Key) -> Value {
+        let spec = &self.plan.groups[name];
+        let entry = &self.state[name][key];
+        let mut row: Map<String, Value> = spec
+            .keys
+            .iter()
+            .zip(key)
+            .map(|(column, value)| (column.clone(), Value::String(value.clone())))
+            .collect();
+        match entry {
+            Entry::Count(n) => {
+                row.insert(spec.count.clone(), Value::from(*n));
+            }
+            // The most-filed member and its rows; two members filed
+            // equally often leave the value null.
+            Entry::Most(m) => {
+                let top = m.values().copied().max().unwrap_or(0);
+                let mut winners = m.iter().filter(|(_, n)| **n == top);
+                let value = match (winners.next(), winners.next()) {
+                    (Some((member, _)), None) => Value::String(member.clone()),
+                    _ => Value::Null,
+                };
+                row.insert(spec.count.clone(), Value::from(top));
+                row.insert(spec.sample.clone().unwrap(), value);
+            }
+            Entry::Members(members) => {
+                let excluded = spec
+                    .exclude
+                    .as_ref()
+                    .and_then(|other| self.state[other].get(key));
+                let mut count = 0u64;
+                let mut sample: BinaryHeap<&String> = BinaryHeap::new();
+                for member in members.keys() {
+                    if matches!(excluded, Some(Entry::Members(m)) if m.contains_key(member)) {
+                        continue;
                     }
-                    // The most-filed member and its rows; two members filed
-                    // equally often leave the value null.
-                    Entry::Most(m) => {
-                        let top = m.values().copied().max().unwrap_or(0);
-                        let mut winners = m.iter().filter(|(_, n)| **n == top);
-                        let value = match (winners.next(), winners.next()) {
-                            (Some((member, _)), None) => Value::String(member.clone()),
-                            _ => Value::Null,
-                        };
-                        row.insert(spec.count.clone(), Value::from(top));
-                        row.insert(spec.sample.clone().unwrap(), value);
-                    }
-                    Entry::Members(members) => {
-                        let excluded = spec
-                            .exclude
-                            .as_ref()
-                            .and_then(|other| self.state[other].get(key));
-                        let mut count = 0u64;
-                        let mut sample: BinaryHeap<&String> = BinaryHeap::new();
-                        for member in members.keys() {
-                            if matches!(excluded, Some(Entry::Members(m)) if m.contains_key(member))
-                            {
-                                continue;
-                            }
-                            count += 1;
-                            if spec.sample_limit != 0 {
-                                sample.push(member);
-                                if sample.len() > spec.sample_limit {
-                                    sample.pop();
-                                }
-                            }
+                    count += 1;
+                    if spec.sample_limit != 0 {
+                        sample.push(member);
+                        if sample.len() > spec.sample_limit {
+                            sample.pop();
                         }
-                        let sample: Vec<_> = sample
-                            .into_sorted_vec()
-                            .into_iter()
-                            .map(|member| {
-                                let mut item = Map::new();
-                                item.insert(
-                                    spec.member.clone().unwrap(),
-                                    Value::String(member.clone()),
-                                );
-                                if let Some(column) = &spec.last {
-                                    item.insert(
-                                        column.clone(),
-                                        Value::String(members[member].clone().unwrap()),
-                                    );
-                                }
-                                Value::Object(item)
-                            })
-                            .collect();
-                        row.insert(spec.count.clone(), Value::from(count));
-                        row.insert(spec.sample.clone().unwrap(), Value::Array(sample));
                     }
                 }
-                output.push(Value::Object(row));
+                let sample: Vec<_> = sample
+                    .into_sorted_vec()
+                    .into_iter()
+                    .map(|member| {
+                        let mut item = Map::new();
+                        item.insert(spec.member.clone().unwrap(), Value::String(member.clone()));
+                        if let Some(column) = &spec.last {
+                            item.insert(
+                                column.clone(),
+                                Value::String(members[member].clone().unwrap()),
+                            );
+                        }
+                        Value::Object(item)
+                    })
+                    .collect();
+                row.insert(spec.count.clone(), Value::from(count));
+                row.insert(spec.sample.clone().unwrap(), Value::Array(sample));
             }
-            result.insert(name.clone(), Value::Array(output));
         }
-        Ok(Value::Object(result))
+        Value::Object(row)
     }
 }
 
@@ -508,6 +576,50 @@ mod tests {
             {"key": "a", "count": 2, "sample": [{"holder": "B", "time": "b"}]}])
         );
         assert!(engine.finish().is_err());
+    }
+
+    #[test]
+    fn groups_taken_in_batches_give_the_whole_output_and_free_their_state() {
+        let body =
+            plan(serde_json::json!({"excluded": member(None), "all": member(Some("excluded"))}));
+        let keyed = |key: &str, holder: &str| Row {
+            key: vec![key.into()],
+            member: Some(holder.into()),
+            last: Some("t".into()),
+        };
+        let fill = |engine: &mut Reduction| {
+            engine
+                .push("all", vec![keyed("c", "A"), keyed("a", "A"), keyed("b", "B"), keyed("a", "C")])
+                .unwrap();
+            engine.push("excluded", vec![keyed("a", "A")]).unwrap();
+        };
+        let mut whole = Reduction::new(&body.to_string()).unwrap();
+        fill(&mut whole);
+        let expected = whole.finish().unwrap();
+
+        let mut batched = Reduction::new(&body.to_string()).unwrap();
+        fill(&mut batched);
+        assert!(batched.take("all", 2).is_err()); // only after close
+        assert_eq!(batched.close().unwrap(), ["excluded", "all"]);
+        let mut found = Map::new();
+        for name in ["excluded", "all"] {
+            let mut rows = Vec::new();
+            loop {
+                let batch = batched.take(name, 2).unwrap();
+                if batch.is_empty() {
+                    break;
+                }
+                assert!(batch.len() <= 2);
+                rows.extend(batch);
+            }
+            // The excluded group's state stays until "all", which excludes it, ends.
+            assert_eq!(batched.state["excluded"].is_empty(), name == "all");
+            assert_eq!(batched.state["all"].is_empty(), name == "all");
+            found.insert(name.into(), Value::Array(rows));
+        }
+        assert_eq!(Value::Object(found), expected);
+        assert_eq!(expected["all"][0]["count"], 1); // key "a": C only, A excluded
+        assert!(batched.take("all", 2).is_err());
     }
 
     #[test]

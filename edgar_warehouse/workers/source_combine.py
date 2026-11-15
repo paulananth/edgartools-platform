@@ -178,8 +178,8 @@ def _checked(envelope, artifacts):
 def _documents(envelope, artifacts, sink):
     manifest, refs, plan, reduced = _checked(envelope, artifacts)
     if reduced:
-        tables = source_reduction.tables(plan, refs, artifacts)
-        return _output(envelope, manifest, refs, tables, sink, max_bytes=plan["max_output_bytes"])
+        names, rows = source_reduction.rows(plan, refs, artifacts)
+        return _streamed_output(envelope, manifest, refs, names, rows, sink, max_bytes=plan["max_output_bytes"])
     inputs, size, count = {}, 0, 0
     for name, value in refs.items():
         listed = []
@@ -219,6 +219,53 @@ def _output(envelope, manifest, refs, tables, sink, *, max_bytes=None):
         return scope_ref, scope, output
     entry = source_readings.pieces(envelope["output"], {"input": scope_ref}, tables, [],
                                    list(tables), len(output), sink)
+    index = _encode({"version": 2, "contract": manifest["contract"], "artifacts": [entry]})
+    if len(index) > source_readings.INDEX_BYTES:
+        raise ValueError("Combined reading index exceeds its byte bound")
+    return scope_ref, scope, index
+
+
+def _streamed_output(envelope, manifest, refs, names, rows, sink, *, max_bytes):
+    """`_output` over rows given one at a time, with the same bytes: rows are
+    held only while the whole reading could still fit its index bound; past it,
+    each piece is written as it fills, so the output is never held whole."""
+    scope_ref, scope = _scope(envelope, manifest)
+    head = {"version": 1, "contract": manifest["contract"], "readings": refs,
+            "artifacts": [{"input": scope_ref, "tables": {}, "deferred": []}]}
+    # The whole reading's length without encoding it: its empty form, plus each
+    # table's `"name":[...]` and its rows (compact, unescaped, as `_encode` writes).
+    size = len(_encode(head)) + sum(len(name) + 5 for name in names) + max(len(names) - 1, 0)
+    counts = dict.fromkeys(names, 0)
+    held = []
+
+    def measured(name, row):
+        nonlocal size
+        size += len(json.dumps(row, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+                               allow_nan=False).encode()) + (1 if counts[name] else 0)
+        counts[name] += 1
+        if size > max_bytes:
+            raise ValueError("Combined reading exceeds its declared output byte bound")
+
+    for name, row in rows:
+        measured(name, row)
+        held.append((name, row))
+        if size > OUTPUT_BYTES:
+            break
+    else:
+        tables = {name: [] for name in names}
+        for name, row in held:
+            tables[name].append(row)
+        return _output(envelope, manifest, refs, tables, sink, max_bytes=max_bytes)
+
+    def rest():
+        yield from held
+        held.clear()
+        for name, row in rows:
+            measured(name, row)
+            yield name, row
+    parts, count = source_readings.cut(envelope["output"], rest(), list(names), sink)
+    entry = {"input": scope_ref, "record_count": count, "expanded_bytes": max(1, size),
+             "table_names": list(names), "partitions": parts}
     index = _encode({"version": 2, "contract": manifest["contract"], "artifacts": [entry]})
     if len(index) > source_readings.INDEX_BYTES:
         raise ValueError("Combined reading index exceeds its byte bound")
