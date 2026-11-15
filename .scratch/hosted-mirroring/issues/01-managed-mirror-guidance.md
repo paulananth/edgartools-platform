@@ -78,3 +78,11 @@ Final Standards and Spec reviews found no conflicting approval rule.
 The installed mirror skill is a local installation update; the supplied archive
 is unchanged. Tag assignment, selector implementation and live publication
 remain outside this skills-only task.
+
+## Skill length CI repair
+
+- [x] Reproduce test_every_skill_file_is_short_enough_to_read_whole: the OpenMetadata main skill had 529 lines and failed the unchanged 500-line bound, 2026-11-15 07:17 ET.
+- [x] Move the exposure-tag procedure into the owning skills references/EXPOSURE-TAGS.md and link it from the main skill; preserve the full procedure, 2026-11-15 07:17 ET.
+- [x] Verify the exact failing test, all six skill-policy checks, isolated bundle portability and 114 guide/genericity checks; main skill is 499 lines, 2026-11-15 07:17 ET.
+- [ ] Publish repair and verify CI on its head before readiness/merge.
+- [x] Learning → skill: branch-specific OpenMetadata exposure procedure uses progressive disclosure inside the owning skill; helpers remain with their skill, 2026-11-15 07:17 ET.
