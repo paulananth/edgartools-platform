@@ -221,52 +221,6 @@
     "checks": [
      "input.hash",
      "output.receipt",
-     "source.combined"
-    ],
-    "input": {
-     "contract": "custody-combine.yaml",
-     "readings": {
-      "custody": {
-       "all": "read_custody"
-      }
-     }
-    },
-    "key": "{unit}",
-    "leases": [
-     "artifact:{destination}"
-    ],
-    "name": "combine",
-    "operation": "source.combine",
-    "requires": [
-     "read_custody"
-    ]
-   },
-   {
-    "checks": [
-     "input.hash",
-     "output.receipt",
-     "source.output"
-    ],
-    "input": {
-     "contract": "record-custody.yaml",
-     "pieces": {
-      "step": "combine"
-     }
-    },
-    "key": "{unit}",
-    "leases": [
-     "artifact:{destination}"
-    ],
-    "name": "record",
-    "operation": "source.read",
-    "requires": [
-     "combine"
-    ]
-   },
-   {
-    "checks": [
-     "input.hash",
-     "output.receipt",
      "mdm.prepared"
     ],
     "input": {
@@ -275,12 +229,11 @@
       "distinct_on": [
        "custodian_id"
       ],
-      "record_column": "record",
       "table": "custody"
      },
      "readings": {
-      "record": {
-       "all": "record"
+      "read_custody": {
+       "all": "read_custody"
       }
      }
     },
@@ -291,7 +244,7 @@
     "name": "prepare",
     "operation": "mdm.prepare",
     "requires": [
-     "record"
+     "read_custody"
     ]
    },
    {
@@ -517,6 +470,62 @@
     "checks": [
      "input.hash",
      "output.receipt",
+     "journal.recorded"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "name": "processed",
+    "operation": "journal.record",
+    "requires": [
+     "merge"
+    ]
+   }
+  ]
+ },
+ "iapd.adv/silver": {
+  "checks": [
+   "manifest.hash",
+   "work.accounting",
+   "journal.delivered"
+  ],
+  "run": {
+   "facts": [
+    "published"
+   ]
+  },
+  "steps": [
+   {
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "input": {
+     "context": {
+      "published": {
+       "fact": "published"
+      }
+     },
+     "contract": "custody-csv.yaml",
+     "files": "*.zip"
+    },
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "name": "read_custody",
+    "operation": "source.read",
+    "requires": [],
+    "units": {
+     "each": "file"
+    }
+   },
+   {
+    "checks": [
+     "input.hash",
+     "output.receipt",
      "silver.landed"
     ],
     "input": {
@@ -532,8 +541,7 @@
     "name": "land_custody",
     "operation": "silver.land",
     "requires": [
-     "read_custody",
-     "merge"
+     "read_custody"
     ]
    },
    {

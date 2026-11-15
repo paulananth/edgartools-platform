@@ -18,11 +18,11 @@ execution: {profile: source.read, workers: 1, max_artifacts: 512}
 bronze:
   # Bronze: reference/iapd_adv_bulk/<YYYY-MM>/ADV_Filing_Data_<from>_<to>.zip
   family: iapd_adv_bulk
-# Bookkeeping (ticket 176). Two targets, one publication each (a target prepares one):
-# `mastering` masters the adviser filings, each with its custodians joined in (combine.yaml);
-# `custodians` masters the custodians, one record per custodian in a file (distinct_on).
-# Run the custodians first, so the CUSTODIAN links of the filings find their targets.
-# The month the file covers comes in as the run fact `published` (an ISO instant).
+# Bookkeeping (ticket 176). Three targets, one path each (operator, 2026-11-14: "make it two split one to mdm and
+# one to silver"): `custodians` masters the custodians, one record per custodian in a file (distinct_on), straight
+# from the custody reading; `mastering` masters the adviser filings, each with its custodians joined in
+# (combine.yaml); `silver` lands each custody row's amount. Run the custodians first, so the CUSTODIAN links of the
+# filings find their targets. The month the file covers comes in as the run fact `published` (an ISO instant).
 bookkeeping:
   version: 2
   targets:
@@ -31,15 +31,19 @@ bookkeeping:
       # The combine's rows are the records; no record step.
       extract: combine.yaml
       master: {keys: {dataset: iapd.adv.filings.v2, table: filings}}
-      silver:
-        # The amount each custodian holds (Schedule D 5.K(3)(g)) lands in silver once the adviser's
-        # filing is mastered here and the custodians are, which the `custodians` target (run first)
-        # did: each row finds both Companies by lookup (silver-custody.yaml).
-        - {name: land_custody, land: {silver: adv_custody, table: custody_facts}, requires: [read_custody, merge]}
     custodians:
       run: {facts: [published]}
-      extract: record-custody.yaml
-      master: {keys: {dataset: iapd.adv.custodians.v1, distinct_on: [custodian_id], record_column: record, table: custody}}
+      # The custody reading's rows are the records, one per custodian (`distinct_on`); no combine or record step.
+      extract: custody-csv.yaml
+      master: {keys: {dataset: iapd.adv.custodians.v1, distinct_on: [custodian_id], table: custody}}
+    # The amount each custodian holds (Schedule D 5.K(3)(g)), its own path apart from MDM's: the silver writer
+    # finds each row's adviser and custodian Company by lookup (silver-custody.yaml), and a row whose master is not
+    # mastered yet keeps an empty id for `silver refresh-ids`, so this target needs no MDM run before it.
+    silver:
+      run: {facts: [published]}
+      extract: custody-csv.yaml
+      silver:
+        - {name: land_custody, land: {silver: adv_custody, table: custody_facts}}
 dataset_contracts:
   iapd.adv.filings.v2:
     contract:

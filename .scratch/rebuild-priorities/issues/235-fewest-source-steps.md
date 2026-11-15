@@ -46,7 +46,13 @@ hosted run reprocesses its files. Nothing runs on the hosted store without the o
   funds: 1,947 registrant and 12,937 Fund records equal body for body, 14,880 masters, 7 set aside, 0 reviews,
   12,891 IS_SUBFUND_OF links with equal dates (2026-11-14 22:17 ET)
 - [ ] ~~Fold OpenFIGI `record.yaml`~~ not possible in rules: it chooses by condition, which a combine cannot (see above)
-- [ ] Fold Form ADV `record-custody.yaml` (it computes the custodian id)
+- [x] Form ADV in three one-path targets (operator, 2026-11-14: "agreed", after the seven-wastes review): the
+  custody amounts land through their own `silver` target with no merge before them; `custodians` prepares straight
+  from the custody reading (the copy-only combine and the record step deleted: the read already computes
+  `custodian_id`), 3 extract steps to 1. Proved on the 2026-03 and 2026-06 files, main against this branch: 2,246
+  custodian and 17,965 filing records equal body for body, 15,755 masters, 34 set aside, 80 reviews, 18,504 silver
+  custody rows equal (2026-11-14 22:26 ET). June needs `--revision 1` on both: a second month of one source is a new
+  publication (data-operations, "A reload whose inputs changed")
 - [ ] OpenFIGI `listing.yaml` stays: it computes each listing's currency from counts a combine joined, which no
   read can
 - [ ] N-PORT security reads one quarter's zip nine times, one table a read (2026q2 on a disposable store: about
