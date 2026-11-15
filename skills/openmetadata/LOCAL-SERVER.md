@@ -110,6 +110,10 @@ named `db-data` and `es-data` volumes carry the catalog, so remove the
 containers, never the volumes, and confirm the PostgreSQL data directory is
 still populated before restarting. The catalog survives the recreate intact.
 
+## Resource ownership and evidence
+
+An image cache is not a running deployment. Confirm active OpenMetadata containers with `docker ps`; image labels show release/project provenance, while container labels identify the active Compose project. A cached server, PostgreSQL, or Elasticsearch image is not evidence that the catalog is running. Keep OpenMetadata metadata and search volumes separate from AutoOntology state.
+
 The catalog publisher reads `OPENMETADATA_TOKEN` from the private environment.
 The local PAT lasts 30 days; `init.sh` reissues it after it no longer passes
 the API version readback and stores the replacement in `.env`. A publish that
