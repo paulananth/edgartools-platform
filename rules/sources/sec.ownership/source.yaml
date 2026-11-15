@@ -19,22 +19,25 @@ bronze:
   # Bronze: filing_artifact/sec/cik=<issuer>/<accession_number>/<accession_number>.txt (the SGML
   # submission file); the cohort's bare primary documents sit under filings/.
   family: filing_artifact
-# Bookkeeping (ticket 176): read the SEC submission files, master each reporting owner (a Person, or a
-# Company by its CIK), then land the owners and the lines in silver once the merge has made the masters
-# their rows link to, and record each file in the Change Journal. Landing waits for the merge, not for
-# the owners' rows alone, so a new owner's Person id is there when its silver row lands.
+# Bookkeeping (ticket 176): read the SEC submission files on two paths (operator, 2026-11-14: "make it two
+# split one to mdm and one to silver"). `mastering` masters each reporting owner (a Person, or a Company by its
+# CIK); `silver` lands the owners and the lines. The silver writer finds each row's Person and Companies by
+# lookup, and a row whose owner is not mastered yet keeps an empty id for `silver refresh-ids`, so the silver
+# path waits for no merge. Each records its files in the Change Journal.
 bookkeeping:
   version: 2
   targets:
     mastering:
       extract: ownership-sgml.yaml
       master: {keys: {dataset: sec.ownership.reporting_owner.v1, record_column: record, table: owner_record}}
+    silver:
+      extract: ownership-sgml.yaml
       silver:
-        - {name: land_owner, land: {silver: insider_reporting_owner, table: reporting_owner}, requires: [read, merge]}
-        - {name: land_nd_transaction, land: {silver: insider_position, table: non_derivative_transaction}, requires: [read, merge]}
-        - {name: land_nd_holding, land: {silver: insider_position, table: non_derivative_holding}, requires: [read, merge]}
-        - {name: land_d_transaction, land: {silver: insider_position, table: derivative_transaction}, requires: [read, merge]}
-        - {name: land_d_holding, land: {silver: insider_position, table: derivative_holding}, requires: [read, merge]}
+        - {name: land_owner, land: {silver: insider_reporting_owner, table: reporting_owner}}
+        - {name: land_nd_transaction, land: {silver: insider_position, table: non_derivative_transaction}}
+        - {name: land_nd_holding, land: {silver: insider_position, table: non_derivative_holding}}
+        - {name: land_d_transaction, land: {silver: insider_position, table: derivative_transaction}}
+        - {name: land_d_holding, land: {silver: insider_position, table: derivative_holding}}
     # The issuer's security (ticket 24; operator, 2026-11-04, "Yes, Form 4 route only"): the trading
     # symbol each filing names finds its Security by ticker. A target prepares one publication, so
     # this one reads only each filing's issuer and symbol (ownership-security-sgml.yaml), far less

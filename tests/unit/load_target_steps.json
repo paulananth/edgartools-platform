@@ -3341,121 +3341,6 @@
     "checks": [
      "input.hash",
      "output.receipt",
-     "silver.landed"
-    ],
-    "input": {
-     "keys": {
-      "silver": "insider_reporting_owner",
-      "table": "reporting_owner"
-     }
-    },
-    "key": "{unit}",
-    "leases": [
-     "silver:{silver}:{unit}"
-    ],
-    "name": "land_owner",
-    "operation": "silver.land",
-    "requires": [
-     "read",
-     "merge"
-    ]
-   },
-   {
-    "checks": [
-     "input.hash",
-     "output.receipt",
-     "silver.landed"
-    ],
-    "input": {
-     "keys": {
-      "silver": "insider_position",
-      "table": "non_derivative_transaction"
-     }
-    },
-    "key": "{unit}",
-    "leases": [
-     "silver:{silver}:{unit}"
-    ],
-    "name": "land_nd_transaction",
-    "operation": "silver.land",
-    "requires": [
-     "read",
-     "merge"
-    ]
-   },
-   {
-    "checks": [
-     "input.hash",
-     "output.receipt",
-     "silver.landed"
-    ],
-    "input": {
-     "keys": {
-      "silver": "insider_position",
-      "table": "non_derivative_holding"
-     }
-    },
-    "key": "{unit}",
-    "leases": [
-     "silver:{silver}:{unit}"
-    ],
-    "name": "land_nd_holding",
-    "operation": "silver.land",
-    "requires": [
-     "read",
-     "merge"
-    ]
-   },
-   {
-    "checks": [
-     "input.hash",
-     "output.receipt",
-     "silver.landed"
-    ],
-    "input": {
-     "keys": {
-      "silver": "insider_position",
-      "table": "derivative_transaction"
-     }
-    },
-    "key": "{unit}",
-    "leases": [
-     "silver:{silver}:{unit}"
-    ],
-    "name": "land_d_transaction",
-    "operation": "silver.land",
-    "requires": [
-     "read",
-     "merge"
-    ]
-   },
-   {
-    "checks": [
-     "input.hash",
-     "output.receipt",
-     "silver.landed"
-    ],
-    "input": {
-     "keys": {
-      "silver": "insider_position",
-      "table": "derivative_holding"
-     }
-    },
-    "key": "{unit}",
-    "leases": [
-     "silver:{silver}:{unit}"
-    ],
-    "name": "land_d_holding",
-    "operation": "silver.land",
-    "requires": [
-     "read",
-     "merge"
-    ]
-   },
-   {
-    "checks": [
-     "input.hash",
-     "output.receipt",
      "journal.recorded"
     ],
     "key": "{unit}",
@@ -3465,11 +3350,7 @@
     "name": "processed",
     "operation": "journal.record",
     "requires": [
-     "land_owner",
-     "land_nd_transaction",
-     "land_nd_holding",
-     "land_d_transaction",
-     "land_d_holding"
+     "merge"
     ]
    }
   ]
@@ -3562,6 +3443,168 @@
     "operation": "journal.record",
     "requires": [
      "merge_security"
+    ]
+   }
+  ]
+ },
+ "sec.ownership/silver": {
+  "checks": [
+   "manifest.hash",
+   "work.accounting",
+   "journal.delivered"
+  ],
+  "steps": [
+   {
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "input": {
+     "contract": "ownership-sgml.yaml",
+     "files": "*.txt"
+    },
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "name": "read",
+    "operation": "source.read",
+    "requires": [],
+    "units": {
+     "slices": {
+      "bytes": 8388608
+     }
+    }
+   },
+   {
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "silver.landed"
+    ],
+    "input": {
+     "keys": {
+      "silver": "insider_reporting_owner",
+      "table": "reporting_owner"
+     }
+    },
+    "key": "{unit}",
+    "leases": [
+     "silver:{silver}:{unit}"
+    ],
+    "name": "land_owner",
+    "operation": "silver.land",
+    "requires": [
+     "read"
+    ]
+   },
+   {
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "silver.landed"
+    ],
+    "input": {
+     "keys": {
+      "silver": "insider_position",
+      "table": "non_derivative_transaction"
+     }
+    },
+    "key": "{unit}",
+    "leases": [
+     "silver:{silver}:{unit}"
+    ],
+    "name": "land_nd_transaction",
+    "operation": "silver.land",
+    "requires": [
+     "read"
+    ]
+   },
+   {
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "silver.landed"
+    ],
+    "input": {
+     "keys": {
+      "silver": "insider_position",
+      "table": "non_derivative_holding"
+     }
+    },
+    "key": "{unit}",
+    "leases": [
+     "silver:{silver}:{unit}"
+    ],
+    "name": "land_nd_holding",
+    "operation": "silver.land",
+    "requires": [
+     "read"
+    ]
+   },
+   {
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "silver.landed"
+    ],
+    "input": {
+     "keys": {
+      "silver": "insider_position",
+      "table": "derivative_transaction"
+     }
+    },
+    "key": "{unit}",
+    "leases": [
+     "silver:{silver}:{unit}"
+    ],
+    "name": "land_d_transaction",
+    "operation": "silver.land",
+    "requires": [
+     "read"
+    ]
+   },
+   {
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "silver.landed"
+    ],
+    "input": {
+     "keys": {
+      "silver": "insider_position",
+      "table": "derivative_holding"
+     }
+    },
+    "key": "{unit}",
+    "leases": [
+     "silver:{silver}:{unit}"
+    ],
+    "name": "land_d_holding",
+    "operation": "silver.land",
+    "requires": [
+     "read"
+    ]
+   },
+   {
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "journal.recorded"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "name": "processed",
+    "operation": "journal.record",
+    "requires": [
+     "land_owner",
+     "land_nd_transaction",
+     "land_nd_holding",
+     "land_d_transaction",
+     "land_d_holding"
     ]
    }
   ]

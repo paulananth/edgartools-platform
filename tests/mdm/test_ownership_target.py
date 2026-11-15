@@ -1,7 +1,7 @@
-"""The insider ownership filings' `mastering` target (ticket 176): read the SEC
-submission files, prepare and merge the reporting owners, land the owners and the
-lines in silver once the merge is done, and record each file in the Change
-Journal. Every name and number here is invented."""
+"""The insider ownership filings' two paths (ticket 176): `mastering` reads the SEC
+submission files and prepares and merges the reporting owners; `silver` reads them and
+lands the owners and the lines, waiting for no merge. Each records its files in the
+Change Journal. Every name and number here is invented."""
 import hashlib
 import json
 from uuid import uuid4
@@ -46,15 +46,23 @@ def recorded(options, report):
         options["journal"].append(value)
 
 
-def test_the_target_masters_the_owners_then_lands_the_owners_and_lines_in_silver(tmp_path):
+def test_the_mastering_target_masters_the_owners_and_lands_nothing(tmp_path):
     report = write_manifest(**capture(tmp_path, [1, 2]))
     steps = Artifacts().json(report["manifest"])["steps"]
-    assert set(steps) == {"read", "prepare", "merge", "processed", *LANDS}
+    assert set(steps) == {"read", "prepare", "merge", "processed"}
     assert all(len(units) == 1 for units in steps.values())  # two small files share one read unit
-    (read,) = steps["read"]
     assert steps["prepare"][0]["keys"]["table"] == "owner_record"
     assert steps["prepare"][0]["keys"]["dataset"] == "sec.ownership.reporting_owner.v1"
-    for name, (table, silver) in LANDS.items():  # each lands the read step's unit, once the merge is done
+    recorded_files = Artifacts().json(steps["processed"][0]["input"])["files"]
+    assert [f["key"] for f in recorded_files] == [key(1), key(2)]
+
+
+def test_the_silver_target_lands_the_owners_and_lines_from_its_own_read(tmp_path):
+    report = write_manifest(**{**capture(tmp_path, [1, 2]), "target": "silver"})
+    steps = Artifacts().json(report["manifest"])["steps"]
+    assert set(steps) == {"read", "processed", *LANDS}
+    (read,) = steps["read"]
+    for name, (table, silver) in LANDS.items():  # each lands the read step's unit
         (land,) = steps[name]
         assert (land["keys"]["table"], land["keys"]["silver"]) == (table, silver)
         assert land["input"] == {"from": {"step": "read", "key": read["keys"]["unit"]}}

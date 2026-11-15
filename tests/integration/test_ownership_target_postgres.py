@@ -1,10 +1,9 @@
-"""The insider ownership filings' `mastering` target through real workers on PG16 (ticket 176).
+"""The insider ownership filings' `silver` target through real workers on PG16 (ticket 176).
 
 Invented SGML submissions run through Bookkeeping's claim, lease and verify path:
-read (one unit a file), prepare the owners, a merge, then the five silver landings
-that wait for it. The merge here is a stand-in that records itself (MDM's own
-merge has its worker test); what is proven is the order: no landing can be claimed
-before the merge is verified, and every landing then lands its rows in silver.
+read (one unit a file), then the five silver landings, with no merge and an empty
+MDM. What is proven is that the silver path needs no MDM run: every landing lands
+its rows, and an owner not mastered yet keeps an empty id for `silver refresh-ids`.
 Every name and number is invented."""
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.rules import frozen
@@ -22,7 +21,7 @@ from edgar_warehouse.mdm import target_manifest
 from edgar_warehouse.rules import files
 from edgar_warehouse.silver_writer import database as silver
 from edgar_warehouse.silver_writer.cli import spec_file
-from edgar_warehouse.workers import mdm_prepare, silver_land, source_read
+from edgar_warehouse.workers import silver_land, source_read
 from tests.engine.test_ownership_readings import filing
 from tests.engine.test_sgml_container import document, submission
 from tests.integration.test_configured_bookkeeping_postgres import databases  # noqa: F401
@@ -64,17 +63,17 @@ def capture(tmp_path, numbers):
             "revision": 0, "journal": MemoryJournal()}
 
 
-def test_no_landing_is_claimable_before_the_merge_and_each_then_lands_its_rows(databases, mdm, tmp_path, monkeypatch):
+def test_the_silver_path_lands_every_row_with_no_merge_and_no_owner_mastered(databases, mdm, tmp_path, monkeypatch):
     real = files.source
 
     def small_slices(name, *args, **kwargs):
         reading = deepcopy(real(name, *args, **kwargs))
         if name == SOURCE:
-            reading["bookkeeping"]["targets"]["mastering"]["steps"][0]["units"] = {"slices": {"bytes": 1}}
+            reading["bookkeeping"]["targets"]["silver"]["steps"][0]["units"] = {"slices": {"bytes": 1}}
         return reading
     monkeypatch.setattr(target_manifest.rules_files, "source", small_slices)
-    report = target_manifest.write_manifest(**capture(tmp_path, [1, 2]))
-    target = deepcopy(small_slices(SOURCE)["bookkeeping"]["targets"]["mastering"])
+    report = target_manifest.write_manifest(**{**capture(tmp_path, [1, 2]), "target": "silver"})
+    target = deepcopy(small_slices(SOURCE)["bookkeeping"]["targets"]["silver"])
     assert target["steps"][-1]["name"] == "processed"
     target["steps"] = target["steps"][:-1]  # the Change Journal step has its own plan test
     book = Bookkeeping(databases.runtime)
@@ -82,26 +81,18 @@ def test_no_landing_is_claimable_before_the_merge_and_each_then_lands_its_rows(d
     del steps["processed"]
     assert len(steps["read"]) == 2  # one unit a file
     manifest = book.artifacts.put(tmp_path.as_uri() + "/submitted", {"version": 2, "steps": steps})
-    body = {"source": f"ownership-{uuid4().hex}", "bookkeeping": {"version": 2, "targets": {"mastering": target}}}
+    body = {"source": f"ownership-{uuid4().hex}", "bookkeeping": {"version": 2, "targets": {"silver": target}}}
     saved = frozen.of("source", body["source"], body)
     rules = Artifacts().put(tmp_path.as_uri() + "/rules", saved)
-    rid = book.start(rules_ref=rules, inputs_ref=manifest, target="mastering", scope={"test": body["source"]})
+    rid = book.start(rules_ref=rules, inputs_ref=manifest, target="silver", scope={"test": body["source"]})
 
     order = []
-
-    def merge(envelope, artifacts):
-        # The read units are verified and the preparation too; only the merge stands between a landing and its claim.
-        assert book.tasks(rid, "silver.land", limit=100) == []
-        order.append("merge")
-        return artifacts.put_bytes(envelope["output"], b"{}")
 
     def land(envelope, artifacts):
         order.append("land")
         return silver_land.execute(envelope, artifacts)
 
-    workers = {"source.read": source_read, "mdm.prepare": mdm_prepare,
-               "mastering.merge": SimpleNamespace(execute=merge, check=lambda e, a: ({n: True for n in e["checks"]}, [])),
-               "silver.land": SimpleNamespace(execute=land, check=silver_land.check)}
+    workers = {"source.read": source_read, "silver.land": SimpleNamespace(execute=land, check=silver_land.check)}
     for profile in workers:
         grant_profile(databases.admin, profile=profile, worker="bk_runtime")
 
@@ -115,11 +106,13 @@ def test_no_landing_is_claimable_before_the_merge_and_each_then_lands_its_rows(d
         state = drive(book, rid, databases.ledger, workers=workers)
         with runtime.connect() as conn:
             owners = conn.execute(text("SELECT count(*) FROM silver.insider_reporting_owner")).scalar()
+            unlinked = conn.execute(text("SELECT count(*) FROM silver.insider_reporting_owner WHERE person_mdm_id IS NULL")).scalar()
             lines = conn.execute(text("SELECT line_table, count(*) FROM silver.insider_position GROUP BY 1")).all()
 
     assert state["run"]["state"] == "complete"
-    assert state["counts"] == {"verified": 2 + 1 + 1 + 5 * 2}  # read x2, prepare, merge, five landings x2 units
-    assert order == ["merge"] + ["land"] * 10  # the merge first, then every landing
+    assert state["counts"] == {"verified": 2 + 5 * 2}  # read x2, five landings x2 units
+    assert order == ["land"] * 10
     # Two filings, each: one owner, one transaction and one holding (invented).
     assert owners == 2
+    assert unlinked == 2  # no owner mastered yet: `silver refresh-ids` fills the id after the MDM path
     assert dict(lines) == {"non_derivative_transaction": 2, "non_derivative_holding": 2}

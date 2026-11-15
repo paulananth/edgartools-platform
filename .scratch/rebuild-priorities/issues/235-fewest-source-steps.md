@@ -77,4 +77,13 @@ hosted run reprocesses its files. Nothing runs on the hosted store without the o
   functionality skill to use 7 wastes as part of desigh"): data-onboarding, "Design a source extract against the
   seven wastes", a table of what each waste looks like in an extract and what to do instead; skill lints pass
   (2026-11-15 06:40 ET)
+- [x] Ownership in two paths (operator, 2026-11-14: "make it two split one to mdm and one to silver"; 2026-11-15:
+  "continue with ownership"): `mastering` reads, prepares and merges the reporting owners (4 steps); `silver` reads
+  and lands the owners and the four line tables (7 steps), waiting for no merge. Seven wastes: the five landings
+  waited for the merge only for the Person id, which the silver writer finds by lookup and `silver refresh-ids`
+  fills later (waiting); both paths read the same extract, since dropping the line tables saves no parsing of each
+  document (an owner-only extract was not made: over-production). Proof on the p07 cohort (5,356 files), main's
+  one target against the split, silver run first: records equal (4,962; 4,339 masters; 781 set aside; 0 reviews),
+  5,743 owner and 14,331 line rows equal column by column, and 4,962 Person ids filled by `refresh-ids` as on main;
+  main 1 min 42 s, split 1 min 15 s + 1 min 9 s (2026-11-15 06:49 ET)
 - [ ] Learning → skill
