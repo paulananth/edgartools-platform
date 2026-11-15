@@ -243,6 +243,9 @@ def test_the_plan_flag_prints_the_plan_and_the_capture_run_is_only_needed_to_loa
         def plan(self, *, capture):
             return {"documents": 3, "capture": str(capture)}
 
+        def close(self):
+            pass
+
     monkeypatch.setattr(loading, "Loader", Stub)
     base = dict(source="example", target="by_letter", capture=tmp_path, stores=tmp_path, workers=1, bundles=1,
                 minutes=1, as_of=None, fact=None, file=None)
