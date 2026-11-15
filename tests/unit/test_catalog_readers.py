@@ -9,7 +9,7 @@ import pytest
 
 @pytest.fixture
 def readers():
-    path = Path(__file__).parents[2] / "infra/scripts/catalog-readers.py"
+    path = Path(__file__).parents[2] / "skills/auto-ontology/scripts/catalog-readers.py"
     spec = importlib.util.spec_from_file_location("catalog_readers_test", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

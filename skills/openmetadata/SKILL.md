@@ -204,7 +204,7 @@ local catalog had no native data products at first. The fundamental
 analytics package in the data-catalog model is already three tables of that
 subject, not one of these native objects.
 
-## Glossary and classification
+## Glossary, classification and [consumer exposure tags](references/EXPOSURE-TAGS.md)
 
 Project. Do not author a second glossary, and do not mark a term approved.
 

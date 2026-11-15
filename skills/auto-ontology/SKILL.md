@@ -15,6 +15,33 @@ The upstream [setup skill](https://github.com/NVIDIA/auto-ontology/blob/main/ski
 
 ## Source scope and repeatable sync
 
+Apply [Final exposable tables](../data-platform/FINAL-TABLES.md) before any sync:
+only configured final master and silver outputs may enter AutoOntology.
+The same authoritative table list controls managed mirrors and its eligibility
+is projected to OpenMetadata. This narrows the store-level scope below.
+The existing schema-scoped source config and helpers do not yet enforce this
+table boundary; stop ingestion until exact reader grants and imported-table
+identity checks are qualified. Existing sampling authorization covers only
+eligible tables; it does not authorize internal tables.
+
+Resolve the configured exposure tag and its approved table assignments from
+the same requirements/mapping version the mirror workflow uses. Only explicit,
+approved assignments select a table; absent, pending, declined or stale
+assignments and an empty selection never widen to a schema. Map selected
+assets to exact physical source tables before granting reads or starting
+ingestion. Data-class, layer and certification labels do not substitute for
+the exposure tag. Manual OpenMetadata tags cannot expand configuration.
+
+Compare imported table identities and effective SELECT privileges against
+that exact tagged set, not only store membership or counts. On unexpected
+tables or tag removal, stop further ingestion/compilation for the affected
+scope and report remaining imported state and grants. Do not claim a tag
+change deletes imported data or embeddings; any cleanup retains its normal
+authorization and ownership checks. Keep generic selection and verification
+helpers in this skill's `scripts/` or the application package; `infra/` only
+wires the deployment. Existing schema-scoped helpers remain unqualified for
+tag-based selection until the exact-table enforcement is implemented.
+
 **AutoOntology imports only MDM, RDM and Silver. Nothing else.** Rules,
 Bookkeeping, Change Journal, raw captures, provider endpoints, Snowflake Gold
 and OpenMetadata itself are excluded. The complete source list is
@@ -37,7 +64,8 @@ credentials and service settings stay in private local files.
 ```bash
 CATALOG_OWNER_ENV="$HOME/.local/share/edgartools/hosted-prod/connection.env" \
   bash infra/scripts/catalog-services.sh sync-auto
-uv run --no-project --with 'psycopg[binary]' python infra/scripts/catalog-auto-verify.py \
+uv run --no-project --with 'psycopg[binary]' python <SKILL_DIR>/scripts/catalog-auto-verify.py \
+  --config <deployment-source-config> \
   --auto-env ../auto-ontology/.env \
   --reader-env "$HOME/.local/share/edgartools/auto-ontology/reader.env"
 ```
@@ -89,7 +117,7 @@ Blank `CONNECTION_STRINGS` copied from the upstream example before the first sta
 6. Follow the matching upstream Helm or Compose procedure. For Compose, inspect fixed `container_name` values and host ports first: the upstream stack uses PostgreSQL, UI, backend, ingestion, and pgAdmin ports and can collide with existing containers. Use a reviewed, version-matched override or an isolated target; never stop or reconfigure shared platform containers to make it fit.
 7. Connect only the approved MDM, RDM, and Silver inputs. Rules, Bookkeeping, Change Journal, raw source/capture stores and Snowflake Gold are excluded.
 
-Catalog sync completion: the deployment is healthy; exactly the three approved source inventories match live table/column counts; every source has stored embeddings; and source roles have TLS and zero write privileges. Semantic compilation and query qualification are separate: require successful compilation and a synthetic positive/unsupported query before claiming query readiness.
+Catalog sync completion: the deployment is healthy; the exact configured final-table identities match each imported source inventory with no internal or stale tables; table/column counts and embeddings match that scope; and source roles have TLS, only approved table reads and zero write privileges. Semantic compilation and query qualification are separate: require successful compilation and a synthetic positive/unsupported query before claiming query readiness.
 
 ## Reset and initialize (destructive)
 

@@ -25,7 +25,7 @@ def main():
     parser.add_argument(
         "--config",
         type=Path,
-        default=Path(__file__).parents[1] / "catalog-sources.json",
+        required=True,
     )
     parser.add_argument("--enable-compilation", action="store_true")
     args = parser.parse_args()
