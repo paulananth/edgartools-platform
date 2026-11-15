@@ -44,4 +44,12 @@ hosted run reprocesses its files. Nothing runs on the hosted store without the o
   silver loaded first (12 min) and MDM after it (19 min; main's one target took 68 min on the old engine): 420,690
   Security records, 2,465 issued by a fund series, 240,635 by an LEI issuer, 177,590 naming none, and 5,347,869
   holdings, each equal to main's; the Change Journal let both targets load the one zip (2026-11-14 21:14 ET)
+- [x] N-PORT security: fold the issuers read into the holdings read (operator, 2026-11-14: "agreed", after the
+  seven-wastes review): the MDM path reads FUND_REPORTED_HOLDING.tsv (868 MB in 2026q2) once, 10 extract steps
+  from 11. Proved on 2026q2 in a disposable store: the 420,690 Security records are equal to the split's, field by
+  field (only the publication key differs, which names the changed contracts); MDM path 21 min (19 before: with
+  two workers the two reads had run side by side, so the fold saves a pass of work, not wall time on this
+  laptop); worker peak 4.4 GB (2026-11-14 21:40 ET)
+- [ ] N-PORT security: one reading of SUBMISSION.tsv per path (it is read twice in each)
+- [ ] ~~A lookup read from another source's run~~ deferred: engine code, waits for the operator's word
 - [ ] Learning → skill
