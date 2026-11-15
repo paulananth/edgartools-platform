@@ -16,8 +16,10 @@ RECORDS_FILE_BYTES = 16 * 1024**2
 # One unit's batch manifest, as read back by the Stage and its verifier: about
 # 450 bytes a batch, so some two million batches of 1,000 records (ticket 83).
 MANIFEST_BYTES = 1024**3
-# Where mdm.prepare cuts a batch's records, as well as at BATCH_RECORDS.
-BATCH_RECORD_BYTES = 1024**2
+# Where mdm.prepare cuts a batch's records, as well as at BATCH_RECORDS. Every batch is a merge unit with its own claim,
+# session and statements, which a hosted store pays a round trip each, so a batch is as large as one records file may be
+# (RECORDS_FILE_BYTES) allows with room to spare.
+BATCH_RECORD_BYTES = 8 * 1024**2
 
 
 def iter_batches(rows, encode):
