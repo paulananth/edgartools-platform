@@ -44,10 +44,13 @@ including the hosted Bookkeeping control group.
 | Schema | Command |
 |---|---|
 | MDM | `edgar-warehouse mdm migrate --application-role <role>` |
-| RDM | `edgar-warehouse rdm init --runtime-role <role>`, then `rdm migrate` |
-| Bookkeeping | `edgar-warehouse bookkeeping init --runtime-role <role>`, then `bookkeeping migrate`. The database name is `bookkeeping`. |
-| Change Journal | `edgar-warehouse change-journal init --runtime-role <role>`, then `change-journal migrate`. The database name is `change_journal`. |
-| Silver | `edgar-warehouse silver init --runtime-role <role>`, then `silver migrate` |
+| RDM | `edgar-warehouse rdm init --runtime-role <role>` |
+| Bookkeeping | `edgar-warehouse bookkeeping init --runtime-role <role>`. The database name is `bookkeeping`. |
+| Change Journal | `edgar-warehouse change-journal init --runtime-role <role>`. The database name is `change_journal`. |
+| Silver | `edgar-warehouse silver init --runtime-role <role>` |
+
+`init` is the whole step on a fresh store. `migrate` (each store has one) applies a schema file that arrives later and
+prints the same checksums when nothing has.
 
 The runtime role exists, has no administrative privileges, and is not the
 migration login. Done when the selected engine's migration history matches

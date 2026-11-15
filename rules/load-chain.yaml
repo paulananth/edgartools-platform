@@ -1,0 +1,386 @@
+# The order a fresh store is loaded in: every captured source and target, each one's capture, facts, revision and
+# workers, read by `skills/data-operations/scripts/load_chain.py` (RUNBOOK, "Load a fresh store"). Masters come first and
+# each source's silver target last, so silver rows find their masters as they land. A source's later delivery is a new
+# publication and carries the next `revision`. `capture` is a folder under the captures root (or the proving root where
+# `capture_root: proving`); `{run}` in a fact is the chain's run label. `minutes` bounds one attempt, which carries on
+# where the last stopped.
+version: 1
+steps:
+  - name: company
+    source: sec.company
+    target: mastering
+    capture: sec.submissions.company/all-76230
+    facts:
+      capture_run: "{run}-company"
+      catalog_run: "{run}-catalog"
+      observed_at: "2026-09-30T02:20:28+00:00"
+      load_mode: "default"
+    workers: 2
+    bundles: 4
+    minutes: 300
+    attempts: 4
+  - name: nport-registrant
+    source: sec.nport.registrant
+    target: mastering
+    capture: sec.nport-datasets/2026q2
+    workers: 2
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: nport-fund
+    source: sec.nport.fund
+    target: mastering
+    capture: sec.nport-datasets/2026q2
+    workers: 2
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: person
+    source: sec.submissions.person
+    target: mastering
+    capture: sec.submissions.company/all-76230
+    workers: 2
+    bundles: 2
+    minutes: 300
+    attempts: 5
+  - name: adv-custodians-03
+    source: iapd.adv
+    target: custodians
+    capture: iapd.adv/p07-2026-03
+    revision: 0
+    facts:
+      published: "2026-03-31T00:00:00+00:00"
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: adv-mastering-03
+    source: iapd.adv
+    target: mastering
+    capture: iapd.adv/p07-2026-03
+    revision: 0
+    facts:
+      published: "2026-03-31T00:00:00+00:00"
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: adv-custodians-06
+    source: iapd.adv
+    target: custodians
+    capture: iapd.adv/p07-2026-06
+    revision: 1
+    facts:
+      published: "2026-06-30T00:00:00+00:00"
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: adv-mastering-06
+    source: iapd.adv
+    target: mastering
+    capture: iapd.adv/p07-2026-06
+    revision: 1
+    facts:
+      published: "2026-06-30T00:00:00+00:00"
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: ncen-registrant-2025q4
+    source: sec.ncen.registrant
+    target: mastering
+    capture: sec.ncen-datasets/2025q4
+    revision: 0
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: ncen-registrant-2026q1
+    source: sec.ncen.registrant
+    target: mastering
+    capture: sec.ncen-datasets/2026q1
+    revision: 1
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: ncen-registrant-2026q2
+    source: sec.ncen.registrant
+    target: mastering
+    capture: sec.ncen-datasets/2026q2
+    revision: 2
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: ncen-registrant-2026q3
+    source: sec.ncen.registrant
+    target: mastering
+    capture: sec.ncen-datasets/2026q3
+    revision: 3
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: ncen-fund-2025q4
+    source: sec.ncen.fund
+    target: mastering
+    capture: sec.ncen-datasets/2025q4
+    revision: 0
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: ncen-fund-2026q1
+    source: sec.ncen.fund
+    target: mastering
+    capture: sec.ncen-datasets/2026q1
+    revision: 1
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: ncen-fund-2026q2
+    source: sec.ncen.fund
+    target: mastering
+    capture: sec.ncen-datasets/2026q2
+    revision: 2
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: ncen-fund-2026q3
+    source: sec.ncen.fund
+    target: mastering
+    capture: sec.ncen-datasets/2026q3
+    revision: 3
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: ncen-adviser-2025q4
+    source: sec.ncen.adviser
+    target: mastering
+    capture: sec.ncen-datasets/2025q4
+    revision: 0
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: ncen-adviser-2026q1
+    source: sec.ncen.adviser
+    target: mastering
+    capture: sec.ncen-datasets/2026q1
+    revision: 1
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: ncen-adviser-2026q2
+    source: sec.ncen.adviser
+    target: mastering
+    capture: sec.ncen-datasets/2026q2
+    revision: 2
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: ncen-adviser-2026q3
+    source: sec.ncen.adviser
+    target: mastering
+    capture: sec.ncen-datasets/2026q3
+    revision: 3
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: openfigi-answers
+    source: openfigi
+    target: mastering
+    capture: openfigi/2026q2-nport
+    revision: 0
+    workers: 1
+    bundles: 3
+    minutes: 420
+    attempts: 8
+  - name: openfigi-tickers
+    source: openfigi
+    target: mastering
+    capture: openfigi/form4-tickers-20261109
+    revision: 1
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: 13f-securities
+    source: sec.thirteenf.securities
+    target: mastering
+    capture: sec.thirteenf.securities/p07-cohort
+    workers: 2
+    bundles: 1
+    minutes: 90
+    attempts: 3
+  - name: nport-security
+    source: sec.nport.security
+    target: mastering
+    capture: sec.nport-datasets/2026q2
+    facts:
+      period: "2026-06-30T00:00:00+00:00"
+    workers: 1
+    bundles: 1
+    minutes: 480
+    attempts: 8
+  - name: nport-security-other-keys
+    source: sec.nport.security
+    target: mastering_other_keys
+    capture: sec.nport-datasets/2026q2
+    facts:
+      period: "2026-06-30T00:00:00+00:00"
+    workers: 1
+    bundles: 1
+    minutes: 120
+    attempts: 3
+  - name: ncen-class-2025q4
+    source: sec.ncen.class
+    target: mastering
+    capture: sec.ncen-datasets/2025q4
+    revision: 0
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: ncen-class-2026q1
+    source: sec.ncen.class
+    target: mastering
+    capture: sec.ncen-datasets/2026q1
+    revision: 1
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: ncen-class-2026q2
+    source: sec.ncen.class
+    target: mastering
+    capture: sec.ncen-datasets/2026q2
+    revision: 2
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: ncen-class-2026q3
+    source: sec.ncen.class
+    target: mastering
+    capture: sec.ncen-datasets/2026q3
+    revision: 3
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: ownership
+    source: sec.ownership
+    target: mastering
+    capture: sec.ownership/p07-cohort
+    workers: 1
+    bundles: 1
+    minutes: 300
+    attempts: 8
+  - name: ownership-symbols
+    source: sec.ownership
+    target: security_symbols
+    capture: sec.ownership/p07-cohort
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: gleif-pairs
+    source: gleif
+    target: subfund-pairs
+    capture: gleif/20260911-1600
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: gleif
+    source: gleif
+    target: mastering
+    capture: gleif/20260911-1600-publisher
+    facts:
+      publication_count: "3428477"
+    workers: 1
+    bundles: 1
+    minutes: 240
+    attempts: 40
+  - name: adv-silver-03
+    source: iapd.adv
+    target: silver
+    capture: iapd.adv/p07-2026-03
+    revision: 0
+    facts:
+      published: "2026-03-31T00:00:00+00:00"
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: adv-silver-06
+    source: iapd.adv
+    target: silver
+    capture: iapd.adv/p07-2026-06
+    revision: 1
+    facts:
+      published: "2026-06-30T00:00:00+00:00"
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: ownership-silver
+    source: sec.ownership
+    target: silver
+    capture: sec.ownership/p07-cohort
+    workers: 1
+    bundles: 1
+    minutes: 300
+    attempts: 3
+  - name: 13f-securities-silver
+    source: sec.thirteenf.securities
+    target: silver
+    capture: sec.thirteenf.securities/p07-cohort
+    workers: 2
+    bundles: 1
+    minutes: 90
+    attempts: 3
+  - name: nport-security-silver
+    source: sec.nport.security
+    target: silver
+    capture: sec.nport-datasets/2026q2
+    facts:
+      period: "2026-06-30T00:00:00+00:00"
+    workers: 1
+    bundles: 1
+    minutes: 240
+    attempts: 3
+  - name: 13f-filings
+    source: sec.thirteenf.filings
+    target: silver
+    capture: sec.thirteenf.filings/p07-managers
+    workers: 1
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: company-facts
+    source: sec.company-facts
+    target: silver
+    capture: company-facts/cohort-json
+    capture_root: proving
+    workers: 1
+    bundles: 1
+    minutes: 240
+    attempts: 4
+  - name: registration
+    source: sec.registration
+    target: silver
+    capture: sec.registration/s1-f1-originals
+    workers: 1
+    bundles: 1
+    minutes: 240
+    attempts: 4

@@ -26,13 +26,7 @@ def test_configuration_registration_authority(case, database_factory, storage_ap
                 registration.grant(owner, governor_role)
             return
         migrate(owner, application_role=role)
-        quote = owner.dialect.identifier_preparer.quote
-        with owner.begin() as conn:
-            api = require_installed(conn)
-            conn.exec_driver_sql(f"GRANT USAGE ON SCHEMA mdm,public TO {quote(governor_role)}")
-            conn.exec_driver_sql(f"GRANT SELECT ON ALL TABLES IN SCHEMA mdm,public TO {quote(governor_role)}")
-            conn.exec_driver_sql(f"GRANT INSERT ON mdm.policy,mdm.dataset,mdm.dataset_mapping TO {quote(governor_role)}")
-        registration.grant(owner, governor_role)
+        registration.grant_registrar(owner, governor_role)
         delegated = storage_api.connect(governor.url.set(database=owner.url.database), "postgresql")
         body = {"version": "invented-approved", "required_consumers": ["invented"], "automatic_rules": []}
         try:

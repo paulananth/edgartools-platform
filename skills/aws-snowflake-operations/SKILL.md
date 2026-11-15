@@ -81,10 +81,12 @@ front of it silently orders by the wrong one, so order by the alias instead.
 
 ## The hosted MDM store
 
-- Its connection files live in `~/.config/edgartools/hosted/` (`worker.env`, `verifier.env`, `governance.env`,
-  `connection.env`, `postgres.env`; folder and files owner-only), beside the other private env files, never in a
-  repo `.env` (each worktree is a checkout of a public repository) nor among the disposable local stores, whose
-  folders are deleted when unused. Source `worker.env` before a hosted load; never print its values.
+- Its connection files live in `~/.config/edgartools/hosted/` (`connection.env` the owner logins, `worker.env`,
+  `governance.env`; folder and files owner-only), beside the other private env files, never in a repo `.env` (each
+  worktree is a checkout of a public repository) nor among the disposable local stores, whose folders are deleted when
+  unused. This is the one folder: `load --stores` takes it, and a second copy elsewhere goes stale. Source `worker.env`
+  before a hosted load; never print its values. Its manifests are the run artifacts (large); the manifest root in
+  `worker.env` names where they go.
 - `mdm migrate` does not run automatically on deploy. Treat any prod deploy carrying new migration files
   as incomplete until it has been re-run explicitly — "the image is current" and "the migration was
   applied" are separate facts.
