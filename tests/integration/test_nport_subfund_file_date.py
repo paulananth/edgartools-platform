@@ -19,10 +19,13 @@ def normalized(tmp_path, source, table, row):
     root.mkdir()
     raw = store.put((root / 'input.json').as_uri(), {'tables': {table: [row]}})
     context = store.put((root / 'context.json').as_uri(), {'version': 1, 'input': raw, 'values': {}})
-    reading = source_chain.read(store, root / 'read', files.load(folder / 'record.yaml'),
-                                [{'input': raw, 'context': context}], 2)
-    records = [r['record'] for part, _ in iter_artifacts(reading, store,
-               max_bytes=10_000_000, max_rows=100) for r in part['tables'][table]]
+    if not (folder / 'record.yaml').exists():  # the combine's row is the record: its read made the dates
+        records = [row]
+    else:
+        reading = source_chain.read(store, root / 'read', files.load(folder / 'record.yaml'),
+                                    [{'input': raw, 'context': context}], 2)
+        records = [r['record'] for part, _ in iter_artifacts(reading, store,
+                   max_bytes=10_000_000, max_rows=100) for r in part['tables'][table]]
     assert len(records) == 1
     code = source + ('.v2' if source == 'sec.nport.registrant' else '.v1')  # the registrant's identifiers moved (ticket 203)
     contract = files.load_source(folder / 'source.yaml')['dataset_contracts'][code]['contract']
@@ -31,9 +34,11 @@ def normalized(tmp_path, source, table, row):
                                   'effective_at': None, 'artifact_sha256': 'a' * 64, 'member': 'invented'})
 
 
-def fund_row(filed='2026 05 15'):
+def fund_row(filed_at='2026-05-15T00:00:00+00:00'):
+    """A `fund` row as the combine gives it: the latest filing as the read made it."""
     return {'series_id': 'S000000001', 'lei': None,
-            'latest': {'name': 'Invented Fund', 'cik': '0000000001', 'filed': filed}}
+            'latest': {'name': 'Invented Fund', 'cik': '0000000001', 'filed_at': filed_at,
+                       'date_basis': 'observed', 'date_is_provisional': 'true', 'authoritative_start': None}}
 
 
 def registrant_row():

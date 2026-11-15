@@ -16,7 +16,7 @@
 # registrant is the fund); combine.yaml keeps each series' latest filing whole
 # (by date, then accession number) and its LEI when one to one (lei-pairs.yaml, its own
 # step before the combine);
-# record.yaml makes each `fund` row one record; mdm.prepare,
+# mdm.prepare takes each `fund` row as one record (the date is an instant in the read);
 # the merge and the processed record follow (the `mastering` target below).
 # Left out: the report's financial figures (FUND_REPORTED_INFO's other
 # columns), detail of a report, not of the Fund.
@@ -36,8 +36,8 @@ bookkeeping:
   version: 2
   targets:
     mastering:
-      extract: record.yaml
-      master: {keys: {dataset: sec.nport.fund.v1, record_column: record, table: fund}}
+      extract: combine.yaml
+      master: {keys: {dataset: sec.nport.fund.v1, table: fund}}
       silver:
         # Links are a silver table, built from the stored records after the merge.
         - {name: links, derive: {build: links, reads: mastering_record, silver: relationship}}
@@ -72,6 +72,20 @@ read:
         accession_number: {text: {path: ACCESSION_NUMBER}}
         filed:
           member_value: {lookup: filed, key: {text: {path: ACCESSION_NUMBER}}, on_many: error}
+        # The filing date ("YYYY MM DD" in the filing pairs) as an instant, none without one, and the
+        # Fund's start facts: observed from the filing, provisional, with no stated inception (operator,
+        # 2026-11-06: the filing date is a provisional observed start).
+        filed_at:
+          transform:
+            value: {member_value: {lookup: filed, key: {text: {path: ACCESSION_NUMBER}}, on_many: error}}
+            transforms:
+            - {regex_replace: {pattern: ' ', with: '-'}}
+            - {pad: {left: '', right: 'T00:00:00+00:00'}}
+            # A blank date stays blank: the contract sets its record aside (missing_provisional_file_date).
+            - {regex_replace: {pattern: '^T00:00:00[+]00:00$', with: ''}}
+        date_basis: {const: {value: observed}}
+        date_is_provisional: {const: {value: true}}
+        authoritative_start: {const: {value: null}}
         cik:
           member_value: {lookup: registrant, key: {text: {path: ACCESSION_NUMBER}}, on_many: error}
         name: {text: {path: SERIES_NAME, default: "", null_if: [""]}}
@@ -137,7 +151,7 @@ dataset_contracts:
                   path: .
                   kind: object
               reason: Mapped input must be an object
-            - test: {test: {path: filed_at, kind: truthy}}
+            - test: {test: {path: latest.filed_at, kind: truthy}}
               reason: missing_provisional_file_date
             tables:
               mapped:
@@ -150,20 +164,16 @@ dataset_contracts:
                   matching:
                     object:
                       fields:
-                        relationship_start_date_basis: {value: {path: date_basis, type: text}}
+                        relationship_start_date_basis: {value: {path: latest.date_basis, type: text}}
           input_fields:
           - series_id
           - lei
           - latest
-          - filed_at
-          - date_basis
-          - date_is_provisional
-          - authoritative_start
         version: sec-nport-fund-2026-11-06.provisional-file-date
         retain_deferred: true
         source_record_provenance: true
         kind: fund_structure
-        effective_at: filed_at
+        effective_at: latest.filed_at
         record_key:
         - series_id
         record_key_format: sec_series_id
@@ -191,20 +201,20 @@ dataset_contracts:
         - role: fund
           authority: SEC EDGAR
           registration: series_id
-          valid_from: filed_at
+          valid_from: latest.filed_at
           fields:
-            source_start_date_basis: date_basis
-            source_start_date_is_provisional: date_is_provisional
+            source_start_date_basis: latest.date_basis
+            source_start_date_is_provisional: latest.date_is_provisional
         relationships:
         - type: IS_SUBFUND_OF
           target_key: [latest.cik]
           target_source: sec.nport.registrant.v2
           # No stated inception: the existing engine uses effective_at and
           # records valid_from_basis=observed. A real stated date may replace it.
-          valid_from: authoritative_start
+          valid_from: latest.authoritative_start
           time_format: instant
           scope: SEC N-PORT fund series
           ends: {reason: missing_record_identity}
           properties:
-            source_start_date_basis: date_basis
-            source_start_date_is_provisional: date_is_provisional
+            source_start_date_basis: latest.date_basis
+            source_start_date_is_provisional: latest.date_is_provisional
