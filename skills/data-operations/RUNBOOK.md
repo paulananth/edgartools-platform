@@ -71,7 +71,6 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    from their ordinary variable, for that command only; the others read their `*_MIGRATION_DATABASE_URL`:
    ```bash
    env MDM_DATABASE_URL="$MDM_MIGRATION_DATABASE_URL" edgar-warehouse mdm migrate --application-role mdm_runtime
-   env DESTINATION_MIGRATION_DATABASE_URL="$MDM_MIGRATION_DATABASE_URL" edgar-warehouse bookkeeping init-guard --runtime-role mdm_runtime
    edgar-warehouse rdm init --runtime-role rdm_runtime
    env BOOKKEEPING_DATABASE_URL="$BOOKKEEPING_MIGRATION_DATABASE_URL" edgar-warehouse bookkeeping init --runtime-role bookkeeping_control
    edgar-warehouse change-journal init --runtime-role change_journal_runtime
@@ -222,7 +221,8 @@ unknown, wait/report the missing estimate; do not force it or reject the source.
 On a hosted store a bundle's time is its statements times the round trip (tens of milliseconds each), not its computation
 and not a lock. Before adding parallelism or blaming a lock, count one bundle's statements on a disposable local store with
 statement logging (`log_statement = 'all'`; `<this skill>/scripts/count_statements.py` groups them by shape): a lock shows as sessions waiting on it for long, so
-sample who waits and how old the holder's transaction is.
+sample who waits and how old the holder's transaction is. Most of a bundle's statements are Bookkeeping's (a claim, status
+read and report for each unit): the target's grain sets that cost ([bookkeeping](../bookkeeping/SKILL.md#grain-how-much-bookkeeping-a-target-uses)).
 
 Increasing `workers work --limit` changes the work bound of that invocation; it
 does not itself create parallel workers. A frozen source execution setting cannot

@@ -203,6 +203,28 @@ receipts, and the content hash is their proof. The run in the database starts at
 (`config.staged`), with those receipts as its inputs, and Bookkeeping holds no record of the local steps. A local step requires only local steps, and a
 local step that generates work is refused until a source needs it.
 
+## Grain: how much Bookkeeping a target uses
+
+Bookkeeping says which work of a run is in flight, who holds it and what is verified, so a stopped run resumes. Each claim,
+status read and report is a process, a database session and about a dozen statements, and a hosted store pays a round trip
+for each, so choose **the coarsest grain that still resumes**. The Change Journal already resumes by the file (a file recorded
+once its merge is verified is skipped on the next run), and a destination's own protection (an immutable artifact store, a
+merge lock, a table lock and key, a unique key) makes a lease on it a second copy.
+
+| Grain | What Bookkeeping holds | Resumes at | Gives up |
+|---|---|---|---|
+| `unit` | every unit of every step: claim, lease, heartbeat, check, report | the unit | nothing; the most cost |
+| `bundle` | one run for a bundle, one unit a step; its units run inside the worker | the step of a bundle | a lease and a report for each unit |
+| `load` | one run for the load, one unit | the load, skipping the files the journal records | per-bundle progress in `status` |
+| `off` | nothing: the loader runs the steps itself, as `local: true` does for read and combine | the file | fencing, retry audit and parallel workers |
+
+Keep `unit` where one unit is long and a unit-level resume earns its cost; use `off` or `load` where every step is a
+deterministic function of its input and the destination protects itself (a silver-only landing, a one-document delivery).
+No destination checks a lease proof, so a grain that drops the lease gives up only that one unit is not done twice (the
+destinations refuse a conflicting write themselves). Not built: every target runs at `unit` grain, `rules check` refuses a `bookkeeping`
+setting on a target, and `local: true` is the only step that runs without a claim. Measure a target's statements before
+choosing a grain (data-operations, "Resource sizing").
+
 ## Init and migrate modes
 
 Use `init` for an empty Bookkeeping database on PostgreSQL 16 or MySQL 8;
