@@ -41,4 +41,6 @@ series → its adviser (company). The onboarding log is `.scratch/onboarding/sec
   - data-onboarding: a sibling data set reads through the other source's readings (`from:`); periods load
     with rising `--revision`; what a new source moves in the tests; one identifier with two paddings
     needs a normalizer version.
-- [ ] Learning → skill for parts 2 to 4
+- [x] Learning → skill for parts 2 to 4: data-onboarding, Examples: a self-stated identifier joins only where it
+  is one to one (else lookup only); a secondary key finds a master only where one holds it; a link's capacity
+  is the source's term, added to RDM (2026-11-14 20:23 ET)
