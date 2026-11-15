@@ -1596,27 +1596,15 @@
      "source.output"
     ],
     "input": {
-     "contract": "sec.nport.registrant/source.yaml",
-     "lookups": {
-      "filed": {
-       "column": "accession_number",
-       "from": "submissions",
-       "max_input_bytes": 67108864,
-       "max_input_rows": 1000000,
-       "table": "filed",
-       "value_column": "filed"
-      }
-     }
+     "contract": "sec.nport.registrant/registrant-keys.yaml"
     },
     "key": "{unit}",
     "leases": [
      "artifact:{destination}"
     ],
-    "name": "registrants",
+    "name": "registrant_keys",
     "operation": "source.read",
-    "requires": [
-     "submissions"
-    ],
+    "requires": [],
     "units": {
      "each": "file"
     }
@@ -1639,10 +1627,10 @@
       },
       "registrant": {
        "column": "accession_number",
-       "from": "registrants",
+       "from": "registrant_keys",
        "max_input_bytes": 268435456,
        "max_input_rows": 1000000,
-       "table": "filing",
+       "table": "registrant",
        "value_column": "cik"
       }
      }
@@ -1655,7 +1643,7 @@
     "operation": "source.read",
     "requires": [
      "submissions",
-     "registrants"
+     "registrant_keys"
     ],
     "units": {
      "each": "file"
@@ -2054,27 +2042,15 @@
      "source.output"
     ],
     "input": {
-     "contract": "sec.nport.registrant/source.yaml",
-     "lookups": {
-      "filed": {
-       "column": "accession_number",
-       "from": "submissions",
-       "max_input_bytes": 67108864,
-       "max_input_rows": 1000000,
-       "table": "filed",
-       "value_column": "filed"
-      }
-     }
+     "contract": "sec.nport.registrant/registrant-keys.yaml"
     },
     "key": "{unit}",
     "leases": [
      "artifact:{destination}"
     ],
-    "name": "registrants",
+    "name": "registrant_keys",
     "operation": "source.read",
-    "requires": [
-     "submissions"
-    ],
+    "requires": [],
     "units": {
      "each": "file"
     }
@@ -2097,10 +2073,10 @@
       },
       "registrant": {
        "column": "accession_number",
-       "from": "registrants",
+       "from": "registrant_keys",
        "max_input_bytes": 268435456,
        "max_input_rows": 1000000,
-       "table": "filing",
+       "table": "registrant",
        "value_column": "cik"
       }
      }
@@ -2113,7 +2089,7 @@
     "operation": "source.read",
     "requires": [
      "submissions",
-     "registrants"
+     "registrant_keys"
     ],
     "units": {
      "each": "file"
@@ -2491,27 +2467,15 @@
      "source.output"
     ],
     "input": {
-     "contract": "sec.nport.registrant/source.yaml",
-     "lookups": {
-      "filed": {
-       "column": "accession_number",
-       "from": "submissions",
-       "max_input_bytes": 67108864,
-       "max_input_rows": 1000000,
-       "table": "filed",
-       "value_column": "filed"
-      }
-     }
+     "contract": "sec.nport.registrant/registrant-keys.yaml"
     },
     "key": "{unit}",
     "leases": [
      "artifact:{destination}"
     ],
-    "name": "registrants",
+    "name": "registrant_keys",
     "operation": "source.read",
-    "requires": [
-     "submissions"
-    ],
+    "requires": [],
     "units": {
      "each": "file"
     }
@@ -2535,10 +2499,10 @@
       },
       "registrant": {
        "column": "accession_number",
-       "from": "registrants",
+       "from": "registrant_keys",
        "max_input_bytes": 268435456,
        "max_input_rows": 1000000,
-       "table": "filing",
+       "table": "registrant",
        "value_column": "cik"
       }
      }
@@ -2551,7 +2515,7 @@
     "operation": "source.read",
     "requires": [
      "submissions",
-     "registrants"
+     "registrant_keys"
     ],
     "units": {
      "each": "file"
@@ -2980,47 +2944,15 @@
      "source.output"
     ],
     "input": {
-     "contract": "sec.nport.registrant/submissions.yaml"
+     "contract": "sec.nport.registrant/registrant-keys.yaml"
     },
     "key": "{unit}",
     "leases": [
      "artifact:{destination}"
     ],
-    "name": "submissions",
+    "name": "registrant_keys",
     "operation": "source.read",
     "requires": [],
-    "units": {
-     "each": "file"
-    }
-   },
-   {
-    "checks": [
-     "input.hash",
-     "output.receipt",
-     "source.output"
-    ],
-    "input": {
-     "contract": "sec.nport.registrant/source.yaml",
-     "lookups": {
-      "filed": {
-       "column": "accession_number",
-       "from": "submissions",
-       "max_input_bytes": 67108864,
-       "max_input_rows": 1000000,
-       "table": "filed",
-       "value_column": "filed"
-      }
-     }
-    },
-    "key": "{unit}",
-    "leases": [
-     "artifact:{destination}"
-    ],
-    "name": "registrants",
-    "operation": "source.read",
-    "requires": [
-     "submissions"
-    ],
     "units": {
      "each": "file"
     }
@@ -3101,10 +3033,10 @@
       },
       "registrant": {
        "column": "accession_number",
-       "from": "registrants",
+       "from": "registrant_keys",
        "max_input_bytes": 17179869184,
        "max_input_rows": 100000000,
-       "table": "filing",
+       "table": "registrant",
        "value_column": "cik"
       },
       "sedol": {
@@ -3134,7 +3066,7 @@
     "requires": [
      "identifiers",
      "filing_dates",
-     "registrants",
+     "registrant_keys",
      "series"
     ],
     "units": {

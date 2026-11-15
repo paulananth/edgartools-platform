@@ -71,7 +71,7 @@ hosted run reprocesses its files. Nothing runs on the hosted store without the o
   field (only the publication key differs, which names the changed contracts); MDM path 21 min (19 before: with
   two workers the two reads had run side by side, so the fold saves a pass of work, not wall time on this
   laptop); worker peak 4.4 GB (2026-11-14 21:40 ET)
-- [ ] N-PORT security: one reading of SUBMISSION.tsv per path (it is read twice in each)
+- [ ] N-PORT security: one reading of SUBMISSION.tsv per path (the silver path reads it once since registrant-keys.yaml, below; the MDM path still reads it twice: `submissions` for N-PORT fund's read, `filing_dates` for the holdings)
 - [ ] ~~A lookup read from another source's run~~ deferred: engine code, waits for the operator's word
 - [x] The seven wastes are the design check for a source extract (operator, 2026-11-15: "update the source extract
   functionality skill to use 7 wastes as part of desigh"): data-onboarding, "Design a source extract against the
@@ -106,4 +106,20 @@ hosted run reprocesses its files. Nothing runs on the hosted store without the o
   date and series with the filing-date lookup alone. Proof on 2026q2, main against the branch on disposable stores
   (fund mastered first so class's links have endpoints): records equal per dataset (554 advisers, 5,137 classes,
   2,054 funds; 1 set aside; 0 reviews), 8,580 links equal once each id is mapped to its records (2026-11-15 07:31 ET)
+- [x] No engine change for OpenFIGI or N-CEN fund (operator, 2026-11-15: "agreed", to measuring first): one
+  2026q2 OpenFIGI bundle (512 of 7,714 files) on a disposable store took 97 s; the three steps a combine with
+  conditions would fold (`lines`, `listing`, `record`) took about 10 s (10%), and the merge 52 s; the join change
+  for N-CEN fund would save seconds on about 7K rows a quarter. Both stay at 8, kept by the engine limit (2026-11-15 08:46 ET)
+- [x] Form ADV filings stays at 5: four reads of four different CSVs in the zip, run side by side, and a combine
+  that collects each filing's custodians, CIKs and related persons as lists, which a pair set cannot (2026-11-15 08:46 ET)
+- [x] N-PORT fund stays at 6 (the reduce is the one-to-one LEI rule; `pairs` stays, a combine cannot filter on a
+  joined column), but its registrant step read N-PORT registrant's whole read file for one CIK (operator,
+  2026-11-15: "Add it (Recommended)"): `sec.nport.registrant/registrant-keys.yaml` gives each filing's registrant
+  CIK with no lookup, used by N-PORT fund, N-CEN fund and N-PORT security's holdings; the step no longer waits for
+  the submissions read, a change to N-PORT registrant's rules no longer reprocesses them, and N-PORT security's
+  silver path drops its submissions read (6 extract steps to 5). Proof: the (accession, CIK) pairs equal the old
+  read's on every captured zip (N-PORT 2026q2: 14,416; N-CEN 2025q4 to 2026q3: 505, 1,927, 501, 438); then N-PORT
+  registrant, N-PORT fund and N-CEN fund on 2026q2, main against the branch: records equal per dataset (12,937 /
+  2,054 / 1,947), 14,953 masters, 8 set aside, 12,886 links equal once ids are mapped to records. The holdings'
+  12-minute load was not repeated: its only change is this pair set, proved equal (2026-11-15 08:46 ET)
 - [ ] Learning → skill

@@ -1,0 +1,34 @@
+pass:
+  name: registrant_keys
+  units: {each: file}
+# Each filing's registrant CIK (REGISTRANT.tsv, one row per filing), a pair set for the readings that name only a
+# filing's registrant: N-PORT fund (sec.nport.fund) and N-CEN fund (sec.ncen.fund), whose data sets both carry
+# REGISTRANT.tsv with these two columns. It needs no other reading, so it runs beside the submissions reading,
+# and those funds read nothing else of the registrant's rules.
+execution: {profile: source.read, workers: 1, max_artifacts: 1}
+read:
+  format: json
+  limits: {max_bytes: 1048576, max_records: 1}
+  tables:
+    registrant:
+      each: .
+      columns:
+        accession_number: {text: {path: ACCESSION_NUMBER}}
+        cik: {text: {path: CIK}}
+  stream:
+    framing: delimited
+    delimited: {format: tsv, encoding: utf-8}
+    container: zip
+    member: REGISTRANT.tsv
+    # Profiling, N-PORT 2026q2: 14,416 rows.
+    max_input_bytes: 1000000000
+    max_bytes: 100000000
+    max_record: 1048576
+    max_records: 1000000
+    max_depth: 64
+    ordinal_context: null
+    partition_bytes: 8388608
+    partition_records: 100000
+    max_partitions: 1000
+    max_spool_bytes: 1073741824
+    max_output_rows: 1000000
