@@ -31,7 +31,7 @@ submits one source.
    ```
    It registers the merge rules and the source's Dataset Contracts in MDM with the store owner's connection
    (`MDM_REGISTRATION_DATABASE_URL`, [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment)).
-   A source that lands silver needs its silver tables registered first (`infra/scripts/deploy-silver-local.sh
+   A source that lands silver needs its silver tables registered first (`infra/scripts/deploy-silver.sh
    <name>`), and a load stops before it starts if an env file has no silver login.
 4. **Load it.** One command, for any source and target, over files already
    captured. See **Load a capture** below.
