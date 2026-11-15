@@ -279,6 +279,21 @@ def test_a_file_set_is_recorded_and_read_in_batches_with_one_receipt_each(journa
         journal.verify_many([receipts[0], {**receipts[1], "id": receipts[1]["id"] + 1}])
 
 
+def test_a_file_set_is_recorded_in_one_statement_on_postgresql(journal):
+    """A hosted store costs a round trip a statement: a bundle's 512 events are one call, not 512."""
+    owner, runtime, role, journal = journal
+    if runtime.dialect.name != "postgresql":
+        pytest.skip("only the PostgreSQL path sends the batch as one statement")
+    from sqlalchemy import event as sql_event
+
+    calls = []
+    sql_event.listen(runtime, "before_cursor_execute", lambda conn, cur, statement, *rest: calls.append(statement))
+    values = [event(producer="invented.single", feed="invented.feed") for _ in range(60)]
+    journal.append_many(values)
+    assert len([c for c in calls if "record_event" in c]) == 1
+    assert len(journal.get_many("invented.single", [v["event_key"] for v in values])) == 60
+
+
 def test_a_conflict_in_a_batch_raises_and_a_replay_leaves_one_event_each(journal):
     owner, runtime, role, journal = journal
     first = event(producer="invented.conflict")
