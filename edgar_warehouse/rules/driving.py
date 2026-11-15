@@ -83,6 +83,7 @@ class Commands:
         if workers < 1:
             raise RunStopped("At least one worker")
         self.env, self.reports, self.deadline, self.log, self.workers = env, reports, deadline, log, workers
+        self._book = None
 
     def __call__(self, duty: str, *args: str) -> str:
         environment = {**os.environ, **self.env[duty]}
@@ -102,9 +103,36 @@ class Commands:
             raise RunStopped(f"{' '.join(args[:3])} failed with status {done.returncode}; its message is in {self.log}")
         return done.stdout
 
+    def book(self):
+        """The worker login's Bookkeeping, opened once for the run: the driver reads status twice a step, and a
+        process with its own database session for each read was about twelve sessions a bundle on a hosted store."""
+        if self._book is None:
+            from edgar_warehouse.bookkeeping.clean.database import get_engine
+            from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
+
+            url = self.env["worker"].get("BOOKKEEPING_DATABASE_URL")
+            if not url:
+                raise RunStopped("The worker.env of these stores names no BOOKKEEPING_DATABASE_URL")
+            self._book = Bookkeeping(get_engine(url))
+        return self._book
+
     def status(self, run_id: str, step: str | None = None) -> dict:
-        named = ("--step", step) if step is not None else ()
-        return json.loads(self("worker", "bookkeeping", "status", run_id, "--limit", "1000", *named))
+        try:
+            found = self.book().status(run_id, limit=1000, step=step)
+        except RunStopped:
+            raise
+        except Exception as exc:
+            # Its message can hold a login or an address: it goes to a private file, never the screen.
+            self.log.parent.mkdir(parents=True, exist_ok=True)
+            with os.fdopen(os.open(self.log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "a") as out:
+                out.write(f"$ bookkeeping status {run_id}\n{exc}\n")
+            raise RunStopped(f"bookkeeping status {run_id} failed ({type(exc).__name__}); its message is in {self.log}") from None
+        return json.loads(json.dumps(found, default=str))  # as the command prints it: times and the like as text
+
+    def close(self) -> None:
+        if self._book is not None:
+            self._book.engine.dispose()
+            self._book = None
 
     def drive(self, run_id: str, steps: list[dict]) -> dict:
         """Each step's workers, in step order, until nothing is left."""

@@ -25,15 +25,15 @@ class Script(driving.Commands):
                          log=driving.Path("unused"), workers=workers)
         self.pages, self.calls = list(pages), []
 
+    def status(self, run_id, step=None):
+        page = [i for i in (self.pages.pop(0) if len(self.pages) > 1 else self.pages[0]) if i["step"] == step]
+        counts = {}
+        for item in page:
+            counts[item["state"]] = counts.get(item["state"], 0) + 1
+        return {"items": page, "counts": counts}
+
     def __call__(self, duty, *args):
         self.calls.append((duty, *args[:3]))
-        if args[:2] == ("bookkeeping", "status"):
-            step = args[args.index("--step") + 1]
-            page = [i for i in (self.pages.pop(0) if len(self.pages) > 1 else self.pages[0]) if i["step"] == step]
-            counts = {}
-            for item in page:
-                counts[item["state"]] = counts.get(item["state"], 0) + 1
-            return json.dumps({"items": page, "counts": counts})
         if args[:2] == ("bookkeeping", "finalize"):
             return json.dumps({"run": {"state": "complete"}})
         return ""
@@ -164,3 +164,55 @@ def test_a_missing_duty_file_names_the_command_that_makes_it(tmp_path):
 
     with pytest.raises(driving.RunStopped, match="local-test-stores.py up"):
         driving.duties(tmp_path)
+
+
+class Book:
+    """A Bookkeeping that answers one status page, with a time in it as the real one has."""
+
+    def __init__(self, error=None):
+        self.error, self.asked = error, []
+
+    def status(self, run_id, *, limit, step):
+        self.asked.append((run_id, limit, step))
+        if self.error:
+            raise self.error
+        from datetime import UTC, datetime
+        return {"run": {"run_id": run_id, "started": datetime(2026, 1, 2, tzinfo=UTC)}, "counts": {"verified": 1}, "items": []}
+
+
+def test_a_status_read_starts_no_process_and_gives_what_the_command_prints(tmp_path, monkeypatch):
+    """The driver asks for status twice a step; a process and a database session each time cost a hosted store
+    about twelve sessions a bundle."""
+    found = {"worker": {"BOOKKEEPING_DATABASE_URL": "postgresql://invented"}}
+    reads = commands(found, tmp_path)
+    book = Book()
+    monkeypatch.setattr(reads, "book", lambda: book)
+    monkeypatch.setattr(driving.subprocess, "run", lambda *_, **__: pytest.fail("a status read started a process"))
+    page = reads.status("run-1", "merge")
+    assert book.asked == [("run-1", 1000, "merge")]
+    assert page == {"run": {"run_id": "run-1", "started": "2026-01-02 00:00:00+00:00"}, "counts": {"verified": 1}, "items": []}
+
+
+def test_a_status_read_opens_the_worker_connection_once(tmp_path, monkeypatch):
+    opened = []
+    import edgar_warehouse.bookkeeping.clean.database as database
+    import edgar_warehouse.bookkeeping.clean.engine as engine
+    monkeypatch.setattr(database, "get_engine", lambda url: opened.append(url) or object())
+    monkeypatch.setattr(engine, "Bookkeeping", lambda built: Book())
+    reads = commands({"worker": {"BOOKKEEPING_DATABASE_URL": "postgresql://invented"}}, tmp_path)
+    reads.status("run-1"), reads.status("run-1", "read")
+    assert opened == ["postgresql://invented"]
+
+
+def test_a_failed_status_read_keeps_its_message_off_the_screen(tmp_path, monkeypatch):
+    reads = commands({"worker": {"BOOKKEEPING_DATABASE_URL": "postgresql://invented"}}, tmp_path)
+    monkeypatch.setattr(reads, "book", lambda: Book(error=RuntimeError("could not connect to 127.0.0.1")))
+    with pytest.raises(driving.RunStopped) as caught:
+        reads.status("run-1")
+    assert "127.0.0.1" not in str(caught.value) and "bookkeeping status" in str(caught.value)
+    assert "127.0.0.1" in (tmp_path / "errors.log").read_text()
+
+
+def test_a_status_read_needs_the_worker_logins_database(tmp_path):
+    with pytest.raises(driving.RunStopped, match="worker.env"):
+        commands({"worker": {}}, tmp_path).status("run-1")
