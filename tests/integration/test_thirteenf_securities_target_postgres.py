@@ -64,12 +64,12 @@ def run(databases, tmp_path, monkeypatch, tables):
     for profile in WORKERS:
         grant_profile(databases.admin, profile=profile, worker="bk_runtime")
     target = deepcopy(small_slices(SOURCE)["bookkeeping"]["targets"]["mastering"])
-    assert [step["name"] for step in target["steps"][-3:]] == ["merge", "land_holding", "processed"]
-    target["steps"] = target["steps"][:-3]  # the merge, the silver landing (its own test) and the journal
+    assert [step["name"] for step in target["steps"][-2:]] == ["merge", "processed"]
+    target["steps"] = target["steps"][:-2]  # the merge and the journal
     body = {"source": f"thirteenf-{uuid4().hex}", "bookkeeping": {"version": 2, "targets": {"mastering": target}}}
     book = Bookkeeping(databases.runtime)
     steps = book.artifacts.json(report["manifest"])["steps"]
-    del steps["merge"], steps["land_holding"], steps["processed"]
+    del steps["merge"], steps["processed"]
     manifest = book.artifacts.put(tmp_path.as_uri() + "/submitted", {"version": 2, "steps": steps})
     saved = frozen.of("source", body["source"], body)
     rules = Artifacts().put(tmp_path.as_uri() + "/rules", saved)
