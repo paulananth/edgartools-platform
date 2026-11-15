@@ -4013,6 +4013,57 @@
     "checks": [
      "input.hash",
      "output.receipt",
+     "journal.recorded"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "name": "processed",
+    "operation": "journal.record",
+    "requires": [
+     "merge"
+    ]
+   }
+  ]
+ },
+ "sec.thirteenf.securities/silver": {
+  "checks": [
+   "manifest.hash",
+   "work.accounting",
+   "journal.delivered"
+  ],
+  "steps": [
+   {
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "input": {
+     "context": {
+      "accession_number": {
+       "segment": "accession"
+      }
+     }
+    },
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "name": "read",
+    "operation": "source.read",
+    "requires": [],
+    "units": {
+     "slices": {
+      "bytes": 8388608
+     }
+    }
+   },
+   {
+    "checks": [
+     "input.hash",
+     "output.receipt",
      "silver.landed"
     ],
     "input": {
@@ -4028,8 +4079,7 @@
     "name": "land_holding",
     "operation": "silver.land",
     "requires": [
-     "read",
-     "merge"
+     "read"
     ]
    },
    {

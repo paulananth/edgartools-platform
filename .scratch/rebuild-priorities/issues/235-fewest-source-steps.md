@@ -86,4 +86,13 @@ hosted run reprocesses its files. Nothing runs on the hosted store without the o
   one target against the split, silver run first: records equal (4,962; 4,339 masters; 781 set aside; 0 reviews),
   5,743 owner and 14,331 line rows equal column by column, and 4,962 Person ids filled by `refresh-ids` as on main;
   main 1 min 42 s, split 1 min 15 s + 1 min 9 s (2026-11-15 06:49 ET)
+- [x] 13F securities in two paths (operator, 2026-11-14: "make it two split one to mdm and one to silver"; 2026-11-15:
+  "continue"): `mastering` reads, reduces, combines, prepares and merges the Securities (6 steps); `silver` reads and
+  lands the holdings (3 steps), waiting for no merge. Seven wastes: the landing waited for the merge only for the
+  Security id (waiting); the reduce (about 11M rows to about 31K CUSIPs) and the combine stay; the silver path's read
+  still writes the four tables only MDM uses (issuer name, title, class, FIGI), kept since a silver-only extract
+  would copy the holdings table's definition (over-processing, accepted). Proof on the p07 cohort (52 files), main's
+  one target against the split, silver run first: records equal (5,759; 5,759 masters; 0 set aside; 0 reviews),
+  283,725 holdings equal column by column but `loaded_at`, and 283,725 Security ids filled by `refresh-ids` as on
+  main; main 33 s, split 22 s + 20 s (2026-11-15 07:09 ET)
 - [ ] Learning → skill

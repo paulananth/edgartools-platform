@@ -148,17 +148,20 @@ read:
 bookkeeping:
   version: 2
   targets:
-    # The Securities of one data set (ticket 172): every information table is
-    # read, reduced by CUSIP, combined to one row each, prepared for
-    # the Dataset Contract and merged; each file is then noted in the Change
-    # Journal, so an unchanged file is not read again.
+    # Two paths (operator, 2026-11-14: "make it two split one to mdm and one to silver"). `mastering`: the
+    # Securities of one data set (ticket 172): every information table is read, reduced by CUSIP, combined to
+    # one row each, prepared for the Dataset Contract and merged. `silver`: the holdings (ticket 183), landed
+    # from their own read; the silver writer finds each holding's Security by lookup, and a holding whose
+    # Security is not mastered yet keeps an empty id for `silver refresh-ids`, so it waits for no merge.
+    # Each notes its files in the Change Journal, so an unchanged file is not read again.
     mastering:
       # The combine's rows are the records, one per CUSIP; no record step.
       extract: combine.yaml
       master: {keys: {dataset: sec.thirteenf.securities.v2, table: security}}
+    silver:
+      extract: source.yaml
       silver:
-        # The holdings land in silver once the Securities they link to are merged (ticket 183).
-        - {name: land_holding, land: {silver: thirteenf_holding, table: sec_thirteenf_holding}, requires: [read, merge]}
+        - {name: land_holding, land: {silver: thirteenf_holding, table: sec_thirteenf_holding}}
 dataset_contracts:
   sec.thirteenf.securities.v2:
     contract:
