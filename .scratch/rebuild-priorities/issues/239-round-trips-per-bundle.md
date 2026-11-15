@@ -102,6 +102,26 @@ Ordered by the statements each removes, with the effect on a bundle's 1,152: the
 60); one isolation a connection (about 30). Together Bookkeeping 750 to about 250, a bundle 1,152 to about 650, hosted about
 50 s to about 28 s of statements.
 
+## Steady state, and a correction (operator, 2026-11-15: "Yes" to the Bookkeeping and journal cuts)
+
+The per-bundle counts above (2,750, 1,665, 1,152, 1,034) came from one-minute local runs of 4 to 5 bundles, and the load's
+one-time start-up (it plans all 149 bundles' files against the journal, about 190 reads) is in every one of them. Measured over
+17 to 30 bundles, **a persons bundle on current main is 462 statements in 12 sessions: Bookkeeping 309 (67%), Change Journal 82
+(18%), MDM 63 (14%), rules 8.** The hosted measure is the real proof of the changes so far: a bundle's 2.2 minutes became
+0.8 (8 bundles each side, same load), the persons lane about twice as fast.
+
+What Bookkeeping's 316 statements a bundle are: about 8 status reads (each 6 queries, 73 in all), 41 reads of work items (the
+claims), 37 reads of the run row, 55 for isolation (a BEGIN at REPEATABLE READ and a `SET default_transaction_isolation TO
+DEFAULT` when the connection returns, 29 and 27), and the BEGIN and COMMIT around the rest. Single reads without a transaction
+block (tried) changed nothing measurable here and was dropped.
+
+This change: the Change Journal is opened once a process for a database (each new engine was a new session), and its reads run
+without a transaction block (the events never change): **82 to 64 statements a bundle** (30 bundles each).
+
+Next, by what is left: the isolation juggling (55) with an engine that holds REPEATABLE READ from its connection; one status
+read a pass (a step's two reads of the same counts); the run row once a process; fewer processes a bundle (12 sessions, each a
+Python start and a hosted connection, which is most of the rest of a bundle's 48 s).
+
 ## Checklist
 
 - [x] The statements of one bundle counted by a committed command (`skills/data-operations/scripts/count_statements.py`: a local store with statement logging, grouped by shape) so a change shows as a count (2026-11-15 15:09 ET)

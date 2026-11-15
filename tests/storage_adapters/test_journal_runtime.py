@@ -294,6 +294,25 @@ def test_a_file_set_is_recorded_in_one_statement_on_postgresql(journal):
     assert len(journal.get_many("invented.single", [v["event_key"] for v in values])) == 60
 
 
+def test_a_journal_read_is_not_wrapped_in_a_transaction(journal):
+    """The journal's events never change, so a read needs no snapshot: BEGIN and ROLLBACK around each were half of
+    its statements on a hosted store."""
+    owner, runtime, role, journal = journal
+    from sqlalchemy import event as sql_event
+
+    first = journal.append(event(producer="invented.reads"))
+    isolation = []
+    sql_event.listen(runtime, "before_cursor_execute",
+                     lambda conn, cursor, statement, *rest: isolation.append(conn.get_execution_options().get("isolation_level")))
+    keys = [first["event"]["event_key"]]
+    assert journal.get("invented.reads", keys[0]) == first
+    assert journal.get_many("invented.reads", keys) == {keys[0]: first}
+    assert journal.found("invented.reads", keys) == set(keys)
+    assert journal.verify_many([first]) == [first]
+    assert journal.status()["events"] >= 1
+    assert isolation and set(isolation) == {"AUTOCOMMIT"}
+
+
 def test_a_conflict_in_a_batch_raises_and_a_replay_leaves_one_event_each(journal):
     owner, runtime, role, journal = journal
     first = event(producer="invented.conflict")

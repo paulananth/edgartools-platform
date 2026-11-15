@@ -66,10 +66,20 @@ def unprocessed(journal, source: str, processing: str, files: list[tuple[str, st
     return [keys[name] for name in names if name not in seen]
 
 
+_JOURNALS: dict = {}
+
+
 def journal():
+    """The Change Journal of this process: opened once for a database, since each new engine is a new database session
+    (a persons bundle opened fifteen on a hosted store)."""
+    import os
+
     from edgar_warehouse.change_journal.store import ChangeJournal, get_engine
 
-    return ChangeJournal(get_engine())
+    url = os.environ.get("CHANGE_JOURNAL_DATABASE_URL", "")
+    if url not in _JOURNALS:
+        _JOURNALS[url] = ChangeJournal(get_engine())
+    return _JOURNALS[url]
 
 
 def select(source: str, processing: str, files: list[tuple[str, str]], *, force: bool, ledger=None) -> list[str]:
