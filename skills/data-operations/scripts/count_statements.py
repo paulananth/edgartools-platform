@@ -13,7 +13,7 @@ import collections
 import re
 import subprocess
 
-STATEMENT = re.compile(r"\[(\d+)\] LOG:\s+(?:statement|execute [^:]*):\s*(.*)$")
+STATEMENT = re.compile(r"\[(\d+)\] (?:\S+ \S+ )?LOG:\s+(?:statement|execute [^:]*):\s*(.*)$")  # the prefix may add database and user
 
 
 def shape(text: str) -> str:

@@ -54,18 +54,35 @@ from the artifacts that share one publication time (the one batch of up to 1,000
 publication identities a function of the artifacts they hold so a rerun gives the same ones. Proof: two stores, one loaded
 the current way and one pooled, equal records, masters and links.
 
-## Remaining after the first two changes (counts after them)
+## After the first three changes (operator, 2026-11-15: "I need 50% speed", "1 statement for merge", "Step 1")
 
-Per bundle, locally: 1,665 statements in 36 sessions: about 340 BEGIN and 230 ROLLBACK (a read-only checkout ends in a rollback), 720
-reads, 55 liveness checks left and the session setup. Next: reuse a worker's connections, and read-only checkouts that
-send no BEGIN or ROLLBACK.
+Persons, same capture and local store, statement log (counts only), with the journal's one-statement file set, the engines'
+no ping, and the 8 MiB batch (PR 1811): **1,152 statements a bundle, 42 sessions, about 6 s**, from about 2,750 and 12 to 18 s.
+At the hosted round trip that is about 50 s of statements against 118 s.
+
+By database: **Bookkeeping 720 (63%) in 19 sessions, Change Journal 287 (25%) in 16 sessions, MDM 130 (11%) in 5 sessions
+(all of the merge), rules 15.** A merge batch is 25 statements (2 locks, 12 reads, 9 writes, BEGIN, COMMIT; the writes are
+already one `INSERT` a table), and a bundle is now 2 batches: about 50 statements.
+
+**"One statement for the merge" is not built, on this evidence.** The reads are a dependent chain (`bound`, `holders`,
+`kinds`, `identifiers_of`, `decisions_about`) with writes between that later reads see, and the matching rules run in the
+engine, so a literal statement needs the rules in SQL, and two calls need an in-memory overlay and a prefetch of what a
+batch can reach, with a duplicate-golden-record risk for a saving of under 100 statements of 1,152 (a second a bundle
+hosted). The raw cursor is psycopg2 (no pipeline mode); queueing writes and sending them in one multi-statement query before
+the next read is the safe first cut (about 25 to 18 round trips a batch). Reopen it if the merge becomes a larger share, or
+for the identifier-only kinds (persons, funds, companies by an identifier), where a set-based statement is a join.
+
+**The next cuts are the 88% that is not the merge:** Bookkeeping's 720 (claims, status before and after each pass in its own
+Python process, leases, reports, schema checks) and the Change Journal's 287 in 16 sessions (each session verifies the
+journal's installed schema before it appends or reads).
 
 ## Checklist
 
 - [x] The statements of one bundle counted by a committed command (`skills/data-operations/scripts/count_statements.py`: a local store with statement logging, grouped by shape) so a change shows as a count (2026-11-15 15:09 ET)
 - [x] The Change Journal appends a bundle's events in one statement (`unnest` of an array through `journal.record_event`) on PostgreSQL, the same receipts; MySQL and SQL Server unchanged. Test: 60 events were 60 statements, now 1 (`test_a_file_set_is_recorded_in_one_statement_on_postgresql`) (2026-11-15 15:09 ET)
 - [x] A checkout no longer pings: the three stores' engines replace a connection older than 30 s at checkout (`pool_recycle`), which finds one dropped while idle with no statement; a shared helper was refused by the journal's independence rule and is not needed. Tests: 4 pings in 5 checkouts, now 0; an aged connection is replaced and a young one reused (`tests/unit/test_engine_checkout.py`) (2026-11-15 15:09 ET)
-- [ ] A bundle's artifacts that share one publication time are pooled into batches of up to 1,000 records (20 merge units to 1), the same records, masters and links on two stores
+- [x] A merge batch is up to 8 MiB, not 1 MiB (PR 1811): a bundle is 2 merge units, not 20, since a persons record carries a 16 KB submissions row; the pooling by publication time that I first planned was wrong, the bundle is already one publication and the batches were cut by size (2026-11-15 15:26 ET)
+- [ ] ~~One statement for the merge~~ deferred: under 100 of 1,152 statements now; see above
 - [ ] One status read a pass, no pause after a finished step, one session a worker, a schema check once a connection
 - [ ] A persons bundle measured again: local, 2,750 statements a bundle before and 1,665 after (5 bundles each, same capture); hosted seconds after the persons lane restarts on this code
 - [ ] Learning → skill
