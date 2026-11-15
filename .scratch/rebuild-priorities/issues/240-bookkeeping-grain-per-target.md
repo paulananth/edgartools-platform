@@ -1,6 +1,6 @@
 # 240: Bookkeeping runs once a bundle or a load, and a source can turn it off
 
-Type: task. Status: open. Blocked by: none. Builds on ticket 232 (which leases the destinations already make redundant),
+Type: task. Status: open (operator, 2026-11-15: "Run with no bookkeeping", then "Yes" to GLEIF first). Blocked by: none. Builds on ticket 232 (which leases the destinations already make redundant),
 ticket 239 (where a bundle's statements go) and the `local: true` target setting.
 
 ## Why
@@ -48,12 +48,36 @@ Recommendation: `bundle` as the default for the sources loaded in bundles (perso
 for the silver-only sources and the one-document deliveries (one claim is the whole load); `unit` for GLEIF, whose merge
 units are long and where a unit-level resume earns its cost.
 
+## What `off` takes to build (read 2026-11-15, GLEIF first)
+
+`rules/local.py` runs only `source.read` and `source.combine`, calling each worker's `execute(envelope, artifacts)` with a
+synthetic envelope and keeping the receipt. GLEIF's target is read, prepare, merge, links, processed. What the rest needs:
+
+- **Envelope.** Every worker reads `input`, `output`, `keys`, `checks`, `cursor`; the merge and journal workers also read
+  `claim.run_id` (the journal event's run), and the report binding reads `claim.step/key/attempt` and `effect_key`. A local
+  run supplies a run id of its own (the load's) and attempt 1.
+- **Verify.** Prepare, merge, links and journal each have a second function that checks the candidate against the input
+  (`envelope["candidate"]`). Bookkeeping calls it after `execute`; `off` calls it in the same process, one after the other,
+  and stops the load on a failed check.
+- **Expansion (the hard part).** Prepare's output is an expansion receipt; Bookkeeping turns its sealed children into the
+  merge units (`generated_worklist`, at most 128 a parent, ordinals offset by the parent's). The runner does the same from
+  the receipt, in order, and the merges run one after the other (the kind lock already serializes them).
+- **Resume.** A stopped load runs again from the Change Journal: a batch recorded as merged is skipped (`_recorded`), and
+  the artifact store never overwrites, so a repeated prepare writes the same object.
+- **What is dropped.** The claim, lease, heartbeat and report rows; nothing else. `bookkeeping status` shows no run.
+- **The setting.** `bookkeeping: {grain: off}` on the target, read by `rules/driving.py` (skip `rules run` and `drive`, call
+  the local runner) and refused by `rules check` for any other value until each grain is built.
+- **Proof.** Load one GLEIF capture slice at `unit` and at `off` into two disposable stores: the same records, masters and
+  links (counts and a content hash), and statements a bundle by `count_statements.py`.
+
+Not started: the runner, the setting and the proof are the next three checklist parts.
+
 ## Checklist
 
 - [ ] The operator's rulings on the table above: the default grain and the sources that turn it off (one question at a time, with a recommendation)
 - [ ] The setting in the source file's target (`bookkeeping:`), validated by `rules check`, in the Mapping Documents' pipeline sheet (`rules mapdoc write`), and in `rules/shape.py`'s expansion
 - [ ] Failing tests first: a target at `off` takes no claim, lease or report and a rerun skips what the Change Journal recorded; at `bundle` a step is one unit; at `load` one run
-- [ ] `off` and `load`: the loader runs the steps (generalizing `local: true`); a stopped load resumes from the journal
+- [ ] `off` and `load`: the loader runs the steps (generalizing `local: true`); a stopped load resumes from the journal. GLEIF first (operator, 2026-11-15); the build is described above, not started
 - [ ] `bundle`: one unit a step, with its units run inside the worker
 - [ ] Each grain measured as statements a bundle (`count_statements.py`) and hosted seconds, on the persons capture
 - [ ] The grain chosen for each source, and the hosted loads of the changed sources run again, after the operator's word
