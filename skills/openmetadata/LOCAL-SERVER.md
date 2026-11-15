@@ -37,6 +37,30 @@ than 2.0.7. If using a different private environment file, set
 `OPENMETADATA_ENV_FILE` to its path when invoking `init.sh`; keep that file
 outside Git and mode `0600`.
 
+### Fresh instance rejects the saved password
+
+Problem: after a new catalog database is created, the saved login returns HTTP
+401 even though the server is healthy. Root cause: the fresh instance still
+has its default administrator password; the private environment file retains
+credentials and `OPENMETADATA_PASSWORD_CHANGED=true` from the previous database.
+That marker describes the old database, not the newly created one.
+
+Confirm the intended Compose project, port and volumes first. For a confirmed
+fresh instance, keep the desired `OPENMETADATA_LOGIN_PASSWORD`, remove the stale
+`OPENMETADATA_PASSWORD_CHANGED` and `OPENMETADATA_TOKEN` entries from the private
+environment file, and supply the fresh instance's bootstrap password through
+`OPENMETADATA_INITIAL_PASSWORD` in that file. Keep it mode `0600` and values out
+of output. Run `bash infra/openmetadata/init.sh` with that private file. The
+credential helper logs in with the bootstrap password, changes it to the saved
+desired password, obtains a new token and removes the bootstrap value.
+
+The native API uses base64 for the password in `POST /api/v1/users/login`, but
+plain strings for `oldPassword`, `newPassword` and `confirmPassword` in
+`PUT /api/v1/users/changePassword`. Require a new login with the desired password
+and confirmed initialization readback; repeat initialization to prove reuse.
+Lesson: reconcile credential state with the actual database after a rebuild,
+including a stale token that may still pass a public version-endpoint read.
+
 ### Exclude bundled demo lineage
 
 Operator policy excludes vendor demonstration lineage from this platform's
