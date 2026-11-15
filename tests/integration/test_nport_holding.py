@@ -178,14 +178,18 @@ def test_a_link_pointed_at_another_dataset_contract_finds_nothing(database, tmp_
             assert conn.scalar(text("SELECT security_mdm_id FROM silver.nport_holding")) is None
 
 
-def test_the_mastering_target_lands_the_holdings_after_the_securities_merge():
-    """The holdings reach silver through the target's own `silver.land` step (ticket 79), after the merge."""
-    steps = {s["name"]: s for s in files.source("sec.nport.security")["bookkeeping"]["targets"]["mastering"]["steps"]}
-    land = steps["land_holding"]
-    assert land["operation"] == "silver.land" and land["requires"] == ["holding", "merge"]
+def test_the_holdings_land_through_their_own_silver_target_with_no_merge_before_them():
+    """MDM and silver are two paths: the `silver` target lands the holdings and waits for no merge (a row whose
+    master is not mastered yet keeps an empty id); `mastering` lands no holding."""
+    targets = files.source("sec.nport.security")["bookkeeping"]["targets"]
+    silver = {s["name"]: s for s in targets["silver"]["steps"]}
+    mastering = {s["name"]: s for s in targets["mastering"]["steps"]}
+    land = silver["land_holding"]
+    assert land["operation"] == "silver.land" and land["requires"] == ["holding"]
     assert land["input"]["keys"] == {"table": "holding", "silver": spec_file(FOLDER / "silver-holding.yaml", None)["table"]}
-    assert steps["links"]["requires"] == ["land_holding"]
-    assert steps["processed"]["requires"] == ["links"]  # the Change Journal records only what landed
+    assert "merge" not in silver and "prepare" not in silver
+    assert silver["processed"]["requires"] == ["land_holding"]  # the Change Journal records only what landed
+    assert "land_holding" not in mastering and mastering["processed"]["requires"] == ["links"]
 
 
 def test_the_land_step_lands_every_holding_once_and_its_verifier_confirms(database, tmp_path, monkeypatch):
