@@ -18,7 +18,43 @@ sessions. At 43 ms to the hosted store that is 118 s, the bundle's 110 s.
 | New sessions | about 36 sessions, 7 setup statements each, and the TLS handshake | one connection a command |
 | The merge's own statements | about 100 | already set-based |
 
-## Remaining after the first two changes
+## Corrected, and the seven wastes (operator, 2026-11-15: "Merge should take millisecond ... Use 7 waste analysis ... not acceptable")
+
+**The first table was wrong.** "Merging into MDM about 110 to 120 s" was the span of two receipts, the merge and the Change
+Journal's `processed`. Measured per step (hosted, 8 bundles): prepare 9 s, merge 62 s, `processed` 38 s. And "the 110 s come from
+per-file journal calls" was wrong too: those 512 calls were about 22 s of the 38 s `processed`, one fifth of the bundle.
+
+**The merge is milliseconds.** Profiled on the local store (every worker process under cProfile): `merge_file` is 0.6 s for 45
+batches, 13 ms a batch. What surrounds it is the cost. Per persons bundle (512 documents, about 300 records), local counts by
+step window; hosted seconds measured:
+
+| Step | Hosted s | Statements | Sessions | What the time is |
+|---|---|---|---|---|
+| prepare | 9 | 163 | 5.5 | a process, its sessions and checks |
+| merge | 62 | 751 (MDM 544, Bookkeeping 115, Journal 92) | 10 | 20 units, each a claim, a report and about 49 MDM statements, for 13 ms of merge |
+| processed | 38 | 276 (+512 journal calls before the fix) | 6.5 | Bookkeeping and journal round trips; 22 s were the 512 calls |
+
+Statements times the hosted round trip (43 ms) gives 7, 32 and 34 s; the rest is processes started (a Python process per
+status check and per worker, each with its own sessions) and waiting.
+
+| Waste | In a persons bundle | Fix |
+|---|---|---|
+| Transport | 16 MB of read output and 16 MB of records pieces a bundle (4.8 GB over 149 bundles), each step reading and re-hashing its input | not the time here; measure after the rest |
+| Inventory | a bundle's manifest (about 33 MB) stays; the old store's were 114 GB | clear a finished run's pieces |
+| Motion | about 1,800 statements and 43 sessions a bundle; 75% are claims, checks and schema verification, about 100 are the merge | one session a worker, a check once a connection |
+| Waiting | a status process before and after each pass (three Python processes a step); a 15 s pause when a pass moves nothing (`driving.py` `PAUSE`) | one status read a pass; no pause for a step that finished |
+| Over-processing | **20 merge units for 512 records** (median 26 records a unit), each repeating the claim, the session and the checks | pool the unit's artifacts into batches of up to 1,000 records |
+| Over-production | one journal event a file (512 calls), a 0.55 MB `processed` receipt a bundle | one statement for the file set (done) |
+| Defects | a ping on every checkout, three round trips (done) | |
+
+**Why 20 units.** `mdm.prepare` without a `publication_key` makes each read artifact its own publication and its own batches
+(`_documents`, the `published is None` branch); a bundle's 512 documents are read in 8 MB slices, so 20 artifacts become 20
+batches, one merge unit each. All 512 records share one effective date, so pooling them is exact. The change: cut batches
+from the artifacts that share one publication time (the one batch of up to 1,000 records), keeping the batch ids and
+publication identities a function of the artifacts they hold so a rerun gives the same ones. Proof: two stores, one loaded
+the current way and one pooled, equal records, masters and links.
+
+## Remaining after the first two changes (counts after them)
 
 Per bundle, locally: 1,665 statements in 36 sessions: about 340 BEGIN and 230 ROLLBACK (a read-only checkout ends in a rollback), 720
 reads, 55 liveness checks left and the session setup. Next: reuse a worker's connections, and read-only checkouts that
@@ -29,6 +65,7 @@ send no BEGIN or ROLLBACK.
 - [x] The statements of one bundle counted by a committed command (`skills/data-operations/scripts/count_statements.py`: a local store with statement logging, grouped by shape) so a change shows as a count (2026-11-15 15:09 ET)
 - [x] The Change Journal appends a bundle's events in one statement (`unnest` of an array through `journal.record_event`) on PostgreSQL, the same receipts; MySQL and SQL Server unchanged. Test: 60 events were 60 statements, now 1 (`test_a_file_set_is_recorded_in_one_statement_on_postgresql`) (2026-11-15 15:09 ET)
 - [x] A checkout no longer pings: the three stores' engines replace a connection older than 30 s at checkout (`pool_recycle`), which finds one dropped while idle with no statement; a shared helper was refused by the journal's independence rule and is not needed. Tests: 4 pings in 5 checkouts, now 0; an aged connection is replaced and a young one reused (`tests/unit/test_engine_checkout.py`) (2026-11-15 15:09 ET)
-- [ ] A worker's commands reuse its connections where one process serves several
+- [ ] A bundle's artifacts that share one publication time are pooled into batches of up to 1,000 records (20 merge units to 1), the same records, masters and links on two stores
+- [ ] One status read a pass, no pause after a finished step, one session a worker, a schema check once a connection
 - [ ] A persons bundle measured again: local, 2,750 statements a bundle before and 1,665 after (5 bundles each, same capture); hosted seconds after the persons lane restarts on this code
 - [ ] Learning → skill
