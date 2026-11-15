@@ -6,6 +6,12 @@ its `mirror` sub-skill and `mirror/references/type-mapping.md`. If unavailable,
 stop and obtain the skill; do not substitute pg_lake, Openflow, exports or
 hybrid tables for an operator-selected managed mirror.
 
+For one target database containing Iceberg tables across several source schemas,
+follow [Single-database Iceberg qualification](SINGLE-DATABASE-ICEBERG.md)
+from an empty isolated source. It requires one PostgreSQL source database,
+explicit approved tables and `target_table_type => 'ICEBERG'`; it does not
+consolidate existing production stores or create billable resources implicitly.
+
 ## Readiness before changes
 
 Use `aws-snowflake-operations` before Snowflake commands. Inspect the selected
