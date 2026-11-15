@@ -28,9 +28,19 @@ hosted run reprocesses its files. Nothing runs on the hosted store without the o
 - [x] Fold N-CEN adviser (reduce and record steps) and N-CEN fund (record step): the filing date becomes an
   instant in the read. Proved by loading N-CEN 2026q1 into two disposable stores, before and after: 6,465 fund and
   840 adviser records, 7,304 masters and 11,167 links in each; no record body and no link differs (2026-11-14 16:38 ET)
-- [ ] Fold N-PORT fund `record.yaml` (a date reformat; the read can do it)
+- [x] Fold N-PORT fund `record.yaml`: the read makes the filing date an instant (a blank stays blank and is set
+  aside, as before) and carries the start facts; mdm.prepare takes the combine's `fund` row. 7 extract steps to 6.
+  Proved on 2026q2, main against this branch: 12,937 Fund records equal body for body, 7 set aside in each, and
+  12,891 IS_SUBFUND_OF links with equal dates (2026-11-14 22:03 ET)
+- [x] OpenFIGI stays at 8 (measured, 2026-11-14): its two reduces together hold about 9.6 million keys in 2026q2,
+  under the engine's 10 million ceiling by 4%, so they stay two; `lines`, `listing` and `record` each choose by
+  condition, which a combine cannot. The open part "Fold OpenFIGI `record.yaml`" below is therefore not done:
+  its record step chooses each field (US composite, else the ISIN country's, else the only listing) (2026-11-14 22:03 ET)
+- [x] N-CEN fund stays at 8: its adviser combine keys on `fund_id`, which the main combine adds by a join, and a
+  join reads its key from the base row only (`combination.rs`); folding it needs that engine line changed, the
+  operator's word (2026-11-14 22:03 ET)
 - [ ] Fold N-PORT registrant `record.yaml`
-- [ ] Fold OpenFIGI `record.yaml`
+- [ ] ~~Fold OpenFIGI `record.yaml`~~ not possible in rules: it chooses by condition, which a combine cannot (see above)
 - [ ] Fold Form ADV `record-custody.yaml` (it computes the custodian id)
 - [ ] OpenFIGI `listing.yaml` stays: it computes each listing's currency from counts a combine joined, which no
   read can
