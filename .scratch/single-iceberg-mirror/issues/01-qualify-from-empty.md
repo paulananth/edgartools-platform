@@ -9,7 +9,7 @@ Type: task
 - [x] Update platform and installed mirror skills with isolated qualification, Iceberg format and explicit expected results, 2026-11-15 12:54 ET.
 - [x] Reuse Docker/psql/Snow CLI and existing clients; no demonstrated orchestration gap and no new helper script, 2026-11-15 12:54 ET.
 - [x] Validate 122 policy/genericity/path/installed-portability checks and Standards/Spec/GoF reviews; installed mirror validation passed, 2026-11-15 12:54 ET.
-- [ ] Publish the skill update in a PR and verify its checked head.
+- [x] Publish the skill update in draft PR #1805; local checks and fixture execution verified on the skill changes, CI remains pending, 2026-11-15 12:56 ET.
 - [ ] Run the hosted synthetic qualification after a concrete test-resource plan and explicit billable-operation approval.
 - [x] Learning → skill: SINGLE-DATABASE-ICEBERG.md separates documentation, executed local fixture, hosted Iceberg, tag enforcement and production consolidation; no new helper was needed, 2026-11-15 12:54 ET.
 
