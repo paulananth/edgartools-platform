@@ -21,13 +21,21 @@ Keep existing explicit process values unless deliberately selecting a new
 environment. Missing configuration means ask the operator to set it in their
 own terminal, never paste it into chat. Examples contain placeholders only.
 
-The shared `.env` is a private URL catalog across agent worktrees. Standard
-database variable names hold hosted worker connections. Saved alternatives
-use `HOSTED_PROD_VERIFIER_`, `HOSTED_PROD_GOVERNANCE_`,
-`HOSTED_PROD_CONNECTION_` and `WORKTREE_` prefixes. These are catalog aliases,
-not variables applications automatically select. Preserve the original role
-files and refresh saved values from them when connections change; do not
-combine credentials or silently substitute an owner for a runtime login.
+The shared `.env` keeps one standard URL variable per store and one per
+catalog service. Use the variable names below directly; keep role-specific
+owner, migration and governance connections in their original private role
+files. Load the appropriate role file only for that duty. Preserve complete
+URLs and keep owner credentials separate from runtime credentials.
+
+## Local catalog endpoint inventory
+
+Keep every database and service URL in the private local connection catalog,
+mode `0600`. `OPENMETADATA_URL` selects the catalog root;
+`AUTO_ONTOLOGY_API_URL` selects the AutoOntology public web gateway. Runtime
+`.env` files remain private. Skills contain variable names and file locations,
+not live hosted addresses or credentials. Inventory assignment names only when
+the operator asks to list variables without values. Load shell-compatible
+assignments with shell sourcing; preserve escaped characters in complete URLs.
 
 ## Database connections and duties
 
