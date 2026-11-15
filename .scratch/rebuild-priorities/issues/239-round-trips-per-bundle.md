@@ -76,6 +76,32 @@ for the identifier-only kinds (persons, funds, companies by an identifier), wher
 Python process, leases, reports, schema checks) and the Change Journal's 287 in 16 sessions (each session verifies the
 journal's installed schema before it appends or reads).
 
+## Bookkeeping's 63%, by the seven wastes (operator, 2026-11-15: "Apply 7 waste")
+
+Bookkeeping takes 750 statements a bundle in 19 sessions (3,000 over 4 persons bundles, local statement log, counts only;
+about 32 s of a hosted bundle at 43 ms a statement). What they are:
+
+| Part | Statements a bundle | Share |
+|---|---|---|
+| BEGIN (3 forms), COMMIT, ROLLBACK around queries | 368 | 49% |
+| New session setup (type lookup, version, schema, SHOW) | 99 | 13% |
+| Queries and writes of Bookkeeping's tables | 343 | 46% (of which the run row 68, unit lists and counts about 130) |
+
+| Waste | Measured | Fix |
+|---|---|---|
+| Motion | 736 transactions, **half with one statement inside**: three round trips (BEGIN, the query, COMMIT or ROLLBACK) for one read; 19 sessions a bundle, each paying setup | a single read runs without a transaction block (autocommit); a read that needs one snapshot keeps its transaction |
+| Over-processing | **every one of the 79 sessions reads the same run row**, 3 to 4 times each (68 a bundle); the driver asks the same step counts twice a pass (before and after) | read the run once a process; one status read a pass |
+| Waiting | the driver starts a Python process for every status check and every worker (4 a step, 16 a bundle) and sleeps 15 s when a pass moves nothing | the driver reads status in its own process; no sleep after a finished step |
+| Over-production | 111 ROLLBACKs a bundle after reads that changed nothing | none after a read outside a transaction |
+| Defects | three BEGIN forms (default, READ COMMITTED, REPEATABLE READ) chosen per call, each a different transaction setup | one isolation, set once a connection |
+| Transport | the run row (its submission document) crosses the wire in all 79 sessions | cached with the run row |
+| Inventory | none found | |
+
+Ordered by the statements each removes, with the effect on a bundle's 1,152: the status reads in the driver's own process
+(12 fewer sessions, about 250 statements); reads without a transaction block (about 180); the run row once a process (about
+60); one isolation a connection (about 30). Together Bookkeeping 750 to about 250, a bundle 1,152 to about 650, hosted about
+50 s to about 28 s of statements.
+
 ## Checklist
 
 - [x] The statements of one bundle counted by a committed command (`skills/data-operations/scripts/count_statements.py`: a local store with statement logging, grouped by shape) so a change shows as a count (2026-11-15 15:09 ET)
@@ -83,6 +109,6 @@ journal's installed schema before it appends or reads).
 - [x] A checkout no longer pings: the three stores' engines replace a connection older than 30 s at checkout (`pool_recycle`), which finds one dropped while idle with no statement; a shared helper was refused by the journal's independence rule and is not needed. Tests: 4 pings in 5 checkouts, now 0; an aged connection is replaced and a young one reused (`tests/unit/test_engine_checkout.py`) (2026-11-15 15:09 ET)
 - [x] A merge batch is up to 8 MiB, not 1 MiB (PR 1811): a bundle is 2 merge units, not 20, since a persons record carries a 16 KB submissions row; the pooling by publication time that I first planned was wrong, the bundle is already one publication and the batches were cut by size (2026-11-15 15:26 ET)
 - [ ] ~~One statement for the merge~~ deferred: under 100 of 1,152 statements now; see above
-- [ ] One status read a pass, no pause after a finished step, one session a worker, a schema check once a connection
+- [ ] Bookkeeping's statements cut by the order above, each measured as a count (750 a bundle now; target about 250)
 - [ ] A persons bundle measured again: local, 2,750 statements a bundle before and 1,665 after (5 bundles each, same capture); hosted seconds after the persons lane restarts on this code
 - [ ] Learning → skill
