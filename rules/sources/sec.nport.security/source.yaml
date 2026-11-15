@@ -38,7 +38,7 @@ pass:
     isin: {column: holding, from: identifiers.yaml, max_input_bytes: 268435456, max_input_rows: 10000000, table: isin, value_column: isin}
     loanx: {column: holding, from: identifiers.yaml, max_input_bytes: 268435456, max_input_rows: 10000000, table: loanx, value_column: loanx}
     sedol: {column: holding, from: identifiers.yaml, max_input_bytes: 268435456, max_input_rows: 10000000, table: sedol, value_column: sedol}
-    series: {column: lei_key, from: sec.nport.fund/source.yaml, max_input_bytes: 268435456, max_input_rows: 1000000, table: filing, value_column: series_id}
+    series: {column: lei_key, from: series-keys.yaml, max_input_bytes: 268435456, max_input_rows: 1000000, table: series_lei, value_column: series_id}
     filed: {column: accession_number, from: filings.yaml, max_input_bytes: 67108864, max_input_rows: 1000000, table: filed, value_column: filed}
 bronze:
   family: sec.nport-datasets
@@ -691,7 +691,7 @@ read:
     # read into the holdings read): by CUSIP (`security_issuer`), and by ISIN for a holding with no usable CUSIP
     # (`no_cusip_issuer`, ticket 102). An issuer LEI not 20 letters and digits ending in two digits, or a holding
     # with no CUSIP or ISIN to hang it on, is not read. A fund's share is issued by its fund series (ticket 234;
-    # operator, 2026-11-14: "Yes"): the `series` pair set (sec.nport.fund's reading: each series' LEI to its
+    # operator, 2026-11-14: "Yes"): the `series` pair set (series-keys.yaml: each series' LEI to its
     # SEC series id, none for an LEI two series file) turns a filed series LEI into its series id, in
     # `security_series` and `no_cusip_series`; the LEI tables keep only the holdings that name no series. The
     # same expressions are in both pairs of tables: keep them in step. issuer-reduce.yaml reads these four.
