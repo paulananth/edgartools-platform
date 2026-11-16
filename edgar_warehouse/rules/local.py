@@ -118,6 +118,13 @@ def run_local(steps: list[dict], items: list[dict], modules: dict, artifacts, *,
         for _, envelope in ready:  # the workers a step's units leave over, for a unit that splits its own work
             envelope["processes"] = max(1, workers // len(ready))
         checked = every and step["operation"] not in LOCAL_OPERATIONS
+        if every and not checked:
+            # A stopped run worked again: a read or a combine whose output is written is not done again. Its output
+            # is written whole or not at all and never replaced, and the same run gives the same unit the same input.
+            for item, envelope in ready:
+                if (kept := _written(artifacts, envelope["output"])) is not None:
+                    done[(step["name"], item["key"])] = kept
+            ready = [(item, envelope) for item, envelope in ready if (step["name"], item["key"]) not in done]
         if workers > 1 and len(ready) > 1:
             from concurrent.futures import ProcessPoolExecutor
             from multiprocessing import get_context
@@ -132,6 +139,17 @@ def run_local(steps: list[dict], items: list[dict], modules: dict, artifacts, *,
                 raise Blocked(f"Step {step['name']} unit {item['key']}: check {', '.join(failed)} failed")
             done[(step["name"], item["key"])] = candidate
     return done
+
+
+def _written(artifacts, uri: str) -> dict | None:
+    """The receipt of an output already written, or none."""
+    import hashlib
+
+    try:
+        data = artifacts.read(uri)
+    except Blocked:
+        return None
+    return {"uri": uri, "sha256": hashlib.sha256(data).hexdigest()}
 
 
 def _input(unit: dict, receipt_of, artifacts) -> dict:
