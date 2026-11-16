@@ -56,19 +56,23 @@ see go wrong; if nothing, write no test.
    with fakes on `PATH`, or call the function. A security or cost invariant that is only readable from
    config (an IAM scope, a log retention) may be pinned, once, with a reason in the test's name.
 2. **Never assert what a fake returns.** A fake that answers `"sentinel"` and a test that asserts the
-   sentinel came back tests the fake. Assert what the code did with the answer.
+   sentinel came back tests the fake. Assert what the code did with the answer. A fake never re-implements the
+   logic it stands in for (a diff of "already applied" pairs): it records what it was handed, and the real
+   logic gets its own test on the real store.
 3. **No copied counts.** `len(x) == 34` over repo content fails on every legitimate addition. Assert the
    property (`x` is not empty, each item has its field), or the one item the rule is about. A closed external
    code set (309 place codes) may keep its count.
-4. **A mock matches the real interface.** Patch with `autospec` or a subclass of the real class or
-   protocol, so a changed signature fails the test. A hand-written fake of an outside service
+4. **A mock matches the real interface.** Patch a function with `tests.support.patching.checked(monkeypatch, owner, "name", replacement)`
+   (never a bare `lambda *a`), or subclass the real class or protocol, so a changed signature fails the test. A hand-written fake of an outside service
    (OpenMetadata, Docker) names the version it was probed against and has one contract test against the
    real service or a recorded response.
 5. **Not tied to call order.** Assert the outcome (rows, state, refusal), not the exact sequence of internal
    calls or the role string that made each one. A `pytest.fail` guard on a call that must never happen
    ("plan must not connect") is a behaviour and is fine.
-6. **Every test has an assertion that can fail.** A test whose only check is `is not None`, or that has no
+6. **No clocks.** A test waits on an event or a counter its own fake sets, never on `time.sleep` and a
+   tolerance: a slow machine must change how long a test takes, not whether it passes.
+7. **Every test has an assertion that can fail.** A test whose only check is `is not None`, or that has no
    assert and no raising helper, proves nothing. Change the code under test once and see the test fail.
-7. **Use real data shapes.** Start a body from the real rules file and change it (as `test_target_manifest`
+8. **Use real data shapes.** Start a body from the real rules file and change it (as `test_target_manifest`
    does), never a hand-built dict that can drift from the real one.
 

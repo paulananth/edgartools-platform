@@ -80,23 +80,24 @@ def test_the_pass_pairs_each_filer_with_its_entity_and_a_shared_name_binds_neith
 
 
 class FakeStore:
-    def __init__(self, rows):
-        self.rows_given, self.asked = rows, []
+    """A store that answers only a query handed the source code it holds records for."""
+
+    def __init__(self, source_code, rows):
+        self.source_code, self.rows_given = source_code, rows
 
     def rows(self, sql, values=()):
-        self.asked.append((sql, list(values)))
-        return self.rows_given
+        return self.rows_given if list(values) == [self.source_code] else []
 
 
 def test_the_stored_company_records_become_filers_whether_the_body_is_text_or_already_parsed():
     import json
-    store = FakeStore([(json.dumps(sec_record("0000000001", "Alpha Widgets Inc")),),
-                       (sec_record("0000000002", "Beta Gadgets Inc"),)])
+    store = FakeStore("sec.company.v1", [(json.dumps(sec_record("0000000001", "Alpha Widgets Inc")),),
+                                         (sec_record("0000000002", "Beta Gadgets Inc"),)])
 
     filers = waterfall.stored_filers(store, "sec.company.v1")
 
     assert [f.cik for f in filers] == ["0000000001", "0000000002"]
-    assert store.asked == [("select body from mastering_record where source_code=%s", ["sec.company.v1"])]
+    assert waterfall.stored_filers(store, "another.source") == []  # only the asked source's records
 
 
 def gleif_tables(*legal_names, address=ADDRESS, copies=1):

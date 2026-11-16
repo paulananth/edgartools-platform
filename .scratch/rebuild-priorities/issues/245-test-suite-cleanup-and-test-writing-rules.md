@@ -14,6 +14,9 @@ Operator, 2026-11-16: an audit of the suite (tautological, structure-sensitive a
 - [x] Replace copied repo-content counts with the property they stood for (entity types, line items, measures, mapdoc classification) 2026-11-16 07:00 ET
 - [x] `FakeSink` implements the whole `Sink` protocol (a path that starts calling `link_keys` or `set_ids` fails loudly) 2026-11-16 07:00 ET
 - [x] The rule: `docs/agents/watching-and-testing.md` "Writing a test", with a pointer in CLAUDE.md 2026-11-16 07:00 ET
+- [x] Patches check the real signature (`tests/support/patching.checked`, 31 patches) and five tests that pinned an absence are deleted (PR 1827) 2026-11-16 07:13 ET
+- [x] `test_worker_renewal.py` waits on events, not clocks; the `apply_pairs` fake records instead of diffing; the waterfall fake no longer asserts SQL text 2026-11-16 07:13 ET
+- [ ] ~~Split `engine/test_json_sequence.py:62` into refused and accepted cases; make the `!=` assertions in `engine/test_company_combination_contract.py:129` exact~~ deferred to a later ticket: small, and the operator has not asked for it
 - [ ] ~~OpenMetadata `_Server` fake in `unit/test_rules_catalog.py`: one contract test against a recorded 2.0.2 response~~ deferred to Codex: OpenMetadata work is Codex's
 - [x] Not changed, on a re-read of current main: `mdm/test_target_manifest.py` starts each body from the real rules file; the Streamlit, native-pull and routine-retirement tests the audit named are already gone from main
 - [x] Learning → skill: none; the rule lives in `docs/agents/watching-and-testing.md` and CLAUDE.md
