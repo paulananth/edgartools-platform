@@ -337,11 +337,17 @@ class Store:
                      for assertion, subject, source, lei, body in self.staged])
         older = []
         for block in blocks(sorted(bound)):
-            older += [(bound[subject], bound[subject], assertion) for assertion, subject, entity in self.rows(
+            older += [(bound[subject], assertion) for assertion, subject, entity in self.rows(
                 "select assertion_id,subject,entity_id from mastering_record "
                 f"where subject in ({marks(block)})", block) if entity != bound[subject]]
-        self.cursor.executemany("update mastering_record set bound_id=coalesce(bound_id,%s),entity_id=%s where assertion_id=%s",
-                                older)
+        # One statement a block, never one a row: a row costs a round trip, and a load that binds records stored
+        # before their golden record existed has an older row for every record of the batch.
+        for block in blocks(older):
+            golden = "case assertion_id " + "when %s then %s " * len(block) + "end"
+            pairs = [value for entity, assertion in block for value in (assertion, entity)]
+            self.cursor.execute(f"update mastering_record set bound_id=coalesce(bound_id,{golden}),entity_id={golden} "
+                                f"where assertion_id in ({marks(block)})",
+                                [*pairs, *pairs, *(assertion for _, assertion in block)])
 
     def update_records(self, records: list[tuple[str, str]]) -> None:
         """Retain newly computed matching evidence on the same source assertion, under the file lock."""
