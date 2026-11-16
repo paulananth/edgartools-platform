@@ -13,6 +13,7 @@ Type: task
 - [ ] ~~Occupancy engine allowlist~~ deferred to journal-guard: `claude/journal-guard-platform-tables` already holds the code and test; this ticket is skill-only.
 - [x] Genericity and guide-path tests on the skill edits. `uv run --no-project --with pytest -- pytest -q -p no:cacheprovider tests/unit/test_profiling_genericity.py tests/unit/test_guides_name_existing_paths.py` 119 passed, 2026-11-15 21:31 ET.
 - [x] Publish the skill PR from `grok/hosted-skill-learnings`. https://github.com/paulananth/edgartools-platform/pull/1823 head 46afddf4, 2026-11-15 21:31 ET.
+- [x] Trim `skills/data-operations/SKILL.md` below 500 lines (`test_every_skill_file_is_short_enough_to_read_whole` failed at 505). Keep occupancy pointer, `grain: run`, and load-chain lanes. 2026-11-15 21:49 ET
 - [x] Learning → skill: change-journal Init (hosted occupancy); data-operations Load a capture (`grain: run` default) and Apply store DDL (`env KEY=value`, occupancy pointer). 2026-11-15 21:31 ET.
 
 ## Scope
