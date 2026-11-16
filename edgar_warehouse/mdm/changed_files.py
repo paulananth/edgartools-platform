@@ -45,6 +45,9 @@ def event_key(source: str, processing: str, key: str, sha256: str) -> str:
     return found
 
 
+HOW_HELD = frozenset({"grain", "local", "lease_seconds", "heartbeat_seconds"})
+
+
 def source_rules(source: str) -> dict:
     """The source's rules version: every rules file in its folder, by name. A target is taken as the
     steps it gives (never its grain) and a rules file without what its pass reads (the steps hold that), so writing the same
@@ -54,13 +57,14 @@ def source_rules(source: str) -> dict:
 
     folder = rules_files.ROOT / "sources" / source
     found = {path.name: expand_source(rules_files.contract(path), folder) for path in sorted(folder.glob("*.yaml"))}
-    # A target's grain says how much of its work Bookkeeping holds, not what the work writes: a changed grain
-    # processes no file again.
+    # A target's grain, and what only a target held by the unit reads, say how much of its work Bookkeeping holds,
+    # not what the work writes: changing one processes no file again.
     targets = ((found.get("source.yaml") or {}).get("bookkeeping") or {}).get("targets") or {}
-    if any("grain" in target for target in targets.values()):
+    if any(HOW_HELD & set(target) for target in targets.values()):
         body = found["source.yaml"]
         found["source.yaml"] = {**body, "bookkeeping": {**body["bookkeeping"], "targets": {
-            name: {key: value for key, value in target.items() if key != "grain"} for name, target in targets.items()}}}
+            name: {key: value for key, value in target.items() if key not in HOW_HELD}
+            for name, target in targets.items()}}}
     return found
 
 

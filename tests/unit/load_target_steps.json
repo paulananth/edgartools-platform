@@ -568,7 +568,6 @@
    "work.accounting",
    "journal.delivered"
   ],
-  "local": true,
   "run": {
    "facts": [
     "ticker_file_date"
@@ -1032,7 +1031,6 @@
    "work.accounting",
    "journal.delivered"
   ],
-  "local": true,
   "run": {
    "facts": [
     "capture_run",
@@ -2451,8 +2449,6 @@
    "work.accounting",
    "journal.delivered"
   ],
-  "heartbeat_seconds": 60,
-  "lease_seconds": 900,
   "run": {
    "facts": [
     "period"
@@ -3460,8 +3456,6 @@
    "work.accounting",
    "journal.delivered"
   ],
-  "heartbeat_seconds": 30,
-  "lease_seconds": 300,
   "steps": [
    {
     "checks": [

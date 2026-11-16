@@ -1219,11 +1219,8 @@ bookkeeping:
     # no order between them; `id_type` is the folder, OpenFIGI's own idType.
     mastering:
       grain: run
-      local: true
       # The date of the SEC ticker file read beside the answers (ticket 248): it starts each ISSUED_BY link.
       run: {facts: [ticker_file_date]}
-      # Source read and combine run in the loader's process (no claim, lease or
-      # verifier); the run in the database starts at prepare.
       # Each request file alone, read beside its answer (its sha256 is in the
       # answer's receipt), so each answer's pair set comes from its own request.
       # The answers, 16 files a unit (one composed slot each), each tied to the

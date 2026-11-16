@@ -18,11 +18,14 @@ STEPS = [
 ]
 
 
-def by_the_unit(name: str) -> dict:
-    """A source's rules with its targets held by the unit, as a `local` target's steps are then staged."""
+def by_the_unit(name: str, local: bool = False) -> dict:
+    """A source's rules with its targets held by the unit; with `local`, its mastering target marked local, as
+    such a target's steps are then staged."""
     body = deepcopy(source(name))
     for target in body["bookkeeping"]["targets"].values():
         target.pop("grain", None)
+    if local:
+        body["bookkeeping"]["targets"]["mastering"]["local"] = True
     return body
 
 
@@ -34,22 +37,34 @@ def test_a_target_may_declare_itself_local_and_nothing_else_changes():
     assert "local" not in validate(by_the_unit("sec.nport.registrant"), "mastering")
 
 
-def test_openfigi_mastering_held_by_the_unit_is_local_and_its_run_starts_at_prepare():
-    config = validate(by_the_unit("openfigi"), "mastering")
+def test_openfigi_mastering_held_by_the_unit_and_marked_local_starts_its_run_at_prepare():
+    config = validate(by_the_unit("openfigi", local=True), "mastering")
 
-    assert config["local"] is True
     assert [step["name"] for step in staged(config)["steps"]] == ["prepare", "merge", "processed"]
 
 
-def test_a_local_target_at_grain_run_holds_no_step_at_all():
-    config = validate(source("openfigi"), "mastering")
+@pytest.mark.parametrize("setting", [{"local": True}, {"lease_seconds": 300}, {"heartbeat_seconds": 30}])
+def test_a_target_at_grain_run_refuses_what_only_a_target_held_by_the_unit_reads(setting):
+    body = deepcopy(source("openfigi"))
+    body["bookkeeping"]["targets"]["mastering"].update(setting)
 
-    assert (config["grain"], config["local"]) == ("run", True)
-    assert staged(config)["steps"] == []
+    with pytest.raises(Blocked, match=f"holds no unit or lease: remove {next(iter(setting))}"):
+        validate(body, "mastering")
+
+
+def test_no_target_at_grain_run_names_a_setting_it_does_not_read():
+    from edgar_warehouse.bookkeeping.clean.config import HELD_BY_THE_UNIT
+    from edgar_warehouse.rules import files
+
+    named = {f"{path.parent.name}/{name}": sorted(HELD_BY_THE_UNIT & set(target))
+             for path in sorted((files.ROOT / "sources").glob("*/source.yaml"))
+             for name, target in (source(path.parent.name).get("bookkeeping", {}).get("targets") or {}).items()
+             if target.get("grain") == "run"}
+    assert {name: found for name, found in named.items() if found} == {}
 
 
 def test_local_must_be_a_boolean():
-    body = deepcopy(source("openfigi"))
+    body = by_the_unit("openfigi")
     body["bookkeeping"]["targets"]["mastering"]["local"] = "yes"
 
     with pytest.raises(Blocked, match="local"):
@@ -163,9 +178,8 @@ def test_an_input_that_reads_another_run_is_a_database_input_even_when_a_local_s
 
 
 def test_a_local_step_that_requires_a_database_step_is_refused_by_the_configuration():
-    body = deepcopy(source("openfigi"))
+    body = by_the_unit("openfigi", local=True)
     target = body["bookkeeping"]["targets"]["mastering"]
-    target["local"] = True
     gate = {**next(s for s in target["steps"] if s["operation"] == "journal.record"), "name": "gate", "requires": []}
     target["steps"].insert(0, gate)  # a database step before the first read, which then requires it
     next(s for s in target["steps"] if s["name"] == "requests")["requires"] = ["gate"]
@@ -177,14 +191,14 @@ def test_a_local_step_that_requires_a_database_step_is_refused_by_the_configurat
 def test_the_driver_waits_only_for_the_steps_the_database_run_holds():
     from edgar_warehouse.rules.driving import run_steps
 
-    assert [step["name"] for step in run_steps(by_the_unit("openfigi"), "mastering")] == ["prepare", "merge", "processed"]
+    assert [step["name"] for step in run_steps(by_the_unit("openfigi", local=True), "mastering")] == ["prepare", "merge", "processed"]
     unmarked = by_the_unit("sec.nport.registrant")
     assert [s["name"] for s in run_steps(unmarked, "mastering")] == [
         s["name"] for s in validate(unmarked, "mastering")["steps"]]
 
 
 def test_company_mastering_held_by_the_unit_is_local_and_its_run_starts_at_records():
-    config = validate(by_the_unit("sec.company"), "mastering")
+    config = validate(by_the_unit("sec.company", local=True), "mastering")
 
     assert config["local"] is True
     assert [step["name"] for step in staged(config)["steps"]] == ["records", "merge", "processed"]
@@ -223,9 +237,9 @@ def test_a_target_that_names_no_grain_is_held_by_the_unit():
     assert staged(config)["steps"] == config["steps"]
 
 
-def test_a_local_target_at_grain_run_keeps_the_manifest_it_was_given():
-    """Its local steps are not run before the run starts: the run takes the whole manifest, and the loader runs
-    every step after the run has started."""
+def test_a_target_at_grain_run_keeps_the_manifest_it_was_given():
+    """No step is run before the run starts: the run takes the whole manifest, and the loader runs every step
+    after the run has started."""
     class Untouched:
         def json(self, ref):
             raise AssertionError("the manifest is not read before the run starts")

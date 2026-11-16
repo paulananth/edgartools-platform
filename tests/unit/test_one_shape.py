@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from edgar_warehouse.mdm import changed_files
 from edgar_warehouse.rules import files, shape
 
 # The steps of every target, recorded once from the hand-written step lists.
@@ -22,7 +23,7 @@ def test_every_target_is_recorded():
 
 @pytest.mark.parametrize("name", sorted(STEPS))
 def test_a_target_gives_its_recorded_steps(name):
-    assert {key: value for key, value in targets()[name].items() if key != "grain"} == STEPS[name]
+    assert {key: value for key, value in targets()[name].items() if key not in changed_files.HOW_HELD} == STEPS[name]
 
 
 # The targets Bookkeeping still holds by the unit: one whose step another target reads as verified units, and the
@@ -38,8 +39,6 @@ def test_every_target_is_at_grain_run_except_the_two_joined_by_a_read_of_verifie
 @pytest.mark.parametrize("name", sorted(STEPS))
 def test_the_rules_version_holds_the_steps_not_how_they_are_written(name):
     # The processing identity is taken from this: a target written in the one shape must not load its files again.
-    from edgar_warehouse.mdm import changed_files
-
     source, target = name.split("/")
     assert changed_files.source_rules(source)["source.yaml"]["bookkeeping"]["targets"][target] == STEPS[name]
 

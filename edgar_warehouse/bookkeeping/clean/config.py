@@ -208,6 +208,10 @@ def _plan(step: dict) -> None:
         raise Blocked("A read of pieces is one unit")
 
 
+# What only a target held by the unit reads: at grain `run` the loader does every step and no lease is taken.
+HELD_BY_THE_UNIT = frozenset({"local", "lease_seconds", "heartbeat_seconds"})
+
+
 def validate(document: dict, target: str) -> dict:
     """Strict versioned contract; reject unknown keys rather than guessing."""
     try:
@@ -233,6 +237,8 @@ def validate(document: dict, target: str) -> dict:
             raise Blocked("local must be boolean")
         if selected.get("grain", "unit") not in GRAINS:
             raise Blocked(f"grain is one of {', '.join(GRAINS)}")
+        if selected.get("grain") == "run" and (held := sorted(HELD_BY_THE_UNIT & set(selected))):
+            raise Blocked(f"A target at grain `run` holds no unit or lease: remove {', '.join(held)}")
         duration = _integer(selected.get("lease_seconds", 120), 2, 86400, "lease_seconds")
         heartbeat = _integer(selected.get("heartbeat_seconds", 30), 1, duration - 1, "heartbeat_seconds")
         retry = selected.get("retry", {})
