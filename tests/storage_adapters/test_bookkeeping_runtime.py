@@ -506,7 +506,10 @@ def test_a_target_at_grain_run_holds_its_start_and_completion_only(control, tmp_
 
     _, _, _, book, _ = control
     body = config(steps=2)
-    body["bookkeeping"]["targets"]["silver"]["grain"] = "run"
+    target = body["bookkeeping"]["targets"]["silver"]
+    target["grain"] = "run"
+    for held in ("lease_seconds", "heartbeat_seconds"):  # a target at grain `run` names no lease
+        target.pop(held, None)
     run_id, _, _ = submission(book, tmp_path, body=body)
     started = book.status(run_id)
     assert started["run"]["state"] == "running" and started["counts"] == {} and started["items"] == []
@@ -535,7 +538,10 @@ def test_a_run_at_grain_run_whose_check_fails_stays_open_and_is_worked_again(con
 
     _, _, _, book, _ = control
     body = config()
-    body["bookkeeping"]["targets"]["silver"]["grain"] = "run"
+    target = body["bookkeeping"]["targets"]["silver"]
+    target["grain"] = "run"
+    for held in ("lease_seconds", "heartbeat_seconds"):  # a target at grain `run` names no lease
+        target.pop(held, None)
     run_id, _, _ = submission(book, tmp_path, body=body)
 
     class Failing:
