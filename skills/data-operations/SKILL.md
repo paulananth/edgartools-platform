@@ -1,6 +1,6 @@
 ---
 name: data-operations
-description: Operates every domain and applies the DDL for MDM, RDM, Bookkeeping, Change Journal and silver on PostgreSQL, MySQL or SQL Server Express. Use when making those stores operational, applying a schema or an approved silver spec, operating daily loads, checking source readiness, reporting load timings, managing a backlog, monitoring a run or maintaining its operational runbook.
+description: Operates every domain and applies the DDL for MDM, RDM, Bookkeeping, Change Journal and silver on PostgreSQL, MySQL or SQL Server Express. Use when making those stores operational, applying a schema or an approved silver spec, operating daily loads, loading with grain: run / no bookkeeping, checking source readiness, reporting load timings, managing a backlog, monitoring a run or maintaining its operational runbook.
 ---
 
 # Data Operations
@@ -38,7 +38,7 @@ For timing reports, use the [five-minute workflow](TIMING-REPORTS.md).
 
 ## Apply store DDL
 
-This skill applies DDL. Read [STORES.md](STORES.md) before creating or changing a store's schema, or applying an approved silver spec, on any engine.
+This skill applies DDL. Read [STORES.md](STORES.md) before creating or changing a store's schema, or applying an approved silver spec, on any engine. A hosted empty Journal database's occupancy is [change-journal Init](../change-journal/SKILL.md#init-and-migrate). Pass one command's owner URL as `KEY=value command args` (a binary may use `env KEY=value command`; a shell function takes the assignment only).
 
 ## Operationalize every domain
 
@@ -122,9 +122,7 @@ Read [INSTALL-SOURCE.md](INSTALL-SOURCE.md) when the task is to load and master 
 
 ## Load a capture
 
-One command loads a captured delivery through one source's target, from
-start to finish. It knows no source, target or store by name. Everything
-comes from the rules files and the stores folder you give it.
+One command loads a captured delivery through one source's target, from start to finish. It knows no source, target or store by name. Everything comes from the rules files and the stores folder you give it.
 
 ```bash
 edgar-warehouse load \
@@ -133,6 +131,8 @@ edgar-warehouse load \
   --stores <stores folder> \
   --workers <readers> --bundles <runs at once> --minutes <window>
 ```
+
+**A load uses `grain: run`.** That is "no bookkeeping" for the target's work: one run row, no units or leases ([bookkeeping grain](../bookkeeping/SKILL.md#grain-how-much-bookkeeping-a-target-uses)). Bookkeeping still initializes and grants workers; `load` still writes the run. `--workers` adds nothing; `--bundles` still runs in parallel. Write `grain: run` on the target (a target that names none still runs as `unit` until it names `run`). A target another target reads as verified units keeps `unit`. Load every captured source through [the load chain](RUNBOOK.md) (`load_chain.py --lane` A P S C L O D, then `--finish`); `waits_for` is the dependency order.
 
 - `--stores` is the stores folder configured through
   [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
@@ -310,10 +310,7 @@ Work it out from counts before starting:
 2. **Wide and narrow steps.** A wide step has one unit per file or group
    (`source.read`). A narrow step is one unit per bundle (`mastering.merge`,
    `mdm.prepare`). Only more bundles at once shorten narrow steps in total.
-3. **Bundles and readers.** `--bundles` is how many runs go at once and
-   `--workers` is the worker processes on each step of a run; each worker
-   checks its own units. Keep `--bundles` × `--workers` near the
-   core count. `load` never starts more workers than a step has units left.
+3. **Bundles and readers.** `--bundles` is how many runs go at once. At `grain: run`, `--workers` adds nothing: keep `--bundles` near the core count. At `unit`, `--workers` is the worker processes on each step; keep `--bundles` × `--workers` near the core count. `load` never starts more workers than a step has units left.
 4. **The bound.** Measure one bundle first (`load` prints each run's
    minutes). The load takes roughly (the number of bundles ÷ `--bundles`,
    rounded up) × that time.
@@ -332,15 +329,7 @@ Work it out from counts before starting:
    a time, and measure one merge's peak memory against the free memory
    before choosing `--bundles`.
 
-   **Problem:** merges that had saved all 52 batches still died, with no
-   receipt (9 of them). **Root cause:** after the saves, the receipt, the
-   resumed-start check and the run report each read every saved batch's intent
-   and publication payload at once (2.7 GB of intents for one bundle; 9.5 GB
-   peak footprint, so swap and a kill). **Fix:** they read one batch at a
-   time (receipt 493 s to 29 s, 1.7 GB). **Lesson:** a failed merge may have
-   saved everything, so count its applied batches before blaming the saves;
-   and a rerun of a saved merge only writes the receipt, so it measures
-   nothing about saving. Measure a merge that has never run.
+   **Lesson:** a merge that saved every batch can still die writing the receipt if that step reads every payload at once; count applied batches before blaming the saves, and measure a merge that has never run (a rerun that only writes the receipt measures nothing about saving).
 
 ### While a load runs
 
@@ -427,7 +416,7 @@ there.
    qualification and approval; missing version evidence is reconciled, not invented.
 3. **Size the work.** Measure usable CPU, memory, disk, database connection budget
    and competing work at the actual execution host/container. Fit the load into
-   the window (**Load a capture**) before choosing `--workers`. Use prior verified measurements and current supported bounds to choose
+   the window (**Load a capture**) before choosing `--bundles`. Use prior verified measurements and current supported bounds to choose
    concurrency and bundle size.
    Unknown estimates start conservatively; exhausted
    resources wait. Size divides the whole backlog into work, never drops records.
