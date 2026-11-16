@@ -337,10 +337,10 @@ rules:
 # and the state of incorporation, for an SEC filer whose address GLEIF's two addresses do not match (the city or
 # postcode agree for 237 of 993 look-alike issuer names, the state for 635). The filer's state counts for a US state
 # only, as US- and its code, against GLEIF's jurisdiction. It follows the name pass above and takes only what that
-# left. DECLARED, NOT SWITCHED ON: a rule that is not an issued identifier is switched on after a measured proof at
-# its kind's bar (a labelled sample of the pairs it adds, with adversarial pairs: parent and subsidiary, the same
-# name in two places), and the operator's word. Two earlier passes that compared less were deleted for adding too
-# few links to prove.
+# left. SWITCHED ON (operator, 2026-11-16: "Switch on"), after a measured proof: on the hosted records it adds 848
+# pairs; the operator reviewed 25 sampled pairs and the seven least likely to match, and none was a wrong match
+# (ticket 250). A LAPSED registration of an ACTIVE entity counts, as in the pass above ("Yes"). Two earlier passes
+# that compared less were deleted for adding too few links to prove.
 - rule_id: sec-gleif-name-jurisdiction
   version: 2026-11-16.name-and-state-of-incorporation
   family: name_binding

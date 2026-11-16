@@ -174,12 +174,13 @@ def test_a_cascade_pass_may_compare_the_jurisdiction_and_rechecks_it_on_the_stag
     assert not _passes(rule, *jurisdictional(state="ZZ", gleif_jurisdiction="CA-BC"))  # no such code
 
 
-def test_the_jurisdiction_pass_is_declared_and_not_switched_on():
-    """Ticket 250: it acts only after a measured proof and the operator's word, so the policy has no entry for it and
-    the waterfall prepares only the passes that act."""
+def test_the_jurisdiction_pass_is_switched_on_after_the_name_pass():
+    """Ticket 250 (operator, 2026-11-16: "Switch on"): the policy acts on it, and it follows the name pass so it takes
+    only what that left."""
     from edgar_warehouse.mdm.activation import activated
 
     rule = _pass("sec-gleif-name-jurisdiction")
     assert [t["args"]["compare"] for t in rule["when"] if t["primitive"] == "cascade_pass@1"] == [["jurisdiction"]]
-    assert not activated(_POLICY, "company", rule, "bind")
-    assert activated(_POLICY, "company", _pass(CITY_OR_POSTCODE), "bind")
+    assert activated(_POLICY, "company", rule, "bind")
+    spec = _cascade.spec(_POLICY)
+    assert [p["pass"] for p in spec["passes"]] == ["name and city or postcode", "name and jurisdiction"]
