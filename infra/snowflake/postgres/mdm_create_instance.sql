@@ -3,7 +3,8 @@
 -- Templated by environment via Snow CLI's Jinja substitution (-D flags).
 -- Required variables: instance_name, network_policy, comment_env.
 -- The referenced network_policy must already exist (see
--- mdm_create_network_policy.sql) before this script runs.
+-- skills/aws-snowflake-operations/scripts/mdm_create_network_policy.sql)
+-- before this script runs.
 --
 -- Run with (dev):
 --   snow sql --connection snowconn --enable-templating JINJA --filename infra/snowflake/postgres/mdm_create_instance.sql \

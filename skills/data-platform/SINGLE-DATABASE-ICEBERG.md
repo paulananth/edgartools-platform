@@ -180,7 +180,8 @@ effect of this test or replace the required Iceberg target with three databases.
 ## Examples
 
 The requested production target is `DB_EDGARTOOLS_MIRROR` with `MDM`, `RDM`
-and `SILVER` schemas. A qualification uses a unique disposable target such as
+and `SILVER` schemas. dbt Gold is built in the writable
+`DB_EDGARTOOLS_GOLD.GOLD` schema, reading the mirror as a source. A qualification uses a unique disposable target such as
 `DB_EDGARTOOLS_MIRROR_Q_<unique>` instead of consuming that production name.
 One source test database contains `mdm.final_data`, `rdm.final_data` and
 `silver.final_data`; only these three tables are selected. The three initial

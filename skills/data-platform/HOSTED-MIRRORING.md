@@ -1,16 +1,25 @@
 # Hosted PostgreSQL mirroring
 
 Use the installed `snowflake-postgres` skill first for Snowflake-hosted
-PostgreSQL. For continuous replication into native Snowflake tables, follow
-its `mirror` sub-skill and `mirror/references/type-mapping.md`. If unavailable,
-stop and obtain the skill; do not substitute pg_lake, Openflow, exports or
-hybrid tables for an operator-selected managed mirror.
+PostgreSQL. For managed mirroring, follow its `mirror` sub-skill and
+`mirror/references/type-mapping.md`; set the target table format explicitly
+from the approved architecture. The selected platform design uses one
+Snowflake-managed Iceberg mirror database. Do not substitute pg_lake, Openflow,
+exports or hybrid tables for that managed mirror.
 
 For one target database containing Iceberg tables across several source schemas,
 follow [Single-database Iceberg qualification](SINGLE-DATABASE-ICEBERG.md)
 from an empty isolated source. It requires one PostgreSQL source database,
 explicit approved tables and `target_table_type => 'ICEBERG'`; it does not
 consolidate existing production stores or create billable resources implicitly.
+
+The target flow is PostgreSQL MDM, RDM and Silver final outputs → the read-only
+`DB_EDGARTOOLS_MIRROR` Iceberg database → dbt models in the writable
+`DB_EDGARTOOLS_GOLD.GOLD` schema. dbt reads approved mirror sources and writes
+Gold outside the managed mirror database. The Gold database also holds the
+`CONTROL` schema for the hosted Postgres ingress rule. Treat source
+consolidation, managed mirror qualification and Gold model qualification as
+distinct gates.
 
 ## Readiness before changes
 
