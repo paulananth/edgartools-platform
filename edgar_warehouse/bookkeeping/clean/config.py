@@ -233,8 +233,6 @@ def validate(document: dict, target: str) -> dict:
             raise Blocked("local must be boolean")
         if selected.get("grain", "unit") not in GRAINS:
             raise Blocked(f"grain is one of {', '.join(GRAINS)}")
-        if selected.get("grain") == "run" and selected.get("local"):
-            raise Blocked("A target at grain `run` runs every step in the loader; drop `local`")
         duration = _integer(selected.get("lease_seconds", 120), 2, 86400, "lease_seconds")
         heartbeat = _integer(selected.get("heartbeat_seconds", 30), 1, duration - 1, "heartbeat_seconds")
         retry = selected.get("retry", {})

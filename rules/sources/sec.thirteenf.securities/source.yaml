@@ -155,10 +155,12 @@ bookkeeping:
     # Security is not mastered yet keeps an empty id for `silver refresh-ids`, so it waits for no merge.
     # Each notes its files in the Change Journal, so an unchanged file is not read again.
     mastering:
+      grain: run
       # The combine's rows are the records, one per CUSIP; no record step.
       extract: combine.yaml
       master: {keys: {dataset: sec.thirteenf.securities.v2, table: security}}
     silver:
+      grain: run
       extract: source.yaml
       silver:
         - {name: land_holding, land: {silver: thirteenf_holding, table: sec_thirteenf_holding}}

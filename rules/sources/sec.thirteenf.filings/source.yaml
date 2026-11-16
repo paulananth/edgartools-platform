@@ -74,6 +74,7 @@ bookkeeping:
   targets:
     # The managers' Companies are mastered by sec.company, which runs first.
     silver:
+      grain: run
       extract: source.yaml
       silver:
         - {name: land, land: {silver: thirteenf_filing, table: filing}}

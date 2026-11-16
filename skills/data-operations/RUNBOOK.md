@@ -221,8 +221,8 @@ unknown, wait/report the missing estimate; do not force it or reject the source.
 On a hosted store a bundle's time is its statements times the round trip (tens of milliseconds each), not its computation
 and not a lock. Before adding parallelism or blaming a lock, count one bundle's statements on a disposable local store with
 statement logging (`log_statement = 'all'`; `<this skill>/scripts/count_statements.py` groups them by shape): a lock shows as sessions waiting on it for long, so
-sample who waits and how old the holder's transaction is. Most of a bundle's statements are Bookkeeping's (a claim, status
-read and report for each unit): the target's grain sets that cost ([bookkeeping](../bookkeeping/SKILL.md#grain-how-much-bookkeeping-a-target-uses)).
+sample who waits and how old the holder's transaction is. At `unit` grain most of a bundle's statements are Bookkeeping's (a claim, status
+read and report for each unit); a target at `grain: run` pays none of them, one process does its bundle, and `--workers` adds nothing to it, so raise `--bundles` instead ([bookkeeping](../bookkeeping/SKILL.md#grain-how-much-bookkeeping-a-target-uses)).
 
 Increasing `workers work --limit` changes the work bound of that invocation; it
 does not itself create parallel workers. A frozen source execution setting cannot

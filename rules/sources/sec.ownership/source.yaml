@@ -28,9 +28,11 @@ bookkeeping:
   version: 2
   targets:
     mastering:
+      grain: run
       extract: ownership-sgml.yaml
       master: {keys: {dataset: sec.ownership.reporting_owner.v1, record_column: record, table: owner_record}}
     silver:
+      grain: run
       extract: ownership-sgml.yaml
       silver:
         - {name: land_owner, land: {silver: insider_reporting_owner, table: reporting_owner}}
@@ -44,6 +46,7 @@ bookkeeping:
     # than the lines. It creates no Security, so OpenFIGI's Securities are mastered first; a symbol
     # no Security holds yet waits unbound.
     security_symbols:
+      grain: run
       extract: ownership-security-sgml.yaml
       master: {names: {prepare: prepare_security, merge: merge_security}, keys: {dataset: sec.ownership.security.v2, record_column: record, table: security_record}, readings: {read: {all: read_security}}}
       names: {record: processed_security}

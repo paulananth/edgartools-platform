@@ -36,6 +36,7 @@ bookkeeping:
   version: 2
   targets:
     mastering:
+      grain: run
       extract: combine.yaml
       master: {keys: {dataset: sec.nport.fund.v1, table: fund}}
       silver:
