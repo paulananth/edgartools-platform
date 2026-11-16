@@ -53,9 +53,12 @@ steps:
     attempts: 5
   - name: openfigi-answers
     lane: S
+    waits_for: [company]
     source: openfigi
     target: mastering
     capture: openfigi/2026q2-nport
+    facts:
+      ticker_file_date: "2026-09-02"
     revision: 0
     workers: 4
     bundles: 3
@@ -63,9 +66,12 @@ steps:
     attempts: 8
   - name: openfigi-tickers
     lane: S
+    waits_for: [company]
     source: openfigi
     target: mastering
     capture: openfigi/form4-tickers-20261109
+    facts:
+      ticker_file_date: "2026-09-02"
     revision: 1
     workers: 2
     bundles: 1

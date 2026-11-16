@@ -32,7 +32,8 @@ def write(tmp_path, monkeypatch, change=None, tamper=None):
     listed.write_text(json.dumps(keys))
     return write_manifest(source="openfigi", target="mastering", capture=str(tmp_path / "capture"),
                           documents=str(listed), capture_run="c", output=str(tmp_path / "bundle"),
-                          as_of="2026-10-17T00:00:00Z", revision=0, journal=MemoryJournal())
+                          as_of="2026-10-17T00:00:00Z", revision=0, journal=MemoryJournal(),
+                          facts={"ticker_file_date": "2026-09-02"})
 
 
 def test_each_answers_file_reads_the_same_files_request_unit(tmp_path, monkeypatch):
@@ -113,7 +114,8 @@ def test_a_changed_request_beside_an_unchanged_answer_is_named_again(tmp_path, m
     def written(out):
         return write_manifest(source="openfigi", target="mastering", capture=str(tmp_path / "capture"),
                               documents=str(listed), capture_run="c", output=str(tmp_path / out),
-                              as_of="2026-10-17T00:00:00Z", revision=0, journal=journal)
+                              as_of="2026-10-17T00:00:00Z", revision=0, journal=journal,
+                              facts={"ticker_file_date": "2026-09-02"})
     first = written("first")
     body = Artifacts().json(Artifacts().json(first["manifest"])["steps"]["processed"][0]["input"])
     assert len(body["files"]) == 16  # each answer and the request beside it
@@ -124,12 +126,12 @@ def test_a_changed_request_beside_an_unchanged_answer_is_named_again(tmp_path, m
     request = tmp_path / "capture" / "id_cusip" / "00007.request.json"
     request.write_text(json.dumps([{"idType": "ID_CUSIP", "idValue": "ZZ0000146"}]))
     chain.capture(tmp_path / "capture", rewrite=False, words=("cusip",))
-    assert written("changed")["scope"]["documents"] == 1
+    assert written("changed")["scope"]["documents"] == 2  # the answer and the SEC ticker file every bundle reads
 
 
 def test_a_read_with_lookups_and_no_context_gets_an_empty_one(tmp_path, monkeypatch):
     def no_context(steps):
-        del steps[1]["input"]["context"]
+        del next(step for step in steps if step["name"] == "answers")["input"]["context"]
     steps = Artifacts().json(write(tmp_path, monkeypatch, no_context)["manifest"])["steps"]
 
     artifact = steps["answers"][0]["input"]["compose"]["document"]["artifacts"][0]
@@ -153,7 +155,7 @@ def test_a_bundle_larger_than_its_readings_is_not_refused_for_its_bytes(tmp_path
         chain.capture(capture, rewrite=False, words=("cusip",))
 
     report = write(tmp_path, monkeypatch, tamper=large)
-    assert report["manifest"] is not None and report["scope"]["documents"] == 8
+    assert report["manifest"] is not None and report["scope"]["documents"] == 9  # 8 answers and the SEC ticker file
 
 
 def gleif_bundle(tmp_path, **inputs):
@@ -312,3 +314,19 @@ def test_a_combines_units_are_each_unit_of_a_step_it_requires(tmp_path, monkeypa
 
     with pytest.raises(Exception, match=message):
         write(tmp_path, monkeypatch, bad)
+
+
+def test_a_document_no_companion_step_reads_needs_no_companion(tmp_path, monkeypatch):
+    """The SEC's ticker file (ticket 248) sits in the bundle beside the answers: the requests step, which reads each
+    answers file's request beside it, asks nothing of a document its `files` do not match."""
+    body = chain.declared(monkeypatch)
+    keys = chain.capture(tmp_path / "capture", words=("cusip",))
+    assert any("company_tickers_exchange" in key for key in keys)
+    listed = tmp_path / "documents.json"
+    listed.write_text(json.dumps(keys))
+    report = write_manifest(source="openfigi", target="mastering", capture=str(tmp_path / "capture"),
+                            documents=str(listed), capture_run="c", output=str(tmp_path / "bundle"),
+                            as_of="2026-10-17T00:00:00Z", revision=0, journal=MemoryJournal(),
+                            facts={"ticker_file_date": "2026-09-02"})
+    steps = Artifacts().json(report["manifest"])["steps"]
+    assert len(steps["sec_tickers"]) == 1 and len(steps["requests"]) == 8

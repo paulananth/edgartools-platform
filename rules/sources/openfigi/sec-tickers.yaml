@@ -1,0 +1,29 @@
+# The SEC's own ticker file, read to ticker and CIK pairs: the lookup record.yaml states a Security's issuer CIK
+# from (ticket 248; operator, 2026-11-16: "Accept recommendation"). A Security's ticker may name its SEC issuer only
+# through this file, and only where it maps the ticker to one CIK; record.yaml's lookup gives none for a ticker
+# several rows share. The ticker is written as OpenFIGI's record writes it (letters and digits only, upper case), so
+# BRK-B and BRKB meet. The CIK is the ten digits the SEC Company's record key holds. No whole record: it feeds a
+# lookup, not MDM. The file is a copy of the SEC's, placed beside the answers in the capture folder; every bundle
+# reads it (`always`), and a changed file makes every document new again.
+source: openfigi
+pass:
+  name: sec_tickers
+  files: '*company_tickers_exchange*'
+  always: true
+execution: {profile: source.read, workers: 1, max_artifacts: 1}
+read:
+  format: json
+  limits: {max_bytes: 33554432, max_records: 100000}
+  tables:
+    pairs:
+      each:
+        matrix:
+          headers: fields
+          rows: data
+          lengths: zip
+          duplicates: last
+          headers_coerce: python
+          on_invalid_row: skip
+      columns:
+        ticker: {text: {path: ticker, coerce: python, null_if: [""], transforms: [{regex_replace: {pattern: "[^A-Za-z0-9]", with: ""}}, {case: upper}]}}
+        cik: {text: {path: cik, coerce: python, null_if: [""], transforms: [{pad: {left: "0000000000", right: ""}}, {keep_last: 10}]}}

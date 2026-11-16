@@ -783,6 +783,15 @@ read as the other. Derive the set
 from a verified source extract (version-2 receipt, below) with `value_column`
 beside `column`: the reading is streamed once, with no materialized join.
 
+A read over a combine's pieces (`pieces:`) takes no lookups. Look the value up
+in the earlier read, where lookups work, and carry it inside the member the
+reduce counts (`<id> <name>|<value>`, the value empty where the lookup gives
+none); the later read splits it at the bar. A lookup over a file of another
+source reads that file from the same capture folder: give its pass
+`always: true` (one unit) so every bundle holds it, and declare the lookup
+`over: all`. A step that reads a companion file beside each document asks it
+only of the documents its `files` match.
+
 The `source.read` **worker input manifest** uses version 3 for these receipts;
 this is distinct from the pipeline's run manifest:
 

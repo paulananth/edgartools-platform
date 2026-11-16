@@ -32,12 +32,26 @@ Route: **the SEC ticker file is read by OpenFIGI's own run.**
 
 Cost: OpenFIGI's rules change, so its 771,554 records load again (accepted by the operator, 2026-11-16).
 
+## Built (2026-11-16, operator: "Option 1", configuration only)
+
+A read over a combine's pieces carries no lookups (the manifest writer builds it from the contract, the pieces and a context), so the lookup could not sit in `record.yaml`. It sits in the answers read, where lookups work, and rides through the reduce in the member:
+
+- `sec-tickers.yaml` reads the SEC ticker file to ticker and ten-digit CIK pairs (`always: true`, one unit, so every bundle holds it).
+- The answers read (`source.yaml`, three tables) makes each listing's member `<FIGI> <ticker>|<CIK>`, the CIK from a pair-set lookup that gives none where the file names none or several. A FIGI has one ticker, so the reduce still counts FIGIs.
+- `record.yaml` cleans the ticker as before, ignoring what follows the bar, and states `issuer_cik` from the chosen member and `issuer_seen` from the load's `ticker_file_date` fact.
+- The Dataset Contract states `ISSUED_BY` to `sec.company.v1` by `issuer_cik`, observed from `issuer_seen`.
+- The load chain: OpenFIGI follows `company`, and its two steps carry the fact.
+- One generic fix in the manifest writer (`read_units.companions`): a step that reads a companion beside each document asks it only of the documents its `files` match, so the ticker file can share a bundle with the answers. Failed first: `Step requests: the receipt of <the ticker file> holds no request_sha256`.
+
+Failed before: `test_a_ticker_the_sec_file_maps_to_one_cik_states_the_securitys_issuer` (no relationship) and, end to end on PostgreSQL 16, the declared chain's links (EXA and EX-J link to their SEC Companies, EXD, two CIKs, links none). 1,416 unit and architecture tests, 2,090 mdm and engine tests and 31 OpenFIGI integration tests pass.
+
 ## Parts
 
 - [x] 2026-11-16 10:12 ET Ruling recorded (operator words above) and the evidence counted.
-- [ ] A test on a disposable store that fails first: a Security whose ticker names one CIK links to that Company; a ticker naming two CIKs, or none, links nothing; a CIK with no Company waits.
-- [ ] The ticker read pass, the lookup and `issuer_cik` in OpenFIGI's reading, and the `ISSUED_BY` relationship in its Dataset Contract, by configuration; the SEC ticker file copied into the OpenFIGI capture (additive).
-- [ ] Mapping Documents regenerated (`rules mapdoc write`); load chain order checked (`waits_for`).
+- [x] 2026-11-16 12:11 ET Tests that failed first (see Built): the contract link, the companion fix, and the declared chain end to end (one CIK links, two CIKs link nothing).
+- [x] 2026-11-16 12:11 ET The ticker read pass, the lookup carried in the member, `issuer_cik`, and the `ISSUED_BY` relationship in the contract, by configuration.
+- [ ] The SEC ticker file copied into each OpenFIGI capture folder it loads (`openfigi/2026q2-nport`, `openfigi/form4-tickers-20261109`) with a receipt: additive, from the file already on this machine. Not done: it is part of the hosted run.
+- [x] 2026-11-16 12:11 ET Mapping Document regenerated (`rules mapdoc write --only openfigi`); load chain order checked (`test_load_chain`).
 - [ ] Hosted: the operator accepted the cost ("yes", 2026-11-16): OpenFIGI's 771,554 records load again. Still to be started on the operator's word to run it.
 - [ ] Not covered, stays open: 6,622 Securities the SEC file does not know, and the 10,177 whose issuer's GLEIF record waits (ticket 22's mint question).
-- [ ] Learning → skill.
+- [x] Learning → skill: `data-platform` READING.md, after `member_value`: a read over a combine's pieces takes no lookups (carry the value in the member), a file of another source rides in the capture with `always`, and a companion is asked only of the documents the step reads.

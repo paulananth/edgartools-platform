@@ -569,6 +569,11 @@
    "journal.delivered"
   ],
   "local": true,
+  "run": {
+   "facts": [
+    "ticker_file_date"
+   ]
+  },
   "steps": [
    {
     "checks": [
@@ -605,6 +610,25 @@
      "source.output"
     ],
     "input": {
+     "always": true,
+     "contract": "sec-tickers.yaml",
+     "files": "*company_tickers_exchange*"
+    },
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "name": "sec_tickers",
+    "operation": "source.read",
+    "requires": []
+   },
+   {
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "input": {
      "context": {
       "batch": "{dir}/{base}",
       "id_type": "{dir}"
@@ -618,6 +642,15 @@
        "max_input_rows": 1000,
        "table": "asked",
        "value_column": "id"
+      },
+      "sec_tickers": {
+       "column": "ticker",
+       "from": "sec_tickers",
+       "max_input_bytes": 4194304,
+       "max_input_rows": 50000,
+       "over": "all",
+       "table": "pairs",
+       "value_column": "cik"
       }
      }
     },
@@ -628,7 +661,8 @@
     "name": "answers",
     "operation": "source.read",
     "requires": [
-     "requests"
+     "requests",
+     "sec_tickers"
     ],
     "units": {
      "groups": 16
@@ -771,6 +805,11 @@
      "source.output"
     ],
     "input": {
+     "context": {
+      "ticker_file_date": {
+       "fact": "ticker_file_date"
+      }
+     },
      "contract": "record.yaml",
      "pieces": {
       "step": "combine"

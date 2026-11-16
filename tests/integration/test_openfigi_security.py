@@ -108,6 +108,20 @@ def capture(root: Path, word: str) -> list[str]:
     return names
 
 
+SEC_TICKERS = "reference/sec/company_tickers_exchange/2026/09/02/company_tickers_exchange.json"
+
+
+def write_sec_tickers(capture_root: Path) -> Path:
+    """The SEC's own ticker file, as a copy beside the answers (ticket 248): one ticker maps to one CIK (EXA), one to
+    two (EXD), and a class ticker is written with a dash (EX-J). Invented."""
+    path = capture_root / SEC_TICKERS
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"fields": ["cik", "name", "ticker", "exchange"], "data": [
+        [51143, "INVENTED A CO", "EXA", "NYSE"], [51144, "INVENTED D CO", "EXD", "NYSE"],
+        [51145, "INVENTED D TWO", "EXD", "OTC"], [51146, "INVENTED J CO", "EX-J", "NYSE"]]}))
+    return path
+
+
 def answer_readings(store: Artifacts, root: Path, word: str) -> list[str]:
     """One kind's eight answers readings (requests.yaml, then the streamed answers reading)."""
     capture_root = root / "capture"
@@ -122,6 +136,9 @@ def answer_readings(store: Artifacts, root: Path, word: str) -> list[str]:
         return store.put(where.as_uri(), {"version": 1, "input": ref(path), "values": values})
 
     answers_body = {k: v for k, v in files.source("openfigi").items() if k in ("source", "execution", "read")}
+    ticker_file = write_sec_tickers(capture_root)
+    pairs = chain.read(store, root / "sec_tickers", files.load(FOLDER / "sec-tickers.yaml"),
+                       [{"input": ref(ticker_file), "context": context(root / "st", ticker_file, {})}], 2)
     readings = []
     for number, name in enumerate(name_list, 1):
         where, batch = root / f"{word}_answers_{number}", f"{kind}/{name.split('.')[0]}"
@@ -131,7 +148,9 @@ def answer_readings(store: Artifacts, root: Path, word: str) -> list[str]:
         answer = capture_root / kind / name
         lookups = store.put(where.as_uri(), {"version": 2, "input": ref(answer), "sets": {"asked": {
             "readings": [asked], "table": "asked", "column": "key", "value_column": "id",
-            "max_input_bytes": 1 << 20, "max_input_rows": 1000}}})
+            "max_input_bytes": 1 << 20, "max_input_rows": 1000},
+            "sec_tickers": {"readings": [pairs], "table": "pairs", "column": "ticker", "value_column": "cik",
+                            "max_input_bytes": 4194304, "max_input_rows": 50000}}})
         readings.append(chain.read(store, where / "answers", answers_body, [{
             "input": ref(answer), "lookups": lookups,
             "context": context(where / "an", answer, {"batch": batch, "id_type": kind})}], 3))
@@ -142,8 +161,10 @@ def read_pieces(store: Artifacts, piece_root: Path, combined: str, contract: str
     """A source extract over a combination's pieces, as the configured run gives them."""
     piece_root.mkdir(parents=True, exist_ok=True)
     pieces = [store.put(piece_root.as_uri(), {"tables": a["tables"]}) for a in store.json(combined)["artifacts"]]
-    return chain.read(store, piece_root, files.load(FOLDER / contract), [
-        {"input": p, "context": store.put(piece_root.as_uri(), {"version": 1, "input": p, "values": {}})}
+    body = files.load(FOLDER / contract)
+    values = {name: "2026-09-02" for name in body["read"].get("context", {})}  # the SEC ticker file's date (ticket 248)
+    return chain.read(store, piece_root, body, [
+        {"input": p, "context": store.put(piece_root.as_uri(), {"version": 1, "input": p, "values": values})}
         for p in pieces], 2)
 
 

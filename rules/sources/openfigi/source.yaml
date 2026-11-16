@@ -40,6 +40,7 @@ pass:
   context: {batch: '{dir}/{base}', id_type: '{dir}'}
   lookups:
     asked: {column: key, from: requests.yaml, max_input_bytes: 1048576, max_input_rows: 1000, table: asked, value_column: id}
+    sec_tickers: {from: sec-tickers.yaml, over: all, table: pairs, column: ticker, value_column: cik, max_input_bytes: 4194304, max_input_rows: 50000}
 bronze:
   family: openfigi
 acquisition:
@@ -454,6 +455,11 @@ read:
       max_bytes: 4194304
       max_value_bytes: 64
       pairs: true
+    sec_tickers:
+      max_values: 50000
+      max_bytes: 4194304
+      max_value_bytes: 64
+      pairs: true
   tables:
     answers:
       each: .
@@ -550,6 +556,9 @@ read:
             path: securityDescription
             null_if:
             - ""
+        # "<FIGI> <ticker>|<CIK>": the CIK is the one the SEC's own ticker file maps this ticker to, none where it
+        # maps the ticker to several or does not know it (ticket 248; operator, 2026-11-16: "Accept recommendation").
+        # A FIGI has one ticker, so the member still counts the FIGIs.
         figi_ticker:
           concat:
           - text:
@@ -558,6 +567,22 @@ read:
               value: ' '
           - text:
               path: ticker
+          - const:
+              value: '|'
+          - coalesce:
+              skip: "null"
+              values:
+              - member_value:
+                  lookup: sec_tickers
+                  key:
+                    text:
+                      path: ticker
+                      transforms:
+                      - regex_replace: {pattern: '[^A-Za-z0-9]', with: ''}
+                      - case: upper
+                  on_many: "null"
+              - const:
+                  value: ''
     us_composites:
       each: data
       select:
@@ -594,6 +619,9 @@ read:
               - context:
                   name: answer
             on_many: error
+        # "<FIGI> <ticker>|<CIK>": the CIK is the one the SEC's own ticker file maps this ticker to, none where it
+        # maps the ticker to several or does not know it (ticket 248; operator, 2026-11-16: "Accept recommendation").
+        # A FIGI has one ticker, so the member still counts the FIGIs.
         figi_ticker:
           concat:
           - text:
@@ -602,6 +630,22 @@ read:
               value: ' '
           - text:
               path: ticker
+          - const:
+              value: '|'
+          - coalesce:
+              skip: "null"
+              values:
+              - member_value:
+                  lookup: sec_tickers
+                  key:
+                    text:
+                      path: ticker
+                      transforms:
+                      - regex_replace: {pattern: '[^A-Za-z0-9]', with: ''}
+                      - case: upper
+                  on_many: "null"
+              - const:
+                  value: ''
     share_classes:
       each: data
       select:
@@ -1052,6 +1096,9 @@ read:
               - context:
                   name: answer
             on_many: error
+        # "<FIGI> <ticker>|<CIK>": the CIK is the one the SEC's own ticker file maps this ticker to, none where it
+        # maps the ticker to several or does not know it (ticket 248; operator, 2026-11-16: "Accept recommendation").
+        # A FIGI has one ticker, so the member still counts the FIGIs.
         figi_ticker:
           concat:
           - text:
@@ -1060,6 +1107,22 @@ read:
               value: ' '
           - text:
               path: ticker
+          - const:
+              value: '|'
+          - coalesce:
+              skip: "null"
+              values:
+              - member_value:
+                  lookup: sec_tickers
+                  key:
+                    text:
+                      path: ticker
+                      transforms:
+                      - regex_replace: {pattern: '[^A-Za-z0-9]', with: ''}
+                      - case: upper
+                  on_many: "null"
+              - const:
+                  value: ''
     # The security type each listing states, counted by reduce.yaml (ticket 120).
     security_types:
       each: data
@@ -1157,6 +1220,8 @@ bookkeeping:
     mastering:
       grain: run
       local: true
+      # The date of the SEC ticker file read beside the answers (ticket 248): it starts each ISSUED_BY link.
+      run: {facts: [ticker_file_date]}
       # Source read and combine run in the loader's process (no claim, lease or
       # verifier); the run in the database starts at prepare.
       # Each request file alone, read beside its answer (its sha256 is in the
@@ -1298,3 +1363,15 @@ dataset_contracts:
         # 2026-11-10 ("step 3 agreed"), the share class FIGI are identifiers above.
         cross_references:
           composite_figi: composite_figi
+        # The Security's issuer, by the SEC's own ticker file (ticket 248; operator, 2026-11-16: "Accept
+        # recommendation"): record.yaml states `issuer_cik` only where that file maps the Security's ticker to
+        # one CIK. The link names the SEC Company of that CIK and waits until it is mastered; the file's date
+        # starts it, observed.
+        relationships:
+        - type: ISSUED_BY
+          target_key: [issuer_cik]
+          target_source: sec.company.v1
+          valid_from: issuer_seen
+          date_basis: observed
+          time_format: date
+          scope: SEC ticker file
