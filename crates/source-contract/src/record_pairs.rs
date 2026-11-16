@@ -5,7 +5,7 @@ use crate::record_tests::{display_text, normalize_value};
 use crate::record_values::{self as values, Document, Object};
 use indexmap::IndexMap;
 use serde::Deserialize;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Deserialize)]
 struct Command {
@@ -19,6 +19,10 @@ struct Command {
     normalizers: IndexMap<String, bool>,
     cascade_version: String,
     pair_comparison: PairComparison,
+    /// The pinned crosswalk from a state of incorporation code (EDGAR's) to the jurisdiction GLEIF writes
+    /// (ticket 250). Rules holds the table; the engine decides with it. None gives a `jurisdiction` part nothing.
+    #[serde(default)]
+    jurisdictions: BTreeMap<String, String>,
 }
 
 #[derive(Deserialize)]
@@ -42,16 +46,8 @@ struct PairComparison {
     right_jurisdiction_field: Option<String>,
 }
 
-/// A US state, the District or a territory, as EDGAR writes it in a state of incorporation.
-const US_STATES: [&str; 56] = [
-    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA",
-    "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK",
-    "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY", "DC", "PR", "GU", "VI",
-    "MP", "AS",
-];
-
-/// The jurisdictions a pass's `jurisdiction` part compares: the filer's, in the form GLEIF writes it (a US state's
-/// code, as `US-` and the code; no other country's), and GLEIF's own.
+/// The jurisdictions a pass's `jurisdiction` part compares: the filer's, in the form GLEIF writes it (by the pinned
+/// crosswalk; a code it does not hold gives none), and GLEIF's own.
 fn jurisdictions(command: &Command, left: &Object, right: &Object) -> Result<(Option<String>, Option<String>), String> {
     let shape = &command.pair_comparison;
     let (Some(left_field), Some(right_field)) = (&shape.left_jurisdiction_field, &shape.right_jurisdiction_field)
@@ -59,9 +55,7 @@ fn jurisdictions(command: &Command, left: &Object, right: &Object) -> Result<(Op
         return Ok((None, None));
     };
     let state = read_optional_text(read_matching_field(left, left_field)?)?
-        .map(|code| code.trim().to_uppercase())
-        .filter(|code| US_STATES.contains(&code.as_str()))
-        .map(|code| format!("US-{code}"));
+        .and_then(|code| command.jurisdictions.get(&code.trim().to_uppercase()).cloned());
     Ok((state, read_optional_text(read_matching_field(right, right_field)?)?))
 }
 

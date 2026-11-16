@@ -16,6 +16,7 @@ from .activation import activated
 from .catalog import CATALOG, assert_current
 from .binding import bound, in_review, nothing, survivors
 from .evidence import decision
+from .names import _EDGAR_ISO as EDGAR_JURISDICTIONS
 from .store import Conflict
 
 FAMILY = "name_binding"
@@ -99,6 +100,7 @@ def compare_candidate_records(rule: dict, pairs: list[tuple[dict, dict]]) -> lis
             "normalizers": {kind.normalizer_name: kind.upper for kind in TYPES.values()},
             "cascade_version": cascade.VERSION,
             "pair_comparison": profile,
+            "jurisdictions": EDGAR_JURISDICTIONS,  # the pinned crosswalk, for a pass's `jurisdiction` part (ticket 250)
         })
     except ValueError as error:
         raise Conflict(str(error)) from None
