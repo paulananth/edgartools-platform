@@ -1,6 +1,6 @@
 # 235: A source extract has the fewest steps that make its records
 
-Type: task. Status: open. Blocked by: none.
+Type: task. Status: resolved. Blocked by: none.
 
 ## Why
 
@@ -53,11 +53,13 @@ hosted run reprocesses its files. Nothing runs on the hosted store without the o
   custodian and 17,965 filing records equal body for body, 15,755 masters, 34 set aside, 80 reviews, 18,504 silver
   custody rows equal (2026-11-14 22:26 ET). June needs `--revision 1` on both: a second month of one source is a new
   publication (data-operations, "A reload whose inputs changed")
-- [ ] OpenFIGI `listing.yaml` stays: it computes each listing's currency from counts a combine joined, which no
-  read can
-- [ ] N-PORT security reads one quarter's zip nine times, one table a read (2026q2 on a disposable store: about
+- [ ] ~~Fold OpenFIGI `listing.yaml`~~ kept: it computes each listing's currency from counts a combine joined,
+  which no read can; the engine change was measured not worth it (below)
+- [x] N-PORT security reads one quarter's zip nine times, one table a read (2026q2 on a disposable store: about
   23 of its 60 minutes); find whether one read step can give several tables from several members of a zip, and fold
-  them
+  them: no longer a waste after the folds below. The MDM path reads four members and the silver path five, each
+  read opening only its own member; on 2026q2 the three small reads took about 1.5 min together, startup included,
+  and the holdings read (910 MB) 5 min. No multi-member read is needed (2026-11-15 12:44 ET)
 - [x] N-PORT security in two paths (operator, 2026-11-14: "make it two split one to mdm and one to silver", then
   "rework the extracts one source at a time, starting with N-PORT security yes"): `mastering` (11 extract steps,
   MDM and its links) and `silver` (6 extract steps, the holdings); every step's body is main's, only divided
@@ -71,7 +73,15 @@ hosted run reprocesses its files. Nothing runs on the hosted store without the o
   field (only the publication key differs, which names the changed contracts); MDM path 21 min (19 before: with
   two workers the two reads had run side by side, so the fold saves a pass of work, not wall time on this
   laptop); worker peak 4.4 GB (2026-11-14 21:40 ET)
-- [ ] N-PORT security: one reading of SUBMISSION.tsv per path (the silver path reads it once since registrant-keys.yaml, below; the MDM path still reads it twice: `submissions` for N-PORT fund's read, `filing_dates` for the holdings)
+- [x] N-PORT security: one reading of SUBMISSION.tsv per path (operator, 2026-11-15: "Add it (Recommended)"): the
+  silver path reads it once since registrant-keys.yaml; the MDM path read it twice only because it ran N-PORT fund's
+  whole read (with its submissions and registrant reads) for one pair set, a series' LEI to its series id.
+  `series-keys.yaml` gives that set with no lookup: the MDM path goes from 10 extract steps to 8, its three reads run
+  side by side, and N-PORT fund's and registrant's rules no longer reprocess it. Proof on 2026q2: the pairs equal
+  N-PORT fund's (13,687 rows, 12,892 LEIs); main against the branch on disposable stores, run side by side (24 min
+  to the merge and links; 8.5 min of it the merge, slowed by two loads on one laptop): 420,690 Security, 12,937
+  Fund and 1,947 registrant records equal per dataset, 409,550 masters grouping the same records, 8 set aside,
+  4 reviews, 15,355 links equal once ids are mapped to records (2026-11-15 12:33 ET)
 - [ ] ~~A lookup read from another source's run~~ deferred: engine code, waits for the operator's word
 - [x] The seven wastes are the design check for a source extract (operator, 2026-11-15: "update the source extract
   functionality skill to use 7 wastes as part of desigh"): data-onboarding, "Design a source extract against the
@@ -122,4 +132,9 @@ hosted run reprocesses its files. Nothing runs on the hosted store without the o
   registrant, N-PORT fund and N-CEN fund on 2026q2, main against the branch: records equal per dataset (12,937 /
   2,054 / 1,947), 14,953 masters, 8 set aside, 12,886 links equal once ids are mapped to records. The holdings'
   12-minute load was not repeated: its only change is this pair set, proved equal (2026-11-15 08:46 ET)
-- [ ] Learning → skill
+- [x] Learning → skill: data-onboarding, "Design a source extract against the seven wastes" (a table of what
+  each waste looks like in an extract), "A lookup reads its own small file", and timing the steps an engine
+  change would remove before proposing it; mdm-engineering, "Choose the cheapest proof": a moved lookup is proved
+  by its pair set on every delivery, a fold or split by main against the change on two disposable stores, and
+  "Compare two stores" (bodies without per-store ids, silver column by column, links mapped to records with
+  evidence sorted, endpoints mastered first, two loads on one laptop each slower) (2026-11-15 12:44 ET)

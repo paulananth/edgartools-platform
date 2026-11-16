@@ -64,3 +64,22 @@ def grant(engine, role):
             raise Conflict("Configuration registration and master-save duties must be separate")
         quoted = engine.dialect.identifier_preparer.quote(role)
         conn.exec_driver_sql(f"GRANT EXECUTE ON FUNCTION {SIGNATURE} TO {quoted}")
+
+
+def grant_registrar(engine, role):
+    """Give the restricted registration login what it reads and the three tables it writes, then delegate
+    registration to it. Run with the owner connection, once the schema is installed."""
+    from edgar_warehouse.mastering.store import WRITTEN
+    from .prepared_registry import require_installed
+
+    quote = engine.dialect.identifier_preparer.quote
+    login = quote(role)
+    with engine.begin() as conn:
+        conn.exec_driver_sql(f"GRANT USAGE ON SCHEMA mdm TO {login}")
+        conn.exec_driver_sql(f"GRANT SELECT ON ALL TABLES IN SCHEMA mdm TO {login}")
+        conn.exec_driver_sql(f"GRANT INSERT ON mdm.policy,mdm.dataset,mdm.dataset_mapping TO {login}")
+        for table in require_installed(conn).tables.values():
+            conn.exec_driver_sql(f"GRANT SELECT ON {quote(table.schema)}.{quote(table.name)} TO {login}")
+        read = ",".join(f"mastering_{name}" for name in (*WRITTEN, "decision"))
+        conn.exec_driver_sql(f"GRANT SELECT ON {read} TO {login}")
+    grant(engine, role)

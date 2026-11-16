@@ -136,6 +136,25 @@ def test_migration_drift_wrong_database_and_runtime_owner_rejected(databases):
             )
 
 
+def test_a_hosted_database_holding_the_platforms_extension_table_still_migrates_the_journal(databases):
+    """A hosted instance puts `extension_base.workers` in every database it creates; the journal's own database
+    holds nothing else but that and the journal, and a table of any other schema still refuses."""
+    first = migrate(databases.ledger_admin, runtime_role="ledger_runtime")
+    try:
+        with databases.ledger_admin.begin() as conn:
+            conn.exec_driver_sql("CREATE SCHEMA extension_base")
+            conn.exec_driver_sql("CREATE TABLE extension_base.workers(id int)")
+        assert migrate(databases.ledger_admin, runtime_role="ledger_runtime") == first
+        with databases.ledger_admin.begin() as conn:
+            conn.exec_driver_sql("CREATE TABLE public.stray(id int)")
+        with pytest.raises(Blocked, match="only the journal"):
+            migrate(databases.ledger_admin, runtime_role="ledger_runtime")
+    finally:
+        with databases.ledger_admin.begin() as conn:
+            conn.exec_driver_sql("DROP TABLE IF EXISTS public.stray")
+            conn.exec_driver_sql("DROP SCHEMA IF EXISTS extension_base CASCADE")
+
+
 def test_cli_inspection_and_receipt_verification(
     databases, tmp_path, monkeypatch, capsys
 ):

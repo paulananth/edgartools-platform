@@ -62,7 +62,7 @@ silver database intact and keeps its login in the env files; `--no-silver` alone
 Silver is part of the platform and comes with `up <name>`. Register every committed silver table spec:
 
 ```bash
-bash infra/scripts/deploy-silver-local.sh <name>
+bash infra/scripts/deploy-silver.sh <name>
 ```
 
 The script migrates silver and registers each `rules/sources/*/silver-*.yaml`.

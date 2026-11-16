@@ -320,11 +320,20 @@ Name the claim in one sentence, then take the smallest cohort that can falsify i
 | A rebuilt merge path | Replay real stored records and compare with the stored masters: members, identifiers, each field's value, winner and conflicts. Pick whole masters, so none is cut in two, and run batches of the real size as well as one record a batch: each size hides faults the other shows. |
 | Any code, a migration, a rules or data file | The affected tests, locally, and CI (`CLAUDE.md`, "Tests"). A source's rules file is also read by tests that never name the source, through a shared helper (two tests reached a source through another test's helper and only CI found them). Before the first push of a change to a source's rules, run the whole test folder CI runs for it once (`tests/integration` takes 12 minutes) rather than the files whose names match |
 | A rule upstream of MDM (a source extract, a combine step) | Compare the changed step's output over a capture, and the combined output on one bundle. Equal combined bytes mean everything downstream is unchanged |
+| A lookup moved to another read file | Compare the pair set from the old read and the new one on every captured delivery. Equal pairs prove every reader that uses the set: load one reader end to end at most, never each reader again |
+| A source extract folded or split | Load the same capture with main and with the change on two disposable stores, then compare them (below) |
 | The Merge Stage engine, a worker, Bookkeeping | A Proving Run on a pinned cohort, and the full installed proof on an empty store: every count as before, a killed worker resumes, the second pass changes nothing |
 | Matching rules, a Dataset Contract | The smallest cohort that contains each new case. One slice whose second pass changes nothing proves the path on real records. A case that slice did not contain is the one bundle that contains it, then stop. The whole delivery is the proof only when the claim is that delivery's totals, or switch-on |
 | A storage adapter or a change claimed to work across databases | The shared per-engine behavior checks above for every affected kind and source; preserve restricted-role, transaction and recovery guarantees |
 | Speed | Time per batch over a whole feed: flat, not growing with the store. Each worker's process time is in the run's progress lines; `mastering.merge` gives one total a file. |
 | A version whose rules moved since its last proof, each change proven by its own merged PR at the level this table names for it | No new run: carry the last proof forward. Write a proof file from the last one: its counts and `batch_hash`, `passed: true`, `digest` set to the new version's digest (`rules record-proof` refuses any other), its acquisition evidence if it had any, and under `evidence` and `note` the run it came from and each change since with its PR. Record it with `rules record-proof --proof-uri --proof-sha256`; `rules pending` then shows that evidence for approval. A change without such a proof gets its own row's proof first |
+
+**Compare two stores** by what they hold, never by the ids each store makes. Records: each body without its
+assertion id and publication key. Silver rows: column by column, without the load time; an MDM id column by
+how many rows hold one. Links: each master and assertion id mapped to the records it holds, and each evidence
+list sorted, since it keeps store order. Master the kinds a links step points to first: a links step with
+nothing to link refuses an empty snapshot. Two full loads side by side on one laptop share its memory, so
+each runs slower than alone; say the pair's time.
 
 Say the time of any proof over ten minutes before starting it. When a run
 shows a case the cohort did not contain, prove that case and stop. Name what

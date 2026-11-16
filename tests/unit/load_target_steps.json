@@ -2447,76 +2447,15 @@
      "source.output"
     ],
     "input": {
-     "contract": "sec.nport.registrant/submissions.yaml"
+     "contract": "series-keys.yaml"
     },
     "key": "{unit}",
     "leases": [
      "artifact:{destination}"
     ],
-    "name": "submissions",
+    "name": "series_keys",
     "operation": "source.read",
     "requires": [],
-    "units": {
-     "each": "file"
-    }
-   },
-   {
-    "checks": [
-     "input.hash",
-     "output.receipt",
-     "source.output"
-    ],
-    "input": {
-     "contract": "sec.nport.registrant/registrant-keys.yaml"
-    },
-    "key": "{unit}",
-    "leases": [
-     "artifact:{destination}"
-    ],
-    "name": "registrant_keys",
-    "operation": "source.read",
-    "requires": [],
-    "units": {
-     "each": "file"
-    }
-   },
-   {
-    "checks": [
-     "input.hash",
-     "output.receipt",
-     "source.output"
-    ],
-    "input": {
-     "contract": "sec.nport.fund/source.yaml",
-     "lookups": {
-      "filed": {
-       "column": "accession_number",
-       "from": "submissions",
-       "max_input_bytes": 67108864,
-       "max_input_rows": 1000000,
-       "table": "filed",
-       "value_column": "filed"
-      },
-      "registrant": {
-       "column": "accession_number",
-       "from": "registrant_keys",
-       "max_input_bytes": 268435456,
-       "max_input_rows": 1000000,
-       "table": "registrant",
-       "value_column": "cik"
-      }
-     }
-    },
-    "key": "{unit}",
-    "leases": [
-     "artifact:{destination}"
-    ],
-    "name": "filings",
-    "operation": "source.read",
-    "requires": [
-     "submissions",
-     "registrant_keys"
-    ],
     "units": {
      "each": "file"
     }
@@ -2596,10 +2535,10 @@
       },
       "series": {
        "column": "lei_key",
-       "from": "filings",
+       "from": "series_keys",
        "max_input_bytes": 268435456,
        "max_input_rows": 1000000,
-       "table": "filing",
+       "table": "series_lei",
        "value_column": "series_id"
       }
      }
@@ -2612,7 +2551,7 @@
     "operation": "source.read",
     "requires": [
      "identifiers",
-     "filings",
+     "series_keys",
      "filing_dates"
     ],
     "units": {
