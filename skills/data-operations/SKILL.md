@@ -1,6 +1,6 @@
 ---
 name: data-operations
-description: Operates every domain and applies the DDL for MDM, RDM, Bookkeeping, Change Journal and silver on PostgreSQL, MySQL or SQL Server Express. Use when making those stores operational, applying a schema or an approved silver spec, operating daily loads, checking source readiness, reporting load timings, managing a backlog, monitoring a run or maintaining its operational runbook.
+description: Operates every domain and applies the DDL for MDM, RDM, Bookkeeping, Change Journal and silver on PostgreSQL, MySQL or SQL Server Express. Use when making those stores operational, applying a schema or an approved silver spec, operating daily loads, loading with grain: run / no bookkeeping, checking source readiness, reporting load timings, managing a backlog, monitoring a run or maintaining its operational runbook.
 ---
 
 # Data Operations
@@ -38,7 +38,7 @@ For timing reports, use the [five-minute workflow](TIMING-REPORTS.md).
 
 ## Apply store DDL
 
-This skill applies DDL. Read [STORES.md](STORES.md) before creating or changing a store's schema, or applying an approved silver spec, on any engine.
+This skill applies DDL. Read [STORES.md](STORES.md) before creating or changing a store's schema, or applying an approved silver spec, on any engine. A hosted empty Journal database's occupancy is [change-journal Init](../change-journal/SKILL.md#init-and-migrate). Pass one command's owner URL as `env KEY=value command args`; each assignment stands before the command.
 
 ## Operationalize every domain
 
@@ -133,6 +133,13 @@ edgar-warehouse load \
   --stores <stores folder> \
   --workers <readers> --bundles <runs at once> --minutes <window>
 ```
+
+**A load uses `grain: run`.** That is "no bookkeeping" for the target's work: one run
+row, no units or leases ([bookkeeping grain](../bookkeeping/SKILL.md#grain-how-much-bookkeeping-a-target-uses)).
+Bookkeeping still initializes and grants workers; `load` still writes the run.
+`--workers` adds nothing; `--bundles` still runs in parallel. Write `grain: run`
+on the target (a target that names none still runs as `unit` until it names `run`).
+A target another target reads as verified units keeps `unit`.
 
 - `--stores` is the stores folder configured through
   [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
