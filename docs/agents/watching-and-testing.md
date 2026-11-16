@@ -44,3 +44,31 @@ after it has exited.
   test files instead. The storage-adapter scenarios run locally on MySQL with
   `CI=true SKILL_ADAPTER_TEST_ENGINE=mysql uv run --no-sync pytest tests/storage_adapters/...` (the database clients are in the `dev` group);
   remove the `skill-adapter-proof-*` containers after.
+
+## Writing a test
+
+A test earns its place by failing when behaviour breaks and by passing when only the internals change
+(operator, 2026-11-16, after an audit of the suite). Before writing one, say what a user of the code would
+see go wrong; if nothing, write no test.
+
+1. **Assert behaviour, never a file's text.** Do not read a script, Terraform or YAML file and assert that
+   a string is in it, or is gone from it ("no longer contains X" is a changelog, not a test). Run the script
+   with fakes on `PATH`, or call the function. A security or cost invariant that is only readable from
+   config (an IAM scope, a log retention) may be pinned, once, with a reason in the test's name.
+2. **Never assert what a fake returns.** A fake that answers `"sentinel"` and a test that asserts the
+   sentinel came back tests the fake. Assert what the code did with the answer.
+3. **No copied counts.** `len(x) == 34` over repo content fails on every legitimate addition. Assert the
+   property (`x` is not empty, each item has its field), or the one item the rule is about. A closed external
+   code set (309 place codes) may keep its count.
+4. **A mock matches the real interface.** Patch with `autospec` or a subclass of the real class or
+   protocol, so a changed signature fails the test. A hand-written fake of an outside service
+   (OpenMetadata, Docker) names the version it was probed against and has one contract test against the
+   real service or a recorded response.
+5. **Not tied to call order.** Assert the outcome (rows, state, refusal), not the exact sequence of internal
+   calls or the role string that made each one. A `pytest.fail` guard on a call that must never happen
+   ("plan must not connect") is a behaviour and is fine.
+6. **Every test has an assertion that can fail.** A test whose only check is `is not None`, or that has no
+   assert and no raising helper, proves nothing. Change the code under test once and see the test fail.
+7. **Use real data shapes.** Start a body from the real rules file and change it (as `test_target_manifest`
+   does), never a hand-built dict that can drift from the real one.
+

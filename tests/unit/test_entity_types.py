@@ -26,5 +26,5 @@ def test_every_source_in_the_repo_states_its_entity_types():
     stated = {code: found for name in ("gleif", "iapd.adv", "openfigi", "sec.company", "sec.ncen.adviser", "sec.ncen.class", "sec.ncen.fund", "sec.ncen.registrant", "sec.nport.fund", "sec.nport.registrant",
                                        "sec.nport.security", "sec.ownership", "sec.submissions.person", "sec.thirteenf.securities")
               for code, found in files.entity_types(files.source(name)).items()}
-    assert len(stated) == 18
+    assert stated
     assert {v["origin"] for v in stated.values()} == {"fixed", "rule", "source_field"}
