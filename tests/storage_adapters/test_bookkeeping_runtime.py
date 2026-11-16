@@ -496,3 +496,56 @@ def test_mysql_uses_the_existing_host_restricted_runtime_account(database_factor
                     for group in granted.values():
                         conn.execute(text("DROP ROLE " + quote(group["role"]) + "@" + quote("%")))
                     conn.execute(text("RENAME USER " + restricted + " TO " + original))
+
+
+def test_a_target_at_grain_run_holds_its_start_and_completion_only(control, tmp_path):
+    """Bookkeeping records that the run started and that it completed, and no unit between: the loader's own
+    process does every step, each unit under the run's id and checked by its worker module."""
+    from edgar_warehouse.rules import local
+    from edgar_warehouse.workers import copy
+
+    _, _, _, book, _ = control
+    body = config(steps=2)
+    body["bookkeeping"]["targets"]["silver"]["grain"] = "run"
+    run_id, _, _ = submission(book, tmp_path, body=body)
+    started = book.status(run_id)
+    assert started["run"]["state"] == "running" and started["counts"] == {} and started["items"] == []
+
+    seen = []
+
+    class Recording:
+        @staticmethod
+        def execute(envelope, artifacts):
+            seen.append((envelope["claim"]["run_id"], envelope["claim"]["step"], envelope["claim"]["key"]))
+            return copy.execute(envelope, artifacts)
+        check = staticmethod(copy.check)
+
+    final = local.work_run(book, run_id, modules={book.profile: Recording})
+    assert final["run"]["state"] == "complete" and final["counts"] == {} and final["failed_steps"] == []
+    assert seen == [(run_id, "s0", "0"), (run_id, "s0", "1"), (run_id, "s1", "0"), (run_id, "s1", "1")]
+    assert all((tmp_path / f"output-{n}").exists() for n in range(2))
+    assert local.work_run(book, run_id, modules={book.profile: Recording})["run"]["state"] == "complete"
+    assert len(seen) == 4  # a complete run is not worked again
+
+
+def test_a_run_at_grain_run_whose_check_fails_stays_open_and_is_worked_again(control, tmp_path):
+    from edgar_warehouse.control_contract import Blocked
+    from edgar_warehouse.rules import local
+    from edgar_warehouse.workers import copy
+
+    _, _, _, book, _ = control
+    body = config()
+    body["bookkeeping"]["targets"]["silver"]["grain"] = "run"
+    run_id, _, _ = submission(book, tmp_path, body=body)
+
+    class Failing:
+        execute = staticmethod(copy.execute)
+
+        @staticmethod
+        def check(envelope, artifacts):
+            return {"output.matches": False}, []
+
+    with pytest.raises(Blocked, match="check output.matches failed"):
+        local.work_run(book, run_id, modules={book.profile: Failing})
+    assert book.status(run_id)["run"]["state"] == "running"
+    assert local.work_run(book, run_id, modules={book.profile: copy})["run"]["state"] == "complete"

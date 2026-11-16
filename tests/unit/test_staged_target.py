@@ -173,3 +173,36 @@ def test_company_mastering_is_local_and_its_run_starts_at_records():
 
     assert config["local"] is True
     assert [step["name"] for step in staged(config)["steps"]] == ["records", "merge", "processed"]
+
+
+def test_a_target_at_grain_run_keeps_no_step_in_the_database_and_its_manifest_is_still_checked():
+    """Bookkeeping holds the run's start and completion only: the run has no step and no unit, and the manifest
+    is checked against the steps the loader will run."""
+    from edgar_warehouse.bookkeeping.clean.config import worklist
+
+    body = deepcopy(source("sec.nport.registrant"))
+    body["bookkeeping"]["targets"]["mastering"]["grain"] = "run"
+    config = staged(validate(body, "mastering"))
+
+    assert config["steps"] == [] and config["loader_steps"]
+    whole = {"version": 2, "steps": {step["name"]: [] for step in config["loader_steps"]}}
+    with pytest.raises(Blocked, match="Zero work"):
+        worklist(whole, config)  # checked as the loader will run it
+    assert worklist(whole, {**config, "allow_zero_work": True}) == []
+    with pytest.raises(Blocked, match="exactly the configured steps"):
+        worklist({"version": 2, "steps": {}}, {**config, "allow_zero_work": True})
+
+
+@pytest.mark.parametrize("change, message", [({"grain": "off"}, "grain is one of"), ({"grain": False}, "grain is one of"),
+                                             ({"grain": "run", "local": True}, "drop `local`")])
+def test_a_grain_is_unit_or_run_and_a_run_grain_target_is_not_also_local(change, message):
+    body = deepcopy(source("sec.nport.registrant"))
+    body["bookkeeping"]["targets"]["mastering"].update(change)
+
+    with pytest.raises(Blocked, match=message):
+        validate(body, "mastering")
+
+
+def test_a_target_that_names_no_grain_is_held_by_the_unit():
+    assert "grain" not in validate(source("sec.nport.registrant"), "mastering")
+    assert all(step for step in staged(validate(source("sec.nport.registrant"), "mastering"))["steps"])

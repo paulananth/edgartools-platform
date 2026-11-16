@@ -30,7 +30,7 @@ A target says how much Bookkeeping it uses, in its source file, one setting for 
 | `unit` (today) | every unit of every step: claim, lease, heartbeat, check, report | the unit | the most |
 | `bundle` | one run for a bundle with one unit a step: the step claimed once, its units run inside the worker | the step of a bundle | a claim a step |
 | `load` | one run for the load, one unit | the load; the Change Journal skips the files done | one claim |
-| `off` | the run's start and completion only; the loader runs the steps itself (as `local: true` does for read and combine) | the file: the Change Journal skips what was processed | two writes a load |
+| `off` (built as `grain: run`) | the run's start and completion only; the loader runs the steps itself (as `local: true` does for read and combine) | the file: the Change Journal skips what was processed | two writes a load |
 
 What a coarser grain gives up, and what already stands in for it:
 
@@ -81,12 +81,12 @@ Not started: the runner, the setting and the proof are the next three checklist 
 ## Checklist
 
 - [ ] The operator's rulings on the table above: the default grain and the sources that turn it off (one question at a time, with a recommendation)
-- [ ] The setting in the source file's target (`bookkeeping:`), validated by `rules check`, in the Mapping Documents' pipeline sheet (`rules mapdoc write`), and in `rules/shape.py`'s expansion
-- [ ] Failing tests first: a target at `off` takes no claim, lease or report and a rerun skips what the Change Journal recorded; at `bundle` a step is one unit; at `load` one run
-- [ ] `off` records the run's start and completion in Bookkeeping, and nothing between; test: the catalog's Pipeline status is built from that row alone (Pending while running, Successful when complete)
-- [ ] `off` and `load`: the loader runs the steps (generalizing `local: true`); a stopped load resumes from the journal. GLEIF first (operator, 2026-11-15); the build is described above, not started
-- [ ] `bundle`: one unit a step, with its units run inside the worker
+- [x] The setting on the source file's target: `grain: run` (`unit` is the default; not `off`, which YAML reads as false), validated in `config.validate`: `test_a_grain_is_unit_or_run_and_a_run_grain_target_is_not_also_local` (2026-11-15 19:01 ET). Not done: a line in the Mapping Documents' pipeline sheet
+- [x] Tests, each failing on the code before ("Unknown target option"): a run at `run` grain holds no unit and completes (`test_a_target_at_grain_run_holds_its_start_and_completion_only`, PostgreSQL and MySQL); a failed check leaves it running and it is worked again; the loader works such a run by one command and an open one again (`test_rules_loading.py`) (2026-11-15 19:01 ET)
+- [x] The run's start and completion are recorded and nothing between: on a disposable store Bookkeeping held 1 run row and no work item, lease, checkpoint or outbox row, against 1 run and 6 of each at `unit` (2026-11-15 19:01 ET)
+- [x] The loader runs every step (`local.work_run`, `rules run --work-run-id`, called by `load`), generic for any target. Proof on one N-CEN registrant quarter at each grain, two disposable stores: every MDM and silver table holds the same number of rows (14 non-empty tables, 1,413 rows); the journal holds the same batch and file records and lacks only Bookkeeping's 6 per-unit events; a second load loads nothing; 3.6 s against 6.1 s (2026-11-15 19:01 ET). Not done: GLEIF itself, which is loading on the hosted store at `unit` now; its switch needs the operator's word, since a changed rules file is a new processing identity
+- [ ] ~~`bundle` and `load` grains~~ deferred: `run` gives what the operator asked for (off, with start and completion); a grain between is built when a source needs one
 - [ ] Each grain measured as statements a bundle (`count_statements.py`) and hosted seconds, on the persons capture
 - [ ] The grain chosen for each source, and the hosted loads of the changed sources run again, after the operator's word
-- [ ] Skills: bookkeeping (the grain table and the rule), data-onboarding (the target setting), data-operations (resource sizing and the load runbook) as each grain is built
+- [x] Skills: bookkeeping ("Grain": the two grains, what `run` keeps and gives up, how to prove a change) (2026-11-15 19:01 ET); data-onboarding and data-operations already point to it
 - [ ] Learning → skill

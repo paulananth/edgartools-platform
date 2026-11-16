@@ -217,7 +217,7 @@ def validate(document: dict, target: str) -> dict:
         planned = body["version"] == 2
         selected = body["targets"][target]
         if set(selected) - {"steps", "lease_seconds", "heartbeat_seconds", "retry", "allow_zero_work", "checks",
-                            "local", "preparation"} - (
+                            "local", "preparation", "grain"} - (
                 {"run"} if planned else set()):
             raise Blocked("Unknown target option")
         declared = run_inputs(selected) if planned else {"facts": [], "files": []}
@@ -231,6 +231,10 @@ def validate(document: dict, target: str) -> dict:
             raise Blocked("allow_zero_work must be boolean")
         if type(selected.get("local", False)) is not bool:
             raise Blocked("local must be boolean")
+        if selected.get("grain", "unit") not in GRAINS:
+            raise Blocked(f"grain is one of {', '.join(GRAINS)}")
+        if selected.get("grain") == "run" and selected.get("local"):
+            raise Blocked("A target at grain `run` runs every step in the loader; drop `local`")
         duration = _integer(selected.get("lease_seconds", 120), 2, 86400, "lease_seconds")
         heartbeat = _integer(selected.get("heartbeat_seconds", 30), 1, duration - 1, "heartbeat_seconds")
         retry = selected.get("retry", {})
@@ -304,6 +308,12 @@ def validate(document: dict, target: str) -> dict:
         raise Blocked("Malformed bookkeeping configuration") from exc
 
 
+# How much of a target's work Bookkeeping holds. `unit`: every unit of every step, claimed, leased and reported.
+# `run`: the run alone, its start and its completion; the loader runs every step itself (`rules/local.py`), and a
+# stopped load resumes the same run. (Not `off`: YAML reads a bare `off` as false.)
+GRAINS = ("unit", "run")
+
+
 # The operations a target marked `local: true` runs in the loader's own process: they turn captured files into
 # extracts and write files with receipts, so they need no claim or lease (ticket 210).
 LOCAL_OPERATIONS = frozenset({"source.read", "source.combine"})
@@ -312,6 +322,8 @@ LOCAL_OPERATIONS = frozenset({"source.read", "source.combine"})
 def staged(config: dict) -> dict:
     """The steps of a run in the database: a target marked `local` has its local steps run by the loader, so the
     run starts at the first step after them and no step waits on one of them."""
+    if config.get("grain") == "run":
+        return {**config, "steps": [], "loader_steps": config["steps"]}
     if not config.get("local"):
         return config
     local = {step["name"] for step in config["steps"] if step["operation"] in LOCAL_OPERATIONS}
@@ -397,6 +409,10 @@ def worklist(manifest: dict, config: dict) -> list[dict]:
     name a preceding prerequisite's unit, or compose a document from several;
     only verified output can be resolved at execution time. No paths or work are discovered on resume.
     """
+    if "loader_steps" in config:
+        # A target at grain `run`: the manifest is checked as the loader will run it, and the run holds no unit.
+        worklist(manifest, {**{k: v for k, v in config.items() if k != "loader_steps"}, "steps": config["loader_steps"]})
+        return []
     if not isinstance(manifest, dict) or type(manifest.get("version")) is not int:
         raise Blocked("Unsupported input manifest")
     if manifest["version"] == 1 and set(manifest) == {"version", "units"}:

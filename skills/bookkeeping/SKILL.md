@@ -213,17 +213,30 @@ merge lock, a table lock and key, a unique key) makes a lease on it a second cop
 
 | Grain | What Bookkeeping holds | Resumes at | Gives up |
 |---|---|---|---|
-| `unit` | every unit of every step: claim, lease, heartbeat, check, report | the unit | nothing; the most cost |
-| `bundle` | one run for a bundle, one unit a step; its units run inside the worker | the step of a bundle | a lease and a report for each unit |
-| `load` | one run for the load, one unit | the load, skipping the files the journal records | per-bundle progress in `status` |
-| `off` | the run's start and its completion only (one run row, so the catalog still shows the run); the loader runs the steps itself, as `local: true` does for read and combine | the file | fencing, retry audit and parallel workers |
+| `unit` (the default) | every unit of every step: claim, lease, heartbeat, check, report | the unit | nothing; the most cost |
+| `run` | the run's start and its completion only: one run row, no unit | the run: the same run is worked again from its first step | fencing, a per-unit record, parallel workers on a step |
 
-Keep `unit` where one unit is long and a unit-level resume earns its cost; use `off` or `load` where every step is a
-deterministic function of its input and the destination protects itself (a silver-only landing, a one-document delivery).
-No destination checks a lease proof, so a grain that drops the lease gives up only that one unit is not done twice (the
-destinations refuse a conflicting write themselves). Not built: every target runs at `unit` grain, `rules check` refuses a `bookkeeping`
-setting on a target, and `local: true` is the only step that runs without a claim. Measure a target's statements before
-choosing a grain (data-operations, "Resource sizing").
+**`grain: run` turns Bookkeeping off for a target's work and keeps the run on record.** Write it on the target in the source
+file (`grain: run`; a bare `off` is not a value, since YAML reads it as false). `rules run` starts the run as it does any
+other, so the run row says it is `running`; one command then does every step in its own process, in order, each unit checked
+by its worker module (`rules run --work-run-id <run>`, which `load` calls), and completes the run. The catalog reads a run's
+id, state, source and target, so it shows the run with no change. What differs from `unit`:
+
+- Bookkeeping holds no unit, lease, checkpoint or per-unit journal event of the run; `bookkeeping status` shows the run and
+  no items. MDM, silver and the Change Journal's file and batch records are the same.
+- A stopped load leaves the run `running`. The next `load` works the same run again from its first step: a written file is
+  written again as the same file, and the Change Journal skips each batch it recorded as merged.
+- One process does the run, so `--workers` adds nothing; bundles still load at once (`--bundles`).
+- A step another target reads as verified units (`pieces: {run: ...}`) keeps `unit`: a run at `run` grain has no verified unit
+  to read. Per-unit quality results are not published for it either.
+- `local: true` is not written with it: every step already runs in the loader.
+
+Keep `unit` where one unit is long and a unit-level resume earns its cost; use `run` where every step is a deterministic
+function of its input and the destination protects itself (a silver-only landing, a one-document delivery). No destination
+checks a lease proof, so dropping the lease gives up only that one unit is not done twice (the destinations refuse a
+conflicting write themselves). Prove a change of grain before the switch-on: load one delivery at each grain into two
+disposable stores and compare every table's row count. Measure a target's statements first (data-operations, "Resource
+sizing"). Not built: a grain between the two (one unit a step, or one unit a load).
 
 ## Init and migrate modes
 
