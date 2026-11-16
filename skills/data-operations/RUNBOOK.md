@@ -222,7 +222,12 @@ On a hosted store a bundle's time is its statements times the round trip (tens o
 and not a lock. Before adding parallelism or blaming a lock, count one bundle's statements on a disposable local store with
 statement logging (`log_statement = 'all'`; `<this skill>/scripts/count_statements.py` groups them by shape): a lock shows as sessions waiting on it for long, so
 sample who waits and how old the holder's transaction is. At `unit` grain most of a bundle's statements are Bookkeeping's (a claim, status
-read and report for each unit); a target at `grain: run` pays none of them, one process does its bundle, and `--workers` adds nothing to it, so raise `--bundles` instead ([bookkeeping](../bookkeeping/SKILL.md#grain-how-much-bookkeeping-a-target-uses)).
+read and report for each unit); a target at `grain: run` pays none of them ([bookkeeping](../bookkeeping/SKILL.md#grain-how-much-bookkeeping-a-target-uses)).
+
+`--workers` is the processes on each step, at either grain. A step's units run that many at once; a step with fewer
+units than workers hands each unit its share, and a merge deals its batches out to that share (a one-file
+publication merges on all of them). `--bundles` runs several bundles at once. Merges of one kind take turns on the kind
+lock, so before scaling a merge, sample its sessions: processes waiting on the lock gain nothing from more of them.
 
 Increasing `workers work --limit` changes the work bound of that invocation; it
 does not itself create parallel workers. A frozen source execution setting cannot

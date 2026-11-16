@@ -288,3 +288,9 @@ def test_a_merge_unit_uses_one_process_unless_the_environment_names_more(monkeyp
     assert mastering_merge.processes() == 4
     monkeypatch.setenv("MASTERING_MERGE_PROCESSES", "0")
     assert mastering_merge.processes() == 1
+
+
+def test_a_merge_unit_uses_the_processes_its_load_hands_it(monkeypatch):
+    monkeypatch.setenv("MASTERING_MERGE_PROCESSES", "2")
+    assert mastering_merge.processes({"processes": 8}) == 8
+    assert mastering_merge.processes({}) == 2

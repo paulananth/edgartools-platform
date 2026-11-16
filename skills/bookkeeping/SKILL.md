@@ -226,7 +226,7 @@ id, state, source and target, so it shows the run with no change. What differs f
   no items. MDM, silver and the Change Journal's file and batch records are the same.
 - A stopped load leaves the run `running`. The next `load` works the same run again from its first step: a written file is
   written again as the same file, and the Change Journal skips each batch it recorded as merged.
-- One process does the run, so `--workers` adds nothing; bundles still load at once (`--bundles`).
+- The loader does the run's steps; `--workers` still splits each step ([data-operations Resource sizing](../data-operations/RUNBOOK.md#resource-sizing)), and bundles still load at once (`--bundles`).
 - A step another target reads as verified units (`pieces: {run: ...}`) keeps `unit`: a run at `run` grain has no verified unit
   to read. Per-unit quality results are not published for it either.
 - `local: true` beside it changes nothing: every step already runs in the loader.

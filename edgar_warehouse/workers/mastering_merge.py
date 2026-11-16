@@ -134,9 +134,11 @@ def _record(journal, envelope: dict, manifest: dict, spec: dict, key: str, files
         pass
 
 
-def processes() -> int:
-    """How many processes one merge unit merges its batches on (MASTERING_MERGE_PROCESSES, default 1)."""
-    return max(1, int(os.environ.get("MASTERING_MERGE_PROCESSES", "1")))
+def processes(envelope: dict | None = None) -> int:
+    """How many processes one merge unit merges its batches on: the share its load hands it (`processes`),
+    else MASTERING_MERGE_PROCESSES, default 1."""
+    given = (envelope or {}).get("processes")
+    return max(1, int(given if given is not None else os.environ.get("MASTERING_MERGE_PROCESSES", "1")))
 
 
 def _quality_identity(envelope: dict) -> dict:
@@ -289,7 +291,7 @@ def execute(envelope: dict, artifacts) -> dict:
         if QUALITY_CHECK in checks and done:
             replayed_quality = _quality_for_recorded(envelope, manifest, str(path.parent), sorted(done), readings)
             done = _attach_replayed_quality(done, replayed_quality)
-        count = min(processes(), len(work))
+        count = min(processes(envelope), len(work))
         if count <= 1:
             done.update(_merge_batches(envelope, manifest, str(path.parent), work, readings))
         else:

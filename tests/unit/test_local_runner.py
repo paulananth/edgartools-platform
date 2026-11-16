@@ -101,3 +101,17 @@ def test_a_steps_units_run_several_at_once_each_in_its_own_process_and_give_the_
 
     assert several == one and len(several) == 8
     assert all((tmp_path / f"again-{n}").exists() for n in range(4))
+
+
+def test_a_step_of_one_unit_hands_the_unit_every_worker():
+    """A step with fewer units than workers gives each unit the workers left over, so a one-unit merge
+    (a whole GLEIF publication) splits its own batches across them."""
+    module = Module("merge")
+    steps = [{"name": "merge", "operation": "source.read", "requires": [], "checks": []}]
+    items = [{"step": "merge", "key": "only", "ordinal": 0, "unit": {
+        "keys": {"id": "only"}, "input": REF, "output": "file:///out/only", "cursor": {}}}]
+
+    local.run_local(steps, items, {"source.read": module}, Store(), every=True, workers=8)
+    local.run_local(steps, items, {"source.read": module}, Store(), every=True)
+
+    assert [call["processes"] for call in module.calls] == [8, 1]

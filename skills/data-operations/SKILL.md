@@ -132,7 +132,7 @@ edgar-warehouse load \
   --workers <readers> --bundles <runs at once> --minutes <window>
 ```
 
-**A load uses `grain: run`.** That is "no bookkeeping" for the target's work: one run row, no units or leases ([bookkeeping grain](../bookkeeping/SKILL.md#grain-how-much-bookkeeping-a-target-uses)). Bookkeeping still initializes and grants workers; `load` still writes the run. `--workers` adds nothing; `--bundles` still runs in parallel. Write `grain: run` on the target (a target that names none still runs as `unit` until it names `run`). A target another target reads as verified units keeps `unit`. Load every captured source through [the load chain](RUNBOOK.md) (`load_chain.py --lane` A P S C L O D F, eight lanes, then `--finish`); `waits_for` is the dependency order. Start `--workers 2` and scale to 8 for a long load (at `grain: run`, start `--bundles 2` and scale `--bundles` to 8).
+**A load uses `grain: run`.** That is "no bookkeeping" for the target's work: one run row, no units or leases ([bookkeeping grain](../bookkeeping/SKILL.md#grain-how-much-bookkeeping-a-target-uses)). Bookkeeping still initializes and grants workers; `load` still writes the run. `--workers` and `--bundles` both still apply ([Resource sizing](RUNBOOK.md#resource-sizing)). Write `grain: run` on the target (a target that names none still runs as `unit` until it names `run`). A target another target reads as verified units keeps `unit`. Load every captured source through [the load chain](RUNBOOK.md) (`load_chain.py --lane` A P S C L O D F, eight lanes, then `--finish`); `waits_for` is the dependency order. Start `--workers 2` and scale to 8 for a long load (at `grain: run`, start `--bundles 2` and scale `--bundles` to 8).
 
 - `--stores` is the stores folder configured through
   [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
@@ -310,7 +310,7 @@ Work it out from counts before starting:
 2. **Wide and narrow steps.** A wide step has one unit per file or group
    (`source.read`). A narrow step is one unit per bundle (`mastering.merge`,
    `mdm.prepare`). Only more bundles at once shorten narrow steps in total.
-3. **Bundles and readers.** Start `--workers 2`; a long load (the two-minute sample will miss the window, or a step already ran past ten minutes) scales to 8, at most the host's cores. At `grain: run`, `--workers` adds nothing: start `--bundles 2` and scale `--bundles` to 8. At `unit`, `--workers` is the worker processes on each step; keep `--bundles` × `--workers` near the core count. `load` never starts more workers than a step has units left. A merge into shared masters stays at one bundle when memory is the limiter.
+3. **Bundles and readers.** Start `--workers 2`; a long load (the two-minute sample will miss the window, or a step already ran past ten minutes) scales to 8, at most the host's cores. `--workers` is the processes on each step at either grain, shared out to a step with fewer units ([Resource sizing](RUNBOOK.md#resource-sizing)); keep `--bundles` × `--workers` near the core count. `load` never starts more workers than a step has units left. A merge into shared masters stays at one bundle when memory is the limiter.
 4. **The bound.** Measure one bundle first (`load` prints each run's
    minutes). The load takes roughly (the number of bundles ÷ `--bundles`,
    rounded up) × that time.
