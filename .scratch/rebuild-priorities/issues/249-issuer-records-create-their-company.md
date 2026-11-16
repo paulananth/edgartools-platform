@@ -13,6 +13,10 @@ The reversal is not limited to issuers: GLEIF may create a Company, by configura
 - **Issuers only:** the creating rule keeps its test that an N-PORT holding names the record as its issuer (9,909 waiting records; resolves up to 10,177 Securities).
 - **Every eligible GLEIF entity:** the test is dropped. A 3% sample of the 3,041,042 waiting records is 56.6% ACTIVE and ISSUED, 36.7% ACTIVE and LAPSED, 6.5% INACTIVE and RETIRED, so about 1.7 million records are active and issued. Companies would grow from 26,260 to about 1.7 million (about 65 times), and each would need the duplicate guard below.
 
+## Scope ruled (operator, 2026-11-16: "every eligible GLEIF entity now")
+
+Every eligible GLEIF entity creates its Company now, with no issuer test. Eligible is the test the SEC-GLEIF name rule already states (`gleif_entity_eligible@1`): category GENERAL, entity status ACTIVE, registration status not ANNULLED or DUPLICATE. A registration that is LAPSED is therefore eligible. From the 3% sample that is about 93% of the 3,041,042 waiting records, about **2.8 million Companies** (26,260 today, about 110 times more), not the 1.7 million first written (that counted ISSUED only).
+
 ## Why the first version failed, and the guard
 
 Identifier rules run before name rules in one merge, so an issuer that is also an SEC filer became a second Company (3,240 of 3,528 name-paired issuers). In the hosted store the SEC-GLEIF name pass has already run (2,042 pairs held), so only issuers it did not pair would create. 993 of the 9,909 waiting issuer records have a normalized name equal to an SEC filer's name: they are likely the same company, so they are held for review, not created.
@@ -20,6 +24,7 @@ Identifier rules run before name rules in one merge, so an issuer that is also a
 ## Parts
 
 - [x] 2026-11-16 10:17 ET Ruling recorded and evidence counted (hosted counts, 2026-11-16).
+- [x] 2026-11-16 10:37 ET Scope ruled: every eligible GLEIF entity.
 - [ ] A test on a disposable store that fails first: an issuer no Company holds creates one; an issuer that joins by the SEC-GLEIF name pass first stays one Company; a look-alike by name is held for review.
 - [ ] `gleif-issuer-lei` as a creating version (`on_no_match: mint`) by configuration, and the guard for the 993 (a looser name pass or a review), proved on a disposable store with the name pass applied first.
 - [ ] Mapping Documents regenerated; policy digest fixtures updated (`policy_layers`).
