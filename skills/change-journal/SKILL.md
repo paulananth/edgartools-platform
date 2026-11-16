@@ -22,7 +22,9 @@ is the digest of the source's own rules, the part of the merge policy that acts 
 activations, the identifier contracts they search or that name it as an issuer, the kind's field defaults and the
 sections every kind shares) and every shared input it reads. A rule of another source is not in it, so it does not
 process this source again; the slicing is `edgar_control.source_policy_digest` (Rust, beside the digest). A first
-run after the identity formula changes names every file once.
+run after the identity formula changes names every file once. A file's identity holds its target, so two targets over
+the same files each record their own; a target that writes no record step (`record: false`) is never skipped and loads
+its files on every run.
 
 **Force publish** ignores the journal: `edgar-warehouse load --force` (underneath, `mdm prepare-capture --all`)
 processes every document of the source again as a new publication of the capture run, and the journal records the

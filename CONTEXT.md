@@ -79,7 +79,7 @@ The one process every source record goes through to find or create the golden re
 _Avoid_: A source writing a golden record directly, an identifier class that skips mastering, settling the entity type after searching for a golden record, creating a golden record per identifier before searching the record's other identifiers, source priority as a reason to merge, a score that picks between two golden records
 
 **Merge Stage**:
-The common mastering stage that resolves identity before selecting identity and profile values, preserving source attribution, disagreement and the decisions that explain the resulting master state.
+The common mastering stage that resolves identity before selecting identity and profile values, preserving source attribution, disagreement and the decisions that explain the resulting master state. Merges of one entity type run side by side when they only join stored master records; one that creates or merges master records runs alone.
 _Avoid_: Field overwrite only, source-specific direct master writes, identity consolidation by field priority
 
 **Source Extract**:

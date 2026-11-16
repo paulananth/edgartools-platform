@@ -197,6 +197,13 @@ identity**. A content hash alone is not its deduplication key.
 Normal runs leave forced replay off. The selector is per file; reprocessing a
 changed multi-record file does not imply every row became a new identity.
 
+**Prove an unchanged rerun.** Count the rows of every table of every store (MDM, Bookkeeping, Change Journal, silver,
+RDM, Rules) and the highest golden record change number, run the same chain again with its own log folder (the chain's
+state file is read for `waits_for`, so copy it there), and count again. Every step should print `0 documents loaded`,
+and no table should change. Read a difference by what wrote it: a Bookkeeping run and its unit rows mean a step loaded
+files, so find why the Journal did not skip them. Counts show inserts and deletes only, not an update to a stored
+row, so the change number covers golden records. Do not include `--finish`: it rebuilds lookups on purpose.
+
 ## Resource sizing
 
 Size at the execution boundary: a Mac host's CPU/RAM does not describe a
