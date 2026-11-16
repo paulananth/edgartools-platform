@@ -7,6 +7,19 @@ description: Draft a semantic model in AutoOntology, deploy it as a Snowflake se
 
 A semantic view is a **serving projection**. Rules/`CONTEXT.md` own meaning; MDM owns identities and relationships; RDM owns code sets; Silver owns transaction facts. AutoOntology drafts the model. Snowflake deploys and serves it. Read [AutoOntology](../auto-ontology/SKILL.md), [data modeling](../data-modeling/SKILL.md), and [Snowflake operations](../aws-snowflake-operations/SKILL.md) first.
 
+## The four objects
+
+A semantic view has only dimensions, relationships, facts, and metrics. A date is a dimension with a time meaning, not a fifth object.
+
+| Object | Comes from | Rule |
+|---|---|---|
+| Dimension | Gold-approved MDM master, or gold-approved RDM code set | Identity, descriptive attribute, or code meaning. Never a copied master field. |
+| Relationship | The fact table's declared link to that master or code | Foreign key to primary key. State cardinality. Reject a join that multiplies facts. |
+| Fact | The fact table, at its own grain | Row-level amount, quantity, date, or link key. Do not repeat an MDM or RDM field here. |
+| Metric | An aggregation over a fact, qualified by its logical table | `SUM(orders.total_amount)` deploys. `SUM(TOTAL_AMOUNT)` is rejected. |
+
+The view denormalizes at query time through relationships. It does not create a physical table that copies dimensions onto facts.
+
 ## Choose the tool
 
 | Job | Tool | Do not |
