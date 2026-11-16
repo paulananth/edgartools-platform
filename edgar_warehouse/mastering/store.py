@@ -41,10 +41,12 @@ class Store:
         self.staged: list[tuple] = []  # the file being merged: (assertion_id, subject, source_code, lei, body)
         self.changed: set[str] = set()  # the golden records this transaction wrote, not yet numbered
         self.shared: str | None = None  # the kind this transaction merges beside others of it, if it does
+        self.minted: set[str] = set()  # the golden records this transaction created: no other merge can touch them
 
     def commit(self) -> None:
         self.number_changes()
         self.shared = None
+        self.minted.clear()
         try:
             self.connection.commit()
         finally:
@@ -53,6 +55,7 @@ class Store:
     def rollback(self) -> None:
         self.changed.clear()
         self.shared = None
+        self.minted.clear()
         try:
             self.connection.rollback()
         finally:
@@ -101,7 +104,7 @@ class Store:
         read each other's members in turn. A golden record not stored yet is one only a merge alone creates."""
         if not self.shared:
             return
-        wanted = sorted(set(entities))
+        wanted = sorted(set(entities) - self.minted)  # one this merge created is not stored for others to hold
         held = set()
         for block in blocks(wanted):
             held.update(r[0] for r in self.rows(f"select entity_id from mastering_master where entity_id in ({marks(block)}) "
