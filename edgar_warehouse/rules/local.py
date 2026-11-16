@@ -85,7 +85,8 @@ def run_local(steps: list[dict], items: list[dict], modules: dict, artifacts, *,
     here (a target at grain `run`): `extra(step, item)` adds what a worker reads of its run to the envelope, and
     a step that writes a destination checks its own result, as a worker does before it reports. A step's units
     depend only on earlier steps, so with `workers` above one they run that many at once, each in its own process
-    (the operation's own module, loaded there)."""
+    (the operation's own module, loaded there). A step with fewer units than workers hands each unit its share
+    as `processes`: a one-unit merge deals its batches out to them."""
     local = [step for step in steps if every or step["operation"] in LOCAL_OPERATIONS]
     names = {step["name"] for step in local}
     for step in local:
@@ -114,6 +115,8 @@ def run_local(steps: list[dict], items: list[dict], modules: dict, artifacts, *,
             if extra is not None:
                 envelope.update(extra(step, item))
             ready.append((item, envelope))
+        for _, envelope in ready:  # the workers a step's units leave over, for a unit that splits its own work
+            envelope["processes"] = max(1, workers // len(ready))
         checked = every and step["operation"] not in LOCAL_OPERATIONS
         if workers > 1 and len(ready) > 1:
             from concurrent.futures import ProcessPoolExecutor
