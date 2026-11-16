@@ -46,37 +46,114 @@ source runbook references the release and its active environment/run IDs.
 
 ## Initialize a hosted store
 
-A hosted PostgreSQL 16 instance (Snowflake Postgres) is initialized with the same commands as the local store,
-in this order, by skills and their own commands only. No script installs it end to end.
-Use [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment)
-for all private connection files, hosted roles, grants and credential handling.
+A hosted PostgreSQL 16 instance (Snowflake Postgres) is initialized with the same commands as the local store, in this
+order, by skills and their own commands only. Use
+[Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment) for the private connection
+files, roles and credential handling. The commands below are the whole procedure; each prints names and checksums, never
+a connection value.
 
-1. **Instance.** [aws-snowflake-operations](../aws-snowflake-operations/SKILL.md) creates it.
-   Handle its credentials through the central connection section. A password rotation needs the operator's word.
-   Wait for `state` to read `READY`.
-2. **Databases and logins.** Provision the hosted databases, owners and restricted roles through
-   [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment),
-   including the Bookkeeping control group before applying its schema.
-3. **Schemas.** Run [Apply store DDL](STORES.md#apply-store-ddl) with each store's owner connection
-   and runtime-role argument from the central connection section.
-   Read each command's `--help` first. Done when every migration file prints with its checksum.
-4. **RDM codes.** `scripts/rdm_restore_published.py` in this skill, with the operator's exact words; every pin
-   must read `pin ok`, then `rdm list`.
-5. **Governance logins.** Provision the registration login through
-   [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
-6. **Source configurations.** For a full initial registration, run the
-   unfiltered `rules check` once, then `rules register` with the registration connection from the central
-   section. For a narrow source change, use `rules check --source <source>`.
-   Done when registration prints a digest for the merge rules and every
-   selected Dataset Contract.
+The stores folder is `~/.config/edgartools/hosted/`, one folder for the store: `connection.env` (the owner logins),
+`worker.env` (the runtime logins and the manifest root), `governance.env` (the registration login). `load --stores`
+takes it. A second copy of these files elsewhere goes stale, and a stale copy fails `doctor` with a login error.
 
-7. **Worker logins.** Apply the hosted worker roles, profile grants and
-   MDM guard from [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
-   Done when `doctor` prints
-   `"ok": true` under the worker connection and `load --plan` reads the capture.
+1. **Instance.** [aws-snowflake-operations](../aws-snowflake-operations/SKILL.md) creates it. Wait for `state` to read
+   `READY`. A rotation of a login's password needs the operator's word, and nothing below needs one.
+2. **Databases.** An instance that holds an old store keeps its logins and gets its databases made again: with the
+   operator's word, list them, then drop and create them with the owner and the grants each had:
+   ```bash
+   set -a; . ~/.config/edgartools/hosted/connection.env; set +a
+   python infra/scripts/reset-hosted-databases.py             # lists sizes; refuses while any session is connected
+   python infra/scripts/reset-hosted-databases.py --confirm
+   ```
+   A fresh instance gets its six databases (`mdm`, `rdm`, `rules`, `bookkeeping`, `change_journal`, `silver`) and their
+   restricted logins from the connection section, which names the grants each needs.
+3. **Schemas**, each with its owner login, in one shell that holds `connection.env`. MDM and Bookkeeping read the owner
+   from their ordinary variable, for that command only; the others read their `*_MIGRATION_DATABASE_URL`:
+   ```bash
+   env MDM_DATABASE_URL="$MDM_MIGRATION_DATABASE_URL" edgar-warehouse mdm migrate --application-role mdm_runtime
+   edgar-warehouse rdm init --runtime-role rdm_runtime
+   env BOOKKEEPING_DATABASE_URL="$BOOKKEEPING_MIGRATION_DATABASE_URL" edgar-warehouse bookkeeping init --runtime-role bookkeeping_control
+   edgar-warehouse change-journal init --runtime-role change_journal_runtime
+   edgar-warehouse silver init --runtime-role silver_runtime
+   edgar-warehouse rules init --agent-role rules_agent
+   ```
+   `init` is the whole step on a fresh store; `migrate` follows an `init` only when a later schema file arrives. Done when
+   each prints its schema file's checksum.
+4. **RDM codes.** With `worker.env` sourced, `python <this skill>/scripts/rdm_restore_published.py --by <name>
+   --words "<their exact words>"` (the operator's words go in the approval record). Done when every pin reads `pin ok`.
+5. **Registration login.** With the owner connection, `env MDM_DATABASE_URL="$MDM_MIGRATION_DATABASE_URL" edgar-warehouse
+   mdm grant-registration --role mdm_governance`. It lets the restricted login read the stored records and write the
+   policy and dataset tables, and nothing else.
+6. **Source configurations.** `edgar-warehouse rules check` (every source, offline), then, with `governance.env`
+   sourced, `edgar-warehouse rules register`. Done when it prints a digest for the merge rules and every Dataset Contract.
+   Then the silver tables: `bash infra/scripts/deploy-silver.sh ~/.config/edgartools/hosted/connection.env`.
+7. **Worker grants**, with `connection.env` sourced, one per worker profile:
+   ```bash
+   for p in $(python -c "from edgar_warehouse.workers import PROFILES; print(*PROFILES)"); do
+     env BOOKKEEPING_DATABASE_URL="$BOOKKEEPING_MIGRATION_DATABASE_URL" edgar-warehouse bookkeeping grant-profile --profile "$p" --worker bookkeeping_runtime
+   done
+   ```
+   Done when `doctor` prints `"ok": true` under `worker.env` (it checks MDM, Rules, Bookkeeping and the Change Journal; steps
+   4 and 6 prove RDM and Silver) and `load --plan` reads a capture.
 
-A missing grant or login that a command names is a gap to fix through the central connection
-section, not to work around.
+A missing grant or login that a command names is a gap to fix through the central connection section, not to work around.
+
+## Load a fresh store
+
+`rules/load-chain.yaml` holds the order of every source and target, each one's capture, facts, revision and workers, and
+`scripts/load_chain.py` runs it, so a store is loaded the same way every time and nobody rewrites the list:
+
+```bash
+python <this skill>/scripts/load_chain.py --plan     # documents and bundles per step; writes nothing
+python <this skill>/scripts/load_chain.py            # the chain; stays awake; each step runs until it reports Done
+python <this skill>/scripts/load_chain.py --from <step>   # carry on; a step that is done costs one call
+```
+
+Masters come first and each source's silver target last, so silver rows find their masters as they land. A source's later
+delivery is a new publication and carries the next `--revision`. The chain stops at the first step that does not finish
+in its attempts and names why in that step's log. After the last step it builds the lookups and fills each silver
+table's master ids (`--finish` runs only those). Check a running chain every 30 minutes; a step that stops reports at its
+check, never on a tighter loop.
+
+### Dependencies between loads
+
+Loads depend on each other only as the rules say, and `python <this skill>/scripts/infer_dependencies.py` prints it from
+the rules files: nothing here comes from a machine's size. No source needs another loaded first: the Merge Stage holds a
+record that finds no master and releases it when a later file gives one, so a load that runs early is never wrong. The
+rules state three kinds of ordering:
+
+- **Must** (a load leaves something out otherwise). A target that reads another run's step of its own source follows that
+  target. The links table is rebuilt whole from every stored record at each build, so a build shows only the links whose
+  masters exist when it runs: the last build follows every source whose contract states links. The lookups and each silver
+  table's master ids follow every load (`--finish`).
+- **Prefer** (records wait, or a link is missing, until the other load is done; never wrong, only later). A source with a
+  matching rule that waits follows the source the rule names (`holder_source`), else the sources whose minting rules use the
+  same identifier namespace, else the sources that mint its kind. A source whose links point at another source's masters
+  follows it. Two sources that each prefer the other have no order to keep.
+- **Alone** (these take turns; they are not dependencies). Merges of one kind of master data, the targets that build the
+  links table (one lease), and two loads of one source and target (their outputs would collide).
+
+Everything else runs at the same time. The chain file turns that into lanes: `lane` marks steps that may run together,
+`waits_for` is exactly the edges above that cross lanes, and a test holds the chain equal to the inference, so a rule change
+that adds a dependency fails the test until the chain follows it.
+
+```bash
+for lane in A P S C L O D; do python <this skill>/scripts/load_chain.py --lane $lane & done   # one process per lane
+python <this skill>/scripts/load_chain.py --finish          # once every lane reports its last step done
+```
+
+A step waits for the steps of other lanes it needs, and for any other load of its own source and target to end.
+
+#### Examples: this store's dependencies
+
+From the shipped rules: no source is a must for another, and a source that only finds (never mints) is GLEIF, which
+follows the SEC Company masters its rule names. The links table is built by the N-PORT fund, N-PORT security, N-CEN
+fund, N-CEN class and GLEIF targets, and its contracts are stated by those and by Form ADV and ownership, so GLEIF, the
+last build, follows Form ADV and ownership. Form ADV follows the Company registrants (SEC Company, N-PORT and N-CEN),
+ownership follows SEC Company, and ownership's ticker symbols follow OpenFIGI, 13F and N-PORT securities. OpenFIGI,
+13F securities and N-PORT security each prefer the others: either order. SEC persons, the silver-only sources and each
+quarter's N-CEN registrants and advisers have nothing to follow, so they start at once.
+
 
 ## Delivery availability
 
@@ -140,6 +217,12 @@ contract bounds. Keep headroom based on observed pressure and shared use. When
 measurements are unavailable but one unit can safely fit, begin with one worker
 and conservative bundles, then measure. If even one unit cannot fit or fit is
 unknown, wait/report the missing estimate; do not force it or reject the source.
+
+On a hosted store a bundle's time is its statements times the round trip (tens of milliseconds each), not its computation
+and not a lock. Before adding parallelism or blaming a lock, count one bundle's statements on a disposable local store with
+statement logging (`log_statement = 'all'`; `<this skill>/scripts/count_statements.py` groups them by shape): a lock shows as sessions waiting on it for long, so
+sample who waits and how old the holder's transaction is. Most of a bundle's statements are Bookkeeping's (a claim, status
+read and report for each unit): the target's grain sets that cost ([bookkeeping](../bookkeeping/SKILL.md#grain-how-much-bookkeeping-a-target-uses)).
 
 Increasing `workers work --limit` changes the work bound of that invocation; it
 does not itself create parallel workers. A frozen source execution setting cannot

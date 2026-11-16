@@ -1,6 +1,6 @@
 # 233: Batches of one kind merge in parallel
 
-Type: task. Status: open (stopped before building, see "Stopped"). Blocked by: none. Follows ticket 197's open part
+Type: task. Status: open (reopened 2026-11-15 on a measured wait; the measure says the lock is not the cause, see "Measured again"). Blocked by: none. Follows ticket 197's open part
 "narrowing [the kind lock] to the identifiers a batch touches".
 
 ## Question
@@ -57,12 +57,34 @@ Stopped before any code (operator, 2026-11-13: "stop here"), for two findings ma
 Reopen when a daily merge or a full reload is measured waiting on the kind lock. The first step then is cheap: compute
 the batch groups read-only for a real manifest and stop if most batches land in one group.
 
+## Measured again (operator, 2026-11-15: "Start ticket 233")
+
+The reopen condition ("a full reload measured waiting on the kind lock") was met by the hosted fresh load: SEC persons, 149
+bundles, about 2.8 hours at 1.3 minutes a bundle. Its first step, measuring before building, shows the lock is not what limits it:
+
+- **The lock is held briefly.** 40 read-only samples 1.5 s apart on the hosted store: a kind lock was held in 72% of them
+  (every kind counted), the holder's transaction was a median 0.1 s old (at most 2.9 s), and on average 0.1 sessions waited
+  for one (at most 1). A persons merge is short; parallel merges would not shorten the load. (The 6.4 of 8 waiting seen with
+  GLEIF came from many long merges at once, a different case, and stays the one this ticket is for.)
+- **The time is round trips.** One persons bundle of 512 documents takes 110 s hosted (prepare 9 s, merge 62 s, the
+  Change Journal's `processed` 38 s) and 8 to 14 s on a local store (2, 5 to 9, 2 to 3 s). A local statement log of 4 bundles
+  holds 10,985 statements, about 2,750 a bundle; at the hosted store's 43 ms a statement that is 118 s, the bundle's time.
+  Of the 2,750: 512 are `journal.record_event`, one call a file; about 260 are liveness checks (`SELECT 1`, each with its
+  own BEGIN and ROLLBACK, from `pool_pre_ping`) on each checkout; about 36 are new sessions, each with about 7 setup
+  statements. The merge's own statements are about 100.
+- **Decision:** ticket 239 takes the round trips. This ticket's design (key closures, a coordinator) stays deferred until a
+  merge of one kind is measured waiting on the lock for long merges: GLEIF, whose merge is measured when it loads.
+
 ## Parts
 
 - [x] 2026-11-13 21:27 ET Evidence: the kind lock serializes the hosted GLEIF merge (77 of 96 worker samples waiting), and the
       tables alone do not replace it (two-writer test without the lock: 3 of 3 failed, `assert 200 == 0`).
+- [x] 2026-11-15 Measured again on the hosted fresh load (persons): the lock is held a median 0.1 s and almost never waited
+      for; a bundle's time is its statements times the round trip (110 s measured, 118 s from 2,750 statements at 43 ms).
+      The fix is ticket 239; GLEIF is the case left for this ticket.
 - [ ] ~~Failing tests, slot locks, golden record locks, components at preparation, measurement~~ deferred until a
       merge is measured waiting on the kind lock: slot locks saturate at 1,000-record batches, and the grouping
       design is not worth building while daily merges are small (see "Stopped").
-- [x] 2026-11-13 21:27 ET Learning → skill: none. The rule learned (a lock per key must be bounded, and hashed slots saturate on
-      large batches) belongs in `mdm-engineering` only once a design is built and measured.
+- [x] Learning → skill: data-operations RUNBOOK, "Resource sizing": a hosted store's time is statements times the round trip;
+      count a bundle's statements on a local store with statement logging before blaming a lock or adding parallelism. The
+      lock rule (a lock per key must be bounded, hashed slots saturate on large batches) waits for a built design.

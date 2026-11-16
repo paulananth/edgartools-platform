@@ -27,6 +27,12 @@ def readable_table(engine):
         *(Column(c.name, c.type) for c in event.c), schema=event.schema)
 
 
+def reader(engine):
+    """A connection for a read: the journal's events never change, so no snapshot is needed and BEGIN and ROLLBACK
+    around each read (half of the journal's statements on a hosted store) are not sent."""
+    return engine.connect().execution_options(isolation_level="AUTOCOMMIT")
+
+
 def assert_ready(conn):
     from edgar_warehouse.control_contract import Blocked
     name=conn.dialect.name
@@ -71,6 +77,11 @@ def record_events(engine, items):
         "mssql": "EXEC journal.record_event @body=:b,@content_hash=:h"}[name]
     with engine.begin() as conn:
         assert_ready(conn)
+        if name == "postgresql" and items:
+            # One statement for the file set: a hosted store costs a round trip a statement.
+            conn.execute(text("SELECT journal.record_event(t.b,t.h) FROM unnest(CAST(:b AS text[]),CAST(:h AS text[])) AS t(b,h)"),
+                         {"b": [body for body, _ in items], "h": [content_hash for _, content_hash in items]})
+            return
         for body, content_hash in items:
             conn.execute(text(statement), {"b": body, "h": content_hash})
 
@@ -95,7 +106,7 @@ def read_events_statement(engine, table):
 
 def get_event(engine, producer, event_key):
     table = readable_table(engine)
-    with engine.connect() as conn:
+    with reader(engine) as conn:
         assert_ready(conn)
         query=read_events_statement(engine,table).where(key_condition(engine,table,producer,event_key))
         if engine.dialect.name=="mssql":query=query.with_hint(table,"WITH (FORCESEEK)","mssql")
@@ -109,7 +120,7 @@ def get_events(engine, producer, event_keys):
     table = readable_table(engine)
     wanted = list(dict.fromkeys(event_keys))
     found = {}
-    with engine.connect() as conn:
+    with reader(engine) as conn:
         assert_ready(conn)
         for start in range(0, len(wanted), 400):
             query = read_events_statement(engine, table).where(hashed_keys_condition(engine, table, producer, wanted[start:start+400]))
@@ -126,7 +137,7 @@ def list_events(engine, *, source=None, feed=None, run_id=None, limit=100, after
     for column, value in ((table.c.source, source), (table.c.feed, feed), (table.c.run_id, run_id)):
         if value is not None:
             query = query.where(column == value)
-    with engine.connect() as conn:
+    with reader(engine) as conn:
         assert_ready(conn)
         return [transport_row(row) for row in conn.execute(query.order_by(table.c.id).limit(limit)).mappings()]
 
@@ -148,7 +159,7 @@ def found_events(engine, producer, keys):
     # Bound driver parameters on every engine; each group uses the producer/key index.
     for start in range(0,len(unique),400):
         query = find_keys_statement(engine, producer, unique[start:start+400])
-        with engine.connect() as conn:
+        with reader(engine) as conn:
             assert_ready(conn)
             values = conn.execute(query).scalars()
             found.update(key.decode() if isinstance(key,bytes) else key for key in values)
@@ -162,7 +173,7 @@ def event_status(engine, *, source=None, feed=None):
     query=select(count.label("events"),func.max(table.c.id).label("last_id"))
     for column,value in ((table.c.source,source),(table.c.feed,feed)):
         if value is not None: query=query.where(column==value)
-    with engine.connect() as conn:
+    with reader(engine) as conn:
         assert_ready(conn)
         counts=conn.execute(query).mappings().one()
     return {"database":engine.url.database,"events":counts["events"],"last_id":counts["last_id"],"source":source,"feed":feed}

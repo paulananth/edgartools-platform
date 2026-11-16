@@ -121,6 +121,9 @@ class Loader:
         self.commands = Commands(env, (self.root / "reports").as_uri(), deadline=time.monotonic() + minutes * 60,
                                  log=stores / "load-errors.log", workers=workers)
 
+    def close(self) -> None:
+        self.commands.close()
+
     def register_silver(self) -> list[str]:
         """Create each silver table this target lands, before anything is submitted. Registering is idempotent
         (the same spec changes nothing; a changed spec for a registered table is refused), so every load does it
@@ -304,6 +307,7 @@ class Loader:
 
 
 def _handle(args) -> int:
+    loader = None
     try:
         loader = Loader(source=args.source, target=args.target, stores=args.stores.expanduser(),
                         workers=args.workers, minutes=args.minutes, at_a_time=args.bundles)
@@ -319,6 +323,9 @@ def _handle(args) -> int:
         print(f"Load stopped: {error}", file=sys.stderr)
         print("Run the same command again to carry on from here.", file=sys.stderr)
         return 1
+    finally:
+        if loader is not None:
+            loader.close()
     print(json.dumps(result, indent=1, sort_keys=True))
     return 0
 

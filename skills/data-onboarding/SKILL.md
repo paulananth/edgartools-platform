@@ -176,8 +176,17 @@ keeps, name the waste each step holds, and propose the fold or split that remove
 | Over-production | A reduce that does not cut rows by orders of magnitude; a target, table or column no reader uses | Measure the rows with and without it; delete what nothing reads |
 | Defects | A fold that is not proved, or a proof that ran an old engine build | Compare the records and the silver rows with main's, on disposable stores, with today's engine |
 
+**A lookup reads its own small file.** A read that needs one pair set from another source (one key's
+identifier, nothing more) takes it from a read file holding only the key and the value, with no lookups of
+its own, never from that source's whole read. The whole read brings its own lookups as steps that wait on each
+other, computes columns no one uses here, and makes every change to that source's rules reprocess this one.
+
+Choose the target's Bookkeeping grain with its extract: [the coarsest that still resumes](../bookkeeping/SKILL.md#grain-how-much-bookkeeping-a-target-uses).
+
 A step the engine cannot fold yet (for example, a combine that would need an expression) stays as it is.
-Name the engine limit that keeps it, and leave the engine change for the operator to approve.
+Name the engine limit that keeps it, and leave the engine change for the operator to approve. Before proposing
+that change, time the steps it would remove: each step starts when the one before it ends, so the times of its
+pieces give each step's share of one bundle. Bring the change only when those steps are a large share of the load.
 
 **Run each long step once per part.** Profiling and the load each run once. Before a long run, check what can
 stop it partway: the reader accepts the format; no size bound, cap or limit is below the data's measured

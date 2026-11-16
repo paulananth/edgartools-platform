@@ -297,21 +297,9 @@ class LocalStores:
             book.dispose()
         mdm = self.engine(name, "mdm")
         try:
-            with mdm.begin() as conn:
-                conn.exec_driver_sql("GRANT USAGE ON SCHEMA mdm TO mdm_governance")
-                conn.exec_driver_sql("GRANT SELECT ON ALL TABLES IN SCHEMA mdm TO mdm_governance")
-                conn.exec_driver_sql("GRANT INSERT ON mdm.policy,mdm.dataset,mdm.dataset_mapping TO mdm_governance")
-                from edgar_warehouse.mdm.prepared_registry import require_installed
-                from edgar_warehouse.mdm.registration import grant
-                adapter = require_installed(conn)
-                quote = mdm.dialect.identifier_preparer.quote
-                for table in adapter.tables.values():
-                    conn.exec_driver_sql(f"GRANT SELECT ON {quote(table.schema)}.{quote(table.name)} TO mdm_governance")
-                from edgar_warehouse.mastering.store import WRITTEN
-                read = ",".join(f"mastering_{name}" for name in (*WRITTEN, "decision"))
-                conn.exec_driver_sql(f"GRANT SELECT ON {read} TO mdm_governance")
-            grant(mdm, "mdm_governance")
+            from edgar_warehouse.mdm.registration import grant_registrar
 
+            grant_registrar(mdm, "mdm_governance")
         finally:
             mdm.dispose()
 

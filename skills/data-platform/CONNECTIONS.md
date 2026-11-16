@@ -60,7 +60,8 @@ store's URL, or a guessed database name.
 | Change Journal | `CHANGE_JOURNAL_DATABASE_URL` | `CHANGE_JOURNAL_MIGRATION_DATABASE_URL` |
 | Silver | `SILVER_DATABASE_URL` | `SILVER_MIGRATION_DATABASE_URL` |
 
-The selected stores folder is authoritative: use its `worker.env` for work,
+The selected stores folder is authoritative (a hosted store's is `~/.config/edgartools/hosted/`, the only copy of its
+files): use its `worker.env` for work,
 `connection.env` for owner or migration duties, and `governance.env` for
 registering rules in MDM. Source the appropriate
 trusted file in a command-scoped subshell with `set -a` and disable tracing.
@@ -79,8 +80,9 @@ For load profiling, `quality` reads MDM, `progress`, `failures` and `steps`
 read Bookkeeping, and `sample` uses the profiling login's `pg_stat_activity`
 access.
 
-Rules commands use the restricted `rules_agent` login; activation uses the
-Rules governance login plus the MDM governance connection. Silver landing
+Rules commands use the restricted `rules_agent` login; registering rules in
+MDM uses the MDM governance connection (`mdm grant-registration` gives that
+login its access). Silver landing
 uses its runtime connection and the MDM runtime connection to resolve master
 IDs. Each profile grants its worker duty to `bookkeeping_runtime`.
 For a hosted store, it is a member of `bookkeeping_control`, the group
@@ -92,8 +94,8 @@ When provisioning these files, use `umask 077`, retain TLS settings
 separate from restricted runtime logins. `mdm_governance` needs database
 `CONNECT`, schema `USAGE`, read access to prepared/mastering tables, and
 `INSERT` on `mdm.policy`, `mdm.dataset` and `mdm.dataset_mapping`, plus the
-registration grant. `rules_governance` needs Rules agent and approver
-membership. Apply the committed provisioning and grant procedures rather
+registration grant (`edgar-warehouse mdm grant-registration --role mdm_governance`,
+with the owner connection). Apply the committed provisioning and grant procedures rather
 than granting administrative rights to runtimes.
 
 `MDM_APPLICATION_ROLE` names the application role.

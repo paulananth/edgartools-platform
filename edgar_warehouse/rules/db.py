@@ -27,7 +27,9 @@ def get_engine(url=None):
     drivers = {"postgresql": "postgresql+psycopg2", "mysql": "mysql+pymysql"}
     if target.drivername in drivers:
         target = target.set(drivername=drivers[target.drivername])
-    return create_engine(target, pool_pre_ping=True, hide_parameters=True)
+    # A connection older than the bound is replaced at checkout, which finds one the server dropped while it sat
+    # idle; a ping on every checkout is three round trips (BEGIN, SELECT 1, ROLLBACK), each a delay on a hosted store.
+    return create_engine(target, pool_recycle=30, hide_parameters=True)
 
 
 def table(dialect: str) -> Table:
