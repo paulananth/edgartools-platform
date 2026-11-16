@@ -1,0 +1,56 @@
+# 252: One pipeline design for every source
+
+Type: task. Status: open. Blocked by: none.
+
+## Question
+
+Do the 17 sources' pipelines follow one design? Where they differ, is the difference in the data or only in how the pipeline was written?
+
+## Method
+
+Every `rules/sources/*/source.yaml` was expanded to its steps (`rules.shape`) and laid in one table: 17 sources, 27 targets, 41 chain steps (`rules/load-chain.yaml`). Each difference was then checked in the code that reads the setting. Counts only.
+
+## What is already one design
+
+- Every target is written in one shape (extract, master, silver) and expands to the same step kinds, checks and leases.
+- 25 of 27 targets run at grain `run`; all 25 loading targets end in a Change Journal record.
+- All 16 Bookkeeping sections are version 2; every target carries the same three run checks.
+
+## Findings and goals
+
+| # | Finding (verified) | Goal |
+|---|---|---|
+| 1 | **The links table is rebuilt whole 11 times in one fresh load.** 5 targets carry the build step; the chain runs them 11 times, and each build reads every stored record. 3 sources that state links (Form ADV, OpenFIGI, ownership) carry no build, so their links show only because a later step in the chain happens to build. Loaded alone (a daily run, the planned OpenFIGI reload), their links stay missing. | The links table is built once per load, after the last merge, in one place (the chain's finish, beside the lookups). A source loaded alone builds it too. No target carries the step. |
+| 2 | **Two targets still run by the unit** (the N-PORT Security mastering and its other-keys target): one reads the other's step from another run, which a run at grain `run` cannot do. They alone keep units, leases, a heartbeat and lease override (60 s, 900 s) and all of the by-the-unit recovery text in the skills. | Every target at grain `run`. Either fold the two into one target, or let a run read a finished run's output by its receipt. Then delete the by-the-unit path from the loader and the skills. |
+| 3 | **`local: true` does nothing** on the 2 targets that set it (OpenFIGI and SEC Company mastering): `rules/local.py` and `bookkeeping/clean/config.py` both return before reading it when the grain is `run`. The SEC Company file still explains it in a comment. | Remove the setting from both targets, and from the code once finding 2 leaves no target by the unit. |
+| 4 | **A lease and heartbeat on a target at grain `run` has no reader.** The registration capture target sets 300 s and 30 s; a run at grain `run` holds no lease. | Remove them; the validator refuses lease settings on a grain `run` target. |
+| 5 | **The same captured files are read again for each target of a source.** Form ADV reads its custody file in 3 targets; ownership reads the same filings in 2; 13F in 2; N-PORT Security reads 2 of its files in 2; the N-CEN submissions file is read by 4 sources in each of 4 quarters. The one shape already lets a target master and land silver from one read. | One target per source reads once, then masters and lands silver ("pipeline must complete both mdm and silver together"). A second target stays only where it is a second publication. Measure the read time saved first. |
+| 6 | **A delivery's identity is a different fact in each source**, each typed by hand into the chain: `publication_count` (GLEIF), `published` (Form ADV), `period` (N-PORT Security), `observed_at` with 3 more (SEC Company), `ticker_file_date` (OpenFIGI), and none for N-CEN, which uses only the `revision` number. A daily run must edit the chain file. | One convention: a delivery states its date once, read from the capture's receipts where the capture holds it; `revision` follows from it. No date typed into the chain. |
+| 7 | **"workers" means two things.** `execution.workers` in a source file is threads inside one read (1 or 2; one source sets 2). `--workers` on a load is processes per step. | One knob. Measure whether the second thread gains anything on the one source that sets it; if not, delete `execution.workers`. |
+| 8 | **How files arrive is declared 3 ways.** 4 sources declare `acquisition`; 2 of them have a capture target (one copies, one fetches); 13 sources declare nothing, so the rules do not say where their files come from. | Every source says how its files arrive in the same place, or capture is ruled outside the pipeline and the 2 capture targets and 4 sections move out. Operator's decision. |
+| 9 | **A stopped load at grain `run` reads its files again from the first step** before the Change Journal can skip a merged batch (measured on the largest file: about 15 minutes before any merge resumes). | A restart skips a read whose output file is already written with the same input hash: the receipt is the proof. |
+
+Lower value, same cause (written at different times):
+
+- The prepare step is named `records` in 2 sources and `prepare` in the rest; one source suffixes every step `_security`; target names mix hyphen and underscore (`subfund-pairs`, `security_symbols`).
+- Source files carry about 126 comment lines that cite tickets and dated rulings; version 1.0 keeps no history in rules files.
+- The chain gives every step its own `workers`, `bundles`, `minutes` and `attempts` by hand; 37 of 41 are `workers: 2, bundles: 1`.
+
+## Order
+
+Findings 3 and 4 are deletions with no data effect: do them first. Finding 1 removes ten whole rebuilds from every fresh load and fixes a wrong result for a source loaded alone: next. Findings 2, 5 and 9 change how long a load takes: measure one source before changing all. Findings 6, 7 and 8 need a ruling on the convention.
+
+## Parts
+
+- [x] 2026-11-16 16:45 ET Every source's targets expanded and compared; each finding checked in the code that reads the setting (this file).
+- [ ] Finding 3: remove `local: true` and its comment from the 2 targets.
+- [ ] Finding 4: remove the lease settings from the capture target; the validator refuses them at grain `run`.
+- [ ] Finding 1: the links build moves to one place; a source loaded alone builds it; a test loads a link-stating source alone and finds its links.
+- [ ] Finding 2: every target at grain `run`; the by-the-unit path deleted.
+- [ ] Finding 5: one target per source reads once (measure one source first).
+- [ ] Finding 9: a restart skips a read already written.
+- [ ] Finding 6: operator's ruling on one delivery-date convention.
+- [ ] Finding 7: measure the second read thread; one knob.
+- [ ] Finding 8: operator's ruling on where capture is declared.
+- [ ] Names, comments and chain defaults (the lower-value list).
+- [x] 2026-11-16 16:45 ET Learning → skill: `data-operations` "One design" (the checks a new target must pass), and the skills pruned of by-the-unit detail that only two targets use, stale paths and narrative (same PR).

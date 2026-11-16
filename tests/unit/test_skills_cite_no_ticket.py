@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-TICKET = re.compile(r"\btickets? \d+", re.IGNORECASE)
+TICKET = re.compile(r"\btickets?\s+\d+", re.IGNORECASE)  # a line break between the two is still a citation
 KNOWN: dict[str, int] = {}
 # A calendar date, but not a rule version's name (`2026-10-25.1`, `security-2026-10-24.isin`).
 DATE = re.compile(r"(?<![\w.-])20\d\d-\d{2}-\d{2}(?!\.\d|[\w-])")
@@ -25,7 +25,7 @@ def citations(text: str) -> int:
 
 
 def test_a_ticket_citation_is_counted():
-    assert citations("decided (ticket 12), see Tickets 3 and 4; a ticketed 9") == 2
+    assert citations("decided (ticket 12), see Tickets 3 and 4; a ticketed 9; over a line (ticket\n  7)") == 3
 
 
 def test_skills_cite_only_the_known_tickets():

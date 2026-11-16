@@ -33,9 +33,6 @@ before provisioning, migrating, applying prepared effects or reviewing the
 boundary. Apply its GoF review before recommending a change and again
 against the resulting work.
 
-Each rule below was learned from a failure here. The Examples section names
-where.
-
 ## Database-agnostic merge logic
 
 **Compute once in programs; persist through the selected engine.** Configured
@@ -313,25 +310,22 @@ location: `Path(__file__).parents[N]` and `.parent`. Before the move, grep `pare
   time. The locks are database locks (advisory and row), not tables. Its file stays in memory:
   a shared working table would force one lock for the whole store. Only a whole-store change (`clear`) takes
   the store's lock, with no kind.
-- **Problem, root cause, fix, lesson (a load 6 times slower than one batch alone).** Eight merge processes ran one batch at a
-  time, each batch twice. The merge raised a conflict whenever a batch created, then redid it holding the kind lock; the
-  rule that only joins ran beside others had been written when the large source only joined, and a later ruling made
-  every batch create. Fix: creating by an identifier runs beside others (its values are claimed). Lesson: when a ruling changes what a
-  load does (join to create), re-check every lock rule that assumed the old behaviour, and time one batch alone, then
-  beside each other, in a rolled-back transaction before the first full run.
+- When a ruling changes what a load does (it joined, now it creates), re-check every lock rule that assumed the old
+  behaviour, and time one batch alone, then the same batches beside each other, in a transaction rolled back, before
+  the first full run. A load far slower than its batches alone is contention.
 - A changed golden record gets its file number when its transaction commits, never when it starts. A number
   given at the start lets a merge that commits late land below a reader's checkpoint, and the reader misses it.
 
 ## Choose the cheapest proof
 
-Name the claim in one sentence, then take the smallest cohort that can falsify it. The agent chooses that cohort; the operator does not pick a size each time (operator: "the skill must be intelligent and use the most optimal path"). A proof drops work that cannot change the claim. A recurring load is a different claim and still processes every file ([data-operations](../data-operations/SKILL.md), "Size the work").
+Name the claim in one sentence, then take the smallest cohort that can falsify it. The agent chooses that cohort; the operator does not pick a size each time. A proof drops work that cannot change the claim. A recurring load is a different claim and still processes every file ([data-operations](../data-operations/SKILL.md), "Size the work").
 
 | The change | The proof |
 |---|---|
 | A proof on a large delivery | [A sample chosen by kind](../data-profiling/SKILL.md#choose-a-proof-sample-by-kind): the batches richest in each rare case and one ordinary batch |
 | A stage that changes what readers see, on top of its own proof | Trace one well-known entity end to end: every source that names it, its masters, its silver rows and links, and each reader's answer. Keep the questions as a script that runs again. A bulk comparison checks that two paths agree, and agreement hides what both get wrong; a traced entity shows a stripped identifier, an empty name or a missing link at once |
 | A rebuilt merge path | Replay real stored records and compare with the stored masters: members, identifiers, each field's value, winner and conflicts. Pick whole masters, so none is cut in two, and run batches of the real size as well as one record a batch: each size hides faults the other shows. |
-| Any code, a migration, a rules or data file | The affected tests, locally, and CI (`CLAUDE.md`, "Tests"). A source's rules file is also read by tests that never name the source, through a shared helper (two tests reached a source through another test's helper and only CI found them). Before the first push of a change to a source's rules, run the whole test folder CI runs for it once (`tests/integration` takes 12 minutes) rather than the files whose names match |
+| Any code, a migration, a rules or data file | The affected tests, locally, and CI (`CLAUDE.md`, "Tests"). A source's rules file is also read by tests that never name the source, through a shared helper. Before the first push of a change to a source's rules, run the whole test folder CI runs for it once (`tests/integration` takes 12 minutes) rather than the files whose names match |
 | A rule upstream of MDM (a source extract, a combine step) | Compare the changed step's output over a capture, and the combined output on one bundle. Equal combined bytes mean everything downstream is unchanged |
 | A lookup moved to another read file | Compare the pair set from the old read and the new one on every captured delivery. Equal pairs prove every reader that uses the set: load one reader end to end at most, never each reader again |
 | A source extract folded or split | Load the same capture with main and with the change on two disposable stores, then compare them (below) |
@@ -354,12 +348,11 @@ stays unchecked, including the delivery's totals until switch-on. A domain
 skill that names a whole-delivery test uses that test only when the claim is
 the delivery's totals or switch-on. So does a ticket's checklist: a line
 written as "proof on the capture" is met by the limited test that answers its
-claim, never by a multi-hour run that repeats it at scale (operator: "Why do we need to run a 5-hour proving run this is a waste").
+claim, never by a multi-hour run that repeats it at scale.
 Stop the proof's containers when it ends,
 whatever the outcome.
 
-**A full-size proof runs once, with its final checks** (operator:
-"stronger checks must run once with the appropriate checks"). Before it:
+**A full-size proof runs once, with its final checks.** Before it:
 review its checks (the Spec review included); run every step through the
 installed commands on a sample (the answer key's few records) until it
 passes; then run full size once. Each check states what it proves: the
@@ -373,11 +366,11 @@ beside a checkout (`Path(__file__).parents[n] / "rules"`): the installed
 bundle ships `rules/` elsewhere, and the bundle test loads each such file
 from the installed bundle.
 
-### Learned on a record that carries only a name
+### A record that carries only a name
 
 - **The name rules (`name_binding`) serve one pair of sources only**: they need a Name Matching and a place test, so
   a Form ADV custodian named only by its name cannot use them. The rule for it is the `exact_name_binding`
-  family (`edgar_warehouse/mdm/exact_name.py`): a source, its `holder_sources`, `key: name_id@1`, finds
+  family (`edgar_warehouse/mdm/matching.py`): a source, its `holder_sources`, `key: name_id@1`, finds
   and never creates (`on_no_match: wait`, `on_several: review`).
 - **Both sides must carry the name id as a cross-reference** (`name_id@1`, one fold for every source);
   a holder source that does not map it cannot be found. Adding it is a new contract version, not a new
@@ -385,7 +378,7 @@ from the installed bundle.
 - **A new candidate route changes the routes digest** that every stored record is indexed under
   (`matching_routes_sha256`); stored records must be reindexed, a rebuild store simply loads again.
 
-### Learned on a lookup-only route
+### A lookup-only route, and the tests that pin rules
 
 - **A retained source population includes history.** Use the shared current-record fold for revision and
   as-of selection, and compare its folded fields with the selected original's matching provenance.
@@ -432,8 +425,7 @@ expected engine/kind/case once and refuse missing or contradictory outcomes.
 
 **Count a store through its record reader, never its tables.** Governed
 storage keeps the records in its own tables, so a count of the old `mdm`
-tables reads an empty store whatever the run did (a
-proof passed with every count 0). Count with `inspection.counts` and each
+tables reads an empty store whatever the run did. Count with `inspection.counts` and each
 source record's current pointer, and grant the verifier what the installed
 test grants. A proof whose counts are all zero proved nothing: treat it as
 failed.
@@ -463,35 +455,9 @@ modules, since it fails on a deleted name only in CI.
 
 ## Examples
 
-These name this repo's code and the failures each rule came from.
-
-- **Database portability:** use the same pinned Company and Person fixtures
-  and policies on PostgreSQL, MySQL and SQL Server, plus every other affected
-  kind/source, applying the qualification checks above. These are concrete
-  test cohorts, not limits on the shared merge algorithm.
-- **Code:** the Merge Stage is `edgar_warehouse/mdm/merge.py`, and what
-  a batch reads is `edgar_warehouse/mdm/scope.py`; the
-  input cut is `edgar_warehouse/mdm/limits.py` (1,000 records and
-  1 MiB a batch); the migrations are registered in
-  `edgar_warehouse/mdm/store.py` (`MIGRATIONS`).
-- **Tests that hold the rules:** `tests/mdm/test_limits.py` (input batching
-  keeps an oversized record).
-- **No size refusal**: a closure cap and a
-  request cap, chosen for a local machine, stopped the ownership
-  Proving Run, whose insider network was one connected group.
-- **Record by record**: without the cap, every batch
-  replayed the whole insider network; merging only
-  the masters a batch touches made batch times flat over the full Person feed.
-- **Join the keys**: over a few thousand keys a whole-list GIN
-  search took seconds, and one key at a time milliseconds for all of them.
-  A generic plan was several times slower than a custom one.
-- **Remove a layer** (operator): the Merge Stage writes and reads
-  the dated master table directly, instead of copying rows between tables.
-- **Cheapest proof** (operator): a source extract column trim
-  already shown equal over the captured documents needed no full proof.
-- **Lean cohort** (operator). A slice of the
-  Securities proof passed twice, and the CUSIP half of the quarter matched.
-  The ISIN half's only new case was one CUSIP offered two ISINs that share a
-  FIGI, inside the first bundle. The other seven bundles were the same join,
-  hours of over-processing. Stop after the bundle that holds the new
-  case. The quarter's totals stay unchecked until switch-on.
+- The Merge Stage is `edgar_warehouse/mastering/merge.py` and its store `edgar_warehouse/mastering/store.py`; what a
+  batch reads is `edgar_warehouse/mdm/scope.py`; the input cut is `edgar_warehouse/mdm/limits.py` (1,000 records and
+  1 MiB a batch); the migrations are registered in `edgar_warehouse/mdm/store.py` (`MIGRATIONS`).
+- `tests/mdm/test_limits.py` holds the input batching rule (an oversized record is kept).
+- Database portability runs the same pinned Company and Person fixtures and policies on every engine, plus every
+  other affected kind and source. They are test cohorts, not limits on the shared merge algorithm.

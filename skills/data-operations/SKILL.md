@@ -9,11 +9,8 @@ Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#
 
 Operate existing sources repeatedly using their configured engines. Maintain the
 source's operational runbook and report verified progress with counts and reasons.
-This skill guides an invoked agent; it does not install a scheduler or stay running
-between invocations. AWS acquisition supplies completed deliveries independently.
-OpenMetadata's catalog `Pipeline` entries describe those workflows; they do not
-start or resume Bookkeeping runs. Use [the OpenMetadata execution boundary](../openmetadata/SKILL.md#pipeline-execution-boundary)
-when deciding whether an installed catalog can control operations.
+Acquisition supplies completed deliveries independently. A catalog `Pipeline` entry describes a
+load and never starts or resumes one ([execution boundary](../openmetadata/SKILL.md#pipeline-execution-boundary)).
 
 ## Start with live state
 
@@ -132,7 +129,7 @@ edgar-warehouse load \
   --workers <readers> --bundles <runs at once> --minutes <window>
 ```
 
-**A load uses `grain: run`.** That is "no bookkeeping" for the target's work: one run row, no units or leases ([bookkeeping grain](../bookkeeping/SKILL.md#grain-how-much-bookkeeping-a-target-uses)). Bookkeeping still initializes and grants workers; `load` still writes the run. `--workers` and `--bundles` both still apply ([Resource sizing](RUNBOOK.md#resource-sizing)). Write `grain: run` on the target (a target that names none still runs as `unit` until it names `run`). A target another target reads as verified units keeps `unit`. Load every captured source through [the load chain](RUNBOOK.md) (`load_chain.py --lane` A P S C L O D F, eight lanes, then `--finish`); `waits_for` is the dependency order. Start `--workers 2` and scale to 8 for a long load (at `grain: run`, start `--bundles 2` and scale `--bundles` to 8).
+**A load uses `grain: run`**: one run row, no units or leases ([bookkeeping grain](../bookkeeping/SKILL.md#grain-how-much-bookkeeping-a-target-uses)). Write `grain: run` on every target; a target that names none runs by the unit, and only a target another target reads as verified units, and the target that reads it, do ([By the unit](UNIT-GRAIN.md)). Load every captured source through [the load chain](RUNBOOK.md) (`load_chain.py --lane` A P S C L O D F, eight lanes, then `--finish`); `waits_for` is the dependency order. Size `--workers` and `--bundles` by **Fit the load into the window**.
 
 - `--stores` is the stores folder configured through
   [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
@@ -156,19 +153,12 @@ edgar-warehouse load \
 - **A reload whose inputs changed needs `--revision N`** (default 0, the
   first publication). A changed input (a new Name Matching, say) changes a record under the
   same revision, and the Stage refuses it ("Source native revision has
-  contradictory publications"): pass a revision higher than the last load's
-  (the bundles all stopped at merge until it was raised).
-- **A source's Bookkeeping section must be version 2.** `load` cannot plan a
-  version 1 section: every bundle stops at `mdm prepare-capture` with "must be
-  version 2" before any run is submitted. Check
-  `grep -A2 '^bookkeeping' rules/sources/<source>/source.yaml`. A source still
-  on version 1 has its own route (see that source's doc) until it is converted.
+  contradictory publications"): pass a revision higher than the last load's.
 - **Plan first.** Add `--plan` (no `--capture-run` needed) before claiming or
   starting a load. It changes nothing and prints which open runs `load` would
   finish, which it would leave and why (a run pinned to old worker code is
   left, and its documents load again in a new run), a blocked run that would
-  stop it, and the documents and bundles. One load spent an hour on 14 open runs
-  that the plan shows as pinned in one call.
+  stop it, and the documents and bundles.
 
 What it does, in order:
 
@@ -251,28 +241,20 @@ Under `~/.local/share/edgartools/mdm/`, `captures/` holds whole deliveries and `
 
 ### When it stops
 
+Run the same command again after fixing the cause: it finishes the open run first.
+
 | You see | It means | Do this |
 | --- | --- | --- |
-| `workers work <operation> ... failed with status 1; its message is in <log>` | A worker could not finish a unit. | Read that log (`load-errors.log` in the stores folder), fix the cause, and run the same command again. The unit is tried again first. A transient database error (a deadlock, a closed connection) clears on that retry. A retry that fails the same way ("Artifact hash mismatch": an earlier run left a different file at the output path) cannot be resumed: `load` names that run, leaves it as it is and loads its documents again in a new run from the Change Journal. Give each load its own `--as-of` (the default is now), because the output folder is named by it and a reused one collides with an earlier run's files. |
-| `step <s>: unit <u> failed (<error>)` | A unit failed and is still failing. | Run `bookkeeping status <run> --step <s>` to see its error, fix the cause, and run the same command again. |
-| `Run <id> of <source> <target> is blocked` | Bookkeeping stopped that run, frozen under the active rules version, on corrupt or missing evidence. `load` will not submit its documents again. | Read `bookkeeping status <id>` and recover it ([recovery](../bookkeeping/RECOVERY.md)), then run the same command again. |
-| `did not finish before the deadline` | `--minutes` ran out. | Run the same command again, or give a longer `--minutes`. |
-| `declares no <target> target` | No target of that name in `rules/sources/<source>/source.yaml`. | Use a target listed there. `rules sequence check --source <source>` names the wired one. |
-| `ended waiting` or `ended blocked` | `finalize` found a check that did not pass. | Read `bookkeeping status <run>` (its `run.checks`) and the run's errors. Never submit the bundle again. |
-| `all N documents already loaded` | The Change Journal holds every document of that bundle under these rules. | Nothing to do. Rerun with changed rules or new files only. |
+| `N of M did not finish: <bundle>: <error>` | A bundle stopped, or `--minutes` passed before it started. The others went on. | Read the named error (the database's own line, `(psycopg2.errors.X)`, not the driver's last line), fix it, run again. |
+| `Run <id> ended <state>, not complete; its checks: ...` | A run check did not pass. | Read `bookkeeping status <id>` (`run.checks`). Never submit the bundle again. |
+| `Run <id> of <source> <target> is blocked` | Bookkeeping stopped that run under the active rules version, on corrupt or missing evidence. | Recover it ([recovery](../bookkeeping/RECOVERY.md)), then run again. |
+| `declares no <target> target` | No target of that name in the source file. | Use a target listed there. |
+| `lands silver table(s) ... with no silver-*.yaml spec` | The target lands a table no spec describes. | Add the approved spec ([STORES.md](STORES.md)). |
+| `all N documents already loaded` | The Change Journal holds every document of that bundle under these rules. | Nothing to do. |
 
-A unit left `waiting` with `Lease or prerequisite contention; retry on
-resume` is not a failure: a worker found its prerequisites or leases busy.
-`load` claims it again on the next pass, and waits a few seconds when a pass
-moved nothing (a lease from a stopped worker has not expired yet).
-(`bookkeeping resume` resets only the run's state, not such a unit.)
-
-An open run is driven by the steps it was frozen with, so a later rules
-version never changes a run already under way. Two kinds of run are reported
-and left as they are, and their documents load again in a new run (the Change
-Journal never recorded them): a blocked run frozen under a retired rules
-version, and an open run pinned to other worker code, which no later checkout
-can finish ("Pinned worker runtime changed; start a new run").
+Two kinds of run are reported and left as they are, and their documents load again in a new run (the Change
+Journal never recorded them): a blocked run under a retired rules version, and an open run pinned to other
+worker code. A unit that failed, a lease or a pinned worker is [By the unit](UNIT-GRAIN.md).
 
 ### Restart a running load for new code
 
@@ -301,8 +283,7 @@ changed what its records join) is cleared and loaded again. Never delete rows by
 
 ### Fit the load into the window
 
-The operator names the window. A plan that does not fit it is not the plan
-(operator: "10 hours will never fly must be within 1-2 hours").
+The operator names the window. A plan that does not fit it is not the plan.
 Work it out from counts before starting:
 
 1. **Documents and bundles.** Count the documents not yet loaded, and divide
@@ -333,49 +314,19 @@ Work it out from counts before starting:
 
 ### While a load runs
 
-- **Finish open runs with `load`, never by hand.** `load` finishes what is
-  open and runs the later steps. Driving `workers work`
-  yourself skips the later steps, and a bare `--reports`
-  path (it needs a `file://` address) marks the unit `waiting`.
-
-- **Leave worker code alone** (`edgar_warehouse/workers/*`). A run pins its
-  worker runtime and stops on a change ("Pinned worker runtime changed;
-  start a new run"). Change code between loads.
-- **Size the lease to the slowest claim, not to the work.** A step that
-  reads another run's output rechecks that run on every claim and report,
-  which can outlast the default 120 s lease ("Stale lease"). The target sets
-  `lease_seconds` and `heartbeat_seconds`.
 - **A long run shows its progress.** Sample any run over ten minutes in its first two minutes with
   `scripts/dev/run_sample.py`. Send its output to a file, unpiped: a `| tail` hides a slow page until the run ends. A
   build with no progress line gets one before it starts.
-- **Check every 30 minutes, not in a tight loop** (operator).
-  A check that finds nothing changed sends no message. Report a failure, a
-  finished bundle or the end.
-- **Keep the machine awake and on power.** Sleep stops the workers. Their
-  leases expire and the units run again later, with nothing loaded twice.
+- **Keep the machine awake and on power.** Sleep stops the workers; the same
+  command resumes the load, with nothing loaded twice.
   On macOS, check `pmset -g` (`sleep`): while the machine sleeps, Docker,
   every test container and the shared server freeze, and brief Power Nap
-  wakes make a run look slow, not stopped (a 6-minute test took 61, ticket
-  138). Start a long run or test as `caffeinate -i <command>`.
+  wakes make a run look slow, not stopped. Start a long run or test as `caffeinate -i <command>`.
 - **Measure a slow load with `scripts/profile_load.py`, never by hand**.
   `progress` shows, for the running runs, the units in each state per step and how long they have run: the
   answer to "how far is it", and it lists runs left `running` by a load that was stopped.
   `quality` lists the data quality counts each merge run retained (records, records set aside by a failed check,
   open reviews, fields with empty values).
-  For a completed run whose frozen steps requested version-2 silver quality evidence,
-  `edgar-warehouse rules catalog publish --bookkeeping-run <run-id>` sends only
-  verified per-unit outcomes with stable run, step and opaque unit references,
-  then requires exact timestamped OpenMetadata readback. Use
-  `edgar-warehouse rules catalog check --bookkeeping-run <run-id>` for a
-  read-only confirmation later. An incomplete run remains unknown and cannot
-  publish. The publish reconciles the whole catalog plan, not only the quality
-  results: run it from a checkout at current `origin/main`, or it removes
-  catalog objects the current rules describe. The quality results themselves
-  are keyed by timestamp and survive that reconcile. Keep `SILVER_QUALITY_EVIDENCE_V2` unset until
-  [Enable a new receipt format](../bookkeeping/RECOVERY.md#enable-a-new-receipt-format)
-  is met. Catalog
-  entries describe the load and its checks; OpenMetadata does not run or resume
-  the pipeline.
   `failures` groups the units that hold an error by step, state and error shape, with counts: read it before
   opening the load log.
   `steps` gives each step's share of a finished run;
@@ -384,20 +335,15 @@ Work it out from counts before starting:
   For a statement inside a function, set `shared_preload_libraries=auto_explain` with
   `auto_explain.log_nested_statements=on` and read the server log. The first answer is the step; the second,
   the statement.
-- **Read a failed call's database error**, the `(psycopg2.errors.X)` line,
-  not SQLAlchemy's last line, which is only a link.
-- **A target that reads another target's runs** (`{run: {source, target,
-  step}}`, [Bookkeeping SPEC](../bookkeeping/SPEC.md)) loads after that
-  target. The comments in `rules/source-sequence.yaml` give the order.
 
-### Underneath `load`
+### One design for every target
 
-`load` runs the same steps you can run by hand when diagnosing: `mdm
-prepare-capture`, `rules run`, `workers work <operation> <run>` (several in
-parallel; a lease keeps two off the same unit), and
-`bookkeeping finalize <run>` ([Bookkeeping run](../bookkeeping/RUN.md)).
-Do not write a source-specific driver script. A missing step is a gap in `load`: fix it
-there.
+A target that differs from the others with no reason in its data is a defect. Before a new or changed target
+merges, expand every source's targets into one table, setting by setting (grain, run facts, files read, steps,
+lease settings, workers), and explain each difference by the data. A setting no code reads at that target's
+grain is deleted, and a captured file is read once: master and land silver from the same target unless the
+second is a second publication. Do not write a source-specific driver script: a missing step is a gap in
+`load`, fixed there.
 
 ## Operate the recurring loop
 
