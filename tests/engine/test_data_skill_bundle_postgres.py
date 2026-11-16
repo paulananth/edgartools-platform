@@ -102,7 +102,12 @@ def test_complete_name_count_general_projection_matches_active_cascade_without_i
     if case == "bad_field": entity["LegalJurisdiction"] = {"$": []}
     if case == "bad_lines": entity["LegalAddress"]["AdditionalAddressLine"] = [42]
     if case == "branch": entity["EntityCategory"] = {"$": "BRANCH"}
-    spec = cascade.spec(sec_company.POLICY)
+    # The passes that act, as preparation takes them: a declared pass the policy has not switched on does not (ticket 250).
+    from edgar_warehouse.mdm.activation import activated
+
+    body = sec_company.POLICY["kinds"]["company"]
+    active = [r for r in body["rules"] if activated(sec_company.POLICY, "company", r, "bind")]
+    spec = cascade.spec({"kinds": {"company": {**body, "rules": active}}}, "company")
     assert len(spec["passes"]) == 1
     contract = dataset_contract("level1")
     expected = cascade_entity(row, {"spec": spec, "gleif_contract": contract}, {"EXAMPLE"})
