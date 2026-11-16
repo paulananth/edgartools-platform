@@ -442,6 +442,10 @@ struct PreparedInputs {
     /// on, and which pairs never merge again.
     #[serde(default)]
     consolidations: Vec<Object>,
+    /// Subjects a name rule holds a pair for: each is a master that already
+    /// exists, so it waits for the name rule to join it and never creates.
+    #[serde(default)]
+    name_paired: BTreeSet<String>,
 }
 
 /// Each master's consolidation component (its live merges, stored and this
@@ -721,6 +725,9 @@ pub fn link_matching_records(raw: &str) -> Result<String, String> {
             let Some(item) = items.iter().find(|item| item.outcomes.on_no_match == OnNoMatch::Mint) else {
                 continue;
             };
+            if input.name_paired.contains(subject) {
+                continue;
+            }
             let entity = ids.next().ok_or("Not enough allocated record identities")?;
             if !floors.contains_key(&kind) {
                 let at = values::read_time(&input.as_of)?;

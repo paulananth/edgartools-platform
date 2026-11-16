@@ -31,16 +31,8 @@
   "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
   null
  ],
- "gleif/normalize/non_company": [
-  "deferred",
-  "unsupported_identity_kind",
-  "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
-  "fund_structure"
- ],
- "gleif/normalize/valid": [
-  "assertion",
-  "4f1208552018aad26b372358e5e594f28a8f87217f70b0383086a75a0bf4c537"
- ],
+ "gleif/normalize/non_company": ["deferred", "classification_deferred", "919f9f064e5137bcf144e662ebf8fc64ad639cd5439bf68ca433938d00393edb", "fund_structure"],
+ "gleif/normalize/valid": ["assertion", "52ded69fdaf073c1c33dd558b5d00bc6098deb83981aedffafc5d128fe455bc6"],
  "gleif/parents/'plain text'": "0803fff15876616e80bf448856a145a1b25091c95158cdadc098fdc86bab9937",
  "gleif/parents/0": "0803fff15876616e80bf448856a145a1b25091c95158cdadc098fdc86bab9937",
  "gleif/parents/False": "0803fff15876616e80bf448856a145a1b25091c95158cdadc098fdc86bab9937",

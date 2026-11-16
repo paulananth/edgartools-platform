@@ -169,39 +169,15 @@ steps:
     bundles: 1
     minutes: 60
     attempts: 3
-  - name: adv-custodians-03
-    lane: C
-    waits_for: [nport-registrant]
-    source: iapd.adv
-    target: custodians
-    capture: iapd.adv/p07-2026-03
-    revision: 0
-    facts:
-      published: "2026-03-31T00:00:00+00:00"
-    workers: 2
-    bundles: 1
-    minutes: 60
-    attempts: 3
   - name: adv-mastering-03
     lane: C
+    waits_for: [nport-registrant]
     source: iapd.adv
     target: mastering
     capture: iapd.adv/p07-2026-03
     revision: 0
     facts:
       published: "2026-03-31T00:00:00+00:00"
-    workers: 2
-    bundles: 1
-    minutes: 60
-    attempts: 3
-  - name: adv-custodians-06
-    lane: C
-    source: iapd.adv
-    target: custodians
-    capture: iapd.adv/p07-2026-06
-    revision: 1
-    facts:
-      published: "2026-06-30T00:00:00+00:00"
     workers: 2
     bundles: 1
     minutes: 60
@@ -380,6 +356,32 @@ steps:
     bundles: 1
     minutes: 240
     attempts: 40
+  - name: adv-custodians-06
+    lane: L
+    waits_for: [gleif]
+    source: iapd.adv
+    target: custodians
+    capture: iapd.adv/p07-2026-06
+    revision: 1
+    facts:
+      published: "2026-06-30T00:00:00+00:00"
+    workers: 2
+    bundles: 1
+    minutes: 60
+    attempts: 3
+  - name: adv-custodians-03
+    lane: L
+    waits_for: [nport-registrant, gleif]
+    source: iapd.adv
+    target: custodians
+    capture: iapd.adv/p07-2026-03
+    revision: 0
+    facts:
+      published: "2026-03-31T00:00:00+00:00"
+    workers: 2
+    bundles: 1
+    minutes: 60
+    attempts: 3
   - name: ownership
     lane: O
     waits_for: [company]

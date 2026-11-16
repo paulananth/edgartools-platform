@@ -101,7 +101,7 @@ def test_frozen_inline_reading_matches_bundled_recipe(member):
 
 @pytest.mark.parametrize('case',['valid','invalid_lei','non_company','bad_name','bad_address','bad_matching'])
 def test_configured_normalization_preserves_assertion_ids_and_deferrals(case):
-    row=raw()
+    row=raw(); row['Entity']['EntityStatus']={'$':'ACTIVE'}  # an active entity: the kind rule makes it a Company
     if case=='invalid_lei': row['LEI']['$']='not-an-lei'
     elif case=='non_company': row['Entity']['EntityCategory']['$']='FUND'
     elif case=='bad_name': row['Entity']['LegalName']['$']=False
@@ -110,7 +110,7 @@ def test_configured_normalization_preserves_assertion_ids_and_deferrals(case):
     publication={'artifact_sha256':'a'*64,'member':'level1','publication_key':'fixture',
                  'revision':1,'effective_at':None}
     try:
-        assertion=adapters.normalize(row,source_code='gleif.level1.v1',contract=contract('level1'),publication=publication)
+        assertion=adapters.normalize(row,source_code='gleif.level1.v1',contract=contract('level1'),publication=publication,policy=files.policy())
         outcome=('assertion',digest(assertion))
     except adapters.UnsupportedRecord as error:
         outcome=('deferred',error.reason,digest(error.detail),error.probable_kind)
@@ -124,14 +124,14 @@ def test_invalid_reading_configuration_stops_instead_of_deferring_record():
 
 
 def test_relationship_refusal_precedes_later_matching_shape_failure():
-    row=raw()
+    row=raw(); row['Entity']['EntityStatus']={'$':'ACTIVE'}
     row['relationship']={'kind':'UNSUPPORTED'}
     row['Entity']['HeadquartersAddress']['AdditionalAddressLine']=['invalid']
     configured=copy.deepcopy(files.source('gleif')['dataset_contracts']['gleif.level1.v1']['contract'])
     configured['adapter']['relationships']=[{'type_field':'relationship.kind','type_values':{'KNOWN':'owns'}}]
     publication={'artifact_sha256':'a'*64,'member':'level1','publication_key':'fixture','revision':1}
     with pytest.raises(adapters.UnsupportedRecord) as failure:
-        adapters.normalize(row,source_code='gleif.level1.v1',contract=configured,publication=publication)
+        adapters.normalize(row,source_code='gleif.level1.v1',contract=configured,publication=publication,policy=files.policy())
     assert failure.value.reason=='unsupported_relationship_type'
 
 

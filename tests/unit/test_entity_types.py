@@ -27,4 +27,4 @@ def test_every_source_in_the_repo_states_its_entity_types():
                                        "sec.nport.security", "sec.ownership", "sec.submissions.person", "sec.thirteenf.securities")
               for code, found in files.entity_types(files.source(name)).items()}
     assert stated
-    assert {v["origin"] for v in stated.values()} == {"fixed", "rule", "source_field"}
+    assert {v["origin"] for v in stated.values()} == {"fixed", "rule"}  # GLEIF's kind became a rule (ticket 249)

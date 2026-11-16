@@ -143,10 +143,29 @@ def test_a_failed_file_leaves_nothing_and_runs_again(database_factory, monkeypat
 
 def test_a_record_with_no_match_waits_as_an_open_review(database_factory):
     with opened(database_factory) as db:
-        waiting = record(GLEIF, "INVENTEDLEI000000017", lei="INVENTEDLEI000000017")
+        waiting = record("iapd.adv.filings.v2", "ADV000017", cik="0000000017")  # a rule that waits, not creates
         merge.merge_file(db, COMPANY, [waiting])
         assert masters(db) == {}
         assert db.rows("select reason,open_review from mastering_review where subject=%s", [waiting["subject"]]) == [("binding_required", 1)]
+
+
+def test_a_gleif_record_creates_its_company_or_joins_the_one_holding_its_lei(database_factory):
+    """GLEIF finds a Company by its LEI and creates one when none holds it (operator, 2026-11-16: "GLEIF can create
+    company no new code only config"): a second delivery of the same LEI joins it, and a Company an N-PORT registrant
+    created for the LEI is joined, never doubled."""
+    with opened(database_factory) as db:
+        created = record(GLEIF, "INVENTEDLEI000000017", lei="INVENTEDLEI000000017")
+        merge.merge_file(db, COMPANY, [created])
+        (only,) = live(db)
+        assert db.bound([created["subject"]]) == {created["subject"]: only}
+        assert db.rows("select count(*) from mastering_review where subject=%s and open_review=1",
+                       [created["subject"]]) == [(0,)]
+        registrant = record("sec.nport.registrant.v2", "0000000099", lei="INVENTEDLEI000000099", cik="0000000099")
+        gleif = record(GLEIF, "INVENTEDLEI000000099", lei="INVENTEDLEI000000099")
+        merge.merge_file(db, COMPANY, [registrant])
+        merge.merge_file(db, COMPANY, [gleif])
+        assert len(live(db)) == 2
+        assert db.bound([gleif["subject"]])[gleif["subject"]] == db.bound([registrant["subject"]])[registrant["subject"]]
 
 
 def test_a_steward_override_changes_one_field_and_a_revoke_returns_it(database_factory):
@@ -606,37 +625,49 @@ def joined(db, *, gleif_first=False):
 
     spec = cascade.spec(POLICY)
     filer, entity = placed_filer(), placed_entity()
-    for record_ in ([entity, filer] if gleif_first else [filer, entity]):
-        merge.merge_file(db, COMPANY, [record_])
+    if gleif_first:
+        merge.merge_file(db, COMPANY, [entity])  # it creates its own Company: the pair cannot join it afterwards
+    merge.merge_file(db, COMPANY, [filer])
     found = waterfall.assignments(
         waterfall.stored_filers(db, SEC), [cascade.entity_of(entity, frozenset({"INVENTED CO"}), eligible=True)],
         spec["passes"], gleif_addresses=Counter(), over_shared=spec["over_shared"])
     merge.apply_pairs(db, COMPANY, SEC, found)
+    if not gleif_first:
+        merge.merge_file(db, COMPANY, [entity])  # a load's order: the pair is applied first, so the record joins
     return filer, entity
 
 
 @pytest.mark.parametrize("gleif_first", [False, True])
-def test_the_pass_pairs_and_the_merge_joins_the_company_in_either_order_and_a_second_pass_changes_nothing(
+def test_the_pass_pairs_and_the_merge_joins_the_company_when_the_pair_comes_first_and_a_second_pass_changes_nothing(
         database_factory, gleif_first):
+    """A load's order, the filer, its pair, then the GLEIF record, gives one Company: the engine lets a record a name
+    rule holds a pair for wait, and the rule joins it. A GLEIF record that came before its filer was paired created its
+    own Company, which a name rule cannot join afterwards: a known limit, kept here so it is seen."""
     from collections import Counter
     from edgar_warehouse.mdm import cascade, waterfall
 
     spec = cascade.spec(POLICY)
     with opened(database_factory) as db:
         filer, entity = placed_filer(), placed_entity()
-        for record_ in ([entity, filer] if gleif_first else [filer, entity]):
-            merge.merge_file(db, COMPANY, [record_])
-        assert len(live(db)) == 1 and len(next(iter(live(db).values()))["subjects"]) == 1  # no pass yet: the GLEIF record waits
+        if gleif_first:
+            merge.merge_file(db, COMPANY, [entity])
+        merge.merge_file(db, COMPANY, [filer])
+        assert len(live(db)) == (2 if gleif_first else 1)
 
         found = waterfall.assignments(
             waterfall.stored_filers(db, SEC), [cascade.entity_of(entity, frozenset({"INVENTED CO"}), eligible=True)],
             spec["passes"], gleif_addresses=Counter(), over_shared=spec["over_shared"])
         assert set(found) == {"0000000017"}
         merge.apply_pairs(db, COMPANY, SEC, found)
+        if not gleif_first:
+            merge.merge_file(db, COMPANY, [entity])
 
-        (master,) = live(db).values()
-        assert sorted(master["subjects"]) == sorted([filer["subject"], entity["subject"]])
-        assert master["identifiers"]["lei"] == [LEI]
+        if gleif_first:
+            assert len(live(db)) == 2  # the limit: two Companies for one filer
+        else:
+            (master,) = live(db).values()
+            assert sorted(master["subjects"]) == sorted([filer["subject"], entity["subject"]])
+            assert master["identifiers"]["lei"] == [LEI]
         assert db.rows("select count(*) from mastering_review where open_review=1") == [(0,)]
         before = live(db)
         assert merge.apply_pairs(db, COMPANY, SEC, found) == {"records": 0} and live(db) == before
@@ -684,8 +715,11 @@ def test_configured_preparation_pairs_and_merges_through_the_stage(
             assert matching.compare_candidate_records(rule, [(staged_filer, entity)])[0][0], staged_filer["provenance"]
         if not gleif_first:
             merge.merge_file(db, COMPANY, [entity])
-        (master,) = live(db).values()
-        assert sorted(master["subjects"]) == sorted([filer["subject"], entity["subject"]])
+        if gleif_first:
+            assert len(live(db)) == 2  # its own Company came first: a name rule cannot join it (the known limit)
+        else:
+            (master,) = live(db).values()
+            assert sorted(master["subjects"]) == sorted([filer["subject"], entity["subject"]])
         before = live(db)
         checked(monkeypatch, preparation, "project_capture", lambda *a, **k: pytest.fail("unchanged input re-read"))
         [repeated] = preparation.prepare_load(**arguments)

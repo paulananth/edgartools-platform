@@ -233,8 +233,8 @@ one source's load is that source's part of the entity, never the entity.
 
 The Company entity is mastered from the SEC company filers, the N-PORT registrants, Form ADV advisers and
 custodians and GLEIF. After the SEC company source alone, the count is the listed operating filers it passes (the
-rest are set aside by its classification), not the Companies; GLEIF finds Companies and never creates one, and
-the SEC Companies pair with GLEIF through the waterfall pass. A Security is mastered from OpenFIGI, N-PORT
+rest are set aside by its classification), not the Companies; GLEIF joins the Company that holds its LEI or creates one for an active general entity, and
+the SEC Companies pair with GLEIF through the waterfall pass, which runs first so a paired record joins its filer. A Security is mastered from OpenFIGI, N-PORT
 securities and 13F securities in the same way.
 
 ### Examples: where retained files are

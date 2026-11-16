@@ -310,6 +310,17 @@ def merge_masters(store, settings: Settings, decision: dict, keep: str, gone: st
     store.add_decision(decision, keep, gone)
 
 
+def _name_paired(store, settings: Settings, records) -> list[str]:
+    """The records of this file that a name rule holds a pair for. The engine lets such a record wait for the rule and
+    never create a master, since the pair says it is one that exists (the SEC filer's GLEIF twin)."""
+    paired = set()
+    for rule in _rules(settings):
+        holders = sorted(r["subject"] for r in records if r["source_code"] == rule["holder_source"])
+        paired.update(json.loads(candidate)["subject"] for candidate, _ in store.name_pairs(
+            "cascade", rule["holder_source"], rule["source"], holders))
+    return sorted(paired & {r["subject"] for r in records})
+
+
 def _match_identifiers(store, settings: Settings, records, bound: dict, counts: Counter, binds: list) -> set:
     known = [r["subject"] for r in records if r["subject"] in bound]
     plan = plan_record_matches({
@@ -338,7 +349,8 @@ def _match_identifiers(store, settings: Settings, records, bound: dict, counts: 
         "plan": plan, "found": [{"namespace": n, "value": v, "records": r} for (n, v), r in found.items()],
         "suspended": [], "newest": {kind: None for kind in plan["kinds"]},
         "new_ids": (new_ids := [str(uuid4()) for _ in plan["applicable"]]), "refused": [], "as_of": settings.as_of,
-        "consolidations": store.decisions_about(sorted(reached)) if reached else []})
+        "consolidations": store.decisions_about(sorted(reached)) if reached else [],
+        "name_paired": _name_paired(store, settings, records)})
     if store.shared and any(d["operation"] == "merge" or (d["operation"] == "bind" and d["entity_id"] in new_ids)
                             for d in made["decisions"]):
         raise Contended("a merge that creates or merges golden records")

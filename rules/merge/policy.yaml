@@ -217,3 +217,13 @@ automatic_rules:
   rule_id: sec-gleif-name-city-or-postcode
   rule_version: 2026-11-03.named-by-what-it-compares
   verdict: bind
+- kind: company
+  family: classification
+  rule_id: gleif-company-candidate
+  rule_version: 2026-11-16.active-general-entities
+  verdict: company
+- kind: company
+  family: binding
+  rule_id: gleif-lei
+  rule_version: 2026-11-16.gleif-creates-company
+  verdict: bind

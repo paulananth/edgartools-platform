@@ -22,10 +22,10 @@ def open_reviews(db, subject: str) -> int:
 
 def test_step_6_a_record_left_waiting_has_a_recorded_reason(database_factory):
     """Step 6: every decision is recorded. A record a rule leaves waiting has an open review saying so, for a
-    name-only custodian (an exact-name rule) as for a GLEIF record (a name rule); before, the exact-name wait left none."""
+    name-only custodian (an exact-name rule) as for an adviser filing (a rule that waits); before, the exact-name wait left none."""
     with opened(database_factory) as db:
         named = custodian("c1", NAME_ID)
-        gleif = record(GLEIF, "g1", "company", {"name": "INVENTED GLEIF"}, lei="9999000000EXAMPLE016")
+        gleif = record("iapd.adv.filings.v2", "g1", "company", {"name": "INVENTED ADV"}, cik="0000000016")
         merge.merge_file(db, COMPANY, [named, gleif])
         assert db.bound([named["subject"], gleif["subject"]]) == {}  # neither has a golden record
         assert open_reviews(db, named["subject"]) == 1

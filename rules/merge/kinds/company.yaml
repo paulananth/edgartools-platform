@@ -130,6 +130,81 @@ rules:
     verdict: deferred
     otherwise: true
 
+# Which GLEIF Level 1 records are Companies (operator, 2026-11-16: "every eligible GLEIF entity now"): a GENERAL
+# entity that GLEIF shows ACTIVE and whose registration is not ANNULLED or DUPLICATE, the test the SEC-GLEIF name
+# rule already states. Every other record is held back: a fund, branch, government or international organization
+# with the kind it probably is (as `probable_kind_values` did), the rest with none. A LAPSED registration of an
+# ACTIVE entity is eligible.
+- rule_id: gleif-company-candidate
+  version: 2026-11-16.active-general-entities
+  family: classification
+  source: gleif.level1.v1
+  emits:
+  - company
+  - deferred
+  steps:
+  - step: "0"
+    verdict: deferred
+    probable_kind: fund_structure
+    when:
+    - primitive: field_in_set@1
+      args:
+        field: Entity.EntityCategory.$
+        values:
+        - FUND
+  - step: "1"
+    verdict: deferred
+    probable_kind: branch
+    when:
+    - primitive: field_in_set@1
+      args:
+        field: Entity.EntityCategory.$
+        values:
+        - BRANCH
+  - step: "2"
+    verdict: deferred
+    probable_kind: government
+    when:
+    - primitive: field_in_set@1
+      args:
+        field: Entity.EntityCategory.$
+        values:
+        - RESIDENT_GOVERNMENT_ENTITY
+  - step: "3"
+    verdict: deferred
+    probable_kind: international_organization
+    when:
+    - primitive: field_in_set@1
+      args:
+        field: Entity.EntityCategory.$
+        values:
+        - INTERNATIONAL_ORGANIZATION
+  - step: "4"
+    verdict: deferred
+    when:
+    - primitive: field_in_set@1
+      args:
+        field: Registration.RegistrationStatus.$
+        values:
+        - ANNULLED
+        - DUPLICATE
+  - step: "5"
+    verdict: company
+    when:
+    - primitive: field_in_set@1
+      args:
+        field: Entity.EntityCategory.$
+        values:
+        - GENERAL
+    - primitive: field_in_set@1
+      args:
+        field: Entity.EntityStatus.$
+        values:
+        - ACTIVE
+  - step: "6"
+    verdict: deferred
+    otherwise: true
+
 # The CIK matching rule (company mastering tickets 04 and 15): an SEC record the
 # classification rule accepts joins the one Company that holds its CIK, or
 # creates it when none does. Only SEC's own record creates a Company from a CIK.
@@ -405,11 +480,32 @@ rules:
   cross_reference: name_place_id
   on_no_match: mint
   on_several: review
+# A GLEIF record joins the one Company that holds its LEI, or creates it when none does
+# (operator, 2026-11-16: "I am reversing 2026-10-16 rule that GLEIF only joins, never creates. GLEIF can
+# create company no new code only config"; "every eligible GLEIF entity now"). It rests on the LEI
+# Identifier Contract (below). Which GLEIF records are Companies is the kind decision of the GLEIF
+# Dataset Contract, not this rule.
+- rule_id: gleif-lei
+  version: 2026-11-16.gleif-creates-company
+  family: binding
+  source: gleif.level1.v1
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: mint
+  when:
+  - primitive: identifier_match@1
+    args:
+      namespace: lei
+  - primitive: identifier_cardinality@1
+    args:
+      namespace: lei
 # A GLEIF record an N-PORT holding names as its issuer joins the one Company
 # that holds its LEI, and otherwise waits for the SEC-GLEIF name rules; it
 # never creates a Company (operator, 2026-10-16: "Wait, config only
-# (Recommended)"; ticket 22). Creating one would make an issuer that is an SEC
-# filer a second Company, since identifier rules run before the name rules. The record test keeps it to issuers. Declared, not switched on.
+# (Recommended)"; ticket 22). Superseded by gleif-lei (operator, 2026-11-16), which lets every
+# eligible GLEIF record create its Company; a name pair now makes the engine wait instead of create. Declared,
+# not switched on.
 - rule_id: gleif-issuer-lei
   version: 2026-10-16.2
   family: binding
