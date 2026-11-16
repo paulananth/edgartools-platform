@@ -167,12 +167,13 @@ JURISDICTION = [{"pass": "name and jurisdiction", "compare": ["jurisdiction"]}]
 
 
 def test_a_pass_that_compares_the_jurisdiction_pairs_places_that_differ_but_the_state():
-    """Ticket 250 (operator, 2026-11-16: "engine change for jurisdiction"): the state of incorporation against GLEIF's
-    jurisdiction, the same function the Merge Stage's re-check uses."""
-    sec = _place(jurisdiction="US-DE")
-    far = lambda jurisdiction: _place(street="9 ELM ST", city="DALLAS", postcode="75001", jurisdiction=jurisdiction)
-    run = lambda jurisdiction: assign([_filer("1", where=sec)], [_entity("L1", where=far(jurisdiction))], JURISDICTION,
-                                      address_counts=Counter(), over_shared=25)
-    assert run("US-DE")["1"]["pass"] == "name and jurisdiction"
-    assert run("US-CA") == {}   # another state
-    assert run(None) == {}      # none stated
+    """Ticket 250 (operator, 2026-11-16: "engine change for jurisdiction", "Option 1"): the filer's US state of
+    incorporation against GLEIF's jurisdiction, as the Merge Stage's re-check reads them."""
+    far = _place(street="9 ELM ST", city="DALLAS", postcode="75001")
+    run = lambda incorporated="US-DE", jurisdiction="US-DE": assign(
+        [_filer("1", incorporated=incorporated)], [_entity("L1", where=far, jurisdiction=jurisdiction)], JURISDICTION,
+        address_counts=Counter(), over_shared=25)
+    assert run()["1"]["pass"] == "name and jurisdiction"
+    assert run(jurisdiction="US-CA") == {}   # another state
+    assert run(jurisdiction=None) == {}      # none stated
+    assert run(incorporated="CA-AB", jurisdiction="CA-AB") == {}  # a Canadian province: US states only

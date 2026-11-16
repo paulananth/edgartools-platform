@@ -34,6 +34,35 @@ struct PairComparison {
     registration_status_field: String,
     left_address_fields: Vec<String>,
     right_address_fields: Vec<String>,
+    /// The fields a pass's `jurisdiction` part compares: the SEC filer's state of incorporation and GLEIF's
+    /// jurisdiction (ticket 250). None names none, and the part then agrees with nothing.
+    #[serde(default)]
+    left_jurisdiction_field: Option<String>,
+    #[serde(default)]
+    right_jurisdiction_field: Option<String>,
+}
+
+/// A US state, the District or a territory, as EDGAR writes it in a state of incorporation.
+const US_STATES: [&str; 56] = [
+    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA",
+    "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK",
+    "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY", "DC", "PR", "GU", "VI",
+    "MP", "AS",
+];
+
+/// The jurisdictions a pass's `jurisdiction` part compares: the filer's, in the form GLEIF writes it (a US state's
+/// code, as `US-` and the code; no other country's), and GLEIF's own.
+fn jurisdictions(command: &Command, left: &Object, right: &Object) -> Result<(Option<String>, Option<String>), String> {
+    let shape = &command.pair_comparison;
+    let (Some(left_field), Some(right_field)) = (&shape.left_jurisdiction_field, &shape.right_jurisdiction_field)
+    else {
+        return Ok((None, None));
+    };
+    let state = read_optional_text(read_matching_field(left, left_field)?)?
+        .map(|code| code.trim().to_uppercase())
+        .filter(|code| US_STATES.contains(&code.as_str()))
+        .map(|code| format!("US-{code}"));
+    Ok((state, read_optional_text(read_matching_field(right, right_field)?)?))
 }
 
 fn read_field_value(record: &Object, name: &str) -> Result<Document, String> {
@@ -143,7 +172,12 @@ enum Part {
     Any(Vec<String>),
 }
 
-fn addresses_agree(left: &Object, right: &Object, raw: &Document) -> Result<bool, String> {
+fn addresses_agree(
+    left: &Object,
+    right: &Object,
+    raw: &Document,
+    places: &(Option<String>, Option<String>),
+) -> Result<bool, String> {
     if raw.get() == "null" {
         return Ok(true);
     }
@@ -163,7 +197,7 @@ fn addresses_agree(left: &Object, right: &Object, raw: &Document) -> Result<bool
         };
         let mut agreed = false;
         for option in options {
-            if part_agrees(left, right, &option)? {
+            if part_agrees(left, right, &option, places)? {
                 agreed = true;
                 break;
             }
@@ -175,7 +209,12 @@ fn addresses_agree(left: &Object, right: &Object, raw: &Document) -> Result<bool
     Ok(true)
 }
 
-fn part_agrees(left: &Object, right: &Object, part: &str) -> Result<bool, String> {
+fn part_agrees(
+    left: &Object,
+    right: &Object,
+    part: &str,
+    places: &(Option<String>, Option<String>),
+) -> Result<bool, String> {
     match part {
         "street" => {
             let lines = |body: &Object| -> Result<BTreeSet<String>, String> {
@@ -206,12 +245,9 @@ fn part_agrees(left: &Object, right: &Object, part: &str) -> Result<bool, String
             &display_text(&values::read_optional_value(right, "postcode")?)?,
             read_optional_text(values::read_optional_value(right, "country")?)?.as_deref(),
         )),
-        // The state of incorporation against GLEIF's jurisdiction (ticket 250): the one function the places of a
-        // conflict test use, so a territory's own code, a country and a subdivision of it agree as there.
-        "jurisdiction" => Ok(matching_values::places_agree(
-            read_optional_text(values::read_optional_value(left, "jurisdiction")?)?.as_deref(),
-            read_optional_text(values::read_optional_value(right, "jurisdiction")?)?.as_deref(),
-        )),
+        // The state of incorporation against GLEIF's jurisdiction (ticket 250), read from the two records' fields
+        // (`jurisdictions`), by the one function the places of a conflict test use.
+        "jurisdiction" => Ok(matching_values::places_agree(places.0.as_deref(), places.1.as_deref())),
         _ => Err(format!("A pass compares an unknown address part: {part}")),
     }
 }
@@ -296,6 +332,7 @@ fn test_record_pair(
                 &prepared_address(left, &shape.left_address_fields)?,
                 &prepared_address(right, &shape.right_address_fields)?,
                 &values::read_optional_value(args, "compare")?,
+                &jurisdictions(command, left, right)?,
             )
         }
         _ => Err(format!("Name binding test {name} has no implementation")),

@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from .names import (
     edgar_jurisdiction,
@@ -213,6 +213,16 @@ def _part_agrees(sec: Place, gleif: Place, part: str) -> bool:
     raise ValueError(f"A pass compares an unknown address part: {part}")
 
 
+def _us_state(jurisdiction: str | None) -> str | None:
+    """A filer's state of incorporation, for a pass's `jurisdiction` part: a US state only, as the Merge Stage's
+    re-check reads it (no other country's)."""
+    return jurisdiction if jurisdiction and jurisdiction.startswith("US-") else None
+
+
+def _with_jurisdiction(p: Place, jurisdiction: str | None) -> Place:
+    return replace(p, jurisdiction=p.jurisdiction or jurisdiction)
+
+
 def _usable(p: Place, counts: Counter, over_shared: int) -> Place:
     if p.key and counts[p.key] > over_shared:
         return place({"country": p.country})
@@ -238,8 +248,10 @@ def assign(
     for e in entities.values():
         for key in e.keys:
             holders[key].add(e.lei)
-    sec_place = {c: _usable(f.place, address_counts, over_shared) for c, f in filers.items()}
-    gleif_place = {l: _usable(e.place, address_counts, over_shared) for l, e in entities.items()}
+    sec_place = {c: _with_jurisdiction(_usable(f.place, address_counts, over_shared), _us_state(f.incorporated))
+                 for c, f in filers.items()}
+    gleif_place = {l: _with_jurisdiction(_usable(e.place, address_counts, over_shared), e.jurisdiction)
+                   for l, e in entities.items()}
     found: dict[str, dict] = {}
     taken: set[str] = set()
     for step in passes:
