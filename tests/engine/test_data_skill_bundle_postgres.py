@@ -108,7 +108,7 @@ def test_complete_name_count_general_projection_matches_active_cascade_without_i
     body = sec_company.POLICY["kinds"]["company"]
     active = [r for r in body["rules"] if activated(sec_company.POLICY, "company", r, "bind")]
     spec = cascade.spec({"kinds": {"company": {**body, "rules": active}}}, "company")
-    assert len(spec["passes"]) == 1
+    assert [p["pass"] for p in spec["passes"]] == ["name and city or postcode", "name and jurisdiction"]
     contract = dataset_contract("level1")
     expected = cascade_entity(row, {"spec": spec, "gleif_contract": contract}, {"EXAMPLE"})
     recipe = files.load(files.ROOT / "sources/gleif/name-count-cascade-record.yaml")
