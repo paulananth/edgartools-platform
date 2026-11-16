@@ -1,10 +1,17 @@
-# 249: A GLEIF record that an N-PORT holding names as its issuer creates its Company
+# 249: A GLEIF record creates its Company (configuration only)
 
 Type: task (configuration only; no code change). Status: open. Blocked by: none. Related: ticket 22 (the first ruling and its duplicate finding), ticket 248.
 
 ## Ruling
 
 Operator, 2026-11-16: "Fix A yes". The common stock Securities whose N-PORT filing states an issuer LEI (10,177 of the 18,376 with no Company) wait because the issuer's GLEIF record is not a Company (9,909 records wait, all unbound). The issuer rule `gleif-issuer-lei` creates the Company when none holds the LEI. This reverses "Issuer joins, never creates" (operator, 2026-10-16, after 3,240 duplicate Companies).
+
+## Ruling widened (operator, 2026-11-16: "I am reversing 2026-10-16 rule that GLEIF only joins, never creates. GLEIF can create company no new code only config")
+
+The reversal is not limited to issuers: GLEIF may create a Company, by configuration only, no code change. The configuration has two scopes, and the scope is the next decision:
+
+- **Issuers only:** the creating rule keeps its test that an N-PORT holding names the record as its issuer (9,909 waiting records; resolves up to 10,177 Securities).
+- **Every eligible GLEIF entity:** the test is dropped. A 3% sample of the 3,041,042 waiting records is 56.6% ACTIVE and ISSUED, 36.7% ACTIVE and LAPSED, 6.5% INACTIVE and RETIRED, so about 1.7 million records are active and issued. Companies would grow from 26,260 to about 1.7 million (about 65 times), and each would need the duplicate guard below.
 
 ## Why the first version failed, and the guard
 
