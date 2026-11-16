@@ -20,17 +20,23 @@ Operator, 2026-11-16: "Accept recommendation". A Security's ticker may name its 
 - Against links we already hold: 1,839 of 1,843 Securities whose issuer is an SEC filer and whose ticker the file knows agree (99.8%); 4 disagree. No ticker names two CIKs in the file (10,391 tickers).
 - GLEIF's ISIN-to-LEI file (captured 2026-11-16) names an issuer for 169 of the 8,062 ISINs: too few to build on.
 
-## Design
+## Design (revised 2026-11-16, configuration only)
 
-1. `sec.company` gets a pair-set target (nothing mastered; the pattern of `gleif` `subfund-pairs`): the SEC's ticker file (`company_tickers_exchange`) read to `ticker`, `cik` pairs, one CIK per ticker.
-2. The Security's OpenFIGI record reads that pair set (another run's verified units) and states `ISSUED_BY` to the `sec.company.v1` record of the CIK, dated by the ticker file's publication (observed), only where the ticker names exactly one CIK.
-3. The link resolves only when that CIK is a Company; a CIK with no Company waits.
+The first design, a pair-set target in `sec.company` that OpenFIGI reads as another run, does not hold: a target at `grain: run` reads only its own run (`BY_THE_UNIT` in `tests/unit/test_one_shape.py`; bookkeeping skill, "Grain"). A cross-run read would put OpenFIGI's 771,554 records back at `unit` grain, with Bookkeeping's statements on every bundle (ticket 239 removed them).
+
+Route: **the SEC ticker file is read by OpenFIGI's own run.**
+1. The SEC's `company_tickers_exchange` file is placed, as an additive copy with its receipt, in the OpenFIGI capture folder. It is already on this machine (the `sec.submissions.company` capture), so no request is made.
+2. OpenFIGI's source gains a read pass over that file (`ticker`, `cik` pairs, upper-case ticker, CIK as filed) and a lookup set; `record.yaml` states `issuer_cik` with `member_value: {lookup: ..., on_many: "null"}`, so a ticker the file maps to several CIKs gives none.
+3. OpenFIGI's Dataset Contract states `ISSUED_BY` with `target_key: [issuer_cik]` and `target_source: sec.company.v1`, started by the ticker file's date (observed), as Form 4 states its issuer's CIK.
+4. The link resolves only when that CIK is a Company.
+
+Cost: OpenFIGI's rules change, so its 771,554 records load again (accepted by the operator, 2026-11-16).
 
 ## Parts
 
 - [x] 2026-11-16 10:12 ET Ruling recorded (operator words above) and the evidence counted.
 - [ ] A test on a disposable store that fails first: a Security whose ticker names one CIK links to that Company; a ticker naming two CIKs, or none, links nothing; a CIK with no Company waits.
-- [ ] The pair-set target in `sec.company` and the `ISSUED_BY` relationship in the OpenFIGI Dataset Contract, by configuration.
+- [ ] The ticker read pass, the lookup and `issuer_cik` in OpenFIGI's reading, and the `ISSUED_BY` relationship in its Dataset Contract, by configuration; the SEC ticker file copied into the OpenFIGI capture (additive).
 - [ ] Mapping Documents regenerated (`rules mapdoc write`); load chain order checked (`waits_for`).
 - [ ] Hosted: the operator accepted the cost ("yes", 2026-11-16): OpenFIGI's 771,554 records load again. Still to be started on the operator's word to run it.
 - [ ] Not covered, stays open: 6,622 Securities the SEC file does not know, and the 10,177 whose issuer's GLEIF record waits (ticket 22's mint question).
