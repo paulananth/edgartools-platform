@@ -42,15 +42,15 @@ def test_a_reading_without_checks_refuses_nothing():
 
 
 def test_the_refusal_comes_before_the_kind():
-    # A FUND would defer as unsupported_identity_kind; the contract's check speaks first.
+    # A FUND would defer as classification_deferred; the contract's check speaks first.
     with pytest.raises(UnsupportedRecord) as refused:
         normalize(record("FUND", Extension={"gleif:Deletion": {"$": "x"}}), source_code="gleif.level1.v1",
-                  contract=contract(DELETION), publication=PUBLICATION)
+                  contract=contract(DELETION), publication=PUBLICATION, policy=files.policy())
     assert refused.value.reason == "gleif_deletion_flag"
     with pytest.raises(UnsupportedRecord) as kind:
         normalize(record("FUND"), source_code="gleif.level1.v1", contract=contract(DELETION),
-                  publication=PUBLICATION)
-    assert kind.value.reason == "unsupported_identity_kind"
+                  publication=PUBLICATION, policy=files.policy())
+    assert kind.value.reason == "classification_deferred"
 
 
 def test_mapped_values_refuses_the_same_record():

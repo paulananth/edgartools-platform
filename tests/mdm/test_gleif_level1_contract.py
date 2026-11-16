@@ -11,6 +11,7 @@ from edgar_warehouse.mdm.adapters import UnsupportedRecord, normalize
 from edgar_warehouse.mdm.evidence import subject_key
 from edgar_warehouse.mdm.gleif_publication import dataset_contract
 from edgar_warehouse.mdm.matching import _read
+from edgar_warehouse.rules import files
 
 LEI = "HWUPKR0MPOU8FGXBT394"
 PUBLICATION = {"publication_key": "p1", "revision": 1, "artifact_sha256": "a" * 64, "member": "level1",
@@ -19,12 +20,12 @@ PUBLICATION = {"publication_key": "p1", "revision": 1, "artifact_sha256": "a" * 
 
 def read(row, **kwargs):
     return normalize(row, source_code="gleif.level1.v1", contract=dataset_contract("level1"),
-                     publication=PUBLICATION, **kwargs)
+                     publication=PUBLICATION, policy=files.policy(), **kwargs)
 
 
-def record(category="GENERAL", **entity):
-    return {"LEI": {"$": LEI}, "Entity": {"EntityCategory": {"$": category}, **entity},
-            "Registration": {"LastUpdateDate": {"$": "2026-09-10T00:00:00Z"}, "RegistrationStatus": {"$": "LAPSED"}}}
+def record(category="GENERAL", status="ACTIVE", registration="LAPSED", **entity):
+    return {"LEI": {"$": LEI}, "Entity": {"EntityCategory": {"$": category}, "EntityStatus": {"$": status}, **entity},
+            "Registration": {"LastUpdateDate": {"$": "2026-09-10T00:00:00Z"}, "RegistrationStatus": {"$": registration}}}
 
 
 def test_a_company_record_maps_its_fields_through_the_contract():
@@ -54,8 +55,28 @@ def test_a_company_record_maps_its_fields_through_the_contract():
 def test_a_waiting_record_carries_the_kind_its_category_names(category, probable):
     with pytest.raises(UnsupportedRecord) as waiting:
         read(record(category))
-    assert waiting.value.reason == "unsupported_identity_kind"
+    assert waiting.value.reason == "classification_deferred"
     assert waiting.value.probable_kind == probable
+
+
+@pytest.mark.parametrize(("status", "registration", "company"), [
+    ("ACTIVE", "ISSUED", True),
+    ("ACTIVE", "LAPSED", True),   # a lapsed registration of an active entity is eligible
+    ("ACTIVE", "ANNULLED", False),
+    ("ACTIVE", "DUPLICATE", False),
+    ("INACTIVE", "RETIRED", False),
+    (None, "ISSUED", False),
+])
+def test_only_an_active_general_entity_whose_registration_stands_is_a_company(status, registration, company):
+    row = record(status=status, registration=registration, LegalName={"$": "Example Inc."})
+    if status is None:
+        del row["Entity"]["EntityStatus"]
+    if company:
+        assert read(row)["kind"] == "company"
+    else:
+        with pytest.raises(UnsupportedRecord) as held:
+            read(row)
+        assert held.value.reason == "classification_deferred"
 
 
 def test_a_corrected_reading_of_one_publication_is_a_second_assertion():
@@ -104,7 +125,7 @@ def _event(status, kind, effective, *affected):
 def test_each_successor_lei_is_a_link_dated_by_its_completed_event():
     first, second = "549300JB1P61FUTPEZ75", "5493001KJTIIGC8Y1R12"
     row = record(
-        LegalName={"$": "Ceased a.s."}, EntityStatus={"$": "INACTIVE"},
+        LegalName={"$": "Ceased a.s."}, EntityStatus={"$": "ACTIVE"},
         SuccessorEntity=[{"SuccessorLEI": {"$": first}},
                          {"SuccessorEntityName": {"@xml:lang": "sk", "$": "Named only, a.s."}},
                          {"SuccessorLEI": {"$": second}}],
@@ -119,9 +140,9 @@ def test_each_successor_lei_is_a_link_dated_by_its_completed_event():
         ("SUCCESSOR_ENTITY", subject_key("gleif.level1.v1", lei)) for lei in (first, second)]
     assert links[0]["valid_from"] == "2022-01-01T00:00:00+01:00"
     assert links[0]["properties"] == {"source_event_type": "MERGERS_AND_ACQUISITIONS",
-                                      "source_event_status": "COMPLETED", "source_entity_status": "INACTIVE"}
+                                      "source_event_status": "COMPLETED", "source_entity_status": "ACTIVE"}
     assert links[1]["valid_from"] is None and links[1]["properties"] == {
-        "source_event_type": None, "source_event_status": None, "source_entity_status": "INACTIVE"}
+        "source_event_type": None, "source_event_status": None, "source_entity_status": "ACTIVE"}
     alone = copy.deepcopy(row)
     alone["Entity"].pop("SuccessorEntity")
     assert read(alone)["relationships"] == []

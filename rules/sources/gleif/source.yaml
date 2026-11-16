@@ -45,9 +45,9 @@ bookkeeping:
     subfund-pairs:
       grain: run
       extract: subfund-pairs.yaml
-    # Every Level 1 record of one Golden Copy publication through the Merge Stage. GLEIF finds
-    # Companies and never creates one: a record that finds none waits in the Stage. The run
-    # gives the publication's record count.
+    # Every Level 1 record of one Golden Copy publication through the Merge Stage. A record joins the
+    # Company that holds its LEI or creates one (gleif-lei), a record an SEC filer's name pair is held for waits
+    # for that pair, and one the kind rule holds back is set aside. The run gives the publication's record count.
     mastering:
       grain: run
       # Prepare whole-publication name pairs before deriving the LEIs this load reads.
@@ -84,6 +84,7 @@ dataset_contracts:
       nonblocking_deferred_reasons:
       - outside_approved_company_scope
       - unsupported_identity_kind
+      - classification_deferred
       - reported_parent_exception
       - invalid_lei
       - invalid_lei_checksum
@@ -371,17 +372,14 @@ dataset_contracts:
         provenance:
           native_record: .
         effective_at: Registration.LastUpdateDate.$
-        kind_field: Entity.EntityCategory.$
-        kind_values:
-          GENERAL: company
-        # What a record in each other GLEIF category probably is, so the Stage can
-        # sort it; none of these creates an identity. A sole proprietor is left
-        # unnamed: it is not settled as Person.
-        probable_kind_values:
-          FUND: fund_structure
-          BRANCH: branch
-          RESIDENT_GOVERNMENT_ENTITY: government
-          INTERNATIONAL_ORGANIZATION: international_organization
+        # The rule decides the kind (gleif-company-candidate, in merge/kinds/company.yaml): a GENERAL entity
+        # that is ACTIVE and not ANNULLED or DUPLICATE is a Company; a fund, branch, government or international
+        # organization is held back with the kind it probably is, so the Stage can sort it. A sole proprietor is
+        # left unnamed: it is not settled as Person.
+        classification:
+          kind: company
+          rule_id: gleif-company-candidate
+          version: 2026-11-16.active-general-entities
         record_key:
         - LEI.$
         record_key_format: lei

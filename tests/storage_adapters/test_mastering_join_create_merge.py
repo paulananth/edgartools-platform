@@ -35,8 +35,8 @@ def test_none_found_creates_one_golden_record_of_the_entity_type_and_a_later_rec
 
 def test_none_found_waits_where_the_rule_says_wait_and_creates_nothing(database_factory):
     with opened(database_factory) as db:
-        merge.merge_file(db, COMPANY, [record(GLEIF, "INVENTEDLEI000000117", lei="INVENTEDLEI000000117")])
-        assert masters(db) == {}  # GLEIF attaches to Companies others create, never creates one
+        merge.merge_file(db, COMPANY, [record("iapd.adv.filings.v2", "ADV000117", cik="0000000117")])
+        assert masters(db) == {}  # an adviser's filing attaches to a Company others create, never creates one
 
 
 def test_two_found_are_merged_the_older_kept_and_nothing_is_lost(database_factory):

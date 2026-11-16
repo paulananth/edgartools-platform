@@ -78,7 +78,7 @@ def record(key: str, *figis: str, source: str = SOURCE) -> dict:
     )
 
 
-def match(records, held=None, decisions=(), bound=None, refused=(), policy=None, consolidations=()):
+def match(records, held=None, decisions=(), bound=None, refused=(), policy=None, consolidations=(), name_paired=()):
     """Plan, then link: `held` maps a value (a FIGI, or a (namespace, value)
     pair) to the Security holding it, or to a list of them; `bound` a stored
     record's subject to its Security; `consolidations` the stored merges and
@@ -98,7 +98,7 @@ def match(records, held=None, decisions=(), bound=None, refused=(), policy=None,
     return plan, link_matching_records({
         "plan": plan, "found": found, "suspended": [], "newest": {},
         "new_ids": [str(uuid4()) for _ in plan["applicable"]], "refused": list(refused), "as_of": AS_OF,
-        "consolidations": list(consolidations),
+        "consolidations": list(consolidations), "name_paired": list(name_paired),
     })
 
 
@@ -564,3 +564,16 @@ def test_a_malformed_filed_figi_finds_nothing_and_the_cusip_still_binds():
     _, result = match([filed("one", "NOT-A-FIGI", cusip=CUSIP)], held={("cusip", CUSIP): HELD},
                       policy=lookup_policy(FIRST, FILED_FIGI))
     assert [d["entity_id"] for d in result["decisions"]] == [HELD] and result["reviews"] == []
+
+
+def test_a_record_a_name_rule_holds_a_pair_for_never_creates_and_the_others_still_do():
+    """A name pair says the record is a master that already exists (the SEC filer's GLEIF twin): it waits for the
+    name rule to join it, and creating one would double it. A record with no pair creates as before; one that
+    finds a stored master still joins it."""
+    paired, free = record("paired", F1), record("free", F2)
+    plan, result = match([paired, free], name_paired=[paired["subject"]])
+    (identity,) = result["identities"]
+    assert {d["subject"] for d in result["decisions"]} == {free["subject"]}
+    assert given(result, "mints") == {(identity["entity_id"], F2)}
+    _, joined = match([paired], held={F1: HELD}, name_paired=[paired["subject"]])
+    assert joined["identities"] == [] and [d["entity_id"] for d in joined["decisions"]] == [HELD]

@@ -28,12 +28,25 @@ Identifier rules run before name rules in one merge, so an issuer that is also a
 3. **The duplicate guard.** The SEC-GLEIF name pass gives an SEC Company the GLEIF LEI first, so the GLEIF record then joins by LEI instead of creating. SEC filers that pass did not pair would duplicate: 993 of the 9,909 issuer records have an SEC filer's name. The guard is still open: a looser name pass (measured), or review.
 4. **Every record is reprocessed.** The change alters GLEIF's rules, so all 3,043,084 GLEIF records load again (and about 2.8 million Companies are created, with their lookups and links). That needs the operator's word to run, and a measured time first.
 
+## Built (operator, 2026-11-16: "I don't want custom code all must go through engine", then "Yes")
+
+- The creating rule `gleif-lei` and its switch-on (`kinds/company.yaml`, `policy.yaml`).
+- The kind rule `gleif-company-candidate`: GENERAL, ACTIVE, registration not ANNULLED or DUPLICATE is a Company; fund, branch, government and international organization are held back with their probable kind, the rest with none. It reads GLEIF's own raw paths, so the reading is unchanged. A LAPSED registration of an ACTIVE entity is a Company.
+- **The engine:** `link_matching_records` (Rust, `record_matches.rs`) takes `name_paired`, the subjects a name rule holds a pair for; such a subject waits for the name rule and never creates. The merge passes it with one call (`_name_paired`); the rule order stays in the engine.
+- The load chain: `adv-custodians-06` and `-03` follow `gleif` (a rule that mints by LEI now has a second minting source), and `adv-mastering-03` waits for `nport-registrant` in their place.
+- Tests that waited for GLEIF now use an adviser filing (a rule that waits); the recorded GLEIF mapping outcomes changed on purpose (`valid`, `non_company`).
+
+## Known limit (kept visible in `test_the_pass_pairs_and_the_merge_joins_the_company_when_the_pair_comes_first...`)
+
+A GLEIF record that arrives before its SEC filer is paired creates its own Company, and a name rule cannot join it afterwards (it binds a record that waits; a binding rule cannot merge two Companies). A load pairs first, so a load is not affected. A filer registered after its GLEIF Company exists would duplicate. Merging the two would be a second engine change (a name rule with a merge outcome).
+
 ## Parts
 
 - [x] 2026-11-16 10:17 ET Ruling recorded and evidence counted (hosted counts, 2026-11-16).
 - [x] 2026-11-16 10:37 ET Scope ruled: every eligible GLEIF entity.
-- [ ] A test on a disposable store that fails first: an issuer no Company holds creates one; an issuer that joins by the SEC-GLEIF name pass first stays one Company; a look-alike by name is held for review.
-- [ ] `gleif-issuer-lei` as a creating version (`on_no_match: mint`) by configuration, and the guard for the 993 (a looser name pass or a review), proved on a disposable store with the name pass applied first.
-- [ ] Mapping Documents regenerated; policy digest fixtures updated (`policy_layers`).
-- [ ] Hosted: switch-on needs the operator's word.
+- [x] 2026-11-16 11:11 ET Tests that failed first: `test_a_gleif_record_creates_its_company_or_joins_the_one_holding_its_lei` (no Company created), `test_a_record_a_name_rule_holds_a_pair_for_never_creates_and_the_others_still_do` (`ValueError: too many values to unpack`: two records created), `test_only_an_active_general_entity_whose_registration_stands_is_a_company`. A filer paired first, then its GLEIF record, is one Company.
+- [x] 2026-11-16 11:11 ET The creating rule, the kind rule and the engine input (above); mastering tests pass on PostgreSQL (84) and MySQL (82, 2 skipped), 2,274 mdm, engine and architecture tests, the Rust tests.
+- [ ] The 993 issuer records whose name equals an SEC filer's name, and every filer the name pass has not paired to its GLEIF twin, would still create a duplicate: measure on a disposable store, then a looser name pass (configuration) or review.
+- [x] 2026-11-16 11:11 ET Mapping Documents regenerated (`company`, `gleif`); the company mastering fixture's policy digest updated (`tests/integration/test_company_mastering_target_postgres.py` passes).
+- [ ] Hosted: needs the operator's word to run. It changes GLEIF's rules, so all 3,043,084 records load again and about 2.8 million Companies are created, with their lookups and links. Time not measured. The Rust extension must be rebuilt where the load runs.
 - [ ] Learning → skill.
