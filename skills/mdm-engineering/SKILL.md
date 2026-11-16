@@ -303,11 +303,13 @@ location: `Path(__file__).parents[N]` and `.parent`. Before the move, grep `pare
   is one function that takes the lock first, then does every write, then commits once, and rolls back on any
   error. Ordering separate calls cannot make it atomic.
 - A merge takes the lock of its own kind only (`Store.take_lock(kind)`), so merges of two kinds run together.
-  Of one kind, a merge first runs beside the others under the kind's shared lock. What only a merge alone may do
-  (create or merge golden records, join by exact name, give an identifier another golden record of the kind took
-  meanwhile), or a deadlock, rolls it back, and it merges again holding the lock alone. Beside others it locks the
-  golden records it rewrites before reading their members, and the identifier values it newly gives before reading
-  who holds them, and after its commit it looks once for a wait neither merge could see. MySQL merges one kind at a
+  Of one kind, a merge runs beside the others under the kind's shared lock, and that includes creating a golden
+  record for an identifier no one holds: the identifier values it newly gives are locked, one lock a value, then read
+  again, so a merge that gives a value another golden record took meanwhile is sent to join it. A kind lock
+  serializes what a key lock allows: the batches of one source file carry disjoint keys. What only a merge alone may
+  do (merge golden records, create by exact name, which no lock covers, or survive a deadlock) rolls it back, and it
+  merges again holding the lock alone. Beside others it locks the golden records it rewrites (not one it created)
+  before reading their members, and after its commit it looks once for a wait neither merge could see. MySQL merges one kind at a
   time. The locks are database locks (advisory and row), not tables. Its file stays in memory:
   a shared working table would force one lock for the whole store. Only a whole-store change (`clear`) takes
   the store's lock, with no kind.

@@ -348,12 +348,12 @@ def _match_identifiers(store, settings: Settings, records, bound: dict, counts: 
     made = link_matching_records({
         "plan": plan, "found": [{"namespace": n, "value": v, "records": r} for (n, v), r in found.items()],
         "suspended": [], "newest": {kind: None for kind in plan["kinds"]},
-        "new_ids": (new_ids := [str(uuid4()) for _ in plan["applicable"]]), "refused": [], "as_of": settings.as_of,
+        "new_ids": [str(uuid4()) for _ in plan["applicable"]], "refused": [], "as_of": settings.as_of,
         "consolidations": store.decisions_about(sorted(reached)) if reached else [],
         "name_paired": _name_paired(store, settings, records)})
-    if store.shared and any(d["operation"] == "merge" or (d["operation"] == "bind" and d["entity_id"] in new_ids)
-                            for d in made["decisions"]):
-        raise Contended("a merge that creates or merges golden records")
+    if store.shared and any(d["operation"] == "merge" for d in made["decisions"]):
+        raise Contended("a merge of golden records")  # creating needs no lock of the kind: its identifiers are claimed
+    store.minted.update(identity["entity_id"] for identity in made["identities"])
     moved, survivors = {}, set()
 
     def live(entity):

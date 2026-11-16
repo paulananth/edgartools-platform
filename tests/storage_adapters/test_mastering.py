@@ -353,6 +353,38 @@ def test_two_writers_on_the_same_identifiers_leave_one_master_each(database_fact
             db.close()
 
 
+def test_four_writers_creating_the_same_identifiers_at_once_leave_one_master_each(database_factory):
+    """Creating needs no lock of the kind (operator, 2026-11-16: "There is no need for lock"): four merges that give the
+    same 100 identifiers, in four orders, at once, leave one golden record for each, holding all four records."""
+    with database_factory() as (owner, runtime, role):
+        if owner.dialect.name != "postgresql":
+            pytest.skip("Only PostgreSQL merges one kind beside others")
+        stores.install(owner, runtime_role=role)
+        files_of = [[record(SEC, f"w{w}-{n}", cik=f"{n + 1:010d}") for n in range(100)] for w in range(4)]
+        for w, records in enumerate(files_of):
+            records[:] = records[w * 25:] + records[:w * 25]
+        start = Barrier(4)
+
+        def write(records):
+            db = open_store(runtime)
+            try:
+                start.wait()
+                return merge.merge_file(db, COMPANY, records)
+            finally:
+                db.close()
+
+        with ThreadPoolExecutor(4) as pool:
+            done = list(pool.map(write, files_of))
+        assert [item["skipped"] for item in done] == [False] * 4
+        db = open_store(runtime)
+        try:
+            assert db.rows("select count(*) from (select namespace,value from mastering_identifier "
+                           "group by namespace,value having count(*)>1) doubled")[0][0] == 0
+            assert len(live(db)) == 100 and all(len(body["subjects"]) == 4 for body in live(db).values())
+        finally:
+            db.close()
+
+
 @contextmanager
 def two_stores(database_factory):
     """Two sessions on one mastering store."""
@@ -476,18 +508,19 @@ def test_a_record_left_waiting_beside_a_merge_that_gives_its_identifier_is_relea
         assert first.bound([filing["subject"]]) == {filing["subject"]: company}
 
 
-def test_a_merge_that_creates_a_golden_record_waits_for_one_in_flight_of_its_kind(database_factory):
-    """Creating golden records is for a merge alone: a new Company waits until the open merge commits."""
+def test_a_merge_that_creates_golden_records_by_identifier_runs_beside_one_in_flight_of_its_kind(database_factory):
+    """A merge that creates a golden record for an identifier no one holds needs no lock of its kind (operator,
+    2026-11-16: "There is no need for lock"): the identifier it gives is claimed, so another merge that gives the
+    same one is sent to join it. It commits while the first merge is still open."""
     with two_stores(database_factory) as (first, second):
+        if first.dialect == "mysql":
+            pytest.skip("MySQL merges one kind at a time")
         merge.merge_file(first, COMPANY, [record(SEC, "1", cik="0000000017")])
-        first.take_lock("company", shared=first.dialect == "postgresql")
+        first.take_lock("company", shared=True)
         pool = ThreadPoolExecutor(1)
         try:
             creating = pool.submit(merge.merge_file, second, COMPANY, [record(SEC, "2", cik="0000000018")])
-            with pytest.raises(TimeoutError):
-                creating.result(timeout=1)
-            first.commit()
-            assert creating.result(timeout=30)["skipped"] is False
+            assert creating.result(timeout=10)["skipped"] is False  # while the first is open
         finally:
             first.rollback()
             pool.shutdown(wait=False)
