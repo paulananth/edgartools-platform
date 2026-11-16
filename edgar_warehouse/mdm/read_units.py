@@ -104,7 +104,7 @@ def companions(steps: list[dict], rows: dict, key: str) -> list[tuple[str, str]]
     found = {}
     for step in steps:
         beside = step.get("input", {}).get("beside")
-        if beside is not None:
+        if beside is not None and fnmatch.fnmatchcase(key, step["input"].get("files", "*")):  # only a document the step reads
             sha256 = rows[key].get(beside["sha256"])
             if not isinstance(sha256, str):
                 raise raw_capture.Conflict(f"Step {step['name']}: the receipt of {key} holds no {beside['sha256']}")

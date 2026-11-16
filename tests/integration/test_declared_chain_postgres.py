@@ -57,12 +57,22 @@ def capture(root, rewrite=True, words=("cusip", "isin")):
                                       "bytes": answer.stat().st_size, "status": 200,
                                       "request_sha256": hashlib.sha256(request.read_bytes()).hexdigest()}) + "\n")
                 keys.append(f"{kind}/{name}")
+        keys.append(sec_tickers(root, out))
     return keys
+
+
+def sec_tickers(root, out):
+    """The SEC's own ticker file beside the answers (ticket 248), with its receipt."""
+    path = figi.write_sec_tickers(root)
+    key = figi.SEC_TICKERS
+    out.write(json.dumps({"file": key, "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                          "bytes": path.stat().st_size, "status": 200}) + "\n")
+    return key
 
 
 def comparable(record):
     """A record less its publication (each chain names its own) and where its files were written."""
-    record = {k: v for k, v in record.items() if k not in ("assertion_id", "revision", "publication_key")}
+    record = {k: v for k, v in record.items() if k not in ("assertion_id", "revision", "publication_key", "relationships")}
     return {**record, "provenance": {k: v for k, v in record["provenance"].items()
                                      if not any(word in k for word in ("sha256", "uri", "member", "artifact", "batch",
                                                                        "consumer", "publication"))}}
@@ -71,7 +81,7 @@ def comparable(record):
 # One target over both kinds asked (ticket 138): 8 CUSIP and 8 ISIN request files, their 16
 # answers in groups of 3, then one reduce, line counts, lines, listing, combine, record and
 # prepare; no step pairs them.
-STEPS = {"requests": 16, "answers": 6, "reduce": 1, "line_counts": 1, "lines": 1, "listing": 1, "combine": 1,
+STEPS = {"sec_tickers": 1, "requests": 16, "answers": 6, "reduce": 1, "line_counts": 1, "lines": 1, "listing": 1, "combine": 1,
          "record": 1, "prepare": 1, "merge": 1, "processed": 1}
 
 
@@ -84,7 +94,8 @@ def run_target(databases, tmp_path, body, target=TARGET):
     book = Bookkeeping(databases.runtime)
     report = write_manifest(source="openfigi", target=target, capture=str(tmp_path / "capture"),
                             documents=str(listed), capture_run="capture-1", output=str(tmp_path / "bundle"),
-                            as_of="2026-10-17T00:00:00Z", revision=0, journal=MemoryJournal(), bookkeeping=book)
+                            as_of="2026-10-17T00:00:00Z", revision=0, journal=MemoryJournal(), bookkeeping=book,
+                            facts={"ticker_file_date": "2026-09-02"})
     for profile in WORKERS:
         grant_profile(databases.admin, profile=profile, worker="bk_runtime")
     declared_target = copy.deepcopy(body["bookkeeping"]["targets"][target])
@@ -120,5 +131,18 @@ def test_the_declared_chain_gives_the_hand_built_chains_records(databases, tmp_p
     # 6 CUSIP and 4 ISIN answers found; 8 CUSIPs and 7 ISINs not found: records too (operator, 2026-11-09), none refused.
     assert len(found) == len(by_hand) == 25 and len(refused) == 0
     assert sum(1 for r in found if figi.is_found(r)) == 10
-    # 16 requests, 6 answers groups, reduce, line counts, lines, listing, combine, record, prepare.
-    assert state["counts"] == {"verified": 29}
+    # The SEC's ticker file names one CIK for EXA, two for EXD and one for EX-J, which the record writes EXJ
+    # (ticket 248): the Securities of EXA and EXJ are issued by that SEC Company from the file's date, the one of EXD
+    # by none, and no other Security states an issuer.
+    from edgar_warehouse.mdm.evidence import subject_key
+
+    def ticker(record):
+        value = record["identifiers"].get("ticker")
+        return value[0] if isinstance(value, list) else value
+
+    linked = {ticker(r): [(l["type"], l["target_subject"], l["valid_from"][:10]) for l in r["relationships"]]
+              for r in found if r.get("relationships")}
+    assert linked == {"EXA": [("ISSUED_BY", subject_key("sec.company.v1", "0000051143"), "2026-09-02")],
+                      "EXJ": [("ISSUED_BY", subject_key("sec.company.v1", "0000051146"), "2026-09-02")]}
+    # 17 steps' units: the SEC ticker file, 16 requests, 6 answers groups, reduce, line counts, lines, listing, combine, record, prepare.
+    assert state["counts"] == {"verified": 30}
