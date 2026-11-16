@@ -5,6 +5,7 @@ import pytest
 
 from edgar_warehouse.bookkeeping.clean.engine import CONTENTION
 from edgar_warehouse.rules import driving
+from tests.support.patching import checked
 
 
 def write(folder, **files):
@@ -187,7 +188,7 @@ def test_a_status_read_starts_no_process_and_gives_what_the_command_prints(tmp_p
     reads = commands(found, tmp_path)
     book = Book()
     monkeypatch.setattr(reads, "book", lambda: book)
-    monkeypatch.setattr(driving.subprocess, "run", lambda *_, **__: pytest.fail("a status read started a process"))
+    checked(monkeypatch, driving.subprocess, "run", lambda *_, **__: pytest.fail("a status read started a process"))
     page = reads.status("run-1", "merge")
     assert book.asked == [("run-1", 1000, "merge")]
     assert page == {"run": {"run_id": "run-1", "started": "2026-01-02 00:00:00+00:00"}, "counts": {"verified": 1}, "items": []}

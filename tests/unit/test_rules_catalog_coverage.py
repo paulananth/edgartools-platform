@@ -5,6 +5,7 @@ import shutil
 import pytest
 
 from edgar_warehouse.rules import catalog, files, mapdoc
+from tests.support.patching import checked
 
 
 def test_every_source_and_standalone_target_has_a_native_pipeline():
@@ -234,8 +235,8 @@ def test_catalog_check_cli_fails_on_remote_drift(monkeypatch, capsys, ok, expect
     monkeypatch.setenv("OPENMETADATA_URL", "http://invented.invalid")
     monkeypatch.setenv("OPENMETADATA_TOKEN", "invented-not-a-credential")
     monkeypatch.setattr(catalog, "plan", lambda root: {})
-    monkeypatch.setattr(catalog, "connect", lambda *args: None)
-    monkeypatch.setattr(catalog, "verify", lambda *args, **kw: {"ok": ok, "differences": [] if ok else ["invented drift"]})
+    checked(monkeypatch, catalog, "connect", lambda *args: None)
+    checked(monkeypatch, catalog, "verify", lambda *args, **kw: {"ok": ok, "differences": [] if ok else ["invented drift"]})
     assert cli._catalog(Namespace(action="check", root=str(files.ROOT))) == expected
     assert '"ok"' in capsys.readouterr().out
 

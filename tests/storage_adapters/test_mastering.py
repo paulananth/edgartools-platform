@@ -14,6 +14,7 @@ from edgar_warehouse.mdm.evidence import assertion, decision, subject_key
 from edgar_warehouse.rules import files
 from edgar_warehouse.mastering.store import open_store
 from tests.support.masters import figi
+from tests.support.patching import checked
 
 AS_OF = "2026-11-06T12:00:00+00:00"
 POLICY = files.policy()
@@ -131,7 +132,7 @@ def test_a_conflict_a_first_rule_settles_withholds_the_other_value(database_fact
 def test_a_failed_file_leaves_nothing_and_runs_again(database_factory, monkeypatch):
     with opened(database_factory) as db:
         batch = [record(SEC, "1", cik="0000000017")]
-        monkeypatch.setattr(merge, "_write_masters", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("invented failure")))
+        checked(monkeypatch, merge, "_write_masters", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("invented failure")))
         with pytest.raises(RuntimeError):
             merge.merge_file(db, COMPANY, batch)
         monkeypatch.undo()
@@ -602,7 +603,7 @@ def test_configured_preparation_pairs_and_merges_through_the_stage(
         (master,) = live(db).values()
         assert sorted(master["subjects"]) == sorted([filer["subject"], entity["subject"]])
         before = live(db)
-        monkeypatch.setattr(preparation, "project_capture", lambda *a, **k: pytest.fail("unchanged input re-read"))
+        checked(monkeypatch, preparation, "project_capture", lambda *a, **k: pytest.fail("unchanged input re-read"))
         [repeated] = preparation.prepare_load(**arguments)
         assert repeated["applied"] == 0 and live(db) == before
 

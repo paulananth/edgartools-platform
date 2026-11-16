@@ -22,6 +22,7 @@ from tests.integration import test_company_line_item_silver as line_tests
 from tests.integration import test_company_measure_silver as measure_tests
 from tests.integration.test_silver_land_worker_postgres import Artifacts
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
+from tests.support.patching import checked
 
 FOLDER = files.ROOT / "sources" / "sec.company-facts"
 TABLES = ("silver-company-fact.yaml", "silver-company-line-item.yaml", "silver-company-measure.yaml")
@@ -109,7 +110,7 @@ def test_a_build_that_gives_no_rows_from_a_source_that_holds_rows_is_refused(sil
     from edgar_warehouse.financials import line_items
 
     land(PostgresSink(silver_store), "company_fact", copy.deepcopy(line_tests.FACTS), line_tests.no_masters)
-    monkeypatch.setattr(line_items, "build", lambda *a, **k: {})  # a build that wrote nothing
+    checked(monkeypatch, line_items, "build", lambda *a, **k: {})  # a build that wrote nothing
     with pytest.raises(ValueError, match="is empty although"):
         silver_derive.execute(envelope("line_items"), Artifacts())
 

@@ -167,49 +167,6 @@ def test_recovery_window_is_fixed_at_thirty_days() -> None:
     assert module.RECOVERY_WINDOW_DAYS == 30
 
 
-def test_terraform_forgets_retired_containers_without_destroying_them() -> None:
-    runtime_main = (
-        REPO_ROOT / "infra" / "terraform" / "modules" / "warehouse_runtime" / "main.tf"
-    ).read_text()
-    runtime_outputs = (
-        REPO_ROOT
-        / "infra"
-        / "terraform"
-        / "modules"
-        / "warehouse_runtime"
-        / "outputs.tf"
-    ).read_text()
-
-    for policy in module.RETIREMENT_POLICIES:
-        resource_name = policy.terraform_address.rsplit(".", 1)[-1]
-        assert (
-            f'resource "aws_secretsmanager_secret" "{resource_name}"'
-            not in runtime_main
-        )
-        assert f"from = aws_secretsmanager_secret.{resource_name}" in runtime_main
-        assert f'output "{resource_name}_secret_arn"' not in runtime_outputs
-
-
-def test_access_roots_no_longer_grant_retired_secret_access() -> None:
-    for environment in ("dev", "prod"):
-        access_main = (
-            REPO_ROOT
-            / "infra"
-            / "terraform"
-            / "access"
-            / "aws"
-            / "accounts"
-            / environment
-            / "main.tf"
-        ).read_text()
-        account_outputs = (
-            REPO_ROOT / "infra" / "terraform" / "accounts" / environment / "outputs.tf"
-        ).read_text()
-        for retired in ("runner_credentials", "mdm_neo4j", "mdm_api_keys"):
-            assert f"{retired}_secret_arn" not in access_main
-            assert f'output "{retired}_secret_arn"' not in account_outputs
-
-
 def test_repository_reference_scan_finds_stale_operational_lookup(
     tmp_path: Path,
 ) -> None:

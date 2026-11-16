@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
+from tests.support.patching import checked
 
 
 PATH = Path(__file__).resolve().parents[2] / "infra/scripts/local-test-stores.py"
@@ -47,8 +48,8 @@ def test_another_agents_resource_is_never_stopped(tmp_path, monkeypatch):
     stores = local.LocalStores(tmp_path, tmp_path)
     with stores.locked("one"):
         stores.identity("one", create=True)
-    monkeypatch.setattr(stores, "resource", lambda *a: {"Config": {"Labels": {local.LABEL: "another"}}})
-    monkeypatch.setattr(stores, "docker", lambda *a: pytest.fail("must not change Docker"))
+    checked(monkeypatch, stores, "resource", lambda *a: {"Config": {"Labels": {local.LABEL: "another"}}})
+    checked(monkeypatch, stores, "docker", lambda *a: pytest.fail("must not change Docker"))
     with pytest.raises(ValueError, match="ownership differs"):
         stores.stop("one")
 
@@ -60,7 +61,7 @@ def test_corrupt_backup_is_refused_before_creating_a_copy(tmp_path, monkeypatch)
     (snapshot / "manifest.json").write_text(json.dumps({"files": {d + ".dump": "wrong" for d in local.STORES}}))
     for name in local.STORES:
         (snapshot / (name + ".dump")).write_bytes(b"invented corrupt backup")
-    monkeypatch.setattr(stores, "start", lambda *a, **k: pytest.fail("must not create a target"))
+    checked(monkeypatch, stores, "start", lambda *a, **k: pytest.fail("must not create a target"))
     with pytest.raises(ValueError, match="checksum"):
         stores.restore("new", snapshot)
 
@@ -111,9 +112,9 @@ def test_no_other_store_name_is_built_into_the_script():
 def test_a_new_server_starts_with_the_load_settings(tmp_path, monkeypatch):
     stores = local.LocalStores(tmp_path, tmp_path)
     calls = []
-    monkeypatch.setattr(stores, "resource", lambda *a: None)
-    monkeypatch.setattr(stores, "docker", lambda *a: calls.append(a))
-    monkeypatch.setattr(stores, "engine", lambda *a: (_ for _ in ()).throw(RuntimeError("stop after docker run")))
+    checked(monkeypatch, stores, "resource", lambda *a: None)
+    checked(monkeypatch, stores, "docker", lambda *a: calls.append(a))
+    checked(monkeypatch, stores, "engine", lambda *a: (_ for _ in ()).throw(RuntimeError("stop after docker run")))
     monkeypatch.setattr(local.time, "monotonic", iter([0, 99]).__next__)
     with pytest.raises(RuntimeError):
         stores.start("settings")
@@ -164,7 +165,7 @@ def test_bookkeeping_owner_uses_the_runtime_url_key(tmp_path, monkeypatch):
         def render_as_string(self, hide_password=False):
             return "postgresql://invented@127.0.0.1/invented"
 
-    monkeypatch.setattr(stores, "url", lambda *a, **k: Address())
+    checked(monkeypatch, stores, "url", lambda *a, **k: Address())
     stores.connections("one")
     worker = (stores.folder("one") / "worker.env").read_text()
     connection = (stores.folder("one") / "connection.env").read_text()

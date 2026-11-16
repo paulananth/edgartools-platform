@@ -30,6 +30,7 @@ from tests.integration import test_mdm_postgres as core
 from tests.integration import test_nport_isin_link as isin
 from tests.integration import test_nport_link_start as cusip
 from tests.integration.test_silver_writer_postgres import RUNTIME, silver_database
+from tests.support.patching import checked
 
 
 FOLDER = cusip.FOLDER
@@ -237,7 +238,7 @@ def test_a_landing_holds_one_piece_of_a_reading_at_a_time(monkeypatch):
     from edgar_warehouse.workers import silver_land, source_readings
 
     pieces = [{"tables": {"holding": [{"holding_id": str(n)}]}, "deferred": []} for n in range(3)]
-    monkeypatch.setattr(source_readings, "_index", lambda *a: ({"version": 2}, 0))
+    checked(monkeypatch, source_readings, "_index", lambda *a: ({"version": 2}, 0))
     monkeypatch.setattr(source_readings, "_partition_chunks", lambda *a, **k: (
         (0, piece, 0, None) for piece in pieces))
     assert list(silver_land._artifacts({"input": {}}, None)) == pieces

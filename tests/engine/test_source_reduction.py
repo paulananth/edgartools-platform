@@ -8,6 +8,7 @@ import pytest
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.workers import source_combine
 from tests.engine.test_source_combine import envelope, reading
+from tests.support.patching import checked
 
 
 def member(table, *, last=None, exclude=None, limit=2, source="main"):
@@ -106,7 +107,7 @@ def test_large_input_uses_incremental_state_not_materializing_loader(tmp_path, m
     store = Artifacts()
     chunks = [{"rows": [{"key": "a", "holder": str(i % 7)} for i in range(25001)]} for _ in range(4)]
     ref = partitioned(store, tmp_path, chunks)
-    monkeypatch.setattr(source_readings, "load", lambda *a, **k: pytest.fail("materialized input"))
+    checked(monkeypatch, source_readings, "load", lambda *a, **k: pytest.fail("materialized input"))
     work = envelope(store, tmp_path, plan({"members": member("rows")}, max_rows=200000,
                                          max_input_bytes=16*1024**2), {"main": ref})
     candidate = source_combine.execute(work, store)

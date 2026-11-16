@@ -8,6 +8,7 @@ import json
 import pytest
 
 from edgar_warehouse.workers import silver_land
+from tests.support.patching import checked
 
 
 SPEC = {
@@ -67,11 +68,11 @@ def worker(monkeypatch):
 
     source_artifact = {"tables": {"sample_table": copy.deepcopy(ROWS)}}
     monkeypatch.setenv(silver_land.QUALITY_V2_GATE, "enabled")
-    monkeypatch.setattr(silver_land, "_artifacts", lambda *_args, **_kwargs: iter([copy.deepcopy(source_artifact)]))
+    checked(monkeypatch, silver_land, "_artifacts", lambda *_args, **_kwargs: iter([copy.deepcopy(source_artifact)]))
     monkeypatch.setattr(silver_land, "engines", lambda: (Engine(), None))
     monkeypatch.setattr(DatabaseSink, "__init__", lambda self, _engine: None)
     monkeypatch.setattr(DatabaseSink, "spec", Sink.spec)
-    monkeypatch.setattr(silver_land, "_missing", lambda *_args: 0)
+    checked(monkeypatch, silver_land, "_missing", lambda *_args: 0)
 
     def fake_land(_sink, _table, rows, _ids, *, record_quality_results=True):
         assert record_quality_results is False
