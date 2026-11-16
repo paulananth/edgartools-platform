@@ -45,11 +45,13 @@ bookkeeping:
   version: 2
   targets:
     capture:
+      grain: run
       lease_seconds: 300
       heartbeat_seconds: 30
       capture: provider
     # The captured pages, read and landed in silver (the Company is mastered by sec.company, which runs first).
     silver:
+      grain: run
       extract: registration-page.yaml
       silver:
         - {name: land_offering, land: {silver: registration_offering, table: offering}}

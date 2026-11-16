@@ -27,11 +27,13 @@ bookkeeping:
   version: 2
   targets:
     mastering:
+      grain: run
       run: {facts: [published]}
       # The combine's rows are the records; no record step.
       extract: combine.yaml
       master: {keys: {dataset: iapd.adv.filings.v2, table: filings}}
     custodians:
+      grain: run
       run: {facts: [published]}
       # The custody reading's rows are the records, one per custodian (`distinct_on`); no combine or record step.
       extract: custody-csv.yaml
@@ -40,6 +42,7 @@ bookkeeping:
     # finds each row's adviser and custodian Company by lookup (silver-custody.yaml), and a row whose master is not
     # mastered yet keeps an empty id for `silver refresh-ids`, so this target needs no MDM run before it.
     silver:
+      grain: run
       run: {facts: [published]}
       extract: custody-csv.yaml
       silver:

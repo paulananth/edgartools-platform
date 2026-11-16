@@ -75,3 +75,29 @@ def test_a_local_step_that_generates_more_work_is_refused_until_a_source_needs_i
 
     with pytest.raises(Blocked, match="generates work"):
         local.run_local(steps, [generating], {"source.read": Module("read")}, Store())
+
+
+def test_a_steps_units_run_several_at_once_each_in_its_own_process_and_give_the_same_receipts(tmp_path):
+    """With workers above one, the units of a step run in worker processes that load the operation's own module:
+    every unit is done, checked, and its receipt is the one a single worker gives."""
+    from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+    from edgar_warehouse.workers import copy
+
+    artifacts = Artifacts()
+    steps = [{"name": "copy", "operation": "artifact.copy", "requires": [], "checks": ["output.matches"]},
+             {"name": "again", "operation": "artifact.copy", "requires": ["copy"], "checks": ["output.matches"]}]
+    items = []
+    for n in range(4):
+        source = artifacts.put(tmp_path.as_uri() + "/in", {"n": n})
+        items.append({"step": "copy", "key": str(n), "ordinal": n, "unit": {
+            "keys": {"id": str(n)}, "input": source, "output": (tmp_path / f"copy-{n}").as_uri(), "cursor": {}}})
+        items.append({"step": "again", "key": str(n), "ordinal": n, "unit": {
+            "keys": {"id": str(n)}, "input": {"from": {"step": "copy", "key": str(n)}},
+            "output": (tmp_path / f"again-{n}").as_uri(), "cursor": {}}})
+    modules = {"artifact.copy": copy}
+
+    several = local.run_local(steps, items, modules, artifacts, every=True, workers=3)
+    one = local.run_local(steps, items, modules, artifacts, every=True)
+
+    assert several == one and len(several) == 8
+    assert all((tmp_path / f"again-{n}").exists() for n in range(4))

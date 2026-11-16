@@ -57,7 +57,7 @@ steps:
     target: mastering
     capture: openfigi/2026q2-nport
     revision: 0
-    workers: 1
+    workers: 4
     bundles: 3
     minutes: 420
     attempts: 8
@@ -424,7 +424,7 @@ steps:
     target: silver
     capture: company-facts/cohort-json
     capture_root: proving
-    workers: 1
+    workers: 4
     bundles: 1
     minutes: 240
     attempts: 4

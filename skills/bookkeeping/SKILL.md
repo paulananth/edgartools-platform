@@ -213,7 +213,7 @@ merge lock, a table lock and key, a unique key) makes a lease on it a second cop
 
 | Grain | What Bookkeeping holds | Resumes at | Gives up |
 |---|---|---|---|
-| `unit` (the default) | every unit of every step: claim, lease, heartbeat, check, report | the unit | nothing; the most cost |
+| `unit` (when a target names none) | every unit of every step: claim, lease, heartbeat, check, report | the unit | nothing; the most cost |
 | `run` | the run's start and its completion only: one run row, no unit | the run: the same run is worked again from its first step | fencing, a per-unit record, parallel workers on a step |
 
 **`grain: run` turns Bookkeeping off for a target's work and keeps the run on record.** Write it on the target in the source
@@ -229,14 +229,20 @@ id, state, source and target, so it shows the run with no change. What differs f
 - One process does the run, so `--workers` adds nothing; bundles still load at once (`--bundles`).
 - A step another target reads as verified units (`pieces: {run: ...}`) keeps `unit`: a run at `run` grain has no verified unit
   to read. Per-unit quality results are not published for it either.
-- `local: true` is not written with it: every step already runs in the loader.
+- `local: true` beside it changes nothing: every step already runs in the loader.
+- The grain is no part of a source's processing identity: changing it loads no file again.
 
-Keep `unit` where one unit is long and a unit-level resume earns its cost; use `run` where every step is a deterministic
-function of its input and the destination protects itself (a silver-only landing, a one-document delivery). No destination
-checks a lease proof, so dropping the lease gives up only that one unit is not done twice (the destinations refuse a
-conflicting write themselves). Prove a change of grain before the switch-on: load one delivery at each grain into two
-disposable stores and compare every table's row count. Measure a target's statements first (data-operations, "Resource
-sizing"). Not built: a grain between the two (one unit a step, or one unit a load).
+**Write `grain: run` on every target.** Every step is a deterministic function of its input and each destination protects
+itself, so the run's start and completion are all Bookkeeping needs to hold. Two kinds of target keep `unit`, and a test
+names them: a target whose step another target reads as verified units, and the target that reads them (the loader of a
+run at `run` grain reads only its own run). No destination checks a lease proof, so dropping the lease gives up only that
+one unit is not done twice (the destinations refuse a conflicting write themselves).
+
+Prove a change of grain before the switch-on, in two steps. First load one delivery at each grain into two disposable stores
+and compare every table's row count: MDM and silver agree, the Change Journal differs only by Bookkeeping's per-unit events.
+Then load every target once at the new grain on a disposable store (the load chain, with `STORES` naming that store): a
+target whose input the loader cannot resolve stops loudly at its first bundle, and no unit test shows it. Not built: a
+grain between the two (one unit a step, or one unit a load).
 
 ## Init and migrate modes
 

@@ -1126,6 +1126,7 @@ bookkeeping:
     # writer finds each row's Security, Fund and registrant Company by lookup, and a row whose master is not
     # mastered yet keeps an empty id for `silver refresh-ids`, so this target needs no MDM run before it.
     silver:
+      grain: run
       run: {facts: [period]}
       extract: holding.yaml
       silver:

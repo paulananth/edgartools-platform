@@ -35,6 +35,7 @@ bookkeeping:
   version: 2
   targets:
     mastering:
+      grain: run
       # The combine's rows are the records, one per CIK (`distinct_on`): every filing of a CIK carries the same
       # first and latest filing, so the one kept is any of them.
       extract: combine.yaml

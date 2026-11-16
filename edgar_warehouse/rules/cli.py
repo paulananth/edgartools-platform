@@ -79,7 +79,7 @@ def _run(args, kind: str, name: str, rules) -> dict:
                 raise Blocked("The run is of another source or target")
             from edgar_warehouse.rules.local import work_run
 
-            return work_run(book, args.work_run_id)
+            return work_run(book, args.work_run_id, workers=args.workers)
         if not args.input_manifest or not args.input_sha256:
             raise Blocked("Submission requires an exact input manifest URI and hash")
         export = frozen.export(kind, name, Path(args.root))
@@ -584,5 +584,7 @@ def register(subparsers):
             command.add_argument("--resume-run-id")
             command.add_argument("--work-run-id", help="Do the work of this run of a target at grain `run`, in "
                                  "this process, and complete it (safe to repeat on a stopped run)")
+            command.add_argument("--workers", type=int, default=1,
+                                 help="With --work-run-id: units of one step worked at once, each in its own process")
             command.add_argument("--limit", type=int, default=100)
         command.set_defaults(handler=_handle)

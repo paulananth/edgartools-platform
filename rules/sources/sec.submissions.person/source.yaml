@@ -119,6 +119,7 @@ bookkeeping:
   version: 2
   targets:
     mastering:
+      grain: run
       # The documents in units of at most 8 MiB, each at most max_artifacts.
       extract: source.yaml
       # Every reading of the bundle as one publication.

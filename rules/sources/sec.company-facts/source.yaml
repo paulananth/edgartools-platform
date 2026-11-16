@@ -15,6 +15,7 @@ bookkeeping:
   version: 2
   targets:
     silver:
+      grain: run
       extract: facts.yaml
       silver:
         - {name: land, land: {silver: company_fact, table: company_fact}}

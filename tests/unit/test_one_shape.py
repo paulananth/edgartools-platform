@@ -22,7 +22,17 @@ def test_every_target_is_recorded():
 
 @pytest.mark.parametrize("name", sorted(STEPS))
 def test_a_target_gives_its_recorded_steps(name):
-    assert targets()[name] == STEPS[name]
+    assert {key: value for key, value in targets()[name].items() if key != "grain"} == STEPS[name]
+
+
+# The targets Bookkeeping still holds by the unit: one whose step another target reads as verified units, and the
+# target that reads them (a run at grain `run` has no verified unit, and its loader reads only its own run).
+BY_THE_UNIT = {"sec.nport.security/mastering", "sec.nport.security/mastering_other_keys"}
+
+
+def test_every_target_is_at_grain_run_except_the_two_joined_by_a_read_of_verified_units():
+    assert {name for name, body in targets().items() if body.get("grain") != "run"} == BY_THE_UNIT
+    assert all("grain" not in targets()[name] for name in BY_THE_UNIT)
 
 
 @pytest.mark.parametrize("name", sorted(STEPS))

@@ -24,6 +24,7 @@ bookkeeping:
   version: 2
   targets:
     mastering:
+      grain: run
       # The combine's rows are the records, one per adviser (`distinct_on`); no reduce or record step.
       extract: combine.yaml
       master: {keys: {dataset: sec.ncen.adviser.v1, distinct_on: [crd], table: adviser}}

@@ -1155,6 +1155,7 @@ bookkeeping:
     # and the ISIN answers are read together, every bundle in parallel, with
     # no order between them; `id_type` is the folder, OpenFIGI's own idType.
     mastering:
+      grain: run
       local: true
       # Source read and combine run in the loader's process (no claim, lease or
       # verifier); the run in the database starts at prepare.

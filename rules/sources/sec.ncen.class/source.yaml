@@ -29,6 +29,7 @@ bookkeeping:
   version: 2
   targets:
     mastering:
+      grain: run
       # The combine's rows are the records, one per class; no record step.
       extract: combine.yaml
       master: {keys: {dataset: sec.ncen.class.v1, distinct_on: [class_id], table: share_class}}

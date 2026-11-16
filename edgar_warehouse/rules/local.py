@@ -17,8 +17,8 @@ def staged_inputs(artifacts, export_body: dict, target: str, inputs: dict, modul
     """The manifest reference a run takes. A target not marked `local` keeps the one it was given. A local
     target has its source read and combine steps run here, and the run takes the staged manifest."""
     config = validate(export_body, target)
-    if not config.get("local"):
-        return inputs  # also a target at grain `run`: its steps run after the run has started (`work_run`)
+    if not config.get("local") or config.get("grain") == "run":
+        return inputs  # a target at grain `run` has every step run after the run has started (`work_run`)
     from edgar_warehouse.workers import profile
 
     manifest = artifacts.json(inputs)
@@ -30,11 +30,11 @@ def staged_inputs(artifacts, export_body: dict, target: str, inputs: dict, modul
                          stage_manifest(manifest, config["steps"], items, done, artifacts))
 
 
-def work_run(book, run_id: str, modules: dict | None = None) -> dict:
+def work_run(book, run_id: str, modules: dict | None = None, *, workers: int = 1) -> dict:
     """Do the whole work of a run whose target is at grain `run`, then complete the run. Bookkeeping holds the
     run's start and completion only; every step runs here, in order, each unit checked by its own worker module.
     Safe to repeat on a stopped run: a written file is written again as the same file, and the Change Journal
-    skips what it recorded."""
+    skips what it recorded. A step's units run `workers` at once, each in its own process."""
     run = book.status(run_id, limit=1)["run"]
     if run["state"] == "complete":
         return book.status(run_id)
@@ -56,16 +56,36 @@ def work_run(book, run_id: str, modules: dict | None = None) -> dict:
                 "rules": submission["rules"], "ordinal": item["ordinal"],
                 "effect_key": digest({"rules": submission["rules"], "step": step["name"], "key": item["key"],
                                       "unit": item["unit"]})}
-    run_local(config["steps"], items, modules, book.artifacts, every=True, extra=claim)
+    run_local(config["steps"], items, modules, book.artifacts, every=True, extra=claim, workers=workers)
     return book.finalize(run_id)
 
 
+def _work(module, envelope: dict, artifacts, checked: bool) -> tuple[dict, list[str]]:
+    """One unit's work and, for a step that writes a destination, its own check: the receipt and the checks that failed."""
+    written = module.execute(envelope, artifacts)
+    candidate = {"uri": written["uri"], "sha256": written["sha256"]}
+    if not checked:
+        return candidate, []
+    checks, _ = module.check({**envelope, "candidate": candidate}, artifacts)
+    return candidate, sorted(name for name, value in checks.items() if value is not True)
+
+
+def _work_in_process(operation: str, envelope: dict, checked: bool) -> tuple[dict, list[str]]:
+    """`_work` in a worker process of its own, which loads the operation's module and opens its own artifact store."""
+    from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+    from edgar_warehouse.workers import profile
+
+    return _work(profile(operation), envelope, Artifacts(), checked)
+
+
 def run_local(steps: list[dict], items: list[dict], modules: dict, artifacts, *, every: bool = False,
-              extra=None) -> dict[tuple[str, str], dict]:
+              extra=None, workers: int = 1) -> dict[tuple[str, str], dict]:
     """The receipt of every local unit, by (step, key). `steps` are the target's configured steps in order,
     `items` its worklist, `modules` the worker module of each local operation. With `every`, all the steps run
     here (a target at grain `run`): `extra(step, item)` adds what a worker reads of its run to the envelope, and
-    a step that writes a destination checks its own result, as a worker does before it reports."""
+    a step that writes a destination checks its own result, as a worker does before it reports. A step's units
+    depend only on earlier steps, so with `workers` above one they run that many at once, each in its own process
+    (the operation's own module, loaded there)."""
     local = [step for step in steps if every or step["operation"] in LOCAL_OPERATIONS]
     names = {step["name"] for step in local}
     for step in local:
@@ -82,6 +102,7 @@ def run_local(steps: list[dict], items: list[dict], modules: dict, artifacts, *,
         return _receipt(done, dependency)
 
     for step in local:
+        ready = []
         for item in sorted(units[step["name"]], key=lambda unit: unit["ordinal"]):
             unit = item["unit"]
             cursor = unit["cursor"]
@@ -92,13 +113,20 @@ def run_local(steps: list[dict], items: list[dict], modules: dict, artifacts, *,
                         "keys": unit["keys"], "cursor": cursor}
             if extra is not None:
                 envelope.update(extra(step, item))
-            written = modules[step["operation"]].execute(envelope, artifacts)
-            candidate = {"uri": written["uri"], "sha256": written["sha256"]}
-            if every and step["operation"] not in LOCAL_OPERATIONS:
-                checks, _ = modules[step["operation"]].check({**envelope, "candidate": candidate}, artifacts)
-                failed = sorted(name for name, value in checks.items() if value is not True)
-                if failed:
-                    raise Blocked(f"Step {step['name']} unit {item['key']}: check {', '.join(failed)} failed")
+            ready.append((item, envelope))
+        checked = every and step["operation"] not in LOCAL_OPERATIONS
+        if workers > 1 and len(ready) > 1:
+            from concurrent.futures import ProcessPoolExecutor
+            from multiprocessing import get_context
+
+            with ProcessPoolExecutor(min(workers, len(ready)), mp_context=get_context("spawn")) as pool:
+                results = list(pool.map(_work_in_process, [step["operation"]] * len(ready),
+                                        [envelope for _, envelope in ready], [checked] * len(ready)))
+        else:
+            results = [_work(modules[step["operation"]], envelope, artifacts, checked) for _, envelope in ready]
+        for (item, _), (candidate, failed) in zip(ready, results):
+            if failed:
+                raise Blocked(f"Step {step['name']} unit {item['key']}: check {', '.join(failed)} failed")
             done[(step["name"], item["key"])] = candidate
     return done
 

@@ -183,7 +183,8 @@ class Loader:
         if body["bookkeeping"]["targets"][self.target].get("grain") == "run":
             # Bookkeeping holds this run's start and completion only: one process does its steps and completes it.
             final = json.loads(self.commands("worker", "rules", "run", "--source", self.source, "--target",
-                                             self.target, "--work-run-id", run_id))
+                                             self.target, "--work-run-id", run_id, "--workers",
+                                             str(self.commands.workers)))
         else:
             final = self.commands.drive(run_id, run_steps(body, self.target))
         state = final["run"]["state"]

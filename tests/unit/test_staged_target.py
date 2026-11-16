@@ -18,19 +18,34 @@ STEPS = [
 ]
 
 
+def by_the_unit(name: str) -> dict:
+    """A source's rules with its targets held by the unit, as a `local` target's steps are then staged."""
+    body = deepcopy(source(name))
+    for target in body["bookkeeping"]["targets"].values():
+        target.pop("grain", None)
+    return body
+
+
 def test_a_target_may_declare_itself_local_and_nothing_else_changes():
-    body = deepcopy(source("sec.nport.registrant"))
+    body = by_the_unit("sec.nport.registrant")
     body["bookkeeping"]["targets"]["mastering"]["local"] = True
 
     assert validate(body, "mastering")["local"] is True
-    assert "local" not in validate(source("sec.nport.registrant"), "mastering")
+    assert "local" not in validate(by_the_unit("sec.nport.registrant"), "mastering")
 
 
-def test_openfigi_mastering_is_local_and_its_run_starts_at_prepare():
-    config = validate(source("openfigi"), "mastering")
+def test_openfigi_mastering_held_by_the_unit_is_local_and_its_run_starts_at_prepare():
+    config = validate(by_the_unit("openfigi"), "mastering")
 
     assert config["local"] is True
     assert [step["name"] for step in staged(config)["steps"]] == ["prepare", "merge", "processed"]
+
+
+def test_a_local_target_at_grain_run_holds_no_step_at_all():
+    config = validate(source("openfigi"), "mastering")
+
+    assert (config["grain"], config["local"]) == ("run", True)
+    assert staged(config)["steps"] == []
 
 
 def test_local_must_be_a_boolean():
@@ -162,14 +177,14 @@ def test_a_local_step_that_requires_a_database_step_is_refused_by_the_configurat
 def test_the_driver_waits_only_for_the_steps_the_database_run_holds():
     from edgar_warehouse.rules.driving import run_steps
 
-    assert [step["name"] for step in run_steps(source("openfigi"), "mastering")] == ["prepare", "merge", "processed"]
-    unmarked = source("sec.nport.registrant")
+    assert [step["name"] for step in run_steps(by_the_unit("openfigi"), "mastering")] == ["prepare", "merge", "processed"]
+    unmarked = by_the_unit("sec.nport.registrant")
     assert [s["name"] for s in run_steps(unmarked, "mastering")] == [
         s["name"] for s in validate(unmarked, "mastering")["steps"]]
 
 
-def test_company_mastering_is_local_and_its_run_starts_at_records():
-    config = validate(source("sec.company"), "mastering")
+def test_company_mastering_held_by_the_unit_is_local_and_its_run_starts_at_records():
+    config = validate(by_the_unit("sec.company"), "mastering")
 
     assert config["local"] is True
     assert [step["name"] for step in staged(config)["steps"]] == ["records", "merge", "processed"]
@@ -181,7 +196,6 @@ def test_a_target_at_grain_run_keeps_no_step_in_the_database_and_its_manifest_is
     from edgar_warehouse.bookkeeping.clean.config import worklist
 
     body = deepcopy(source("sec.nport.registrant"))
-    body["bookkeeping"]["targets"]["mastering"]["grain"] = "run"
     config = staged(validate(body, "mastering"))
 
     assert config["steps"] == [] and config["loader_steps"]
@@ -194,9 +208,9 @@ def test_a_target_at_grain_run_keeps_no_step_in_the_database_and_its_manifest_is
 
 
 @pytest.mark.parametrize("change, message", [({"grain": "off"}, "grain is one of"), ({"grain": False}, "grain is one of"),
-                                             ({"grain": "run", "local": True}, "drop `local`")])
-def test_a_grain_is_unit_or_run_and_a_run_grain_target_is_not_also_local(change, message):
-    body = deepcopy(source("sec.nport.registrant"))
+                                             ({"grain": "bundle"}, "grain is one of")])
+def test_a_grain_is_unit_or_run(change, message):
+    body = by_the_unit("sec.nport.registrant")
     body["bookkeeping"]["targets"]["mastering"].update(change)
 
     with pytest.raises(Blocked, match=message):
@@ -204,5 +218,16 @@ def test_a_grain_is_unit_or_run_and_a_run_grain_target_is_not_also_local(change,
 
 
 def test_a_target_that_names_no_grain_is_held_by_the_unit():
-    assert "grain" not in validate(source("sec.nport.registrant"), "mastering")
-    assert all(step for step in staged(validate(source("sec.nport.registrant"), "mastering"))["steps"])
+    config = validate(source("sec.nport.security"), "mastering")
+    assert "grain" not in config
+    assert staged(config)["steps"] == config["steps"]
+
+
+def test_a_local_target_at_grain_run_keeps_the_manifest_it_was_given():
+    """Its local steps are not run before the run starts: the run takes the whole manifest, and the loader runs
+    every step after the run has started."""
+    class Untouched:
+        def json(self, ref):
+            raise AssertionError("the manifest is not read before the run starts")
+
+    assert local.staged_inputs(Untouched(), source("openfigi"), "mastering", REF) == REF
