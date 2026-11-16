@@ -19,6 +19,9 @@ class Store:
         self.placed.append((root, document))
         return {"uri": f"{root}/{len(self.placed)}", "sha256": f"{len(self.placed):064d}"}
 
+    def read(self, uri):
+        raise Blocked(f"Artifact missing or unreadable: {uri}")  # nothing was written before
+
 
 class Module:
     def __init__(self, name):
@@ -115,3 +118,52 @@ def test_a_step_of_one_unit_hands_the_unit_every_worker():
     local.run_local(steps, items, {"source.read": module}, Store(), every=True)
 
     assert [call["processes"] for call in module.calls] == [8, 1]
+
+
+def test_a_stopped_run_worked_again_does_not_read_again_what_it_wrote(tmp_path):
+    """The reads of a stopped run are kept: a restart does the steps after them only, with the same receipts."""
+    import hashlib
+
+    from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+
+    artifacts = Artifacts()
+
+    class Writing:
+        def __init__(self):
+            self.calls = []
+
+        def execute(self, envelope, store):
+            self.calls.append(envelope["output"])
+            return store.put_bytes(envelope["output"], repr(sorted(envelope["input"].items())).encode())
+
+        def check(self, envelope, store):
+            return {name: True for name in envelope["checks"]}, []
+
+    read, merge = Writing(), Writing()
+    steps = [{"name": "read", "operation": "source.read", "requires": [], "checks": []},
+             {"name": "merge", "operation": "mastering.merge", "requires": ["read"], "checks": ["mdm.committed"]}]
+    items = [{"step": "read", "key": str(n), "ordinal": n, "unit": {
+                  "keys": {"id": str(n)}, "input": REF, "output": (tmp_path / f"read-{n}").as_uri(), "cursor": {}}}
+             for n in range(3)]
+    items.append({"step": "merge", "key": "all", "ordinal": 0, "unit": {
+        "keys": {"id": "all"}, "input": {"from": {"step": "read", "key": "0"}},
+        "output": (tmp_path / "merge").as_uri(), "cursor": {}}})
+    modules = {"source.read": read, "mastering.merge": merge}
+
+    first = local.run_local(steps, items, modules, artifacts, every=True)
+    (tmp_path / "read-2").unlink()  # the run stopped before its last read was written
+    second = local.run_local(steps, items, modules, artifacts, every=True)
+
+    assert len(read.calls) == 4 and read.calls[3] == (tmp_path / "read-2").as_uri()  # only the missing read again
+    assert len(merge.calls) == 2  # a step that writes a destination is always done again; the destination skips
+    assert second == first
+    assert first[("read", "0")]["sha256"] == hashlib.sha256((tmp_path / "read-0").read_bytes()).hexdigest()
+
+
+def test_a_run_held_by_the_unit_stages_every_local_read_as_before():
+    read = Module("read")
+    steps = [step("read", "source.read")]
+    local.run_local(steps, [item("read", "one", REF)], {"source.read": read}, Store())
+    local.run_local(steps, [item("read", "one", REF)], {"source.read": read}, Store())
+    assert len(read.calls) == 2
+
