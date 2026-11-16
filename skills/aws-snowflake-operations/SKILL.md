@@ -34,7 +34,69 @@ No dev environment exists on AWS or on Snowflake; a command that targets dev has
 | **Bronze** | S3 (`s3://<bucket>/`) and local captures | Provider files as captured, one receipt per file. Never mutated. |
 | **Merge Stage and MDM** | PostgreSQL 16 (local, or Snowflake Postgres when hosted) | Pre-merge records wait in the Merge Stage; the golden record is in MDM. |
 | **RDM** | PostgreSQL 16 | Code sets and their versions. |
-| **Silver** | PostgreSQL 16, written by `edgar_warehouse/silver_writer/` | Every detail of each source, typed and keyed. The platform ends here. |
+| **Silver** | PostgreSQL 16, written by `edgar_warehouse/silver_writer/` | Every detail of each source, typed and keyed. |
+| **Mirror** | Snowflake `DB_EDGARTOOLS_MIRROR` (target design) | One managed Postgres mirror database with Snowflake-managed Iceberg tables for approved final MDM, RDM and Silver outputs. Consumers read it; the mirror owns writes. |
+| **Gold** | Snowflake, built with dbt on mirror inputs | Business-facing models transform the read-only mirror. Gold writes to a separately configured writable target, never into mirror-owned tables. |
+
+This mirror-to-Gold flow is the selected architecture; it is not a claim that
+the production mirror or Gold models are live. The source stores currently
+reside in separate PostgreSQL databases, so one managed mirror cannot combine
+them until source consolidation is separately qualified. Follow
+[`SINGLE-DATABASE-ICEBERG.md`](../data-platform/SINGLE-DATABASE-ICEBERG.md)
+for the source boundary, selection, hosted proof and Gold acceptance gates.
+
+## Retiring a Snowflake database
+
+For an architecture change that removes a Snowflake database, resolve the exact
+database name first; a database is not a schema. Use the production connection
+and an administrative role to inventory it before deletion:
+
+```sql
+SHOW DATABASES LIKE '<database_name>';
+SHOW SCHEMAS IN DATABASE <database_name>;
+SHOW OBJECTS IN DATABASE <database_name>;
+SHOW GRANTS ON DATABASE <database_name>;
+```
+
+Inspect grants and all objects in each user schema as well. `SHOW OBJECTS IN
+DATABASE` includes built-in `INFORMATION_SCHEMA` views; separate those from
+user-owned objects when assessing impact. Check dependencies and retention,
+and record both with the proposed drop.
+
+Check managed mirror ownership before a database drop. For a mirror target,
+follow the Snowflake Postgres mirror skill's `DROP_MIRROR` workflow and its
+approval checkpoint; do not drop the target database directly. If mirror
+inventory is denied because the `snowflake` application lacks `USAGE` on the
+source Postgres instance, use `SHOW TASKS IN ACCOUNT` to check for
+`APPLY_MIRROR_<mirror_name>` tasks. An empty task list does not establish
+historical mirror ownership. If target ownership remains uncertain, stop before
+dropping the database and report the missing evidence. Do not add the
+application grant just to complete preflight without authorization, because it
+changes access and may affect active mirrors.
+
+Check for network-rule policy associations before dropping the database. A
+network rule inside the database can be referenced by a network policy attached
+to a live Postgres instance, which blocks `DROP DATABASE ... CASCADE`. Use
+`SHOW NETWORK RULES IN SCHEMA <database>.<schema>`, `SHOW NETWORK POLICIES`,
+`DESC NETWORK POLICY <policy_name>`, and `DESCRIBE POSTGRES INSTANCE
+<instance_name>`; inspect only rule names and policy associations. Never print
+IP lists or `access_roles`. If a contained rule is referenced by an active
+policy, stop: relocating the rule while preserving access or removing the
+association is a separate network-security change. Obtain authorization for
+that exact change and verify the new policy reference before retrying the
+database drop.
+
+After the owner explicitly authorizes deletion of the named database and its
+inventoried contents, run `DROP DATABASE <database_name> CASCADE` and verify it
+is absent with `SHOW DATABASES LIKE '<database_name>'`. Do not remove other
+account objects, database grants, Postgres instances, network policies, or
+integrations as part of this operation unless they are separately requested
+and inventoried.
+
+For the selected single managed Iceberg mirror architecture, consult
+[`SINGLE-DATABASE-ICEBERG.md`](../data-platform/SINGLE-DATABASE-ICEBERG.md).
+Retiring an existing database does not complete source consolidation or the
+hosted mirror qualification described there.
 
 ## Checking Snowflake credit usage
 
