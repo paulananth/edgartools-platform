@@ -91,12 +91,19 @@ def test_the_lanes_run_to_the_end_together_with_no_step_waiting_on_a_later_one()
         assert ran, f"stuck: {[q[0]['name'] for q in lanes.values() if q]}"
 
 
-def test_the_steps_that_build_links_share_one_lane():
-    """They hold one lease on the links table, so they take turns."""
-    builds = {(s, t) for (s, t), body in targets().items() if any(x["operation"] == "silver.derive" for x in body["steps"])}
-    lanes = {step["lane"] for step in STEPS if (step["source"], step["target"]) in builds
-             and (step["source"], step["target"]) != ("sec.company-facts", "silver")}
-    assert len(lanes) <= 2 and "L" in lanes, lanes
+def test_the_chain_builds_the_links_table_once_after_the_loads_and_no_target_builds_it():
+    builds = sorted(f"{s}/{t}" for (s, t), body in targets().items()
+                    if any((x.get("input") or {}).get("keys", {}).get("build") == "links" for x in body["steps"]))
+    assert builds == []
+    assert all("--no-links" in chain.arguments(step) for step in STEPS)
+    calls = []
+    original = chain.run
+    chain.run = lambda args, env, log=None: calls.append(args) or 0
+    try:
+        chain.finish({}, Path("/dev/null"))
+    finally:
+        chain.run = original
+    assert calls.count(["silver", "links"]) == 1 and calls.index(["silver", "links"]) < calls.index(next(c for c in calls if c[1] == "refresh-ids"))
 
 
 def test_the_chain_has_eight_lanes_and_company_facts_is_the_eighth():
@@ -157,10 +164,6 @@ def steps_of(source, like=None):
     return [s["name"] for s in (same or found)]
 
 
-def builders():
-    return [s for s in STEPS if INFERRED[key(s)]["builds_links"]]
-
-
 def test_a_target_that_reads_another_runs_step_follows_that_target():
     for step in STEPS:
         for after in INFERRED[key(step)]["after_target"]:
@@ -168,31 +171,19 @@ def test_a_target_that_reads_another_runs_step_follows_that_target():
             assert earlier and set(earlier) <= ancestors(step["name"]), step["name"]
 
 
-def test_the_last_links_build_follows_every_source_that_states_links():
-    """The links table is rebuilt whole from every stored record at each build, so the last build shows only the links
-    whose masters exist by then."""
-    final = builders()[-1]
-    for step in STEPS:
-        if INFERRED[key(step)]["states_links_to"] and step["name"] != final["name"]:
-            assert step["name"] in ancestors(final["name"]), step["name"]
-
-
-def test_a_load_follows_the_sources_its_rules_prefer_and_the_masters_its_links_end_at():
-    final_source = builders()[-1]["source"]
+def test_a_load_follows_the_sources_its_rules_prefer():
     for step in STEPS:
         item = INFERRED[key(step)]
-        wanted = set(item["prefer_after"]) | (set(item["states_links_to"]) - {final_source})
+        wanted = set(item["prefer_after"])
         for source in wanted - {step["source"]}:
             assert set(steps_of(source, step)) <= ancestors(step["name"]), (step["name"], source)
 
 
 def test_every_wait_is_explained_by_what_the_rules_declare():
-    final = builders()[-1]["name"]
     for step in STEPS:
         item = INFERRED[key(step)]
         for waited in step.get("waits_for") or []:
             other = BY_NAME[waited]
-            explained = (other["source"] in item["prefer_after"] or other["source"] in item["states_links_to"]
-                         or (other["source"] == step["source"] and other["target"] in item["after_target"])
-                         or (step["name"] == final and INFERRED[key(other)]["states_links_to"]))
+            explained = (other["source"] in item["prefer_after"]
+                         or (other["source"] == step["source"] and other["target"] in item["after_target"]))
             assert explained, (step["name"], waited)

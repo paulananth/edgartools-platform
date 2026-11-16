@@ -5,9 +5,11 @@
 # which carries on where the last stopped.
 # Steps that may run at the same time are in different `lane`s, and `waits_for` names a step of another lane that must
 # be done first. Each lane runs its steps in file order (`load_chain.py --lane <name>`), so every lane can start at once.
-# Every `waits_for` and every lane's order comes from `infer_dependencies.py` (what the rules declare; a test holds the two
-# equal), never from a machine's size. Eight lanes: A the Companies the others follow; P the Persons; S the Securities; C the other
-# Companies; L the targets that build the links table, then GLEIF, the last build; O ownership; D the other silver-only sources; F company-facts.
+# Every `waits_for` comes from `infer_dependencies.py` (what the rules declare; a test holds the two equal), never from
+# a machine's size: a load waits only for the source whose golden records its own records join. Links set no order:
+# the links table is built once, after the last load (`load_chain.py --finish`).
+# Eight lanes: A the Companies the others follow; P the Persons; S the Securities; C the other Companies; L funds, share
+# classes, N-PORT Securities and GLEIF; O ownership; D the other silver-only sources; F company-facts.
 version: 1
 steps:
   - name: company
@@ -53,7 +55,6 @@ steps:
     attempts: 5
   - name: openfigi-answers
     lane: S
-    waits_for: [company]
     source: openfigi
     target: mastering
     capture: openfigi/2026q2-nport
@@ -66,7 +67,6 @@ steps:
     attempts: 8
   - name: openfigi-tickers
     lane: S
-    waits_for: [company]
     source: openfigi
     target: mastering
     capture: openfigi/form4-tickers-20261109
@@ -226,7 +226,6 @@ steps:
     attempts: 3
   - name: ncen-fund-2025q4
     lane: L
-    waits_for: [ncen-registrant-2025q4]
     source: sec.ncen.fund
     target: mastering
     capture: sec.ncen-datasets/2025q4
@@ -237,7 +236,6 @@ steps:
     attempts: 3
   - name: ncen-fund-2026q1
     lane: L
-    waits_for: [ncen-registrant-2026q1]
     source: sec.ncen.fund
     target: mastering
     capture: sec.ncen-datasets/2026q1
@@ -248,7 +246,6 @@ steps:
     attempts: 3
   - name: ncen-fund-2026q2
     lane: L
-    waits_for: [ncen-registrant-2026q2]
     source: sec.ncen.fund
     target: mastering
     capture: sec.ncen-datasets/2026q2
@@ -259,7 +256,6 @@ steps:
     attempts: 3
   - name: ncen-fund-2026q3
     lane: L
-    waits_for: [ncen-registrant-2026q3]
     source: sec.ncen.fund
     target: mastering
     capture: sec.ncen-datasets/2026q3
@@ -270,7 +266,6 @@ steps:
     attempts: 3
   - name: nport-security
     lane: L
-    waits_for: [nport-fund]
     source: sec.nport.security
     target: mastering
     capture: sec.nport-datasets/2026q2
@@ -352,7 +347,7 @@ steps:
     attempts: 3
   - name: gleif
     lane: L
-    waits_for: [adv-mastering-06, ownership]
+    waits_for: [company]
     source: gleif
     target: mastering
     capture: gleif/20260911-1600-publisher
@@ -364,7 +359,7 @@ steps:
     attempts: 40
   - name: adv-custodians-06
     lane: L
-    waits_for: [gleif]
+    waits_for: [nport-registrant, ncen-adviser-2026q3, gleif]
     source: iapd.adv
     target: custodians
     capture: iapd.adv/p07-2026-06
@@ -390,7 +385,6 @@ steps:
     attempts: 3
   - name: ownership
     lane: O
-    waits_for: [company]
     source: sec.ownership
     target: mastering
     capture: sec.ownership/p07-cohort

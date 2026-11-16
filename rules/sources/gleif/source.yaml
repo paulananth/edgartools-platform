@@ -67,9 +67,6 @@ bookkeeping:
       run: {facts: [publication_count]}
       extract: level1-json.yaml
       master: {keys: {dataset: gleif.level1.v1, record_column: record, table: level1}}
-      silver:
-        # Links are a silver table, built from the stored records after the merge.
-        - {name: links, derive: {build: links, reads: mastering_record, silver: relationship}}
 bronze:
   family: gleif
 dataset_contracts:

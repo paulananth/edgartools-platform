@@ -53,7 +53,8 @@ def arguments(step: dict) -> list[str]:
     capture = ROOTS[step.get("capture_root", "captures")] / step["capture"]
     args = ["--source", step["source"], "--target", step["target"], "--capture", str(capture),
             "--capture-run", f"{RUN}-{step['name']}", "--stores", str(STORES),
-            "--workers", str(step["workers"]), "--bundles", str(step["bundles"]), "--minutes", str(step["minutes"])]
+            "--workers", str(step["workers"]), "--bundles", str(step["bundles"]), "--minutes", str(step["minutes"]),
+            "--no-links"]  # the links table is built once, in `finish`
     if "revision" in step:
         args += ["--revision", str(step["revision"])]
     for name, value in (step.get("facts") or {}).items():
@@ -123,10 +124,11 @@ def attempt_loop(step: dict, env: dict, state: Path) -> bool:
 
 
 def finish(env: dict, state: Path) -> None:
-    """After the loads: the lookups are built once, then each silver table's master ids are filled from MDM as it is now
-    (a row that landed before its master was mastered keeps an empty id)."""
+    """After the loads: the lookups and the links table are built once each, then each silver table's master ids are
+    filled from MDM as it is now (a row that landed before its master was mastered keeps an empty id)."""
     note("lookups start", state)
     note(f"lookups rc={run(['mdm', 'build-lookups'], env, LOGS / f'chain-{RUN}-lookups.log')}", state)
+    note(f"links rc={run(['silver', 'links'], env, LOGS / f'chain-{RUN}-links.log')}", state)
     for spec in sorted((ROOT / "rules/sources").glob("*/silver-*.yaml")):
         table = yaml.safe_load(spec.read_text())["table"]
         code = run(["silver", "refresh-ids", table], env, LOGS / f"chain-{RUN}-refresh-{table}.log")

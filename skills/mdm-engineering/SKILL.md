@@ -341,8 +341,7 @@ Name the claim in one sentence, then take the smallest cohort that can falsify i
 **Compare two stores** by what they hold, never by the ids each store makes. Records: each body without its
 assertion id and publication key. Silver rows: column by column, without the load time; an MDM id column by
 how many rows hold one. Links: each master and assertion id mapped to the records it holds, and each evidence
-list sorted, since it keeps store order. Master the kinds a links step points to first: a links step with
-nothing to link refuses an empty snapshot. Two full loads side by side on one laptop share its memory, so
+list sorted, since it keeps store order. Build the links (`silver links`) after the kinds they point to are mastered. Two full loads side by side on one laptop share its memory, so
 each runs slower than alone; say the pair's time.
 
 Say the time of any proof over ten minutes before starting it. When a run

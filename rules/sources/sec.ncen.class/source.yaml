@@ -33,9 +33,6 @@ bookkeeping:
       # The combine's rows are the records, one per class; no record step.
       extract: combine.yaml
       master: {keys: {dataset: sec.ncen.class.v1, distinct_on: [class_id], table: share_class}}
-      silver:
-        # The issuer links are a silver table, built from the stored records after the merge.
-        - {name: links, derive: {build: links, reads: mastering_record, silver: relationship}}
 execution:
   profile: source.read
   workers: 1

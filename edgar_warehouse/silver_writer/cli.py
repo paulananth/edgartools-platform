@@ -43,6 +43,15 @@ def _handle(args):
             ids = MdmIds(engine("MDM_DATABASE_URL")) if os.environ.get("MDM_DATABASE_URL") else None
             silver_engine = engine("SILVER_DATABASE_URL")
             result = line_items.build(silver_engine, DatabaseSink(silver_engine), ids)
+        elif args.silver_command == "links":
+            from datetime import datetime, timezone
+
+            from edgar_warehouse.control_contract import digest
+            from edgar_warehouse.mastering import links
+            from edgar_warehouse.rules import files
+
+            result = links.build(engine("SILVER_DATABASE_URL"), engine("MDM_DATABASE_URL"), digest(files.policy()),
+                                 datetime.now(timezone.utc).isoformat())
         elif args.silver_command == "measures":
             from edgar_warehouse.financials import measures
 
@@ -102,6 +111,8 @@ def _commands(parser):
     landed.set_defaults(handler=_handle)
     built = commands.add_parser("line-items", help="Build company_line_item from company_fact by line-items.yaml")
     built.set_defaults(handler=_handle)
+    linked = commands.add_parser("links", help="Build the links table whole from the records MDM holds now")
+    linked.set_defaults(handler=_handle)
     measured = commands.add_parser("measures", help="Build company_measure from company_line_item by measures.yaml")
     measured.set_defaults(handler=_handle)
     refreshed = commands.add_parser("refresh-ids", help="Fill the MDM ids of rows already landed, from MDM as it is now")

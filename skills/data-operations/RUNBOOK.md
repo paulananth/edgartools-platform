@@ -111,9 +111,16 @@ python <this skill>/scripts/load_chain.py --from <step>   # carry on; a step tha
 
 Masters come first and each source's silver target last, so silver rows find their masters as they land. A source's later
 delivery is a new publication and carries the next `--revision`. The chain stops at the first step that does not finish
-in its attempts and names why in that step's log. After the last step it builds the lookups and fills each silver
-table's master ids (`--finish` runs only those). Check a running chain every 30 minutes; a step that stops reports at its
+in its attempts and names why in that step's log. After the last step it builds the lookups and the links table, once
+each, and fills each silver table's master ids (`--finish` runs only those). Check a running chain every 30 minutes; a step that stops reports at its
 check, never on a tighter loop.
+
+### The links table is built once
+
+The links table is built whole from every stored record (`edgar-warehouse silver links`), so no target carries a step
+for it. A `load` run alone builds it after its last bundle when it mastered anything; a load that is one of several
+passes `--no-links` and the last step builds it (the chain's `--finish`). A newly mastered record can be the end a
+stored link waited for, so any load that masters builds, whatever its source states.
 
 ### Dependencies between loads
 
@@ -123,15 +130,12 @@ record that finds no master and releases it when a later file gives one, so a lo
 rules state three kinds of ordering:
 
 - **Must** (a load leaves something out otherwise). A target that reads another run's step of its own source follows that
-  target. The links table is rebuilt whole from every stored record at each build, so a build shows only the links whose
-  masters exist when it runs: the last build follows every source whose contract states links. The lookups and each silver
-  table's master ids follow every load (`--finish`).
-- **Prefer** (records wait, or a link is missing, until the other load is done; never wrong, only later). A source with a
+  target. The lookups, the links table and each silver table's master ids follow every load (`--finish`).
+- **Prefer** (records wait until the other load is done; never wrong, only later). A source with a
   matching rule that waits follows the source the rule names (`holder_source`), else the sources whose minting rules use the
-  same identifier namespace, else the sources that mint its kind. A source whose links point at another source's masters
-  follows it. Two sources that each prefer the other have no order to keep.
-- **Alone** (these take turns; they are not dependencies). Merges of one kind of master data that merge golden records or create them by exact name (one that joins stored ones, or creates by an identifier, runs beside the others), the targets that build the
-  links table (one lease), and two loads of one source and target (their outputs would collide).
+  same identifier namespace, else the sources that mint its kind. Links set no order. Two sources that each prefer the
+  other have no order to keep.
+- **Alone** (these take turns; they are not dependencies). Merges of one kind of master data that merge golden records or create them by exact name (one that joins stored ones, or creates by an identifier, runs beside the others), and two loads of one source and target (their outputs would collide).
 
 Everything else runs at the same time. The chain file turns that into lanes: `lane` marks steps that may run together,
 `waits_for` is exactly the edges above that cross lanes, and a test holds the chain equal to the inference, so a rule change

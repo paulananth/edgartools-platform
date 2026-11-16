@@ -136,7 +136,8 @@ def test_a_snapshot_delivery_of_some_companies_removes_the_others(silver_store):
     assert whole > 1 and left == 1
 
 
-def test_links_land_as_one_row_a_period_and_a_second_run_keeps_them(postgres, monkeypatch):
+def test_links_land_as_one_row_a_period_and_a_second_build_keeps_them(postgres, monkeypatch):
+    """`silver links`: the table built whole from the stored records, each build given the last one's links."""
     from edgar_warehouse.mastering import links, store as stores
 
     admin, _ = postgres
@@ -148,24 +149,23 @@ def test_links_land_as_one_row_a_period_and_a_second_run_keeps_them(postgres, mo
 
     def calculate(db, policy, as_of, stored):
         seen.append(stored)
-        return [edge], {}
+        return [edge], {"no_master": 2}
 
     with silver_database(admin) as (owner, runtime):
         silver.migrate(owner, runtime_role=RUNTIME)
         silver.register(owner, spec_file(files.ROOT / "silver" / "silver-relationship.yaml", None), runtime_role=RUNTIME)
-        monkeypatch.setattr(silver_derive, "engines", lambda: (runtime, MasterPolicy()))
-        monkeypatch.setattr(runtime, "dispose", lambda: None)
         monkeypatch.setattr(links, "calculate", calculate)
         monkeypatch.setattr(stores, "open_store", lambda engine: Master2())
         monkeypatch.setattr("edgar_warehouse.database_connections.storage_adapter", lambda: Policies())
-        store = Artifacts()
-        store.written["memory://in.json"] = json.dumps({"policy": "invented", "as_of": "2026-11-06T00:00:00+00:00"}).encode()
-        store.verified = lambda ref, **_: store.written[ref["uri"]]
-        done = envelope("links")
-        out = silver_derive.execute(done, store)
-        silver_derive.execute(done, store)
-        assert json.loads(store.written[out["uri"]])["rows"] == 1
+        first = links.build(runtime, MasterPolicy(), "invented", "2026-11-06T00:00:00+00:00")
+        links.build(runtime, MasterPolicy(), "invented", "2026-11-06T00:00:00+00:00")
+        assert first == {"table": "relationship", "links": 1, "rows": 1, "waiting": {"no_master": 2}}
         assert seen[0] == {} and seen[1]["invented"]["periods"][0]["valid_from_basis"] == "observed"
+
+
+def test_the_worker_no_longer_builds_links():
+    with pytest.raises(ValueError, match="silver.derive builds one of"):
+        silver_derive._build({"keys": {"build": "links", "silver": "relationship", "reads": "mastering_record"}})
 
 
 @contextlib.contextmanager

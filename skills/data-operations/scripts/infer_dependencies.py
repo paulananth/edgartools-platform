@@ -6,17 +6,16 @@
 
 Every line comes from what the rules declare, never from a machine's size.
 
-  must     a load that is wrong, or leaves links out, unless another has finished first
-  prefer   a load whose records wait (or whose links are missing) until another has finished: never wrong, only later
+  must     a load that is wrong unless another has finished first
+  prefer   a load whose records wait until another has finished: never wrong, only later
   either   two loads that each prefer the other: any order is as good
   alone    loads that take turns because they share one resource of the store
 
 Where it reads: a matching rule's `on_no_match` (`mint` creates a master; `wait` holds the record in the Merge Stage until a
 master holds its value: the source named in `holder_source`, else a source whose minting rules use the same identifier
 namespace, else any source that mints that kind); a contract's relationships and a silver table's links (each names the
-source whose masters it points at); a target that reads another run's step (`pieces`); the targets that build the links
-table (it is rebuilt whole from every stored record at each build, so a build shows only the links whose masters exist
-when it runs).
+source whose masters it points at); a target that reads another run's step (`pieces`). The links table sets no order:
+it is built whole once, after the last load (`silver links`), from every stored record.
 """
 import argparse
 import json
@@ -44,19 +43,17 @@ def infer() -> dict:
     names = sorted(p.parent.name for p in (ROOT / "sources").glob("*/source.yaml"))
     bodies = {name: files.source(name) for name in names}
     owner = {code: name for name, body in bodies.items() for code in (body.get("dataset_contracts") or {})}
-    # Each target: the dataset it prepares (if any), the silver tables it lands, and whether it builds the links table.
+    # Each target: the dataset it prepares (if any) and the silver tables it lands.
     targets = {}
     for name, body in bodies.items():
         for target, shaped in ((body.get("bookkeeping") or {}).get("targets") or {}).items():
-            item = {"source": name, "dataset": None, "silver": [], "builds_links": False, "pieces": []}
+            item = {"source": name, "dataset": None, "silver": [], "pieces": []}
             for step in shaped["steps"]:
                 keys = (step.get("input") or {}).get("keys") or {}
                 if step["operation"] == "mdm.prepare":
                     item["dataset"] = keys.get("dataset")
                 elif step["operation"] == "silver.land":
                     item["silver"].append(keys.get("silver"))
-                elif step["operation"] == "silver.derive" and keys.get("build") == "links":
-                    item["builds_links"] = True
             for node in walk(shaped.get("extract") or {}):
                 run = (node.get("pieces") or {}).get("run") if isinstance(node.get("pieces"), dict) else None
                 if run:
@@ -112,7 +109,7 @@ def infer() -> dict:
             "kinds": sorted(mints[key] | waits[key]), "mints": sorted(mints[key]),
             "finds_only": sorted(waits[key] - mints[key]),
             "states_links_to": sorted(states - {item["source"]}), "silver_links_to": sorted(silver_links - {item["source"]}),
-            "builds_links": item["builds_links"], "after_target": item["pieces"],
+            "after_target": item["pieces"],
             "prefer_after": sorted(prefer - {item["source"]}),
         }
     # Two sources that each prefer the other have no order to keep.
@@ -139,7 +136,6 @@ def main() -> int:
               f"{','.join(item['silver_links_to']) or '-'} | {','.join(item['prefer_after']) or '-'} | "
               f"{','.join(item['either_order']) or '-'}"
               + (f"  [after {', '.join(item['after_target'])} of its own source]" if item["after_target"] else ""))
-    print("\nbuild the links table (one lease, so they take turns):", ", ".join(k for k, i in result.items() if i["builds_links"]))
     print("state links (mastered before the last build):", ", ".join(k for k, i in result.items() if i["states_links_to"]))
     kinds = {kind: [k for k, i in result.items() if kind in i["kinds"]] for kind in sorted({x for i in result.values() for x in i["kinds"]})}
     print("merges of one kind take turns:", json.dumps(kinds))

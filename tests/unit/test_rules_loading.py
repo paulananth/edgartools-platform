@@ -58,6 +58,8 @@ class Recorded:
         if args[:2] == ("silver", "register"):
             self.registered.append(args)
             return "{}"
+        if args[:2] == ("silver", "links"):
+            return json.dumps({"table": "relationship", "links": 3, "rows": 4, "waiting": {}})
         if args[:2] == ("workers", "describe"):
             return json.dumps({"profile": args[2], "runtime": "this-checkout"})
         if args[:2] == ("rules", "register"):
@@ -513,3 +515,59 @@ def test_a_run_of_a_target_at_grain_run_is_worked_by_one_command_and_never_drive
     assert result["finished_open_runs"] == ["old-1"]
     assert [c for c in commands.calls if c[0] == "work"] == [("work", "old-1"), ("work", "new-1")]
     assert not [c for c in commands.calls if c[0] == "drive"]
+
+
+def mastering_loader(tmp_path, monkeypatch, commands, *, silver=True):
+    """A loader of the mastering target, on a stores folder with (or without) a silver login."""
+    found = loader(tmp_path, monkeypatch, commands)
+    if silver:
+        found.env["worker"]["SILVER_DATABASE_URL"] = "postgresql://invented_runtime:x@localhost/silver"
+        found.env["migration"] = {"SILVER_MIGRATION_DATABASE_URL": "postgresql://owner:x@localhost/silver"}
+    return found
+
+
+def loaded(found, tmp_path, **options):
+    return found.load(capture=capture(tmp_path / "c", "letters/a.json"), capture_run="c", as_of="2026-10-25T00:00:00Z",
+                      facts=[], run_files=[], **options)
+
+
+def test_a_load_that_mastered_records_builds_the_links_table_once_after_its_last_bundle(tmp_path, monkeypatch):
+    commands = Recorded()
+    result = loaded(mastering_loader(tmp_path, monkeypatch, commands), tmp_path)
+
+    assert result["links"] == {"table": "relationship", "links": 3, "rows": 4, "waiting": {}}
+    assert commands.calls.count(("silver", "links")) == 1 and commands.calls[-1] == ("silver", "links")
+    assert commands.calls[-2] == ("silver", "register")  # the links table exists before it is built
+    assert commands.registered[-1][2].endswith("silver/silver-relationship.yaml")
+
+
+def test_one_load_of_several_leaves_the_links_table_to_the_last_step(tmp_path, monkeypatch):
+    commands = Recorded()
+    result = loaded(mastering_loader(tmp_path, monkeypatch, commands), tmp_path, links=False)
+
+    assert result["links"] is None and ("silver", "links") not in commands.calls
+
+
+def test_a_load_that_loaded_nothing_new_builds_no_links(tmp_path, monkeypatch):
+    commands = Recorded(processed={"letters/a.json"})
+    result = loaded(mastering_loader(tmp_path, monkeypatch, commands), tmp_path)
+
+    assert result["links"] is None and ("silver", "links") not in commands.calls
+
+
+def test_a_stores_folder_with_no_silver_login_builds_no_links_and_says_so(tmp_path, monkeypatch):
+    commands, said = Recorded(), []
+    found = mastering_loader(tmp_path, monkeypatch, commands, silver=False)
+    found.say = said.append
+    result = loaded(found, tmp_path)
+
+    assert result["links"] is None and ("silver", "links") not in commands.calls
+    assert "Links are not built: the stores folder has no silver login" in said
+
+
+def test_a_target_that_masters_nothing_builds_no_links(tmp_path, monkeypatch):
+    commands = Recorded()
+    found = mastering_loader(tmp_path, monkeypatch, commands)
+    found.target = "everything"
+    assert found.build_links() is None and commands.calls == []
+
