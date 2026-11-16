@@ -218,6 +218,11 @@ automatic_rules:
   rule_version: 2026-11-03.named-by-what-it-compares
   verdict: bind
 - kind: company
+  family: name_binding
+  rule_id: sec-gleif-name-jurisdiction
+  rule_version: 2026-11-16.name-and-state-of-incorporation
+  verdict: bind
+- kind: company
   family: classification
   rule_id: gleif-company-candidate
   rule_version: 2026-11-16.active-general-entities
