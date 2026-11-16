@@ -391,6 +391,90 @@ def test_the_whole_store_lock_waits_for_a_merge_in_flight(database_factory):
             pool.shutdown(wait=False)
 
 
+def _beside(first, second, during):
+    """Run `during(second)` while `first`'s merge is written and not yet committed; answers what it returned."""
+    seen, finish = {}, first.finish_file
+
+    def while_in_flight(key, records):
+        pool = ThreadPoolExecutor(1)
+        try:
+            seen["result"] = pool.submit(during, second).result(timeout=20)
+        finally:
+            pool.shutdown(wait=False)
+        finish(key, records)
+
+    first.finish_file = while_in_flight
+    return seen
+
+
+def test_a_merge_that_only_joins_golden_records_runs_beside_another_of_its_kind(database_factory):
+    """Two Company merges that only join stored golden records run side by side: the second commits while the first
+    is still open, and each record is bound."""
+    with two_stores(database_factory) as (first, second):
+        if first.dialect == "mysql":
+            pytest.skip("MySQL merges one kind at a time")
+        merge.merge_file(first, COMPANY, [record(SEC, "1", cik="0000000017"), record(SEC, "2", cik="0000000018")])
+        joining = [record(SEC, "1b", cik="0000000017")], [record(SEC, "2b", cik="0000000018")]
+        seen = _beside(first, second, lambda db: merge.merge_file(db, COMPANY, joining[1]))
+        merge.merge_file(first, COMPANY, joining[0])
+        assert seen["result"]["skipped"] is False
+        assert all(len(body["subjects"]) == 2 for body in live(first).values()) and len(live(first)) == 2
+
+
+def test_merges_beside_each_other_that_join_one_golden_record_keep_every_record(database_factory):
+    """Two merges joining records to the same golden records at once, in opposite orders: every golden record holds
+    every record bound to it, and no identifier is on two of them."""
+    with two_stores(database_factory) as (first, second):
+        merge.merge_file(first, COMPANY, [record(SEC, str(n), cik=f"{n + 1:010d}") for n in range(50)])
+        files = [[record(SEC, f"{side}{n}", cik=f"{n + 1:010d}") for n in range(50)] for side in ("left", "right")]
+        files[1].reverse()
+        start = Barrier(2)
+
+        def write(db, records):
+            start.wait()
+            return merge.merge_file(db, COMPANY, records)
+
+        with ThreadPoolExecutor(2) as pool:
+            done = list(pool.map(write, [first, second], files))
+        assert [item["skipped"] for item in done] == [False, False]
+        assert len(live(first)) == 50 and all(len(body["subjects"]) == 3 for body in live(first).values())
+        assert first.rows("select count(*) from (select namespace,value from mastering_identifier "
+                          "group by namespace,value having count(*)>1) doubled")[0][0] == 0
+
+
+def test_a_record_left_waiting_beside_a_merge_that_gives_its_identifier_is_released(database_factory):
+    """An adviser filing waits for the Company holding its CIK. Another merge, still open, gives a stored Company that
+    CIK: neither sees the other, and once both commit the filing joins the Company."""
+    with two_stores(database_factory) as (first, second):
+        if first.dialect == "mysql":
+            pytest.skip("MySQL merges one kind at a time")
+        merge.merge_file(first, COMPANY, [record(SEC, "1", cik="0000000017")])
+        filing = record("iapd.adv.filings.v2", "ADV1", cik="0000000099")
+        seen = _beside(first, second, lambda db: merge.merge_file(db, COMPANY, [filing]))
+        merge.merge_file(first, COMPANY, [record(SEC, "1c", cik=["0000000017", "0000000099"])])
+        assert seen["result"]["skipped"] is False
+        (company,) = live(first)
+        assert first.bound([filing["subject"]]) == {filing["subject"]: company}
+
+
+def test_a_merge_that_creates_a_golden_record_waits_for_one_in_flight_of_its_kind(database_factory):
+    """Creating golden records is for a merge alone: a new Company waits until the open merge commits."""
+    with two_stores(database_factory) as (first, second):
+        merge.merge_file(first, COMPANY, [record(SEC, "1", cik="0000000017")])
+        first.take_lock("company", shared=first.dialect == "postgresql")
+        pool = ThreadPoolExecutor(1)
+        try:
+            creating = pool.submit(merge.merge_file, second, COMPANY, [record(SEC, "2", cik="0000000018")])
+            with pytest.raises(TimeoutError):
+                creating.result(timeout=1)
+            first.commit()
+            assert creating.result(timeout=30)["skipped"] is False
+        finally:
+            first.rollback()
+            pool.shutdown(wait=False)
+        assert len(live(first)) == 2
+
+
 @pytest.mark.parametrize("engine", ["postgresql", "mysql"])
 def test_every_integer_column_is_bigint(engine):
     schema = (Path(stores.__file__).parent / "schema" / f"{engine}.sql").read_text()
@@ -641,14 +725,14 @@ def test_pair_evidence_keys_and_waiter_release_roll_back_together_and_retry_comp
         before = db.rows("select body from mastering_record where assertion_id=%s", [filer["assertion_id"]])
         release = merge._release_waiting
 
-        def interrupted(store, settings, arrived):
+        def interrupted(store, settings, arrived, tried=None):
             current = json.loads(store.rows("select body from mastering_record where assertion_id=%s",
                                             [filer["assertion_id"]])[0][0])
             assert current["provenance"]["matching"]["name_count"]["cascade"]["lei"] == LEI
             assert store.rows("select value from mastering_name_key where role='cascade'") == [(LEI,)]
             raise RuntimeError("interrupted waiter release")
 
-        monkeypatch.setattr(merge, "_release_waiting", interrupted)
+        checked(monkeypatch, merge, "_release_waiting", interrupted)
         pair = {"0000000017": {"lei": LEI, "pass": "name and city or postcode"}}
         with pytest.raises(RuntimeError, match="interrupted waiter release"):
             merge.apply_pairs(db, COMPANY, SEC, pair)

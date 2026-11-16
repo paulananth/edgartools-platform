@@ -8,6 +8,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from uuid import uuid4
 
+from edgar_warehouse.mastering.store import Contended
 from edgar_warehouse.mdm.activation import activated
 from edgar_warehouse.mdm import matching
 from edgar_warehouse.mdm.evidence import PROFILE_KINDS
@@ -107,12 +108,31 @@ def set_aside(store, records: list[dict], quiet: dict) -> None:
                          0 if r["reason"] in quiet.get(r["source_code"], ()) else 1, json.dumps(r)) for r in records])
 
 
+RETRY = {"40P01", "40001"}  # a deadlock or a serialization failure: PostgreSQL rolled the merge back
+
+
 def merge_file(store, settings: Settings, records: list[dict], *, again: bool = False,
                deferred: list[dict] = (), quiet: dict | None = None, record_updates=(), release_identifiers=()) -> dict:
-    """Merge one file, or nothing if it is done. `again` delivers a finished file a second time."""
+    """Merge one file, or nothing if it is done. `again` delivers a finished file a second time. A file of new records
+    first merges beside the other merges of its kind; one that would create or merge golden records, or meets another
+    merge on a golden record or identifier, is rolled back and merged alone."""
+    shareable = store.can_share and records and not (again or record_updates or release_identifiers)
+    if shareable:
+        try:
+            return _merge_file(store, settings, records, again, deferred, quiet, record_updates, release_identifiers,
+                               shared=True)
+        except Contended:
+            pass
+    return _merge_file(store, settings, records, again, deferred, quiet, record_updates, release_identifiers,
+                       shared=False)
+
+
+def _merge_file(store, settings, records, again, deferred, quiet, record_updates, release_identifiers, *,
+                shared: bool) -> dict:
     key = file_key([*records, *({"assertion_id": r["deferred_id"]} for r in deferred)])
     try:
-        store.take_lock(settings.kind)
+        store.take_lock(settings.kind, shared=shared)
+        seen = store.last_file() if shared else None
         if store.file_done(key) and not again:
             store.commit()
             return {"file": key, "skipped": True}
@@ -125,25 +145,60 @@ def merge_file(store, settings: Settings, records: list[dict], *, again: bool = 
         arrived: set = set(release_identifiers)
         counts = _merge(store, settings, records, key, again, arrived) if records else {"records": 0}
         # A file of only set-aside records has no kind and nothing arrived: nothing waits for it.
-        counts["released"] = _release_waiting(store, settings, arrived) if records else 0
+        tried: set = set()
+        counts["released"] = _release_waiting(store, settings, set(arrived), tried) if records else 0
         store.add_delivery(key, delivery)
         if not records:
             store.finish_file(key, 0)
+        written = set(store.changed)
         store.commit()
-        return {"file": key, "skipped": False, **counts}
+    except BaseException as exc:
+        store.rollback()
+        if shared and getattr(exc, "pgcode", None) in RETRY:
+            raise Contended("rolled back beside another merge of its kind") from exc
+        raise
+    if shared:
+        counts["released"] += _wake(store, settings, records, arrived, tried, seen, written)
+    return {"file": key, "skipped": False, **counts}
+
+
+def _wake(store, settings: Settings, records: list[dict], arrived: set, tried: set, seen: int, written: set) -> int:
+    """After a merge beside others of its kind, the waits neither could see: a record this merge left waiting for an
+    identifier another merge gave a golden record meanwhile, and one another merge left waiting for an identifier this
+    merge gave. Each looks once, and only what it finds is merged again, alone."""
+    waits = _waiting_sources(settings)
+    if not waits:
+        return 0
+    try:
+        wanted = defaultdict(set)
+        for r in records:
+            if r["source_code"] in waits:
+                for namespace, values in (r.get("identifiers") or {}).items():
+                    wanted[namespace].update(v for v in (values if isinstance(values, list) else [values]) if v)
+        came = {(n, v) for n, v, e in store.holders(wanted, changed_after=seen) if e not in written} if wanted else set()
+        look = arrived | came
+        ready = [r for r in store.waiting_for(look) if r["subject"] not in tried] if look else []
+        if not ready:
+            store.commit()
+            return 0
+        store.take_lock(settings.kind)
+        released = _release_waiting(store, settings, look)
+        store.commit()
+        return released
     except BaseException:
         store.rollback()
         raise
 
 
-def _release_waiting(store, settings: Settings, arrived: set) -> int:
+def _release_waiting(store, settings: Settings, arrived: set, tried: set | None = None) -> int:
     """A record that waits for a golden record to hold an identifier moves to it when this file gives one. Nothing waits
     forever for what has arrived (operator, 2026-11-10): the records that state an arrived identifier are merged again,
     each once, and what that gives its golden records releases the next, until none is left to try."""
     waits = sorted(_waiting_sources(settings))
     if not waits:
         return 0
-    tried, released = set(), 0
+    tried = set() if tried is None else tried
+    released = 0
     while arrived:
         ready = [r for r in store.waiting_for(arrived) if r["subject"] not in tried and r["source_code"] in waits
                  and r["kind"] == settings.kind]
@@ -282,8 +337,11 @@ def _match_identifiers(store, settings: Settings, records, bound: dict, counts: 
     made = link_matching_records({
         "plan": plan, "found": [{"namespace": n, "value": v, "records": r} for (n, v), r in found.items()],
         "suspended": [], "newest": {kind: None for kind in plan["kinds"]},
-        "new_ids": [str(uuid4()) for _ in plan["applicable"]], "refused": [], "as_of": settings.as_of,
+        "new_ids": (new_ids := [str(uuid4()) for _ in plan["applicable"]]), "refused": [], "as_of": settings.as_of,
         "consolidations": store.decisions_about(sorted(reached)) if reached else []})
+    if store.shared and any(d["operation"] == "merge" or (d["operation"] == "bind" and d["entity_id"] in new_ids)
+                            for d in made["decisions"]):
+        raise Contended("a merge that creates or merges golden records")
     moved, survivors = {}, set()
 
     def live(entity):
@@ -369,6 +427,7 @@ def _match_names(store, settings: Settings, records, bound: dict, counts: Counte
                 lei[candidate["subject"]] = first(candidate["identifiers"]["lei"])
             elif flagged:
                 counts["cascade_flagged_pair"] += 1
+        store.lock_masters({e for found in reach.values() for e in found})  # read their LEIs as another merge left them
         held = store.lei_held(sorted({e for found in reach.values() for e in found})) if reach else {}
         vetoes = any(test["primitive"] == matching.HELD_LEI_TEST for test in rule["when"])
         for subject, found in reach.items():
@@ -434,6 +493,8 @@ def _match_exact_names(store, settings: Settings, records, bound: dict, counts: 
             elif mints:
                 named[subject] = created.setdefault(value, str(uuid4()))
                 binds.append(_bind_decision(settings, rule, subject, (here.get(subject) or {}).get("assertion_id"), named[subject], f"exact_name {namespace} created"))
+    if store.shared and named:
+        raise Contended("a join by exact name")
     return named
 
 
@@ -449,6 +510,7 @@ def _bind_decision(settings: Settings, rule: dict, subject: str, assertion_id, e
 
 
 def _write_masters(store, settings: Settings, entities: list, counts: Counter) -> set:
+    store.lock_masters(entities)  # beside another merge: its members, once it commits, are read in
     records = [json.loads(body) for body in store.member_bodies(entities)]
     bindings = store.members_bound(entities)
     subjects = sorted({r["subject"] for r in records})

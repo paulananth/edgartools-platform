@@ -10,8 +10,13 @@ from pathlib import Path
 BLOCK = 2000
 LOCK_CLASS, FILE_KEY = 74821, 2  # advisory-lock class; file numbering is the second key
 PENDING = 0  # a changed golden record's file number until its transaction commits
+CLAIMS = 2000  # the most identifier values one batch claims beside other merges of its kind; more merge alone
 WRITTEN = ("master", "file", "delivery", "identifier", "record", "name_key", "review", "withheld", "deferred",
            "lookup", "lookup_progress")
+
+
+class Contended(Exception):
+    """A merge beside others of its kind met what only a merge alone may do; it is rolled back and merged alone."""
 
 
 def marks(items) -> str:
@@ -28,15 +33,18 @@ class Store:
     dialect = ""
     ignore = ""
     conflict_nothing = ""
+    can_share = False  # whether merges of one kind may run side by side on this engine
 
     def __init__(self, connection):
         self.connection = connection
         self.cursor = connection.cursor()
         self.staged: list[tuple] = []  # the file being merged: (assertion_id, subject, source_code, lei, body)
         self.changed: set[str] = set()  # the golden records this transaction wrote, not yet numbered
+        self.shared: str | None = None  # the kind this transaction merges beside others of it, if it does
 
     def commit(self) -> None:
         self.number_changes()
+        self.shared = None
         try:
             self.connection.commit()
         finally:
@@ -44,6 +52,7 @@ class Store:
 
     def rollback(self) -> None:
         self.changed.clear()
+        self.shared = None
         try:
             self.connection.rollback()
         finally:
@@ -77,18 +86,60 @@ class Store:
                                 + ",".join([one] * len(block)) + self.conflict_nothing,
                                 [value for row in block for value in row])
 
-    def take_lock(self, kind: str | None = None) -> None:
-        """One writer for a kind. A merge shares the store's lock and takes its kind's own, so merges of two kinds
-        run together and two of one kind take turns. With no kind, the whole store: every merge waits (`clear`).
+    def take_lock(self, kind: str | None = None, *, shared: bool = False) -> None:
+        """A merge shares the store's lock and takes its kind's, so merges of two kinds run together. Of one kind,
+        merges that only join existing golden records share the kind's lock and run side by side (`shared`); one that
+        creates or merges golden records holds it alone. With no kind, the whole store: every merge waits (`clear`).
         The database frees a lock when its holder commits or dies. There is no lock table."""
         self.lock_store(exclusive=kind is None)
         if kind:
-            self.lock_kind(kind)
+            self.lock_kind(kind, shared=shared)
+            self.shared = kind if shared else None
+
+    def lock_masters(self, entities) -> None:
+        """Beside other merges of its kind: hold these golden records until commit, so two merges that change one
+        read each other's members in turn. A golden record not stored yet is one only a merge alone creates."""
+        if not self.shared:
+            return
+        wanted = sorted(set(entities))
+        held = set()
+        for block in blocks(wanted):
+            held.update(r[0] for r in self.rows(f"select entity_id from mastering_master where entity_id in ({marks(block)}) "
+                                                "order by entity_id for update", block))
+        if held != set(wanted):
+            raise Contended("a golden record this merge would create")
+
+    def claim_identifiers(self, rows: list) -> None:
+        """Beside other merges of its kind: the identifier values this merge gives a golden record that does not hold
+        them yet are locked until commit, then read again. One that another golden record of the kind holds is a
+        decision for a merge alone."""
+        if not self.shared or not rows:
+            return
+        wanted = defaultdict(set)
+        for namespace, value, _ in rows:
+            wanted[namespace].add(value)
+        stored = set(self.holders(wanted))
+        new = sorted({row for row in rows if tuple(row) not in stored})
+        if not new:
+            return
+        if len({(n, v) for n, v, _ in new}) > CLAIMS:
+            raise Contended("more identifier values than one merge claims beside others")
+        self.lock_values(sorted({f"{n}:{v}" for n, v, _ in new}))
+        wanted = defaultdict(set)
+        for namespace, value, _ in new:
+            wanted[namespace].add(value)
+        others = {(n, v, e) for n, v, e in self.holders(wanted)} - set(new)
+        kinds = self.kinds({e for _, _, e in others})
+        if any(kinds.get(e) == self.shared for _, _, e in others):
+            raise Contended("an identifier another golden record of this kind holds")
+
+    def lock_values(self, values: list[str]) -> None:
+        raise NotImplementedError
 
     def lock_store(self, *, exclusive: bool) -> None:
         raise NotImplementedError
 
-    def lock_kind(self, kind: str) -> None:
+    def lock_kind(self, kind: str, *, shared: bool = False) -> None:
         raise NotImplementedError
 
     def lock_file(self) -> None:
@@ -131,16 +182,20 @@ class Store:
     def load_stage(self, records: list, name_keys: list) -> None:
         """The file's records stay in memory for its merge; only its name keys are written."""
         self.staged = list(records)
-        if name_keys:
-            self.insert("mastering_name_key", ("role", "value", "subject"), name_keys)
+        if name_keys:  # in order, so two merges writing shared keys wait for each other without a deadlock
+            self.insert("mastering_name_key", ("role", "value", "subject"), sorted(name_keys))
 
-    def holders(self, wanted: dict) -> list[tuple]:
-        """Who holds each wanted identifier: {namespace: values}."""
+    def holders(self, wanted: dict, *, changed_after: int | None = None) -> list[tuple]:
+        """Who holds each wanted identifier: {namespace: values}; with `changed_after`, only golden records changed
+        after that file number."""
         found = []
+        since = "" if changed_after is None else (" and entity_id in (select entity_id from mastering_master "
+                                                   "where changed_file>%s)")
         for namespace, values in wanted.items():
             for block in blocks(sorted(set(values))):
                 found += self.rows("select distinct namespace,value,entity_id from mastering_identifier "
-                                   f"where namespace=%s and value in ({marks(block)})", [namespace, *block])
+                                   f"where namespace=%s and value in ({marks(block)})" + since,
+                                   [namespace, *block, *([] if changed_after is None else [changed_after])])
         return found
 
     def identifiers_of(self, entities, namespaces) -> dict:
@@ -180,6 +235,7 @@ class Store:
 
     def add_identifiers(self, rows: list) -> None:
         if rows:
+            self.claim_identifiers(rows)
             self.insert("mastering_identifier", ("namespace", "value", "entity_id"), rows)
 
     def bound(self, subjects) -> dict:
@@ -472,6 +528,7 @@ class Store:
 
 class Postgres(Store):
     dialect = "postgresql"
+    can_share = True
     conflict_nothing = " on conflict do nothing"
     master_upsert = (" on conflict(entity_id) do update set body=excluded.body,changed_file=excluded.changed_file "
                      "where mastering_master.body<>excluded.body")
@@ -487,8 +544,14 @@ class Postgres(Store):
         name = "pg_advisory_xact_lock" if exclusive else "pg_advisory_xact_lock_shared"
         self.rows(f"select {name}(%s, 1)", [LOCK_CLASS])
 
-    def lock_kind(self, kind: str) -> None:
-        self.rows("select pg_advisory_xact_lock(%s, hashtext(%s))", [LOCK_CLASS + 1, kind])
+    def lock_kind(self, kind: str, *, shared: bool = False) -> None:
+        name = "pg_advisory_xact_lock_shared" if shared else "pg_advisory_xact_lock"
+        self.rows(f"select {name}(%s, hashtext(%s))", [LOCK_CLASS + 1, kind])
+
+    def lock_values(self, values: list[str]) -> None:
+        for block in blocks(values):
+            self.rows("select pg_advisory_xact_lock(%s, hashtext(v)) from (select unnest(%s::text[]) v order by 1) s",
+                      [LOCK_CLASS + 2, block])
 
     def lock_file(self) -> None:
         self.rows("select pg_advisory_xact_lock(%s, %s)", [LOCK_CLASS, FILE_KEY])
@@ -531,7 +594,9 @@ class MySQL(Store):
         if not self._acquire(names[0], 86400):
             raise TimeoutError("Mastering store lock was not acquired")
 
-    def lock_kind(self, kind: str) -> None:
+    def lock_kind(self, kind: str, *, shared: bool = False) -> None:
+        if shared:
+            raise ValueError("MySQL merges one kind at a time")
         if not self._acquire(f"mastering-kind-{kind}", 86400):
             raise TimeoutError(f"Mastering lock for {kind} was not acquired")
 
