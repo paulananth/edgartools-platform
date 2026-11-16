@@ -206,6 +206,12 @@ fn part_agrees(left: &Object, right: &Object, part: &str) -> Result<bool, String
             &display_text(&values::read_optional_value(right, "postcode")?)?,
             read_optional_text(values::read_optional_value(right, "country")?)?.as_deref(),
         )),
+        // The state of incorporation against GLEIF's jurisdiction (ticket 250): the one function the places of a
+        // conflict test use, so a territory's own code, a country and a subdivision of it agree as there.
+        "jurisdiction" => Ok(matching_values::places_agree(
+            read_optional_text(values::read_optional_value(left, "jurisdiction")?)?.as_deref(),
+            read_optional_text(values::read_optional_value(right, "jurisdiction")?)?.as_deref(),
+        )),
         _ => Err(format!("A pass compares an unknown address part: {part}")),
     }
 }

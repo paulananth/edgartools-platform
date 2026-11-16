@@ -19,9 +19,9 @@ Operator, 2026-11-16: "engine change for jurisdiction". After ticket 249, an SEC
 ## Parts
 
 - [x] 2026-11-16 12:26 ET Ruling recorded and the evidence counted.
-- [ ] A Rust test that fails first: `compare: [jurisdiction]` agrees for two addresses with one jurisdiction, and not for two, or for a missing one.
-- [ ] A Python test that fails first: the waterfall pairs a filer and entity that agree on the jurisdiction only.
-- [ ] The engine change (Rust and Python) and its tests.
+- [x] 2026-11-16 12:29 ET A test that failed first through the Rust re-check: `test_a_cascade_pass_may_compare_the_jurisdiction_and_rechecks_it_on_the_stage_rows` (`A pass compares an unknown address part: jurisdiction`): one jurisdiction agrees; two, or a missing one, do not.
+- [x] 2026-11-16 12:29 ET A test that failed first in the waterfall: `test_a_pass_that_compares_the_jurisdiction_pairs_places_that_differ_but_the_state` (`ValueError: A pass compares an unknown address part: jurisdiction`).
+- [x] 2026-11-16 12:29 ET The engine change: the part `jurisdiction` in `record_pairs.rs` (`part_agrees`, by `places_agree`) and in `cascade.py` (`PARTS`, `Place.jurisdiction`, `_part_agrees`, the same function). The Rust tests and 1,243 mdm, waterfall and architecture tests pass.
 - [ ] The jurisdiction in the SEC and GLEIF matching addresses, and the declared pass (not switched on).
 - [ ] The proof: a labelled sample of the pairs the pass adds, with adversarial pairs, on a disposable store; then the operator's word to switch it on.
 - [ ] Mapping Documents regenerated.
