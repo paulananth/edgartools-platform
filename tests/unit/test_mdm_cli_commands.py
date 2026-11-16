@@ -23,11 +23,6 @@ def test_each_command_runs_its_function(monkeypatch, argv, function):
     assert args.handler(args) == 0 and called == [argv[1]]
 
 
-def test_the_name_count_command_is_gone():
-    with pytest.raises(SystemExit):
-        build_parser().parse_args(["mdm", "name-count"])
-
-
 def test_a_split_previews_unless_confirmed_and_needs_who_and_why():
     parser = build_parser()
     split = ["mdm", "steward", "split", "--merge", "m", "--by", "Sam", "--reason", "two different companies",

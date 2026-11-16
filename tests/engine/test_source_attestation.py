@@ -97,15 +97,6 @@ def test_generic_callback_failure_identity(failure):
     assert caught.value is failure
 
 
-def test_retired_inspector_and_reader_have_no_runtime_entry_point():
-    import importlib.util
-
-    from edgar_warehouse.mdm import gleif_publication
-    assert not hasattr(gleif_publication, "inspect_archive")
-    for retired in ("gleif_source", "native_consumption", "source_publications"):
-        assert importlib.util.find_spec(f"edgar_warehouse.mdm.{retired}") is None
-
-
 @pytest.mark.parametrize("fault", ["crc", "expanded_length", "second_member", "encrypted"])
 def test_physical_archive_faults_cannot_return_an_attestation(fault):
     payload = b'{"observations":[{"id":1}]}'

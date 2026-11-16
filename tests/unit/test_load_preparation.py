@@ -10,6 +10,7 @@ from edgar_warehouse.mdm.evidence import assertion
 from edgar_warehouse.rules import files, preparation
 from edgar_warehouse.rules.driving import RunStopped
 from tests.support.waterfall import capture, native
+from tests.support.patching import checked
 
 OPTIONS = {"kind": "company", "holder_source": "sec.company.v1", "files": "*lei2-golden-copy*",
            "completeness": "full_publication",
@@ -64,7 +65,7 @@ def test_complete_native_capture_prepares_a_unique_pair_and_unchanged_repeat_doe
     assert (first["filers"], first["pairs"], first["applied"]) == (1, 1, 1)
     assert db.applied["0000000017"]["lei"] == "00000000000000000000"
 
-    monkeypatch.setattr(preparation, "project_capture", lambda *a, **k: pytest.fail("unchanged capture re-read"))
+    checked(monkeypatch, preparation, "project_capture", lambda *a, **k: pytest.fail("unchanged capture re-read"))
     repeated = run(folder, tmp_path / "prepared")
     assert repeated["input_digest"] == first["input_digest"]
     assert repeated["applied"] == 0
@@ -152,7 +153,7 @@ def test_cached_pairs_do_not_bypass_a_damaged_capture_receipt(tmp_path, monkeypa
     archive = next(folder.glob("*.zip"))
     archive.write_bytes(archive.read_bytes() + b"changed")
     from edgar_warehouse.mastering import merge
-    monkeypatch.setattr(merge, "apply_pairs", lambda *a, **k: pytest.fail("damaged cached capture applied"))
+    checked(monkeypatch, merge, "apply_pairs", lambda *a, **k: pytest.fail("damaged cached capture applied"))
     with pytest.raises(ValueError):
         run(folder, tmp_path / "prepared")
 
@@ -162,13 +163,13 @@ def test_interrupted_application_reuses_verified_input_and_applies_it_on_retry(t
     serve(monkeypatch, db)
     from edgar_warehouse.mastering import merge
     apply = merge.apply_pairs
-    monkeypatch.setattr(merge, "apply_pairs", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("interrupted")))
+    checked(monkeypatch, merge, "apply_pairs", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("interrupted")))
     folder = capture(tmp_path / "capture", [native()])
     with pytest.raises(RuntimeError, match="interrupted"):
         run(folder, tmp_path / "prepared")
     assert db.applied == {}
     monkeypatch.setattr(merge, "apply_pairs", apply)
-    monkeypatch.setattr(preparation, "project_capture", lambda *a, **k: pytest.fail("verified projection re-read"))
+    checked(monkeypatch, preparation, "project_capture", lambda *a, **k: pytest.fail("verified projection re-read"))
     assert run(folder, tmp_path / "prepared")["applied"] == 1
 
 

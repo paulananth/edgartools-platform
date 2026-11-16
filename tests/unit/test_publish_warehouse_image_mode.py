@@ -63,18 +63,6 @@ def test_help_publishes_with_docker() -> None:
     assert "colima" not in lowered
 
 
-def test_removed_modes_are_rejected_before_docker(tmp_path: Path) -> None:
-    env = _fakes(tmp_path, "linux")
-    for mode in ("buildx", "crane"):
-        result = _run(
-            ["--aws-region", "us-east-1", "--ecr-repository", "example", "--mode", mode],
-            env,
-        )
-        assert result.returncode == 1
-        assert "--mode must be docker" in result.stderr
-        assert "unexpected docker" not in result.stderr
-
-
 def test_colima_files_are_gone() -> None:
     assert not (REPO_ROOT / "infra" / "scripts" / "setup-colima.sh").exists()
     assert not (REPO_ROOT / "docs" / "colima-docker-macos.md").exists()

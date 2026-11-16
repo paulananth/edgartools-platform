@@ -8,6 +8,7 @@ from edgar_warehouse.control_contract import Blocked
 from edgar_warehouse.rdm import mysql_migration
 from edgar_warehouse.rdm.database import migrate
 from edgar_warehouse.rdm.store import RDM
+from tests.support.patching import checked
 
 
 @pytest.fixture
@@ -101,7 +102,7 @@ def test_populated_word_index_upgrade_recovers_without_changing_published_pin(st
     with monkeypatch.context() as patch:
         patch.setattr(mysql_migration, "FOLLOW_UPS",
                       tuple(f for f in mysql_migration.FOLLOW_UPS if f[1] != "search"))
-        patch.setattr(storage, "refresh_search_tokens", lambda *args, **kwargs: None)
+        checked(patch, storage, "refresh_search_tokens", lambda *args, **kwargs: None)
         migrate(owner, **arguments)
         reference = RDM(runtime, reserved_subjects=())
         reference.draft({"code_set": "invented", "name": "Invented"}, "1",

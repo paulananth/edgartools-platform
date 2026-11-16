@@ -8,6 +8,7 @@ import pytest
 
 from edgar_warehouse.bookkeeping.clean import quality
 from edgar_warehouse.control_contract import Blocked
+from tests.support.patching import checked
 
 
 class Artifacts:
@@ -63,7 +64,7 @@ def storage_work(monkeypatch):
     # This indirection keeps the fixture useful with different Bookkeeping doubles.
     class Holder:
         rows = []
-    monkeypatch.setattr(quality.storage, "work", lambda *_args, **_kwargs: Holder.rows)
+    checked(monkeypatch, quality.storage, "work", lambda *_args, **_kwargs: Holder.rows)
     return Holder
 
 

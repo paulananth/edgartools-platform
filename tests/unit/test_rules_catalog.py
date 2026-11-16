@@ -15,6 +15,7 @@ import pytest
 
 from edgar_warehouse.rules import catalog, files, mapdoc
 from edgar_warehouse.rules import cli as rules_cli
+from tests.support.patching import checked
 
 
 def _tables(plan: dict) -> dict[str, dict]:
@@ -706,7 +707,7 @@ def test_catalog_http_error_does_not_expose_response_body(monkeypatch):
 def test_catalog_plan_is_read_only_and_reports_pending(capsys, monkeypatch):
     plan = _outcome_plan()
     monkeypatch.setattr(catalog, "plan", lambda root: plan)
-    monkeypatch.setattr(catalog, "connect", lambda *args: pytest.fail("plan must not connect"))
+    checked(monkeypatch, catalog, "connect", lambda *args: pytest.fail("plan must not connect"))
     monkeypatch.delenv("OPENMETADATA_URL", raising=False)
     monkeypatch.delenv("OPENMETADATA_TOKEN", raising=False)
 
@@ -721,7 +722,7 @@ def test_catalog_publish_missing_configuration_preserves_usage_exit_code(capsys,
     monkeypatch.setattr(catalog, "plan", lambda root: _outcome_plan())
     monkeypatch.delenv("OPENMETADATA_URL", raising=False)
     monkeypatch.delenv("OPENMETADATA_TOKEN", raising=False)
-    monkeypatch.setattr(catalog, "connect", lambda *args: pytest.fail("missing config must stop before connect"))
+    checked(monkeypatch, catalog, "connect", lambda *args: pytest.fail("missing config must stop before connect"))
 
     assert rules_cli._catalog(Namespace(action="publish", root="rules", draft_terms=False)) == 2
 
@@ -771,7 +772,7 @@ def test_catalog_publish_failure_names_stage_and_redacts_error_details(capsys, m
         raise catalog.CatalogError("PUT /tables: HTTP 401 body contains do-not-print")
 
     monkeypatch.setattr(catalog, "publish", fail_publish)
-    monkeypatch.setattr(catalog, "verify", lambda *args: pytest.fail("failed publish cannot be confirmed"))
+    checked(monkeypatch, catalog, "verify", lambda *args: pytest.fail("failed publish cannot be confirmed"))
 
     assert rules_cli._catalog(Namespace(action="publish", root="rules", draft_terms=False)) == 1
 
@@ -794,7 +795,7 @@ def test_catalog_partial_publish_failure_requires_readback_before_retry(capsys, 
         raise catalog.CatalogError("PUT /tables: HTTP 503")
 
     monkeypatch.setattr(catalog, "publish", fail_after_write)
-    monkeypatch.setattr(catalog, "verify", lambda *args: pytest.fail("readback is deferred after failure"))
+    checked(monkeypatch, catalog, "verify", lambda *args: pytest.fail("readback is deferred after failure"))
 
     assert rules_cli._catalog(Namespace(action="publish", root="rules", draft_terms=False)) == 1
 
@@ -832,7 +833,7 @@ def test_catalog_check_is_read_only_and_reports_confirmed_readback(capsys, monke
     monkeypatch.setenv("OPENMETADATA_TOKEN", "local-token")
     monkeypatch.setattr(catalog, "plan", lambda root: _outcome_plan())
     monkeypatch.setattr(catalog, "connect", lambda url, token: lambda *args, **kwargs: {})
-    monkeypatch.setattr(catalog, "publish", lambda *args: pytest.fail("check must not publish"))
+    checked(monkeypatch, catalog, "publish", lambda *args: pytest.fail("check must not publish"))
     monkeypatch.setattr(catalog, "verify", lambda plan, call, **kw: {
         "ok": True, "tables": 3, "pipelines": 2, "differences": [],
     })
@@ -1234,7 +1235,7 @@ def test_incomplete_bookkeeping_run_is_reported_pending_without_catalog_writes(c
         "units_expected": 2, "units_verified": 1, "units_unknown": 1,
         "unknown_units": [{"step": "silver", "work_unit_ref": "opaque-unknown"}],
         "results": []})
-    monkeypatch.setattr(catalog, "connect", lambda *_args: pytest.fail("unknown evidence cannot contact OpenMetadata"))
+    checked(monkeypatch, catalog, "connect", lambda *_args: pytest.fail("unknown evidence cannot contact OpenMetadata"))
 
     code = rules_cli._catalog(Namespace(action="publish", root="rules", draft_terms=False,
                                         results=None, bookkeeping_run="run-a"))
@@ -1252,7 +1253,7 @@ def test_incomplete_run_summary_says_not_complete_when_no_units_are_unknown(caps
         "status": "unknown", "run_id": "run-a", "run_complete": False,
         "units_expected": 2, "units_verified": 2, "units_unknown": 0,
         "unknown_units": [], "results": []})
-    monkeypatch.setattr(catalog, "connect", lambda *_args: pytest.fail("incomplete evidence cannot contact OpenMetadata"))
+    checked(monkeypatch, catalog, "connect", lambda *_args: pytest.fail("incomplete evidence cannot contact OpenMetadata"))
 
     code = rules_cli._catalog(Namespace(action="publish", root="rules", draft_terms=False,
                                         results=None, bookkeeping_run="run-a"))
@@ -1284,7 +1285,7 @@ def test_catalog_status_reports_retryable_bookkeeping_failure_on_target_pipeline
     monkeypatch.setenv("OPENMETADATA_TOKEN", "not-a-credential")
     monkeypatch.setattr(rules_cli, "_bookkeeping_status", lambda _run_id: snapshot)
     monkeypatch.setattr(rules_cli, "_bookkeeping_quality", lambda _run_id: {"status": "unknown"})
-    monkeypatch.setattr(catalog, "connect", lambda *_args: server)
+    checked(monkeypatch, catalog, "connect", lambda *_args: server)
 
     code = rules_cli._catalog(Namespace(action="status", root=str(files.ROOT), draft_terms=False,
                                         results=None, bookkeeping_run=run_id))
