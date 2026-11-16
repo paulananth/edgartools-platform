@@ -126,6 +126,8 @@ Learned the hard way; each is a standing operator rule.
 - A fix PR names the test that failed before the fix and how it failed (the
   assertion, not just "red"): a test that passes on the old code proves nothing
   (ticket 152's first test did, 2026-11-01). The Standards reviewer checks the line.
+- **Writing a test:** follow [the test-writing rules](docs/agents/watching-and-testing.md#writing-a-test)
+  (operator, 2026-11-16): assert behaviour, never a file's text, a copied count or a mock's own answer.
 - A conclusion reached by reading code is not proof of behaviour: test each
   case the claim covers (one test per kind, per source), since the untested
   case is where a gap hides.

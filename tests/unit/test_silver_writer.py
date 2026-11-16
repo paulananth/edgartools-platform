@@ -136,6 +136,12 @@ class FakeSink:
         self.written = list(delivered)
         return {"table": spec["table"], "rows": len(self.written)}
 
+    def link_keys(self, spec, link):
+        raise AssertionError("this test does not read link keys")
+
+    def set_ids(self, spec, link, found):
+        raise AssertionError("this test does not set ids")
+
 
 def test_each_link_gets_its_master_mdm_id_and_an_unmastered_record_keeps_it_empty():
     sink, asked = FakeSink(a_spec()), []
