@@ -159,14 +159,19 @@ def jurisdictional(state="CA", gleif_jurisdiction="US-CA"):
 
 def test_a_cascade_pass_may_compare_the_jurisdiction_and_rechecks_it_on_the_stage_rows():
     """A pass that compares the state of incorporation (ticket 250; operator, 2026-11-16: "engine change for
-    jurisdiction", "Option 1") agrees for one jurisdiction, and not for two, a missing one, or a state another country
-    writes."""
+    jurisdiction", "Option 1", "build option 2") agrees for one jurisdiction, and not for two, a missing one, or a
+    code the crosswalk does not know."""
     rule = with_args(_pass(CITY_OR_POSTCODE), "cascade_pass@1", compare=["jurisdiction"])
     assert _passes(rule, *jurisdictional())
     assert not _passes(rule, *jurisdictional(gleif_jurisdiction="US-NY"))
     assert not _passes(rule, *jurisdictional(state=None))
     assert not _passes(rule, *jurisdictional(gleif_jurisdiction=None))
-    assert not _passes(rule, *jurisdictional(state="A1", gleif_jurisdiction="CA-AB"))  # a Canadian province: US only
+    # Another country's code goes through the pinned crosswalk (ticket 250, option 2): A1 is British Columbia, E9
+    # the Cayman Islands; a state of one country never agrees with another's.
+    assert _passes(rule, *jurisdictional(state="A1", gleif_jurisdiction="CA-BC"))
+    assert _passes(rule, *jurisdictional(state="E9", gleif_jurisdiction="KY"))
+    assert not _passes(rule, *jurisdictional(state="A1", gleif_jurisdiction="CA-AB"))
+    assert not _passes(rule, *jurisdictional(state="ZZ", gleif_jurisdiction="CA-BC"))  # no such code
 
 
 def test_the_jurisdiction_pass_is_declared_and_not_switched_on():
