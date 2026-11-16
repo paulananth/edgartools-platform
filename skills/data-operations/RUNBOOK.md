@@ -138,7 +138,7 @@ Everything else runs at the same time. The chain file turns that into lanes: `la
 that adds a dependency fails the test until the chain follows it.
 
 ```bash
-for lane in A P S C L O D; do python <this skill>/scripts/load_chain.py --lane $lane & done   # one process per lane
+for lane in A P S C L O D F; do python <this skill>/scripts/load_chain.py --lane $lane & done   # eight lanes, one process each
 python <this skill>/scripts/load_chain.py --finish          # once every lane reports its last step done
 ```
 
@@ -214,8 +214,8 @@ Choose concurrency no larger than the tightest CPU, usable-memory,
 database-connection and declared-worker budget, including verification and
 parallelism inside each worker. Choose bundle sizes within the existing supported
 contract bounds. Keep headroom based on observed pressure and shared use. When
-measurements are unavailable but one unit can safely fit, begin with one worker
-and conservative bundles, then measure. If even one unit cannot fit or fit is
+measurements are unavailable but one unit can safely fit, begin with 2 workers
+and conservative bundles, then scale a long load to 8. If even one unit cannot fit or fit is
 unknown, wait/report the missing estimate; do not force it or reject the source.
 
 On a hosted store a bundle's time is its statements times the round trip (tens of milliseconds each), not its computation

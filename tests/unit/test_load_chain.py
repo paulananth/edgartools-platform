@@ -99,6 +99,27 @@ def test_the_steps_that_build_links_share_one_lane():
     assert len(lanes) <= 2 and "L" in lanes, lanes
 
 
+def test_the_chain_has_eight_lanes_and_company_facts_is_the_eighth():
+    """A P S C L O D plus F: company-facts runs beside the other silver-only sources."""
+    assert {step["lane"] for step in STEPS} == set("APSCLODF")
+    assert {s["lane"] for s in STEPS if s["source"] == "sec.company-facts"} == {"F"}
+
+
+def test_every_step_starts_at_two_workers_and_stays_at_most_eight():
+    """The skill starts a load at 2 workers and scales a long load to 8."""
+    counts = {step["name"]: step["workers"] for step in STEPS}
+    assert min(counts.values()) == 2, counts
+    assert max(counts.values()) <= 8, counts
+
+
+def test_the_skill_names_eight_lanes_and_the_two_to_eight_worker_scale():
+    skill = (ROOT / "skills/data-operations/SKILL.md").read_text()
+    runbook = (ROOT / "skills/data-operations/RUNBOOK.md").read_text()
+    assert "A P S C L O D F" in skill and "A P S C L O D F" in runbook
+    assert "Start `--workers 2`" in skill
+    assert "scales to 8" in skill
+
+
 def test_a_step_waits_for_what_another_lane_has_done(tmp_path):
     state = tmp_path / "state.log"
     state.write_text("11-15 14:00:00 ET alpha done: x\n11-15 14:01:00 ET beta attempt 1 start\n")
