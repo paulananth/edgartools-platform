@@ -73,6 +73,13 @@ def _run(args, kind: str, name: str, rules) -> dict:
             if args.input_manifest or args.input_sha256:
                 raise Blocked("Resume uses its frozen input reference; do not supply new inputs")
             return book.resume(args.resume_run_id)
+        if args.work_run_id:
+            existing = book.status(args.work_run_id, limit=1)["run"]["submission"]
+            if (existing["kind"], existing["name"], existing["target"]) != (kind, name, args.target):
+                raise Blocked("The run is of another source or target")
+            from edgar_warehouse.rules.local import work_run
+
+            return work_run(book, args.work_run_id)
         if not args.input_manifest or not args.input_sha256:
             raise Blocked("Submission requires an exact input manifest URI and hash")
         export = frozen.export(kind, name, Path(args.root))
@@ -575,5 +582,7 @@ def register(subparsers):
             command.add_argument("--input-manifest")
             command.add_argument("--input-sha256")
             command.add_argument("--resume-run-id")
+            command.add_argument("--work-run-id", help="Do the work of this run of a target at grain `run`, in "
+                                 "this process, and complete it (safe to repeat on a stopped run)")
             command.add_argument("--limit", type=int, default=100)
         command.set_defaults(handler=_handle)

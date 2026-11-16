@@ -488,3 +488,26 @@ def test_a_target_that_lands_no_silver_registers_nothing(tmp_path, monkeypatch):
                         as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
 
     assert result["silver_registered"] == [] and commands.registered == []
+
+
+def test_a_run_of_a_target_at_grain_run_is_worked_by_one_command_and_never_driven_by_step(tmp_path, monkeypatch):
+    """Bookkeeping holds such a run's start and completion only, so there is no step to drive: one command does
+    the work and completes the run. A run a stopped load left open is worked again the same way."""
+    class Worked(Recorded):
+        def __call__(self, duty, *args):
+            if args[:2] == ("rules", "run") and "--work-run-id" in args:
+                self.calls.append(("work", args[args.index("--work-run-id") + 1]))
+                return json.dumps({"run": {"state": "complete"}, "counts": {}})
+            return super().__call__(duty, *args)
+
+    commands = Worked(open_runs=[("old-1", "example", "by_letter", "running")])
+    folder = capture(tmp_path / "c", "letters/a.json")
+    found = loader(tmp_path, monkeypatch, commands)
+    frozen = {"body": {"bookkeeping": {"targets": {"by_letter": {"grain": "run", "steps": [{"name": "read"}]}}}}}
+    monkeypatch.setattr(loading, "Artifacts", lambda: type("Frozen", (), {"json": lambda self, ref: frozen})())
+
+    result = found.load(capture=folder, capture_run="capture-1", as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
+
+    assert result["finished_open_runs"] == ["old-1"]
+    assert [c for c in commands.calls if c[0] == "work"] == [("work", "old-1"), ("work", "new-1")]
+    assert not [c for c in commands.calls if c[0] == "drive"]
