@@ -178,9 +178,14 @@ class Loader:
     def drive(self, run_id: str) -> dict:
         """Drive a run by the steps it was frozen with, which a later rules version cannot change."""
         submission = self.commands.status(run_id)["run"]["submission"]
-        frozen = run_steps(Artifacts().json(submission["rules"])["body"], self.target)
+        body = Artifacts().json(submission["rules"])["body"]
         began = time.monotonic()
-        final = self.commands.drive(run_id, frozen)
+        if body["bookkeeping"]["targets"][self.target].get("grain") == "run":
+            # Bookkeeping holds this run's start and completion only: one process does its steps and completes it.
+            final = json.loads(self.commands("worker", "rules", "run", "--source", self.source, "--target",
+                                             self.target, "--work-run-id", run_id))
+        else:
+            final = self.commands.drive(run_id, run_steps(body, self.target))
         state = final["run"]["state"]
         if state != "complete":
             raise RunStopped(f"Run {run_id} ended {state}, not complete; its checks: {final['run'].get('checks')}")
