@@ -313,6 +313,9 @@ location: `Path(__file__).parents[N]` and `.parent`. Before the move, grep `pare
 - When a ruling changes what a load does (it joined, now it creates), re-check every lock rule that assumed the old
   behaviour, and time one batch alone, then the same batches beside each other, in a transaction rolled back, before
   the first full run. A load far slower than its batches alone is contention.
+- Time a batch on the case the load is made of. A reload's records already have stored rows, and a path that only
+  such records take (rewriting an older row) is missed by a batch of new records. When every session waits for the
+  client and no worker uses CPU, look for one statement sent a row at a time.
 - A changed golden record gets its file number when its transaction commits, never when it starts. A number
   given at the start lets a merge that commits late land below a reader's checkpoint, and the reader misses it.
 
