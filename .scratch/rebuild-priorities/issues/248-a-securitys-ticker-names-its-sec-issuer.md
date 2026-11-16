@@ -7,6 +7,12 @@ Found by the research on common stocks with no Company (operator, 2026-11-16: "G
 
 Operator, 2026-11-16: "Accept recommendation". A Security's ticker may name its SEC issuer only through the SEC's own ticker-to-CIK file. The file must name exactly one CIK for the ticker, and that CIK must already be a Company. A ticker from any other source stays lookup only. This narrows the 2026-10-14 ruling ("ticker is lookup only") for this one link.
 
+## Rulings (operator, 2026-11-16)
+
+- "Accept recommendation": the ticker rule above.
+- On the cost, "yes": the hosted run may load OpenFIGI's 771,554 records again, because this changes OpenFIGI's rules. The load itself still starts only when the operator says to run it; the word covers the cost, not the timing.
+- "Fix A yes": a GLEIF record that an N-PORT holding names as its issuer creates its Company (ticket 249). It reverses the 2026-10-16 "Issuer joins, never creates" rule.
+
 ## Evidence (hosted store, counts only)
 
 - 18,376 common stock Securities have no Company link: 10,177 state an issuer LEI whose GLEIF record waits unbound (ticket 22's "join, never create" rule); 8,199 state none.
@@ -26,6 +32,6 @@ Operator, 2026-11-16: "Accept recommendation". A Security's ticker may name its 
 - [ ] A test on a disposable store that fails first: a Security whose ticker names one CIK links to that Company; a ticker naming two CIKs, or none, links nothing; a CIK with no Company waits.
 - [ ] The pair-set target in `sec.company` and the `ISSUED_BY` relationship in the OpenFIGI Dataset Contract, by configuration.
 - [ ] Mapping Documents regenerated (`rules mapdoc write`); load chain order checked (`waits_for`).
-- [ ] Hosted: needs the operator's word (it changes OpenFIGI's rules, so its 771,554 records load again).
+- [ ] Hosted: the operator accepted the cost ("yes", 2026-11-16): OpenFIGI's 771,554 records load again. Still to be started on the operator's word to run it.
 - [ ] Not covered, stays open: 6,622 Securities the SEC file does not know, and the 10,177 whose issuer's GLEIF record waits (ticket 22's mint question).
 - [ ] Learning → skill.
