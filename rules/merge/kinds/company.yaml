@@ -333,6 +333,44 @@ rules:
       - DUPLICATE
   - primitive: holds_no_other_lei@1
     args: {}
+# A looser pass after it (ticket 250; operator, 2026-11-16: "engine change for jurisdiction", "Option 1"): the name
+# and the state of incorporation, for an SEC filer whose address GLEIF's two addresses do not match (the city or
+# postcode agree for 237 of 993 look-alike issuer names, the state for 635). The filer's state counts for a US state
+# only, as US- and its code, against GLEIF's jurisdiction. It follows the name pass above and takes only what that
+# left. DECLARED, NOT SWITCHED ON: a rule that is not an issued identifier is switched on after a measured proof at
+# its kind's bar (a labelled sample of the pairs it adds, with adversarial pairs: parent and subsidiary, the same
+# name in two places), and the operator's word. Two earlier passes that compared less were deleted for adding too
+# few links to prove.
+- rule_id: sec-gleif-name-jurisdiction
+  version: 2026-11-16.name-and-state-of-incorporation
+  family: name_binding
+  source: gleif.level1.v1
+  holder_source: sec.company.v1
+  applies_to_verdict: company
+  emits:
+  - bind
+  on_no_match: wait
+  when:
+  - primitive: cascade_pass@1
+    args:
+      pass: name and jurisdiction
+      compare:
+      - jurisdiction
+      over_shared: 25
+      refused_flags: []
+      sec_normalizer: normalize_text@sec-legal-form-kept-v1
+      gleif_normalizer: normalize_text@legal-form-kept-v1
+  - primitive: gleif_entity_eligible@1
+    args:
+      categories:
+      - GENERAL
+      entity_statuses:
+      - ACTIVE
+      refused_registration_statuses:
+      - ANNULLED
+      - DUPLICATE
+  - primitive: holds_no_other_lei@1
+    args: {}
 # Form ADV (profiling ticket 07; operator, 2026-10-09 14:56 ET: "custodian
 # must be in mdm, they are a company, Advisors must be in MDM"): an adviser's
 # filings join the one Company that holds its CRD, or create it; a

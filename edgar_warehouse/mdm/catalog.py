@@ -84,9 +84,11 @@ def _validate_pair_comparison(pair, kinds):
     text_fields = {"name_field", "identifier_namespace", "name_count_field", "cascade_field", "cascade_identifier_field",
                    "eligibility_kind", "status_field", "registration_status_field"}
     list_fields = {"eligibility_categories", "left_address_fields", "right_address_fields"}
-    if (not isinstance(pair, dict) or set(pair) != text_fields | list_fields
+    optional = {"left_jurisdiction_field", "right_jurisdiction_field"}  # the fields a `jurisdiction` part compares
+    if (not isinstance(pair, dict) or not (text_fields | list_fields) <= set(pair) <= text_fields | list_fields | optional
         or any(not isinstance(pair[key], str) or not pair[key] or pair[key].strip() != pair[key]
-               for key in text_fields)
+               for key in text_fields | (optional & set(pair)))
+        or (optional & set(pair) and optional - set(pair))
         or pair["eligibility_kind"] not in kinds
         or any(not isinstance(pair[key], list) or not pair[key]
                or any(not isinstance(value, str) or not value or value.strip() != value for value in pair[key])

@@ -148,21 +148,33 @@ def test_a_pair_a_refused_flag_holds_back_goes_to_a_steward():
     assert not _refused_by_flag(_pass(CITY_OR_POSTCODE), *cascaded(**ELSEWHERE))
 
 
-def jurisdictional(sec_jurisdiction="US-CA", gleif_jurisdiction="US-CA"):
-    """A pair that agrees on the state of incorporation only: the places differ in street, city and postcode."""
+def jurisdictional(state="CA", gleif_jurisdiction="US-CA"):
+    """A pair that agrees on the state of incorporation only: the places differ in street, city and postcode. The
+    filer's state is the code EDGAR writes; GLEIF's jurisdiction is the ISO form."""
     record, other = cascaded(**ELSEWHERE)
-    if sec_jurisdiction:
-        record["provenance"]["matching"]["address"]["jurisdiction"] = sec_jurisdiction
-    if gleif_jurisdiction:
-        other["provenance"]["matching"]["headquarters_address"] = {**HQ, "jurisdiction": gleif_jurisdiction}
+    record["fields"]["state_of_incorporation"] = value(state) if state else {"op": "missing"}
+    other["fields"]["jurisdiction"] = value(gleif_jurisdiction) if gleif_jurisdiction else {"op": "missing"}
     return record, other
 
 
 def test_a_cascade_pass_may_compare_the_jurisdiction_and_rechecks_it_on_the_stage_rows():
     """A pass that compares the state of incorporation (ticket 250; operator, 2026-11-16: "engine change for
-    jurisdiction") agrees for one jurisdiction, and not for two, or for a missing one."""
+    jurisdiction", "Option 1") agrees for one jurisdiction, and not for two, a missing one, or a state another country
+    writes."""
     rule = with_args(_pass(CITY_OR_POSTCODE), "cascade_pass@1", compare=["jurisdiction"])
     assert _passes(rule, *jurisdictional())
     assert not _passes(rule, *jurisdictional(gleif_jurisdiction="US-NY"))
-    assert not _passes(rule, *jurisdictional(sec_jurisdiction=None))
+    assert not _passes(rule, *jurisdictional(state=None))
     assert not _passes(rule, *jurisdictional(gleif_jurisdiction=None))
+    assert not _passes(rule, *jurisdictional(state="A1", gleif_jurisdiction="CA-AB"))  # a Canadian province: US only
+
+
+def test_the_jurisdiction_pass_is_declared_and_not_switched_on():
+    """Ticket 250: it acts only after a measured proof and the operator's word, so the policy has no entry for it and
+    the waterfall prepares only the passes that act."""
+    from edgar_warehouse.mdm.activation import activated
+
+    rule = _pass("sec-gleif-name-jurisdiction")
+    assert [t["args"]["compare"] for t in rule["when"] if t["primitive"] == "cascade_pass@1"] == [["jurisdiction"]]
+    assert not activated(_POLICY, "company", rule, "bind")
+    assert activated(_POLICY, "company", _pass(CITY_OR_POSTCODE), "bind")

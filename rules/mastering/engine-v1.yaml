@@ -66,3 +66,7 @@ pair_comparisons:
     right_address_fields:
     - headquarters_address
     - address
+    # What a pass's `jurisdiction` part compares: the filer's state of incorporation (a US state, as US- and its
+    # code) and GLEIF's jurisdiction (ticket 250).
+    left_jurisdiction_field: state_of_incorporation
+    right_jurisdiction_field: jurisdiction
