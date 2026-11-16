@@ -315,8 +315,8 @@ location: `Path(__file__).parents[N]` and `.parent`. Before the move, grep `pare
   the store's lock, with no kind.
 - **Problem, root cause, fix, lesson (a load 6 times slower than one batch alone).** Eight merge processes ran one batch at a
   time, each batch twice. The merge raised a conflict whenever a batch created, then redid it holding the kind lock; the
-  rule that only joins ran beside others had been written when GLEIF only joined, and a later ruling made every batch
-  create. Fix: creating by an identifier runs beside others (its values are claimed). Lesson: when a ruling changes what a
+  rule that only joins ran beside others had been written when the large source only joined, and a later ruling made
+  every batch create. Fix: creating by an identifier runs beside others (its values are claimed). Lesson: when a ruling changes what a
   load does (join to create), re-check every lock rule that assumed the old behaviour, and time one batch alone, then
   beside each other, in a rolled-back transaction before the first full run.
 - A changed golden record gets its file number when its transaction commits, never when it starts. A number
