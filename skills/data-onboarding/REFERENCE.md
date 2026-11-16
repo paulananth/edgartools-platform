@@ -261,8 +261,8 @@ its own rule, `fields.<name>`: it takes `defaults` and changes any part of
 it, such as `sources` (its own order), `clear_sources` (who may empty it),
 `max_age_days` or `allow_unknown_effective`: one source may win one field
 while another wins the rest (Examples). No field rule asks the sources to
-agree: mastering keeps good values, not blanks (operator, ticket
-131: "use priority agreeing is not nessary for all fields"). The first-ranked
+agree: mastering keeps good values, not blanks (operator:
+"use priority agreeing is not nessary for all fields"). The first-ranked
 source wins; the losing values that differ stay beside the winner as its
 `conflicts`, and the `master_field` view counts them (`conflict_count`).
 Propose a field that must agree only with real disagreeing examples in hand.

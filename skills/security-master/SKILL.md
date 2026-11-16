@@ -104,8 +104,7 @@ CUSIPs, the old one with its last-seen date).
 
 **Load order and Field Survivorship:** OpenFIGI, then 13F, then N-PORT
 (operator: "this should be second source", then "Load and
-priority"; this replaces "make openfigi priority 1 and 13f last" when ticket
-138 is built).
+priority").
 
 **The Security's fields** (Field Survivorship: OpenFIGI, then 13F, then N-PORT):
 

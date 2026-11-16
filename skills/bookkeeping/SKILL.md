@@ -15,7 +15,7 @@ own the work itself. `edgar-warehouse rules run` submits the approved versions;
 workers then pull the work (`edgar-warehouse workers work`), each checking
 its own result once, and `edgar-warehouse bookkeeping finalize`
 delivers control's events and records the run's checks. There is no
-`bookkeeping run` command (operator: "Keep `rules run`"). Plan,
+`bookkeeping run` command. Plan,
 validate and recover are steps you follow with the existing commands; they are
 not commands of their own.
 
@@ -37,7 +37,7 @@ metadata; source grammar and domain checks stay outside control.
 Read [INDEPENDENCE.md](INDEPENDENCE.md) before planning or changing an execution
 path, validating its architecture, or running/recovering it under this contract.
 It defines the evidence required to claim independence and what is built so
-far. The callbacks are gone (mastering to-do 20a); never add one back.
+far. Never add a callback.
 
 **Use another skill when:**
 - a feed is new: use **data-onboarding**;
@@ -198,11 +198,9 @@ A worker reads a reading one stored piece at a time and writes as it goes; it ne
 file. One long operation over a whole file keeps the lease renewal from running, so the lease is lost
 however often it would renew, and the memory it takes goes to swap on the disk.
 
-A target marked `local: true` runs its `source.read` and `source.combine` steps in the loader's own process
-(`rules/local.py`, called by `rules run`). They take no claim, lease or heartbeat and write files with
-receipts, and the content hash is their proof. The run in the database starts at the first later step
-(`config.staged`), with those receipts as its inputs, and Bookkeeping holds no record of the local steps. A local step requires only local steps, and a
-local step that generates work is refused until a source needs it.
+`local: true` acts only by the unit: the target's `source.read` and `source.combine` steps run in the loader's
+process with no claim or lease, and the run in the database starts at the first later step. At `grain: run`
+every step already runs in the loader, so leave it off.
 
 ## Grain: how much Bookkeeping a target uses
 
@@ -230,7 +228,6 @@ id, state, source and target, so it shows the run with no change. What differs f
 - The loader does the run's steps; `--workers` still splits each step ([data-operations Resource sizing](../data-operations/RUNBOOK.md#resource-sizing)), and bundles still load at once (`--bundles`).
 - A step another target reads as verified units (`pieces: {run: ...}`) keeps `unit`: a run at `run` grain has no verified unit
   to read. Per-unit quality results are not published for it either.
-- `local: true` beside it changes nothing: every step already runs in the loader.
 - The grain is no part of a source's processing identity: changing it loads no file again.
 
 **Write `grain: run` on every target.** Every step is a deterministic function of its input and each destination protects
