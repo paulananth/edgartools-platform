@@ -32,6 +32,7 @@ from dataclasses import dataclass
 
 from .names import (
     edgar_jurisdiction,
+    jurisdictions_agree,
     jurisdictions_conflict,
     legal_form_key,
     postal_codes_agree,
@@ -44,7 +45,7 @@ VERSION = "sec-gleif-cascade-v1"
 TEST = "cascade_pass@1"
 CONFLICT = "incorporation conflicts"
 NOT_UNIQUE = "name held by another candidate"
-PARTS = ("street", "city", "postcode")
+PARTS = ("street", "city", "postcode", "jurisdiction")
 
 
 @dataclass(frozen=True)
@@ -57,6 +58,7 @@ class Place:
     postcode: str | None
     country: str | None
     key: tuple | None
+    jurisdiction: str | None = None  # the state of incorporation, or GLEIF's jurisdiction (ticket 250)
 
 
 def place(std: dict | None) -> Place:
@@ -65,7 +67,7 @@ def place(std: dict | None) -> Place:
     lines = [line for part in ("street", "street2") for line in str(std.get(part) or "").split("\n") if line]
     postcode, country = std.get("postcode"), std.get("country")
     key = (lines[0], str(postcode or "")[:5], country or "") if lines else None
-    return Place(frozenset(lines), std.get("city") or "", postcode, country, key)
+    return Place(frozenset(lines), std.get("city") or "", postcode, country, key, std.get("jurisdiction"))
 
 
 def fit_place(record: dict, matching: dict, names: Iterable[str] = ("headquarters_address", "address")) -> Place:
@@ -206,6 +208,8 @@ def _part_agrees(sec: Place, gleif: Place, part: str) -> bool:
         return bool(sec.city) and sec.city == gleif.city
     if part == "postcode":
         return postal_codes_agree(sec.postcode, sec.country, gleif.postcode, gleif.country)
+    if part == "jurisdiction":
+        return jurisdictions_agree(sec.jurisdiction, gleif.jurisdiction)
     raise ValueError(f"A pass compares an unknown address part: {part}")
 
 

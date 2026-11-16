@@ -146,3 +146,23 @@ def test_a_pair_a_refused_flag_holds_back_goes_to_a_steward():
     assert _refused_by_flag(rule, *cascaded(flags=[_cascade.CONFLICT]))
     assert not _refused_by_flag(rule, *cascaded(flags=[_cascade.CONFLICT], **ELSEWHERE))
     assert not _refused_by_flag(_pass(CITY_OR_POSTCODE), *cascaded(**ELSEWHERE))
+
+
+def jurisdictional(sec_jurisdiction="US-CA", gleif_jurisdiction="US-CA"):
+    """A pair that agrees on the state of incorporation only: the places differ in street, city and postcode."""
+    record, other = cascaded(**ELSEWHERE)
+    if sec_jurisdiction:
+        record["provenance"]["matching"]["address"]["jurisdiction"] = sec_jurisdiction
+    if gleif_jurisdiction:
+        other["provenance"]["matching"]["headquarters_address"] = {**HQ, "jurisdiction": gleif_jurisdiction}
+    return record, other
+
+
+def test_a_cascade_pass_may_compare_the_jurisdiction_and_rechecks_it_on_the_stage_rows():
+    """A pass that compares the state of incorporation (ticket 250; operator, 2026-11-16: "engine change for
+    jurisdiction") agrees for one jurisdiction, and not for two, or for a missing one."""
+    rule = with_args(_pass(CITY_OR_POSTCODE), "cascade_pass@1", compare=["jurisdiction"])
+    assert _passes(rule, *jurisdictional())
+    assert not _passes(rule, *jurisdictional(gleif_jurisdiction="US-NY"))
+    assert not _passes(rule, *jurisdictional(sec_jurisdiction=None))
+    assert not _passes(rule, *jurisdictional(gleif_jurisdiction=None))
