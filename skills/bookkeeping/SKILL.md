@@ -125,7 +125,8 @@ waits for the files it names, so no target writes a wait, a key, a lease, a
 check or the record step. The engine reads a rules file without its `pass`
 block. Mastering reads the last pass whole unless `master.readings` says
 otherwise. `capture: copy` or `capture: provider` is a target that only brings
-files in; `record: false` is a second pass over files another target records.
+files in; `record: false` writes no Change Journal record, so the target loads every file again on every run
+(a second pass over files another target reads records its own: a file's identity holds its target).
 Writing a target another way that gives the same steps loads no file again;
 renaming a pass or changing what it reads loads the source once more.
 Before a change to a target merges, run each source's end-to-end tests on

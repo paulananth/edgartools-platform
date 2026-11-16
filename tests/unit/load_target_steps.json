@@ -2748,7 +2748,8 @@
  "sec.nport.security/mastering_other_keys": {
   "checks": [
    "manifest.hash",
-   "work.accounting"
+   "work.accounting",
+   "journal.delivered"
   ],
   "steps": [
    {
@@ -2820,6 +2821,22 @@
     "operation": "mastering.merge",
     "requires": [
      "prepare"
+    ]
+   },
+   {
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "journal.recorded"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "name": "processed",
+    "operation": "journal.record",
+    "requires": [
+     "merge"
     ]
    }
   ]

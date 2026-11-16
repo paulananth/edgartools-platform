@@ -1139,4 +1139,3 @@ bookkeeping:
       extract:
         record: {read: record.yaml, pieces: {run: {source: sec.nport.security, target: mastering, step: combine}}, context: {batch: other}}
       master: {keys: {table: security, record_column: record, dataset: sec.nport.security.v2}}
-      record: false

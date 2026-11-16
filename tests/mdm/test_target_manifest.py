@@ -323,8 +323,27 @@ def test_the_second_batch_of_securities_reads_the_first_runs_combine_and_publish
                                                          target="mastering_other_keys", documents=str(one)))
     assert runs.asked == [{"source": "sec.nport.security", "target": "mastering", "step": "combine"}]
     steps = steps_of(report)
-    assert set(steps) == {"record", "prepare", "merge"}
+    assert set(steps) == {"record", "prepare", "merge", "processed"}  # recorded in the Change Journal like the first batch
     (record,) = steps["record"]
     assert record["input"]["compose"]["slots"] == {"pieces": {k: combined[k] for k in ("run", "step", "key")}}
     assert record["input"]["compose"]["document"]["context"] == {"batch": "other"}
     assert steps["prepare"][0]["keys"]["dataset"] == "sec.nport.security.v2"
+
+
+def test_the_second_batch_of_securities_is_recorded_and_a_second_pass_skips_it(tmp_path):
+    """The second batch records its files in the Change Journal, so a rerun of the same files finds nothing to load."""
+    from uuid import uuid4
+
+    from edgar_warehouse.workers import journal_record
+
+    combined = {"run": "11111111-1111-1111-1111-111111111111", "step": "combine", "key": "combine", "sha256": "a" * 64}
+    one = tmp_path / "one.json"
+    one.write_text(json.dumps([key(1001)]))
+    settings = options(tmp_path, source="sec.nport.security", target="mastering_other_keys", documents=str(one))
+    report = write_manifest(bookkeeping=Runs([combined]), **settings)
+    body = Artifacts().json(Artifacts().json(report["manifest"])["steps"]["processed"][0]["input"])
+    for value in journal_record._events({"claim": {"run_id": str(uuid4())}}, body):
+        settings["journal"].append(value)
+
+    again = write_manifest(bookkeeping=Runs([combined]), **{**settings, "output": str(tmp_path / "again")})
+    assert again["manifest"] is None
