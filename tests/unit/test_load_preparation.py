@@ -9,6 +9,7 @@ import pytest
 from edgar_warehouse.mdm.evidence import assertion
 from edgar_warehouse.rules import files, preparation
 from edgar_warehouse.rules.driving import RunStopped
+from tests.support.patching import checked
 from tests.support.waterfall import capture, native
 from tests.support.patching import checked
 
@@ -29,7 +30,7 @@ def filer(key="0000000017", name="INVENTED CO", revision=1, effective_at=None):
 
 class Store:
     def __init__(self, records):
-        self.records, self.applied = records, {}
+        self.records, self.applied, self.calls = records, {}, []
 
     def rows(self, statement, values):
         return [(json.dumps(r),) for r in self.records]
@@ -41,15 +42,16 @@ def serve(monkeypatch, store):
         yield store
 
     monkeypatch.setattr(preparation, "registered_store", registered)
-    # The shared-engine database behavior is qualified separately by storage-adapter tests.
+    # What the real merge does with a pair it already holds is qualified on a database
+    # (tests/storage_adapters/test_mastering.py); here the store only records what preparation hands it.
     from edgar_warehouse.mastering import merge
 
     def apply(db, settings, source, pairs, **kwargs):
-        changed = {k: p for k, p in pairs.items() if db.applied.get(k) != p}
-        db.applied.update(changed)
-        return {"records": len(changed)}
+        db.calls.append(dict(pairs))
+        db.applied.update(pairs)
+        return {"records": len(pairs)}
 
-    monkeypatch.setattr(merge, "apply_pairs", apply)
+    checked(monkeypatch, merge, "apply_pairs", apply)
 
 
 def run(folder, target, *, count=1):
@@ -68,7 +70,7 @@ def test_complete_native_capture_prepares_a_unique_pair_and_unchanged_repeat_doe
     checked(monkeypatch, preparation, "project_capture", lambda *a, **k: pytest.fail("unchanged capture re-read"))
     repeated = run(folder, tmp_path / "prepared")
     assert repeated["input_digest"] == first["input_digest"]
-    assert repeated["applied"] == 0
+    assert db.calls[-1] == db.calls[0]  # the same pairs again: whether the merge has them already is its own test
     assert repeated["publication"]["evidence"] == "source-declared-complete-capture"
     assert "content_date" not in repeated["publication"]
 
