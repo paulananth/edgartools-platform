@@ -56,3 +56,21 @@ def database(postgres):
         app_db.dispose()
         with server.connect() as conn:
             conn.execute(text(f"DROP DATABASE {name} WITH (FORCE)"))
+
+
+@pytest.fixture(autouse=True)
+def targets_held_by_the_unit(monkeypatch):
+    """These tests drive each target through Bookkeeping's unit protocol (claim, work, report) and read the units'
+    counts and receipts, so every target is held by the unit here whatever grain its source file names. A run at
+    grain `run` is tested where it is worked (`test_bookkeeping_runtime.py`, `test_rules_loading.py`)."""
+    from edgar_warehouse.rules import files
+
+    real = files.load_source
+
+    def by_the_unit(path, **options):
+        body = real(path, **options)
+        for target in ((body.get("bookkeeping") or {}).get("targets") or {}).values():
+            if isinstance(target, dict):
+                target.pop("grain", None)
+        return body
+    monkeypatch.setattr(files, "load_source", by_the_unit)
