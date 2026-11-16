@@ -21,6 +21,13 @@ Every eligible GLEIF entity creates its Company now, with no issuer test. Eligib
 
 Identifier rules run before name rules in one merge, so an issuer that is also an SEC filer became a second Company (3,240 of 3,528 name-paired issuers). In the hosted store the SEC-GLEIF name pass has already run (2,042 pairs held), so only issuers it did not pair would create. 993 of the 9,909 waiting issuer records have a normalized name equal to an SEC filer's name: they are likely the same company, so they are held for review, not created.
 
+## Design (found 2026-11-16, configuration only)
+
+1. **The creating rule.** A rule `gleif-lei` in `rules/merge/kinds/company.yaml`, family `binding`, source `gleif.level1.v1`, `on_no_match: mint`, tests `identifier_match` and `identifier_cardinality` on `lei` (the shape of `company-cik`), switched on in `rules/merge/policy.yaml`. The `lei` Identifier Contract already names `gleif.level1.v1`.
+2. **Eligibility cannot be a matching test.** `gleif_entity_eligible@1` belongs to the name-binding family only. A binding rule cannot test ACTIVE or ANNULLED, so the status gate goes into the kind decision: a Dataset Contract states a `kind_field` or names a `classification` rule, never both (ADR 0015). GLEIF's contract changes from `kind_field` to a classification rule `gleif-company-candidate`: GENERAL and ACTIVE and registration not ANNULLED or DUPLICATE is a company; a FUND, BRANCH, government or international organization is deferred with its probable kind (as `kind_values` and `probable_kind_values` do today); anything else is deferred. This needs the record to carry the entity category as a field (to confirm).
+3. **The duplicate guard.** The SEC-GLEIF name pass gives an SEC Company the GLEIF LEI first, so the GLEIF record then joins by LEI instead of creating. SEC filers that pass did not pair would duplicate: 993 of the 9,909 issuer records have an SEC filer's name. The guard is still open: a looser name pass (measured), or review.
+4. **Every record is reprocessed.** The change alters GLEIF's rules, so all 3,043,084 GLEIF records load again (and about 2.8 million Companies are created, with their lookups and links). That needs the operator's word to run, and a measured time first.
+
 ## Parts
 
 - [x] 2026-11-16 10:17 ET Ruling recorded and evidence counted (hosted counts, 2026-11-16).
