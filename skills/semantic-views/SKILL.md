@@ -1,35 +1,52 @@
 ---
 name: semantic-views
-description: Design, validate, deploy, and test Snowflake semantic views for governed business questions. Use when creating or revising CREATE SEMANTIC VIEW definitions, logical tables, dimensions, facts, metrics, relationships, Cortex Analyst context, grants, or verified query pairs.
+description: Draft a semantic model in AutoOntology, deploy it as a Snowflake semantic view, and query it through Snowflake MCP. Use when creating or revising OSSIE YAML, SYSTEM$CREATE_SEMANTIC_VIEW_FROM_OSSIE_YAML, logical tables, metrics, Cortex Analyst, or verified queries.
 ---
 
 # Snowflake semantic views
 
-A semantic view is a **serving projection** for business questions. It is not a new system of record. Rules/`CONTEXT.md` own definitions and processing policy; MDM owns mastered identities and relationships; RDM owns approved code sets; Silver owns transaction facts; OpenMetadata catalogs the governed assets. Read [data catalog](../data-catalog/SKILL.md), [data modeling](../data-modeling/SKILL.md), and [Snowflake operations](../aws-snowflake-operations/SKILL.md) before changing a view.
+A semantic view is a **serving projection**. Rules/`CONTEXT.md` own meaning; MDM owns identities and relationships; RDM owns code sets; Silver owns transaction facts. AutoOntology drafts the model. Snowflake deploys and serves it. Read [AutoOntology](../auto-ontology/SKILL.md), [data modeling](../data-modeling/SKILL.md), and [Snowflake operations](../aws-snowflake-operations/SKILL.md) first.
 
-## Workflow
+## Choose the tool
 
-1. **Scope the question.** Record the business questions, audience, target database/schema, selected physical tables, grain, freshness need, and permitted role. Name what the view will not answer. Resolve the source product and table list from Rules/OpenMetadata; do not invent tables from a screen.
-2. **Inspect sources read-only.** Read columns, exact types, primary/unique and foreign keys, nullability, row counts, sample shapes, date ranges, existing queries, and current grants. Use the approved Snowflake connection and reader role. Never print connection values or raw sensitive rows. If a table's grain or key is unknown, stop and mark it unresolved.
-3. **Map logical tables.** For each physical table, define a stable logical name, business description, grain, primary key, source relation, and ownership. Reuse platform logical identities; a semantic-view name is not a new business identity.
-4. **Classify columns.** Mark dimensions for grouping/filtering, time dimensions for dates/timestamps with timezone and business meaning, and facts for row-level numeric values. Keep exact numeric types: integers are `BIGINT`/64-bit; decimals are exact `NUMBER(precision, scale)`. Do not expose a duplicated MDM field from Silver as a new fact.
-5. **Define relationships.** Use declared foreign-key-to-primary-key paths or evidence-backed joins. State cardinality, direction, null behavior, and grain preservation. Reject many-to-many joins that multiply facts unless a bridge and aggregation rule are explicit. A similar name is not a join key.
-6. **Add metrics.** Define exact aggregations, units, grain, filters, null handling, denominator, and time basis. Examples: `SUM(amount)` as revenue; `COUNT(DISTINCT customer_id)` as customers. Test additive and non-additive measures separately. Reuse approved Rules/MDM/RDM meanings; do not create a conflicting definition in the view.
-7. **Add business context.** Write plain descriptions, synonyms, and usage/avoidance notes for tables, columns, dimensions, facts, relationships, and metrics. Keep review state separate from creation. Include the source logical key and rules/provenance reference in the design artifact.
-8. **Generate and validate DDL.** Produce `CREATE SEMANTIC VIEW` from the reviewed model, not by hand-editing a deployed copy. Compile in an isolated target first. Fix syntax, identifier, type, join, aggregation, and unsupported-feature errors. Preserve a deterministic DDL artifact and review diff.
-9. **Deploy safely.** Use the explicit production Snowflake connection and approved deployer/loader ownership rules. Apply through the repository's approved Snowflake/dbt/deploy path; never use a deprecated dev target or an ad hoc account role. Create or replace only the named view, preserve grants where supported, and grant the minimum reader role. Read back definition, dependencies, owner, and grants.
-10. **Test business questions.** Send positive, negative, boundary-date, null, duplicate-key, and multi-table questions through Cortex Analyst. Inspect generated SQL, selected tables, joins, filters, grain, aggregations, row counts, truncation, and results. A successful response is not proof of correctness; compare against an independently computed expected answer.
-11. **Add verified query records.** Save only reviewed question-and-SQL pairs with the semantic-view version, source revision, expected grain, and validation evidence. A VQR is an optimization and regression fixture, not a business-definition authority. Never store secrets or raw sensitive values in it.
-12. **Iterate by evidence.** Audit unanswered, ambiguous, wrong-grain, duplicated-row, and wrong-metric questions. Change one semantic element at a time, recompile, reread grants, and rerun affected positive and negative questions. Keep a rollback DDL and the prior verified query set.
+| Job | Tool | Do not |
+|---|---|---|
+| Draft logical tables, dimensions, facts, joins, metrics, and synonyms from approved Snowflake tables | AutoOntology | Hand-write the first model, or let it scan unapproved tables |
+| Certify the model | A person, against Rules/MDM/RDM/Silver | Treat AutoOntology output as authority |
+| Deploy | `SYSTEM$CREATE_SEMANTIC_VIEW_FROM_OSSIE_YAML` | Query through AutoOntology after deploy |
+| Ask questions | Snowflake-managed MCP `CORTEX_ANALYST_MESSAGE`, or a Cortex Agent in front of it | Expose `SYSTEM_EXECUTE_SQL` on that same MCP server |
+
+AutoOntology's export is Apache Ossie YAML (`semantic_model.yaml`). It is not a live Snowflake object. After deploy, disconnect AutoOntology as a query path so it cannot become a second model.
+
+## Deploy
+
+1. Scope the questions, database, schema, approved tables, grain, and reader role. Stop if a key or grain is unknown.
+2. Inspect sources read-only. Keep exact types: integers are `BIGINT`; decimals are `NUMBER(precision, scale)`. Never print secrets or raw sensitive rows.
+3. In AutoOntology, generate and certify Ossie YAML version `0.1.1`. Each field and metric needs a `SNOWFLAKE` expression, with `ANSI_SQL` only as fallback. Other dialects are silently skipped.
+4. Qualify every metric by its logical table. `SUM(orders.total_amount)` deploys. `SUM(TOTAL_AMOUNT)` fails on this account with `Unsupported expression in the definition of derived metric`.
+5. Prove the YAML on a disposable database and invented rows. Read the procedure result, then drop that database. Do not use a production schema for the proof.
+6. Deploy the certified YAML to the approved schema:
+
+```sql
+CALL SYSTEM$CREATE_SEMANTIC_VIEW_FROM_OSSIE_YAML(
+  '<database>.<schema>',
+  $$<certified Ossie 0.1.1 YAML>$$
+);
+```
+
+The view name comes from the YAML `name`. Replacement preserves grants. The role needs `CREATE SEMANTIC VIEW` on the schema and `SELECT` on every referenced table.
+7. Read back the view, owner, and grants. Grant only the approved reader role.
+8. Create or update the MCP server so its Analyst tool identifier is that view. Ask positive, negative, boundary, null, and multi-table questions. Compare generated SQL and results with an independent expected answer.
+9. Save only reviewed question-SQL pairs as verified queries. Change one element at a time and retest.
 
 ## Hard stops
 
-- No production write without the explicit target, role, scope, and reviewed DDL.
-- No semantic view over an unqualified table, unknown grain, or unapproved relationship.
-- No copied master fields in Silver or redefinition of MDM/RDM meaning.
-- No broad grants, `ACCOUNTADMIN`, credential-bearing SQL, or secrets in files, prompts, logs, VQRs, or output.
-- No claim that a view is correct from compilation alone; require SQL and result readback.
+- No production deploy without the named schema, role, and certified YAML.
+- No view over an unknown grain, unapproved relationship, or copied MDM field in Silver.
+- No `ACCOUNTADMIN`, broad grants, credential-bearing SQL, or secrets in YAML, prompts, logs, or verified queries.
+- No claim of correctness from the procedure message alone. Require SQL and result readback.
+- Dev Snowflake is decommissioned. Name the production connection explicitly.
 
 ## Completion
 
-The view has an approved question scope, source/grain/key mapping, dimensions/time dimensions/facts, evidence-backed relationships, exact metrics and context, compiled DDL, least-privilege grants, readback, positive and negative Cortex Analyst tests, and reviewed VQRs. Open gaps remain explicit.
+The certified Ossie model, deployed view, least-privilege grant, MCP Analyst binding, and reviewed question tests all name the same view. Open gaps stay explicit.
