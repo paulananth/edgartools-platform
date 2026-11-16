@@ -814,6 +814,10 @@ _Avoid_: An MDM or RDM field repeated as a fact, a Silver row, a metric
 A named aggregation over one Semantic View's facts, at that view's grain.
 _Avoid_: A row-level fact, an unqualified sum, a second business definition
 
+**Verified Query**:
+A question and its SQL for one Semantic View. An example is the question before that pair is accepted.
+_Avoid_: The answer rows, a metric, a second business definition
+
 **Join**:
 The fact grain's named link to one Dimension inside a Semantic View. Two Joins may reach the same Dimension when each names a different role. A Join must not multiply the grain, and it uses the time scope that Gold fact table already declares. An MDM relationship may be the evidence for it, but it is a different object.
 _Avoid_: Semantic Relationship, Relationship Interval, Relationship Applicability, a name match, an unapproved join

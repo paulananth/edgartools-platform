@@ -1,6 +1,6 @@
 ---
 name: semantic-views
-description: Draft, certify, and deploy an Explore-only Snowflake semantic view for one Gold fact grain. Use when creating OSSIE YAML, SYSTEM$CREATE_SEMANTIC_VIEW_FROM_OSSIE_YAML, dimensions, joins, facts, metrics, or Cortex Analyst questions.
+description: Draft, certify, and deploy an Explore-only Snowflake semantic view for one Gold fact grain. Use when creating OSSIE YAML, verified queries, AutoOntology examples, SYSTEM$CREATE_SEMANTIC_VIEW_FROM_OSSIE_YAML, dimensions, joins, facts, metrics, or Cortex Analyst questions.
 ---
 
 # Snowflake semantic views
@@ -46,6 +46,15 @@ Binding a certified view version into the Agent Decision Surface is a separate d
 - No `ACCOUNTADMIN`, broad grants, credential-bearing SQL, or secrets in the YAML, prompts, logs, or verified queries.
 - No claim of correctness from the procedure message alone.
 - Dev Snowflake is decommissioned. Name the production connection explicitly.
+
+## Examples and verified queries
+
+A verified query is a question and its SQL. Create both in AutoOntology with the draft model. Do not give AutoOntology a Gold connection.
+
+1. Write one example question per Dimension role, Join, Metric, and refused case. Name the fact grain in the question.
+2. Keep the question and the SQL that uses the certified objects. That pair is the verified query.
+3. A changed synonym or metric invalidates the pair. Certify it again.
+4. After deploy, add those same question-and-SQL pairs to the semantic view. AutoOntology authors them. It is not the serving question path.
 
 ## Completion
 
