@@ -130,7 +130,7 @@ rules state three kinds of ordering:
   matching rule that waits follows the source the rule names (`holder_source`), else the sources whose minting rules use the
   same identifier namespace, else the sources that mint its kind. A source whose links point at another source's masters
   follows it. Two sources that each prefer the other have no order to keep.
-- **Alone** (these take turns; they are not dependencies). Merges of one kind of master data, the targets that build the
+- **Alone** (these take turns; they are not dependencies). Merges of one kind of master data that create golden records (one that only joins stored ones runs beside them), the targets that build the
   links table (one lease), and two loads of one source and target (their outputs would collide).
 
 Everything else runs at the same time. The chain file turns that into lanes: `lane` marks steps that may run together,
@@ -226,8 +226,9 @@ read and report for each unit); a target at `grain: run` pays none of them ([boo
 
 `--workers` is the processes on each step, at either grain. A step's units run that many at once; a step with fewer
 units than workers hands each unit its share, and a merge deals its batches out to that share (a one-file
-publication merges on all of them). `--bundles` runs several bundles at once. Merges of one kind take turns on the kind
-lock, so before scaling a merge, sample its sessions: processes waiting on the lock gain nothing from more of them.
+publication merges on all of them). `--bundles` runs several bundles at once. A merge that only joins stored golden
+records runs beside the others of its kind; one that creates or merges them holds the kind lock alone, so before
+scaling a merge, sample its sessions: processes waiting on the lock gain nothing from more of them.
 
 Increasing `workers work --limit` changes the work bound of that invocation; it
 does not itself create parallel workers. A frozen source execution setting cannot

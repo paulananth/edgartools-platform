@@ -1,6 +1,6 @@
 # 233: Batches of one kind merge in parallel
 
-Type: task. Status: open (reopened 2026-11-15 on a measured wait; the measure says the lock is not the cause, see "Measured again"). Blocked by: none. Follows ticket 197's open part
+Type: task. Status: open (built 2026-11-16, see "Built"; the hosted measurement is open). Blocked by: none. Follows ticket 197's open part
 "narrowing [the kind lock] to the identifiers a batch touches".
 
 ## Question
@@ -75,6 +75,26 @@ bundles, about 2.8 hours at 1.3 minutes a bundle. Its first step, measuring befo
 - **Decision:** ticket 239 takes the round trips. This ticket's design (key closures, a coordinator) stays deferred until a
   merge of one kind is measured waiting on the lock for long merges: GLEIF, whose merge is measured when it loads.
 
+## Built (operator, 2026-11-16: "implement and fix ticket 233", "there is no need for lock", then "Database guards (Recommended)", and "dont add more tables")
+
+The kind lock is not removed alone: without it, two merges each create a golden record for one identifier (the two-writer
+test, 200 of 200). Nor can the store refuse a second holder of an identifier: on the hosted store 365 tickers, 258 LEIs
+(16 within one kind), 13 SEDOLs, one CIK and one LoanX value are each held by two golden records, so a unique index would
+refuse what the rules allow. What was built instead, with no new table:
+
+1. **Side by side first.** A merge of new records takes its kind's lock shared (PostgreSQL), so merges of one kind run
+   together. A merge that creates or merges golden records, joins by exact name, or meets a deadlock is rolled back and
+   merged again holding the lock alone, exactly as before. MySQL merges one kind at a time.
+2. **Golden record locks.** Beside others, a merge locks the golden records it rewrites (sorted) before it reads their
+   members, and before the held-LEI test of a name rule, so two merges that join one golden record read each other in turn.
+3. **Identifier claims.** The identifier values a merge gives a golden record that does not hold them yet are locked, then
+   read again: one that another golden record of the kind took meanwhile sends the merge to merge alone (at most 2,000
+   values a merge; more merge alone).
+4. **No lost wait.** After its commit, a merge looks once for a record it left waiting whose identifier another merge gave
+   meanwhile, and for one another merge left waiting for what it gave, and merges only those again, alone.
+
+GLEIF finds Companies and never creates one, so its batches merge side by side.
+
 ## Parts
 
 - [x] 2026-11-13 21:27 ET Evidence: the kind lock serializes the hosted GLEIF merge (77 of 96 worker samples waiting), and the
@@ -85,6 +105,14 @@ bundles, about 2.8 hours at 1.3 minutes a bundle. Its first step, measuring befo
 - [ ] ~~Failing tests, slot locks, golden record locks, components at preparation, measurement~~ deferred until a
       merge is measured waiting on the kind lock: slot locks saturate at 1,000-record batches, and the grouping
       design is not worth building while daily merges are small (see "Stopped").
+- [x] 2026-11-16 08:03 ET Merges of one kind that only join stored golden records run side by side; the rest merge alone (Built, above).
+      Tests `test_a_merge_that_only_joins_golden_records_runs_beside_another_of_its_kind` and
+      `test_a_record_left_waiting_beside_a_merge_that_gives_its_identifier_is_released` failed before (`TimeoutError`: the
+      second merge waited on the kind lock); `test_merges_beside_each_other_that_join_one_golden_record_keep_every_record`
+      and `test_a_merge_that_creates_a_golden_record_waits_for_one_in_flight_of_its_kind` guard the rest. All mastering
+      adapter tests pass on PostgreSQL (39, the concurrency ones five times) and MySQL; 219 mdm, unit and architecture tests.
+- [ ] Hosted: the next GLEIF merge, sampled in its first minutes (merge sessions waiting on a lock, records a minute
+      against 2,060). The 2026-11-16 resume finished in 18.9 min on batches earlier attempts had merged, so it measured nothing.
 - [x] Learning → skill: data-operations RUNBOOK, "Resource sizing": a hosted store's time is statements times the round trip;
-      count a bundle's statements on a local store with statement logging before blaming a lock or adding parallelism. The
-      lock rule (a lock per key must be bounded, hashed slots saturate on large batches) waits for a built design.
+      count a bundle's statements on a local store with statement logging before blaming a lock or adding parallelism. mdm-engineering "Writes and transactions": a merge of one kind runs beside the others and merges alone
+      only for what needs it (creating or merging golden records, a contended identifier, a deadlock); a lock per key stays bounded (claims capped).

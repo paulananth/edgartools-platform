@@ -302,8 +302,13 @@ location: `Path(__file__).parents[N]` and `.parent`. Before the move, grep `pare
 - A store call that takes the lock does not commit. A step that must be all or nothing (a split, a reversal)
   is one function that takes the lock first, then does every write, then commits once, and rolls back on any
   error. Ordering separate calls cannot make it atomic.
-- A merge takes the lock of its own kind only (`Store.take_lock(kind)`), so merges of two kinds run together
-  and two of one kind take turns. The lock is a database advisory lock, not a table. Its file stays in memory:
+- A merge takes the lock of its own kind only (`Store.take_lock(kind)`), so merges of two kinds run together.
+  Of one kind, a merge first runs beside the others under the kind's shared lock. What only a merge alone may do
+  (create or merge golden records, join by exact name, give an identifier another golden record of the kind took
+  meanwhile), or a deadlock, rolls it back, and it merges again holding the lock alone. Beside others it locks the
+  golden records it rewrites before reading their members, and the identifier values it newly gives before reading
+  who holds them, and after its commit it looks once for a wait neither merge could see. MySQL merges one kind at a
+  time. The locks are database locks (advisory and row), not tables. Its file stays in memory:
   a shared working table would force one lock for the whole store. Only a whole-store change (`clear`) takes
   the store's lock, with no kind.
 - A changed golden record gets its file number when its transaction commits, never when it starts. A number
