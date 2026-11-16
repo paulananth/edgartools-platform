@@ -798,6 +798,26 @@ _Avoid_: Accepting a mismatch silently, replacing an object without evidence, tr
 The versioned, machine-readable set of SEC-derived facts and features an automated trading agent may read when forming a trading decision; humans may audit the same surface, but charts and dashboards are not the contract.
 _Avoid_: Streamlit app as source of truth, research notebook export, ad-hoc SQL without a published contract, trading execution API
 
+**Semantic View**:
+A person-certified Explore-only question contract for one Gold fact grain: its dimensions, its joins, its facts, and the metrics over that grain. Descriptions and synonyms are words on those objects, not a fifth object. Certifying the view does not bind it into the Agent Decision Surface.
+_Avoid_: A physical denormalized table, a query against Silver, a view that mixes fact grains, an uncertified model, a free Gold join treated as what an agent saw
+
+**Dimension**:
+A gold-approved MDM master attribute or RDM code meaning used to group or filter one Semantic View. An RDM Dimension names its approved code-set version.
+_Avoid_: A copied master field on the fact table, a Silver column, a metric
+
+**Fact**:
+A row-level amount, quantity, date, or link key on the one Gold fact table of a Semantic View.
+_Avoid_: An MDM or RDM field repeated as a fact, a Silver row, a metric
+
+**Metric**:
+A named aggregation over one Semantic View's facts, at that view's grain.
+_Avoid_: A row-level fact, an unqualified sum, a second business definition
+
+**Join**:
+The fact grain's named link to one Dimension inside a Semantic View. Two Joins may reach the same Dimension when each names a different role. A Join must not multiply the grain, and it uses the time scope that Gold fact table already declares. An MDM relationship may be the evidence for it, but it is a different object.
+_Avoid_: Semantic Relationship, Relationship Interval, Relationship Applicability, a name match, an unapproved join
+
 **Decision Feature**:
 A named, typed field on the Agent Decision Surface with documented meaning, null semantics (unknown vs zero), and identity keys (for example CIK and fiscal period).
 _Avoid_: Chart series, dashboard metric, unexplained column
