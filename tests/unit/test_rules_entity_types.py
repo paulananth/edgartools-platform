@@ -10,5 +10,5 @@ def test_each_dataset_contract_is_listed_with_its_entity_type_and_origin(capsys)
     rows = {r["dataset_code"]: (r["source"], r["origin"], r["entity_types"], r["rule_id"])
             for r in json.loads(capsys.readouterr().out)}
     assert rows["sec.company.v1"] == ("sec.company", "rule", "company", "sec-company-candidate")
-    assert rows["gleif.level1.v1"] == ("gleif", "source_field", "company", None)
+    assert rows["gleif.level1.v1"] == ("gleif", "rule", "company", "gleif-company-candidate")
     assert rows["openfigi.security.v4"] == ("openfigi", "fixed", "security", None)
