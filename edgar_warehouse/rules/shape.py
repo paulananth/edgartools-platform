@@ -179,6 +179,8 @@ def _capture(target: dict) -> dict:
     kind = target["capture"]
     if kind not in CAPTURES or set(target) & (SHAPE | {"steps"}):
         raise ShapeError(f"`capture` is one of {sorted(CAPTURES)} and the target's only step")
+    if kind == "provider" and target.get("grain") == "run":
+        raise ShapeError("A provider capture holds the provider's shared lease, so it runs by the unit: remove `grain: run`")
     operation, key, leases, checks = CAPTURES[kind]
     rest = {name: value for name, value in target.items() if name != "capture"}
     return {**rest, "steps": [{"name": "capture", "operation": operation, "requires": [], "key": key,

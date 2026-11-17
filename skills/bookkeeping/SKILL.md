@@ -232,9 +232,18 @@ id, state, source and target, so it shows the run with no change. What differs f
   the files itself, with its own `context` (`extract: [{file: ..., context: ...}]`). Per-unit quality results are not published.
 - The grain is no part of a source's processing identity: changing it loads no file again.
 
-**Write `grain: run` on every target.** Every step is a deterministic function of its input and each destination protects
-itself, so the run's start and completion are all Bookkeeping needs to hold; a test holds every target to it. No destination checks a lease proof, so dropping the lease gives up only that
-one unit is not done twice (the destinations refuse a conflicting write themselves).
+**Write `grain: run` on every target but a provider capture.** Every other step is a deterministic function of its input and
+each destination protects itself, so the run's start and completion are all Bookkeeping needs to hold; a test holds every
+target to it. No destination of theirs checks a lease proof, so dropping the lease gives up only that one unit is not done
+twice (the destinations refuse a conflicting write themselves). A `capture: provider` target is the exception: its worker
+checks the shared provider lease (`provider:sec`), which keeps every capture of one provider, in any run, under one request
+rate, and renews its own lease before each request. It runs by the unit, and the shape refuses it at `grain: run`.
+
+**Run a provider capture by the unit**, after the operator permits each request it makes (the request files name them):
+`rules run --source <source> --target capture --feed <feed> --input-manifest <uri> --input-sha256 <hash>` starts the run,
+`edgar-warehouse workers work provider.capture <run> --reports <uri>` works its units under the lease, and
+`bookkeeping finalize <run>` completes it once every unit is verified. Write the capture's `receipts.jsonl` with
+[capture_receipts.py](../data-operations/scripts/capture_receipts.py) before a target reads it.
 
 Prove a change of grain before the switch-on, in two steps. First load one delivery at each grain into two disposable stores
 and compare every table's row count: MDM and silver agree, the Change Journal differs only by Bookkeeping's per-unit events.

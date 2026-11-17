@@ -3,7 +3,7 @@
 Priority: 149. Map: [Rebuild priorities](../map.md). Opened 2026-10-29 17:20 ET (operator, 2026-10-29:
 "Create a ticket to pull and process S-1").
 
-Type: task. Status: open (reopened 2026-11-17, operator: "Implement ticket 149 and 174 using SpaceX as the test case"). Blocked by: none (SEC requests authorised, below).
+Type: task. Status: resolved (reopened 2026-11-17, operator: "Implement ticket 149 and 174 using [the test issuer] as the test case"). Blocked by: none (SEC requests authorised, below).
 
 ## Question
 
@@ -70,8 +70,7 @@ What does "process an S-1" deliver, and how is it captured? The decisions:
 
 Ruling (operator, 2026-11-17 10:43 ET): "Link by identifier (Recommended)": a silver link may name an MDM identifier (the ticker); it fills the Security's id only when exactly one Security holds the value, so a reused ticker stays empty. The test case: an issuer whose S-1 (2026) is captured and whose shares listed in June 2026; no Security holds its ticker in any capture on this machine today, so its row stays empty and fills once one is loaded.
 
-- [ ] Engine: a silver link by an MDM identifier (namespace), filled only for exactly one holder; the spec validator accepts it; a test that fails first (an invented ticker held once fills, held twice stays empty)
-- [ ] `registration_offering` links its `ticker` to the Security by the `ticker` identifier; Mapping Document regenerated
-- [ ] The proof on the test case: its offering row's Company link fills, its Security link stays empty (no Security holds the ticker), with the reason
-- [ ] Learning → skill
-
+- [x] 2026-11-17 11:18 ET Engine: a silver link names either the Dataset Contract whose record key its column holds or an identifier the master holds (`identifier: ticker`); the id lookup takes the link; the spec validator wants exactly one. Failed before: `test_a_link_by_identifier_asks_for_the_holder_of_each_value` (`Blocked: A link holds columns, kind, source_code, source_key and mdm_id_column`); on PostgreSQL 16, `test_a_ticker_one_security_holds_finds_it_and_a_reused_or_unheld_ticker_finds_none`
+- [x] 2026-11-17 11:18 ET `registration_offering` links its `ticker` to the Security by the `ticker` identifier; Mapping Document regenerated
+- [x] 2026-11-17 11:18 ET The proof on the test case (ticket 174's store `t174`): its S-1 offering row links to its Company (mastered by the Company rule's new step for a new listing, ticket 174); its Security link stays empty, since no Security on this machine holds the ticker (the only OpenFIGI answer for that symbol is another exchange's listing); it fills on `silver refresh-ids` once one does. The S-1 cover states the ticker and exchange and no price range or share count (the original S-1 was filed before pricing)
+- [x] 2026-11-17 11:18 ET Learning → skill: `data-onboarding` TARGETS.md, "A row that states an identifier the master holds links by it"

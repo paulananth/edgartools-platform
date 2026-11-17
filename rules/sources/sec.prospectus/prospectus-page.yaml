@@ -2,7 +2,9 @@ source: sec.prospectus
 pass:
   name: read
   files: '*.capture.zip'
-  units: {slices: {bytes: 33554432}}
+  units:
+    slices:
+      bytes: 33554432
 execution:
   profile: source.read
   workers: 1
@@ -61,43 +63,19 @@ read:
             within: 120
             transforms:
             - regex_extract:
-                pattern: '(?i)\b([0-9][0-9,]{4,}) (?:class [a-z] )?(?:shares|ordinary shares|american depositary shares|ads|units)\b'
+                pattern: (?i)\b([0-9][0-9,]{4,}) (?:class [a-z] )?(?:shares|ordinary shares|american depositary shares|ads|units)\b
                 group: 1
             - regex_replace:
                 pattern: ','
                 with: ''
-        price_low:
+        price_per_share:
           first_found:
             path: block
             from: document
             within: 200
             transforms:
             - regex_extract:
-                pattern: '(?i)between \$\s?([0-9]+(?:\.[0-9]+)?) and \$\s?[0-9]'
-                group: 1
-            - regex_replace:
-                pattern: ','
-                with: ''
-        price_high:
-          first_found:
-            path: block
-            from: document
-            within: 200
-            transforms:
-            - regex_extract:
-                pattern: '(?i)between \$\s?[0-9]+(?:\.[0-9]+)? and \$\s?([0-9]+(?:\.[0-9]+)?)'
-                group: 1
-            - regex_replace:
-                pattern: ','
-                with: ''
-        price_fixed:
-          first_found:
-            path: block
-            from: document
-            within: 200
-            transforms:
-            - regex_extract:
-                pattern: '(?i)(?:initial public offering price|offering price)[^.]{0,60}?\$\s?([0-9]+(?:\.[0-9]+)?) per'
+                pattern: (?i)offering price (?:is |of |will be )?\$\s?([0-9][0-9,]*(?:\.[0-9]+)?) per
                 group: 1
             - regex_replace:
                 pattern: ','
@@ -109,7 +87,7 @@ read:
             within: 200
             transforms:
             - regex_extract:
-                pattern: '(?i)(?:option|right) to purchase up to ([0-9][0-9,]*) (?:additional )?(?:class [a-z] )?(?:shares|ordinary shares|ads|american depositary shares)'
+                pattern: (?i)(?:option|right) to purchase up to (?:an additional )?([0-9][0-9,]*) (?:additional )?(?:shares|ordinary shares|ads|american depositary shares|units)
                 group: 1
             - regex_replace:
                 pattern: ','
@@ -121,7 +99,7 @@ read:
             within: 200
             transforms:
             - regex_extract:
-                pattern: "(?i)(?:under|symbol)[^.]{0,40}?(?:symbol|ticker)[^.]{0,12}?[\u201C\\\"']\\s?([A-Z]{1,5})\\b"
+                pattern: (?i)\b(?:symbol|ticker)[^“"'‘]{0,20}[“"'‘]\s?([A-Za-z]{1,5})\b
                 group: 1
         exchange:
           first_found:
@@ -130,5 +108,187 @@ read:
             within: 200
             transforms:
             - regex_extract:
-                pattern: (?i)(nasdaq global select market|nasdaq global market|nasdaq capital market|nyse american|new york stock exchange|nyse|nasdaq)
+                pattern: (?i)(nasdaq global select market|nasdaq global market|nasdaq capital market|nasdaq stock market|nyse american|new york stock exchange|nyse|nasdaq)
                 group: 1
+    cover_line:
+      each: row
+      select:
+        found:
+          path: c1.$
+          transforms:
+          - regex_extract:
+              pattern: (?i)^(?:(?:initial )?public offering price[\s.]*$|underwriting discounts? and commissions|proceeds,? before expenses,? to)
+              group: 0
+      columns:
+        accession_number:
+          context:
+            name: accession_number
+        cik:
+          context:
+            name: cik
+        captured_at:
+          context:
+            name: captured_at
+        table_number:
+          text:
+            path: '@table'
+            null_if:
+            - ''
+        row_number:
+          text:
+            path: '@row'
+            null_if:
+            - ''
+        label:
+          text:
+            path: c1.$
+            trim: true
+            null_if:
+            - ''
+        line:
+          coalesce:
+            skip: 'null'
+            values:
+            - choose:
+                condition:
+                  found:
+                    path: c1.$
+                    transforms:
+                    - regex_extract:
+                        pattern: (?i)^(?:initial )?public offering price[\s.]*$
+                        group: 0
+                then:
+                  const:
+                    value: offering_price
+                else:
+                  const:
+                    value: null
+            - choose:
+                condition:
+                  found:
+                    path: c1.$
+                    transforms:
+                    - regex_extract:
+                        pattern: (?i)^underwriting discounts? and commissions
+                        group: 0
+                then:
+                  const:
+                    value: underwriting_discount
+                else:
+                  const:
+                    value: null
+            - choose:
+                condition:
+                  found:
+                    path: c1.$
+                    transforms:
+                    - regex_extract:
+                        pattern: (?i)^proceeds,? before expenses,? to
+                        group: 0
+                then:
+                  const:
+                    value: proceeds
+                else:
+                  const:
+                    value: null
+        per_share:
+          text:
+            path: '@cells'
+            null_if:
+            - ''
+            transforms:
+            - regex_extract:
+                pattern: ^[^|]*\|\s*(?:\$\s*\|\s*)?\$?\s*\(?([0-9][0-9,]*(?:\.[0-9]+)?)
+                group: 1
+            - regex_replace:
+                pattern: ','
+                with: ''
+        total:
+          text:
+            path: '@cells'
+            null_if:
+            - ''
+            transforms:
+            - regex_extract:
+                pattern: ^[^|]*\|\s*(?:\$\s*\|\s*)?[^|]*\|\s*(?:\$\s*\|\s*)?\$?\s*\(?([0-9][0-9,]*(?:\.[0-9]+)?)
+                group: 1
+            - regex_replace:
+                pattern: ','
+                with: ''
+    underwriter:
+      each: row
+      select:
+        choose:
+          condition:
+            found:
+              path: '@head'
+              transforms:
+              - regex_extract:
+                  pattern: (?i)^\s*(?:name|underwriters?)\s*\|\s*number of (?:shares|ads|american depositary shares|units)
+                  group: 0
+          then:
+            choose:
+              condition:
+                found:
+                  path: c1.$
+                  transforms:
+                  - regex_extract:
+                      pattern: (?i)^\s*(?:name|underwriters?|total)\b
+                      group: 0
+              then:
+                const:
+                  value: null
+              else:
+                found:
+                  path: '@cells'
+                  transforms:
+                  - regex_extract:
+                      pattern: '[0-9][0-9,]*\s*$'
+                      group: 0
+          else:
+            const:
+              value: null
+      columns:
+        accession_number:
+          context:
+            name: accession_number
+        cik:
+          context:
+            name: cik
+        captured_at:
+          context:
+            name: captured_at
+        table_number:
+          text:
+            path: '@table'
+            null_if:
+            - ''
+        row_number:
+          text:
+            path: '@row'
+            null_if:
+            - ''
+        underwriter:
+          text:
+            path: c1.$
+            null_if:
+            - ''
+            transforms:
+            - regex_replace:
+                pattern: \s*\.{2,}.*$
+                with: ''
+            - regex_replace:
+                pattern: \s*\(\d+\)\s*$
+                with: ''
+        shares:
+          text:
+            path: '@cells'
+            null_if:
+            - ''
+            transforms:
+            - regex_extract:
+                pattern: ([0-9][0-9,]*)\s*$
+                group: 1
+            - regex_replace:
+                pattern: ','
+                with: ''

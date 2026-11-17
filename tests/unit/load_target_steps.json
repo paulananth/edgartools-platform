@@ -3547,6 +3547,146 @@
    }
   ]
  },
+ "sec.prospectus/capture": {
+  "steps": [
+   {
+    "name": "capture",
+    "operation": "provider.capture",
+    "requires": [],
+    "key": "{accession_number}",
+    "leases": [
+     "provider:sec",
+     "output:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "capture.verified"
+    ]
+   }
+  ],
+  "checks": [
+   "manifest.hash",
+   "work.accounting",
+   "journal.delivered"
+  ]
+ },
+ "sec.prospectus/silver": {
+  "steps": [
+   {
+    "name": "read",
+    "operation": "source.read",
+    "requires": [],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "units": {
+     "slices": {
+      "bytes": 33554432
+     }
+    },
+    "input": {
+     "contract": "prospectus-page.yaml",
+     "files": "*.capture.zip"
+    }
+   },
+   {
+    "name": "land_offering",
+    "operation": "silver.land",
+    "requires": [
+     "read"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "silver:{silver}:{unit}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "silver.landed"
+    ],
+    "input": {
+     "keys": {
+      "silver": "prospectus_offering",
+      "table": "offering"
+     }
+    }
+   },
+   {
+    "name": "land_cover_line",
+    "operation": "silver.land",
+    "requires": [
+     "read"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "silver:{silver}:{unit}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "silver.landed"
+    ],
+    "input": {
+     "keys": {
+      "silver": "prospectus_cover_line",
+      "table": "cover_line"
+     }
+    }
+   },
+   {
+    "name": "land_underwriter",
+    "operation": "silver.land",
+    "requires": [
+     "read"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "silver:{silver}:{unit}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "silver.landed"
+    ],
+    "input": {
+     "keys": {
+      "silver": "prospectus_underwriter",
+      "table": "underwriter"
+     }
+    }
+   },
+   {
+    "name": "processed",
+    "operation": "journal.record",
+    "requires": [
+     "land_offering",
+     "land_cover_line",
+     "land_underwriter"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "journal.recorded"
+    ]
+   }
+  ],
+  "checks": [
+   "manifest.hash",
+   "work.accounting",
+   "journal.delivered"
+  ]
+ },
  "sec.registration/capture": {
   "checks": [
    "manifest.hash",

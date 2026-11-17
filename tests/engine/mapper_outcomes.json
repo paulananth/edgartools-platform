@@ -158,11 +158,11 @@
  ],
  "sec/normalize/sec.company/unknown_fields": [
   "assertion",
-  "8fd89fdd062eecae3ae05c31cab073ac67ca039fbf11b73f24d33812e2824200"
+  "bac21afd8c7071b1c87c3f8a1967b87539aac94de76a20114783b4d029abc538"
  ],
  "sec/normalize/sec.company/valid": [
   "assertion",
-  "8fd89fdd062eecae3ae05c31cab073ac67ca039fbf11b73f24d33812e2824200"
+  "bac21afd8c7071b1c87c3f8a1967b87539aac94de76a20114783b4d029abc538"
  ],
  "sec/normalize/sec.submissions.person/bad_identity": [
   "deferred",

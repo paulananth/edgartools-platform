@@ -30,7 +30,7 @@ defaults:
   allow_unknown_effective: true
 rules:
 - rule_id: sec-company-candidate
-  version: 2026-11-14.listed-operating-or-foreign-issuer
+  version: 2026-11-17.listed-operating-foreign-or-new-listing
   family: classification
   source: sec.company.v1
   emits:
@@ -125,6 +125,26 @@ rules:
         values:
         - 20-F
         - 40-F
+        min_count: 1
+  # A new listing (operator, 2026-11-17: "Master the 86 (Recommended)"): SEC types a company "other" until its first
+  # annual report; one with a ticker that filed an initial registration or a final prospectus is an operating company.
+  - step: "10a"
+    verdict: company
+    when:
+    - primitive: field_in_set@1
+      args:
+        field: entity_type
+        values:
+        - other
+    - primitive: values_overlap@1
+      args:
+        field: forms
+        values:
+        - S-1
+        - F-1
+        - S-11
+        - 424B1
+        - 424B4
         min_count: 1
   - step: "11"
     verdict: deferred

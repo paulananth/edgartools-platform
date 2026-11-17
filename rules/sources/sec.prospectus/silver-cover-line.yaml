@@ -1,0 +1,84 @@
+# The silver table of a final prospectus's price lines: one row per row of a page table whose label is the offering price,
+# the underwriting discounts and commissions, or the proceeds before expenses, with its per-share and total amounts.
+# The cover's own table comes first in the page (the lowest table number); the underwriting section repeats it.
+# Rows are the `cover_line` table of prospectus-page.yaml.
+# Rulings: operator, 2026-11-02 ("Look-up on mdm then silver"), 2026-11-17 ("424B1 to 424B5, cover terms"). A term
+# the page does not state is empty, never zero; numbers land as exact decimals or whole numbers from the text as filed.
+table: prospectus_cover_line
+definition: 'One price line of a final prospectus: the offering price, the underwriters'' discount or the proceeds, per share and in total.'
+grain: one row per accession number, table and row
+columns:
+- name: accession_number
+  type: VARCHAR
+  nullable: false
+  definition: The filing's accession number.
+  source: capture metadata scope.accession_number
+  sensitivity: none
+- name: cik
+  type: VARCHAR
+  nullable: false
+  definition: The registrant's CIK, by which its Company is found.
+  source: capture metadata scope.cik
+  sensitivity: none
+- name: captured_at
+  type: TIMESTAMP WITH TIME ZONE
+  nullable: false
+  definition: 'The moment the page was captured from the SEC archive: the row''s time in silver; the filing''s own date is not on the page.'
+  source: capture metadata captured_at
+  sensitivity: none
+- name: table_number
+  type: BIGINT
+  nullable: false
+  definition: The table's number in the page.
+  source: page order
+  sensitivity: none
+- name: row_number
+  type: BIGINT
+  nullable: false
+  definition: The row's number in its table.
+  source: page order
+  sensitivity: none
+- name: label
+  type: VARCHAR
+  nullable: true
+  definition: The row's label as filed.
+  source: first cell
+  sensitivity: none
+- name: line
+  type: VARCHAR
+  nullable: true
+  definition: 'Which price line the label names: ''offering_price'', ''underwriting_discount'' or ''proceeds''.'
+  source: first cell
+  sensitivity: none
+- name: per_share
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: 'The row''s first amount: per share (where a cell gives two, as ''$0.90 / $0.00'', the first).'
+  source: row cells
+  sensitivity: none
+- name: total
+  type: DECIMAL(38,10)
+  nullable: true
+  definition: 'The row''s second amount: the total for the shares offered.'
+  source: row cells
+  sensitivity: none
+key:
+- accession_number
+- table_number
+- row_number
+links:
+- columns:
+  - cik
+  kind: company
+  source_code: sec.company.v1
+  to_part: registrant
+  source_key: cik
+  mdm_id_column: registrant_mdm_id
+time:
+  as_of: null
+  as_at: captured_at
+  event_time: null
+partition: []
+load_mode: append
+why: 'A price line is a fact of a filed document: transaction data keyed by its place in the page, linked to the registrant Company by lookup. Append, since a filed document never changes.'
+checks: []

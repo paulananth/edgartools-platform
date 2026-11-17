@@ -1,17 +1,17 @@
-# The silver table of final prospectuses: one row per 424B1 to 424B5 main document captured, with the
-# final terms its cover states. `edgar-warehouse silver register` reads this spec. Rows are the `offering`
-# table of prospectus-page.yaml. Rulings: operator ("Look-up on mdm then silver"; "424B1 to 424B5, cover
-# terms"). A term the cover does not state is empty, never zero. Numbers land as exact decimals or whole
-# numbers from the text as filed. The Company is found by its CIK; its name and facts are the Company's, in MDM.
+# The silver table of final prospectuses: one row per 424B1 to 424B5 main document captured, with the final
+# terms its cover text states. Rows are the `offering` table of prospectus-page.yaml.
+# Rulings: operator, 2026-11-02 ("Look-up on mdm then silver"), 2026-11-17 ("424B1 to 424B5, cover terms"). A term
+# the page does not state is empty, never zero; numbers land as exact decimals or whole numbers from the text as filed.
+# The Company is found by its CIK and the listed Security by its ticker; their names and facts are theirs, in MDM.
 table: prospectus_offering
-definition: The final offering terms one 424B1 to 424B5 cover states, linked to the registrant Company by CIK.
+definition: The final offering terms one 424B1 to 424B5 cover states, linked to the registrant Company and the listed Security.
 grain: one row per accession number
 columns:
 - name: accession_number
   type: VARCHAR
   nullable: false
   definition: The filing's accession number.
-  source: capture metadata scope.accession
+  source: capture metadata scope.accession_number
   sensitivity: none
 - name: cik
   type: VARCHAR
@@ -38,40 +38,28 @@ columns:
     or ''units''.'
   source: cover text
   sensitivity: none
-- name: price_low
+- name: price_per_share
   type: DECIMAL(38,10)
   nullable: true
-  definition: The low end of the price range per share, from 'between $X and $Y'.
-  source: cover text
-  sensitivity: none
-- name: price_high
-  type: DECIMAL(38,10)
-  nullable: true
-  definition: The high end of the price range per share.
-  source: cover text
-  sensitivity: none
-- name: price_fixed
-  type: DECIMAL(38,10)
-  nullable: true
-  definition: A fixed offering price per share, from 'offering price ... $X per'.
+  definition: The final offering price per share, from 'offering price is $X per'.
   source: cover text
   sensitivity: none
 - name: over_allotment_shares
   type: BIGINT
   nullable: true
-  definition: The shares the underwriters may buy in addition, from 'option to purchase up to N additional shares'.
+  definition: The shares the underwriters may buy in addition, from 'option to purchase up to (an additional) N shares'.
   source: cover text
   sensitivity: none
 - name: ticker
   type: VARCHAR
   nullable: true
-  definition: The symbol the cover proposes (not the symbol the company trades under now, which is the Security's).
+  definition: The symbol the cover names; its Security is found by it once exactly one Security holds it as its ticker.
   source: cover text
   sensitivity: none
 - name: exchange
   type: VARCHAR
   nullable: true
-  definition: The exchange the cover names, as written (Nasdaq Capital Market, New York Stock Exchange, ...).
+  definition: The exchange the cover names, as written (Nasdaq Stock Market, New York Stock Exchange, ...).
   source: cover text
   sensitivity: none
 key:
@@ -97,6 +85,6 @@ time:
   event_time: null
 partition: []
 load_mode: append
-why: 'A final prospectus is transaction data: one row per filed original, keyed by its accession number, linked to the registrant Company by lookup, so no record of its own goes through
-  the Merge Stage. Append, since a filed document never changes; an amendment is another filing.'
+why: 'A final prospectus is transaction data: one row per filed document, keyed by its accession number, linked to the registrant Company and the listed Security by lookup, so no record
+  of its own goes through the Merge Stage. Append, since a filed document never changes.'
 checks: []
