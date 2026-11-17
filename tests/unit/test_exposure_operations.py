@@ -1,0 +1,61 @@
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
+from edgar_warehouse.rules.exposure_manifest import build_manifest
+from edgar_warehouse.rules.exposure_operations import (
+    ExposureRunError,
+    production_policy,
+    run_exposure_cycle,
+)
+
+
+def manifest():
+    return build_manifest({"tables": [{
+        "database": "EDGARTOOLS_PROD", "schema": "EDGARTOOLS_GOLD", "table": "COMPANY",
+        "description": "Mastered companies.", "authority": "mdm", "columns": [], "lineage": [],
+    }]})
+
+
+def snapshots(_manifest):
+    table = {"database": "EDGARTOOLS_PROD", "schema": "EDGARTOOLS_GOLD", "table": "COMPANY", "description": "Mastered companies.", "authority": "mdm", "columns": []}
+    return {"snowflake": {"tables": [table]}, "openmetadata": {"tables": [table]}, "autoontology": {"tables": [table]}}
+
+
+def test_cycle_is_bounded_and_receipt_is_redacted():
+    seen = []
+    result = run_exposure_cycle(
+        manifest(), manifest_created_at=datetime.now(timezone.utc),
+        ingest=lambda value: seen.append("ingest") or {"ok": True},
+        publish=lambda value: seen.append("publish") or {"ok": True},
+        snapshots=snapshots,
+    )
+    assert result["ok"] is True
+    assert seen == ["ingest", "publish"]
+    assert "secret" not in str(result)
+    assert production_policy() == {
+        "target": "EDGARTOOLS_PROD", "role": "EDGARTOOLS_PROD_READER",
+        "scope": ["EDGARTOOLS_GOLD", "EDGARTOOLS_SILVER"],
+        "approval_gate": "operator-approved production run",
+    }
+
+
+def test_stale_manifest_fails_before_side_effects():
+    called = []
+    with pytest.raises(ExposureRunError, match="stale"):
+        run_exposure_cycle(
+            manifest(), manifest_created_at=datetime.now(timezone.utc) - timedelta(days=2),
+            ingest=lambda value: called.append("ingest") or {"ok": True},
+            publish=lambda value: called.append("publish") or {"ok": True},
+            snapshots=snapshots,
+        )
+    assert called == []
+
+
+def test_parity_failure_is_fail_closed():
+    with pytest.raises(ExposureRunError, match="parity"):
+        run_exposure_cycle(
+            manifest(), manifest_created_at=datetime.now(timezone.utc),
+            ingest=lambda value: {"ok": True}, publish=lambda value: {"ok": True},
+            snapshots=lambda value: {"snowflake": {"tables": []}, "openmetadata": {"tables": []}, "autoontology": {"tables": []}},
+        )
