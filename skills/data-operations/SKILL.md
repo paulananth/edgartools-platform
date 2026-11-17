@@ -335,8 +335,10 @@ Work it out from counts before starting:
 A target that differs from the others with no reason in its data is a defect. Before a new or changed target
 merges, expand every source's targets into one table, setting by setting (grain, run facts, files read, steps,
 lease settings, workers), and explain each difference by the data. A setting no code reads at that target's
-grain is deleted, and a captured file is read once: master and land silver from the same target unless the
-second is a second publication. Do not write a source-specific driver script: a missing step is a gap in
+grain is deleted. A captured file is read once however many targets read it: a load takes the extract another
+target of the stores wrote from the same content with the same rules and worker code (kept by content under the
+manifest root's `extracts` folder), so give two targets that need the same extract the same rules file and context.
+A second target stays only where it is a second publication or lands another table. Do not write a source-specific driver script: a missing step is a gap in
 `load`, fixed there. `--workers` is the one setting an operator sizes: processes on each step. A source's
 `execution.workers` is threads inside one read unit, worth setting to 2 only where a unit reads many files.
 

@@ -224,7 +224,9 @@ id, state, source and target, so it shows the run with no change. What differs f
 - Bookkeeping holds no unit, lease, checkpoint or per-unit journal event of the run; `bookkeeping status` shows the run and
   no items. MDM, silver and the Change Journal's file and batch records are the same.
 - A stopped load leaves the run `running`. The next `load` works the same run again from its first step: a written file is
-  written again as the same file, and the Change Journal skips each batch it recorded as merged.
+  written again as the same file, and the Change Journal skips each batch it recorded as merged. A read or combine
+  whose output is written is not done again, by this run or by another target's run over the same content with the same
+  rules and worker code.
 - The loader does the run's steps; `--workers` still splits each step ([data-operations Resource sizing](../data-operations/RUNBOOK.md#resource-sizing)), and bundles still load at once (`--bundles`).
 - A run reads only its own steps. A target that needs what another target read names the same last rules file and reads
   the files itself, with its own `context` (`extract: [{file: ..., context: ...}]`). Per-unit quality results are not published.
