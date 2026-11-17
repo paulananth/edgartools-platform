@@ -103,5 +103,9 @@ change).
 - [ ] Each target's counts recorded beside the local proof of the same capture: records, golden records, set aside,
   reviews, silver rows, links. A count that differs is explained before the next target.
 - [ ] The time of every target, from its run, recorded here
+- [ ] The GLEIF merge sampled in its first minutes: merge sessions waiting on a lock, and records a minute against 2,060
+      (native Python, one process). Moved from ticket 233.
+- [ ] Where two kinds merge at once (GLEIF companies beside N-PORT securities), records a minute each against 6,500 alone
+      and 3,100 together. Moved from ticket 233; a full-size load is not run only for it.
 - [x] Learning → skill: data-operations RUNBOOK "Initialize a hosted store" and "Load a fresh store"; the connection
   section; aws-snowflake-operations, "The hosted MDM store"; STORES, "Apply store DDL" (2026-11-15 13:45 ET)
