@@ -164,7 +164,7 @@ checks and points to the repository lifecycle script.
    that selection through database creation, schema initialization and domain
    operation; a PostgreSQL-only command is a runtime gap to repair, not a
    reason to substitute PostgreSQL. Check the selected engine's actual store
-   capabilities with [data-operations](../data-operations/SKILL.md#apply-store-ddl).
+   capabilities with [STORES.md](STORES.md).
 
    This skill starts the selected container. Use the Docker context already
    configured. Leave `DOCKER_HOST` unset. Do not pass a worktree path, an
@@ -228,10 +228,10 @@ checks and points to the repository lifecycle script.
 
 4. **Databases.** On each selected engine's container, create these databases
    when they are missing: `rules`, `bookkeeping`, `change_journal`, `mdm`, `rdm`,
-   and `silver`. Do not paste the statement or an address into the chat. Do
-   not apply the store schemas here.
-   [data-operations](../data-operations/SKILL.md) applies that DDL into these
-   databases. Use [Connection URLs and environment](#connection-urls-and-environment)
+   and `silver`. Do not paste the statement or an address into the chat. Then
+   apply the store schemas and create every committed silver table by
+   [STORES.md](STORES.md): only this skill and data-onboarding create tables,
+   and a load creates none. Use [Connection URLs and environment](#connection-urls-and-environment)
    for addresses, credentials and role selection. Database creation requires
    an authorized owner with `CREATEDB`; create only missing databases and
    preserve existing data.

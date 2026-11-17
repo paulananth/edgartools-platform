@@ -65,7 +65,7 @@ Silver is part of the platform and comes with `up <name>`. Register every commit
 bash infra/scripts/deploy-silver.sh <name>
 ```
 
-The script migrates silver and registers each `rules/sources/*/silver-*.yaml`.
+The script migrates silver and registers each `rules/sources/*/silver-*.yaml` and `rules/silver/silver-*.yaml`. Run it before the first load: a load creates no table and stops when one it writes is missing.
 Repeating it changes nothing.
 
 The container listens only on loopback at an automatically assigned port.

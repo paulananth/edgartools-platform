@@ -1,12 +1,20 @@
 # Apply store DDL and qualify Silver storage
 
-Part of the `data-operations` skill: [SKILL.md](SKILL.md) says when to read this.
+Part of the `data-platform` skill: [SKILL.md](SKILL.md) says when to read this.
 
 ## Apply store DDL
 
-This skill applies DDL. Data-profiling writes a logical silver spec and does
-not. MDM engineering writes the MDM migration files and does not apply a
-profile's silver spec.
+**Only two skills create tables.** Data-platform creates every store's schema and
+every committed silver table, when a store is set up. Data-onboarding creates a
+new source's silver tables, once, before that source's first load
+([TARGETS.md](../data-onboarding/TARGETS.md)). Nothing else does: a load, a run,
+a worker, data-operations and every other skill create no table, in production
+or anywhere else. A load that finds a table missing stops and names the command.
+A temporary table of one session (a write's staging rows, a calculation's steps)
+is not a table of the store and is allowed.
+
+Data-profiling writes a logical silver spec and applies none. MDM engineering
+writes the MDM migration files and does not apply a profile's silver spec.
 
 Use the operator's selected engine for each store: PostgreSQL, MySQL or SQL
 Server Express. Resolve the connection's dialect and verify it matches that
@@ -16,12 +24,10 @@ merge capability. Preserve the selected engine when a command refuses it;
 route the missing implementation to its owning engineering work instead of
 substituting PostgreSQL.
 
-A hosted instance is initialized by [the runbook](RUNBOOK.md#initialize-a-hosted-store).
+A hosted instance is initialized in the order of [the runbook](../data-operations/RUNBOOK.md#initialize-a-hosted-store); its schema and silver-table steps are this skill's.
 
-Apply these five schemas into databases that
-[data-platform](../data-platform/SKILL.md) already created: `mdm`, `rdm`,
-`bookkeeping`, `change_journal`, and `silver`. This skill does not create
-the databases or the engines. Read each command's `--help` before the
+Apply these five schemas into the databases [Setup](SKILL.md#0-setup) created: `mdm`, `rdm`,
+`bookkeeping`, `change_journal`, and `silver`. Read each command's `--help` before the
 first use. The required initialization path uses the same logical schema
 and supported command interface with a storage adapter for the selected
 engine. [sql-writer](../sql-writer/SKILL.md) compiles portable tables and
@@ -37,7 +43,7 @@ readiness. Route a missing capability to engineering while leaving that target
 incomplete; retain the selected engine instead of substituting PostgreSQL.
 
 Use the owner connection and runtime-role arguments from
-[Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
+[Connection URLs and environment](SKILL.md#connection-urls-and-environment).
 That section owns role provisioning and command-specific connection selection,
 including the hosted Bookkeeping control group.
 
@@ -51,6 +57,11 @@ including the hosted Bookkeeping control group.
 
 `init` is the whole step on a fresh store. `migrate` (each store has one) applies a schema file that arrives later and
 prints the same checksums when nothing has.
+
+Then every committed silver table, with the silver owner's login:
+`bash infra/scripts/deploy-silver.sh <local environment name | path to connection.env>`. It registers each
+`rules/sources/*/silver-*.yaml` and `rules/silver/silver-*.yaml`; an unchanged spec changes nothing and a changed one
+is refused (register it as a new table).
 
 The runtime role exists, has no administrative privileges, and is not the
 migration login. Done when the selected engine's migration history matches

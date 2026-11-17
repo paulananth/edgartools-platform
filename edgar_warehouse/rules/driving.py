@@ -50,17 +50,14 @@ def exports(path: Path) -> dict[str, str | None]:
 
 
 def duties(stores: Path) -> dict[str, dict[str, str | None]]:
-    """Each duty's connection settings, from the local stores' private env files. The migration login
-    (`connection.env`, the stores' owners) is there too when the file is: only schema work, such as creating
-    a silver table, runs as it."""
+    """Each duty's connection settings, from the local stores' private env files. The owners' logins
+    (`connection.env`) are never read: a load does no schema work."""
     found = {}
     for duty in DUTIES:
         path = stores / f"{duty}.env"
         if not path.is_file():
             raise RunStopped(f"{path} is missing: start the stores with infra/scripts/local-test-stores.py up <name>")
         found[duty] = exports(path)
-    if (stores / "connection.env").is_file():
-        found["migration"] = exports(stores / "connection.env")
     return found
 
 

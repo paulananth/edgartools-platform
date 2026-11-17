@@ -428,7 +428,7 @@ while the maintained test-folder inventory cannot see it. Reproduce the
 inventory check locally; keep its coverage assertion intact.
 
 Hand qualified configuration and supported migrations to
-[Data Operations](../../data-operations/SKILL.md#apply-store-ddl). Preserve the
+[data-platform STORES.md](../../data-platform/STORES.md). Preserve the
 existing Rules approval/activation and published-reference lifecycle. A
 fixture proof cannot activate a real source. Keep actual values and private
 connections outside public reports.
