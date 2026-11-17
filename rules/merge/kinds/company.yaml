@@ -744,6 +744,10 @@ identifiers:
     - gleif.level1.v1
     - sec.nport.registrant.v2
     normalizer: normalize_identifier@lei-v1
+    # A sponsor's LEI is filed by several trusts, each its own registrant: the LEI finds a Company only where that
+    # Company holds no other CIK; otherwise the record joins by its CIK alone, and is created by it.
+    yields_to:
+    - cik
     claim:
       forward: 1
       # One value per master (ticket 138): what the engine has always enforced
