@@ -1,6 +1,6 @@
 # 246: The second Securities batch is recorded in the Change Journal
 
-Type: task. Status: open. Blocked by: none. Found by the rerun check (operator, 2026-11-16: "Need to check if change journal working as expected if you run again no database updates"; "Decision for you: yes").
+Type: task. Status: resolved (operator, 2026-11-17: consolidate and close; hosted parts to 238, the rest to 212). Blocked by: none. Found by the rerun check (operator, 2026-11-16: "Need to check if change journal working as expected if you run again no database updates"; "Decision for you: yes").
 
 ## Question
 
@@ -17,6 +17,6 @@ Rerun of all 41 steps (08:38 to 08:41 ET, 2026-11-16), row counts of all 84 tabl
 ## Parts
 
 - [x] 2026-11-16 09:24 ET The target `mastering_other_keys` of `sec.nport.security` loses `record: false`: it gets the `processed` step and the `journal.delivered` check. Failed before: `test_the_second_batch_of_securities_is_recorded_and_a_second_pass_skips_it` (`KeyError: 'processed'`) and `test_a_target_gives_its_recorded_steps[sec.nport.security/mastering_other_keys]` (steps and checks differ); both pass now. Mapping Document regenerated (`rules mapdoc check` clean).
-- [ ] Hosted: the next chain run loads the source's files once more (its rules changed, so every file is processed again under the new identity), then a second run changes nothing, counted as the rerun above did. Not run: it reloads the N-PORT securities.
+- [ ] ~~Hosted: the next chain run loads the source's files once more (its rules changed, so every file is processed again under the new identity), then a second run changes nothing, counted as the rerun above did. Not run: it reloads the N-PORT securities.~~ deferred to 238: every hosted part is one run, in one ticket
 - [x] 2026-11-16 09:24 ET Bookkeeping skill: what `record: false` does.
 - [x] Learning → skill: `bookkeeping` SKILL, "Writing a target": `record: false` means the target loads every file on every run.

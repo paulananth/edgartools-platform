@@ -1,6 +1,6 @@
 # 248: A Security's ticker names its SEC issuer, through the SEC's own ticker file
 
-Type: task (configuration only; no code change). Status: open. Blocked by: none.
+Type: task (configuration only; no code change). Status: resolved (operator, 2026-11-17: consolidate and close; hosted parts to 238, the rest to 212). Blocked by: none.
 Found by the research on common stocks with no Company (operator, 2026-11-16: "Give me list of common stock with no company I will fix this first"; "Find a fix for all this must be a configuration no code change all must be in company master").
 
 ## Ruling
@@ -50,8 +50,8 @@ Failed before: `test_a_ticker_the_sec_file_maps_to_one_cik_states_the_securitys_
 - [x] 2026-11-16 10:12 ET Ruling recorded (operator words above) and the evidence counted.
 - [x] 2026-11-16 12:11 ET Tests that failed first (see Built): the contract link, the companion fix, and the declared chain end to end (one CIK links, two CIKs link nothing).
 - [x] 2026-11-16 12:11 ET The ticker read pass, the lookup carried in the member, `issuer_cik`, and the `ISSUED_BY` relationship in the contract, by configuration.
-- [ ] The SEC ticker file copied into each OpenFIGI capture folder it loads (`openfigi/2026q2-nport`, `openfigi/form4-tickers-20261109`) with a receipt: additive, from the file already on this machine. Not done: it is part of the hosted run.
+- [ ] ~~The SEC ticker file copied into each OpenFIGI capture folder it loads (`openfigi/2026q2-nport`, `openfigi/form4-tickers-20261109`) with a receipt: additive, from the file already on this machine. Not done: it is part of the hosted run.~~ deferred to 238: every hosted part is one run, in one ticket
 - [x] 2026-11-16 12:11 ET Mapping Document regenerated (`rules mapdoc write --only openfigi`); load chain order checked (`test_load_chain`).
-- [ ] Hosted: the operator accepted the cost ("yes", 2026-11-16): OpenFIGI's 771,554 records load again. Still to be started on the operator's word to run it.
-- [ ] Not covered, stays open: 6,622 Securities the SEC file does not know, and the 10,177 whose issuer's GLEIF record waits (ticket 22's mint question).
+- [ ] ~~Hosted: the operator accepted the cost ("yes", 2026-11-16): OpenFIGI's 771,554 records load again. Still to be started on the operator's word to run it.~~ deferred to 238: every hosted part is one run, in one ticket
+- [ ] ~~Not covered, stays open: 6,622 Securities the SEC file does not know, and the 10,177 whose issuer's GLEIF record waits (ticket 22's mint question).~~ deferred to 212: the remaining work is one backlog, in one ticket
 - [x] Learning → skill: `data-platform` READING.md, after `member_value`: a read over a combine's pieces takes no lookups (carry the value in the member), a file of another source rides in the capture with `always`, and a companion is asked only of the documents the step reads.

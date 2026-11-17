@@ -1,6 +1,6 @@
 # 250: A name pass compares the state of incorporation
 
-Type: task (an engine change, then configuration). Status: open. Blocked by: none. Related: ticket 249 (GLEIF creates its Company), ticket 09 (the cascade).
+Type: task (an engine change, then configuration). Status: resolved (operator, 2026-11-17: consolidate and close; hosted parts to 238, the rest to 212). Blocked by: none. Related: ticket 249 (GLEIF creates its Company), ticket 09 (the cascade).
 
 ## Ruling
 
@@ -35,7 +35,7 @@ The Rust command takes the pinned crosswalk as data (`jurisdictions`, from `name
 - [x] 2026-11-16 14:41 ET The proof run (the real cascade logic over the 6,250 stored filers and the 3,043,084 stored GLEIF records, read-only): the active pass pairs 2,211 filers; the jurisdiction pass adds **848** (750 US, 98 other countries); 2 are flagged "name held by another candidate", none as a conflict in the place of incorporation. Independent labels (the LEI a filer states itself) cover 10 of the 6,250 filers and none of the additions, so the operator reviewed a sample.
 - [x] 2026-11-16 14:41 ET The review (operator, 2026-11-16, by chat, five at a time): 25 pairs, all matches, including both flagged pairs, 10 adversarial ones (the filer's and GLEIF's cities or countries differ) and US and non-US pairs; then the pairs least likely to match, found by scoring the other 823: five whose names differ beyond punctuation (all the same company) and two where GLEIF gives only a country ("6 & 7 is match"). No pair was a wrong match. Signals on the rest: 336 link a LAPSED registration, 156 a name type with many related entities (Holdings, Trust), 32 a state tag in the SEC name; 69 have two or more.
 - [x] 2026-11-16 14:41 ET Ruling (operator): the pass accepts a LAPSED registration of an ACTIVE entity ("Yes"), as the existing name pass does.
-- [ ] (replaced by the two lines above) The proof: a labelled sample of the pairs the pass adds, with adversarial pairs, on a disposable store; then the operator's word to switch it on.
+- [ ] ~~(replaced by the two lines above) The proof: a labelled sample of the pairs the pass adds, with adversarial pairs, on a disposable store; then the operator's word to switch it on.~~ deferred to 212: the remaining work is one backlog, in one ticket
 - [x] 2026-11-16 14:56 ET Switched on (operator, 2026-11-16: "Switch on"): `sec-gleif-name-jurisdiction` is in `policy.yaml` after the name pass; `test_the_jurisdiction_pass_is_switched_on_after_the_name_pass` holds it; the company fixture's digest updated. The hosted effect waits for the GLEIF load.
 - [x] Mapping Documents regenerated (company, in the first PR).
-- [ ] Learning → skill.
+- [ ] ~~Learning → skill.~~ deferred to 212: the remaining work is one backlog, in one ticket

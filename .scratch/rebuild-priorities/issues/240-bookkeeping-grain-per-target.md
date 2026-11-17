@@ -1,6 +1,6 @@
 # 240: Bookkeeping runs once a bundle or a load, and a source can turn it off
 
-Type: task. Status: open (operator, 2026-11-15: "Run with no bookkeeping", then "Yes" to GLEIF first; then "i need be able to turn of bookkeeping for a source but must record start and completion alone to support open metadata"). Blocked by: none. Builds on ticket 232 (which leases the destinations already make redundant),
+Type: task. Status: resolved (operator, 2026-11-17: consolidate and close; hosted parts to 238, the rest to 212). Blocked by: none. Builds on ticket 232 (which leases the destinations already make redundant),
 ticket 239 (where a bundle's statements go) and the `local: true` target setting.
 
 ## Why
@@ -80,13 +80,13 @@ Not started: the runner, the setting and the proof are the next three checklist 
 
 ## Checklist
 
-- [ ] The operator's rulings on the table above: the default grain and the sources that turn it off (one question at a time, with a recommendation)
+- [ ] ~~The operator's rulings on the table above: the default grain and the sources that turn it off (one question at a time, with a recommendation)~~ deferred to 212: the remaining work is one backlog, in one ticket
 - [x] The setting on the source file's target: `grain: run` (`unit` is the default; not `off`, which YAML reads as false), validated in `config.validate`: `test_a_grain_is_unit_or_run_and_a_run_grain_target_is_not_also_local` (2026-11-15 19:01 ET). Not done: a line in the Mapping Documents' pipeline sheet
 - [x] Tests, each failing on the code before ("Unknown target option"): a run at `run` grain holds no unit and completes (`test_a_target_at_grain_run_holds_its_start_and_completion_only`, PostgreSQL and MySQL); a failed check leaves it running and it is worked again; the loader works such a run by one command and an open one again (`test_rules_loading.py`) (2026-11-15 19:01 ET)
 - [x] The run's start and completion are recorded and nothing between: on a disposable store Bookkeeping held 1 run row and no work item, lease, checkpoint or outbox row, against 1 run and 6 of each at `unit` (2026-11-15 19:01 ET)
 - [x] The loader runs every step (`local.work_run`, `rules run --work-run-id`, called by `load`), generic for any target. Proof on one N-CEN registrant quarter at each grain, two disposable stores: every MDM and silver table holds the same number of rows (14 non-empty tables, 1,413 rows); the journal holds the same batch and file records and lacks only Bookkeeping's 6 per-unit events; a second load loads nothing; 3.6 s against 6.1 s (2026-11-15 19:01 ET). Not done: GLEIF itself, which is loading on the hosted store at `unit` now; its switch needs the operator's word, since a changed rules file is a new processing identity
 - [ ] ~~`bundle` and `load` grains~~ deferred: `run` gives what the operator asked for (off, with start and completion); a grain between is built when a source needs one
-- [ ] Each grain measured as statements a bundle (`count_statements.py`) and hosted seconds, on the persons capture
+- [ ] ~~Each grain measured as statements a bundle (`count_statements.py`) and hosted seconds, on the persons capture~~ deferred to 238: every hosted part is one run, in one ticket
 - [x] `grain: run` on every target (operator, 2026-11-15: "Turn on grain run for all sources", "implement it for ever source"): 25 of 27 targets. The two kept at `unit` are the N-PORT security `mastering` target, whose combine step the second-batch target reads as verified units, and that second-batch target, whose loader would have to read another run. `test_every_target_is_at_grain_run_except_the_two_joined_by_a_read_of_verified_units` (2026-11-15 20:31 ET)
 - [x] The grain is no part of the processing identity, so the switch loads no file again: `test_the_rules_version_holds_the_steps_not_how_they_are_written` failed for all 25 targets (`{'grain': 'run'}` was in the identity) until `changed_files.source_rules` left it out (2026-11-15 20:31 ET)
 - [x] A `local` target at `run` grain keeps the manifest it was given: the company load stopped at its first bundle ("Manifest must declare exactly the configured steps") because its local steps still ran before the run started. `test_a_local_target_at_grain_run_keeps_the_manifest_it_was_given` failed with "the manifest is not read before the run starts" before the fix (2026-11-15 20:31 ET)
@@ -95,7 +95,7 @@ Not started: the runner, the setting and the proof are the next three checklist 
 - [ ] ~~GLEIF mastering loaded at `run` grain on a disposable store~~ not done: the whole publication is hours on a laptop; its steps (read, prepare, merge, links, journal) are the steps the other mastering targets proved
 - [x] The integration tests that drive real targets through the unit protocol hold them by the unit (`targets_held_by_the_unit` in `tests/integration/conftest.py`): 14 failed in CI with `{} == {'verified': 4}` and missing outputs, since a run at `run` grain has no unit to claim; the nine files pass with it (2026-11-15 20:48 ET)
 - [ ] ~~The N-PORT security pair at `run` grain~~ deferred: it needs a run at `run` grain to keep its units' receipts where another run can read them, which is a record Bookkeeping does not hold at this grain
-- [ ] The hosted store loads at `run` grain from the next load on (the hosted GLEIF load now running was started at `unit`); nothing is loaded again for the switch
+- [ ] ~~The hosted store loads at `run` grain from the next load on (the hosted GLEIF load now running was started at `unit`); nothing is loaded again for the switch~~ deferred to 238: every hosted part is one run, in one ticket
 - [x] Skills, second pass (operator, 2026-11-15: "fix the skill too"): bookkeeping (write `grain: run` on every target, the two kinds that keep `unit`, the two-step proof), data-onboarding (the target line), data-operations runbook (`--workers` adds nothing at `run`; raise `--bundles`) (2026-11-15 20:31 ET)
 - [x] Skills: bookkeeping ("Grain": the two grains, what `run` keeps and gives up, how to prove a change) (2026-11-15 19:01 ET); data-onboarding and data-operations already point to it
-- [ ] Learning → skill
+- [ ] ~~Learning → skill~~ deferred to 212: the remaining work is one backlog, in one ticket

@@ -1,7 +1,7 @@
 # Who runs the measurement, and what is handed off when the map closes?
 
 Type: grilling
-Status: open
+Status: closed (operator, 2026-11-17: consolidate and close; the measurement is the hosted run, ticket 238, which records each target's counts and times)
 Blocked by: 01, 04, 05, 06, 08, 09
 
 ## Question

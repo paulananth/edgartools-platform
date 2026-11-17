@@ -3,7 +3,7 @@
 Priority: 68, tier 5, needs SEC requests or AWS. Map: [Rebuild priorities](../map.md). Moved from `.scratch/clean-mdm/issues/07-qualify-and-cut-over.md` on 2026-10-13; a Blocked by list of numbers now uses this map's numbers (or names the old effort); free text keeps the old effort's numbers.
 
 Type: task
-Status: open, later: the hosted Snowflake Postgres cut-over is under Not yet specified in `mastering-to-done/map.md` (2026-10-02 audit, mastering to-do 01).
+Status: resolved (operator, 2026-11-17: consolidate and close; its parts were deferred to 212, the hosted migrate to 238).
 Was: open
 Owner: Codex
 Blocked by: 21

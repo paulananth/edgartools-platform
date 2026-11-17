@@ -2,7 +2,7 @@
 
 Priority: 227, housekeeping. Map: [Rebuild priorities](../map.md). Opened 2026-11-11 19:52 ET (operator: "remove the dates and run figures from the skills too also make skills focused on the task or the function it is created for"). Part of [214](214-skills-organized-one-index-one-link-script.md).
 
-Type: task. Status: open.
+Type: task. Status: resolved (operator, 2026-11-17: consolidate and close; hosted parts to 238, the rest to 212).
 
 ## Checklist
 
@@ -11,7 +11,7 @@ Type: task. Status: open.
 - [x] (2026-11-11 19:52 ET) "Known open items" leaves the skill: it is a backlog, not a rule. Its three items are kept below, word for word
 - [x] (2026-11-11 19:52 ET) "ECS cost sizing (old pipeline)" becomes "Sizing a worker runtime": the method stays, the old pipeline's story goes
 - [x] (2026-11-11 19:52 ET) Ticket-citation and genericity lints pass; the doctor's skill check returns nothing
-- [ ] The three open items below: each needs an owner or a decision to drop it
+- [ ] ~~The three open items below: each needs an owner or a decision to drop it~~ deferred to 212: the remaining work is one backlog, in one ticket
 - [x] (2026-11-11 19:52 ET) Learning → skill: none here; the rule and its lint land with ticket 214's closing PR
 
 ## Open items moved out of the skill
