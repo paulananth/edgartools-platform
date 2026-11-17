@@ -68,11 +68,10 @@ def _manifest_table(source: dict[str, Any]) -> dict[str, Any]:
         ),
         "lineage": sorted(
             (
-                value
-                if isinstance(value, dict)
-                else {"reference": str(value)}
-            )
-            for value in source.get("lineage", [])
+                value if isinstance(value, dict) else {"reference": str(value)}
+                for value in source.get("lineage", [])
+            ),
+            key=_canonical_json,
         ),
     }
 
