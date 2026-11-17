@@ -13,7 +13,7 @@ copies them instead: `edgar-warehouse skill install`.
 | Any data work, from setup to a verified run; finding the next step | [data-platform](data-platform/SKILL.md) |
 | **Bring a data set in** | |
 | Profile a data set, or compare a new delivery with approved findings | [data-profiling](data-profiling/SKILL.md) |
-| Decide where a profiled part sits in the model | [data-modeling](data-modeling/SKILL.md) |
+| Decide where a profiled part sits, or how Gold facts and dimensions are shaped | [data-modeling](data-modeling/SKILL.md) |
 | Onboard a new feed or a new domain | [data-onboarding](data-onboarding/SKILL.md) |
 | Turn defects into checks, or audit existing data | [data-quality](data-quality/SKILL.md) |
 | Change the mapping, quality or matching rules of a live feed | [refining-rules](refining-rules/SKILL.md) |

@@ -30,6 +30,9 @@ a contract or starts a load, and reviews the model itself. In scope:
   onboarded with its masters.
 - **Transaction parts:** the silver spec data-profiling wrote (grain, key,
   links to masters, time columns, load mode), as advice.
+- **Gold warehouse:** from those approved final outputs, the technique, one
+  fact grain, the conformed dimensions and the current or history scope.
+  The method is [GOLD.md](GOLD.md).
 - **Time:** business time and recorded time kept apart for every part.
 - **Final exposable outputs:** from requirements, mappings and approved profile
   evidence, propose the final master/silver table list and each output's
@@ -45,15 +48,17 @@ a contract or starts a load, and reviews the model itself. In scope:
   does not hold.
 
 Out of scope: profiling the bytes; writing `source.yaml`, `quality.yaml`, a
-configured `read:` contract, or a code set version; approving findings or
-versions; switching a rule on. Those belong to data-profiling,
-data-onboarding, data-quality, data-platform and refining-rules.
+configured `read:` contract, a code set version, a dbt model or a semantic
+view; approving findings or versions; switching a rule on. Those belong to
+data-profiling, data-onboarding, data-quality, data-platform, refining-rules,
+aws-snowflake-operations and semantic-views.
 
 ## Use when
 
 The operator asks what a part is in the model, which kind or code set a
 column belongs to, whether an identifier may join records, how a code list or
-a relationship should be modeled, or for a review of the model. Use it after
+a relationship should be modeled, how approved final tables become a Gold
+fact and its conformed dimensions, or for a review of the model. Use it after
 approved findings exist, or to say that they do not.
 
 ## Refusals
