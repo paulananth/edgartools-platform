@@ -1106,6 +1106,7 @@ bookkeeping:
     mastering:
       grain: run
       run: {facts: [period]}
+      delivered: {key: '(?P<year>\d{4})q(?P<quarter>[1-4])_nport\.zip$', fact: period}
       extract: [record.yaml]
       master: {requires: [record], keys: {dataset: sec.nport.security.v2, record_column: record, table: security}, readings: {record: {all: record}}}
     # Each holding for silver (ticket 79): a lookup row, not an MDM record (operator, 2026-10-22: "Why do you
@@ -1117,6 +1118,7 @@ bookkeeping:
     silver:
       grain: run
       run: {facts: [period]}
+      delivered: {key: '(?P<year>\d{4})q(?P<quarter>[1-4])_nport\.zip$', fact: period}
       extract: holding.yaml
       silver:
         - {name: land_holding, land: {silver: nport_holding, table: holding}}
@@ -1127,5 +1129,6 @@ bookkeeping:
     mastering_other_keys:
       grain: run
       run: {facts: [period]}
+      delivered: {key: '(?P<year>\d{4})q(?P<quarter>[1-4])_nport\.zip$', fact: period}
       extract: [{file: record.yaml, context: {batch: other}}]
       master: {requires: [record], keys: {dataset: sec.nport.security.v2, record_column: record, table: security}, readings: {record: {all: record}}}

@@ -154,6 +154,40 @@ def test_a_load_names_the_publication_revision_and_defaults_to_the_first(tmp_pat
     assert (named.revisions, plain.revisions) == (["3"], ["0"])
 
 
+def dated(tmp_path, monkeypatch, commands, *, fact="period"):
+    found = loader(tmp_path, monkeypatch, commands)
+    found.reading = copy.deepcopy(READING)
+    found.reading["bookkeeping"]["targets"]["by_letter"].update(
+        run={"facts": ["period"]}, delivered={"key": r"(?P<year>\d{4})q(?P<quarter>[1-4])_", **({"fact": fact} if fact else {})})
+    return found
+
+
+def test_a_delivery_takes_its_date_and_its_order_from_the_captures_file_names(tmp_path, monkeypatch):
+    folder = capture(tmp_path / "c", "letters/2026q2_a.json")
+    read, given = Recorded(), Recorded()
+    lines = []
+    found = dated(tmp_path, monkeypatch, read)
+    found.say = lines.append
+
+    assert found.delivery(folder, [], None) == (["period=2026-06-30T00:00:00+00:00"], 739797)  # the quarter's last day
+    assert found.delivery(folder, [], 7)[1] == 7  # a revision given is kept
+    assert found.delivery(folder, ["period=2026-06-30T00:00:00+00:00"], None)[0] == ["period=2026-06-30T00:00:00+00:00"]
+    assert dated(tmp_path, monkeypatch, given, fact=None).delivery(folder, ["period=x"], None) == (["period=x"], 739797)
+    later = capture(tmp_path / "later", "letters/2026q3_a.json")
+    assert found.delivery(later, [], None)[1] > 739797  # a later delivery is a later publication
+    assert "Delivery of 2026-06-30, read from the capture: revision 739797" in lines
+
+
+def test_a_date_typed_against_the_captures_own_or_a_capture_stating_none_or_two_stops_the_load(tmp_path, monkeypatch):
+    found = dated(tmp_path, monkeypatch, Recorded())
+    with pytest.raises(loading.RunStopped, match="The capture states period=2026-06-30"):
+        found.delivery(capture(tmp_path / "c", "letters/2026q2_a.json"), ["period=2026-03-31T00:00:00+00:00"], None)
+    with pytest.raises(loading.RunStopped, match="state 0 delivery dates"):
+        found.delivery(capture(tmp_path / "none", "letters/a.json"), [], None)
+    with pytest.raises(loading.RunStopped, match="state 2 delivery dates"):
+        found.delivery(capture(tmp_path / "two", "letters/2026q2_a.json", "letters/2026q3_a.json"), [], None)
+
+
 def test_a_force_publish_names_every_document_again_as_a_new_run_and_a_normal_load_does_not(tmp_path, monkeypatch):
     """Force publish (operator, 2026-11-10): ignore the Change Journal and process the source again."""
     folder = capture(tmp_path / "c", "letters/a.json")

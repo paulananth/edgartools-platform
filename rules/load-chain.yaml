@@ -100,7 +100,6 @@ steps:
     source: sec.ncen.registrant
     target: mastering
     capture: sec.ncen-datasets/2025q4
-    revision: 0
     workers: 2
     bundles: 1
     minutes: 60
@@ -110,7 +109,6 @@ steps:
     source: sec.ncen.registrant
     target: mastering
     capture: sec.ncen-datasets/2026q1
-    revision: 1
     workers: 2
     bundles: 1
     minutes: 60
@@ -120,7 +118,6 @@ steps:
     source: sec.ncen.registrant
     target: mastering
     capture: sec.ncen-datasets/2026q2
-    revision: 2
     workers: 2
     bundles: 1
     minutes: 60
@@ -130,7 +127,6 @@ steps:
     source: sec.ncen.registrant
     target: mastering
     capture: sec.ncen-datasets/2026q3
-    revision: 3
     workers: 2
     bundles: 1
     minutes: 60
@@ -140,7 +136,6 @@ steps:
     source: sec.ncen.adviser
     target: mastering
     capture: sec.ncen-datasets/2025q4
-    revision: 0
     workers: 2
     bundles: 1
     minutes: 60
@@ -150,7 +145,6 @@ steps:
     source: sec.ncen.adviser
     target: mastering
     capture: sec.ncen-datasets/2026q1
-    revision: 1
     workers: 2
     bundles: 1
     minutes: 60
@@ -160,7 +154,6 @@ steps:
     source: sec.ncen.adviser
     target: mastering
     capture: sec.ncen-datasets/2026q2
-    revision: 2
     workers: 2
     bundles: 1
     minutes: 60
@@ -170,7 +163,6 @@ steps:
     source: sec.ncen.adviser
     target: mastering
     capture: sec.ncen-datasets/2026q3
-    revision: 3
     workers: 2
     bundles: 1
     minutes: 60
@@ -181,9 +173,6 @@ steps:
     source: iapd.adv
     target: mastering
     capture: iapd.adv/p07-2026-03
-    revision: 0
-    facts:
-      published: "2026-03-31T00:00:00+00:00"
     workers: 2
     bundles: 1
     minutes: 60
@@ -193,9 +182,6 @@ steps:
     source: iapd.adv
     target: mastering
     capture: iapd.adv/p07-2026-06
-    revision: 1
-    facts:
-      published: "2026-06-30T00:00:00+00:00"
     workers: 2
     bundles: 1
     minutes: 60
@@ -205,9 +191,6 @@ steps:
     source: iapd.adv
     target: silver
     capture: iapd.adv/p07-2026-03
-    revision: 0
-    facts:
-      published: "2026-03-31T00:00:00+00:00"
     workers: 2
     bundles: 1
     minutes: 60
@@ -217,9 +200,6 @@ steps:
     source: iapd.adv
     target: silver
     capture: iapd.adv/p07-2026-06
-    revision: 1
-    facts:
-      published: "2026-06-30T00:00:00+00:00"
     workers: 2
     bundles: 1
     minutes: 60
@@ -229,7 +209,6 @@ steps:
     source: sec.ncen.fund
     target: mastering
     capture: sec.ncen-datasets/2025q4
-    revision: 0
     workers: 2
     bundles: 1
     minutes: 60
@@ -239,7 +218,6 @@ steps:
     source: sec.ncen.fund
     target: mastering
     capture: sec.ncen-datasets/2026q1
-    revision: 1
     workers: 2
     bundles: 1
     minutes: 60
@@ -249,7 +227,6 @@ steps:
     source: sec.ncen.fund
     target: mastering
     capture: sec.ncen-datasets/2026q2
-    revision: 2
     workers: 2
     bundles: 1
     minutes: 60
@@ -259,7 +236,6 @@ steps:
     source: sec.ncen.fund
     target: mastering
     capture: sec.ncen-datasets/2026q3
-    revision: 3
     workers: 2
     bundles: 1
     minutes: 60
@@ -269,8 +245,6 @@ steps:
     source: sec.nport.security
     target: mastering
     capture: sec.nport-datasets/2026q2
-    facts:
-      period: "2026-06-30T00:00:00+00:00"
     workers: 2
     bundles: 1
     minutes: 480
@@ -280,8 +254,6 @@ steps:
     source: sec.nport.security
     target: mastering_other_keys
     capture: sec.nport-datasets/2026q2
-    facts:
-      period: "2026-06-30T00:00:00+00:00"
     workers: 2
     bundles: 1
     minutes: 120
@@ -292,7 +264,6 @@ steps:
     source: sec.ncen.class
     target: mastering
     capture: sec.ncen-datasets/2025q4
-    revision: 0
     workers: 2
     bundles: 1
     minutes: 60
@@ -302,7 +273,6 @@ steps:
     source: sec.ncen.class
     target: mastering
     capture: sec.ncen-datasets/2026q1
-    revision: 1
     workers: 2
     bundles: 1
     minutes: 60
@@ -312,7 +282,6 @@ steps:
     source: sec.ncen.class
     target: mastering
     capture: sec.ncen-datasets/2026q2
-    revision: 2
     workers: 2
     bundles: 1
     minutes: 60
@@ -322,7 +291,6 @@ steps:
     source: sec.ncen.class
     target: mastering
     capture: sec.ncen-datasets/2026q3
-    revision: 3
     workers: 2
     bundles: 1
     minutes: 60
@@ -332,8 +300,6 @@ steps:
     source: sec.nport.security
     target: silver
     capture: sec.nport-datasets/2026q2
-    facts:
-      period: "2026-06-30T00:00:00+00:00"
     workers: 2
     bundles: 1
     minutes: 240
@@ -365,9 +331,6 @@ steps:
     source: iapd.adv
     target: custodians
     capture: iapd.adv/p07-2026-06
-    revision: 1
-    facts:
-      published: "2026-06-30T00:00:00+00:00"
     workers: 2
     bundles: 1
     minutes: 60
@@ -378,9 +341,6 @@ steps:
     source: iapd.adv
     target: custodians
     capture: iapd.adv/p07-2026-03
-    revision: 0
-    facts:
-      published: "2026-03-31T00:00:00+00:00"
     workers: 2
     bundles: 1
     minutes: 60

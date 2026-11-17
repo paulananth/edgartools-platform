@@ -25,6 +25,8 @@ bookkeeping:
   targets:
     mastering:
       grain: run
+      # The quarter in the data set's file name is the delivery's date: it orders the publications.
+      delivered: {key: '(?P<year>\d{4})q(?P<quarter>[1-4])_ncen\.zip$'}
       # The combine's rows are the records, one per adviser (`distinct_on`); no reduce or record step.
       extract: combine.yaml
       master: {keys: {dataset: sec.ncen.adviser.v1, distinct_on: [crd], table: adviser}}

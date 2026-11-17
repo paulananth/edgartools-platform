@@ -45,7 +45,8 @@ def event_key(source: str, processing: str, key: str, sha256: str) -> str:
     return found
 
 
-HOW_HELD = frozenset({"grain", "local", "lease_seconds", "heartbeat_seconds"})
+# `delivered` says where a run fact's value is read from; the identity holds the value itself.
+HOW_HELD = frozenset({"grain", "local", "lease_seconds", "heartbeat_seconds", "delivered"})
 
 
 def source_rules(source: str) -> dict:
