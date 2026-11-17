@@ -1,6 +1,6 @@
 ---
 name: data-modeling
-description: Decide where one profiled part of a data set sits in the model - its class, its master kind or code set, which identifiers decide identity and which are lookup only, how a code list becomes a code set (hierarchy, crosswalk, usage, hints), how a relationship is typed, and its time model - from approved profiling findings and the language the platform already has. Use when the operator asks what a part is in the model, which kind or code set a column belongs to, whether an identifier may join records, how a code list or relationship should be modeled, or to review the model itself.
+description: Decide where one profiled part of a data set sits in the model - its class, its master kind or code set, which identifiers decide identity and which are lookup only, how a code list becomes a code set (hierarchy, crosswalk, usage, hints), how a relationship is typed, and its time model - from approved profiling findings and the language the platform already has. Use when the operator asks what a part is in the model, which kind or code set a column belongs to, whether an identifier may join records, how a code list or relationship should be modeled, how approved final tables become a Gold fact and its conformed dimensions, or to review the model itself.
 ---
 
 # Data modeling
@@ -18,6 +18,7 @@ check (data-quality), or approve anything.
 - the structure is accepted and the feed is new: data-onboarding (`skills/data-onboarding/SKILL.md`)
 - a live feed's mapping or matching should change: refining-rules (`skills/refining-rules/SKILL.md`)
 - a defect needs a check or a fix: data-quality (`skills/data-quality/SKILL.md`)
+- the Gold shape is accepted and should be built: aws-snowflake-operations (dbt). A question contract on one built fact: semantic-views (`skills/semantic-views/SKILL.md`)
 
 ## Hard stops
 
@@ -105,6 +106,10 @@ the approved mapping and selection in configuration after physical verification;
 OpenMetadata projects that selection and both consumers use it. A changed
 requirement or mapping reopens affected entries. Consumer activation and
 billable mirror creation retain their own gates.
+
+### Gold warehouse
+
+Read [GOLD.md](GOLD.md) when the question is how approved final tables become Gold facts and conformed dimensions.
 
 ### 1. Class
 
@@ -345,7 +350,9 @@ where a gap hides. Before a build starts:
 5. **Write the decision in plain words:** class; kind, code set or silver
    table; identity and cross-references; for a code set, where each field
    goes, its usage and hints; for a relationship, the type, its ends, its
-   capacity and its dates; the time columns.
+   capacity and its dates; the time columns. For a Gold fact, the technique,
+   the grain sentence, the fact type, the conformed dimensions and the time
+   scope ([GOLD.md](GOLD.md)).
 6. **Ask at most one question** when the choice is the operator's: a new kind,
    a new identity namespace, a second type for one fact, or which of two
    fields is the identity. Give the recommendation. Only the part it decides
