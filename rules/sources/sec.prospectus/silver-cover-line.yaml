@@ -2,7 +2,7 @@
 # the underwriting discounts and commissions, or the proceeds before expenses, with its per-share and total amounts.
 # The cover's own table comes first in the page (the lowest table number); the underwriting section repeats it.
 # Rows are the `cover_line` table of prospectus-page.yaml.
-# Rulings: operator, 2026-11-02 ("Look-up on mdm then silver"), 2026-11-17 ("424B1 to 424B5, cover terms"). A term
+# Rulings: operator ("Look-up on mdm then silver"; "424B1 to 424B5, cover terms"). A term
 # the page does not state is empty, never zero; numbers land as exact decimals or whole numbers from the text as filed.
 table: prospectus_cover_line
 definition: 'One price line of a final prospectus: the offering price, the underwriters'' discount or the proceeds, per share and in total.'

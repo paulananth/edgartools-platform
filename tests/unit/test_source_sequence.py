@@ -144,7 +144,7 @@ def test_default_inventory_accounts_for_each_committed_source(capsys):
                                "sec.registration", "sec.prospectus", "sec.submissions.person", "sec.nport.fund", "sec.ncen.registrant", "iapd.adv",
                                "sec.ownership", "openfigi", "sec.ncen.fund", "sec.ncen.adviser", "sec.thirteenf.securities",
                                "sec.nport.security", "sec.thirteenf.filings", "sec.ncen.class"]
-    # OpenFIGI is one target since ticket 138; sec.registration and sec.prospectus each have a silver target:
+    # OpenFIGI is one target; sec.registration and sec.prospectus each have a silver target:
     # every source is configured, none blocked.
     assert {name for name, item in result["sources"].items() if item["status"] == "blocked"} == set()
 

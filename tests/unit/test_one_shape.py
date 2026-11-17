@@ -27,8 +27,9 @@ def test_a_target_gives_its_recorded_steps(name):
 
 
 def test_every_target_but_a_provider_capture_is_at_grain_run():
-    assert {name for name, body in targets().items()
-            if body.get("grain") != "run" and body["steps"][0]["operation"] != "provider.capture"} == set()
+    by_the_unit = {name for name, body in targets().items() if body.get("grain") != "run"}
+    providers = {name for name, body in targets().items() if body["steps"][0]["operation"] == "provider.capture"}
+    assert by_the_unit == providers == {"sec.prospectus/capture", "sec.registration/capture"}
 
 
 @pytest.mark.parametrize("name", sorted(STEPS))

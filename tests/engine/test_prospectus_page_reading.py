@@ -1,4 +1,4 @@
-"""The committed final-prospectus reading (ticket 174) on an invented page, from inside a capture snapshot as
+"""The committed final-prospectus reading on an invented page, from inside a capture snapshot as
 `provider.capture` keeps it: the cover's final terms, its price lines per share and in total, and the
 underwriters with their shares. Every name and number here is invented."""
 from pathlib import Path

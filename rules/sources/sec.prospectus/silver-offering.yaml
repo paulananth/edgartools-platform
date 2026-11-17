@@ -1,6 +1,6 @@
 # The silver table of final prospectuses: one row per 424B1 to 424B5 main document captured, with the final
 # terms its cover text states. Rows are the `offering` table of prospectus-page.yaml.
-# Rulings: operator, 2026-11-02 ("Look-up on mdm then silver"), 2026-11-17 ("424B1 to 424B5, cover terms"). A term
+# Rulings: operator ("Look-up on mdm then silver"; "424B1 to 424B5, cover terms"). A term
 # the page does not state is empty, never zero; numbers land as exact decimals or whole numbers from the text as filed.
 # The Company is found by its CIK and the listed Security by its ticker; their names and facts are theirs, in MDM.
 table: prospectus_offering

@@ -37,7 +37,7 @@ Type: task. Status: resolved (operator, 2026-11-17: "Implement ticket 149 and 17
 
 Rulings, one question each (operator, 2026-11-17 10:43 ET):
 
-- SEC requests: "[the test issuer] 424B4 only (Recommended)": one request, the main document of the issuer's 424B4 (filed 2026-06-12), through the configured capture with its receipt. Nothing wider without a later word.
+- SEC requests: "[the test issuer] 424B4 only (Recommended)": one request, the main document of the issuer's 2026 424B4, through the configured capture with its receipt. Nothing wider without a later word.
 - Forms and facts: "424B1 to 424B5, cover terms": the source names all five forms; each row holds the cover's final price per share, shares offered, over-allotment shares, underwriting discount, proceeds to the company, ticker, exchange and the lead underwriters, each empty when the cover does not state it.
 - Committed tests and rules use invented pages; the test issuer's proof runs on a disposable store and is reported in counts.
 
