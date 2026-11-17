@@ -131,6 +131,11 @@ Learned the hard way; each is a standing operator rule.
 - A conclusion reached by reading code is not proof of behaviour: test each
   case the claim covers (one test per kind, per source), since the untested
   case is where a gap hides.
+- **Stay close to reality** (operator, 2026-11-17: "always be close to
+  reality"). Prove a change on a real case, end to end, the way production
+  runs it (a real capture on a disposable store), before calling it done.
+  Count with the field the code reads, not a neighbour that looks the same,
+  and give every number with where it was measured; an estimate says so.
 
 **Merging**
 - Merge when every CI check is green and the PR is ready, without asking
