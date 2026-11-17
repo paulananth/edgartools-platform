@@ -1,12 +1,13 @@
-# The silver table of a final prospectus's price lines: one row per row of a page table whose label is the offering price,
-# the underwriting discounts and commissions, or the proceeds before expenses, with its per-share and total amounts.
-# The cover's own table comes first in the page (the lowest table number); the underwriting section repeats it.
-# Rows are the `cover_line` table of prospectus-page.yaml.
+# The silver table of a final prospectus's price lines: the offering price, the underwriters' discount and the
+# proceeds, per unit (a share, a note, a security) and in total. A cover writes them one of two ways: a row per line
+# with its per-unit and total amounts (the `cover_line` table of prospectus-page.yaml), or a column per line with a row
+# per unit and a row for the total (`turned_price`, `turned_discount`, `turned_proceeds`). The cover's own table comes
+# first in the page (the lowest table number); a later section may repeat it.
 # Rulings: operator ("Look-up on mdm then silver"; "424B1 to 424B5, cover terms"). A term
 # the page does not state is empty, never zero; numbers land as exact decimals or whole numbers from the text as filed.
 table: prospectus_cover_line
-definition: 'One price line of a final prospectus: the offering price, the underwriters'' discount or the proceeds, per share and in total.'
-grain: one row per accession number, table and row
+definition: 'One price line of a final prospectus: the offering price, the underwriters'' discount or the proceeds, per unit or in total.'
+grain: one row per accession number, table, row and line
 columns:
 - name: accession_number
   type: VARCHAR
@@ -46,26 +47,27 @@ columns:
   sensitivity: none
 - name: line
   type: VARCHAR
-  nullable: true
-  definition: 'Which price line the label names: ''offering_price'', ''underwriting_discount'' or ''proceeds''.'
-  source: first cell
+  nullable: false
+  definition: 'Which price line: ''offering_price'', ''underwriting_discount'' or ''proceeds''.'
+  source: the row's label, or the column's heading in a turned table
   sensitivity: none
-- name: per_share
+- name: per_unit
   type: DECIMAL(38,10)
   nullable: true
-  definition: 'The row''s first amount: per share (where a cell gives two, as ''$0.90 / $0.00'', the first).'
+  definition: The amount per share, note or security (where a cell gives two, as '$0.90 / $0.00', the first).
   source: row cells
   sensitivity: none
 - name: total
   type: DECIMAL(38,10)
   nullable: true
-  definition: 'The row''s second amount: the total for the shares offered.'
+  definition: The amount for everything offered.
   source: row cells
   sensitivity: none
 key:
 - accession_number
 - table_number
 - row_number
+- line
 links:
 - columns:
   - cik

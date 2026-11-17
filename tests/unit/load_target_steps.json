@@ -3641,6 +3641,72 @@
     }
    },
    {
+    "name": "land_turned_price",
+    "operation": "silver.land",
+    "requires": [
+     "read"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "silver:{silver}:{unit}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "silver.landed"
+    ],
+    "input": {
+     "keys": {
+      "silver": "prospectus_cover_line",
+      "table": "turned_price"
+     }
+    }
+   },
+   {
+    "name": "land_turned_discount",
+    "operation": "silver.land",
+    "requires": [
+     "read"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "silver:{silver}:{unit}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "silver.landed"
+    ],
+    "input": {
+     "keys": {
+      "silver": "prospectus_cover_line",
+      "table": "turned_discount"
+     }
+    }
+   },
+   {
+    "name": "land_turned_proceeds",
+    "operation": "silver.land",
+    "requires": [
+     "read"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "silver:{silver}:{unit}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "silver.landed"
+    ],
+    "input": {
+     "keys": {
+      "silver": "prospectus_cover_line",
+      "table": "turned_proceeds"
+     }
+    }
+   },
+   {
     "name": "land_underwriter",
     "operation": "silver.land",
     "requires": [
@@ -3668,6 +3734,9 @@
     "requires": [
      "land_offering",
      "land_cover_line",
+     "land_turned_price",
+     "land_turned_discount",
+     "land_turned_proceeds",
      "land_underwriter"
     ],
     "key": "{unit}",

@@ -98,8 +98,11 @@ read:
             from: document
             within: 200
             transforms:
+            - regex_replace:
+                pattern: (?is)^.*\b(?:exchange-traded|etfs?|funds?|index|indices|underlying|underliers?|reference assets?|linked to|reported by|market measures?|baskets?)\b.*$
+                with: ''
             - regex_extract:
-                pattern: (?i)\b(?:symbol|ticker)[^“"'‘]{0,20}[“"'‘]\s?([A-Za-z]{1,5})\b
+                pattern: (?i)\b(?:under|the|trading|ticker) symbols?\s*[“"'‘]\s?([A-Za-z]{1,5})\b
                 group: 1
         exchange:
           first_found:
@@ -107,18 +110,35 @@ read:
             from: document
             within: 200
             transforms:
+            - regex_replace:
+                pattern: (?is)^.*\b(?:exchange-traded|etfs?|funds?|index|indices|underlying|underliers?|reference assets?|linked to|reported by|market measures?|baskets?)\b.*$
+                with: ''
             - regex_extract:
-                pattern: (?i)(nasdaq global select market|nasdaq global market|nasdaq capital market|nasdaq stock market|nyse american|new york stock exchange|nyse|nasdaq)
+                pattern: (?i)\b(?:list|listed|listing|trade|traded|quoted)\b[^.]{0,80}?\bon (?:the )?(nasdaq global select market|nasdaq global market|nasdaq capital market|nasdaq stock market|nyse american|new
+                  york stock exchange|nyse|nasdaq)
                 group: 1
     cover_line:
       each: row
       select:
-        found:
-          path: c1.$
-          transforms:
-          - regex_extract:
-              pattern: (?i)^(?:(?:initial )?public offering price[\s.]*$|underwriting discounts? and commissions|proceeds,? before expenses,? to)
-              group: 0
+        choose:
+          condition:
+            found:
+              path: c1.$
+              transforms:
+              - regex_extract:
+                  pattern: (?i)^(?:(?:initial |original )?(?:public offering price|price to (?:the )?public|offering price|issue price)(?:\s*\(?\d+\)?)*[\s.]*$|(?:underwriting|agent'?s?|placement agent'?s?)
+                    (?:discounts?|commissions?|fees?)|(?:net )?proceeds(?:,? before expenses,?)? to\b)
+                  group: 0
+          then:
+            found:
+              path: '@cells'
+              transforms:
+              - regex_extract:
+                  pattern: ^[^|]*\|.*[0-9]
+                  group: 0
+          else:
+            const:
+              value: null
       columns:
         accession_number:
           context:
@@ -155,7 +175,7 @@ read:
                     path: c1.$
                     transforms:
                     - regex_extract:
-                        pattern: (?i)^(?:initial )?public offering price[\s.]*$
+                        pattern: (?i)^(?:initial |original )?(?:public offering price|price to (?:the )?public|offering price|issue price)(?:\s*\(?\d+\)?)*[\s.]*$
                         group: 0
                 then:
                   const:
@@ -169,7 +189,7 @@ read:
                     path: c1.$
                     transforms:
                     - regex_extract:
-                        pattern: (?i)^underwriting discounts? and commissions
+                        pattern: (?i)^(?:underwriting|agent'?s?|placement agent'?s?) (?:discounts?|commissions?|fees?)
                         group: 0
                 then:
                   const:
@@ -183,7 +203,7 @@ read:
                     path: c1.$
                     transforms:
                     - regex_extract:
-                        pattern: (?i)^proceeds,? before expenses,? to
+                        pattern: (?i)^(?:net )?proceeds(?:,? before expenses,?)? to\b
                         group: 0
                 then:
                   const:
@@ -191,7 +211,7 @@ read:
                 else:
                   const:
                     value: null
-        per_share:
+        per_unit:
           text:
             path: '@cells'
             null_if:
@@ -215,6 +235,339 @@ read:
             - regex_replace:
                 pattern: ','
                 with: ''
+    turned_price:
+      each: row
+      select:
+        choose:
+          condition:
+            found:
+              path: '@head'
+              transforms:
+              - regex_extract:
+                  pattern: (?i)^\s*(?:initial |original )?(?:public offering price|price to (?:the )?public|offering price|issue price)[^|]*\|\s*(?:underwriting|agent'?s?|placement agent'?s?) (?:discounts?|commissions?|fees?)[^|]*\|\s*(?:net
+                    )?proceeds(?:,? before expenses,?)? to\b
+                  group: 0
+          then:
+            choose:
+              condition:
+                found:
+                  path: c1.$
+                  transforms:
+                  - regex_extract:
+                      pattern: (?i)^\s*(?:per|total)\b
+                      group: 0
+              then:
+                found:
+                  path: '@cells'
+                  transforms:
+                  - regex_extract:
+                      pattern: ^[^|]*\|.*[0-9]
+                      group: 0
+              else:
+                const:
+                  value: null
+          else:
+            const:
+              value: null
+      columns:
+        accession_number:
+          context:
+            name: accession_number
+        cik:
+          context:
+            name: cik
+        captured_at:
+          context:
+            name: captured_at
+        table_number:
+          text:
+            path: '@table'
+            null_if:
+            - ''
+        row_number:
+          text:
+            path: '@row'
+            null_if:
+            - ''
+        label:
+          text:
+            path: c1.$
+            trim: true
+            null_if:
+            - ''
+        line:
+          const:
+            value: offering_price
+        per_unit:
+          choose:
+            condition:
+              found:
+                path: c1.$
+                transforms:
+                - regex_extract:
+                    pattern: (?i)^\s*per\b
+                    group: 0
+            then:
+              text:
+                path: '@cells'
+                null_if:
+                - ''
+                transforms:
+                - regex_extract:
+                    pattern: ^[^|]*\|\s*(?:\$\s*\|\s*)?\$?\s*\(?([0-9][0-9,]*(?:\.[0-9]+)?)
+                    group: 1
+                - regex_replace:
+                    pattern: ','
+                    with: ''
+            else:
+              const:
+                value: null
+        total:
+          choose:
+            condition:
+              found:
+                path: c1.$
+                transforms:
+                - regex_extract:
+                    pattern: (?i)^\s*total\b
+                    group: 0
+            then:
+              text:
+                path: '@cells'
+                null_if:
+                - ''
+                transforms:
+                - regex_extract:
+                    pattern: ^[^|]*\|\s*(?:\$\s*\|\s*)?\$?\s*\(?([0-9][0-9,]*(?:\.[0-9]+)?)
+                    group: 1
+                - regex_replace:
+                    pattern: ','
+                    with: ''
+            else:
+              const:
+                value: null
+    turned_discount:
+      each: row
+      select:
+        choose:
+          condition:
+            found:
+              path: '@head'
+              transforms:
+              - regex_extract:
+                  pattern: (?i)^\s*(?:initial |original )?(?:public offering price|price to (?:the )?public|offering price|issue price)[^|]*\|\s*(?:underwriting|agent'?s?|placement agent'?s?) (?:discounts?|commissions?|fees?)[^|]*\|\s*(?:net
+                    )?proceeds(?:,? before expenses,?)? to\b
+                  group: 0
+          then:
+            choose:
+              condition:
+                found:
+                  path: c1.$
+                  transforms:
+                  - regex_extract:
+                      pattern: (?i)^\s*(?:per|total)\b
+                      group: 0
+              then:
+                found:
+                  path: '@cells'
+                  transforms:
+                  - regex_extract:
+                      pattern: ^[^|]*\|.*[0-9]
+                      group: 0
+              else:
+                const:
+                  value: null
+          else:
+            const:
+              value: null
+      columns:
+        accession_number:
+          context:
+            name: accession_number
+        cik:
+          context:
+            name: cik
+        captured_at:
+          context:
+            name: captured_at
+        table_number:
+          text:
+            path: '@table'
+            null_if:
+            - ''
+        row_number:
+          text:
+            path: '@row'
+            null_if:
+            - ''
+        label:
+          text:
+            path: c1.$
+            trim: true
+            null_if:
+            - ''
+        line:
+          const:
+            value: underwriting_discount
+        per_unit:
+          choose:
+            condition:
+              found:
+                path: c1.$
+                transforms:
+                - regex_extract:
+                    pattern: (?i)^\s*per\b
+                    group: 0
+            then:
+              text:
+                path: '@cells'
+                null_if:
+                - ''
+                transforms:
+                - regex_extract:
+                    pattern: ^[^|]*\|\s*(?:\$\s*\|\s*)?[^|]*\|\s*(?:\$\s*\|\s*)?\$?\s*\(?([0-9][0-9,]*(?:\.[0-9]+)?)
+                    group: 1
+                - regex_replace:
+                    pattern: ','
+                    with: ''
+            else:
+              const:
+                value: null
+        total:
+          choose:
+            condition:
+              found:
+                path: c1.$
+                transforms:
+                - regex_extract:
+                    pattern: (?i)^\s*total\b
+                    group: 0
+            then:
+              text:
+                path: '@cells'
+                null_if:
+                - ''
+                transforms:
+                - regex_extract:
+                    pattern: ^[^|]*\|\s*(?:\$\s*\|\s*)?[^|]*\|\s*(?:\$\s*\|\s*)?\$?\s*\(?([0-9][0-9,]*(?:\.[0-9]+)?)
+                    group: 1
+                - regex_replace:
+                    pattern: ','
+                    with: ''
+            else:
+              const:
+                value: null
+    turned_proceeds:
+      each: row
+      select:
+        choose:
+          condition:
+            found:
+              path: '@head'
+              transforms:
+              - regex_extract:
+                  pattern: (?i)^\s*(?:initial |original )?(?:public offering price|price to (?:the )?public|offering price|issue price)[^|]*\|\s*(?:underwriting|agent'?s?|placement agent'?s?) (?:discounts?|commissions?|fees?)[^|]*\|\s*(?:net
+                    )?proceeds(?:,? before expenses,?)? to\b
+                  group: 0
+          then:
+            choose:
+              condition:
+                found:
+                  path: c1.$
+                  transforms:
+                  - regex_extract:
+                      pattern: (?i)^\s*(?:per|total)\b
+                      group: 0
+              then:
+                found:
+                  path: '@cells'
+                  transforms:
+                  - regex_extract:
+                      pattern: ^[^|]*\|.*[0-9]
+                      group: 0
+              else:
+                const:
+                  value: null
+          else:
+            const:
+              value: null
+      columns:
+        accession_number:
+          context:
+            name: accession_number
+        cik:
+          context:
+            name: cik
+        captured_at:
+          context:
+            name: captured_at
+        table_number:
+          text:
+            path: '@table'
+            null_if:
+            - ''
+        row_number:
+          text:
+            path: '@row'
+            null_if:
+            - ''
+        label:
+          text:
+            path: c1.$
+            trim: true
+            null_if:
+            - ''
+        line:
+          const:
+            value: proceeds
+        per_unit:
+          choose:
+            condition:
+              found:
+                path: c1.$
+                transforms:
+                - regex_extract:
+                    pattern: (?i)^\s*per\b
+                    group: 0
+            then:
+              text:
+                path: '@cells'
+                null_if:
+                - ''
+                transforms:
+                - regex_extract:
+                    pattern: ^[^|]*\|\s*(?:\$\s*\|\s*)?[^|]*\|\s*(?:\$\s*\|\s*)?[^|]*\|\s*(?:\$\s*\|\s*)?\$?\s*\(?([0-9][0-9,]*(?:\.[0-9]+)?)
+                    group: 1
+                - regex_replace:
+                    pattern: ','
+                    with: ''
+            else:
+              const:
+                value: null
+        total:
+          choose:
+            condition:
+              found:
+                path: c1.$
+                transforms:
+                - regex_extract:
+                    pattern: (?i)^\s*total\b
+                    group: 0
+            then:
+              text:
+                path: '@cells'
+                null_if:
+                - ''
+                transforms:
+                - regex_extract:
+                    pattern: ^[^|]*\|\s*(?:\$\s*\|\s*)?[^|]*\|\s*(?:\$\s*\|\s*)?[^|]*\|\s*(?:\$\s*\|\s*)?\$?\s*\(?([0-9][0-9,]*(?:\.[0-9]+)?)
+                    group: 1
+                - regex_replace:
+                    pattern: ','
+                    with: ''
+            else:
+              const:
+                value: null
     underwriter:
       each: row
       select:
