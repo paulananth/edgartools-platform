@@ -113,6 +113,8 @@ GLEIF finds Companies and never creates one, so its batches merge side by side.
       adapter tests pass on PostgreSQL (39, the concurrency ones five times) and MySQL; 219 mdm, unit and architecture tests.
 - [ ] Hosted: the next GLEIF merge, sampled in its first minutes (merge sessions waiting on a lock, records a minute
       against 2,060). The 2026-11-16 resume finished in 18.9 min on batches earlier attempts had merged, so it measured nothing.
+- [ ] Hosted: GLEIF companies and N-PORT securities merging at once, records a minute each against 6,500 alone and 3,100
+      together (moved from ticket 197). Take it at the next load where two kinds overlap; a full-size load is not run only for it.
 - [x] Learning → skill: data-operations RUNBOOK, "Resource sizing": a hosted store's time is statements times the round trip;
       count a bundle's statements on a local store with statement logging before blaming a lock or adding parallelism. mdm-engineering "Writes and transactions": a merge of one kind runs beside the others and merges alone
       only for what needs it (creating or merging golden records, a contended identifier, a deadlock); a lock per key stays bounded (claims capped).
