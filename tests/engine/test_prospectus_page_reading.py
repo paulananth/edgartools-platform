@@ -73,7 +73,8 @@ NOTE = ("<html><body><p>Filed Pursuant to Rule 424(b)(2)</p><p>Invented Bank $25
         "<table><tr><td></td><td>Price to Public(1)</td><td>Agent Discount(1)(2)</td><td>Proceeds to the Issuer</td></tr>"
         "<tr><td>Per Note</td><td>$1,000.00</td><td>$12.50</td><td>$987.50</td></tr>"
         "<tr><td>Total</td><td>$250,000.00</td><td>$3,125.00</td><td>$246,875.00</td></tr></table>"
-        "<p>The Invented Index Fund is an exchange-traded fund that trades on the NYSE Arca under the ticker symbol \u201cIIFX.\u201d</p>"
+        "<p>The Invented Index Fund is listed on the NYSE Arca under the symbol \u201cIIFX.\u201d</p>"
+        "<p>The Invented Measure is reported by an invented vendor under the ticker symbol \u201cIMSR.\u201d</p>"
         "<p>The notes will not be listed on any securities exchange.</p></body></html>")
 
 
@@ -87,6 +88,13 @@ def test_a_note_whose_table_is_turned_gives_its_lines_per_note_and_in_total():
 def test_a_linked_funds_symbol_and_exchange_are_not_the_offerings():
     (offering,) = read(NOTE)["offering"]
     assert (offering["ticker"], offering["exchange"], offering["shares_offered"]) == (None, None, None)
+
+
+def test_the_issuers_own_listing_is_read_however_it_is_worded():
+    page = ("<html><body><p>Our common stock has been approved for listing on the Nasdaq Capital Market under the ticker symbol"
+            " \u201cINVQ.\u201d</p></body></html>")
+    (offering,) = read(page)["offering"]
+    assert (offering["ticker"], offering["exchange"]) == ("INVQ", "Nasdaq Capital Market")
 
 
 def test_a_label_with_footnote_marks_and_a_dollar_sign_cell_is_read():

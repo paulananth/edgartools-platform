@@ -1,14 +1,15 @@
 # Registration statements (S-1) and final prospectuses (424B): what they state, and what is tagged
 
 Research for tickets 149 (the S-1 and F-1 originals, `sec.registration`) and 174 (the final prospectuses,
-`sec.prospectus`). Primary sources only; each finding is checked against the pages captured on this machine
+`sec.prospectus`). The rules come from primary sources: the SEC's form, and the regulations' text. How vendors model
+a pipeline comes from their own documentation. Each finding is checked against the pages captured on this machine
 (counts only). Read 2026-11-17.
 
 ## Sources
 
 | Source | What it settles |
 |---|---|
-| Form S-1 and its General Instructions (SEC, form revision "SEC 870 (07-24)", OMB 3235-0065), `https://www.sec.gov/files/forms-1.pdf` | The items an S-1 holds and where each points in Regulation S-K |
+| Form S-1 and its General Instructions (SEC, form revision "SEC 870 (07-24)", OMB 3235-0065), `https://www.sec.gov/files/forms-1.pdf`: one request (operator: "2 per form + SEC docs (Recommended)") | The items an S-1 holds and where each points in Regulation S-K |
 | Regulation S-K Item 501, 17 CFR 229.501 (Cornell LII, `https://www.law.cornell.edu/cfr/text/17/229.501`) | What the outside front cover of every prospectus must state |
 | Regulation S-K Item 601(b)(101) and (b)(107), 17 CFR 229.601 (Cornell LII) | When financial statements must be tagged; the filing fee table exhibit |
 | Regulation S-T Rule 405, 17 CFR 232.405 (Cornell LII) | The tagged file is Inline XBRL |
@@ -59,7 +60,7 @@ The cover is limited to one page and must state:
 |---|---|---|
 | 424B1 | Information left out of the effective registration statement under Rule 430A (the price of an offering priced at effectiveness) | Second business day after pricing or first use |
 | 424B2 | A primary shelf or delayed offering under Rule 415(a)(1)(x), (vii) or (viii): information left out under Rule 430B (or 430D, asset-backed) | Second business day after pricing or first use |
-| 424B3 | Facts or events that substantively change the last filed prospectus, other than (b)(1), (b)(2) or (b)(6) | Fifth business day after first use |
+| 424B3 | Facts or events that substantively change the last filed prospectus (other than the information the other paragraphs file) | Fifth business day after first use |
 | 424B4 | Both (b)(1) and (b)(3) information: the usual final IPO prospectus | Second business day after pricing or first use |
 | 424B5 | Both (b)(2) and (b)(3) information: a priced shelf takedown | Second business day after pricing or first use |
 
@@ -75,11 +76,30 @@ The share terms (shares, price per share, over-allotment, ticker) belong to equi
 
 ## What is tagged
 
-- Financial statements in a Securities Act registration statement need an Interactive Data File "only if the registration statement contains a price or price range" (S-K Item 601(b)(101)(i)(B)), in Inline XBRL (S-T Rule 405(a)(3)). The file is an exhibit of the filing. It is not in the main document this feed captures, and nothing in the main document is tagged.
-- The cover page Interactive Data File (Item 601(b)(104), S-T Rule 406) applies to the forms Rule 406 names. The cover terms on the page above are text, and are read by their words.
-- The filing fee table has been its own exhibit since Item 601(b)(107), and it is structured there.
+- Financial statements in a Securities Act registration statement need an Interactive Data File "only if the
+  registration statement contains a price or price range" (S-K Item 601(b)(101)(i)(B)), in Inline XBRL (S-T Rule
+  405(a)(3)). Inline XBRL puts the tags inside the HTML document itself, so a tagged registration statement carries
+  them in the main document this feed captures.
+- The cover page Interactive Data File (Item 601(b)(104), S-T Rule 406) tags the cover's own facts (the `dei` taxonomy).
+- The filing fee table is its own exhibit (Item 601(b)(107)), structured there.
 
-**So:** reading the main document by its words is the only way to get the cover terms from the files captured. A tagged reading would need the exhibits, which means new SEC requests and their own ruling: the Inline XBRL financial statements of a priced S-1, and the fee table exhibit.
+**Checked against the capture (counted 2026-11-17, local files only):**
+
+| Main documents | Captured | With Inline XBRL | With financial tags | `dei` (cover) tags only |
+|---|---|---|---|---|
+| S-1 and F-1 originals from 2026 | 732 | 317 | 291 | 26 |
+| 424B samples (2 each of 424B1, 424B2, 424B3, 424B5) and the first 424B4 | 9 | 0 | 0 | 0 |
+
+The financial tags of the 291 are `us-gaap` in 179, the SEC's SPAC taxonomy (`spac`) in 102 and `ifrs-full` in 13. A
+filing may carry several.
+
+**So:**
+
+- An S-1 that states a price range is tagged, which is about 4 in 10 of those captured. Its statement lines could be
+  read from the tags, not the words. The reading by words today (`registration_statement_line`) covers every S-1,
+  tagged or not. A tagged reading would be exact where it applies, and is its own work.
+- A final prospectus (424B) is not a registration statement, and none of the 9 pages is tagged, so its cover is read
+  by its words.
 
 ## How others model an IPO pipeline
 
@@ -96,6 +116,8 @@ Each stage is a filing date in the captured submissions, so no vendor calendar i
 
 ## Limits found
 
+- The ticker and exchange are read from blocks that do not speak of a fund, an index, a basket or a linked asset. A block
+  stating the issuer's own listing beside such a word is skipped, and its symbol stays empty, not wrong.
 - The asset-backed bond sample prices each tranche in percent, in a table with a column per term. Neither the row reading nor the turned reading takes it, so its price lines are empty.
 - A preliminary note supplement states its price lines as blanks or "% of the face amount". Nothing lands until its final supplement.
 - A note priced in percent of face would land the percent's number as the amount. The rows record no unit, and none of the eight samples did this.

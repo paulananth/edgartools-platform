@@ -1646,7 +1646,9 @@ A page is read by its words, since nothing in it is tagged. What the reader give
   table's heading (`@head`), and lands in its own silver table.
 - A term named in many sentences is read from the one that states it of the document's own subject ("our shares are
   listed on …"), never from a sentence about something the document only refers to ("the fund it is linked to trades
-  on …"). Test the reading on a page that names both.
+  on …"). A regex cannot say "not", so the `first_found` blanks such a block first (a `regex_replace` of the whole
+  block, `(?is)^.*\b(?:fund|index|…)\b.*$` to empty) and then looks for the term. Test the reading on a page that
+  names both.
 - A `select` is any expression that gives true, false or null: two conditions are a `choose` inside a `choose`, and a
   branch that keeps no row gives `const: {value: null}`.
 - A `context` field of a zip snapshot can be filled from the snapshot's own JSON member, never by the caller:

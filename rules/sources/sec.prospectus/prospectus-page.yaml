@@ -98,8 +98,11 @@ read:
             from: document
             within: 200
             transforms:
+            - regex_replace:
+                pattern: (?is)^.*\b(?:exchange-traded|etfs?|funds?|index|indices|underlying|underliers?|reference assets?|linked to|reported by|market measures?|baskets?)\b.*$
+                with: ''
             - regex_extract:
-                pattern: (?i)\b(?:under|the|trading) symbols?\s*[“"'‘]\s?([A-Za-z]{1,5})\b
+                pattern: (?i)\b(?:under|the|trading|ticker) symbols?\s*[“"'‘]\s?([A-Za-z]{1,5})\b
                 group: 1
         exchange:
           first_found:
@@ -107,9 +110,12 @@ read:
             from: document
             within: 200
             transforms:
+            - regex_replace:
+                pattern: (?is)^.*\b(?:exchange-traded|etfs?|funds?|index|indices|underlying|underliers?|reference assets?|linked to|reported by|market measures?|baskets?)\b.*$
+                with: ''
             - regex_extract:
-                pattern: (?i)\b(?:to list|(?:are|is|be|been) (?:listed|traded|quoted))\b[^.]{0,80}?\bon (?:the )?(nasdaq global select market|nasdaq global market|nasdaq capital market|nasdaq stock market|nyse
-                  american|new york stock exchange|nyse|nasdaq)
+                pattern: (?i)\b(?:list|listed|listing|trade|traded|quoted)\b[^.]{0,80}?\bon (?:the )?(nasdaq global select market|nasdaq global market|nasdaq capital market|nasdaq stock market|nyse american|new
+                  york stock exchange|nyse|nasdaq)
                 group: 1
     cover_line:
       each: row
