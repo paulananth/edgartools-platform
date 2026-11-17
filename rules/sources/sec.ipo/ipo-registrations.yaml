@@ -1,0 +1,30 @@
+# The file number of every IPO registration statement (S-1, F-1, S-11, as filed or amended) in each captured
+# submissions document, read one file a unit so the stage pass reads the same company's numbers: the stage pass keeps an effectiveness notice, a final prospectus or a withdrawal only when it belongs
+# to one of these registrations, never to another registration of the same company (an S-8, an S-3 shelf).
+pass:
+  name: registrations
+  files: '*/submissions/sec/cik=*/main/*'
+  units: {each: file}
+execution: {profile: source.read, workers: 1, max_artifacts: 512}
+read:
+  format: json
+  limits: {max_bytes: 33554432, max_records: 100000}
+  tables:
+    registration:
+      each:
+        parallel:
+          path: filings.recent
+          anchor: accessionNumber
+          fields: {form: form, file_number: fileNumber}
+          lengths: anchor
+          on_invalid_object: empty
+          strings: characters
+          on_empty_anchor: ignore_fields
+          objects: indexed
+          validation: selected
+      select:
+        found:
+          path: form
+          transforms: [{regex_extract: {pattern: '^(?:S-1|F-1|S-11)(?:/A)?$', group: 0}}]
+      columns:
+        file_number: {text: {path: file_number, null_if: ['']}}

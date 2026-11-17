@@ -785,6 +785,11 @@ read as the other. Derive the set
 from a verified source extract (version-2 receipt, below) with `value_column`
 beside `column`: the reading is streamed once, with no materialized join.
 
+A lookup between two passes over the same documents, where each document's rows need only that document's values
+(two facts one list in a document states), is a same-file lookup: the pass that makes the set reads `units: {each:
+file}`, the pass that reads it `units: {groups: N}` (at most 16), and each group reads every file's own set. A pass
+cut into byte slices cannot feed one ("a lookup reads the same file's unit of a step whose units are each file").
+
 A read over a combine's pieces (`pieces:`) takes no lookups. Look the value up
 in the earlier read, where lookups work, and carry it inside the member the
 reduce counts (`<id> <name>|<value>`, the value empty where the lookup gives

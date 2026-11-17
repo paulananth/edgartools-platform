@@ -1,10 +1,11 @@
 # The IPO pipeline: each company's initial public offering as the dated SEC filings that mark its stages, read
 # from the captured SEC submissions documents (the files sec.company reads; no request of its own). The SEC's
-# filings are the authoritative source the IPO calendars are compiled from (research note
-# 149-174-registration-and-final-prospectus.md, "How others model an IPO pipeline").
+# filings are free and authoritative: each stage is a dated filing; an IPO calendar's dates are a vendor's (Nasdaq
+# states its expected dates are estimates from company filings).
 # A stage is a form: draft (DRS), filed (S-1, F-1, S-11), amended (their /A), effective (EFFECT), listed (8-A12B,
-# CERT), priced (424B4, 424B1), withdrawn (RW). Only a company that filed an IPO registration (S-1, F-1, S-11 or
-# DRS) has rows. Silver only: a row finds its Company by CIK.
+# CERT), priced (424B4, 424B1), withdrawn (RW). Effective, priced and withdrawn are kept only for an IPO
+# registration's own file number (ipo-registrations.yaml); the other stages for a company that filed an IPO
+# registration (S-1, F-1, S-11 or DRS). Silver only: a row finds its Company by CIK.
 source: sec.ipo
 bronze:
   family: submissions

@@ -4,8 +4,8 @@
 
 The SEC's own filings, read from the captured submissions documents (`sec.submissions.company/all-76230`, the files
 `sec.company` reads): no provider request. The IPO calendars named in the research note (OpenBB, Nasdaq, PageCrawl,
-Pineify) are compiled from these filings or from vendors; Nasdaq states its expected dates are estimates from company
-filings. The filings are the free, authoritative source (operator, 2026-11-17 13:16 ET: "pick free authoritive source").
+Pineify) are vendors' pages; Nasdaq states its expected dates are estimates from company filings; the note found no
+sourcing statement for the others. The filings are the free, authoritative source (operator, 2026-11-17 13:16 ET: "pick free authoritive source").
 
 Research: `.scratch/rebuild-priorities/research/149-174-registration-and-final-prospectus.md` (Rule 424, Form S-1,
 "How others model an IPO pipeline").
@@ -31,5 +31,11 @@ Research: `.scratch/rebuild-priorities/research/149-174-registration-and-final-p
 - `pad` takes both `left` and `right`.
 - A submissions document's `filings.recent` holds its latest filings only; a company with a long history keeps older
   filings in further pages the capture does not hold, so an old IPO's early stages may be missing.
-- EFFECT is filed for every registration that becomes effective (an S-8, an S-3 shelf): rows are kept for a company
-  with an IPO registration, and `file_number` ties each to its registration.
+- EFFECT, 424B and RW are filed for every registration (an S-8, an S-3 shelf). The first reading kept them for any
+  company with an IPO registration, so its latest stage could turn "effective" years after it priced (Spec review).
+  Now a pass lists every IPO registration's file number (`ipo-registrations.yaml`), and the stage pass keeps these
+  forms only for those file numbers: a lookup set, which cuts the stage pass into groups of 16 files.
+- 8-A12B and CERT carry the exchange's 001- file number, not the registration's: kept for a company with an IPO
+  registration, so a later listing of another class is a "listed" row too.
+- A company whose IPO registration has aged out of `filings.recent` gets no rows at all.
+- An S-1 is also filed by a listed company to register a resale; its filings read as an IPO registration's.

@@ -1195,7 +1195,7 @@
   },
   "steps": [
    {
-    "name": "read",
+    "name": "registrations",
     "operation": "source.read",
     "requires": [],
     "key": "{unit}",
@@ -1208,9 +1208,30 @@
      "source.output"
     ],
     "units": {
-     "slices": {
-      "bytes": 8388608
-     }
+     "each": "file"
+    },
+    "input": {
+     "contract": "ipo-registrations.yaml",
+     "files": "*/submissions/sec/cik=*/main/*"
+    }
+   },
+   {
+    "name": "read",
+    "operation": "source.read",
+    "requires": [
+     "registrations"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "units": {
+     "groups": 16
     },
     "input": {
      "contract": "ipo-filings.yaml",
@@ -1218,6 +1239,15 @@
      "context": {
       "observed_at": {
        "fact": "observed_at"
+      }
+     },
+     "lookups": {
+      "registered": {
+       "column": "file_number",
+       "from": "registrations",
+       "max_input_bytes": 268435456,
+       "max_input_rows": 1000000,
+       "table": "registration"
       }
      }
     }

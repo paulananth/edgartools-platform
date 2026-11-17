@@ -1,7 +1,7 @@
 # The silver table of the IPO pipeline: one row per filing that marks a stage of a company's initial public offering,
 # for each company that filed an IPO registration (S-1, F-1, S-11 or DRS). Rows are the `filing` table of
-# ipo-filings.yaml. A company's latest stage is its row with the latest filing date; the file number ties an
-# effectiveness notice and a final prospectus to the registration they belong to. Nothing goes to MDM: the
+# ipo-filings.yaml. An effectiveness notice, a final prospectus or a withdrawal lands only when its file number is an
+# IPO registration's; a company's latest stage is its row with the latest filing date (a query; no derived table). Nothing goes to MDM: the
 # Company is found by its CIK, and its name and facts are the Company's.
 table: ipo_filing
 definition: One SEC filing that marks a stage of a company's initial public offering, dated, linked to the Company by CIK.
