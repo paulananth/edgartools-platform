@@ -233,7 +233,7 @@ unknown, wait/report the missing estimate; do not force it or reject the source.
 A slow bundle on a hosted store is waiting on a lock, paying round trips (tens of milliseconds a statement) or computing.
 Find which before adding parallelism, in this order: sample the sessions (who waits on a lock, and how old the holder's
 transaction is); time one batch alone in a transaction rolled back; count one bundle's statements on a disposable local
-store with statement logging (`log_statement = 'all'`; `<this skill>/scripts/count_statements.py` groups them by shape). At `unit` grain most of a bundle's statements are Bookkeeping's (a claim, status
+store with statement logging (`log_statement = 'all'`, the log streamed to a file while the load runs, since Docker keeps only its last few log files; `<this skill>/scripts/count_statements.py --log` groups them by shape and by database). At `unit` grain most of a bundle's statements are Bookkeeping's (a claim, status
 read and report for each unit); a target at `grain: run` pays none of them ([bookkeeping](../bookkeeping/SKILL.md#grain-how-much-bookkeeping-a-target-uses)).
 
 `--workers` is the processes on each step, at either grain. A step's units run that many at once; a step with fewer

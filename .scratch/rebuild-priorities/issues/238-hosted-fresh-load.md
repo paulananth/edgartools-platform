@@ -108,6 +108,8 @@ change).
 - [ ] Where two kinds merge at once (GLEIF companies beside N-PORT securities), records a minute each against 6,500 alone
       and 3,100 together. Moved from ticket 233; a full-size load is not run only for it.
 - [ ] N-CEN fund series, advisers, share classes and registrants loaded (moved from ticket 234).
+- [ ] A persons bundle's hosted seconds on current code (moved from ticket 239): locally 323 statements a bundle before the MDM
+      ping was removed (about 21 fewer expected), about 14 s of round trips at 43 ms; the start was 118 s.
 - [ ] Companies holding more than one CIK: expect 0 once N-PORT registrants load under `yields_to: [cik]` (moved from ticket
       234; the store held 4: 3 with 2 CIKs, 1 with 3). A bind already made stays standing, so this needs the registrants
       loaded into a fresh store, not reloaded over the old binds.
