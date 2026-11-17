@@ -1,6 +1,6 @@
 # Gold warehouse section in the data-modeling skill
 
-Status: claimed
+Status: resolved
 Type: task
 
 ## Parts
@@ -8,7 +8,7 @@ Type: task
 - [x] Research warehouse techniques and classify the registered silver grains (transaction, periodic snapshot, accumulating snapshot, bridge). Spec `load_mode` checked: line items, measures and the relationship table are `snapshot`; holdings, custody and registration are `append`. 2026-11-16 19:34 ET
 - [x] Write `skills/data-modeling/GOLD.md` and the pointers in `SKILL.md`, `REQUIREMENTS.md` and `skills/README.md`. 2026-11-16 19:34 ET
 - [x] Genericity, skill-length and guide-path tests. `uv run --no-project --with pytest -- pytest -q -p no:cacheprovider tests/unit/test_profiling_genericity.py tests/unit/test_skills_cite_no_ticket.py tests/unit/test_guides_name_existing_paths.py`: 127 passed. `SKILL.md` 453 lines. 2026-11-16 19:34 ET
-- [ ] Publish the skill PR.
+- [x] Publish the skill PR. https://github.com/paulananth/edgartools-platform/pull/1850 2026-11-16 19:35 ET
 - [x] Learning → skill: data-modeling `GOLD.md` — Gold is a conformed dimensional bus over the approved mirror; MDM, RDM and silver stay the integrated store. An append-only reported position stays a transaction fact until a requirement names which correction wins. 2026-11-16 19:34 ET
 
 ## Scope
