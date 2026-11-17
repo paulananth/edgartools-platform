@@ -110,15 +110,7 @@ Every part still open in the Rebuild priorities map, in one list, ordered by wha
 
 ### 3. Everything else that is still open (by ticket number; a part waits on its own condition)
 
-**[71](../issues/71-mastering-to-done-24-worker-runtime-on-aws.md) 24: The configured worker runtime on AWS (Step Functions and task definitions)** (open, waits for the operator's AWS destinations)
-- [ ] The operator names the AWS destinations, stores and roles (Codex's go-live review, items 2 and 4): where consumers are delivered, which PostgreSQL hosts each store, the worker and verifier logins
-- [ ] Design: one state machine shape for any target (submit, per step: work and verify until verified, finalize), its timeouts and retries; GoF consult
-- [ ] Task definitions for the worker and verifier images; the image build (needs a container runtime)
-- [ ] install.sh deploy stages for them; tests; review; PR; deploy only on the operator's word
-- [ ] Source activation of SEC Company and GLEIF for live acquisition (the local switch-on over captured files is done: SEC Company by ticket 114; from ticket 02; operator, 2026-10-14: "Move to ticket 71 (Recommended)"): an acquisition proof from a real acquisiti...
-- [ ] Source activation of `sec.submissions.person` (from ticket 11): the same acquisition proof
-- [ ] `rules run --target mdm` end to end (from ticket 02)
-- [ ] The live SEC Company qualification (from ticket 03, L8; parked by the operator until AWS: `.planning/workstreams/sec-company-live-qualification-20261013/TICKET.md`)
+**Open parts of ticket 71 that need no AWS** (the AWS parts of ticket 71 are ticket 255)
 - [ ] The run report's row-count change from the last run (from ticket 10, part 2): compare each Bookkeeping run of a target with the last complete run of the same pipeline and target; the per-run counts are each MDM run's `checks` in `mdm.run.report`; a Bookkeep...
 - [ ] GLEIF Level 1's records step passes `record_extras: [nport_issuer]` to `mdm.prepare` and fills the reading's `nport_issuers` reference from the N-PORT issuer reduction (tickets 22 and 97; noted 2026-10-16 13:16 ET)
 
