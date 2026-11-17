@@ -3,7 +3,7 @@ spec as a table, land a part's rows into it, and describe a table for an agent.
 
 Connections come from the environment and are never printed:
 SILVER_MIGRATION_DATABASE_URL (the schema owner, for init, migrate and register),
-SILVER_DATABASE_URL (the restricted runtime login, for land and describe) and
+SILVER_DATABASE_URL (the restricted runtime login, for created, land and describe) and
 MDM_DATABASE_URL (read, for the MDM ids of a table that links to masters, and the
 statement format and country the measures read from each Company).
 """
@@ -37,6 +37,8 @@ def _handle(args):
         elif args.silver_command == "register":
             result = database.register(engine("SILVER_MIGRATION_DATABASE_URL"), spec_file(args.spec, args.part),
                                        runtime_role=args.runtime_role)
+        elif args.silver_command == "created":
+            result = database.created(engine("SILVER_DATABASE_URL"), spec_file(args.spec, args.part))
         elif args.silver_command == "line-items":
             from edgar_warehouse.financials import line_items
 
@@ -105,6 +107,10 @@ def _commands(parser):
     registered.add_argument("--part", help="The part whose silver spec to use, when the file is a findings.yaml")
     registered.add_argument("--runtime-role", required=True)
     registered.set_defaults(handler=_handle)
+    created = commands.add_parser("created", help="Whether a spec's silver table is in the store, with that spec")
+    created.add_argument("spec", type=Path, help="A spec file (JSON or YAML), or a findings.yaml with --part")
+    created.add_argument("--part", help="The part whose silver spec to use, when the file is a findings.yaml")
+    created.set_defaults(handler=_handle)
     landed = commands.add_parser("land", help="Write a part's rows into its silver table, with MDM ids for its links")
     landed.add_argument("table")
     landed.add_argument("rows", type=Path, help="Flat rows: a .jsonl, .csv or .parquet file")

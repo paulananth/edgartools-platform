@@ -67,7 +67,7 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    ```
    A fresh instance gets its six databases (`mdm`, `rdm`, `rules`, `bookkeeping`, `change_journal`, `silver`) and their
    restricted logins from the connection section, which names the grants each needs.
-3. **Schemas**, each with its owner login, in one shell that holds `connection.env`. MDM and Bookkeeping read the owner
+3. **Schemas** (data-platform's step, [STORES.md](../data-platform/STORES.md)), each with its owner login, in one shell that holds `connection.env`. MDM and Bookkeeping read the owner
    from their ordinary variable, for that command only; the others read their `*_MIGRATION_DATABASE_URL`:
    ```bash
    env MDM_DATABASE_URL="$MDM_MIGRATION_DATABASE_URL" edgar-warehouse mdm migrate --application-role mdm_runtime
@@ -86,7 +86,8 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    policy and dataset tables, and nothing else.
 6. **Source configurations.** `edgar-warehouse rules check` (every source, offline), then, with `governance.env`
    sourced, `edgar-warehouse rules register`. Done when it prints a digest for the merge rules and every Dataset Contract.
-   Then the silver tables: `bash infra/scripts/deploy-silver.sh ~/.config/edgartools/hosted/connection.env`.
+   Then the silver tables (data-platform's step; a load creates none and stops when one is missing):
+   `bash infra/scripts/deploy-silver.sh ~/.config/edgartools/hosted/connection.env`.
 7. **Worker grants**, with `connection.env` sourced, one per worker profile:
    ```bash
    for p in $(python -c "from edgar_warehouse.workers import PROFILES; print(*PROFILES)"); do

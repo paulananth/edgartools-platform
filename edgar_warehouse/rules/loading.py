@@ -28,7 +28,6 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy.engine import make_url
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
 from edgar_warehouse.control_contract import digest
@@ -124,20 +123,17 @@ class Loader:
     def close(self) -> None:
         self.commands.close()
 
-    def register_silver(self) -> list[str]:
-        """Create each silver table this target lands, before anything is submitted. Registering is idempotent
-        (the same spec changes nothing; a changed spec for a registered table is refused), so every load does it
-        and no one prepares a store by hand. It runs as the stores' migration login, for the silver runtime role."""
-        specs = silver_specs(self.source, self.reading, self.target)
-        if not specs:
-            return []
-        if "migration" not in self.env:
-            raise RunStopped(f"{self.source} {self.target} lands silver but the stores folder has no connection.env "
-                             f"(the migration login that creates a silver table)")
-        role = make_url(self.env["worker"]["SILVER_DATABASE_URL"]).username
+    def created(self, specs: list[Path]) -> list[str]:
+        """Each silver table this load writes is in the store with the spec the rules hold, or the load stops before
+        anything is submitted. A load creates no table: tables are created once, when the store is set up."""
         for spec in specs:
-            self.commands("migration", "silver", "register", str(spec), "--runtime-role", role)
-            self.say(f"Silver table of {spec.name} is registered")
+            held = json.loads(self.commands("worker", "silver", "created", str(spec)))
+            if not held["created"] or not held["same"]:
+                state = "holds another spec than" if held["created"] else "is not in the store for"
+                raise RunStopped(
+                    f"silver.{held['table']} {state} {spec.name}. A load creates no table: create it once at store "
+                    f"setup, as the silver owner (bash infra/scripts/deploy-silver.sh <stores>, or edgar-warehouse "
+                    f"silver register {spec} --runtime-role <runtime login>)")
         return [spec.name for spec in specs]
 
     def mine(self, state: str) -> list[dict]:
@@ -268,12 +264,10 @@ class Loader:
         steps = self.reading["bookkeeping"]["targets"][self.target]["steps"]
         if not any(step.get("operation") == "mastering.merge" for step in steps):
             return None
-        if not self.env["worker"].get("SILVER_DATABASE_URL") or "migration" not in self.env:
+        if not self.env["worker"].get("SILVER_DATABASE_URL"):
             self.say("Links are not built: the stores folder has no silver login")
             return None
-        role = make_url(self.env["worker"]["SILVER_DATABASE_URL"]).username
-        self.commands("migration", "silver", "register", str(files.ROOT / "silver" / "silver-relationship.yaml"),
-                      "--runtime-role", role)
+        self.created([files.ROOT / "silver" / "silver-relationship.yaml"])
         built = json.loads(self.commands("worker", "silver", "links"))
         self.say(f"Links built: {built['links']} links in {built['rows']} rows")
         return built
@@ -305,7 +299,7 @@ class Loader:
              revision: int | None = None, force: bool = False, links: bool = True) -> dict:
         result = {"source": self.source, "target": self.target, "finished_open_runs": [], "bundles": []}
         facts, revision = self.delivery(capture, facts, revision)
-        result["silver_registered"] = self.register_silver()
+        result["silver_tables"] = self.created(silver_specs(self.source, self.reading, self.target))
         # The merge rules and this source's Dataset Contracts, registered in MDM from the files.
         result["registered"] = json.loads(self.commands("governance", "rules", "register", "--source", self.source))
         unfinished, result["left_as_they_are"] = self.open_runs()

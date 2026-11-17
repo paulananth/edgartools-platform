@@ -67,6 +67,18 @@ def migrate(engine, *, runtime_role: str, existing_only: bool = False) -> dict:
     return checksums
 
 
+def created(engine, spec: dict) -> dict:
+    """Whether the spec's table is registered in the store, and with this spec. Reads the registry only."""
+    from sqlalchemy import select
+
+    from .storage import registry
+    spec = specs.check(spec)
+    catalog = registry(engine.dialect.name)
+    with engine.connect() as conn:
+        held = conn.scalar(select(catalog.c.sha256).where(catalog.c.table_name == spec["table"]))
+    return {"table": spec["table"], "created": held is not None, "same": held == spec_digest(spec)}
+
+
 def register(engine, spec: dict, *, runtime_role: str) -> dict:
     """Create the table a spec describes, with a comment on it and every column,
     and record the spec. The same spec again changes nothing; a changed spec for

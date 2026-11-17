@@ -143,8 +143,12 @@ def test_the_runtime_reads_specs_and_writes_rows_but_cannot_register_or_create(s
 
 def test_a_spec_becomes_a_table_with_comments_and_a_changed_spec_is_refused(stores):
     owner, runtime, _, _ = stores
+    assert silver.created(runtime, visit_spec()) == {"table": visit_spec()["table"], "created": False, "same": False}
     assert silver.register(owner, visit_spec(), runtime_role=RUNTIME)["created"] is True
     assert silver.register(owner, visit_spec(), runtime_role=RUNTIME)["created"] is False
+    # The runtime login reads whether its table is there, and with which spec, and creates nothing.
+    assert silver.created(runtime, visit_spec()) == {"table": visit_spec()["table"], "created": True, "same": True}
+    assert silver.created(runtime, visit_spec(load_mode="upsert"))["same"] is False
     with pytest.raises(Blocked, match="registered as a new table"):
         silver.register(owner, visit_spec(load_mode="upsert"), runtime_role=RUNTIME)
     with owner.connect() as conn:

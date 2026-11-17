@@ -46,7 +46,8 @@ class Recorded:
 
     def __init__(self, open_runs=(), processed=(), versions=None, pinned=None):
         self.calls, self.open, self.processed, self.submitted = [], list(open_runs), set(processed), 0
-        self.revisions, self.registered, self.prepared = [], [], []
+        self.revisions, self.checked, self.prepared = [], [], []
+        self.held = {"created": True, "same": True}
         self.deadline = float("inf")
         self.versions, self.pinned = versions or {}, pinned or {}
 
@@ -55,9 +56,9 @@ class Recorded:
         if args[:2] == ("mdm", "prepare-capture"):
             self.revisions.append(args[args.index("--revision") + 1])
             self.prepared.append(args)
-        if args[:2] == ("silver", "register"):
-            self.registered.append(args)
-            return "{}"
+        if args[:2] == ("silver", "created"):
+            self.checked.append((duty, args[2]))
+            return json.dumps({"table": "invented_letters", **self.held})
         if args[:2] == ("silver", "links"):
             return json.dumps({"table": "relationship", "links": 3, "rows": 4, "waiting": {}})
         if args[:2] == ("workers", "describe"):
@@ -466,7 +467,7 @@ LANDS = {"execution": {"max_artifacts": 2}, "bookkeeping": {"targets": {"by_lett
     {"name": "land", "operation": "silver.land", "input": {"keys": {"table": "letter", "silver": "invented_letters"}}}]}}}}
 
 
-def landing_loader(tmp_path, monkeypatch, *, spec=True, migration=True):
+def landing_loader(tmp_path, monkeypatch, *, spec=True):
     rules = tmp_path / "rules"
     (rules / "sources" / "example").mkdir(parents=True)
     if spec:
@@ -477,8 +478,6 @@ def landing_loader(tmp_path, monkeypatch, *, spec=True, migration=True):
     for duty in driving.DUTIES:
         login = "export SILVER_DATABASE_URL=postgresql://invented_runtime:x@localhost/silver\n"
         (tmp_path / f"{duty}.env").write_text("export BOOKKEEPING_MANIFEST_ROOT=file://%s/m\n" % tmp_path + login)
-    if migration:
-        (tmp_path / "connection.env").write_text("export SILVER_MIGRATION_DATABASE_URL=postgresql://owner:x@localhost/silver\n")
     commands = Recorded(processed={"letters/a.json"})
     found = loading.Loader(source="example", target="by_letter", stores=tmp_path, workers=1, minutes=1,
                            say=lambda line: None)
@@ -486,16 +485,28 @@ def landing_loader(tmp_path, monkeypatch, *, spec=True, migration=True):
     return found, commands
 
 
-def test_a_load_registers_the_silver_tables_its_target_lands_before_it_submits_anything(tmp_path, monkeypatch):
+def test_a_load_checks_the_silver_tables_its_target_lands_as_the_worker_before_it_submits_anything(tmp_path, monkeypatch):
     found, commands = landing_loader(tmp_path, monkeypatch)
     folder = capture(tmp_path / "c", "letters/a.json")
 
     result = found.load(capture=folder, capture_run="capture-1", as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
 
-    assert result["silver_registered"] == ["silver-letters.yaml"]
-    assert [call[:2] for call in commands.registered] == [("silver", "register")]
-    assert commands.registered[0][3:] == ("--runtime-role", "invented_runtime")
-    assert commands.calls[0] == ("silver", "register")
+    assert result["silver_tables"] == ["silver-letters.yaml"]
+    assert [(duty, spec.rsplit("/", 1)[-1]) for duty, spec in commands.checked] == [("worker", "silver-letters.yaml")]
+    assert commands.calls[0] == ("silver", "created")
+    assert ("silver", "register") not in commands.calls and "migration" not in found.env
+
+
+@pytest.mark.parametrize("held, words", [({"created": False, "same": False}, "is not in the store"),
+                                         ({"created": True, "same": False}, "holds another spec")])
+def test_a_load_creates_no_table_and_stops_when_one_it_lands_is_missing_or_differs(tmp_path, monkeypatch, held, words):
+    found, commands = landing_loader(tmp_path, monkeypatch)
+    commands.held = held
+
+    with pytest.raises(loading.RunStopped, match=f"silver.invented_letters {words}.*A load creates no table.*deploy-silver"):
+        found.load(capture=capture(tmp_path / "c", "letters/a.json"), capture_run="c", as_of="2026-10-25T00:00:00Z",
+                   facts=[], run_files=[])
+    assert commands.calls == [("silver", "created")]  # nothing registered, nothing submitted
 
 
 def test_a_silver_table_with_no_spec_beside_the_rules_stops_the_load_before_any_command(tmp_path, monkeypatch):
@@ -507,23 +518,14 @@ def test_a_silver_table_with_no_spec_beside_the_rules_stops_the_load_before_any_
     assert commands.calls == []
 
 
-def test_a_stores_folder_without_the_migration_login_stops_a_load_that_lands_silver(tmp_path, monkeypatch):
-    found, commands = landing_loader(tmp_path, monkeypatch, migration=False)
-
-    with pytest.raises(loading.RunStopped, match="no connection.env"):
-        found.load(capture=capture(tmp_path / "c", "letters/a.json"), capture_run="c", as_of="2026-10-25T00:00:00Z",
-                   facts=[], run_files=[])
-    assert commands.calls == []
-
-
-def test_a_target_that_lands_no_silver_registers_nothing(tmp_path, monkeypatch):
+def test_a_target_that_lands_no_silver_checks_no_table(tmp_path, monkeypatch):
     commands = Recorded(processed={"letters/a.json"})
     found = loader(tmp_path, monkeypatch, commands)
 
     result = found.load(capture=capture(tmp_path / "c", "letters/a.json"), capture_run="c",
                         as_of="2026-10-25T00:00:00Z", facts=[], run_files=[])
 
-    assert result["silver_registered"] == [] and commands.registered == []
+    assert result["silver_tables"] == [] and commands.checked == []
 
 
 def test_a_run_of_a_target_at_grain_run_is_worked_by_one_command_and_never_driven_by_step(tmp_path, monkeypatch):
@@ -556,7 +558,6 @@ def mastering_loader(tmp_path, monkeypatch, commands, *, silver=True):
     found = loader(tmp_path, monkeypatch, commands)
     if silver:
         found.env["worker"]["SILVER_DATABASE_URL"] = "postgresql://invented_runtime:x@localhost/silver"
-        found.env["migration"] = {"SILVER_MIGRATION_DATABASE_URL": "postgresql://owner:x@localhost/silver"}
     return found
 
 
@@ -571,8 +572,8 @@ def test_a_load_that_mastered_records_builds_the_links_table_once_after_its_last
 
     assert result["links"] == {"table": "relationship", "links": 3, "rows": 4, "waiting": {}}
     assert commands.calls.count(("silver", "links")) == 1 and commands.calls[-1] == ("silver", "links")
-    assert commands.calls[-2] == ("silver", "register")  # the links table exists before it is built
-    assert commands.registered[-1][2].endswith("silver/silver-relationship.yaml")
+    assert commands.calls[-2] == ("silver", "created")  # the links table is checked before it is built, never created
+    assert commands.checked[-1][1].endswith("silver/silver-relationship.yaml")
 
 
 def test_one_load_of_several_leaves_the_links_table_to_the_last_step(tmp_path, monkeypatch):

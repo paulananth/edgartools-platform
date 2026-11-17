@@ -68,22 +68,19 @@ Every step says what differs for each target.
     contracts on them in pieces as a run cuts them (8 MiB, 100,000 rows; a
     large combined output arrives as a version-2 index of pieces), and count
     every row by outcome.
-  1. Hand the approved spec to
-  [data-operations](../data-operations/SKILL.md), which applies it as DDL.
+  1. Create the table from the approved spec, once, before the source's first load. Only this
+  skill (a new source's tables) and data-platform (store setup) create tables.
   Use the owner and runtime connections from [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
   On PostgreSQL the schema owner runs
   `edgar-warehouse silver init --runtime-role <runtime login>` once, and
   `edgar-warehouse silver register rules/sources/<source>/silver-<table>.yaml --runtime-role <runtime login>`
   for the table (or `register <findings.yaml> --part <part>`). A changed
   spec is refused for a registered table: register it as a new table.
-  `edgar-warehouse load` does this itself before it submits anything: for each
-  `silver.land` step it registers the `silver-*.yaml` beside the source's rules
-  whose `table` the step names, as the stores' migration login,
-  for the silver runtime login. It changes nothing for a table already registered
-  with the same spec, so a source with a spec beside its rules needs no
-  preparation by hand.
+  `edgar-warehouse load` creates no table: it checks each table it writes
+  (`silver created <spec>`, with the runtime login) and stops when one is missing
+  or holds another spec. Register a new source's tables once, before its first load.
   MySQL and SQL Server Express use the same spec. When `silver register`
-  refuses that dialect, data-operations reports the gap and does not
+  refuses that dialect, report the gap and do not
   hand-write `CREATE TABLE`.
   2. A target lands a table through a `silver.land` step (`requires` the reading
      and the merge whose masters the rows link to; `input: {keys: {table, silver}}`;

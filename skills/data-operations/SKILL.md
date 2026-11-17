@@ -33,9 +33,9 @@ promotion** in RUNBOOK.md. Reuse the existing Rules approval procedure and exact
 release evidence; distinguish an approved release from its active deployment.
 For timing reports, use the [five-minute workflow](TIMING-REPORTS.md).
 
-## Apply store DDL
+## Tables are created elsewhere
 
-This skill applies DDL. Read [STORES.md](STORES.md) before creating or changing a store's schema, or applying an approved silver spec, on any engine. A hosted empty Journal database's occupancy is [change-journal Init](../change-journal/SKILL.md#init-and-migrate). Pass one command's owner URL as `KEY=value command args` (a binary may use `env KEY=value command`; a shell function takes the assignment only).
+This skill creates no table, and neither does a load. A store's schemas and every committed silver table are data-platform's ([STORES.md](../data-platform/STORES.md)); a new source's silver tables are data-onboarding's ([TARGETS.md](../data-onboarding/TARGETS.md)). When a load stops on a missing table, hand it to one of the two. Pass one command's owner URL as `KEY=value command args` (a binary may use `env KEY=value command`; a shell function takes the assignment only).
 
 ## Operationalize every domain
 
@@ -62,22 +62,11 @@ the whole list.
    blocker for that domain: route it through data-profiling's RDM steps
    (`rdm draft`, `rdm diff`, operator `rdm approve`, `rdm publish`). Leave the
    code set unpublished until those words exist.
-4. **Apply the silver spec.** This skill applies DDL. Data-profiling writes
-   the logical spec and does not. MDM engineering writes the MDM store's own
-   migrations and does not apply a profile's silver spec.
-   For each part with an approved spec, apply that spec to the selected Silver
-   engine, using the connections in the central section above. On PostgreSQL or MySQL,
-   `edgar-warehouse silver register <findings.yaml> --part <part> --runtime-role <role>`,
-   then `edgar-warehouse silver describe <table>`. Numbers, identifiers and
-   material commentary are the fields the spec already names. The same spec
-   is the logical input for MySQL and SQL Server Express as well. Silver
-   registration supports PostgreSQL and MySQL; SQL Server is deferred. Qualify
-   the selected engine's normal registration, not only its compiled table.
-   Registration must compile the spec through
-   [sql-writer](../sql-writer/SKILL.md) and install the table, registry,
-   comments and restricted grants through a recoverable registration path.
-   Report success only after all of them read back correctly. A standalone compiled table
-   leaves registration incomplete. A part with no approved spec, or a pipeline silver step
+4. **Check the silver tables.** Data-onboarding registers each part's approved spec
+   ([TARGETS.md](../data-onboarding/TARGETS.md)); this skill creates none. For each part,
+   `edgar-warehouse silver created <spec>` then `edgar-warehouse silver describe <table>` with the runtime login.
+   Report a table only after its registry entry, comments and restricted grants read back. A part with no
+   approved spec, a table not created, or a pipeline silver step
    with no worker, stays blocked and is reported. A source whose target has a
    `silver.land` step lands through it; `silver land` stays the manual write
    for a table whose source has none
@@ -111,7 +100,7 @@ instead of rebuilding one other tickets' data lives in.
 
 ## Qualify Silver storage
 
-Read [STORES.md](STORES.md), "Qualify Silver storage", before declaring a Silver store ready on an engine.
+Read [STORES.md](../data-platform/STORES.md), "Qualify Silver storage", before declaring a Silver store ready on an engine.
 
 ## Install and enable one source
 
@@ -145,9 +134,10 @@ edgar-warehouse load \
   `delivered: {key: <pattern naming year and quarter, month, or month and day>, fact: <run fact>}`: the load fills the
   fact and takes the publication's revision from the date, and prints both. Giving that fact by hand stops the load. Write
   `delivered` on a new target whenever the file name states the date; type a fact only for what no captured file states.
-- **A target that lands silver registers its tables itself**, before it submits
-  anything, as the migration login configured through the central connection section
-  (the same spec again changes nothing). Do not register by hand first.
+- **A load creates no table.** Only data-platform (store setup, [STORES.md](../data-platform/STORES.md)) and
+  data-onboarding (a new source's tables) create tables. A load checks
+  each table it writes with its runtime login (`silver created <spec>`) and stops before it submits anything when
+  one is missing or holds another spec. A load never reads the owners' logins.
 - **Look on the machine before asking to capture.** Reading retained files needs no provider request, so search
   every place below before asking for one. Say which you found: a cohort proves a path, never a delivery's totals.
 - **The engine reads no gzip.** A folder of `.gz` files stops as "malformed": unzip a copy, then write its receipts.
@@ -253,7 +243,7 @@ Run the same command again after fixing the cause: it finishes the open run firs
 | `Run <id> ended <state>, not complete; its checks: ...` | A run check did not pass. | Read `bookkeeping status <id>` (`run.checks`). Never submit the bundle again. |
 | `Run <id> of <source> <target> is blocked` | Bookkeeping stopped that run under the active rules version, on corrupt or missing evidence. | Recover it ([recovery](../bookkeeping/RECOVERY.md)), then run again. |
 | `declares no <target> target` | No target of that name in the source file. | Use a target listed there. |
-| `lands silver table(s) ... with no silver-*.yaml spec` | The target lands a table no spec describes. | Add the approved spec ([STORES.md](STORES.md)). |
+| `lands silver table(s) ... with no silver-*.yaml spec` | The target lands a table no spec describes. | Add the approved spec ([data-onboarding](../data-onboarding/TARGETS.md)). |
 | `all N documents already loaded` | The Change Journal holds every document of that bundle under these rules. | Nothing to do. |
 
 Two kinds of run are reported and left as they are, and their documents load again in a new run (the Change

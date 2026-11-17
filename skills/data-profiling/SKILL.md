@@ -384,7 +384,7 @@ that matter most:
 - **silver:** the table spec for every part, under "Silver fields". Its links
   point to master parts only, each with an empty `kind` and `source_code` that
   data-onboarding fills; a master part's rows link to themselves (`mdm_id`).
-  Applying that spec as DDL is data-operations, on PostgreSQL, MySQL, or SQL
+  Creating the table from that spec is data-onboarding, on PostgreSQL, MySQL, or SQL
   Server Express. This skill does not create the table.
 - **code_sets:** the RDM code sets the data needs, one per existing or
   proposed set, with every column that uses it (see "Reference data", below).
