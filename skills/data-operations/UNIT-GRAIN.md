@@ -1,7 +1,7 @@
 # By the unit
 
-Read this only for a target that does not say `grain: run` (a target another target reads as verified units,
-and the target that reads it), or for a run started by the unit. Every other load is in [SKILL.md](SKILL.md).
+Read this only for a run started by the unit: no target is written that way, and a test holds each to
+`grain: run`. Every load is in [SKILL.md](SKILL.md).
 
 By the unit, Bookkeeping holds every unit of every step: a claim, a lease, a heartbeat, a check and a report.
 

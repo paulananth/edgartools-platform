@@ -280,6 +280,8 @@ steps:
     source: sec.nport.security
     target: mastering_other_keys
     capture: sec.nport-datasets/2026q2
+    facts:
+      period: "2026-06-30T00:00:00+00:00"
     workers: 2
     bundles: 1
     minutes: 120

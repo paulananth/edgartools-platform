@@ -226,14 +226,12 @@ id, state, source and target, so it shows the run with no change. What differs f
 - A stopped load leaves the run `running`. The next `load` works the same run again from its first step: a written file is
   written again as the same file, and the Change Journal skips each batch it recorded as merged.
 - The loader does the run's steps; `--workers` still splits each step ([data-operations Resource sizing](../data-operations/RUNBOOK.md#resource-sizing)), and bundles still load at once (`--bundles`).
-- A step another target reads as verified units (`pieces: {run: ...}`) keeps `unit`: a run at `run` grain has no verified unit
-  to read. Per-unit quality results are not published for it either.
+- A run reads only its own steps. A target that needs what another target read names the same last rules file and reads
+  the files itself, with its own `context` (`extract: [{file: ..., context: ...}]`). Per-unit quality results are not published.
 - The grain is no part of a source's processing identity: changing it loads no file again.
 
 **Write `grain: run` on every target.** Every step is a deterministic function of its input and each destination protects
-itself, so the run's start and completion are all Bookkeeping needs to hold. Two kinds of target keep `unit`, and a test
-names them: a target whose step another target reads as verified units, and the target that reads them (the loader of a
-run at `run` grain reads only its own run). No destination checks a lease proof, so dropping the lease gives up only that
+itself, so the run's start and completion are all Bookkeeping needs to hold; a test holds every target to it. No destination checks a lease proof, so dropping the lease gives up only that
 one unit is not done twice (the destinations refuse a conflicting write themselves).
 
 Prove a change of grain before the switch-on, in two steps. First load one delivery at each grain into two disposable stores
