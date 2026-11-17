@@ -52,8 +52,9 @@ Findings 3 and 4 are deletions with no data effect: do them first. Finding 1 rem
 - [ ] Finding 2, second half: delete what no target uses now: the read of another run's step (`pieces: {run: ...}`, `verified_units`), then the by-the-unit path (units, leases, heartbeat, `local`) from the loader, Bookkeeping and the skills.
 - [ ] Finding 5: one target per source reads once (measure one source first).
 - [x] 2026-11-16 21:02 ET Finding 9: a run worked again keeps the reads it wrote (PR 1849; `test_a_stopped_run_worked_again_does_not_read_again_what_it_wrote`).
-- [ ] Finding 6: operator's ruling on one delivery-date convention.
-- [ ] Finding 7: measure the second read thread; one knob.
+- [x] 2026-11-16 21:32 ET Finding 6: a target says where its delivery's date is read from the capture's file names (`delivered: {key, fact}`); the load fills the fact and takes the revision from the date. Declared on 10 targets of 6 sources (N-CEN x4, Form ADV, N-PORT Security); 40 typed lines left the chain, which now types no date and no revision for them (`test_a_delivery_takes_its_date_and_its_order_from_the_captures_file_names`, `test_no_step_types_the_date_or_the_order_of_a_delivery_its_capture_states`; read from 4 real local captures). `delivered` is no part of the processing identity: the fact's value already is.
+- [ ] Finding 6, what no captured file states yet: OpenFIGI's ticker file date and its two revisions, SEC Company's capture time, and GLEIF's publication count (a count, not a date; its file name does carry the date). Each needs the capture to hold the fact first.
+- [x] 2026-11-16 21:32 ET Finding 7: measured on the one source that sets 2 threads (13F securities, 52 local files, 149 MB, two rounds): 4.8 s with 1 thread, 2.6 s with 2, 1.9 s with 4. The second thread gains 1.8 times, so the setting stays; `data-operations` "One design" now says which setting is which. Folding it into `--workers` would move every source's processing identity: not worth a full reload for a name.
 - [ ] Finding 8: operator's ruling on where capture is declared.
 - [ ] Names, comments and chain defaults (the lower-value list).
 - [x] 2026-11-16 16:45 ET Learning → skill: `data-operations` "One design" (the checks a new target must pass), and the skills pruned of by-the-unit detail that only two targets use, stale paths and narrative (same PR).

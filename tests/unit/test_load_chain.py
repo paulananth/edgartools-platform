@@ -35,11 +35,18 @@ def test_every_target_that_loads_a_capture_is_in_the_chain():
     assert set(targets()) <= {(s["source"], s["target"]) for s in STEPS}
 
 
-def test_each_step_gives_exactly_the_facts_its_target_declares():
-    """A fact the target does not declare is refused when the load starts (a second-batch target took none)."""
+def test_each_step_gives_exactly_the_facts_its_target_declares_and_the_capture_does_not_state():
+    """A fact the target does not declare is refused when the load starts, and so is one the capture states."""
     for step in STEPS:
-        declared = set((targets()[(step["source"], step["target"])].get("run") or {}).get("facts") or [])
-        assert set(step.get("facts") or {}) == declared, step["name"]
+        target = targets()[(step["source"], step["target"])]
+        read = {(target.get("delivered") or {}).get("fact")}
+        assert set(step.get("facts") or {}) == set((target.get("run") or {}).get("facts") or []) - read, step["name"]
+
+
+def test_no_step_types_the_date_or_the_order_of_a_delivery_its_capture_states():
+    for step in STEPS:
+        if "delivered" in targets()[(step["source"], step["target"])]:
+            assert "revision" not in step, step["name"]
 
 
 def test_a_later_delivery_of_one_source_carries_the_next_revision():

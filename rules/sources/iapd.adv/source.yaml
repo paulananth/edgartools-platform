@@ -29,12 +29,14 @@ bookkeeping:
     mastering:
       grain: run
       run: {facts: [published]}
+      delivered: {key: 'ADV_Filing_Data_\d{8}_(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2})\.zip$', fact: published}
       # The combine's rows are the records; no record step.
       extract: combine.yaml
       master: {keys: {dataset: iapd.adv.filings.v2, table: filings}}
     custodians:
       grain: run
       run: {facts: [published]}
+      delivered: {key: 'ADV_Filing_Data_\d{8}_(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2})\.zip$', fact: published}
       # The custody reading's rows are the records, one per custodian (`distinct_on`); no combine or record step.
       extract: custody-csv.yaml
       master: {keys: {dataset: iapd.adv.custodians.v1, distinct_on: [custodian_id], table: custody}}
@@ -44,6 +46,7 @@ bookkeeping:
     silver:
       grain: run
       run: {facts: [published]}
+      delivered: {key: 'ADV_Filing_Data_\d{8}_(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2})\.zip$', fact: published}
       extract: custody-csv.yaml
       silver:
         - {name: land_custody, land: {silver: adv_custody, table: custody_facts}}

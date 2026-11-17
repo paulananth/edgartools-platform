@@ -45,6 +45,10 @@ RUN_KEYS = frozenset({"facts", "files"})
 # property of the capture (`receipts_sha256`: the sha256 of its receipts file), so a Name Count built from
 # another capture is refused before any unit is written (ticket 177, slice 5d).
 RUN_DECLARED = RUN_KEYS | {"projections", "matches"}
+# A delivery's date is read from the capture, never typed: `delivered: {key: <pattern>, fact: <name>}`. The pattern
+# is searched in each receipt key and names `year` and one of `quarter`, `month` or `month` and `day`; a quarter or
+# a month stands for its last day. `fact` (optional) is the declared run fact that takes the date.
+DELIVERED_PARTS = (frozenset({"year", "quarter"}), frozenset({"year", "month"}), frozenset({"year", "month", "day"}))
 MATCH_PROPERTIES = frozenset({"receipts_sha256"})
 PROJECTION_PARTS = 16
 NAME = r"[a-z][a-z0-9_]*"
@@ -92,6 +96,50 @@ def _segment(value) -> bool:
 def _named(value, kind: str) -> bool:
     """`{fact: <name>}` or `{file: <name>}`: a run input by name."""
     return isinstance(value, dict) and set(value) == {kind} and isinstance(value[kind], str) and bool(re.fullmatch(NAME, value[kind]))
+
+
+def delivered(selected: dict):
+    """A target's `delivered` setting as (compiled pattern, fact name or none); none when it has none."""
+    setting = selected.get("delivered")
+    if setting is None:
+        return None
+    try:
+        pattern = re.compile(setting["key"]) if isinstance(setting, dict) and set(setting) <= {"key", "fact"} else None
+    except (KeyError, TypeError, re.error):
+        pattern = None
+    fact = setting.get("fact") if pattern else None
+    if (pattern is None or frozenset(pattern.groupindex) not in DELIVERED_PARTS
+            or fact is not None and fact not in (selected.get("run") or {}).get("facts", [])):
+        raise Blocked("`delivered` is {key: <pattern naming year and quarter, month, or month and day>, "
+                      "fact: <a fact the run declares>}")
+    return pattern, fact
+
+
+def delivery_date(selected: dict, keys) -> tuple:
+    """The date the capture's receipt keys state for this target's delivery, and the fact that takes it:
+    (date, fact name or none), or (none, none) for a target that reads none. Every key that states a date
+    states the same one."""
+    from calendar import monthrange
+    from datetime import date
+
+    declared = delivered(selected)
+    if declared is None:
+        return None, None
+    pattern, fact = declared
+    found = set()
+    for key in keys:
+        match = pattern.search(key)
+        if match is None:
+            continue
+        parts = {name: int(value) for name, value in match.groupdict().items()}
+        month = parts["quarter"] * 3 if "quarter" in parts else parts["month"]
+        try:
+            found.add(date(parts["year"], month, parts.get("day") or monthrange(parts["year"], month)[1]))
+        except ValueError:
+            raise Blocked(f"The capture's file {key} states no calendar date") from None
+    if len(found) != 1:
+        raise Blocked(f"The capture's files state {len(found)} delivery dates; a delivery has one")
+    return found.pop(), fact
 
 
 def run_inputs(selected: dict) -> dict:
@@ -222,8 +270,9 @@ def validate(document: dict, target: str) -> dict:
         selected = body["targets"][target]
         if set(selected) - {"steps", "lease_seconds", "heartbeat_seconds", "retry", "allow_zero_work", "checks",
                             "local", "preparation", "grain"} - (
-                {"run"} if planned else set()):
+                {"run", "delivered"} if planned else set()):
             raise Blocked("Unknown target option")
+        delivered(selected)
         declared = run_inputs(selected) if planned else {"facts": [], "files": []}
         preparation = selected.get("preparation", [])
         if (not isinstance(preparation, list) or any(

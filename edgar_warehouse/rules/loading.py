@@ -278,9 +278,33 @@ class Loader:
         self.say(f"Links built: {built['links']} links in {built['rows']} rows")
         return built
 
+    def delivery(self, capture: Path, facts: list[str], revision: int | None) -> tuple[list[str], int]:
+        """The run's facts and revision with what the capture states of its delivery: the date read from its
+        file names fills the fact the target names, and orders the publication (a later delivery is a later
+        revision) unless a revision is given. A date typed against the capture's own stops the load."""
+        from edgar_warehouse.bookkeeping.clean.config import Blocked, delivery_date
+
+        try:
+            stated, fact = delivery_date(self.reading["bookkeeping"]["targets"][self.target],
+                                         raw_capture.receipts(capture)[1])
+        except Blocked as blocked:
+            raise RunStopped(str(blocked)) from None
+        if stated is None:
+            return facts, revision or 0
+        if fact is not None:
+            value = f"{fact}={stated.isoformat()}T00:00:00+00:00"
+            typed = [given for given in facts if given.split("=", 1)[0] == fact]
+            if typed not in ([], [value]):
+                raise RunStopped(f"The capture states {value}; do not give {typed[0]}")
+            facts = [*facts, *([] if typed else [value])]
+        revision = stated.toordinal() if revision is None else revision
+        self.say(f"Delivery of {stated.isoformat()}, read from the capture: revision {revision}")
+        return facts, revision
+
     def load(self, *, capture: Path, capture_run: str, as_of: str, facts: list[str], run_files: list[str],
-             revision: int = 0, force: bool = False, links: bool = True) -> dict:
+             revision: int | None = None, force: bool = False, links: bool = True) -> dict:
         result = {"source": self.source, "target": self.target, "finished_open_runs": [], "bundles": []}
+        facts, revision = self.delivery(capture, facts, revision)
         result["silver_registered"] = self.register_silver()
         # The merge rules and this source's Dataset Contracts, registered in MDM from the files.
         result["registered"] = json.loads(self.commands("governance", "rules", "register", "--source", self.source))
@@ -374,9 +398,10 @@ def register(subparsers) -> None:
                         help="Bundles loaded at once, each its own run (default 1)")
     parser.add_argument("--minutes", type=float, default=120, help="Stop after this long; rerun to carry on")
     parser.add_argument("--as-of", help="The load's time, UTC (YYYY-MM-DDTHH:MM:SSZ); default now")
-    parser.add_argument("--revision", type=int, default=0,
-                        help="The source publication's order (default 0): a delivery whose inputs changed (a new Name "
-                             "Count, say) is a new publication and needs a higher revision than the one loaded before")
+    parser.add_argument("--revision", type=int,
+                        help="The source publication's order: a delivery whose inputs changed (a new Name Count, say) "
+                             "is a new publication and needs a higher revision than the one loaded before. Default: "
+                             "the delivery's date where the target reads it from the capture, else 0")
     parser.add_argument("--force", action="store_true",
                         help="Force publish: ignore the Change Journal and process every document of the source again, "
                              "as a new publication of the capture run (the journal records it as forced). Use it when "

@@ -245,3 +245,14 @@ def test_a_target_at_grain_run_keeps_the_manifest_it_was_given():
             raise AssertionError("the manifest is not read before the run starts")
 
     assert local.staged_inputs(Untouched(), source("openfigi"), "mastering", REF) == REF
+
+
+@pytest.mark.parametrize("setting", [{"key": "(?P<year>[0-9]{4})"}, {"key": "(?P<year>[0-9]{4})q(?P<quarter>[1-4])", "fact": "unknown"},
+                                     {"key": "("}, {"pattern": "x"}, "2026q2"])
+def test_a_delivery_date_is_read_by_a_pattern_naming_its_parts_into_a_fact_the_run_declares(setting):
+    body = deepcopy(source("sec.ncen.fund"))
+    assert validate(body, "mastering")["delivered"]["key"].endswith("_ncen\\.zip$")
+    body["bookkeeping"]["targets"]["mastering"]["delivered"] = setting
+
+    with pytest.raises(Blocked, match="`delivered` is"):
+        validate(body, "mastering")

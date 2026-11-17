@@ -141,6 +141,10 @@ edgar-warehouse load \
   blocks fast-forwarding the main checkout; remove the link (not its target) first.
 - Add `--fact name=value` and `--file name=path` for each input the target's
   `run` declares; `scripts/run_inputs.py <source>` in the data-onboarding skill lists them.
+- **A delivery's date is read from the capture, never typed.** A target whose files carry the date in their names says
+  `delivered: {key: <pattern naming year and quarter, month, or month and day>, fact: <run fact>}`: the load fills the
+  fact and takes the publication's revision from the date, and prints both. Giving that fact by hand stops the load. Write
+  `delivered` on a new target whenever the file name states the date; type a fact only for what no captured file states.
 - **A target that lands silver registers its tables itself**, before it submits
   anything, as the migration login configured through the central connection section
   (the same spec again changes nothing). Do not register by hand first.
@@ -150,8 +154,8 @@ edgar-warehouse load \
 - **A capture left by `provider.capture` has no `receipts.jsonl`.** Run
   `scripts/capture_receipts.py <capture folder>` once: it writes one receipt per
   file and never replaces a receipts file.
-- **A reload whose inputs changed needs `--revision N`** (default 0, the
-  first publication). A changed input (a new Name Matching, say) changes a record under the
+- **A reload whose inputs changed needs `--revision N`** (default: the revision the delivery's date gives, which the
+  load prints, else 0). A changed input (a new Name Matching, say) changes a record under the
   same revision, and the Stage refuses it ("Source native revision has
   contradictory publications"): pass a revision higher than the last load's.
 - **Plan first.** Add `--plan` (no `--capture-run` needed) before claiming or
@@ -343,7 +347,8 @@ merges, expand every source's targets into one table, setting by setting (grain,
 lease settings, workers), and explain each difference by the data. A setting no code reads at that target's
 grain is deleted, and a captured file is read once: master and land silver from the same target unless the
 second is a second publication. Do not write a source-specific driver script: a missing step is a gap in
-`load`, fixed there.
+`load`, fixed there. `--workers` is the one setting an operator sizes: processes on each step. A source's
+`execution.workers` is threads inside one read unit, worth setting to 2 only where a unit reads many files.
 
 ## Operate the recurring loop
 

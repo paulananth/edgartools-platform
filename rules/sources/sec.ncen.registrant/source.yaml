@@ -26,6 +26,8 @@ bookkeeping:
   targets:
     mastering:
       grain: run
+      # The quarter in the data set's file name is the delivery's date: it orders the publications.
+      delivered: {key: '(?P<year>\d{4})q(?P<quarter>[1-4])_ncen\.zip$'}
       # The combine's rows are the records, one per CIK (`distinct_on`); no record step.
       extract: combine.yaml
       master: {keys: {dataset: sec.ncen.registrant.v1, distinct_on: [cik], table: filing}}
