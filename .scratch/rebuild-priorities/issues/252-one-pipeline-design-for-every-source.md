@@ -50,7 +50,7 @@ Findings 3 and 4 are deletions with no data effect: do them first. Finding 1 rem
 - [x] 2026-11-16 17:23 ET Operator, 2026-11-16: "6 and 8 agreed now fix the inconsistency". Finding 6: one delivery-date convention, read from the capture. Finding 8: my reading is one place where every source says how its files arrive; to confirm before building.
 - [ ] Finding 2: every target at grain `run`; the by-the-unit path deleted.
 - [ ] Finding 5: one target per source reads once (measure one source first).
-- [ ] Finding 9: a restart skips a read already written.
+- [x] 2026-11-16 21:02 ET Finding 9: a run worked again keeps the reads it wrote (PR 1849; `test_a_stopped_run_worked_again_does_not_read_again_what_it_wrote`).
 - [ ] Finding 6: operator's ruling on one delivery-date convention.
 - [ ] Finding 7: measure the second read thread; one knob.
 - [ ] Finding 8: operator's ruling on where capture is declared.
