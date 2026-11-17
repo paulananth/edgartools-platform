@@ -198,10 +198,6 @@ A worker reads a reading one stored piece at a time and writes as it goes; it ne
 file. One long operation over a whole file keeps the lease renewal from running, so the lease is lost
 however often it would renew, and the memory it takes goes to swap on the disk.
 
-`local: true` acts only by the unit: the target's `source.read` and `source.combine` steps run in the loader's
-process with no claim or lease, and the run in the database starts at the first later step. At `grain: run`
-every step already runs in the loader, so leave it off.
-
 ## Grain: how much Bookkeeping a target uses
 
 Bookkeeping says which work of a run is in flight, who holds it and what is verified, so a stopped run resumes. Each claim,

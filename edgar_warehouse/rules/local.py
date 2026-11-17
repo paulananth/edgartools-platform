@@ -1,9 +1,8 @@
-"""Run a target's source read and source combine steps in this process (ticket 210).
+"""Do the work of a run at grain `run` in this process: every step in order, each unit checked by its worker module.
 
-These steps turn captured files into extracts and write files with receipts. They need no claim, lease,
-heartbeat, so they never reach the database: the content hash is their proof. Inputs resolve from
-the receipts of earlier local units, through `compose_document`. A run in the database
-then opens at the first step that writes the destination, with these receipts as its inputs."""
+A source read or combine turns captured files into extracts and writes files with receipts; it needs no claim,
+lease or heartbeat, and its content hash is its proof. Inputs resolve from the receipts of earlier units, through
+`compose_document`."""
 from __future__ import annotations
 
 import json
@@ -15,23 +14,6 @@ from urllib.parse import unquote, urlparse
 from edgar_warehouse.bookkeeping.clean.compose import compose_document
 from edgar_warehouse.bookkeeping.clean.config import (LOCAL_OPERATIONS, STEP_CHECKS, Blocked, reference,
                                                      validate, worklist)
-
-
-def staged_inputs(artifacts, export_body: dict, target: str, inputs: dict, modules: dict | None = None) -> dict:
-    """The manifest reference a run takes. A target not marked `local` keeps the one it was given. A local
-    target has its source read and combine steps run here, and the run takes the staged manifest."""
-    config = validate(export_body, target)
-    if not config.get("local") or config.get("grain") == "run":
-        return inputs  # a target at grain `run` has every step run after the run has started (`work_run`)
-    from edgar_warehouse.workers import profile
-
-    manifest = artifacts.json(inputs)
-    items = worklist(manifest, config)
-    modules = modules or {operation: profile(operation) for operation in LOCAL_OPERATIONS}
-    done = run_local(config["steps"], items, modules, artifacts)
-    # Named by the input manifest's hash, so two bundles beside each other never write one address.
-    return artifacts.put(inputs["uri"].rsplit("/", 1)[0] + "/staged-" + inputs["sha256"][:12],
-                         stage_manifest(manifest, config["steps"], items, done, artifacts))
 
 
 def work_run(book, run_id: str, modules: dict | None = None, *, workers: int = 1) -> dict:
@@ -235,51 +217,6 @@ def _input(unit: dict, receipt_of, artifacts) -> dict:
         root = unit["output"].rsplit("/", 1)[0] + "/inputs"
         return compose_document(source["compose"], receipt_of, lambda document: artifacts.put(root, document))
     return reference(source)
-
-
-def stage_manifest(manifest: dict, steps: list[dict], items: list[dict], done: dict, artifacts) -> dict:
-    """The manifest of the run in the database: the steps after the local ones, each input that read a local
-    unit now the receipt of that unit. An input on a database step stays as it is, and one composed from both
-    kinds is refused. `artifacts` is only needed to place a composed document, which is all local."""
-    local = {step["name"] for step in steps if step["operation"] in LOCAL_OPERATIONS}
-    units = defaultdict(list)
-    for item in items:
-        units[item["step"]].append(item)
-    result = {key: value for key, value in manifest.items() if key != "steps"}
-    result["steps"] = {}
-    for step in steps:
-        if step["name"] in local:
-            continue
-        result["steps"][step["name"]] = [
-            {**item["unit"], "input": _staged_input(item["unit"], local, done, artifacts)}
-            for item in sorted(units[step["name"]], key=lambda unit: unit["ordinal"])]
-    return result
-
-
-def _staged_input(unit: dict, local: set, done: dict, artifacts):
-    source = unit["input"]
-    if (isinstance(source, dict) and set(source) == {"from"}
-            and source["from"].get("step") in local):
-        return _input(unit, lambda dependency: _receipt(done, dependency), artifacts)
-    if isinstance(source, dict) and set(source) == {"compose"}:
-        slots = _compose_steps(source["compose"])
-        if slots & local and slots - local:
-            raise Blocked("A composed input mixes local and database units")
-        if slots & local:
-            return _input(unit, lambda dependency: _receipt(done, dependency), artifacts)
-    return source
-
-
-def _compose_steps(body: dict) -> set:
-    found = set()
-    for value in body["slots"].values():
-        if isinstance(value, list):
-            found |= {dependency["step"] for dependency in value}
-        elif set(value) == {"compose"}:
-            found |= _compose_steps(value["compose"])
-        else:
-            found.add(value["step"])
-    return found
 
 
 def _receipt(done: dict, dependency: dict) -> dict:

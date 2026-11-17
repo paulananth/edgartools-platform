@@ -252,7 +252,7 @@ def _plan(step: dict) -> None:
 
 
 # What only a target held by the unit reads: at grain `run` the loader does every step and no lease is taken.
-HELD_BY_THE_UNIT = frozenset({"local", "lease_seconds", "heartbeat_seconds"})
+HELD_BY_THE_UNIT = frozenset({"lease_seconds", "heartbeat_seconds"})
 
 
 def validate(document: dict, target: str) -> dict:
@@ -264,7 +264,7 @@ def validate(document: dict, target: str) -> dict:
         planned = body["version"] == 2
         selected = body["targets"][target]
         if set(selected) - {"steps", "lease_seconds", "heartbeat_seconds", "retry", "allow_zero_work", "checks",
-                            "local", "preparation", "grain"} - (
+                            "preparation", "grain"} - (
                 {"run", "delivered"} if planned else set()):
             raise Blocked("Unknown target option")
         delivered(selected)
@@ -277,8 +277,6 @@ def validate(document: dict, target: str) -> dict:
             raise Blocked("Target preparation is a list of {method, options}")
         if type(selected.get("allow_zero_work", False)) is not bool:
             raise Blocked("allow_zero_work must be boolean")
-        if type(selected.get("local", False)) is not bool:
-            raise Blocked("local must be boolean")
         if selected.get("grain", "unit") not in GRAINS:
             raise Blocked(f"grain is one of {', '.join(GRAINS)}")
         if selected.get("grain") == "run" and (held := sorted(HELD_BY_THE_UNIT & set(selected))):
@@ -339,10 +337,6 @@ def validate(document: dict, target: str) -> dict:
             if not step["checks"]:
                 raise Blocked("Every step requires a check")
             seen.add(name)
-        if selected.get("local"):
-            local = {step["name"] for step in steps if step["operation"] in LOCAL_OPERATIONS}
-            if any(not set(step["requires"]) <= local for step in steps if step["name"] in local):
-                raise Blocked("A local step requires only local steps")
         checks = selected.get("checks", [])
         if (not isinstance(checks, list) or not checks or len(set(checks)) != len(checks)
                 or any(c not in RUN_CHECKS for c in checks)):
@@ -362,21 +356,16 @@ def validate(document: dict, target: str) -> dict:
 GRAINS = ("unit", "run")
 
 
-# The operations a target marked `local: true` runs in the loader's own process: they turn captured files into
-# extracts and write files with receipts, so they need no claim or lease (ticket 210).
+# The operations that turn captured files into extracts and write files with receipts: the loader reuses an extract
+# already written from the same content (`rules/local.py`, `Extracts`), and checks no destination for them.
 LOCAL_OPERATIONS = frozenset({"source.read", "source.combine"})
 
 
 def staged(config: dict) -> dict:
-    """The steps of a run in the database: a target marked `local` has its local steps run by the loader, so the
-    run starts at the first step after them and no step waits on one of them."""
+    """The steps of a run in the database: a target at grain `run` keeps none there; the loader does them all."""
     if config.get("grain") == "run":
         return {**config, "steps": [], "loader_steps": config["steps"]}
-    if not config.get("local"):
-        return config
-    local = {step["name"] for step in config["steps"] if step["operation"] in LOCAL_OPERATIONS}
-    return {**config, "steps": [{**step, "requires": [name for name in step["requires"] if name not in local]}
-                                for step in config["steps"] if step["name"] not in local]}
+    return config
 
 
 # A composed input (to-do 20c): a frozen document whose slots each name verified
