@@ -121,8 +121,7 @@ def register(engine, spec: dict, *, runtime_role: str) -> dict:
         for link in spec["links"] or []:
             share = link.get("inclusion")
             _comment(conn, f"COLUMN {table}.{q(link['mdm_id_column'])}",
-                     f"The MDM id of the {link['kind']} whose {link['source_code']} record key is "
-                     f"{link['source_key']}; empty while that record is not mastered."
+                     f"The MDM id of {specs.describe_link(link)}; empty while none is mastered."
                      + (f" Profiling found {share:.1%} of the source keys among the master's keys." if share is not None else ""))
         for c in specs.quality_columns(spec):
             flags = [k for k in spec["checks"] if k["on_fail"] == "flag"]

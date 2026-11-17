@@ -44,7 +44,7 @@ def seed(engine, records: list[dict], policy: dict | None = None) -> dict[str, s
             merge.merge_file(store, merge.Settings(policy or files.policy(), "invented-digest", kind, AS_OF), batch)
     ids, found = MdmIds(engine), {}
     for (code, kind), wanted in keys.items():
-        found.update(ids(code, kind, wanted))
+        found.update(ids({"source_code": code, "kind": kind}, wanted))
     return found
 
 

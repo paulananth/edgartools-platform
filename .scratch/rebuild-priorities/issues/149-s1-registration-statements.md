@@ -3,7 +3,7 @@
 Priority: 149. Map: [Rebuild priorities](../map.md). Opened 2026-10-29 17:20 ET (operator, 2026-10-29:
 "Create a ticket to pull and process S-1").
 
-Type: task. Status: resolved. Blocked by: none (SEC requests authorised, below).
+Type: task. Status: resolved (reopened 2026-11-17, operator: "Implement ticket 149 and 174 using [the test issuer] as the test case"). Blocked by: none (SEC requests authorised, below).
 
 ## Question
 
@@ -65,3 +65,12 @@ What does "process an S-1" deliver, and how is it captured? The decisions:
 - [x] The load through the stores: the first real load of the S-1 and F-1 pages ran end to end in `local-test-server` once finalized rules needed no proof to activate (#1428, #1429); 732 documents in 2 bundles, 11.4 min (2026-11-05 20:03 ET)
 - [x] The operator's approval of the rules and their switch-on: "approved all rules" (2026-11-04) is recorded in `rules/approvals.yaml`; `rules status --source sec.registration` shows its current rules version `active` on the live store (2026-11-05 20:03 ET)
 - [x] Learning → skill: `data-onboarding` "Built means ready to turn on" and its silver step (a load registers its silver tables), `data-platform` READING.md (the HTML reader's `@above`, `@head`, `@cells` and the text operations) (2026-11-05 20:03 ET)
+
+## Reopened 2026-11-17: the launched offering finds its listed Security
+
+Ruling (operator, 2026-11-17 10:43 ET): "Link by identifier (Recommended)": a silver link may name an MDM identifier (the ticker); it fills the Security's id only when exactly one Security holds the value, so a reused ticker stays empty. The test case: an issuer whose S-1 (2026) is captured and whose shares listed in 2026; no Security holds its ticker in any capture on this machine today, so its row stays empty and fills once one is loaded.
+
+- [x] 2026-11-17 11:18 ET Engine: a silver link names either the Dataset Contract whose record key its column holds or an identifier the master holds (`identifier: ticker`); the id lookup takes the link; the spec validator wants exactly one. Failed before: `test_a_link_by_identifier_asks_for_the_holder_of_each_value` (`Blocked: A link holds columns, kind, source_code, source_key and mdm_id_column`); on PostgreSQL 16, `test_a_ticker_one_security_holds_finds_it_and_a_reused_or_unheld_ticker_finds_none`
+- [x] 2026-11-17 11:18 ET `registration_offering` links its `ticker` to the Security by the `ticker` identifier; Mapping Document regenerated (unchanged: the workbook names no link; `rules mapdoc check` clean)
+- [x] 2026-11-17 11:18 ET The proof on the test case (ticket 174's store `t174`): its S-1 offering row links to its Company (mastered by the Company rule's new step for a new listing, ticket 174); its Security link stays empty, since no Security on this machine holds the ticker (the only OpenFIGI answer for that symbol is another exchange's listing); it fills on `silver refresh-ids` once one does. The S-1 cover states the ticker and exchange and no price range or share count (the original S-1 was filed before pricing)
+- [x] 2026-11-17 11:18 ET Learning → skill: `data-onboarding` TARGETS.md, "A row that states an identifier the master holds links by it"

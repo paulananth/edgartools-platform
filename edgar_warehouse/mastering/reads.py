@@ -18,6 +18,18 @@ def master_ids(store, source_code: str, keys) -> dict:
     return {subjects[subject]: entity for subject, entity in store.bound(subjects).items()}
 
 
+def sole_holders(store, namespace: str, kind: str, values) -> dict:
+    """Each value's master of `kind` holding it as its `namespace` identifier, when exactly one does;
+    a value no master holds, or several do (a reused ticker), is left out."""
+    pairs = store.holders_by_value(namespace, sorted(set(values))) if values else []
+    bodies = store.master_bodies(sorted({entity for _, entity in pairs}))
+    holders = defaultdict(set)
+    for value, entity in pairs:
+        if bodies[entity]["kind"] == kind:
+            holders[value].add(entity)
+    return {value: next(iter(found)) for value, found in holders.items() if len(found) == 1}
+
+
 def master(store, requested: str) -> dict:
     """The current master behind an id: a merged-away id answers with the master it joined."""
     key, seen = requested, set()

@@ -97,3 +97,9 @@ sources:
     target: silver
     requires: []
     after: [sec.company]
+  # Final prospectuses (424B1 to 424B5): captured by the `capture` target, then read and landed in silver by
+  # `silver`, linked to the Company by CIK and to the listed Security by ticker.
+  sec.prospectus:
+    target: silver
+    requires: []
+    after: [sec.company]

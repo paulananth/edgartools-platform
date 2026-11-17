@@ -117,7 +117,7 @@ SECURITY, FUND, REGISTRANT = "sec.nport.security.v2", "sec.nport.fund.v1", "sec.
 
 
 def bound(database, source_code: str, key: str) -> str | None:
-    return MdmIds(database.application)(source_code, None, {key}).get(key)
+    return MdmIds(database.application)({"source_code": source_code, "kind": None}, {key}).get(key)
 
 
 def test_each_row_lands_with_its_holder_and_security_found_by_lookup(database, tmp_path):

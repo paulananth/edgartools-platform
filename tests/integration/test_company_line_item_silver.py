@@ -22,7 +22,7 @@ FOLDER = files.ROOT / "sources" / "sec.company-facts"
 US, EU, MARCH, NEXT = "0000000001", "0000000003", "0000000002", "0000000004"
 
 
-def no_masters(source_code, kind, keys):
+def no_masters(link, keys):
     return {}
 
 

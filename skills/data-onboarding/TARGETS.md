@@ -47,6 +47,12 @@ Every step says what differs for each target.
   - **Never carry a many-to-many link as a list on a record.** A reduction keeps
     at most 1,000 members per list (`sample_limit`), so a widely held entity
     loses links silently: one row per link instead.
+  - **A row that states an identifier the master holds links by it**
+    (`identifier: <namespace>` in place of `source_code`): the MDM id fills only
+    when exactly one master of the link's kind holds the value, so a reused
+    value, or one no master holds yet, stays empty until `silver refresh-ids`
+    finds one. A test lands a value one master holds, one two hold and one
+    none holds.
   - **The row's link key is the master's record key, as its contract makes
     it.** Repeat the contract's own choice (an identifier, else another, a
     folded key) in the rows' contract, and prove every row's key is a record

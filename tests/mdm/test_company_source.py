@@ -20,7 +20,7 @@ TEST_POLICY["automatic_rules"] = [
         "kind": "company",
         "family": "classification",
         "rule_id": "sec-company-candidate",
-        "rule_version": "2026-11-14.listed-operating-or-foreign-issuer",
+        "rule_version": "2026-11-17.listed-operating-foreign-or-new-listing",
         "verdict": "company",
     }
 ]
@@ -81,7 +81,8 @@ def test_native_company_kind_identifiers_and_unknown_effective_time():
 def test_phase_1_masters_listed_operating_filers_and_foreign_issuers():
     """Operator, 2026-11-09: "For phase 1 master only publically traded companies (filter)"; "Operating and listed a
     real company". A listed filer SEC types other is a company when it files a 20-F or 40-F (operator, 2026-11-14:
-    "yes make the rule change test locally and reload"); any other filer typed other, or one with no ticker, is not."""
+    "yes make the rule change test locally and reload"), and when it filed an initial registration or a final prospectus
+    (operator, 2026-11-17: "Master the 86 (Recommended)"); any other filer typed other, or one with no ticker, is not."""
     publication = {
         "publication_key": "capture-1/company",
         "revision": 0,
@@ -102,7 +103,11 @@ def test_phase_1_masters_listed_operating_filers_and_foreign_issuers():
     for annual in ("20-F", "40-F"):
         foreign = classified(row(entity_type="other", forms=["6-K", annual]))
         assert foreign["provenance"]["classification"]["step"] == "10"
-    for outside, step in ((row(entity_type="other"), "11"), (row(entity_type="operating", tickers=[]), "0"),
+    for registration in ("S-1", "F-1", "S-11", "424B1", "424B4"):
+        listed = classified(row(entity_type="other", forms=["8-A12B", registration]))
+        assert listed["provenance"]["classification"]["step"] == "10a"
+    for outside, step in ((row(entity_type="other"), "11"), (row(entity_type="other", forms=["S-1/A", "424B3"]), "11"),
+                          (row(entity_type="other", forms=["S-1"], tickers=[]), "0"), (row(entity_type="operating", tickers=[]), "0"),
                           (row(entity_type="other", tickers=[]), "0"),
                           (row(entity_type="other", forms=["20-F"], tickers=[]), "0"),
                           (row(entity_type="other", forms=["20-F/A", "6-K"]), "11")):

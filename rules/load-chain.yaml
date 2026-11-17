@@ -328,3 +328,10 @@ steps:
     capture: sec.registration/s1-f1-originals
     minutes: 240
     attempts: 4
+  - name: prospectus
+    lane: D
+    source: sec.prospectus
+    target: silver
+    capture: sec.prospectus/first-424b4
+    minutes: 30
+    attempts: 4

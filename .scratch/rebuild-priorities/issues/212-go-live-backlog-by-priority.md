@@ -130,17 +130,17 @@ Every part still open in the Rebuild priorities map, in one list, ordered by wha
 - [ ] Learning → skill: `data-operations` and `bookkeeping` name the worker counts and the sizing rule
 
 **[174](../issues/174-sec-prospectus-final-prospectuses-looked-up-on-mdm-then-landed-in-silver.md) 174: sec.prospectus: the final prospectuses (424B1 to 424B5), looked up on MDM, then landed in silver** (open, not started)
-- [ ] The operator's permission for the SEC requests of this feed, with the forms and the scope (nothing is requested before it)
-- [ ] Count the 424B1, 424B2 and 424B5 filings from the captured submissions (no request), and the size of their main documents
-- [ ] Decide with the operator which forms and which facts: the offer terms (price, shares, underwriters, exchange), or the document kept unread first, as for `sec.registration`
-- [ ] Outside standards first (the research skill): how a 424B prospectus is structured and which parts are tagged
-- [ ] Capture: a source `sec.prospectus` with its `acquisition` feed, a Bookkeeping capture target and the Change Journal, shaped like `sec.registration`
-- [ ] The look-up: each filing's filer found in MDM by CIK; a filer MDM does not hold is set aside with its reason, never created here
-- [ ] The silver table (the Silver Spec, its grain and key, the link to the Company), landed through the `silver.land` step, with its first quality checks (the operator decides the checks)
-- [ ] A limited proof only: a few invented documents, a second pass that changes nothing, an unchanged file skipped
-- [ ] The Mapping Document and the Data Catalog entry are regenerated; tests that pin the source order are run before the first push
-- [ ] Stores and containers a test run leaves are removed
-- [ ] Learning → skill: the `data-onboarding` and `company-financials` skills name this feed and its look-up, or "none"
+- [ ] ~~The operator's permission for the SEC requests of this feed, with the forms and the scope (nothing is requested before it)~~ deferred to 174: reopened by the operator (2026-11-17: "Implement ticket 149 and 174 using [the test issuer] as the test case")
+- [ ] ~~Count the 424B1, 424B2 and 424B5 filings from the captured submissions (no request), and the size of their main documents~~ deferred to 174: reopened by the operator (2026-11-17: "Implement ticket 149 and 174 using [the test issuer] as the test case")
+- [ ] ~~Decide with the operator which forms and which facts: the offer terms (price, shares, underwriters, exchange), or the document kept unread first, as for `sec.registration`~~ deferred to 174: reopened by the operator (2026-11-17: "Implement ticket 149 and 174 using [the test issuer] as the test case")
+- [ ] ~~Outside standards first (the research skill): how a 424B prospectus is structured and which parts are tagged~~ deferred to 174: reopened by the operator (2026-11-17: "Implement ticket 149 and 174 using [the test issuer] as the test case")
+- [ ] ~~Capture: a source `sec.prospectus` with its `acquisition` feed, a Bookkeeping capture target and the Change Journal, shaped like `sec.registration`~~ deferred to 174: reopened by the operator (2026-11-17: "Implement ticket 149 and 174 using [the test issuer] as the test case")
+- [ ] ~~The look-up: each filing's filer found in MDM by CIK; a filer MDM does not hold is set aside with its reason, never created here~~ deferred to 174: reopened by the operator (2026-11-17: "Implement ticket 149 and 174 using [the test issuer] as the test case")
+- [ ] ~~The silver table (the Silver Spec, its grain and key, the link to the Company), landed through the `silver.land` step, with its first quality checks (the operator decides the checks)~~ deferred to 174: reopened by the operator (2026-11-17: "Implement ticket 149 and 174 using [the test issuer] as the test case")
+- [ ] ~~A limited proof only: a few invented documents, a second pass that changes nothing, an unchanged file skipped~~ deferred to 174: reopened by the operator (2026-11-17: "Implement ticket 149 and 174 using [the test issuer] as the test case")
+- [ ] ~~The Mapping Document and the Data Catalog entry are regenerated; tests that pin the source order are run before the first push~~ deferred to 174: reopened by the operator (2026-11-17: "Implement ticket 149 and 174 using [the test issuer] as the test case")
+- [ ] ~~Stores and containers a test run leaves are removed~~ deferred to 174: reopened by the operator (2026-11-17: "Implement ticket 149 and 174 using [the test issuer] as the test case")
+- [ ] ~~Learning → skill: the `data-onboarding` and `company-financials` skills name this feed and its look-up, or "none"~~ deferred to 174: reopened by the operator (2026-11-17: "Implement ticket 149 and 174 using [the test issuer] as the test case")
 
 ### 4. Check, then drop (the ticket's status says done, closed or resolved; the box is left over)
 
@@ -162,3 +162,5 @@ Every part still open in the Rebuild priorities map, in one list, ordered by wha
 - [ ] [248] 6,622 Securities the SEC file does not know, and the 10,177 whose issuer's GLEIF record waits.
 - [ ] [249] The 993 issuer records whose name equals an SEC filer's name would still create a duplicate: measure on a disposable store, then a looser name pass or review.
 - [ ] [227], [229], [250] Their open items and their Learning → skill parts.
+- [ ] [174] A record set aside under one rules version keeps its set-aside row after a later version masters it, so the stored set-aside count overstates by the records later mastered (found on the disposable store: 1 such row). Decide whether a mastered record's earlier set-aside is cleared or kept as history, and count by the current version.
+

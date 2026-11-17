@@ -68,7 +68,7 @@ columns:
 - name: ticker
   type: VARCHAR
   nullable: true
-  definition: The symbol the cover proposes (not the symbol the company trades under now, which is the Security's).
+  definition: The symbol the cover proposes; its Security is found by it once exactly one Security holds it as its ticker.
   source: cover text
   sensitivity: none
 - name: exchange
@@ -87,6 +87,13 @@ links:
   to_part: registrant
   source_key: cik
   mdm_id_column: registrant_mdm_id
+- columns:
+  - ticker
+  kind: security
+  identifier: ticker
+  to_part: listed_security
+  source_key: ticker
+  mdm_id_column: listed_security_mdm_id
 time:
   as_of: null
   as_at: captured_at

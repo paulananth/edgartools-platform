@@ -209,8 +209,7 @@ def _registered(source: str, spec: dict) -> dict:
         columns.append({"name": column["name"], "dataType": TYPES.get(str(column["type"]).upper(), TEXT),
                         "description": " ".join(a for a in about if a)})
     columns += [{"name": link["mdm_id_column"], "dataType": TEXT,
-                 "description": f"The MDM id of the {link['kind']} `{', '.join(link['columns'])}` names, "
-                                f"among the records of `{link['source_code']}`; empty until it is mastered."}
+                 "description": f"The MDM id of {silver_spec.describe_link(link)}; empty until it is mastered."}
                 for link in spec.get("links") or []]
     columns += [{"name": name, "dataType": TEXT, "description": "The data quality checks this row failed, by id "
                  "(each flagged, the row still landed); empty when it passed every one."}

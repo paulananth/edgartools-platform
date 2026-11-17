@@ -26,8 +26,10 @@ def test_a_target_gives_its_recorded_steps(name):
     assert {key: value for key, value in targets()[name].items() if key not in changed_files.HOW_HELD} == STEPS[name]
 
 
-def test_every_target_is_at_grain_run():
-    assert {name for name, body in targets().items() if body.get("grain") != "run"} == set()
+def test_every_target_but_a_provider_capture_is_at_grain_run():
+    by_the_unit = {name for name, body in targets().items() if body.get("grain") != "run"}
+    providers = {name for name, body in targets().items() if body["steps"][0]["operation"] == "provider.capture"}
+    assert by_the_unit == providers == {"sec.prospectus/capture", "sec.registration/capture"}
 
 
 @pytest.mark.parametrize("name", sorted(STEPS))
@@ -168,6 +170,12 @@ def test_a_capture_target_is_its_one_step(kind, operation):
     assert target["lease_seconds"] == 300 and target["checks"] == ["manifest.hash", "work.accounting", "journal.delivered"]
     with pytest.raises(shape.ShapeError):
         shape.expand({"capture": "other"})
+
+
+def test_a_provider_capture_runs_by_the_unit_holding_the_providers_lease():
+    with pytest.raises(shape.ShapeError, match="shared lease"):
+        shape.expand({"capture": "provider", "grain": "run"})
+    assert shape.expand({"capture": "copy", "grain": "run"})["steps"][0]["operation"] == "artifact.copy"
 
 
 def test_a_second_pass_over_recorded_files_has_no_record_step():

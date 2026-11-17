@@ -15,7 +15,7 @@ automatic_rules:
 - kind: company
   family: classification
   rule_id: sec-company-candidate
-  rule_version: 2026-11-14.listed-operating-or-foreign-issuer
+  rule_version: 2026-11-17.listed-operating-foreign-or-new-listing
   verdict: company
 - kind: company
   family: binding

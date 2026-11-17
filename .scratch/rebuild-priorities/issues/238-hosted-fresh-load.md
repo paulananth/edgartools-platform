@@ -142,3 +142,5 @@ Each part is struck in its own ticket with `deferred to 238`; the full text stay
 - [ ] [212] Run `mdm migrate` on the hosted store once it exists: it carries every migration the local store has, including 005–007 (ticket 18) and 010 (ticket 19), moved here 2026-10-18 12:25 ET
 - [ ] [253] The hosted GLEIF merge on the fresh store holds about 458 golden records a second (measured 2026-11-16 21:02 ET, 8 workers); record the figure again.
 - [ ] Learning → skill: after the run, each skill line the run changed, or "none".
+- [ ] [174] The fresh load loads `sec.prospectus` (chain step `prospectus`, capture `sec.prospectus/first-424b4`, copied to where the hosted load reads it) and `sec.registration` with its new Security link. The Company rule's version changed (a new listing is a Company), so `sec.company` processes every document once more on a store that holds it; a fresh store loads it once.
+

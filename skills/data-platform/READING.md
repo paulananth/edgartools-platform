@@ -1641,5 +1641,10 @@ A page is read by its words, since nothing in it is tagged. What the reader give
   of them (1 to 10,000). A term the page does not state is empty, never zero.
 - `found: {path: c1.$, transforms: [...]}` is true when its transforms leave a nonempty result; as a table's
   `select` it keeps only the rows whose label matches.
+- `first_found` reads text blocks only: a table row has no text of its own at `path: row`. A term that sits in a table
+  (a price per share and in total, a list of names) is read as its own `each: row` table, selected by its label or by its
+  table's heading (`@head`), and lands in its own silver table.
+- A `select` is any expression that gives true, false or null: two conditions are a `choose` inside a `choose`, and a
+  branch that keeps no row gives `const: {value: null}`.
 - A `context` field of a zip snapshot can be filled from the snapshot's own JSON member, never by the caller:
   `{type: text, zip_json: {member: metadata.json, path: scope.document_id}}`.

@@ -44,8 +44,8 @@ acquisition:
 bookkeeping:
   version: 2
   targets:
+    # A provider capture holds the provider's shared lease (one request rate across every run), so it runs by the unit.
     capture:
-      grain: run
       capture: provider
     # The captured pages, read and landed in silver (the Company is mastered by sec.company, which runs first).
     silver:

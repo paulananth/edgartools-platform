@@ -1,0 +1,48 @@
+# SEC final prospectuses: the main document of each 424B1 to 424B5 filing, which a company files once
+# an offer is priced. Its cover states the final terms: price, shares, discount, proceeds, ticker,
+# exchange and underwriters. `sec.registration` holds the S-1 and F-1 originals filed before the offer.
+# Rulings it rests on (operator):
+# - "Look-up on mdm then silver": the filer is found in MDM by its CIK; nothing is written to MDM.
+# - "424B1 to 424B5, cover terms": the five forms, each row holding the cover's final terms.
+# - SEC requests are permitted filing by filing; a request is written only for a permitted filing.
+# A document's address is the filing's folder plus its primary document name, both from the
+# submissions index; one unit per accession number. The bound is the transport's 128 MiB ceiling.
+source: sec.prospectus
+bronze:
+  family: sec.prospectus
+execution: {profile: source.read, workers: 1, max_artifacts: 512}
+acquisition:
+  version: 1
+  feeds:
+    prospectus:
+      family: sec.prospectus
+      datasets: []
+      scope:
+      - cik
+      - accession_number
+      capabilities:
+        capture: provider.capture
+        fetch: sec.conditional
+      completeness:
+        format: text
+        required: []
+        allow_empty: false
+        max_bytes: 134217728
+      required_producers:
+      - capture
+      url_prefixes:
+      - https://www.sec.gov/Archives/edgar/data/
+bookkeeping:
+  version: 2
+  targets:
+    # A provider capture holds the provider's shared lease (one request rate across every run), so it runs by the unit.
+    capture:
+      capture: provider
+    # The captured pages, read and landed in silver (the Company is mastered by sec.company, which runs first).
+    silver:
+      grain: run
+      extract: prospectus-page.yaml
+      silver:
+        - {name: land_offering, land: {silver: prospectus_offering, table: offering}}
+        - {name: land_cover_line, land: {silver: prospectus_cover_line, table: cover_line}}
+        - {name: land_underwriter, land: {silver: prospectus_underwriter, table: underwriter}}
