@@ -2,7 +2,7 @@
 
 Priority: 212. Map: [Rebuild priorities](../map.md). Opened 2026-11-11 15:02 ET (operator: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
 
-Type: task, charted with wayfinder. Status: open. Blocked by: none.
+Type: task, charted with wayfinder. Status: open (the one backlog of work that needs no hosted run; operator, 2026-11-17: consolidate and close; every hosted part is in ticket 238). Blocked by: none.
 
 ## Destination
 
@@ -14,19 +14,19 @@ Every part still open in the Rebuild priorities map, in one list, ordered by wha
 
 **[211](../issues/211-finish-the-go-live-the-remaining-sources-and-the-hosted-store.md) 211: Finish the go-live: the remaining sources and the hosted store** (open)
 - [x] (2026-11-11 16:45 ET) [211] Hosted SEC company load: 76,380 documents in 150 bundles, 2 at a time, the target marked local (read and combine on the Mac, database writes only for records, merge and processed), finished 16:43 ET after about 3 hours with two stops. First pass 13:32 to 15:55 ET: 128 bundles, about a minute a bundle, then 22 bundles failed at `mastering.merge`. Cause (traceback, then fixed in PR 1677 with a test that fails on the old code): a bundle whose every document is set aside (not a listed operating company) has no records and so no kind, and `merge_file` raised `KeyError('')` looking up the empty kind in the release step; the `local-staging` load of 11-10 predates that step. After the fix the rerun finished the leftover runs (44 runs, 0.8 to 1.3 min each) and reported "0 documents loaded, 76380 already loaded before". The store holds 5,091 company records (the listed operating filers), the same count as `local-staging`.
-- [ ] GLEIF Level 1 (finds Companies, never creates), then GLEIF relationships
-- [ ] OpenFIGI, then 13F securities and N-PORT security (Securities)
-- [ ] SEC ownership (Form 4 relationships)
-- [ ] 13F filings
-- [ ] SEC company facts and SEC registration (Silver only)
-- [ ] Reconcile waiting links once both endpoints exist; record the totals
+- [ ] ~~GLEIF Level 1 (finds Companies, never creates), then GLEIF relationships~~ deferred to 238: every hosted part is one run, in one ticket
+- [ ] ~~OpenFIGI, then 13F securities and N-PORT security (Securities)~~ deferred to 238: every hosted part is one run, in one ticket
+- [ ] ~~SEC ownership (Form 4 relationships)~~ deferred to 238: every hosted part is one run, in one ticket
+- [ ] ~~13F filings~~ deferred to 238: every hosted part is one run, in one ticket
+- [ ] ~~SEC company facts and SEC registration (Silver only)~~ deferred to 238: every hosted part is one run, in one ticket
+- [ ] ~~Reconcile waiting links once both endpoints exist; record the totals~~ deferred to 238: every hosted part is one run, in one ticket
 - [ ] Skill gaps from the rules step: `data-operations` step 2 says "`rules load` saves every file under a root; do not use it here" and step 3 omits `governance.env`, while the go-live path for a new store is `rules load` then `rules activate` with `governance.e...
 - [ ] Ticket 199's open parts that a fresh load meets: the rules version recorded on mastering records, and the Silver `links` stale-lease stop seen in the GLEIF loads.
 - [ ] Ticket 02's origin check of the 327 governed-store runs done first, since an empty start erases that evidence.
 - [ ] Whether a source that cannot yet load (ticket 79 N-PORT run builder, ticket 80 OpenFIGI listing enrichment, ADV and 13F mastering targets) is deferred or loaded as far as its path supports. The load sequence says to report the missing source and stage, not...
 - [ ] Learning → skill: name the skill line this ticket changed, or write "none".
-- [ ] Load each source into the hosted store from the local captures, no AWS (2026-11-11 06:02 ET; operator: "after init load each source in snowflake from local no aws"). Done so far on the hosted store: GLEIF subfund pairs (1 document), N-PORT registrants (1),...
-- [ ] Hosted counts, first part done (2026-11-11 16:45 ET): ticket 209's count on the hosted store after the SEC company load (read-only, 102 s): 446,704 records with a golden record, 393,459 explained as creators, 53,245 by an identifier, 0 by a decision (the waterfall pass has not run there yet), **0 unexplained**, none for any source; 415,730 golden records. Still to record: each source's stored and set-aside counts, and the count again after the remaining sources load.
+- [ ] ~~Load each source into the hosted store from the local captures, no AWS (2026-11-11 06:02 ET; operator: "after init load each source in snowflake from local no aws"). Done so far on the hosted store: GLEIF subfund pairs (1 document), N-PORT registrants (1),...~~ deferred to 238: every hosted part is one run, in one ticket
+- [ ] ~~Hosted counts, first part done (2026-11-11 16:45 ET): ticket 209's count on the hosted store after the SEC company load (read-only, 102 s): 446,704 records with a golden record, 393,459 explained as creators, 53,245 by an identifier, 0 by a decision (the waterfall pass has not run there yet), **0 unexplained**, none for any source; 415,730 golden records. Still to record: each source's stored and set-aside counts, and the count again after the remaining sources load.~~ deferred to 238: every hosted part is one run, in one ticket
 - [ ] Learning → skill: name the skill line this ticket changed, or write "none".
 
 **[210](../issues/210-only-mastering-and-silver-touch-the-database.md) 210: Only mastering and silver touch the database** (open)
@@ -35,7 +35,7 @@ Every part still open in the Rebuild priorities map, in one list, ordered by wha
 - [ ] Design (operator rulings: no run is planned before the local steps; "drop step 6"): seven steps. Captured files; ask the journal (new or changed?); Source Extract and Combine extracts run locally through the worker modules and write files with receipts, wit...
 - [ ] Build it, with a test that fails before the change (a read and combine of N units issue no database call).
 - [ ] Prove on `local-staging`: a small load gives the same counts as before.
-- [ ] Hosted OpenFIGI answers load finishes inside the operator's 1 to 2 hour window.
+- [ ] ~~Hosted OpenFIGI answers load finishes inside the operator's 1 to 2 hour window.~~ deferred to 238: every hosted part is one run, in one ticket
 - [ ] The marker on the sources' `mastering` targets (`local: true`), with new rule versions and approvals, and the hosted activation. In progress: OpenFIGI marked in `rules/sources/openfigi/source.yaml` (config check: the staged run holds prepare, merge, process...
 - [ ] Generated work (`generated_step`) is refused locally; check which sources use it before they are wired.
 - [ ] The engine's own slot filling still copies `compose_document` until PR 1653 lands (GoF finding 1).
@@ -104,7 +104,7 @@ Every part still open in the Rebuild priorities map, in one list, ordered by wha
 **[153](../issues/153-reload-the-security-loads-on-current-code.md) 153: Reload the Security loads on current code** (open)
 - [x] (2026-11-11 16:08 ET) [153] Not needed as a separate reload: the go-live loaded OpenFIGI on current code from empty (`local-staging`: 771,554 `openfigi.security.v4` records and 335 `v3`; the hosted store holds 335 so far).
 - [x] (2026-11-11 16:08 ET) [153] Done by the go-live: 420,690 N-PORT security records stored of the archive's 420,691 (1 set aside), on `local-staging` and on the hosted store.
-- [ ] [153] Counts (`local-staging`, read-only, 2026-11-11): 395,838 Security, 22,766 Company, 12,937 Fund Structure and 31,097 Person golden records; 1,271,374 source records, 0 unexplained. **Not true that no identifier sits on two masters:** 13 SEDOLs and 1 LOANX are each held by two Security masters (14 pairs), 364 tickers by two to four Securities, 231 LEIs by both a Company and a Fund Structure, and 1 CIK by both a Company and a Person. To decide: whether each of the 14 Security pairs is one security (merge) or two (the identifier is wrong on one), whether a ticker may sit on several Securities (it is a lookup, not a join key), and whether one LEI may name a Company and a Fund Structure.
+- [ ] ~~[153] Counts (`local-staging`, read-only, 2026-11-11): 395,838 Security, 22,766 Company, 12,937 Fund Structure and 31,097 Person golden records; 1,271,374 source records, 0 unexplained. **Not true that no identifier sits on two masters:** 13 SEDOLs and 1 LOANX are each held by two Security masters (14 pairs), 364 tickers by two to four Securities, 231 LEIs by both a Company and a Fund Structure, and 1 CIK by both a Company and a Person. To decide: whether each of the 14 Security pairs is one security (merge) or two (the identifier is wrong on one), whether a ticker may sit on several Securities (it is a lookup, not a join key), and whether one LEI may name a Company and a Fund Structure.~~ deferred to 238: every hosted part is one run, in one ticket
 - [ ] "Destination authority expired before save": measure one bundle that has never been merged, per batch (moved from 150)
 - [ ] Learning → skill
 
@@ -148,7 +148,17 @@ Every part still open in the Rebuild priorities map, in one list, ordered by wha
 - [ ] Real company names quoted in older tickets on `main` reach `rulings.jsonl` (the operator's own words among them, kept as written): not fixed here
 
 **[68](../issues/68-clean-mdm-07-qualify-and-cut-over.md) Qualify Snowflake Postgres and rehearse cutover** (open, later: the hosted Snowflake Postgres cut-over is under)
-- [ ] Run `mdm migrate` on the hosted store once it exists: it carries every migration the local store has, including 005–007 (ticket 18) and 010 (ticket 19), moved here 2026-10-18 12:25 ET
+- [ ] ~~Run `mdm migrate` on the hosted store once it exists: it carries every migration the local store has, including 005–007 (ticket 18) and 010 (ticket 19), moved here 2026-10-18 12:25 ET~~ deferred to 238: every hosted part is one run, in one ticket
 - [ ] Learning → skill
 
 - [ ] Learning → skill: name the skill line this ticket changed, or write "none".
+
+## Moved here 2026-11-17 (parts struck `deferred to 212` in tickets 227, 229, 231, 232, 240, 248, 249, 250 and 252; full text stays there)
+
+- [ ] [231] The go-live simple path: its 11 open parts (old documents, what is still deployed, rules gates, schema files, one shape for every target, words, the seven wastes, skills).
+- [ ] [252] One pipeline design: its findings 1 to 9 and the lower-value list, in the order its ticket gives.
+- [ ] [232] Part 3: delete the unreachable guard path.
+- [ ] [240] The operator's rulings on the default grain and which sources turn it off.
+- [ ] [248] 6,622 Securities the SEC file does not know, and the 10,177 whose issuer's GLEIF record waits.
+- [ ] [249] The 993 issuer records whose name equals an SEC filer's name would still create a duplicate: measure on a disposable store, then a looser name pass or review.
+- [ ] [227], [229], [250] Their open items and their Learning → skill parts.

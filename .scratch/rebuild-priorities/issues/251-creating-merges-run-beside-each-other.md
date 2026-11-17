@@ -1,6 +1,6 @@
 # 251: A merge that creates golden records by identifier runs beside the others of its kind
 
-Type: task. Status: open (the hosted measurement). Blocked by: none. Follows ticket 233 (merges that only join run beside each other) and ticket 249 (GLEIF creates its Company).
+Type: task. Status: resolved (operator, 2026-11-17: consolidate and close; hosted parts to 238, the rest to 212). Blocked by: none. Follows ticket 233 (merges that only join run beside each other) and ticket 249 (GLEIF creates its Company).
 
 ## Question
 
@@ -32,5 +32,5 @@ A merge beside others may create a golden record by identifier: the identifier v
 - [x] 2026-11-16 16:17 ET Test that failed first: `test_a_merge_that_creates_golden_records_by_identifier_runs_beside_one_in_flight_of_its_kind` (`TimeoutError`: the second merge waited for the first). Guards: `test_four_writers_creating_the_same_identifiers_at_once_leave_one_master_each` (three runs), the existing two-writer test, and all 84 mastering tests on PostgreSQL and 81 on MySQL (3 skipped).
 - [x] 2026-11-16 16:17 ET Measured on the hosted store, rolled back: 1 batch 122 records a second; 4 beside each other 309 (2.5 times); 8 beside each other 553 records a second, 1.8 ms a record (4.5 times), none sent to redo. At that rate 2.8 million Companies take about 1.4 hours (the 8 are a measured 14.5 s for 8,000).
 - [x] 2026-11-16 16:17 ET Other pipelines: every source that mints by an identifier (SEC filers by CIK, N-PORT and N-CEN registrants, Form ADV by CRD and CIK, persons, funds, Securities by FIGI, CUSIP and ISIN) now merges beside the others of its kind; Form ADV custodians by exact name and the Form 4 issuer-and-symbol Security still run alone. 1,280 mdm, architecture and GLEIF tests, and 42 integration tests (exact-name binding, N-PORT, 13F, N-CEN, Form 4, the company fixture, the declared chain) pass.
-- [ ] Hosted: resume the GLEIF load (`--workers 8`) on this code and measure records a second; the merge then ends in about 1.4 hours plus a restart's re-read of about 15 minutes.
+- [ ] ~~Hosted: resume the GLEIF load (`--workers 8`) on this code and measure records a second; the merge then ends in about 1.4 hours plus a restart's re-read of about 15 minutes.~~ deferred to 238: every hosted part is one run, in one ticket
 - [x] Learning → skill: `mdm-engineering` "Writes and transactions" (a kind lock serializes what a key lock allows; creating by identifier runs beside others), `data-operations` RUNBOOK "Resource sizing" and the alone list (time one batch alone, rolled back, before blaming a lock), and `CONTEXT.md` Merge Stage.

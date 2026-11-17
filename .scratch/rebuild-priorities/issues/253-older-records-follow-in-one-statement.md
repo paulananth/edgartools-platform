@@ -1,6 +1,6 @@
 # 253: Older records follow their golden record in one statement, not one a row
 
-Type: bug. Status: open (the hosted measurement). Blocked by: none. Follows ticket 251.
+Type: bug. Status: resolved (operator, 2026-11-17: consolidate and close; every part ticked, the hosted measurement was taken 2026-11-16 21:02 ET). Blocked by: none. Follows ticket 251.
 
 ## Problem
 

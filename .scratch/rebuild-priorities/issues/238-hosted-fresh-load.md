@@ -1,6 +1,6 @@
 # 238: A fresh load into the hosted store, initialized again
 
-Type: task. Status: open (the store is initialized; the chain is loading). Blocked by: none.
+Type: task. Status: open (the one hosted run: every hosted part of every other ticket is below). Blocked by: none.
 
 ## Why
 
@@ -117,3 +117,28 @@ change).
       `sec.nport.registrant.v2` changed too: a load over a store that holds them reads them again.
 - [x] Learning → skill: data-operations RUNBOOK "Initialize a hosted store" and "Load a fresh store"; the connection
   section; aws-snowflake-operations, "The hosted MDM store"; STORES, "Apply store DDL" (2026-11-15 13:45 ET)
+
+## Hosted parts moved here (operator, 2026-11-17: "Review all open tickets, consolidate and close move hosted run to a single ticket")
+
+Each part is struck in its own ticket with `deferred to 238`; the full text stays there. Read each when its step loads.
+
+- [ ] [246] Hosted: the next chain run loads the source's files once more (its rules changed, so every file is processed again under the new identity), then a second run changes nothing, counted as the rerun above did. Not run: it reloads the N-PORT securities.
+- [ ] [251] Hosted: resume the GLEIF load (`--workers 8`) on this code and measure records a second; the merge then ends in about 1.4 hours plus a restart's re-read of about 15 minutes.
+- [ ] [248] The SEC ticker file copied into each OpenFIGI capture folder it loads (`openfigi/2026q2-nport`, `openfigi/form4-tickers-20261109`) with a receipt: additive, from the file already on this machine. Not done: it is part of the hosted run.
+- [ ] [248] Hosted: the operator accepted the cost ("yes", 2026-11-16): OpenFIGI's 771,554 records load again. Still to be started on the operator's word to run it.
+- [ ] [249] Hosted: needs the operator's word to run. It changes GLEIF's rules, so all 3,043,084 records load again and about 2.8 million Companies are created, with their lookups and links. Time not measured. The Rust extension must be rebuilt where the load runs.
+- [ ] [240] Each grain measured as statements a bundle (`count_statements.py`) and hosted seconds, on the persons capture
+- [ ] [240] The hosted store loads at `run` grain from the next load on (the hosted GLEIF load now running was started at `unit`); nothing is loaded again for the switch
+- [ ] [212] GLEIF Level 1 (finds Companies, never creates), then GLEIF relationships
+- [ ] [212] OpenFIGI, then 13F securities and N-PORT security (Securities)
+- [ ] [212] SEC ownership (Form 4 relationships)
+- [ ] [212] 13F filings
+- [ ] [212] SEC company facts and SEC registration (Silver only)
+- [ ] [212] Reconcile waiting links once both endpoints exist; record the totals
+- [ ] [212] Load each source into the hosted store from the local captures, no AWS (2026-11-11 06:02 ET; operator: "after init load each source in snowflake from local no aws"). Done so far on the hosted store: GLEIF subfund pairs (1 document), N-PORT registrants (1),...
+- [ ] [212] Hosted counts, first part done (2026-11-11 16:45 ET): ticket 209's count on the hosted store after the SEC company load (read-only, 102 s): 446,704 records with a golden record, 393,459 explained as creators, 53,245 by an identifier, 0 by a decision (the waterfall pass has not run there yet), **0 unexplained**, none for any source; 415,730 golden records. Still to record: each source's stored and set-aside counts, and the count again after the remaining sources load.
+- [ ] [212] Hosted OpenFIGI answers load finishes inside the operator's 1 to 2 hour window.
+- [ ] [212] [153] Counts (`local-staging`, read-only, 2026-11-11): 395,838 Security, 22,766 Company, 12,937 Fund Structure and 31,097 Person golden records; 1,271,374 source records, 0 unexplained. **Not true that no identifier sits on two masters:** 13 SEDOLs and 1 LOANX are each held by two Security masters (14 pairs), 364 tickers by two to four Securities, 231 LEIs by both a Company and a Fund Structure, and 1 CIK by both a Company and a Person. To decide: whether each of the 14 Security pairs is one security (merge) or two (the identifier is wrong on one), whether a ticker may sit on several Securities (it is a lookup, not a join key), and whether one LEI may name a Company and a Fund Structure.
+- [ ] [212] Run `mdm migrate` on the hosted store once it exists: it carries every migration the local store has, including 005–007 (ticket 18) and 010 (ticket 19), moved here 2026-10-18 12:25 ET
+- [ ] [253] The hosted GLEIF merge on the fresh store holds about 458 golden records a second (measured 2026-11-16 21:02 ET, 8 workers); record the figure again.
+- [ ] Learning → skill: after the run, each skill line the run changed, or "none".

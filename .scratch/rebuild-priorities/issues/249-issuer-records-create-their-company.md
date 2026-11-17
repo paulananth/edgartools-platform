@@ -1,6 +1,6 @@
 # 249: A GLEIF record creates its Company (configuration only)
 
-Type: task (configuration only; no code change). Status: open. Blocked by: none. Related: ticket 22 (the first ruling and its duplicate finding), ticket 248.
+Type: task (configuration only; no code change). Status: resolved (operator, 2026-11-17: consolidate and close; hosted parts to 238, the rest to 212). Blocked by: none. Related: ticket 22 (the first ruling and its duplicate finding), ticket 248.
 
 ## Ruling
 
@@ -46,7 +46,7 @@ A GLEIF record that arrives before its SEC filer is paired creates its own Compa
 - [x] 2026-11-16 10:37 ET Scope ruled: every eligible GLEIF entity.
 - [x] 2026-11-16 11:11 ET Tests that failed first: `test_a_gleif_record_creates_its_company_or_joins_the_one_holding_its_lei` (no Company created), `test_a_record_a_name_rule_holds_a_pair_for_never_creates_and_the_others_still_do` (`ValueError: too many values to unpack`: two records created), `test_only_an_active_general_entity_whose_registration_stands_is_a_company`. A filer paired first, then its GLEIF record, is one Company.
 - [x] 2026-11-16 11:11 ET The creating rule, the kind rule and the engine input (above); mastering tests pass on PostgreSQL (84) and MySQL (82, 2 skipped), 2,274 mdm, engine and architecture tests, the Rust tests.
-- [ ] The 993 issuer records whose name equals an SEC filer's name, and every filer the name pass has not paired to its GLEIF twin, would still create a duplicate: measure on a disposable store, then a looser name pass (configuration) or review.
+- [ ] ~~The 993 issuer records whose name equals an SEC filer's name, and every filer the name pass has not paired to its GLEIF twin, would still create a duplicate: measure on a disposable store, then a looser name pass (configuration) or review.~~ deferred to 212: the remaining work is one backlog, in one ticket
 - [x] 2026-11-16 11:11 ET Mapping Documents regenerated (`company`, `gleif`); the company mastering fixture's policy digest updated (`tests/integration/test_company_mastering_target_postgres.py` passes).
-- [ ] Hosted: needs the operator's word to run. It changes GLEIF's rules, so all 3,043,084 records load again and about 2.8 million Companies are created, with their lookups and links. Time not measured. The Rust extension must be rebuilt where the load runs.
-- [ ] Learning → skill.
+- [ ] ~~Hosted: needs the operator's word to run. It changes GLEIF's rules, so all 3,043,084 records load again and about 2.8 million Companies are created, with their lookups and links. Time not measured. The Rust extension must be rebuilt where the load runs.~~ deferred to 238: every hosted part is one run, in one ticket
+- [ ] ~~Learning → skill.~~ deferred to 212: the remaining work is one backlog, in one ticket
