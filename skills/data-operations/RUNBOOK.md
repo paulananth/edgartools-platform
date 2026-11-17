@@ -129,8 +129,8 @@ the rules files: nothing here comes from a machine's size. No source needs anoth
 record that finds no master and releases it when a later file gives one, so a load that runs early is never wrong. The
 rules state three kinds of ordering:
 
-- **Must** (a load leaves something out otherwise). A target that reads another run's step of its own source follows that
-  target. The lookups, the links table and each silver table's master ids follow every load (`--finish`).
+- **Must** (a load leaves something out otherwise). A target that publishes a second batch of its source's records follows the
+  target that publishes the first. The lookups, the links table and each silver table's master ids follow every load (`--finish`).
 - **Prefer** (records wait until the other load is done; never wrong, only later). A source with a
   matching rule that waits follows the source the rule names (`holder_source`), else the sources whose minting rules use the
   same identifier namespace, else the sources that mint its kind. Links set no order. Two sources that each prefer the

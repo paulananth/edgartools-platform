@@ -181,7 +181,7 @@ identifier, nothing more) takes it from a read file holding only the key and the
 its own, never from that source's whole read. The whole read brings its own lookups as steps that wait on each
 other, computes columns no one uses here, and makes every change to that source's rules reprocess this one.
 
-Write `grain: run` on the target unless it joins a read of another run's verified units: [the grain](../bookkeeping/SKILL.md#grain-how-much-bookkeeping-a-target-uses).
+Write `grain: run` on the target: [the grain](../bookkeeping/SKILL.md#grain-how-much-bookkeeping-a-target-uses).
 
 A step the engine cannot fold yet (for example, a combine that would need an expression) stays as it is.
 Name the engine limit that keeps it, and leave the engine change for the operator to approve. Before proposing

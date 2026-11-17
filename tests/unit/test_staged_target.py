@@ -232,7 +232,7 @@ def test_a_grain_is_unit_or_run(change, message):
 
 
 def test_a_target_that_names_no_grain_is_held_by_the_unit():
-    config = validate(source("sec.nport.security"), "mastering")
+    config = validate(by_the_unit("sec.nport.security"), "mastering")
     assert "grain" not in config
     assert staged(config)["steps"] == config["steps"]
 

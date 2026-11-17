@@ -26,14 +26,8 @@ def test_a_target_gives_its_recorded_steps(name):
     assert {key: value for key, value in targets()[name].items() if key not in changed_files.HOW_HELD} == STEPS[name]
 
 
-# The targets Bookkeeping still holds by the unit: one whose step another target reads as verified units, and the
-# target that reads them (a run at grain `run` has no verified unit, and its loader reads only its own run).
-BY_THE_UNIT = {"sec.nport.security/mastering", "sec.nport.security/mastering_other_keys"}
-
-
-def test_every_target_is_at_grain_run_except_the_two_joined_by_a_read_of_verified_units():
-    assert {name for name, body in targets().items() if body.get("grain") != "run"} == BY_THE_UNIT
-    assert all("grain" not in targets()[name] for name in BY_THE_UNIT)
+def test_every_target_is_at_grain_run():
+    assert {name for name, body in targets().items() if body.get("grain") != "run"} == set()
 
 
 @pytest.mark.parametrize("name", sorted(STEPS))
@@ -133,6 +127,21 @@ def test_a_target_names_its_last_rules_file_and_the_passes_follow(tmp_path):
     assert steps[1]["input"] == {"files": "*.json", "lookups": {"filed": {"from": "dates", "table": "t"}}}  # no contract: its own file
     assert steps[3]["input"] == {"contract": "join.yaml", "readings": {"counts": {"step": "row_counts"}, "rows": {"all": "rows"}}}
     assert steps[4]["input"] == {"contract": "record.yaml", "pieces": {"step": "joined"}}
+
+
+def test_a_target_gives_its_last_rules_file_its_own_context(tmp_path):
+    folder = rules_folder(tmp_path, source={"pass": {"name": "rows", "units": {"each": "file"}}},
+                          record={"pass": {"pieces": {"step": "source.yaml"}, "context": {"batch": "first", "period": {"fact": "period"}}}})
+    master = {"keys": {"table": "t", "dataset": "invented.v1"}}
+
+    first = shape.expand({"extract": "record.yaml", "master": master}, folder)["steps"]
+    other = shape.expand({"extract": [{"file": "record.yaml", "context": {"batch": "other"}}], "master": master}, folder)["steps"]
+
+    assert [step["name"] for step in other] == [step["name"] for step in first] == ["rows", "record", "prepare", "merge", "processed"]
+    assert first[1]["input"]["context"] == {"batch": "first", "period": {"fact": "period"}}
+    assert other[1]["input"]["context"] == {"batch": "other", "period": {"fact": "period"}}  # the rest as the file states it
+    with pytest.raises(shape.ShapeError, match="its last rules file"):
+        shape.expand({"extract": [{"file": "record.yaml"}], "master": master}, folder)
 
 
 def test_a_rules_file_with_no_pass_block_is_refused(tmp_path):

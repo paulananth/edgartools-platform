@@ -3,7 +3,8 @@
 A target in `source.yaml` says only what is its own:
 
     extract:   the source's last rules file (or files). Each rules file says what it reads in its own `pass`
-               block, so the passes follow from the files; a target may instead name each pass itself
+               block, so the passes follow from the files; a target may give a file its own `context`
+               (`{file: ..., context: ...}`), or instead name each pass itself
     capture:   `copy` or `provider`, for a target that only brings files in
     master:    the table and Dataset Contract its records are mastered under (none: nothing is mastered)
     silver:    the tables it lands (`land`) or builds from stored rows (`derive`), in order
@@ -142,7 +143,13 @@ def follow(leaves: list, folder) -> dict:
         return name
 
     for leaf in leaves:
-        visit(leaf, folder)
+        if isinstance(leaf, str):
+            visit(leaf, folder)
+        elif isinstance(leaf, dict) and set(leaf) == {"file", "context"} and isinstance(leaf["context"], dict):
+            last = passes[visit(leaf["file"], folder)]  # this target's own values for the context its last file states
+            last["context"] = {**last.get("context", {}), **leaf["context"]}
+        else:
+            raise ShapeError("A target names its last rules file, or that `file` with the `context` it gives it")
     return passes
 
 

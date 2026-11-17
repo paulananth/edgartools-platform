@@ -313,21 +313,21 @@ def test_the_pieces_read_of_another_run_is_given_its_context_values(tmp_path, mo
     assert only["input"]["compose"]["document"]["context"] == {"batch": "other"}
 
 
-def test_the_second_batch_of_securities_reads_the_first_runs_combine_and_publishes_after_it(tmp_path):
-    """Ticket 190: the Securities keyed by a SEDOL or a LoanX, from the same record rules, batch `other`."""
-    combined = {"run": "11111111-1111-1111-1111-111111111111", "step": "combine", "key": "combine", "sha256": "a" * 64}
-    runs = Runs([combined])
+PERIOD = {"period": "2026-06-30T00:00:00+00:00"}
+
+
+def test_the_second_batch_of_securities_reads_the_same_files_with_its_own_context(tmp_path):
+    """The Securities keyed by a SEDOL or a LoanX: the same passes and record rules as the first batch, batch `other`."""
     one = tmp_path / "one.json"  # the quarter's one data set file
     one.write_text(json.dumps([key(1001)]))
-    report = write_manifest(bookkeeping=runs, **options(tmp_path, source="sec.nport.security",
-                                                         target="mastering_other_keys", documents=str(one)))
-    assert runs.asked == [{"source": "sec.nport.security", "target": "mastering", "step": "combine"}]
-    steps = steps_of(report)
-    assert set(steps) == {"record", "prepare", "merge", "processed"}  # recorded in the Change Journal like the first batch
-    (record,) = steps["record"]
-    assert record["input"]["compose"]["slots"] == {"pieces": {k: combined[k] for k in ("run", "step", "key")}}
-    assert record["input"]["compose"]["document"]["context"] == {"batch": "other"}
-    assert steps["prepare"][0]["keys"]["dataset"] == "sec.nport.security.v2"
+    settings = options(tmp_path, source="sec.nport.security", documents=str(one), facts=PERIOD)
+    first = steps_of(write_manifest(target="mastering", **settings))
+    other = steps_of(write_manifest(target="mastering_other_keys", **{**settings, "output": str(tmp_path / "other")}))
+
+    assert {"record", "prepare", "merge", "processed"} < set(other) <= set(first)  # its own read, recorded like the first
+    context = lambda steps: steps["record"][0]["input"]["compose"]["document"]["context"]
+    assert (context(first)["batch"], context(other)["batch"]) == ("first", "other")
+    assert other["prepare"][0]["keys"]["dataset"] == "sec.nport.security.v2"
 
 
 def test_the_second_batch_of_securities_is_recorded_and_a_second_pass_skips_it(tmp_path):
@@ -336,14 +336,13 @@ def test_the_second_batch_of_securities_is_recorded_and_a_second_pass_skips_it(t
 
     from edgar_warehouse.workers import journal_record
 
-    combined = {"run": "11111111-1111-1111-1111-111111111111", "step": "combine", "key": "combine", "sha256": "a" * 64}
     one = tmp_path / "one.json"
     one.write_text(json.dumps([key(1001)]))
-    settings = options(tmp_path, source="sec.nport.security", target="mastering_other_keys", documents=str(one))
-    report = write_manifest(bookkeeping=Runs([combined]), **settings)
+    settings = options(tmp_path, source="sec.nport.security", target="mastering_other_keys", documents=str(one), facts=PERIOD)
+    report = write_manifest(**settings)
     body = Artifacts().json(Artifacts().json(report["manifest"])["steps"]["processed"][0]["input"])
     for value in journal_record._events({"claim": {"run_id": str(uuid4())}}, body):
         settings["journal"].append(value)
 
-    again = write_manifest(bookkeeping=Runs([combined]), **{**settings, "output": str(tmp_path / "again")})
+    again = write_manifest(**{**settings, "output": str(tmp_path / "again")})
     assert again["manifest"] is None

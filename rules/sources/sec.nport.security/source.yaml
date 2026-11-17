@@ -1100,19 +1100,11 @@ dataset_contracts:
           scope: SEC N-PORT issuer
 bookkeeping:
   version: 2
-  # One quarter's data set (the zip), its period a run fact (ticket 113), one
-  # target (`mastering`) for its one Dataset Contract: every Security in one run
-  # (ticket 120; `mastering_isin` retired with sec.nport.security_isin.v1). One
-  # input comes from another run (ticket 120; operator, 2026-10-19: "Read
-  # another run (Recommended)"); the umbrella pair set from GLEIF's runs is
-  # no longer read (ticket 234: a share's issuer is its series). OpenFIGI's
-  # answers are no longer read (ticket 138).
+  # One quarter's data set (the zip), its period a run fact. `mastering` publishes every Security keyed by a
+  # CUSIP or an ISIN; `mastering_other_keys` the rest, after it; `silver` lands each holding.
   targets:
     mastering:
-      heartbeat_seconds: 60
-      lease_seconds: 900
-      # Set for the FIGI steps ticket 138 removed (73 s each, measured
-      # 2026-10-19); kept until a run shows the default 120 s lease holds.
+      grain: run
       run: {facts: [period]}
       extract: [record.yaml]
       master: {requires: [record], keys: {dataset: sec.nport.security.v2, record_column: record, table: security}, readings: {record: {all: record}}}
@@ -1128,11 +1120,12 @@ bookkeeping:
       extract: holding.yaml
       silver:
         - {name: land_holding, land: {silver: nport_holding, table: holding}}
-    # The Securities keyed by a SEDOL or a LoanX (ticket 190; operator, 2026-11-04: "Second batch after
-    # CUSIP and ISIN"): the same record rules (record.yaml, batch `other`) over the first target's
-    # verified combine, published after it has merged, so each finds the Security that already holds its
-    # value (records of one batch never match each other). Run it after `mastering`.
+    # The Securities keyed by a SEDOL or a LoanX (operator: "Second batch after CUSIP and ISIN"): the same
+    # record rules (record.yaml, batch `other`) over the same files, published after `mastering` has merged,
+    # so each finds the Security that already holds its value (records of one batch never match each other).
+    # Run it after `mastering`.
     mastering_other_keys:
-      extract:
-        record: {read: record.yaml, pieces: {run: {source: sec.nport.security, target: mastering, step: combine}}, context: {batch: other}}
-      master: {keys: {table: security, record_column: record, dataset: sec.nport.security.v2}}
+      grain: run
+      run: {facts: [period]}
+      extract: [{file: record.yaml, context: {batch: other}}]
+      master: {requires: [record], keys: {dataset: sec.nport.security.v2, record_column: record, table: security}, readings: {record: {all: record}}}
