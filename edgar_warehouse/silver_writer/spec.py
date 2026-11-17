@@ -17,7 +17,7 @@ from .checks import check as check_quality
 KEYS = {"table", "grain", "columns", "key", "links", "time", "partition", "load_mode", "why"}
 OPTIONAL = {"definition", "checks"}
 COLUMN_KEYS = {"name", "type", "nullable", "definition", "source", "sensitivity"}
-LINK_KEYS = {"columns", "kind", "source_code", "to_part", "source_key", "mdm_id_column", "inclusion"}
+LINK_KEYS = {"columns", "kind", "source_code", "identifier", "to_part", "source_key", "mdm_id_column", "inclusion"}
 LOAD_MODES = ("append", "upsert", "snapshot")
 LOADED_AT = "loaded_at"  # the as-at column the writer adds when no source column holds it
 NAME_BYTES = 63  # PostgreSQL cuts longer names silently; two long names could become one
@@ -88,13 +88,14 @@ def check(spec: dict) -> dict:
         raise Blocked(f"load_mode is one of {LOAD_MODES}")
     added = []
     for link in spec["links"] or []:
-        if not isinstance(link, dict) or not {"columns", "kind", "source_code", "source_key", "mdm_id_column"} <= set(link) \
+        if not isinstance(link, dict) or not {"columns", "kind", "source_key", "mdm_id_column"} <= set(link) \
                 or set(link) - LINK_KEYS:
-            raise Blocked(f"A link holds columns, kind, source_code, source_key and mdm_id_column: {link!r}")
-        if not isinstance(link["kind"], str) or not link["kind"] or not isinstance(link["source_code"], str) \
-                or not link["source_code"]:
-            raise Blocked(f"Link on {link['source_key']}: name the master's kind and Dataset Contract "
-                          "(data-onboarding fills them from the onboarded master)")
+            raise Blocked(f"A link holds columns, kind, source_code or identifier, source_key and mdm_id_column: {link!r}")
+        finds = [link.get(by) for by in ("source_code", "identifier") if link.get(by) is not None]
+        if not isinstance(link["kind"], str) or not link["kind"] or len(finds) != 1 \
+                or not isinstance(finds[0], str) or not finds[0]:
+            raise Blocked(f"Link on {link['source_key']}: name the master's kind and either the Dataset Contract whose "
+                          "record key the column holds (source_code) or the identifier the master holds (identifier)")
         if link["columns"] != [link["source_key"]] or link["source_key"] not in names:
             raise Blocked(f"A link points from one column of the spec, its source key: {link!r}")
         if link.get("inclusion") is not None and not (isinstance(link["inclusion"], (int, float))
@@ -131,6 +132,13 @@ def columns(spec: dict) -> list[str]:
 def quality_columns(spec: dict) -> list[str]:
     """The column a flagged row's check ids are written to, when the spec has checks."""
     return [QUALITY] if spec.get("checks") else []
+
+
+def describe_link(link: dict) -> str:
+    """How a link finds its master, in words: the record key of a Dataset Contract, or an identifier."""
+    if link.get("identifier"):
+        return f"the {link['kind']} that alone holds `{link['source_key']}` as its {link['identifier']} identifier"
+    return f"the {link['kind']} whose `{link['source_code']}` record key is `{link['source_key']}`"
 
 
 def mdm_id_columns(spec: dict) -> list[str]:

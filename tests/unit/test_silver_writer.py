@@ -63,7 +63,7 @@ def test_a_spec_is_checked_and_the_writer_adds_its_mdm_ids_and_loaded_at():
 @pytest.mark.parametrize("change, refused", [
     ({"links": [{"columns": ["member_id"], "kind": None, "source_code": None, "to_part": "member",
                  "source_key": "member_id", "mdm_id_column": "member_id_mdm_id", "inclusion": 1.0}]},
-     "name the master's kind and Dataset Contract"),
+     "name the master's kind and either"),
     ({"links": [{"columns": ["member_id"], "kind": "person", "source_code": "x", "source_key": "member_id",
                  "mdm_id_column": "amount"}]}, "share a name"),
     ({"table": "t" * 64}, "1 to 63 bytes"),
@@ -146,8 +146,8 @@ class FakeSink:
 def test_each_link_gets_its_master_mdm_id_and_an_unmastered_record_keeps_it_empty():
     sink, asked = FakeSink(a_spec()), []
 
-    def ids(source_code, kind, keys):
-        asked.append((source_code, kind, sorted(keys)))
+    def ids(link, keys):
+        asked.append((link["source_code"], link["kind"], sorted(keys)))
         return {"m1": "entity-1", "m2": None}
 
     result = writer.land(sink, "visit", [{"visit_id": 1, "member_id": "m1"}, {"visit_id": 2, "member_id": "m2"},
@@ -155,6 +155,28 @@ def test_each_link_gets_its_master_mdm_id_and_an_unmastered_record_keeps_it_empt
     assert asked == [("fixture.members", "person", ["m1", "m2"])]
     assert [r["member_id_mdm_id"] for r in sink.written] == ["entity-1", None, None]
     assert result["mdm_keys_found"] == 1
+
+
+def test_a_link_by_identifier_asks_for_the_holder_of_each_value():
+    by_ticker = {"columns": ["member_id"], "kind": "security", "identifier": "ticker", "to_part": "listed",
+                 "source_key": "member_id", "mdm_id_column": "member_id_mdm_id"}
+    sink, asked = FakeSink(a_spec(links=[by_ticker])), []
+
+    def ids(link, keys):
+        asked.append((link["identifier"], link["kind"], sorted(keys)))
+        return {"ZZA": "security-1"}  # ZZB is held by none, or by several
+
+    writer.land(sink, "visit", [{"visit_id": 1, "member_id": "ZZA"}, {"visit_id": 2, "member_id": "ZZB"}], ids)
+    assert asked == [("ticker", "security", ["ZZA", "ZZB"])]
+    assert [r["member_id_mdm_id"] for r in sink.written] == ["security-1", None]
+
+
+@pytest.mark.parametrize("finds", [{}, {"source_code": "fixture.members", "identifier": "ticker"},
+                                   {"identifier": ""}])
+def test_a_link_names_either_a_dataset_contract_or_an_identifier(finds):
+    link = {"columns": ["member_id"], "kind": "person", "source_key": "member_id", "mdm_id_column": "m", **finds}
+    with pytest.raises(Blocked, match="source_code\\) or the identifier"):
+        specs.check(a_spec(links=[link]))
 
 
 def test_a_field_the_spec_does_not_name_or_a_missing_mdm_database_is_refused():

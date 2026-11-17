@@ -2,8 +2,10 @@
 
 Each row keeps the source's own key for every link, and the master's MDM id
 beside it: read from MDM by the link's Dataset Contract, kind and record key
-(compared as text). A record MDM has not mastered keeps an empty id; a later
-landing of the row, or `refresh_ids` for rows already landed, fills it.
+(compared as text), or by an identifier the master holds (`identifier: ticker`),
+filled only when exactly one master of the kind holds the value. A record MDM
+has not mastered keeps an empty id; a later landing of the row, or
+`refresh_ids` for rows already landed, fills it.
 
 A spec's data quality checks run on the delivery first (`checks.py`): a
 flagged row lands with the ids of the checks it failed in its `quality`
@@ -29,12 +31,12 @@ from .sink import Sink
 
 
 class MdmIds:
-    """Record key to MDM id, read from the MDM database."""
+    """A link's key to MDM id, read from the MDM database."""
 
     def __init__(self, engine):
         self.engine = engine
 
-    def __call__(self, source_code: str, kind: str, keys: set[str]) -> dict[str, str | None]:
+    def __call__(self, link: dict, keys: set[str]) -> dict[str, str | None]:
         if not keys:
             return {}
         from edgar_warehouse.mastering import reads
@@ -42,7 +44,9 @@ class MdmIds:
 
         store = open_store(self.engine)
         try:
-            return reads.master_ids(store, source_code, keys)
+            if link.get("identifier"):
+                return reads.sole_holders(store, link["identifier"], link["kind"], keys)
+            return reads.master_ids(store, link["source_code"], keys)
         finally:
             store.rollback()
             store.close()
@@ -72,7 +76,7 @@ def land(sink: Sink, table: str, records: Iterable[dict], ids=None, results: Pat
     for link in links:
         column = link["source_key"]
         keys = {_key(r.get(column)) for r in rows} - {None}
-        found = ids(link["source_code"], link["kind"], keys) if keys else {}
+        found = ids(link, keys) if keys else {}
         for row in rows:
             row[link["mdm_id_column"]] = found.get(_key(row.get(column)))
         known += sum(1 for v in found.values() if v)
@@ -93,7 +97,7 @@ def refresh_ids(sink: Sink, table: str, ids) -> dict:
     updated = {}
     for link in links:
         keys = sink.link_keys(spec, link)
-        found = ids(link["source_code"], link["kind"], keys) if keys else {}
+        found = ids(link, keys) if keys else {}
         updated[link["mdm_id_column"]] = sink.set_ids(spec, link, {k: found.get(k) for k in keys})
     return {"table": table, "rows_updated": updated}
 

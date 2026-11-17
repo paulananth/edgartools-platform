@@ -44,7 +44,7 @@ class TableContext:
             raise ContextError(f"No silver table {name!r}.", f"{PROG} silver")
         spec = row["spec"]
         links = [{key: link.get(key) for key in
-                  ("columns", "kind", "source_code", "source_key", "mdm_id_column", "inclusion")}
+                  ("columns", "kind", "source_code", "identifier", "source_key", "mdm_id_column", "inclusion")}
                  for link in spec["links"] or []]
         quote = self.engine.dialect.identifier_preparer.quote_identifier
         target = "silver." + quote(row["table_name"]) if self.engine.dialect.name == "postgresql" else quote(row["table_name"])

@@ -291,7 +291,7 @@ def test_an_isin_answer_carries_its_isin_and_every_listing_figi(tmp_path):
 
 def bound(database, source_code: str, key: str) -> str | None:
     """The Security a staged record is bound to, through its survivor."""
-    return MdmIds(database.application)(source_code, "security", {key}).get(key)
+    return MdmIds(database.application)({"source_code": source_code, "kind": "security"}, {key}).get(key)
 
 
 def securities(database) -> dict:

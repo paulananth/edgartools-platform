@@ -2,7 +2,7 @@
 
 Priority: 174. Map: [Rebuild priorities](../map.md). Opened 2026-11-02 17:33 ET (operator, 2026-11-02: "Have a ticket to capture this", "Look-up on mdm then silver").
 
-Type: task. Status: closed (2026-11-11 15:02 ET, operator: "Close all tickets"): its open parts are ticket 212's. Blocked by: the operator's permission for the SEC requests (below). Related: [149](149-s1-registration-statements.md) (`sec.registration`, the S-1 and F-1 originals; the name stays, 2026-11-02: "Agreed").
+Type: task. Status: open (operator, 2026-11-17: "Implement ticket 149 and 174 using SpaceX as the test case"). Blocked by: none. Related: [149](149-s1-registration-statements.md) (`sec.registration`, the S-1 and F-1 originals; the name stays, 2026-11-02: "Agreed").
 
 ## Question
 
@@ -32,3 +32,25 @@ Type: task. Status: closed (2026-11-11 15:02 ET, operator: "Close all tickets"):
 - [ ] ~~The Mapping Document and the Data Catalog entry are regenerated; tests that pin the source order are run before the first push~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
 - [ ] ~~Stores and containers a test run leaves are removed~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
 - [ ] ~~Learning → skill: the `data-onboarding` and `company-financials` skills name this feed and its look-up, or "none"~~ deferred to 212: the operator closed all tickets (2026-11-11 15:02 ET: "Close all tickets consolidate remaining issues into new ticket by priority and go-live").
+
+## Reopened 2026-11-17 (operator: "Implement ticket 149 and 174 using SpaceX as the test case")
+
+Rulings, one question each (operator, 2026-11-17 10:43 ET):
+
+- SEC requests: "SpaceX 424B4 only (Recommended)": one request, the main document of the issuer's 424B4 (filed 2026-06-12), through the configured capture with its receipt. Nothing wider without a later word.
+- Forms and facts: "424B1 to 424B5, cover terms": the source names all five forms; each row holds the cover's final price per share, shares offered, over-allotment shares, underwriting discount, proceeds to the company, ticker, exchange and the lead underwriters, each empty when the cover does not state it.
+- Committed tests and rules use invented pages; the SpaceX proof runs on a disposable store and is reported in counts.
+
+Parts:
+
+- [ ] The source `sec.prospectus`: its acquisition feed (424B1 to 424B5, the SEC archive prefix, `sec.conditional`, `text` completeness), its capture target and its silver target, shaped like `sec.registration`; `rules check` passes
+- [ ] The units: from the captured submissions, every 424B1 to 424B5 filing listed (counts only in this file); the request written for the one permitted filing
+- [ ] The capture: the one permitted request through `provider.capture`, its receipt, journal event and verifier
+- [ ] Profile the captured page: which cover terms it states, and where
+- [ ] The reading (`prospectus-page.yaml`): the cover terms by the engine's text operations, configuration only; a test on an invented page
+- [ ] The silver table `prospectus_offering` (grain one row a filing, key accession), linked to the Company by CIK and to the Security by ticker (ticket 149's link)
+- [ ] The Mapping Document and catalog regenerated; the tests that pin the source list run
+- [ ] The proof on a disposable store: the test case lands one row with its terms, linked to its Company; a second pass changes nothing
+- [ ] Stores and containers the proof leaves are removed
+- [ ] Learning → skill
+

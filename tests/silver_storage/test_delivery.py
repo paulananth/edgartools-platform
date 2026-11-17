@@ -114,8 +114,8 @@ def test_quality_and_configured_master_links(silver):
         "on_fail": "flag", "why": "Invented quality policy"}])
     register(owner, config, runtime_role=role)
     seen = []
-    def ids(source, kind, keys):
-        seen.append((source, kind))
+    def ids(link, keys):
+        seen.append((link["source_code"], link["kind"]))
         return {key: "identity-one" for key in keys}
     sink = DatabaseSink(runtime)
     first = land(sink, config["table"], rows(), ids)

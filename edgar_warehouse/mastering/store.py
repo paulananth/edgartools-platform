@@ -525,8 +525,12 @@ class Store:
         return self.rows("select changed_file from mastering_master where entity_id=%s", [entity])[0][0]
 
     def identifier_holders(self, namespace: str, values) -> list[str]:
-        return [row[0] for row in self.rows(
-            f"select distinct entity_id from mastering_identifier where namespace=%s and value in ({marks(values)})",
+        return list(dict.fromkeys(entity for _, entity in self.holders_by_value(namespace, values)))
+
+    def holders_by_value(self, namespace: str, values) -> list[tuple[str, str]]:
+        """Each (value, master) pair of the identifier `namespace`, for the values asked."""
+        return [(value, entity) for value, entity in self.rows(
+            f"select distinct value,entity_id from mastering_identifier where namespace=%s and value in ({marks(values)})",
             [namespace, *values])]
 
     def totals(self) -> dict:

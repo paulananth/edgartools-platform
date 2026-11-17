@@ -1,0 +1,134 @@
+source: sec.prospectus
+pass:
+  name: read
+  files: '*.capture.zip'
+  units: {slices: {bytes: 33554432}}
+execution:
+  profile: source.read
+  workers: 1
+  max_artifacts: 512
+  max_input_bytes: 134217728
+read:
+  format: html
+  container: zip
+  member: payload
+  encoding:
+  - utf-8
+  - windows-1252
+  context:
+    accession_number:
+      type: text
+      zip_json:
+        member: metadata.json
+        path: scope.accession_number
+    cik:
+      type: text
+      zip_json:
+        member: metadata.json
+        path: scope.cik
+    captured_at:
+      type: text
+      zip_json:
+        member: metadata.json
+        path: captured_at
+  limits:
+    max_bytes: 134217728
+    max_member_bytes: 134217728
+    max_records: 5000000
+  tables:
+    offering:
+      each: .
+      columns:
+        accession_number:
+          context:
+            name: accession_number
+        cik:
+          context:
+            name: cik
+        captured_at:
+          context:
+            name: captured_at
+        title:
+          text:
+            path: title.$
+            from: document
+            null_if:
+            - ''
+        shares_offered:
+          first_found:
+            path: block
+            from: document
+            within: 120
+            transforms:
+            - regex_extract:
+                pattern: '(?i)\b([0-9][0-9,]{4,}) (?:class [a-z] )?(?:shares|ordinary shares|american depositary shares|ads|units)\b'
+                group: 1
+            - regex_replace:
+                pattern: ','
+                with: ''
+        price_low:
+          first_found:
+            path: block
+            from: document
+            within: 200
+            transforms:
+            - regex_extract:
+                pattern: '(?i)between \$\s?([0-9]+(?:\.[0-9]+)?) and \$\s?[0-9]'
+                group: 1
+            - regex_replace:
+                pattern: ','
+                with: ''
+        price_high:
+          first_found:
+            path: block
+            from: document
+            within: 200
+            transforms:
+            - regex_extract:
+                pattern: '(?i)between \$\s?[0-9]+(?:\.[0-9]+)? and \$\s?([0-9]+(?:\.[0-9]+)?)'
+                group: 1
+            - regex_replace:
+                pattern: ','
+                with: ''
+        price_fixed:
+          first_found:
+            path: block
+            from: document
+            within: 200
+            transforms:
+            - regex_extract:
+                pattern: '(?i)(?:initial public offering price|offering price)[^.]{0,60}?\$\s?([0-9]+(?:\.[0-9]+)?) per'
+                group: 1
+            - regex_replace:
+                pattern: ','
+                with: ''
+        over_allotment_shares:
+          first_found:
+            path: block
+            from: document
+            within: 200
+            transforms:
+            - regex_extract:
+                pattern: '(?i)(?:option|right) to purchase up to ([0-9][0-9,]*) (?:additional )?(?:class [a-z] )?(?:shares|ordinary shares|ads|american depositary shares)'
+                group: 1
+            - regex_replace:
+                pattern: ','
+                with: ''
+        ticker:
+          first_found:
+            path: block
+            from: document
+            within: 200
+            transforms:
+            - regex_extract:
+                pattern: "(?i)(?:under|symbol)[^.]{0,40}?(?:symbol|ticker)[^.]{0,12}?[\u201C\\\"']\\s?([A-Z]{1,5})\\b"
+                group: 1
+        exchange:
+          first_found:
+            path: block
+            from: document
+            within: 200
+            transforms:
+            - regex_extract:
+                pattern: (?i)(nasdaq global select market|nasdaq global market|nasdaq capital market|nyse american|new york stock exchange|nyse|nasdaq)
+                group: 1
