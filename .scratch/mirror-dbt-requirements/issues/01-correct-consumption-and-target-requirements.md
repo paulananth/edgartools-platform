@@ -21,7 +21,10 @@ This change does not rename or drop existing objects or activate consumers.
 - [x] Verify affected tests, genericity, guide paths and Standards/Spec/GoF review:
   2 SQL cases and 127 documentation checks passed; all three reviews found no
   blockers or worthwhile pattern refactor; 2026-11-17 06:40 ET.
-- [ ] Publish the checked change for review and retain CI status in the handoff.
+- [x] Publish the locally checked change for review: PR #1860 is draft while
+  final-head CI is pending; 2026-11-17 06:41 ET.
+- [ ] Complete final-head CI and merge; retain the draft on failure or pending
+  validation. No live rollout is part of this change.
 - [x] Learning → skill: GOLD.md dbt implementation requirements and the operations
   skill now separate naming approval from existing operational objects, and
   decouple connectivity from Gold creation; 2026-11-17 06:40 ET.
