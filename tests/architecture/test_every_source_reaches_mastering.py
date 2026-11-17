@@ -9,7 +9,7 @@ one means removing it here.
 from edgar_warehouse.rules import files
 
 # Sources with no Dataset Contract that gives an entity type: they land in silver only.
-SILVER_ONLY = {"sec.company-facts", "sec.prospectus", "sec.registration", "sec.thirteenf.filings"}
+SILVER_ONLY = {"sec.company-facts", "sec.ipo", "sec.prospectus", "sec.registration", "sec.thirteenf.filings"}
 # Dataset Contracts that name an entity type and never reach mastering. FINDING (ticket 204, 2026-11-09, step 1):
 # GLEIF's relationship and reporting-exception files describe links and exceptions between entities, not entities;
 # nothing prepares or merges them. Awaiting the operator's ruling; remove a name here when it is fixed.

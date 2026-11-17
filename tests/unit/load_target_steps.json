@@ -1187,6 +1187,86 @@
    }
   ]
  },
+ "sec.ipo/silver": {
+  "run": {
+   "facts": [
+    "observed_at"
+   ]
+  },
+  "steps": [
+   {
+    "name": "read",
+    "operation": "source.read",
+    "requires": [],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "source.output"
+    ],
+    "units": {
+     "slices": {
+      "bytes": 8388608
+     }
+    },
+    "input": {
+     "contract": "ipo-filings.yaml",
+     "files": "*/submissions/sec/cik=*/main/*",
+     "context": {
+      "observed_at": {
+       "fact": "observed_at"
+      }
+     }
+    }
+   },
+   {
+    "name": "land_filing",
+    "operation": "silver.land",
+    "requires": [
+     "read"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "silver:{silver}:{unit}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "silver.landed"
+    ],
+    "input": {
+     "keys": {
+      "silver": "ipo_filing",
+      "table": "filing"
+     }
+    }
+   },
+   {
+    "name": "processed",
+    "operation": "journal.record",
+    "requires": [
+     "land_filing"
+    ],
+    "key": "{unit}",
+    "leases": [
+     "artifact:{destination}"
+    ],
+    "checks": [
+     "input.hash",
+     "output.receipt",
+     "journal.recorded"
+    ]
+   }
+  ],
+  "checks": [
+   "manifest.hash",
+   "work.accounting",
+   "journal.delivered"
+  ]
+ },
  "sec.ncen.adviser/mastering": {
   "checks": [
    "manifest.hash",

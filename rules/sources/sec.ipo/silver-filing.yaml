@@ -1,0 +1,70 @@
+# The silver table of the IPO pipeline: one row per filing that marks a stage of a company's initial public offering,
+# for each company that filed an IPO registration (S-1, F-1, S-11 or DRS). Rows are the `filing` table of
+# ipo-filings.yaml. A company's latest stage is its row with the latest filing date; the file number ties an
+# effectiveness notice and a final prospectus to the registration they belong to. Nothing goes to MDM: the
+# Company is found by its CIK, and its name and facts are the Company's.
+table: ipo_filing
+definition: One SEC filing that marks a stage of a company's initial public offering, dated, linked to the Company by CIK.
+grain: one row per accession number and CIK
+columns:
+- name: accession_number
+  type: VARCHAR
+  nullable: false
+  definition: The filing's accession number.
+  source: filings.recent.accessionNumber
+  sensitivity: none
+- name: cik
+  type: VARCHAR
+  nullable: false
+  definition: The filer's CIK (ten digits), by which its Company is found.
+  source: cik
+  sensitivity: none
+- name: form
+  type: VARCHAR
+  nullable: false
+  definition: The SEC form, as filed.
+  source: filings.recent.form
+  sensitivity: none
+- name: stage
+  type: VARCHAR
+  nullable: false
+  definition: "The stage the form marks: draft (DRS), filed (S-1, F-1, S-11), amended (their /A), effective (EFFECT), listed (8-A12B, CERT), priced (424B4, 424B1) or withdrawn (RW)."
+  source: form
+  sensitivity: none
+- name: filing_date
+  type: DATE
+  nullable: true
+  definition: The date the SEC received the filing.
+  source: filings.recent.filingDate
+  sensitivity: none
+- name: file_number
+  type: VARCHAR
+  nullable: true
+  definition: The SEC file number of the registration the filing belongs to (333- for a Securities Act registration, 001- for an exchange listing).
+  source: filings.recent.fileNumber
+  sensitivity: none
+- name: observed_at
+  type: TIMESTAMP WITH TIME ZONE
+  nullable: false
+  definition: The moment the submissions document was captured, the row's time in silver.
+  source: run fact observed_at
+  sensitivity: none
+key:
+- accession_number
+- cik
+links:
+- columns:
+  - cik
+  kind: company
+  source_code: sec.company.v1
+  to_part: filer
+  source_key: cik
+  mdm_id_column: filer_mdm_id
+time:
+  as_of: null
+  as_at: observed_at
+  event_time: filing_date
+partition: []
+load_mode: append
+why: 'A filing is transaction data: one row per filed document and filer, keyed by its accession number and CIK (a filing listed under co-registrants is one row each), linked to the Company by lookup. Append, since a filed document never changes.'
+checks: []

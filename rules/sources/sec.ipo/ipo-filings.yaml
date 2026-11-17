@@ -1,0 +1,76 @@
+source: sec.ipo
+pass:
+  name: read
+  files: '*/submissions/sec/cik=*/main/*'
+  units: {slices: {bytes: 8388608}}
+  context:
+    observed_at: {fact: observed_at}
+execution:
+  profile: source.read
+  workers: 1
+  max_artifacts: 512
+read:
+  format: json
+  context:
+    observed_at:
+      type: text
+  limits:
+    max_bytes: 33554432
+    max_records: 100000
+  tables:
+    filing:
+      each:
+        parallel:
+          path: filings.recent
+          anchor: accessionNumber
+          fields:
+            accession_number: accessionNumber
+            form: form
+            filing_date: filingDate
+            file_number: fileNumber
+          lengths: anchor
+          on_invalid_object: empty
+          strings: characters
+          on_empty_anchor: ignore_fields
+          objects: indexed
+          validation: selected
+      # A filing of a stage form, by a company that filed an IPO registration somewhere in its list.
+      select:
+        choose:
+          condition:
+            overlap:
+              left: {value: {path: filings.recent.form, from: document}}
+              right: {sequence: [{const: {value: S-1}}, {const: {value: F-1}}, {const: {value: S-11}}, {const: {value: DRS}}]}
+          then:
+            found:
+              path: form
+              transforms:
+              - regex_extract:
+                  pattern: '^(?:DRS|DRS/A|S-1|S-1/A|F-1|F-1/A|S-11|S-11/A|EFFECT|8-A12B|CERT|424B1|424B4|RW)$'
+                  group: 0
+          else: {const: {value: null}}
+      columns:
+        accession_number:
+          text: {path: accession_number}
+        # The Company's record key: the CIK as ten digits, its zeros kept.
+        cik:
+          text: {path: cik, from: document, null_if: [''], transforms: [{pad: {left: '0000000000', right: ''}}, {keep_last: 10}]}
+        form:
+          text: {path: form}
+        stage:
+          coalesce:
+            skip: 'null'
+            values:
+            - {choose: {condition: {found: {path: form, transforms: [{regex_extract: {pattern: '^DRS', group: 0}}]}}, then: {const: {value: draft}}, else: {const: {value: null}}}}
+            - {choose: {condition: {found: {path: form, transforms: [{regex_extract: {pattern: '^(?:S-1|F-1|S-11)$', group: 0}}]}}, then: {const: {value: filed}}, else: {const: {value: null}}}}
+            - {choose: {condition: {found: {path: form, transforms: [{regex_extract: {pattern: '^(?:S-1|F-1|S-11)/A$', group: 0}}]}}, then: {const: {value: amended}}, else: {const: {value: null}}}}
+            - {choose: {condition: {found: {path: form, transforms: [{regex_extract: {pattern: '^EFFECT$', group: 0}}]}}, then: {const: {value: effective}}, else: {const: {value: null}}}}
+            - {choose: {condition: {found: {path: form, transforms: [{regex_extract: {pattern: '^(?:8-A12B|CERT)$', group: 0}}]}}, then: {const: {value: listed}}, else: {const: {value: null}}}}
+            - {choose: {condition: {found: {path: form, transforms: [{regex_extract: {pattern: '^424B[14]$', group: 0}}]}}, then: {const: {value: priced}}, else: {const: {value: null}}}}
+            - {choose: {condition: {found: {path: form, transforms: [{regex_extract: {pattern: '^RW$', group: 0}}]}}, then: {const: {value: withdrawn}}, else: {const: {value: null}}}}
+        filing_date:
+          text: {path: filing_date, null_if: ['']}
+        file_number:
+          text: {path: file_number, null_if: ['']}
+        observed_at:
+          context: {name: observed_at}
