@@ -1,7 +1,7 @@
 pass:
   readings: {filings: {all: source.yaml}}
 # Each filing's CIK with that CIK's first and latest filing whole (`latest`: name, file number, LEI and address of
-# one filing), first and latest by filing date, then accession number (ticket 79, part 2); the filing's own columns
+# one filing), first and latest by filing date, then accession number; the filing's own columns
 # are dropped, so every filing of a CIK gives the same row and mdm.prepare keeps one per CIK. Input: source.yaml's
 # reading (`filings`). Pin canonical JSON of this file as the source.combine contract.
 execution:

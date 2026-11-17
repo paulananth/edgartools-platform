@@ -43,7 +43,7 @@ bookkeeping:
       grain: run
       capture: copy
     # Company preparation and mastering of one bundle, planned by the generic `load` command
-    # (ticket 177): the bundle's documents are the main submissions documents and the exchange
+    #: the bundle's documents are the main submissions documents and the exchange
     # ticker catalog; the Name Count is a run file read once per bundle, narrowed to the bundle's
     # names and CIKs. The run takes the approved capture runs and the observation time as facts:
     #   capture_run: the run id of the approved company submissions capture; each record carries it as its
@@ -56,7 +56,7 @@ bookkeeping:
       run: {facts: [capture_run, catalog_run, observed_at, load_mode]}
       extract: combine-name-count-captured.yaml
       # The Change Journal records each file the run processed, once its
-      # merge is verified, so a later run names only changed files (ticket 22).
+      # merge is verified, so a later run names only changed files.
       master: {names: {prepare: records}, keys: {dataset: sec.company.v1, table: company}, readings: {combined: {all: combine}}}
 bronze:
   family: submissions
@@ -209,7 +209,7 @@ dataset_contracts:
         - cik
         record_key_format: sec_cik
         # The measured Company classification rule, not a lookup table: SEC
-        # types a foreign issuer "other", as it does an individual (ticket 12).
+        # types a foreign issuer "other", as it does an individual.
         classification:
           kind: company
           rule_id: sec-company-candidate

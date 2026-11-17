@@ -1,6 +1,6 @@
 pass:
   readings: {answers: {all: source.yaml}}
-# For each identifier asked (ticket 80): its answer (`answers`: found or not
+# For each identifier asked: its answer (`answers`: found or not
 # found), and how many listings, share classes and US composites OpenFIGI gave it, each with its lexically first member
 # (`sample_limit: 1`), so combine.yaml keeps one only where there is exactly
 # one (operator, 2026-10-17: "(c) MDM + silver listings (Recommended)", "US
@@ -20,7 +20,7 @@ reduce:
   max_rows: 10000000
   max_input_bytes: 17179869184
   max_state_bytes: 2147483648
-  # Keys are counted over every group: the names group (ticket 84) adds one per
+  # Keys are counted over every group: the names group adds one per
   # identifier found, about 353,000 for the CUSIPs, past the 1,000,000 before.
   # Ticket 120 adds four groups of about 360,000 identifiers each (types,
   # sectors, country composites): about 3.9M keys and members in all.
@@ -34,11 +34,11 @@ reduce:
     answers: {source: [answers], table: answers, keys: [id, id_type, found], mode: count, count: answers, sample: null, sample_limit: 0}
     listings: {source: [answers], table: listings, keys: [id], mode: members, member: figi_ticker, count: listings, sample: listing_sample, sample_limit: 1}
     share_classes: {source: [answers], table: share_classes, keys: [id], mode: members, member: share_class_figi, count: share_classes, sample: share_class_sample, sample_limit: 1}
-    # The names an identifier's listings state, counted the same way (ticket 84).
+    # The names an identifier's listings state, counted the same way.
     names: {source: [answers], table: names, keys: [id], mode: members, member: name, count: names, sample: name_sample, sample_limit: 1}
     us_composites: {source: [answers], table: us_composites, keys: [id], mode: members, member: figi_ticker, count: us_composites, sample: us_composite_sample, sample_limit: 1}
     # The values a security-level field takes over an identifier's listings, and its
-    # ISIN country's composite listings (ticket 120): combine.yaml keeps a value
+    # ISIN country's composite listings: combine.yaml keeps a value
     # only where there is exactly one.
     security_types: {source: [answers], table: security_types, keys: [id], mode: members, member: security_type, count: security_types, sample: security_type_sample, sample_limit: 1}
     security_types2: {source: [answers], table: security_types2, keys: [id], mode: members, member: security_type2, count: security_types2, sample: security_type2_sample, sample_limit: 1}

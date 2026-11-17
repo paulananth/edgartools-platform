@@ -1,6 +1,6 @@
 pass:
   readings: {counts: {step: reduce.yaml}, answers: {all: source.yaml}, listings: {all: listing.yaml}}
-# One row per identifier asked (ticket 80): its answer (reduce.yaml's `answers`)
+# One row per identifier asked: its answer (reduce.yaml's `answers`)
 # joined with reduce.yaml's counts (`counts`) where a level
 # has exactly one member (operator, 2026-10-17: "(c) MDM + silver listings
 # (Recommended)", "US composite (Recommended)"): `listing` when the identifier
@@ -9,7 +9,7 @@ pass:
 # never chooses. Ticket 120: also every listing (`listings`, read from the
 # answers themselves, `answers`), the fields the listings agree on, and the
 # primary listing's fields (the US composite's, else the ISIN country's).
-# Both kinds asked in one run (ticket 138). Pin canonical JSON of this file as the
+# Both kinds asked in one run. Pin canonical JSON of this file as the
 # source.combine contract.
 execution:
   profile: source.combine

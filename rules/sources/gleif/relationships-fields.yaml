@@ -33,7 +33,7 @@ read:
         values: [LEI]
         reason: unsupported_relationship_endpoint
         on_fail: defer
-      # A flag with a value blocks until someone decides (ticket 18).
+      # A flag with a value blocks until someone decides.
       - check: absent
         column: _deletion
         reason: gleif_deletion_flag

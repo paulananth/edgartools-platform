@@ -1,4 +1,4 @@
-# OpenFIGI's mapping answers for the Security master (ticket 80), from the
+# OpenFIGI's mapping answers for the Security master, from the
 # approved OpenFIGI findings (profiled 2026-10-17, operator: "Approve
 # (Recommended)", 08:50 ET). The capture of 2026-10-15 is reused, never asked
 # again (operator, 2026-10-15: "Open figi rarely changes do not download
@@ -29,7 +29,7 @@
 # its `id_type`, the folder ("id_cusip" or "id_isin", OpenFIGI's idType). A select that gives null excludes its row (`value: {path:
 # NO_SUCH_FIELD}`, the null idiom of the engine). The `listings` table keeps
 # OpenFIGI's field names; the Security's `listings` detail holds every listing in MDM, so silver
-# keeps none (ticket 143). Stream bounds hold for a whole reading of up to 512 files: each
+# keeps none. Stream bounds hold for a whole reading of up to 512 files: each
 # file is at least one piece, and an ISIN file projects about 1.4 MB (measured
 # 2026-10-17 on 8 files), so about 700 MB a reading.
 source: openfigi
@@ -671,7 +671,7 @@ read:
             null_if:
             - ""
     # The name each listing states, only from the listings that carry one
-    # (ticket 84): reduce.yaml counts an identifier's names.
+    #: reduce.yaml counts an identifier's names.
     names:
       each: data
       select:
@@ -714,7 +714,7 @@ read:
                   name: answer
             on_many: error
         # The listing's FIGI alone: every one is an identifier of the
-        # Security (ticket 138), gathered by combine.yaml.
+        # Security, gathered by combine.yaml.
         figi:
           text:
             path: figi
@@ -1123,7 +1123,7 @@ read:
                   on_many: "null"
               - const:
                   value: ''
-    # The security type each listing states, counted by reduce.yaml (ticket 120).
+    # The security type each listing states, counted by reduce.yaml.
     security_types:
       each: data
       select:
@@ -1146,7 +1146,7 @@ read:
         security_type:
           text:
             path: securityType
-    # The security type2 each listing states, counted by reduce.yaml (ticket 120).
+    # The security type2 each listing states, counted by reduce.yaml.
     security_types2:
       each: data
       select:
@@ -1169,7 +1169,7 @@ read:
         security_type2:
           text:
             path: securityType2
-    # The market sector each listing states, counted by reduce.yaml (ticket 120).
+    # The market sector each listing states, counted by reduce.yaml.
     market_sectors:
       each: data
       select:
@@ -1209,7 +1209,7 @@ read:
     max_spool_bytes: 4294967296
     max_output_rows: 10000000
 bookkeeping:
-  # One target per kind asked (ticket 14): a bundle names one kind's answer
+  # One target per kind asked: a bundle names one kind's answer
   # files, each with its request beside it.
   version: 2
   targets:
@@ -1219,20 +1219,20 @@ bookkeeping:
     # no order between them; `id_type` is the folder, OpenFIGI's own idType.
     mastering:
       grain: run
-      # The date of the SEC ticker file read beside the answers (ticket 248): it starts each ISSUED_BY link.
+      # The date of the SEC ticker file read beside the answers: it starts each ISSUED_BY link.
       run: {facts: [ticker_file_date]}
       # Each request file alone, read beside its answer (its sha256 is in the
       # answer's receipt), so each answer's pair set comes from its own request.
       # The answers, 16 files a unit (one composed slot each), each tied to the
       # identifier it was asked for by position, through its request's pairs.
-      # The Listing currency (ticket 138 part B3): each identifier and
+      # The Listing currency: each identifier and
       # exchange's lines, roots and tickers counted; each line beside its
       # group's counts; each listing's detail row with its currency.
       extract: record.yaml
       master: {keys: {dataset: openfigi.security.v4, record_column: record, table: security}}
 
 dataset_contracts:
-  # One contract for both kinds asked (ticket 138): it replaces
+  # One contract for both kinds asked: it replaces
   # openfigi.security.v1 (CUSIPs) and openfigi.security_isin.v2 (ISINs). A new
   # source code, since a Rules database holds both and an identifier cannot be
   # added on an existing one (2026-10-24).
@@ -1313,7 +1313,7 @@ dataset_contracts:
                       fields:
                         found: {value: {path: figis}}
                       omit_nulls: true
-                  # Every listing, one detail row per FIGI (ticket 120).
+                  # Every listing, one detail row per FIGI.
                   details:
                     object:
                       fields:

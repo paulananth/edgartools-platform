@@ -1,4 +1,4 @@
-# SEC Form 13F information tables, read for the Security master (ticket 79),
+# SEC Form 13F information tables, read for the Security master,
 # drafted from the profiling findings the operator approved on 2026-10-14
 # ("yes approve the 13F findings"; profiling/thirteenf-check/findings.yaml).
 # Rulings it rests on (operator, 2026-10-14):
@@ -149,8 +149,8 @@ bookkeeping:
   version: 2
   targets:
     # Two paths (operator, 2026-11-14: "make it two split one to mdm and one to silver"). `mastering`: the
-    # Securities of one data set (ticket 172): every information table is read, reduced by CUSIP, combined to
-    # one row each, prepared for the Dataset Contract and merged. `silver`: the holdings (ticket 183), landed
+    # Securities of one data set: every information table is read, reduced by CUSIP, combined to
+    # one row each, prepared for the Dataset Contract and merged. `silver`: the holdings, landed
     # from their own read; the silver writer finds each holding's Security by lookup, and a holding whose
     # Security is not mastered yet keeps an empty id for `silver refresh-ids`, so it waits for no merge.
     # Each notes its files in the Change Journal, so an unchanged file is not read again.
@@ -203,7 +203,7 @@ dataset_contracts:
                           join: {path: name.name_sample, item_path: issuer_name, separator: "", max_items: 1}
                         title_of_class:
                           join: {path: title.title_sample, item_path: security_title, separator: "", max_items: 1}
-                        # The share class (ticket 130): the one letter the filed
+                        # The share class: the one letter the filed
                         # titles name; none when they name two (combine.yaml).
                         share_class:
                           join: {path: class, item_path: share_class, separator: "", max_items: 1}

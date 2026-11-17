@@ -1,4 +1,4 @@
-# Data quality for N-PORT Securities (ticket 79, part 1). The CUSIP and ISIN
+# Data quality for N-PORT Securities. The CUSIP and ISIN
 # check digits are the identifier types' (rules/identifiers/): a failing one
 # is set aside where the record is read, so no check repeats it here.
 # Approved under the operator's standing words "Approved the rules always"

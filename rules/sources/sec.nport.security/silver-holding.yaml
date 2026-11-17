@@ -1,4 +1,4 @@
-# The silver table of N-PORT holdings (ticket 79): `edgar-warehouse silver
+# The silver table of N-PORT holdings: `edgar-warehouse silver
 # register` reads this spec (docs/specs/profiling/findings.md, section 6).
 # Rulings it rests on (operator):
 # - finding q5 (2026-10-15): "Silver + MDM link (Recommended)": each quarter's
@@ -16,7 +16,7 @@
 # ticket 143): a row holds the holding's own facts and its links. The CUSIP,
 # ISIN and the facts it repeats about its Security (currency, asset category,
 # issuer type, investment country, restricted, derivative category) are the
-# Security's, in MDM (ticket 138), read through `security_mdm_id`. The row's
+# Security's, in MDM, read through `security_mdm_id`. The row's
 # currency code stays as the unit of its own value and exchange rate
 # (operator, 2026-10-28: "Keep it on the row (Recommended)"). The issuer LEI
 # identifies the issuer Company in MDM, which the Security reaches by
@@ -167,6 +167,6 @@ why: >-
   by the filing and the holding id (unique over the quarter). It links to its
   holder and its Security by lookup, so the Fund-to-Security link needs no
   MDM record of its own. Append, since a filed holding never changes.
-# No checks: the CUSIP and ISIN they checked (ticket 105) are the Security's,
-# checked by its Dataset Contract (ticket 143).
+# No checks: the CUSIP and ISIN they checked are the Security's,
+# checked by its Dataset Contract.
 checks: []

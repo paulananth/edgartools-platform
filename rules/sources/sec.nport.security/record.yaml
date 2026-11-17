@@ -5,7 +5,7 @@ pass:
 # over the combine's pieces, for mdm.prepare (`record_column: record`), as the
 # Dataset Contract sec.nport.security.v2 reads it (ticket 120; operator,
 # 2026-10-20: "One master record"): its key; its CUSIP when the key is one;
-# its ISIN (the key), or every ISIN filed with a CUSIP (ticket 138); and its
+# its ISIN (the key), or every ISIN filed with a CUSIP; and its
 # filed facts, the CUSIP's or the ISIN-only holding's. The combine's output
 # comes in pieces of at most 8 MiB, one artifact each (2026 Q2: more than one).
 execution: {profile: source.read, workers: 1, max_artifacts: 512}
@@ -55,9 +55,9 @@ read:
                   condition: {equal: {left: {join: {path: kind_sample, item_path: key_kind, separator: "", max_items: 1}}, right: {const: {value: cusip}}}}
                   then: {text: {path: key}}
                   else: {value: {path: NO_SUCH_FIELD}}
-              # An ISIN is the key of an ISIN-only holding, or every ISIN filed with a CUSIP (ticket 138);
-              # a SEDOL or a LoanX is the key of a holding with neither (ticket 190), else it joins the
-              # key's Security (ticket 125). A key is the one class its `key_kind` names.
+              # An ISIN is the key of an ISIN-only holding, or every ISIN filed with a CUSIP;
+              # a SEDOL or a LoanX is the key of a holding with neither, else it joins the
+              # key's Security. A key is the one class its `key_kind` names.
               isin:
                 choose:
                   condition: {equal: {left: {join: {path: kind_sample, item_path: key_kind, separator: "", max_items: 1}}, right: {const: {value: isin}}}}
@@ -72,7 +72,7 @@ read:
                   condition: {equal: {left: {join: {path: kind_sample, item_path: key_kind, separator: "", max_items: 1}}, right: {const: {value: sedol}}}}
                   then: {text: {path: key}}
                   else: {value: {path: sedol}}
-              # A FIGI is only a lookup: the key of a holding with nothing else, never an identifier (ticket 139).
+              # A FIGI is only a lookup: the key of a holding with nothing else, never an identifier.
               figi:
                 choose:
                   condition: {equal: {left: {join: {path: kind_sample, item_path: key_kind, separator: "", max_items: 1}}, right: {const: {value: figi}}}}
@@ -96,7 +96,7 @@ read:
                   - {value: {path: title}}
                   - {value: {path: no_cusip_title}}
               # The class from the level whose letters `classes` reads
-              # (ticket 130).
+              #.
               class:
                 choose:
                   condition: {test: {path: classes, kind: present}}
@@ -118,7 +118,7 @@ read:
                   values:
                   - {value: {path: lei}}
                   - {value: {path: no_cusip_lei}}
-              # The issuing fund series (ticket 234) when the holdings name one;
+              # The issuing fund series when the holdings name one;
               # else the issuer's LEI, for a Company (or a series no N-PORT
               # filing of the quarter names).
               issuer_series:
@@ -155,7 +155,7 @@ read:
                   values:
                   - {value: {path: filed}}
                   - {value: {path: no_cusip_filed}}
-              # The most-filed value of each fact (ticket 138).
+              # The most-filed value of each fact.
               asset_category: {value: {path: asset_category}}
               issuer_type: {value: {path: issuer_type}}
               investment_country: {value: {path: investment_country}}

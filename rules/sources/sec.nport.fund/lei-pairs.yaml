@@ -3,7 +3,7 @@ pass:
   readings: {series: {step: reduce.yaml}}
 # Each series and LEI filed together, with how many series file that LEI
 # (`lei_series`) and how many LEIs that series files (`series_leis`), so
-# combine.yaml keeps an LEI only when both are 1 (ticket 79, part 3). Input:
+# combine.yaml keeps an LEI only when both are 1. Input:
 # reduce.yaml's output (`series`). Pin canonical JSON of this file as the
 # source.combine contract.
 execution:

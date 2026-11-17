@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("load_chain", ROOT / "skills/data-operations/scripts/load_chain.py")
 chain = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(chain)
-STEPS = yaml.safe_load((ROOT / "rules/load-chain.yaml").read_text())["steps"]
+STEPS = chain.chain_steps()
 INFER = importlib.util.spec_from_file_location("infer_dependencies", ROOT / "skills/data-operations/scripts/infer_dependencies.py")
 infer = importlib.util.module_from_spec(INFER)
 INFER.loader.exec_module(infer)
@@ -194,3 +194,15 @@ def test_every_wait_is_explained_by_what_the_rules_declare():
             explained = (other["source"] in item["prefer_after"]
                          or (other["source"] == step["source"] and other["target"] in item["after_target"]))
             assert explained, (step["name"], waited)
+
+
+def test_a_step_takes_the_chains_defaults_for_what_it_does_not_say(tmp_path):
+    path = tmp_path / "chain.yaml"
+    path.write_text(yaml.safe_dump({"defaults": {"workers": 2, "bundles": 1}, "steps": [
+        {"name": "plain", "minutes": 60}, {"name": "sized", "minutes": 60, "workers": 8}]}))
+
+    assert [(s["name"], s["workers"], s["bundles"]) for s in chain.chain_steps(path)] == [("plain", 2, 1), ("sized", 8, 1)]
+
+
+def test_every_step_of_the_chain_has_its_sizes():
+    assert all(type(step[size]) is int and step[size] >= 1 for step in STEPS for size in ("workers", "bundles", "attempts"))

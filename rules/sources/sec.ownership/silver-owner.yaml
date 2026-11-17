@@ -11,7 +11,7 @@
 # title (and the "other" capacity with its text, ticket 182) are the Person's and its dated relationships in MDM, so only the links and the
 # filing's own facts stay. The owner's address is not kept anywhere in the platform's data stores
 # (the Person consumer spec never captures it); the filing in bronze keeps it. The table is new
-# (ticket 182) because a registered silver table is never changed by dropping its columns.
+# because a registered silver table is never changed by dropping its columns.
 table: insider_reporting_owner
 definition: One reporting owner of one Form 3, 4 or 5, linked to its Person or Company and
   to the issuer; a joint filing names several.

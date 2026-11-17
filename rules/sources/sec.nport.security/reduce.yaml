@@ -1,6 +1,6 @@
 pass:
   readings: {holdings: {step: source.yaml}}
-# The N-PORT Securities of one quarter (ticket 79, part 1): every usable CUSIP
+# The N-PORT Securities of one quarter: every usable CUSIP
 # and every ISIN of a holding with none, each with its filed words, and every
 # CUSIP and ISIN pair filed on one holding (`pairs`; combine.yaml gives
 # a CUSIP every ISIN filed with it, ticket 138). One source extract: the holdings reading (source.yaml).
@@ -20,7 +20,7 @@ reduce:
   max_output_rows: 10000000
   max_output_bytes: 4294967296
   groups:
-    # Every Security once, by its one key (ticket 120): a CUSIP's holdings and an
+    # Every Security once, by its one key: a CUSIP's holdings and an
     # ISIN-only holding's, one table for combine.yaml's one `security` table, with
     # which kind its key is (`key_kind`: cusip or isin).
     keys:
@@ -115,7 +115,7 @@ reduce:
       count: titles
       sample: title_sample
       sample_limit: 1
-    # Every share class its equity holdings name (ticket 130), all kept.
+    # Every share class its equity holdings name, all kept.
     cusip_classes:
       source: holdings
       table: cusip_class
@@ -142,7 +142,7 @@ reduce:
       count: holdings
       sample: null
       sample_limit: 0
-    # Each SEDOL and LoanX filed with a Security's key (ticket 125).
+    # Each SEDOL and LoanX filed with a Security's key.
     sedols:
       source: holdings
       table: key_sedol
@@ -185,7 +185,7 @@ reduce:
       count: titles
       sample: title_sample
       sample_limit: 1
-    # Every share class its equity holdings name (ticket 130), all kept.
+    # Every share class its equity holdings name, all kept.
     no_cusip_classes:
       source: holdings
       table: no_cusip_class

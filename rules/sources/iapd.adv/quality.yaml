@@ -1,4 +1,4 @@
-# Data quality for the Form ADV contracts (ticket 07): a record with no name is
+# Data quality for the Form ADV contracts: a record with no name is
 # set aside as an open exception (never merges, never stops the run).
 version: iapd-adv-quality-v1
 quality:

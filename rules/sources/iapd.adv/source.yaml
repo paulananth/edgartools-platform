@@ -18,7 +18,7 @@ execution: {profile: source.read, workers: 1, max_artifacts: 512}
 bronze:
   # Bronze: reference/iapd_adv_bulk/<YYYY-MM>/ADV_Filing_Data_<from>_<to>.zip
   family: iapd_adv_bulk
-# Bookkeeping (ticket 176). Three targets, one path each (operator, 2026-11-14: "make it two split one to mdm and
+# Bookkeeping. Three targets, one path each (operator, 2026-11-14: "make it two split one to mdm and
 # one to silver"): `custodians` masters the custodians, one record per custodian in a file (distinct_on), straight
 # from the custody reading; `mastering` masters the adviser filings, each with its custodians joined in
 # (combine.yaml); `silver` lands each custody row's amount. Run the custodians first, so the CUSTODIAN links of the

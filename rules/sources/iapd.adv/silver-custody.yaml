@@ -4,7 +4,7 @@
 # custodian by its custodian id), never on the CUSTODIAN link. Rows are the custody reading's table
 # (Schedule D 5.K(3), custody-csv.yaml), table `custody_facts`, every column of it (the writer refuses a
 # field the spec does not name). The custodian's name, address and identifiers are fields of the master
-# record, so they are not here (ticket 143): the custodian Company in MDM is found by `custodian_id`.
+# record, so they are not here: the custodian Company in MDM is found by `custodian_id`.
 # Measured over the 13 local months (June 2025 to June 2026), counts only: 50,152 rows; every amount is a
 # whole number of at most 13 digits (no decimals, none empty, none negative); 1,156 rows name a related
 # person (Y) and 48,996 do not (N). Append only: a filed row never changes; an amendment is a new filing.

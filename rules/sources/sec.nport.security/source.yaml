@@ -1,4 +1,4 @@
-# SEC Form N-PORT holdings, read for the Security master (ticket 79, part 1),
+# SEC Form N-PORT holdings, read for the Security master,
 # from the approved N-PORT findings (profiling/sec.nport-2026q2-final,
 # approved 2026-10-15 06:29 ET). Rulings it rests on (operator):
 # - "CUSIP and ISIN join" (2026-10-14): one CUSIP is one Security; an ISIN
@@ -298,7 +298,7 @@ read:
         currency: {text: {path: CURRENCY_CODE, default: "", transforms: [{case: upper}], null_if: [""]}}
         restricted: {text: {path: IS_RESTRICTED_SECURITY, default: "", transforms: [{case: upper}], null_if: [""]}}
         derivative_category: {text: {path: DERIVATIVE_CAT, default: "", transforms: [{case: upper}], null_if: [""]}}
-        # Which class the key is (ticket 190): the first of the classes the holding files,
+        # Which class the key is: the first of the classes the holding files,
         # in the order of the key above.
         key_kind:
           coalesce:
@@ -337,7 +337,7 @@ read:
     key_sedol:
       each: .
       # A holding keyed by its usable CUSIP, else its ISIN, that also files one SEDOL
-      # (identifiers.yaml): the SEDOL joins that Security (ticket 125). A holding with
+      # (identifiers.yaml): the SEDOL joins that Security. A holding with
       # no CUSIP or ISIN makes no row: keying a Security by a SEDOL alone is ticket 190's.
       select:
         choose:
@@ -372,7 +372,7 @@ read:
     key_loanx:
       each: .
       # A holding keyed by its usable CUSIP, else its ISIN, that also files one LOANX
-      # (identifiers.yaml): the LOANX joins that Security (ticket 125). A holding with
+      # (identifiers.yaml): the LOANX joins that Security. A holding with
       # no CUSIP or ISIN makes no row: keying a Security by a LOANX alone is ticket 190's.
       select:
         choose:
@@ -735,7 +735,7 @@ read:
             default: ""
             transforms: [{case: upper}]
         # The holding's filing date (YYYY-MM-DD), else the quarter's: an
-        # ISSUED_BY link starts at the earliest (ticket 113).
+        # ISSUED_BY link starts at the earliest.
         filed:
           coalesce:
             skip: "null"
@@ -786,7 +786,7 @@ read:
             default: ""
             transforms: [{case: upper}]
         # The holding's filing date (YYYY-MM-DD), else the quarter's: an
-        # ISSUED_BY link starts at the earliest (ticket 113).
+        # ISSUED_BY link starts at the earliest.
         filed:
           coalesce:
             skip: "null"
@@ -836,7 +836,7 @@ read:
       columns:
         no_cusip_key: {coalesce: {skip: "null", values: [{member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}}, {member_value: {lookup: sedol, key: {text: {path: HOLDING_ID}}, on_many: "null"}}, {member_value: {lookup: loanx, key: {text: {path: HOLDING_ID}}, on_many: "null"}}, {member_value: {lookup: figi, key: {text: {path: HOLDING_ID}}, on_many: "null"}}]}}
         # The holding's filing date (YYYY-MM-DD), else the quarter's: an
-        # ISSUED_BY link starts at the earliest (ticket 113).
+        # ISSUED_BY link starts at the earliest.
         filed:
           coalesce:
             skip: "null"
@@ -890,7 +890,7 @@ read:
       columns:
         no_cusip_key: {coalesce: {skip: "null", values: [{member_value: {lookup: isin, key: {text: {path: HOLDING_ID}}, on_many: "null"}}, {member_value: {lookup: sedol, key: {text: {path: HOLDING_ID}}, on_many: "null"}}, {member_value: {lookup: loanx, key: {text: {path: HOLDING_ID}}, on_many: "null"}}, {member_value: {lookup: figi, key: {text: {path: HOLDING_ID}}, on_many: "null"}}]}}
         # The holding's filing date (YYYY-MM-DD), else the quarter's: an
-        # ISSUED_BY link starts at the earliest (ticket 113).
+        # ISSUED_BY link starts at the earliest.
         filed:
           coalesce:
             skip: "null"
@@ -976,7 +976,7 @@ dataset_contracts:
                             item_path: issuer_title
                             separator: ""
                             max_items: 1
-                        # The share class (ticket 130): the one letter the
+                        # The share class: the one letter the
                         # equity holdings name; none when they name two
                         # (combine.yaml).
                         share_class:
@@ -993,7 +993,7 @@ dataset_contracts:
                         # No issuer LEI field: an LEI identifies a Company, not a
                         # Security ("A value of another kind stays out of this
                         # kind"); the Security reaches its issuer by ISSUED_BY
-                        # (ticket 22), and each holding's filed LEI is in silver
+                        #, and each holding's filed LEI is in silver
                         # (silver-holding.yaml; operator, 2026-10-22: "Fix 1").
                   matching:
                     object:
@@ -1028,10 +1028,10 @@ dataset_contracts:
           - currency
           - restricted
           - derivative_category
-        # v3 (ticket 138): a CUSIP's record carries every ISIN filed with it.
-        # v4 (ticket 138): and the six facts its holdings file most.
-        # v5 (ticket 199): an ISSUED_BY start is observed, not stated.
-        # v8 (ticket 234): a fund's share is issued by its fund series.
+        # v3: a CUSIP's record carries every ISIN filed with it.
+        # v4: and the six facts its holdings file most.
+        # v5: an ISSUED_BY start is observed, not stated.
+        # v8: a fund's share is issued by its fund series.
         version: sec-nport-security-v8
         retain_deferred: true
         source_record_provenance: true
@@ -1109,7 +1109,7 @@ bookkeeping:
       delivered: {key: '(?P<year>\d{4})q(?P<quarter>[1-4])_nport\.zip$', fact: period}
       extract: [record.yaml]
       master: {requires: [record], keys: {dataset: sec.nport.security.v2, record_column: record, table: security}, readings: {record: {all: record}}}
-    # Each holding for silver (ticket 79): a lookup row, not an MDM record (operator, 2026-10-22: "Why do you
+    # Each holding for silver: a lookup row, not an MDM record (operator, 2026-10-22: "Why do you
     # need to merge it it's just a lookup"), and its own path, apart from MDM's (operator, 2026-11-14: "make it
     # two split one to mdm and one to silver"). The filing's series (holding-series.yaml), its registrant
     # (sec.nport.registrant's) and its date name each row's holder; holding.yaml gives the rows. The silver

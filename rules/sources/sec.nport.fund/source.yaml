@@ -1,4 +1,4 @@
-# SEC Form N-PORT fund series, read for the Fund master (ticket 79, part 3),
+# SEC Form N-PORT fund series, read for the Fund master,
 # from the approved N-PORT findings (profiling/sec.nport-2026q2-final,
 # approved 2026-10-15 06:29 ET; part FUND_REPORTED_INFO.SERIES_LEI: 12,944
 # series over 14,416 filings). Rulings it rests on (operator):
@@ -29,7 +29,7 @@ pass:
     registrant: {column: accession_number, from: sec.nport.registrant/registrant-keys.yaml, max_input_bytes: 268435456, max_input_rows: 1000000, table: registrant, value_column: cik}
 bronze:
   family: sec.nport-datasets
-# The quarter's fund series through the Merge Stage (ticket 118). The registrant's
+# The quarter's fund series through the Merge Stage. The registrant's
 # own readings give each filing its date and its registrant's CIK (`<source>/<file>`
 # names another source's rules file); a bundle is the quarter's data set.
 bookkeeping:

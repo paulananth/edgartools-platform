@@ -3,7 +3,7 @@ pass:
 # One row per fund series (table `fund`) with its latest filing whole
 # (`latest`: name, LEI and registrant CIK of one filing), latest by filing
 # date, then accession number, and its LEI (`lei`) only when the series files
-# one LEI and no other series files it (ticket 79, part 3). Inputs:
+# one LEI and no other series files it. Inputs:
 # reduce.yaml's output (`series`), lei-pairs.yaml's output (`pairs`) and
 # source.yaml's reading (`filings`). Pin canonical JSON
 # of this file as the source.combine contract.

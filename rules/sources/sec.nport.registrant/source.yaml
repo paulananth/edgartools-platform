@@ -1,4 +1,4 @@
-# SEC Form N-PORT registrants, read for the Company master (ticket 79, part 2),
+# SEC Form N-PORT registrants, read for the Company master,
 # from the approved N-PORT findings (profiling/sec.nport-2026q2-final,
 # approved 2026-10-15 06:29 ET; part REGISTRANT.CIK, master by CIK: 1,947
 # registrants over 14,416 filings). Rulings it rests on (operator):
@@ -28,7 +28,7 @@ pass:
     filed: {column: accession_number, from: submissions.yaml, max_input_bytes: 67108864, max_input_rows: 1000000, table: filed, value_column: filed}
 bronze:
   family: sec.nport-datasets
-# The quarter's registrants through the Merge Stage (ticket 118): the filing
+# The quarter's registrants through the Merge Stage: the filing
 # dates, the registrant rows with them, each CIK, its latest filing, one record
 # each. A bundle is the quarter's data set (one file).
 bookkeeping:
