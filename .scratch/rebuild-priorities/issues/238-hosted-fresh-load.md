@@ -107,5 +107,11 @@ change).
       (native Python, one process). Moved from ticket 233.
 - [ ] Where two kinds merge at once (GLEIF companies beside N-PORT securities), records a minute each against 6,500 alone
       and 3,100 together. Moved from ticket 233; a full-size load is not run only for it.
+- [ ] N-CEN fund series, advisers, share classes and registrants loaded (moved from ticket 234).
+- [ ] Companies holding more than one CIK: expect 0 once N-PORT registrants load under `yields_to: [cik]` (moved from ticket
+      234; the store held 4: 3 with 2 CIKs, 1 with 3). A bind already made stays standing, so this needs the registrants
+      loaded into a fresh store, not reloaded over the old binds.
+      The Company `lei` contract changed, so the processing identity of `gleif.level1.v1`, `iapd.adv.custodians.v1` and
+      `sec.nport.registrant.v2` changed too: a load over a store that holds them reads them again.
 - [x] Learning → skill: data-operations RUNBOOK "Initialize a hosted store" and "Load a fresh store"; the connection
   section; aws-snowflake-operations, "The hosted MDM store"; STORES, "Apply store DDL" (2026-11-15 13:45 ET)

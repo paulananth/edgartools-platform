@@ -389,11 +389,21 @@ def _match_identifiers(store, settings: Settings, records, bound: dict, counts: 
     return survivors
 
 
+def _listed(value) -> list:
+    return [v for v in (value if isinstance(value, list) else [value]) if v]
+
+
 def _hold_conflicts(store, settings: Settings, plan: dict, records, found: dict) -> Counter:
-    """A record whose identifier finds a golden record that holds another value of an identifier its contract says
-    must agree (a share class FIGI whose Security holds another CUSIP) joins nothing and goes to review (step 4)."""
+    """A record whose identifier finds a golden record that holds another value of an identifier its contract names,
+    or whose file-mate states another value, does not join by that identifier. Under `conflicts_with` (a share class
+    FIGI whose Security holds another CUSIP) it joins nothing and goes to review (step 4). Under `yields_to` (a
+    registrant's LEI that a Company with another CIK holds: a sponsor's LEI filed by several trusts) it joins by its
+    other identifiers alone, and is created by them when none finds a golden record; the value it gave way on is
+    withheld, so its golden record never holds it beside the one that does."""
     contracts = ((settings.policy.get("kinds") or {}).get(settings.kind) or {}).get("identifiers") or {}
-    agree = {namespace: contract["conflicts_with"] for namespace, contract in contracts.items() if contract.get("conflicts_with")}
+    agree = {namespace: contract.get("conflicts_with") or contract.get("yields_to")
+             for namespace, contract in contracts.items() if contract.get("conflicts_with") or contract.get("yields_to")}
+    yields = {namespace for namespace, contract in contracts.items() if contract.get("yields_to")}
     held_by = {}
     if agree:
         wanted = {entity for (namespace, _), holders in found.items() if namespace in agree for entity in holders}
@@ -405,13 +415,20 @@ def _hold_conflicts(store, settings: Settings, plan: dict, records, found: dict)
         mine = {n: values(stated[subject]["identifiers"].get(n)) for names in agree.values() for n in names}
         keys = [(item["namespace"], item["value"]) for item in plan["applicable"][subject] if item["namespace"] in agree]
         peers = {key: [held_by.get(entity, {}) for entity in found.get(key, {})] + seen[key] for key in keys}
-        if any(mine[n] and peer.get(n) and not mine[n] & peer[n]
-               for key in keys for peer in peers[key] for n in agree[key[0]]):
+        clash = {key[0] for key in keys for peer in peers[key] for n in agree[key[0]]
+                 if mine[n] and peer.get(n) and not mine[n] & peer[n]}
+        kept = [item for item in plan["applicable"][subject] if item["namespace"] not in clash]
+        review = clash - yields or (clash and not kept)
+        if review:
             store.open_reviews("conflicting_identifiers", [(subject, stated[subject]["assertion_id"])])
             counts["conflicting_identifiers"] += 1
             del plan["applicable"][subject]
-        else:
-            for key in keys:
+            continue
+        plan["applicable"][subject] = kept
+        store.add_withheld([(subject, namespace, raw) for namespace in sorted(clash)
+                            for raw in _listed(stated[subject]["identifiers"].get(namespace))])
+        for key in keys:
+            if key[0] not in clash:
                 seen[key].append(mine)
     return counts
 
