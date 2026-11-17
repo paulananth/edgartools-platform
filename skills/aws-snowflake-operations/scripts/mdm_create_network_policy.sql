@@ -1,5 +1,6 @@
--- Create the writable Gold database, its CONTROL/GOLD schemas, and the network
--- rule + policy required to connect to the MDM Snowflake Postgres instance.
+-- Create the approved writable control database/schema and the network rule
+-- + policy required to connect to the MDM Snowflake Postgres instance.
+-- This connectivity helper does not create Gold schemas or select a dbt target.
 -- Keep the rule outside EDGARTOOLS_PROD so that database can be retired.
 -- CREATE POSTGRES INSTANCE accepts NETWORK_POLICY as optional, but Snowflake
 -- Postgres instances reject any policy that lacks a network rule with MODE =
@@ -14,23 +15,20 @@
 -- values during a schema/database relocation; narrowing ingress is a separate
 -- security decision.
 --
--- Templated by Snow CLI's Jinja substitution (-D flags). For prod use
--- database_name=DB_EDGARTOOLS_GOLD, control_schema=CONTROL,
--- gold_schema=GOLD, network_rule_name=MDM_POSTGRES_INGRESS_ALL, and
--- network_policy_name=EDGARTOOLS_PROD_MDM_POSTGRES_POLICY. Validate all names
--- as simple unquoted identifiers before rendering this file.
+-- Templated by Snow CLI's Jinja substitution (-D flags). Set database_name,
+-- control_schema, network_rule_name and network_policy_name from the approved
+-- operational configuration. Validate all names as simple unquoted identifiers
+-- before rendering. Existing objects do not establish Gold naming approval.
 --
--- Run with (prod):
---   snow sql --connection edgartools-prod --enable-templating JINJA --filename skills/aws-snowflake-operations/scripts/mdm_create_network_policy.sql \
---     -D "database_name=DB_EDGARTOOLS_GOLD" \
---     -D "control_schema=CONTROL" \
---     -D "gold_schema=GOLD" \
---     -D "network_rule_name=MDM_POSTGRES_INGRESS_ALL" \
---     -D "network_policy_name=EDGARTOOLS_PROD_MDM_POSTGRES_POLICY"
+-- Invocation shape (replace placeholders with approved operational names):
+--   snow sql --connection <connection> --enable-templating JINJA --filename skills/aws-snowflake-operations/scripts/mdm_create_network_policy.sql \
+--     -D "database_name=<approved_control_database>" \
+--     -D "control_schema=<approved_control_schema>" \
+--     -D "network_rule_name=<approved_network_rule>" \
+--     -D "network_policy_name=<approved_network_policy>"
 
 CREATE DATABASE IF NOT EXISTS {{ database_name }};
 CREATE SCHEMA IF NOT EXISTS {{ database_name }}.{{ control_schema }};
-CREATE SCHEMA IF NOT EXISTS {{ database_name }}.{{ gold_schema }};
 
 USE SCHEMA {{ database_name }}.{{ control_schema }};
 

@@ -36,9 +36,10 @@ No dev environment exists on AWS or on Snowflake; a command that targets dev has
 | **RDM** | PostgreSQL 16 | Code sets and their versions. |
 | **Silver** | PostgreSQL 16, written by `edgar_warehouse/silver_writer/` | Every detail of each source, typed and keyed. |
 | **Mirror** | Snowflake `DB_EDGARTOOLS_MIRROR` (target design) | One managed Postgres mirror database with Snowflake-managed Iceberg tables for approved final MDM, RDM and Silver outputs. Consumers read it; the mirror owns writes. |
-| **Gold** | Snowflake `DB_EDGARTOOLS_GOLD.GOLD`, built with dbt on mirror inputs | Business-facing models transform the read-only mirror. Gold writes to this writable target, never into mirror-owned tables; `DB_EDGARTOOLS_GOLD.CONTROL` holds the hosted Postgres ingress rule. |
+| **Gold** | Snowflake writable destination; database/schema names await approval | Use dbt when consumption requirements need transformations of approved mirror inputs. Direct mirror reads do not need dbt. Gold writes outside the managed mirror database. |
 
-This mirror-to-Gold flow is the selected architecture; it is not a claim that
+The mirror supports direct read-only consumption, with dbt Gold on top when
+required by consumption requirements. This is not a claim that
 the production mirror or Gold models are live. The source stores currently
 reside in separate PostgreSQL databases, so one managed mirror cannot combine
 them until source consolidation is separately qualified. Follow
@@ -95,8 +96,9 @@ and inventoried.
 
 For the selected single managed Iceberg mirror architecture, consult
 [`SINGLE-DATABASE-ICEBERG.md`](../data-platform/SINGLE-DATABASE-ICEBERG.md).
-The paired writable Gold target is `DB_EDGARTOOLS_GOLD.GOLD`. Retiring an
-existing database does not complete source consolidation or the hosted mirror
+The writable Gold destination requires approval of its exact database and
+schema names; an existing operational object does not establish that approval.
+Retiring an existing database does not complete source consolidation or the hosted mirror
 qualification described there.
 
 ## Checking Snowflake credit usage
@@ -163,7 +165,7 @@ Check the account first: `snow sql --connection <name> -q "SHOW DATABASES"` and 
 A rebuilt account holds neither the `EDGARTOOLS_<ENV>` database nor an instance, and the account named in older
 notes is not the live one. The order:
 
-1. Use [`scripts/mdm_create_network_policy.sql`](scripts/mdm_create_network_policy.sql) to create the writable Gold database and its `CONTROL`/`GOLD` schemas; the network rule and policy live under `CONTROL` so the operational policy does not depend on the retired data database.
+1. Use [`scripts/mdm_create_network_policy.sql`](scripts/mdm_create_network_policy.sql) with an explicitly approved writable control database/schema for the network rule and policy. This is operational connectivity setup, independent of Gold; it does not create a Gold schema or approve a model destination. Preserve existing policy references until an approved relocation is verified.
 2. Use `pg_connect.py --create` from the Snowflake Postgres manage skill for a new instance, with the created network policy. Review compute family and storage before execution.
 3. `bootstrap-prod-mdm.sh`, which rotates both credentials and runs `mdm migrate` last. It rotates on every run
    with no way to skip it, and a rotation needs the operator's word; without it, build the connection file from the

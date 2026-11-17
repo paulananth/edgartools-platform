@@ -14,12 +14,17 @@ explicit approved tables and `target_table_type => 'ICEBERG'`; it does not
 consolidate existing production stores or create billable resources implicitly.
 
 The target flow is PostgreSQL MDM, RDM and Silver final outputs → the read-only
-`DB_EDGARTOOLS_MIRROR` Iceberg database → dbt models in the writable
-`DB_EDGARTOOLS_GOLD.GOLD` schema. dbt reads approved mirror sources and writes
-Gold outside the managed mirror database. The Gold database also holds the
-`CONTROL` schema for the hosted Postgres ingress rule. Treat source
-consolidation, managed mirror qualification and Gold model qualification as
-distinct gates.
+`DB_EDGARTOOLS_MIRROR` Iceberg database. Approved consumers can read those
+tables directly; dbt is not required for replication or direct consumption.
+When requirements call for Gold joins, calculations, aggregates or reporting
+models, dbt reads approved mirror sources and writes to a separately approved
+writable destination outside the managed mirror database. Gold database and
+schema names remain undecided; neither an example nor an existing operational
+object approves a target. Follow [Gold requirements](../data-modeling/GOLD.md)
+before building it. Treat source consolidation, managed mirror qualification,
+consumer access and Gold model qualification as distinct gates. The hosted
+Postgres ingress rule needs an approved writable control location independent
+of whether Gold is built.
 
 ## Readiness before changes
 

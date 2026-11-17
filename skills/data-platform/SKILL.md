@@ -115,7 +115,8 @@ the application package, not `infra/`. Keep only deployment wiring under
 Before shipping a skill, verify its links in an isolated installed skill tree:
 a checkout can hide a missing helper by resolving a link back into `infra/`.
 
-For Snowflake-hosted PostgreSQL, the managed Iceberg mirror and dbt Gold flow,
+For Snowflake-hosted PostgreSQL, direct managed Iceberg mirror consumption and
+required dbt Gold transformations,
 read [Hosted PostgreSQL mirroring](HOSTED-MIRRORING.md). It routes to the
 installed `snowflake-postgres` skill; source hosting, resizing, mirror creation
 and Gold qualification have separate readiness and approval gates.

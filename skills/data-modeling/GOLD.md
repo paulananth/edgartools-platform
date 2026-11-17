@@ -6,18 +6,47 @@ dimensions, and the time scope. The class, kind, identifier, code set,
 relationship and silver decisions stay in [SKILL.md](SKILL.md). This file
 does not write a dbt model, deploy a database, or approve an exposure list.
 
-Gold is the warehouse a reader queries. The mastered identity stays in MDM.
+Approved mirror tables can be queried directly without dbt or a Gold build.
+Use Gold when a consumption requirement needs a modeled transformation;
+the mastered identity stays in MDM.
 A Gold fact is the consumption shape of a transaction part or a relationship
 that silver already holds, plus dimensions from the masters and code sets.
 It is not a new data class, and it is not an exposure source.
 [Final exposable tables](../data-platform/FINAL-TABLES.md) lists final master,
-reference and silver tables. dbt reads that approved mirror and writes Gold.
-The database and the writable target are in
+reference and silver tables. For required Gold transformations, dbt reads that
+approved mirror and writes Gold. The database and schema names are undecided;
+record and obtain approval of the exact writable destination before a build.
+An existing database, example name or control-schema location is not target
+approval. Execution follows
 [aws-snowflake-operations](../aws-snowflake-operations/SKILL.md). A question
 contract on one built fact is
 [semantic-views](../semantic-views/SKILL.md).
 
 ## Choose the technique
+
+First state the consumption requirement and whether direct reads of the
+approved mirror satisfy it. If they do, stop at consumer access qualification;
+do not build a duplicate table or require dbt just to serve the same rows.
+The Gold modeling method below applies when transformations are needed.
+
+## dbt implementation requirements
+
+- Link each model to the consumption requirement and its approved input-table
+  assignments. Mirroring and direct reads do not depend on dbt readiness.
+- Record the approved output database and schema, materialization, execution
+  role and warehouse in deployment configuration; do not supply a production
+  destination by convention or copy one from an example.
+- Use dbt for Snowflake transformation writes. Its role reads only approved
+  mirror inputs and writes only to the approved writable destination, outside
+  the read-only mirror database. Reader access remains separately controlled.
+- Declare approved mirror inputs as dbt sources and prove grain, key uniqueness,
+  nullability, exact-number calculations and join multiplicity for the required
+  model. Report Gold acceptance separately from mirror replication and access.
+- Provisioning Postgres ingress does not create Gold models or a Gold schema.
+  A Gold name previously used for an operational object remains unapproved as
+  a model destination until explicitly reviewed.
+
+## Model the required Gold output
 
 The integrated store already exists. MDM holds identity and master attributes,
 RDM holds code sets as versions, silver holds each transaction grain, and the
@@ -111,6 +140,8 @@ marked approved or proposed.
 - Measures that belong to the row, and the master attributes left on the dimension.
 - Business-time columns, recorded-time columns, and the declared time scope.
 - Inputs, each approved or proposed.
+- Whether direct mirror reads suffice; otherwise the required transformation
+  and the approved writable destination, or an explicit pending naming decision.
 - The row count the key would drop or multiply.
 
 ## Hand off
