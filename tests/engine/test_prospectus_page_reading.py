@@ -44,8 +44,13 @@ def test_the_cover_states_the_final_terms_and_the_snapshot_names_the_filing():
     assert (offering["ticker"], offering["exchange"]) == ("INVR", "Nasdaq Stock Market")
 
 
+def price_lines(tables):
+    return {(line["line"], line["per_unit"], line["total"])
+            for name in ("cover_line", "turned_price", "turned_discount", "turned_proceeds") for line in tables.get(name, [])}
+
+
 def test_the_price_lines_carry_their_amount_per_share_and_in_total():
-    lines = {line["line"]: (line["per_share"], line["total"]) for line in read()["cover_line"]}
+    lines = {line["line"]: (line["per_unit"], line["total"]) for line in read()["cover_line"]}
     assert lines == {"offering_price": ("21.00", "252000000"), "underwriting_discount": ("1.47", "17640000"),
                      "proceeds": ("19.53", "234360000")}  # the dilution table's per-share price is not a cover line
 
@@ -60,3 +65,33 @@ def test_a_page_that_states_nothing_gives_empty_terms_not_zero():
     (offering,) = tables["offering"]
     assert [offering[k] for k in ("shares_offered", "price_per_share", "ticker", "exchange", "over_allotment_shares")] == [None] * 5
     assert tables.get("cover_line", []) == tables.get("underwriter", []) == []
+
+
+
+NOTE = ("<html><body><p>Filed Pursuant to Rule 424(b)(2)</p><p>Invented Bank $250,000 Contingent Coupon Notes Linked to the"
+        " Invented Index Fund</p>"
+        "<table><tr><td></td><td>Price to Public(1)</td><td>Agent Discount(1)(2)</td><td>Proceeds to the Issuer</td></tr>"
+        "<tr><td>Per Note</td><td>$1,000.00</td><td>$12.50</td><td>$987.50</td></tr>"
+        "<tr><td>Total</td><td>$250,000.00</td><td>$3,125.00</td><td>$246,875.00</td></tr></table>"
+        "<p>The Invented Index Fund is an exchange-traded fund that trades on the NYSE Arca under the ticker symbol \u201cIIFX.\u201d</p>"
+        "<p>The notes will not be listed on any securities exchange.</p></body></html>")
+
+
+def test_a_note_whose_table_is_turned_gives_its_lines_per_note_and_in_total():
+    assert price_lines(read(NOTE)) == {
+        ("offering_price", "1000.00", None), ("offering_price", None, "250000.00"),
+        ("underwriting_discount", "12.50", None), ("underwriting_discount", None, "3125.00"),
+        ("proceeds", "987.50", None), ("proceeds", None, "246875.00")}
+
+
+def test_a_linked_funds_symbol_and_exchange_are_not_the_offerings():
+    (offering,) = read(NOTE)["offering"]
+    assert (offering["ticker"], offering["exchange"], offering["shares_offered"]) == (None, None, None)
+
+
+def test_a_label_with_footnote_marks_and_a_dollar_sign_cell_is_read():
+    page = ("<html><body><table><tr><td></td><td>Per Share</td><td>Total</td></tr>"
+            "<tr><td>Public offering price(1)(2)</td><td>$</td><td>25.00</td><td>$</td><td>20,000,000</td></tr>"
+            "<tr><td>Proceeds to us, before expenses</td><td>$</td><td>24.21</td><td>$</td><td>19,368,000</td></tr>"
+            "<tr><td>Price to Public</td><td>$</td><td>$</td></tr></table></body></html>")
+    assert price_lines(read(page)) == {("offering_price", "25.00", "20000000"), ("proceeds", "24.21", "19368000")}

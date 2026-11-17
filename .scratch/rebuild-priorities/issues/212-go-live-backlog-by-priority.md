@@ -163,4 +163,5 @@ Every part still open in the Rebuild priorities map, in one list, ordered by wha
 - [ ] [249] The 993 issuer records whose name equals an SEC filer's name would still create a duplicate: measure on a disposable store, then a looser name pass or review.
 - [ ] [227], [229], [250] Their open items and their Learning → skill parts.
 - [ ] [174] A record set aside under one rules version keeps its set-aside row after a later version masters it, so the stored set-aside count overstates by the records later mastered (found on the disposable store: 1 such row). Decide whether a mastered record's earlier set-aside is cleared or kept as history, and count by the current version.
+- [ ] [174] A final prospectus that prices an asset-backed bond by tranche, in percent, in a table with a column per term, lands no price lines (one of the 8 sampled pages). Build a reading for it once a second such page shows the shape holds.
 
