@@ -3,7 +3,7 @@ pass:
 # The 13F Securities of one data set: every CUSIP the information tables name,
 # with one filed issuer name and class title each (ticket 79; operator,
 # 2026-10-14: "A", the Security carries the filed words). A data set is too
-# large for one reading unit, so each group reads every unit (ticket 82).
+# large for one reading unit, so each group reads every unit.
 # The information tables carry no filing date, so the filed words kept are the
 # lexically first of each CUSIP, read only from the rows that carry it
 # (source.yaml). `securities` names every CUSIP; `figis` counts each CUSIP and
@@ -50,7 +50,7 @@ reduce:
       count: titles
       sample: title_sample
       sample_limit: 1
-    # Every share class the titles name (ticket 130), all kept: at most 26.
+    # Every share class the titles name, all kept: at most 26.
     classes:
       source: [units]
       table: sec_thirteenf_class

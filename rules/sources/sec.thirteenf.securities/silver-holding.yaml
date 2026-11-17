@@ -2,7 +2,7 @@
 # register` reads this spec (docs/specs/profiling/findings.md, section 6).
 # One row per holding of one information table: the manager's position in a Security, as filed.
 # Rows are the `sec_thirteenf_holding` table of source.yaml, with the filing's accession number
-# from the capture's folder (`accession=`). Silver keeps no master field (ticket 143): the
+# from the capture's folder (`accession=`). Silver keeps no master field: the
 # issuer name, the class title and the FIGI are the Security's, in MDM, read through
 # `security_mdm_id`; the CUSIP stays as the link key. The numbers are read as floating point
 # (exact to 15 digits) and land as exact decimals. Append only: a filed holding never changes;
@@ -103,6 +103,6 @@ why: >-
   A holding is transaction data: one row per filed holding, keyed by the filing and its place
   in the information table. It links to its Security by lookup, so no record of its own goes
   through the Merge Stage. Append, since a filed holding never changes.
-# No checks yet: the CUSIP is the Security's, checked by its Dataset Contract (ticket 143); a
+# No checks yet: the CUSIP is the Security's, checked by its Dataset Contract; a
 # holding's own numbers wait for the manager filings to say what a sensible value is.
 checks: []

@@ -49,6 +49,12 @@ def load_env(path: Path) -> dict:
     return env
 
 
+def chain_steps(path: Path = ROOT / "rules/load-chain.yaml") -> list[dict]:
+    """The chain's steps, each with the chain's `defaults` for what it does not say itself."""
+    chain = yaml.safe_load(path.read_text())
+    return [{**(chain.get("defaults") or {}), **step} for step in chain["steps"]]
+
+
 def arguments(step: dict) -> list[str]:
     capture = ROOTS[step.get("capture_root", "captures")] / step["capture"]
     args = ["--source", step["source"], "--target", step["target"], "--capture", str(capture),
@@ -144,7 +150,7 @@ def main() -> int:
     parser.add_argument("--only")
     parser.add_argument("--lane")
     args = parser.parse_args()
-    steps = yaml.safe_load((ROOT / "rules/load-chain.yaml").read_text())["steps"]
+    steps = chain_steps()
     names = [step["name"] for step in steps]
     for chosen in (args.start, args.only):
         if chosen and chosen not in names:

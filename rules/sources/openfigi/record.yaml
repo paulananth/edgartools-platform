@@ -1,7 +1,7 @@
 pass:
   pieces: {step: combine.yaml}
   context: {ticker_file_date: {fact: ticker_file_date}}
-# One flat record per identifier asked (ticket 80), read over combine.yaml's
+# One flat record per identifier asked, read over combine.yaml's
 # pieces, for mdm.prepare (`record_column: record`): a cross-reference is read
 # from a path of the record, so each single value is taken out of its sample
 # here. The ticker and composite FIGI are the US composite's, else the ISIN
@@ -10,7 +10,7 @@ pass:
 # composite's, else the ISIN country's composite's (operator, 2026-10-20:
 # "Use the primary exchange listing", "US, else the ISIN's country"), else
 # none; every listing is kept (`listings`, ticket 120). Both kinds asked in
-# one run (ticket 138): the identifier asked is the record's `cusip` or `isin`
+# one run: the identifier asked is the record's `cusip` or `isin`
 # by its `id_type`, and every listing's FIGI is in `figis`, each an
 # identifier of the one Security, so a CUSIP answer and an ISIN answer of one
 # security meet in MDM by a shared FIGI, with no pairing in these rules.
@@ -30,7 +30,7 @@ read:
             fields:
               id: {text: {path: id}}
               found: {value: {path: found}}
-              # The identifier asked, under its own kind (ticket 138).
+              # The identifier asked, under its own kind.
               cusip:
                 choose:
                   condition: {equal: {left: {text: {path: id_type}}, right: {const: {value: id_cusip}}}}
@@ -112,9 +112,9 @@ read:
                           condition: {test: {path: home_composite, kind: present}}
                           then: {value: {path: home_level.market_sector}}
                           else: {value: {path: NO_SUCH_FIELD}}
-              # Every listing, keyed by its FIGI in the Security's detail rows (ticket 120).
+              # Every listing, keyed by its FIGI in the Security's detail rows.
               listings: {value: {path: listings}}
-              # The US composite's, else the ISIN country's composite's (ticket 120).
+              # The US composite's, else the ISIN country's composite's.
               composite_figi:
                 transform:
                   value:
@@ -134,10 +134,10 @@ read:
                       - {join: {path: home_composite.home_composite_sample, item_path: figi_ticker, separator: "", max_items: 1, null_if_empty: true}}
                       - {join: {path: listing.listing_sample, item_path: figi_ticker, separator: "", max_items: 1, null_if_empty: true}}
                   # A class ticker is written with a slash, a dash, a dot or a space (BRK/B); the
-                  # identifier keeps letters and digits only (ticket 24), as a Form 4's symbol does. A bond's
+                  # identifier keeps letters and digits only, as a Form 4's symbol does. A bond's
                   # description (ten or more once dropped) is no ticker and leaves the field empty.
                   transforms: [{regex_replace: {pattern: "^[^ ]+ ", with: ""}}, {regex_replace: {pattern: "[|].*$", with: ""}}, {regex_replace: {pattern: "[^A-Za-z0-9]", with: ""}}, {regex_replace: {pattern: "^.{10,}$", with: ""}}]
-              # The issuer the SEC's own ticker file names for this Security's ticker (ticket 248): the CIK the
+              # The issuer the SEC's own ticker file names for this Security's ticker: the CIK the
               # chosen member carries after its bar (answers read it from that file), none where the file names none
               # or several. Its date starts the ISSUED_BY link (the contract).
               issuer_cik:

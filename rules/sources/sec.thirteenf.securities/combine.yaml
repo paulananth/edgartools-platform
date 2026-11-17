@@ -1,8 +1,8 @@
 pass:
   readings: {securities: {step: reduce.yaml}}
 # One row per CUSIP: every CUSIP the reduction names, joined with its filed
-# name, title and share-class (ticket 130) groups and the lexically first FIGI filed with it, each if
-# any (ticket 79). Its one input is the reduction's output, named
+# name, title and share-class groups and the lexically first FIGI filed with it, each if
+# any. Its one input is the reduction's output, named
 # `securities`. Pin canonical JSON of this file as the source.combine contract.
 execution:
   profile: source.combine

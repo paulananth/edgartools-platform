@@ -1,7 +1,7 @@
 pass:
   readings: {issuers: {step: source.yaml}}
-# How many issuer LEIs each CUSIP is filed with (ticket 22), and each ISIN of a
-# holding with no usable CUSIP (ticket 102). One source extract: the holdings reading
+# How many issuer LEIs each CUSIP is filed with, and each ISIN of a
+# holding with no usable CUSIP. One source extract: the holdings reading
 # (source.yaml), its issuer tables (`issuers`); reduce.yaml reads its Security tables. Pin canonical JSON of this file as the
 # source.combine contract.
 execution:
@@ -15,7 +15,7 @@ reduce:
   max_output_rows: 1000000
   max_output_bytes: 268435456
   groups:
-    # The fund series each CUSIP's holdings name (ticket 234), and each ISIN's.
+    # The fund series each CUSIP's holdings name, and each ISIN's.
     cusip_series:
       source: issuers
       table: security_series
@@ -63,7 +63,7 @@ reduce:
       sample_limit: 1
     # The earliest filing date of each CUSIP's holdings that name an issuer
     # LEI (dates are YYYY-MM-DD, so the lexically first is the earliest): an
-    # ISSUED_BY link starts there (ticket 113).
+    # ISSUED_BY link starts there.
     cusip_filed:
       source: issuers
       table: security_issuer

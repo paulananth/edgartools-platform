@@ -14,7 +14,7 @@ read:
   root: ownershipDocument
   context:
     accession_number: {type: text, sgml_header: ACCESSION NUMBER}
-    # The filing date, YYYYMMDD as the header writes it (ticket 25).
+    # The filing date, YYYYMMDD as the header writes it.
     filed: {type: text, nullable: true, sgml_header: FILED AS OF DATE}
   # max_member_bytes bounds the XML inside an SGML file; the bare reading declares it too, so the
   # two readings' limits stay one statement (a test holds them equal).
@@ -85,7 +85,7 @@ read:
         position: {ordinal: {}}
         rpt_owner_cik: {text: {path: reportingOwnerId.rptOwnerCik.$}}
         # The owner's record key in sec.ownership.reporting_owner.v1 (its accession number and CIK,
-        # as MDM writes a two-part key), so a silver row finds the owner's Person (ticket 25).
+        # as MDM writes a two-part key), so a silver row finds the owner's Person.
         owner_record_key: {concat: [{const: {value: '["'}}, {context: {name: accession_number}}, {const: {value: '","'}}, {text: {path: reportingOwnerId.rptOwnerCik.$}}, {const: {value: '"]'}}]}
         filed: {context: {name: filed}}
         # The filing's issuer and event date on each owner row (from the document), so the
@@ -93,7 +93,7 @@ read:
         issuer_cik: {text: {path: issuer.issuerCik.$, from: document}}
         period_of_report: {date: {path: periodOfReport.$, kind: calendar, prefix_length: 10, from: document}}
     # The owner as MDM reads it: the fields the Dataset Contract sec.ownership.reporting_owner.v1
-    # names, in one object, for a Bookkeeping preparation (ticket 176). Silver lands reporting_owner.
+    # names, in one object, for a Bookkeeping preparation. Silver lands reporting_owner.
     owner_record:
       each: reportingOwner
       columns:

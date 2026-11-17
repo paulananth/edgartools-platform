@@ -1,8 +1,8 @@
 # SEC company facts: every XBRL fact a filer reported, one JSON file per filer
-# (ticket 45). This file names the source; it reads nothing itself. Each file is
-# read by facts.yaml, one table per taxonomy (ticket 40). Its rows are
+#. This file names the source; it reads nothing itself. Each file is
+# read by facts.yaml, one table per taxonomy. Its rows are
 # transactions for silver (`company_fact`, ticket 43), linked to the Company by
-# CIK; nothing goes to MDM. Its Bookkeeping target `silver` (ticket 169) reads
+# CIK; nothing goes to MDM. Its Bookkeeping target `silver` reads
 # the files, lands them in `company_fact`, rebuilds the line items and measures
 # and records each file in the Change Journal.
 source: sec.company-facts

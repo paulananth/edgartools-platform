@@ -11,7 +11,7 @@ execution: {profile: source.read, workers: 1, max_artifacts: 512, max_input_byte
 read:
   format: json
   limits: {max_bytes: 134217728, max_records: 100000}
-  # Nothing is dropped silently (ticket 40): a file is refused when its shape is
+  # Nothing is dropped silently: a file is refused when its shape is
   # not the one read below. A filer with no facts (an empty object) lands nothing.
   assertions:
   - test: {test: {path: '.', kind: object}}
@@ -104,8 +104,8 @@ read:
           lookup: {reference: taxonomies, column: known, key: {text: {path: taxonomy, trim: false}}, on_missing: error}
     # Each concept row carries the filer's CIK. The SEC files it as a JSON number in
     # some files and as digit text (zero-padded) in others; `integer` reads both exactly.
-    # Every figure stays exact: an integer beyond 64-bit (ticket 128) and every decimal
-    # (ticket 134) as its filed digits, a big decimal, never a float.
+    # Every figure stays exact: an integer beyond 64-bit and every decimal
+    # as its filed digits, a big decimal, never a float.
     concepts_dei:
       each: {entries: {path: facts.dei, key_field: concept, value_field: body, on_invalid: empty}}
       columns:
@@ -178,7 +178,7 @@ read:
         label: {value: {path: body.label, type: text}}
         description: {value: {path: body.description, type: text}}
         units: {value: {path: body.units, type: object, nullable: false, big_numbers: text, decimals: text}}
-    # One row per filed fact, the rows of silver's `company_fact` (ticket 46): each
+    # One row per filed fact, the rows of silver's `company_fact`: each
     # taxonomy, concept and unit carried onto its facts by `nest`. The figure stays
     # its exact filed digits (a big decimal). `period` keys a fact's period without
     # an empty part: start/end for a duration (ISO 8601), the date for an instant.

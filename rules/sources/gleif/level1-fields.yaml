@@ -22,7 +22,7 @@ read:
         column: _lei
         on_fail: defer
       # GLEIF flags a deletion in delta files only; in a full file the field is present and empty
-      # on 4% of reporting exceptions (ticket 18). A flag with a value blocks until someone decides.
+      # on 4% of reporting exceptions. A flag with a value blocks until someone decides.
       - check: absent
         column: _deletion
         reason: gleif_deletion_flag

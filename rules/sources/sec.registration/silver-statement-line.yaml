@@ -1,4 +1,4 @@
-# The silver table of the statement lines a registration page shows (ticket 149): one row per table row
+# The silver table of the statement lines a registration page shows: one row per table row
 # whose label is one of the line items a valuation needs (revenue, operating income, net income, cash, total
 # assets and liabilities, debt, leases, research and development, tax, capital spending, share-based pay,
 # weighted shares). Rows are the `statement_line` table of registration-page.yaml. Values are as filed:
@@ -6,7 +6,7 @@
 # row in column order, and the table's own first two rows (`head`) and the text above it (`above`) say which
 # period and unit each column is. The statement and the scale come from the text above the table and are empty
 # when it says neither. This is the input of a valuation model (operator, 2026-11-04: Damodaran's valuation
-# tools): the reviewed label list is `registration-page.yaml`'s `line_item`. No master field (ticket 143).
+# tools): the reviewed label list is `registration-page.yaml`'s `line_item`. No master field.
 table: registration_statement_line
 definition: One valuation line item of one table of a registration page, with up to four of its numbers and their years, as filed.
 grain: one row per accession number, table and row

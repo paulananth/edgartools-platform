@@ -1,8 +1,7 @@
-# The order a fresh store is loaded in: every captured source and target, each one's capture, facts, revision and
-# workers, read by `skills/data-operations/scripts/load_chain.py` (RUNBOOK, "Load a fresh store"). A source's later
-# delivery is a new publication and carries the next `revision`. `capture` is a folder under the captures root (or the
-# proving root where `capture_root: proving`); `{run}` in a fact is the chain's run label. `minutes` bounds one attempt,
-# which carries on where the last stopped.
+# The order a fresh store is loaded in: every captured source and target, each one's capture and the facts and
+# revision no capture states, read by `skills/data-operations/scripts/load_chain.py` (RUNBOOK, "Load a fresh
+# store"). `capture` is a folder under the captures root (or the proving root where `capture_root: proving`);
+# `{run}` in a fact is the chain's run label. `minutes` bounds one attempt, which carries on where the last stopped.
 # Steps that may run at the same time are in different `lane`s, and `waits_for` names a step of another lane that must
 # be done first. Each lane runs its steps in file order (`load_chain.py --lane <name>`), so every lane can start at once.
 # Every `waits_for` comes from `infer_dependencies.py` (what the rules declare; a test holds the two equal), never from
@@ -11,6 +10,8 @@
 # Eight lanes: A the Companies the others follow; P the Persons; S the Securities; C the other Companies; L funds, share
 # classes, N-PORT Securities and GLEIF; O ownership; D the other silver-only sources; F company-facts.
 version: 1
+# What a step takes unless it says otherwise.
+defaults: {workers: 2, bundles: 1}
 steps:
   - name: company
     lane: A
@@ -31,8 +32,6 @@ steps:
     source: sec.nport.registrant
     target: mastering
     capture: sec.nport-datasets/2026q2
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: nport-fund
@@ -40,8 +39,6 @@ steps:
     source: sec.nport.fund
     target: mastering
     capture: sec.nport-datasets/2026q2
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: person
@@ -73,8 +70,6 @@ steps:
     facts:
       ticker_file_date: "2026-09-02"
     revision: 1
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: 13f-securities
@@ -82,8 +77,6 @@ steps:
     source: sec.thirteenf.securities
     target: mastering
     capture: sec.thirteenf.securities/p07-cohort
-    workers: 2
-    bundles: 1
     minutes: 90
     attempts: 3
   - name: 13f-securities-silver
@@ -91,8 +84,6 @@ steps:
     source: sec.thirteenf.securities
     target: silver
     capture: sec.thirteenf.securities/p07-cohort
-    workers: 2
-    bundles: 1
     minutes: 90
     attempts: 3
   - name: ncen-registrant-2025q4
@@ -100,8 +91,6 @@ steps:
     source: sec.ncen.registrant
     target: mastering
     capture: sec.ncen-datasets/2025q4
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: ncen-registrant-2026q1
@@ -109,8 +98,6 @@ steps:
     source: sec.ncen.registrant
     target: mastering
     capture: sec.ncen-datasets/2026q1
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: ncen-registrant-2026q2
@@ -118,8 +105,6 @@ steps:
     source: sec.ncen.registrant
     target: mastering
     capture: sec.ncen-datasets/2026q2
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: ncen-registrant-2026q3
@@ -127,8 +112,6 @@ steps:
     source: sec.ncen.registrant
     target: mastering
     capture: sec.ncen-datasets/2026q3
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: ncen-adviser-2025q4
@@ -136,8 +119,6 @@ steps:
     source: sec.ncen.adviser
     target: mastering
     capture: sec.ncen-datasets/2025q4
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: ncen-adviser-2026q1
@@ -145,8 +126,6 @@ steps:
     source: sec.ncen.adviser
     target: mastering
     capture: sec.ncen-datasets/2026q1
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: ncen-adviser-2026q2
@@ -154,8 +133,6 @@ steps:
     source: sec.ncen.adviser
     target: mastering
     capture: sec.ncen-datasets/2026q2
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: ncen-adviser-2026q3
@@ -163,8 +140,6 @@ steps:
     source: sec.ncen.adviser
     target: mastering
     capture: sec.ncen-datasets/2026q3
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: adv-mastering-03
@@ -173,8 +148,6 @@ steps:
     source: iapd.adv
     target: mastering
     capture: iapd.adv/p07-2026-03
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: adv-mastering-06
@@ -182,8 +155,6 @@ steps:
     source: iapd.adv
     target: mastering
     capture: iapd.adv/p07-2026-06
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: adv-silver-03
@@ -191,8 +162,6 @@ steps:
     source: iapd.adv
     target: silver
     capture: iapd.adv/p07-2026-03
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: adv-silver-06
@@ -200,8 +169,6 @@ steps:
     source: iapd.adv
     target: silver
     capture: iapd.adv/p07-2026-06
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: ncen-fund-2025q4
@@ -209,8 +176,6 @@ steps:
     source: sec.ncen.fund
     target: mastering
     capture: sec.ncen-datasets/2025q4
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: ncen-fund-2026q1
@@ -218,8 +183,6 @@ steps:
     source: sec.ncen.fund
     target: mastering
     capture: sec.ncen-datasets/2026q1
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: ncen-fund-2026q2
@@ -227,8 +190,6 @@ steps:
     source: sec.ncen.fund
     target: mastering
     capture: sec.ncen-datasets/2026q2
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: ncen-fund-2026q3
@@ -236,8 +197,6 @@ steps:
     source: sec.ncen.fund
     target: mastering
     capture: sec.ncen-datasets/2026q3
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: nport-security
@@ -245,8 +204,6 @@ steps:
     source: sec.nport.security
     target: mastering
     capture: sec.nport-datasets/2026q2
-    workers: 2
-    bundles: 1
     minutes: 480
     attempts: 8
   - name: nport-security-other-keys
@@ -254,8 +211,6 @@ steps:
     source: sec.nport.security
     target: mastering_other_keys
     capture: sec.nport-datasets/2026q2
-    workers: 2
-    bundles: 1
     minutes: 120
     attempts: 3
   - name: ncen-class-2025q4
@@ -264,8 +219,6 @@ steps:
     source: sec.ncen.class
     target: mastering
     capture: sec.ncen-datasets/2025q4
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: ncen-class-2026q1
@@ -273,8 +226,6 @@ steps:
     source: sec.ncen.class
     target: mastering
     capture: sec.ncen-datasets/2026q1
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: ncen-class-2026q2
@@ -282,8 +233,6 @@ steps:
     source: sec.ncen.class
     target: mastering
     capture: sec.ncen-datasets/2026q2
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: ncen-class-2026q3
@@ -291,8 +240,6 @@ steps:
     source: sec.ncen.class
     target: mastering
     capture: sec.ncen-datasets/2026q3
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: nport-security-silver
@@ -300,8 +247,6 @@ steps:
     source: sec.nport.security
     target: silver
     capture: sec.nport-datasets/2026q2
-    workers: 2
-    bundles: 1
     minutes: 240
     attempts: 3
   - name: gleif-pairs
@@ -309,8 +254,6 @@ steps:
     source: gleif
     target: subfund-pairs
     capture: gleif/20260911-1600
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: gleif
@@ -321,8 +264,6 @@ steps:
     capture: gleif/20260911-1600-publisher
     facts:
       publication_count: "3428477"
-    workers: 2
-    bundles: 1
     minutes: 240
     attempts: 40
   - name: adv-custodians-06
@@ -331,8 +272,6 @@ steps:
     source: iapd.adv
     target: custodians
     capture: iapd.adv/p07-2026-06
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: adv-custodians-03
@@ -341,8 +280,6 @@ steps:
     source: iapd.adv
     target: custodians
     capture: iapd.adv/p07-2026-03
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: ownership
@@ -350,8 +287,6 @@ steps:
     source: sec.ownership
     target: mastering
     capture: sec.ownership/p07-cohort
-    workers: 2
-    bundles: 1
     minutes: 300
     attempts: 8
   - name: ownership-symbols
@@ -360,8 +295,6 @@ steps:
     source: sec.ownership
     target: security_symbols
     capture: sec.ownership/p07-cohort
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: ownership-silver
@@ -369,8 +302,6 @@ steps:
     source: sec.ownership
     target: silver
     capture: sec.ownership/p07-cohort
-    workers: 2
-    bundles: 1
     minutes: 300
     attempts: 3
   - name: 13f-filings
@@ -378,8 +309,6 @@ steps:
     source: sec.thirteenf.filings
     target: silver
     capture: sec.thirteenf.filings/p07-managers
-    workers: 2
-    bundles: 1
     minutes: 60
     attempts: 3
   - name: company-facts
@@ -397,7 +326,5 @@ steps:
     source: sec.registration
     target: silver
     capture: sec.registration/s1-f1-originals
-    workers: 2
-    bundles: 1
     minutes: 240
     attempts: 4

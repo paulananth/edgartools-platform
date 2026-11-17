@@ -1,11 +1,11 @@
-# The silver table of registration offerings (ticket 149): one row per original S-1 or F-1 main document
+# The silver table of registration offerings: one row per original S-1 or F-1 main document
 # captured from 2026 on, with the terms its cover states. `edgar-warehouse silver register` reads this spec.
 # Rows are the `offering` table of registration-page.yaml. Rulings: operator, 2026-10-29 ("S-1 + F-1
 # originals, main doc (Recommended)"; "IPO pipeline + offering terms (Recommended)"), 2026-10-30 ("Main doc
 # only (Recommended)": a term the main document does not state is empty, no fee exhibit is requested),
 # 2026-11-04 ("write it in rust": the terms are found by the engine's text operations). A term the cover does
 # not state is empty, never zero. Numbers land as exact decimals or whole numbers from the text as filed.
-# The Company is found by its CIK; the company's name and facts are the Company's, in MDM (ticket 143).
+# The Company is found by its CIK; the company's name and facts are the Company's, in MDM.
 table: registration_offering
 definition: The offering terms one S-1 or F-1 cover states, linked to the registrant Company by CIK.
 grain: one row per accession number
