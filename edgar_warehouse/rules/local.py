@@ -98,8 +98,6 @@ def run_local(steps: list[dict], items: list[dict], modules: dict, artifacts, *,
     done: dict[tuple[str, str], dict] = {}
 
     def receipt_of(dependency: dict) -> dict:
-        if "run" in dependency:
-            raise Blocked("A local step reads only this run's local steps")
         return _receipt(done, dependency)
 
     for step in local:
@@ -184,7 +182,7 @@ def stage_manifest(manifest: dict, steps: list[dict], items: list[dict], done: d
 
 def _staged_input(unit: dict, local: set, done: dict, artifacts):
     source = unit["input"]
-    if (isinstance(source, dict) and set(source) == {"from"} and "run" not in source["from"]
+    if (isinstance(source, dict) and set(source) == {"from"}
             and source["from"].get("step") in local):
         return _input(unit, lambda dependency: _receipt(done, dependency), artifacts)
     if isinstance(source, dict) and set(source) == {"compose"}:
@@ -196,18 +194,15 @@ def _staged_input(unit: dict, local: set, done: dict, artifacts):
     return source
 
 
-OTHER_RUN = "<another run>"  # a unit of another run is never a local unit of this one
-
-
 def _compose_steps(body: dict) -> set:
     found = set()
     for value in body["slots"].values():
         if isinstance(value, list):
-            found |= {OTHER_RUN if "run" in dependency else dependency["step"] for dependency in value}
+            found |= {dependency["step"] for dependency in value}
         elif set(value) == {"compose"}:
             found |= _compose_steps(value["compose"])
         else:
-            found.add(OTHER_RUN if "run" in value else value["step"])
+            found.add(value["step"])
     return found
 
 

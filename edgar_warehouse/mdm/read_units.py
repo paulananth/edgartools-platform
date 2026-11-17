@@ -65,16 +65,6 @@ def contract_of(step: dict) -> str:
     return step.get("input", {}).get("contract", "source.yaml")
 
 
-def run_label(selector: dict) -> str:
-    """Another run's step a reading or a lookup names (ticket 120): `<source>/<target>/<step>`."""
-    return f"{selector['source']}/{selector['target']}/{selector['step']}"
-
-
-def run_units(run, selector: dict) -> list[dict]:
-    """That step's verified units, as the slot's list of `{run, step, key}`."""
-    return [{k: u[k] for k in ("run", "step", "key")} for u in run.others[run_label(selector)]]
-
-
 def pair(key: str) -> str:
     """A document's pair key, `{dir}/{base}`: an answer and its request share it."""
     return fill("{dir}/{base}", key)
@@ -208,14 +198,10 @@ def form(step: dict, run, units: dict) -> list[dict]:
                              "give a large set as a lookup set instead")
     contract = run.store.put(run.inputs, body)
     if "pieces" in shape:
-        if "run" in shape["pieces"]:  # another run's combine, read as it was verified (ticket 190)
-            (before,) = run_units(run, shape["pieces"]["run"])
-            slot = before
-        else:
-            if run.by_name[shape["pieces"]["step"]]["operation"] != "source.combine":
-                raise ValueError(f"Step {name}: pieces are read from a source.combine step")
-            (before,) = units[shape["pieces"]["step"]]
-            slot = {"step": shape["pieces"]["step"], "key": before["keys"]["unit"]}
+        if run.by_name[shape["pieces"]["step"]]["operation"] != "source.combine":
+            raise ValueError(f"Step {name}: pieces are read from a source.combine step")
+        (before,) = units[shape["pieces"]["step"]]
+        slot = {"step": shape["pieces"]["step"], "key": before["keys"]["unit"]}
         given = {value_name: context_value(template, name, run) for value_name, template in shape.get("context", {}).items()}
         return [unit(f"{run.root}/{name}/reading.json", {"unit": name}, {"compose": {
             "document": {"version": 4, "contract": contract, "pieces": {"slot": "pieces"}, **({"context": given} if given else {})},
@@ -227,8 +213,6 @@ def form(step: dict, run, units: dict) -> list[dict]:
     lookups = shape.get("lookups", {})
     from_files = bool(lookups) and all("file" in value for value in lookups.values())
     for value in ([] if from_files else lookups.values()):
-        if "run" in value:  # another run's step, read whole (ticket 120)
-            continue
         if value.get("over") == "all":  # every unit of the prerequisite, in one reading (ticket 177, slice 4)
             if not 1 <= len(units[value["from"]]) <= COMPOSE_LIST:
                 raise ValueError(f"Step {name}: a lookup over all reads 1..{COMPOSE_LIST} units of {value['from']}")
@@ -252,12 +236,10 @@ def form(step: dict, run, units: dict) -> list[dict]:
                 artifact["lookups"] = {"slot": slot}
                 slots[slot] = {"compose": {
                     "document": {"version": 2, "input": source, "sets": {
-                        set_name: {"readings": {"slot": set_name} if "run" in value or value.get("over") == "all"
-                                   else [{"slot": set_name}],
-                                   **{k: v for k, v in value.items() if k not in ("from", "run", "over")}}
+                        set_name: {"readings": {"slot": set_name} if value.get("over") == "all" else [{"slot": set_name}],
+                                   **{k: v for k, v in value.items() if k not in ("from", "over")}}
                         for set_name, value in lookups.items()}},
-                    "slots": {set_name: run_units(run, value["run"]) if "run" in value
-                              else [{"step": value["from"], "key": u["keys"]["unit"]} for u in units[value["from"]]]
+                    "slots": {set_name: [{"step": value["from"], "key": u["keys"]["unit"]} for u in units[value["from"]]]
                               if value.get("over") == "all" else {"step": value["from"], "key": pair(key)}
                               for set_name, value in lookups.items()}}}
             artifacts.append(artifact)

@@ -5,8 +5,6 @@ exercise the same read caller and native decisions on every selected engine;
 they do not establish migration, lease-write or worker authorization support.
 """
 from datetime import UTC, datetime, timedelta
-from concurrent.futures import ThreadPoolExecutor
-from threading import Event
 from uuid import uuid4
 
 import edgar_control
@@ -16,7 +14,6 @@ from sqlalchemy.exc import DBAPIError
 
 from edgar_warehouse.bookkeeping.clean import storage
 from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
-from edgar_warehouse.control_contract import Blocked
 
 
 @pytest.fixture(scope="module")
@@ -123,42 +120,6 @@ def test_real_available_work_observes_server_clock_and_live_attempt(control_tabl
     assert storage.available_keys(runtime, rid, "read", 10) == ["leased"]
 
 
-def test_real_latest_capture_uses_all_its_runs_and_never_an_old_rerun(control_tables):
-    owner, runtime, models = control_tables
-    at = datetime(2026, 1, 1, tzinfo=UTC)
-    first, name = add_run(owner, models, capture="older", at=at)
-    second, _ = add_run(owner, models, name=name, capture="newer", at=at + timedelta(days=1))
-    third, _ = add_run(owner, models, name=name, capture="older", at=at + timedelta(days=2))
-    fourth, _ = add_run(owner, models, name=name, capture="newer", at=at + timedelta(days=3))
-    for n, rid in enumerate((first, second, third, fourth)):
-        add_work(owner, models, rid, key="invented", ordinal=0, state="verified",
-                 receipt={"uri": "s3://invented/output", "sha256": str(n + 1) * 64})
-    # A repeated output within the newest capture is represented once, by its earliest completion.
-    add_work(owner, models, fourth, key="duplicate", ordinal=1, state="verified",
-             receipt={"uri": "s3://invented/output", "sha256": "2" * 64})
-    book = Bookkeeping(runtime)
-    selected = book.verified_units(source=name, target="reading", step="read")
-    assert [unit["run"] for unit in selected] == [second, fourth]
-    assert book.verified_units(source=name, target="reading", step="read", kind="pipeline") == []
-    run = models["pipeline_run"]
-    with owner.begin() as conn:
-        conn.execute(run.update().where(run.c.run_id == fourth).values(state="waiting"))
-    with pytest.raises(Blocked, match="1 runs not finished"):
-        book.verified_units(source=name, target="reading", step="read")
-    with owner.begin() as conn:
-        conn.execute(run.update().where(run.c.run_id == fourth).values(
-            state="complete", compacted_at=at + timedelta(days=4)))
-    with pytest.raises(Blocked, match="1 compacted"):
-        book.verified_units(source=name, target="reading", step="read")
-
-
-def test_real_capture_metadata_uses_its_document_index(control_tables):
-    owner, runtime, models = control_tables
-    _, name = add_run(owner, models)
-    statement = storage.capture_runs_statement(runtime, kind="source", source=name, target="reading")
-    assert_index_seek(owner, runtime, statement, "run_document_lookup")
-
-
 def assert_index_seek(owner, runtime, statement, index_name=None):
     compiled = statement.compile(dialect=runtime.dialect, compile_kwargs={"render_postcompile": True})
     sql = str(compiled)
@@ -216,9 +177,8 @@ def test_long_capture_and_document_names_and_unicode_keys_are_retained(control_t
     key = "invented-clé-漢字-😀"
     add_work(owner, models, rid, key=key, ordinal=0, state="verified",
              receipt={"uri": "s3://invented/output", "sha256": "a" * 64})
-    assert storage.capture_runs(runtime, kind="source", source=name, target="reading")[0]["capture"] == capture
-    assert Bookkeeping(runtime).verified_units(source=name, target="reading", step="read") == [
-        {"run": rid, "step": "read", "key": key, "sha256": "a" * 64}]
+    assert storage.run(runtime, rid)[0]["submission"]["capture"] == capture
+    assert storage.work(runtime, rid, step="read", key=key)[0]["unit_key"] == key
 
 
 def test_original_work_keys_are_exact_under_default_collations(control_tables):
@@ -228,37 +188,3 @@ def test_original_work_keys_are_exact_under_default_collations(control_tables):
         add_work(owner, models, rid, key=key, ordinal=0)
         assert storage.work(runtime, rid, step="read", key=key)[0]["unit_key"] == key
         assert storage.work(runtime, rid, step="read", key=other) == []
-
-
-def test_capture_outputs_and_metadata_share_one_observation_set(control_tables, monkeypatch):
-    owner, runtime, models = control_tables
-    rid, name = add_run(owner, models)
-    add_work(owner, models, rid, key="invented", ordinal=0, state="verified",
-             receipt={"sha256": "a" * 64})
-    original = storage.verified_units
-    entered = Event()
-
-    def compact():
-        entered.set()
-        with owner.begin() as conn:
-            run, work = models["pipeline_run"], models["work_item"]
-            conn.execute(run.update().where(run.c.run_id == rid).values(compacted_at=datetime.now(UTC)))
-            conn.execute(work.delete().where(work.c.run_id == rid))
-
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        pending = []
-
-        def between_reads(*args, **kwargs):
-            future = pool.submit(compact)
-            pending.append(future)
-            assert entered.wait(5)
-            if owner.dialect.name != "mssql":
-                future.result(timeout=5)
-            return original(*args, **kwargs)
-
-        monkeypatch.setattr(storage, "verified_units", between_reads)
-        assert Bookkeeping(runtime).verified_units(source=name, target="reading", step="read") == [
-            {"run": rid, "step": "read", "key": "invented", "sha256": "a" * 64}]
-        pending[0].result(timeout=5)
-    with pytest.raises(Blocked, match="1 compacted"):
-        Bookkeeping(runtime).verified_units(source=name, target="reading", step="read")

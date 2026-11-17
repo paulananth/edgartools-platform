@@ -94,7 +94,7 @@ def run_target(databases, tmp_path, body, target=TARGET):
     book = Bookkeeping(databases.runtime)
     report = write_manifest(source="openfigi", target=target, capture=str(tmp_path / "capture"),
                             documents=str(listed), capture_run="capture-1", output=str(tmp_path / "bundle"),
-                            as_of="2026-10-17T00:00:00Z", revision=0, journal=MemoryJournal(), bookkeeping=book,
+                            as_of="2026-10-17T00:00:00Z", revision=0, journal=MemoryJournal(),
                             facts={"ticker_file_date": "2026-09-02"})
     for profile in WORKERS:
         grant_profile(databases.admin, profile=profile, worker="bk_runtime")

@@ -162,21 +162,6 @@ def test_a_target_not_marked_local_keeps_its_manifest(monkeypatch):
     assert local.staged_inputs(Artifacts({}), {"bookkeeping": {}}, "mastering", inputs) is inputs
 
 
-def test_an_input_that_reads_another_run_is_a_database_input_even_when_a_local_step_has_the_name():
-    other = {"from": {"run": "11111111-1111-1111-1111-111111111111", "step": "read", "key": "r"}}
-    mixed = {"compose": {"slots": {"a": {"step": "combine", "key": "c"},
-                                   "b": {"run": "11111111-1111-1111-1111-111111111111", "step": "read", "key": "r"}},
-                         "document": {"a": {"slot": "a"}, "b": {"slot": "b"}}}}
-    items = [{"step": "prepare", "key": "p", "ordinal": 0, "unit": unit("p", other)},
-             {"step": "merge", "key": "m", "ordinal": 0, "unit": unit("m", mixed)}]
-    manifest = {"version": 2, "steps": {}}
-
-    with pytest.raises(Blocked, match="mixes"):
-        local.stage_manifest(manifest, STEPS, items, {("read", "r"): REF, ("combine", "c"): REF}, artifacts=None)
-    kept = local.stage_manifest(manifest, STEPS, items[:1], {("read", "r"): REF}, artifacts=None)
-    assert kept["steps"]["prepare"][0]["input"] == other  # not resolved to this run's own local receipt
-
-
 def test_a_local_step_that_requires_a_database_step_is_refused_by_the_configuration():
     body = by_the_unit("openfigi", local=True)
     target = body["bookkeeping"]["targets"]["mastering"]

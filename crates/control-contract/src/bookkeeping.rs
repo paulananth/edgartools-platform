@@ -1,6 +1,4 @@
 //! Database-independent control decisions over explicit stored observations.
-use super::{canonical, read, Document};
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -204,113 +202,6 @@ pub fn completion_storage_contract() -> Result<String, String> {
     .map_err(|_| "Invalid control storage contract".into())
 }
 
-#[derive(Deserialize)]
-struct CaptureRun {
-    run_id: String,
-    state: String,
-    capture: Option<Document>,
-    created_at: DateTime<Utc>,
-    compacted_at: Option<DateTime<Utc>>,
-}
-
-pub fn select_latest_capture(raw: &str) -> Result<String, String> {
-    let runs: Vec<CaptureRun> =
-        serde_json::from_str(raw).map_err(|_| "Invalid capture observations")?;
-    let mut groups: BTreeMap<String, Vec<CaptureRun>> = BTreeMap::new();
-    for run in runs {
-        if !matches!(
-            run.state.as_str(),
-            "running" | "waiting" | "blocked" | "complete"
-        ) {
-            return Err("Invalid capture run state".into());
-        }
-        let key = run
-            .capture
-            .as_ref()
-            .map(|value| canonical(value))
-            .transpose()?
-            .unwrap_or("null".into());
-        groups.entry(key).or_default().push(run);
-    }
-    // A rerun of an older capture must not make it the newest capture. Group
-    // creation order is its earliest start, then its independently earliest id.
-    let latest = groups.values().max_by_key(|runs| {
-        (
-            runs.iter().map(|run| run.created_at).min(),
-            runs.iter().map(|run| run.run_id.as_str()).min(),
-        )
-    });
-    let Some(latest) = latest else {
-        return Ok("[]".into());
-    };
-    let open = latest
-        .iter()
-        .filter(|run| matches!(run.state.as_str(), "running" | "waiting"))
-        .count();
-    if open != 0 {
-        return Err(format!(
-            "The newest capture has {open} runs not finished; finish them first"
-        ));
-    }
-    let compacted = latest
-        .iter()
-        .filter(|run| run.state == "complete" && run.compacted_at.is_some())
-        .count();
-    if compacted != 0 {
-        return Err(format!("The newest capture has {compacted} compacted runs; run that target again over a capture"));
-    }
-    let mut selected: Vec<&str> = latest
-        .iter()
-        .filter(|run| run.state == "complete")
-        .map(|run| run.run_id.as_str())
-        .collect();
-    selected.sort_unstable();
-    serde_json::to_string(&selected).map_err(|_| "Cannot select capture runs".into())
-}
-
-#[derive(Deserialize, Serialize)]
-struct VerifiedUnit {
-    run: String,
-    step: String,
-    key: String,
-    sha256: String,
-    #[serde(skip_serializing)]
-    completed_at: DateTime<Utc>,
-}
-
-impl VerifiedUnit {
-    fn order(&self) -> (DateTime<Utc>, &str, &str) {
-        (self.completed_at, self.run.as_str(), self.key.as_str())
-    }
-}
-
-pub fn select_verified_units(raw: &str) -> Result<String, String> {
-    let raw: Document =
-        serde_json::from_str(raw).map_err(|_| "Invalid verified unit observations")?;
-    let units: Vec<VerifiedUnit> = read(&raw)?;
-    let mut hashes: BTreeMap<String, VerifiedUnit> = BTreeMap::new();
-    for unit in units {
-        if !super::valid_hash(&unit.sha256) {
-            return Err("Verified unit has no valid output hash".into());
-        }
-        let held = hashes
-            .entry(unit.sha256.clone())
-            .or_insert_with(|| VerifiedUnit {
-                run: unit.run.clone(),
-                step: unit.step.clone(),
-                key: unit.key.clone(),
-                sha256: unit.sha256.clone(),
-                completed_at: unit.completed_at,
-            });
-        if unit.order() < held.order() {
-            *held = unit;
-        }
-    }
-    let mut units: Vec<_> = hashes.into_values().collect();
-    units.sort_by(|left, right| left.order().cmp(&right.order()));
-    serde_json::to_string(&units).map_err(|_| "Cannot select verified units".into())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -362,50 +253,5 @@ mod tests {
             &good.replace("\"work.accounting\":true", "\"work.accounting\":1")
         )
         .is_err());
-    }
-
-    #[test]
-    fn old_capture_rerun_never_changes_capture_creation_order() {
-        let runs = r#"[
-          {"run_id":"a","state":"complete","capture":{"sha256":"old"},"created_at":"2026-01-01T00:00:00Z"},
-          {"run_id":"b","state":"complete","capture":{"sha256":"new"},"created_at":"2026-02-01T00:00:00Z"},
-          {"run_id":"c","state":"complete","capture":{"sha256":"old"},"created_at":"2026-03-01T00:00:00Z"}]
-        "#;
-        assert_eq!(select_latest_capture(runs).unwrap(), r#"["b"]"#);
-    }
-
-    #[test]
-    fn unfinished_latest_capture_is_refused_but_a_blocked_one_is_abandoned() {
-        for state in ["running", "waiting"] {
-            let raw = format!(
-                r#"[{{"run_id":"a","state":"{state}","created_at":"2026-01-01T00:00:00Z"}}]"#
-            );
-            assert!(select_latest_capture(&raw)
-                .unwrap_err()
-                .contains("1 runs not finished"));
-        }
-        assert_eq!(
-            select_latest_capture(
-                r#"[{"run_id":"a","state":"blocked","created_at":"2026-01-01T00:00:00Z"}]"#
-            )
-            .unwrap(),
-            "[]"
-        );
-        assert!(select_latest_capture(r#"[{"run_id":"a","state":"complete","created_at":"2026-01-01T00:00:00Z","compacted_at":"2026-01-02T00:00:00Z"}]"#).unwrap_err().contains("1 compacted"));
-    }
-
-    #[test]
-    fn duplicate_output_chooses_earliest_completion_then_run_and_key() {
-        let hash = "a".repeat(64);
-        let raw = format!(
-            r#"[
-          {{"run":"b","step":"read","key":"z","sha256":"{hash}","completed_at":"2026-01-02T00:00:00Z"}},
-          {{"run":"a","step":"read","key":"z","sha256":"{hash}","completed_at":"2026-01-01T00:00:00Z"}},
-          {{"run":"a","step":"read","key":"a","sha256":"{hash}","completed_at":"2026-01-01T00:00:00Z"}}]"#
-        );
-        assert_eq!(
-            select_verified_units(&raw).unwrap(),
-            format!(r#"[{{"run":"a","step":"read","key":"a","sha256":"{hash}"}}]"#)
-        );
     }
 }

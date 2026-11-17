@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import re
 from string import Formatter
-from uuid import UUID
 
 
 from edgar_warehouse.control_contract import Blocked, canonical, digest, reference
@@ -194,10 +193,9 @@ def _plan(step: dict) -> None:
     if not isinstance(readings, dict) or any(not re.fullmatch(r"[a-z][a-z0-9_]*", name) for name in readings):
         raise Blocked("A step's readings are named by identifiers")
     if any(not isinstance(value, dict) or len(value) != 1 or not (
-               set(value) <= {"all", "step"} and value.get("all", value.get("step")) in step["requires"]
-               or set(value) == {"run"} and _other_run(value["run"])) for value in readings.values()):
-        raise Blocked("A step's readings each name one prerequisite step, {all: <step>} or {step: <step>}, "
-                      "or another run's step: {run: {source, target, step}}")
+               set(value) <= {"all", "step"} and value.get("all", value.get("step")) in step["requires"])
+           for value in readings.values()):
+        raise Blocked("A step's readings each name one prerequisite step, {all: <step>} or {step: <step>}")
     if "files" in shape and (not isinstance(shape["files"], str) or not shape["files"] or ".." in shape["files"]):
         raise Blocked("A step's files are a pattern over the bundle's documents")
     beside = shape.get("beside")
@@ -220,13 +218,12 @@ def _plan(step: dict) -> None:
                        not isinstance(v, dict)
                        or v.get("over", "file") not in LOOKUP_OVER
                        or not (set(v) - {"over"} in (LOOKUP_KEYS, LOOKUP_KEYS - {"value_column"})
-                               and v["from"] in step["requires"]
-                               or set(v) == LOOKUP_KEYS - {"from"} | {"run"} and _other_run(v["run"]))
+                               and v["from"] in step["requires"])
                        or any(type(v[k]) is not int or v[k] < 1 for k in ("max_input_bytes", "max_input_rows")))
                    for v in lookups.values())):
         raise Blocked("A step's lookups each read the same file's unit of one prerequisite (from, table, "
-                      "column, value_column and their bounds; `over: all` reads every unit of it), another run's "
-                      "step instead of `from` ({run: {source, target, step}}), or a run file {file: <name>}")
+                      "column, value_column and their bounds; `over: all` reads every unit of it), "
+                      "or a run file {file: <name>}")
     if any(_named(v, "file") for v in lookups.values()) and not all(_named(v, "file") for v in lookups.values()):
         raise Blocked("A step's lookups are all run files, or all read from a prerequisite")
     if "runfile" in shape and (not isinstance(shape["runfile"], str) or not re.fullmatch(NAME, shape["runfile"])
@@ -247,11 +244,9 @@ def _plan(step: dict) -> None:
             and not (isinstance(step.get("units"), dict) and set(step["units"]) <= {"groups", "each"})):
         raise Blocked("A read with lookups is cut into groups or each file (a composed slot per file)")
     pieces = shape.get("pieces")
-    if pieces is not None and not (isinstance(pieces, dict) and (
-            set(pieces) == {"step"} and pieces["step"] in step["requires"]
-            or set(pieces) == {"run"} and _other_run(pieces["run"]))):
-        raise Blocked("A step's pieces name one prerequisite step, {step: <step>}, "
-                      "or another run's step, {run: {source, target, step}}")
+    if pieces is not None and not (isinstance(pieces, dict) and set(pieces) == {"step"}
+                                   and pieces["step"] in step["requires"]):
+        raise Blocked("A step's pieces name one prerequisite step, {step: <step>}")
     if pieces is not None and step.get("units", "one") != "one":
         raise Blocked("A read of pieces is one unit")
 
@@ -393,11 +388,6 @@ COMPOSE_DEPTH = 2
 
 
 def _dependency(dependency, step: dict, identities: set):
-    if isinstance(dependency, dict) and set(dependency) == {"run", "step", "key"}:
-        # Another run's unit (ticket 120): Bookkeeping fills it only from that run's verified output.
-        if not all(isinstance(dependency[k], str) and dependency[k] for k in ("step", "key")) or not _run_id(dependency["run"]):
-            raise Blocked("Input must name an existing unit in a preceding prerequisite or another run")
-        return
     if (not isinstance(dependency, dict) or set(dependency) != {"step", "key"}
             or not isinstance(dependency["step"], str) or not isinstance(dependency["key"], str)
             or dependency["step"] not in step["requires"]
@@ -405,17 +395,7 @@ def _dependency(dependency, step: dict, identities: set):
         raise Blocked("Input must name an existing unit in a preceding prerequisite")
 
 
-def _other_run(value) -> bool:
-    """`{source, target, step}`: a step of another source's target, read from its complete runs (ticket 120)."""
-    return (isinstance(value, dict) and set(value) == {"source", "target", "step"}
-            and all(isinstance(v, str) and re.fullmatch(IDENTIFIER, v) for v in value.values()))
 
-
-def _run_id(value) -> bool:
-    try:
-        return isinstance(value, str) and str(UUID(value)) == value
-    except ValueError:
-        return False
 
 
 def slot_names(document) -> list[str]:

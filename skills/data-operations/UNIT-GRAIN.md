@@ -34,13 +34,6 @@ can finish ("Pinned worker runtime changed; start a new run").
 - **Leave worker code alone** (`edgar_warehouse/workers/*`). A run pins its
   worker runtime and stops on a change ("Pinned worker runtime changed;
   start a new run"). Change code between loads.
-- **Size the lease to the slowest claim, not to the work.** A step that
-  reads another run's output rechecks that run on every claim and report,
-  which can outlast the default 120 s lease ("Stale lease"). The target sets
-  `lease_seconds` and `heartbeat_seconds`.
-- **A target that reads another target's runs** (`{run: {source, target,
-  step}}`, [Bookkeeping SPEC](../bookkeeping/SPEC.md)) loads after that
-  target. The comments in `rules/source-sequence.yaml` give the order.
 
 ## Quality results in the catalog
 

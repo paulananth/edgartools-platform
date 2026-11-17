@@ -372,8 +372,6 @@ mod python {
         m.add_function(wrap_pyfunction!(prepare_reference_search, m)?)?;
         m.add_function(wrap_pyfunction!(prepare_text_search, m)?)?;
         m.add_function(wrap_pyfunction!(completion_storage_contract, m)?)?;
-        m.add_function(wrap_pyfunction!(select_latest_capture, m)?)?;
-        m.add_function(wrap_pyfunction!(select_verified_units, m)?)?;
         Ok(())
     }
 
@@ -435,16 +433,6 @@ mod python {
     #[pyfunction]
     fn completion_storage_contract(py: Python<'_>) -> PyResult<String> {
         py.allow_threads(super::bookkeeping::completion_storage_contract)
-            .map_err(PyValueError::new_err)
-    }
-    #[pyfunction]
-    fn select_latest_capture(py: Python<'_>, raw: String) -> PyResult<String> {
-        py.allow_threads(|| super::bookkeeping::select_latest_capture(&raw))
-            .map_err(PyValueError::new_err)
-    }
-    #[pyfunction]
-    fn select_verified_units(py: Python<'_>, raw: String) -> PyResult<String> {
-        py.allow_threads(|| super::bookkeeping::select_verified_units(&raw))
             .map_err(PyValueError::new_err)
     }
 }
