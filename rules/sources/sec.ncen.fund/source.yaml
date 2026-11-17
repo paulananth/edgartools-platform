@@ -52,9 +52,6 @@ bookkeeping:
       # The combine's rows are the records, one per series; no record step.
       extract: advisers-combine.yaml
       master: {keys: {dataset: sec.ncen.fund.v1, table: fund}}
-      silver:
-        # The adviser links are a silver table, built from the stored records after the merge.
-        - {name: links, derive: {build: links, reads: mastering_record, silver: relationship}}
 execution:
   profile: source.read
   workers: 1

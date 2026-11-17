@@ -43,12 +43,14 @@ Findings 3 and 4 are deletions with no data effect: do them first. Finding 1 rem
 ## Parts
 
 - [x] 2026-11-16 16:45 ET Every source's targets expanded and compared; each finding checked in the code that reads the setting (this file).
-- [ ] Finding 3: remove `local: true` and its comment from the 2 targets.
-- [ ] Finding 4: remove the lease settings from the capture target; the validator refuses them at grain `run`.
-- [ ] Finding 1: the links build moves to one place; a source loaded alone builds it; a test loads a link-stating source alone and finds its links.
+- [x] 2026-11-16 17:23 ET Finding 3: `local: true` and its comments removed from the 2 targets (PR 1846; `test_no_target_at_grain_run_names_a_setting_it_does_not_read`).
+- [x] 2026-11-16 17:23 ET Finding 4: the lease settings removed; the validator refuses them at grain `run` (PR 1846; `test_a_target_at_grain_run_refuses_what_only_a_target_held_by_the_unit_reads`). The processing identity now leaves out how a target is held.
+- [x] 2026-11-16 17:23 ET Finding 1: `silver links` builds the table once; a `load` alone builds it after its last bundle, the chain once in `--finish` (`--no-links` on each step); the 5 targets carry no step and the worker no longer builds links. Nine waits that existed only for link order are gone from the chain. Tests: `test_the_chain_builds_the_links_table_once_after_the_loads_and_no_target_builds_it`, `test_a_load_that_mastered_records_builds_the_links_table_once_after_its_last_bundle` and 4 beside it, `test_links_land_as_one_row_a_period_and_a_second_build_keeps_them` (PostgreSQL).
+- [ ] Hosted: findings 1, 3 and 4 move the processing identity of 8 sources once, so their files load again on their next load. One reload after the remaining findings land, on the operator's word.
+- [x] 2026-11-16 17:23 ET Operator, 2026-11-16: "6 and 8 agreed now fix the inconsistency". Finding 6: one delivery-date convention, read from the capture. Finding 8: my reading is one place where every source says how its files arrive; to confirm before building.
 - [ ] Finding 2: every target at grain `run`; the by-the-unit path deleted.
 - [ ] Finding 5: one target per source reads once (measure one source first).
-- [ ] Finding 9: a restart skips a read already written.
+- [x] 2026-11-16 21:02 ET Finding 9: a run worked again keeps the reads it wrote (PR 1849; `test_a_stopped_run_worked_again_does_not_read_again_what_it_wrote`).
 - [ ] Finding 6: operator's ruling on one delivery-date convention.
 - [ ] Finding 7: measure the second read thread; one knob.
 - [ ] Finding 8: operator's ruling on where capture is declared.

@@ -21,5 +21,5 @@ One update a block of 2,000 rows: each record takes its own golden record throug
 
 - [x] 2026-11-16 17:07 ET Test that failed first: `test_a_thousand_older_records_follow_their_golden_records_in_one_statement` (`assert 1000 == 1`: a statement a row).
 - [x] 2026-11-16 17:07 ET Proved on the hosted store, rolled back: 58.8 s to 0.33 s for 1,000 rows; the rows written are equal.
-- [ ] Hosted: the GLEIF load restarted on this code; records a second measured.
+- [x] 2026-11-16 21:02 ET Hosted: the GLEIF load restarted on this code. Measured over 182 s of merging with 8 workers: 458 golden records a second (110 before), 33.6 batches a minute.
 - [x] 2026-11-16 17:07 ET Learning → skill: `mdm-engineering` "Writes and transactions" (a measurement covers the case the load is made of: records that already have rows, not only new ones).

@@ -190,7 +190,7 @@ def test_the_holdings_land_through_their_own_silver_target_with_no_merge_before_
     assert land["input"]["keys"] == {"table": "holding", "silver": spec_file(FOLDER / "silver-holding.yaml", None)["table"]}
     assert "merge" not in silver and "prepare" not in silver
     assert silver["processed"]["requires"] == ["land_holding"]  # the Change Journal records only what landed
-    assert "land_holding" not in mastering and mastering["processed"]["requires"] == ["links"]
+    assert "land_holding" not in mastering and mastering["processed"]["requires"] == ["merge"]
 
 
 def test_the_land_step_lands_every_holding_once_and_its_verifier_confirms(database, tmp_path, monkeypatch):

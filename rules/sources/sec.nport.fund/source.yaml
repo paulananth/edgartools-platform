@@ -39,9 +39,6 @@ bookkeeping:
       grain: run
       extract: combine.yaml
       master: {keys: {dataset: sec.nport.fund.v1, table: fund}}
-      silver:
-        # Links are a silver table, built from the stored records after the merge.
-        - {name: links, derive: {build: links, reads: mastering_record, silver: relationship}}
 execution:
   profile: source.read
   workers: 1

@@ -261,8 +261,25 @@ class Loader:
             plan["preparation"] = preparation
         return plan
 
+    def build_links(self) -> dict | None:
+        """The links table, built whole once this load's merges are done: any newly mastered record can be the end a
+        stored link waited for. A target that masters nothing builds none; neither does a stores folder with no
+        silver login, and the load says so."""
+        steps = self.reading["bookkeeping"]["targets"][self.target]["steps"]
+        if not any(step.get("operation") == "mastering.merge" for step in steps):
+            return None
+        if not self.env["worker"].get("SILVER_DATABASE_URL") or "migration" not in self.env:
+            self.say("Links are not built: the stores folder has no silver login")
+            return None
+        role = make_url(self.env["worker"]["SILVER_DATABASE_URL"]).username
+        self.commands("migration", "silver", "register", str(files.ROOT / "silver" / "silver-relationship.yaml"),
+                      "--runtime-role", role)
+        built = json.loads(self.commands("worker", "silver", "links"))
+        self.say(f"Links built: {built['links']} links in {built['rows']} rows")
+        return built
+
     def load(self, *, capture: Path, capture_run: str, as_of: str, facts: list[str], run_files: list[str],
-             revision: int = 0, force: bool = False) -> dict:
+             revision: int = 0, force: bool = False, links: bool = True) -> dict:
         result = {"source": self.source, "target": self.target, "finished_open_runs": [], "bundles": []}
         result["silver_registered"] = self.register_silver()
         # The merge rules and this source's Dataset Contracts, registered in MDM from the files.
@@ -309,6 +326,8 @@ class Loader:
             for number, keys in enumerate(cut, 1)])
         self.say(f"Done: {sum(b['new'] for b in result['bundles'])} documents loaded, "
                  f"{sum(b['documents'] - b['new'] for b in result['bundles'])} already loaded before")
+        changed = result["finished_open_runs"] or any(b["new"] for b in result["bundles"])
+        result["links"] = self.build_links() if links and changed else None
         return result
 
 
@@ -324,7 +343,8 @@ def _handle(args) -> int:
             raise RunStopped("--capture-run is required unless --plan")
         result = loader.load(capture=args.capture.expanduser(), capture_run=args.capture_run,
                              as_of=args.as_of or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                             facts=args.fact or [], run_files=args.file or [], revision=args.revision, force=args.force)
+                             facts=args.fact or [], run_files=args.file or [], revision=args.revision, force=args.force,
+                             links=not args.no_links)
     except (RunStopped, ValueError) as error:
         print(f"Load stopped: {error}", file=sys.stderr)
         print("Run the same command again to carry on from here.", file=sys.stderr)
@@ -361,6 +381,9 @@ def register(subparsers) -> None:
                         help="Force publish: ignore the Change Journal and process every document of the source again, "
                              "as a new publication of the capture run (the journal records it as forced). Use it when "
                              "the result must be made again whatever the journal holds")
+    parser.add_argument("--no-links", action="store_true",
+                        help="Leave the links table as it is: for a load that is one of several, whose last step "
+                             "builds it once (`silver links`)")
     parser.add_argument("--fact", action="append", help="A run fact the target declares: name=value (repeat)")
     parser.add_argument("--file", action="append", help="A run file the target declares: name=path (repeat)")
     parser.set_defaults(handler=_handle)
