@@ -140,7 +140,9 @@ Verify reads succeed and an INSERT/UPDATE attempt is denied under that
 consumer role, inside the isolated fixture scope. Do not test as ACCOUNTADMIN
 or infer read-only access because a table's name contains mirror.
 
-Declare the three Iceberg targets as dbt sources. Build the smallest synthetic
+Direct mirror consumption does not require dbt or a Gold build. When the
+qualification includes a required Gold transformation, declare the three
+Iceberg targets as dbt sources. Build the smallest synthetic
 Gold model that joins their fixture keys and computes an exact numeric result
 in a separately approved test Gold target; run its key, uniqueness, non-null
 and exact-result checks. Gold gets no write grant on mirror tables. A missing
@@ -180,8 +182,10 @@ effect of this test or replace the required Iceberg target with three databases.
 ## Examples
 
 The requested production target is `DB_EDGARTOOLS_MIRROR` with `MDM`, `RDM`
-and `SILVER` schemas. dbt Gold is built in the writable
-`DB_EDGARTOOLS_GOLD.GOLD` schema, reading the mirror as a source. A qualification uses a unique disposable target such as
+and `SILVER` schemas. Consumers may read approved mirror tables directly.
+When Gold transformations are required, dbt reads the mirror and writes to a
+separately approved writable destination; no Gold database/schema name is
+approved by this example. A qualification uses a unique disposable target such as
 `DB_EDGARTOOLS_MIRROR_Q_<unique>` instead of consuming that production name.
 One source test database contains `mdm.final_data`, `rdm.final_data` and
 `silver.final_data`; only these three tables are selected. The three initial

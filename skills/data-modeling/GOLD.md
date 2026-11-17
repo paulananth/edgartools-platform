@@ -6,18 +6,72 @@ dimensions, and the time scope. The class, kind, identifier, code set,
 relationship and silver decisions stay in [SKILL.md](SKILL.md). This file
 does not write a dbt model, deploy a database, or approve an exposure list.
 
-Gold is the warehouse a reader queries. The mastered identity stays in MDM.
+Approved mirror tables can be queried directly without dbt or a Gold build.
+Use Gold when a consumption requirement needs a modeled transformation;
+the mastered identity stays in MDM.
 A Gold fact is the consumption shape of a transaction part or a relationship
 that silver already holds, plus dimensions from the masters and code sets.
 It is not a new data class, and it is not an exposure source.
 [Final exposable tables](../data-platform/FINAL-TABLES.md) lists final master,
-reference and silver tables. dbt reads that approved mirror and writes Gold.
-The database and the writable target are in
+reference and silver tables. For required Gold transformations, dbt reads that
+approved mirror and writes Gold. The database and schema names are undecided;
+record and obtain approval of the exact writable destination before a build.
+An existing database, example name or control-schema location is not target
+approval. Execution follows
 [aws-snowflake-operations](../aws-snowflake-operations/SKILL.md). A question
 contract on one built fact is
 [semantic-views](../semantic-views/SKILL.md).
 
 ## Choose the technique
+
+First state the consumption requirement and whether direct reads of the
+approved mirror satisfy it. If they do, stop at consumer access qualification;
+do not build a duplicate table or require dbt just to serve the same rows.
+The Gold modeling method below applies when transformations are needed.
+
+## dbt implementation requirements
+
+- Apply this method to any business domain. Resolve the entity and fact list
+  from approved modeling configuration; no fixed entity names or three-entity
+  limit controls the build. Each entry declares its approved input assignments,
+  output view identity, key, attributes, relationships and current/history scope.
+  Fact entries also declare their grain, measures and dimension joins. Keep
+  connections and credentials outside these model definitions.
+- Gold has dimension and fact models. Expose each configured mastered entity as its own
+  dimension view, using dbt's `view` materialization; do not combine distinct
+  entities into a single dimension. Facts have their own business grain and
+  refer to those shared dimensions through master keys. A separate fact is
+  not required merely because an entity has a dimension view.
+- Reuse a conformed dimension across domains when it represents the same
+  modeled entity. A new domain or a different join role does not create a
+  second copy. RDM code-set dimensions retain their approved version; date
+  dimensions retain their declared business-time or recorded-time role.
+- An entity dimension view is an ordinary SQL view, not a Snowflake Semantic
+  View. A Semantic View is the separately certified question contract over
+  one Gold fact grain and its dimensions; apply
+  [semantic-views](../semantic-views/SKILL.md) for that later stage. A dimension
+  view alone does not certify questions or authorize another consumer source.
+- Use a shared model-generation path or reusable dbt templates/macros driven by
+  those entries. Adding a domain or entity changes configuration and its grain,
+  key and join tests, not a copied domain-specific implementation. Verify the
+  installed project's actual capabilities before using this path; this skill
+  defines requirements and does not claim a generator or models already exist.
+- Link each model to the consumption requirement and its approved input-table
+  assignments. Mirroring and direct reads do not depend on dbt readiness.
+- Record the approved output database and schema, materialization, execution
+  role and warehouse in deployment configuration; do not supply a production
+  destination by convention or copy one from an example.
+- Use dbt for Snowflake transformation writes. Its role reads only approved
+  mirror inputs and writes only to the approved writable destination, outside
+  the read-only mirror database. Reader access remains separately controlled.
+- Declare approved mirror inputs as dbt sources and prove grain, key uniqueness,
+  nullability, exact-number calculations and join multiplicity for the required
+  model. Report Gold acceptance separately from mirror replication and access.
+- Provisioning Postgres ingress does not create Gold models or a Gold schema.
+  A Gold name previously used for an operational object remains unapproved as
+  a model destination until explicitly reviewed.
+
+## Model the required Gold output
 
 The integrated store already exists. MDM holds identity and master attributes,
 RDM holds code sets as versions, silver holds each transaction grain, and the
@@ -75,7 +129,9 @@ rows the key would drop or multiply (zero, or the operator decides).
 
 - **One conformed dimension per master kind**, keyed by the master id. Every
   fact that links to that kind uses that dimension. A role (holder, issuer,
-  custodian) is a second join to the same dimension, not a second copy of it.
+  custodian) is a second join to the same dimension view, not a second copy of
+  it. Expose each kind as a separate Gold view over approved mirror inputs;
+  the view is a consumer projection and does not master the entity again.
 - **The fact holds its own measures and the master-id links.** Master
   attributes stay on the dimension. The row's own unit stays beside the
   amount it measures (one system of record, in the skill).
@@ -111,6 +167,8 @@ marked approved or proposed.
 - Measures that belong to the row, and the master attributes left on the dimension.
 - Business-time columns, recorded-time columns, and the declared time scope.
 - Inputs, each approved or proposed.
+- Whether direct mirror reads suffice; otherwise the required transformation
+  and the approved writable destination, or an explicit pending naming decision.
 - The row count the key would drop or multiply.
 
 ## Hand off
@@ -123,6 +181,13 @@ its grain, no silver query. A missing exposure approval stops the build and
 returns to [Final exposable tables](../data-platform/FINAL-TABLES.md).
 
 ## Examples
+
+For one configured domain, Person, Company and Security each have a separate
+Gold dimension view. Another domain supplies its own approved entity list to
+the same modeling method. Facts join dimension views through their respective
+master ids at the fact's declared grain. These entity labels do not approve
+physical view, schema or database names, and this document does not claim the
+views have been deployed.
 
 Examples only. These are the registered silver grains read as a bus. They
 are not installed dbt models. Nothing above depends on them.
