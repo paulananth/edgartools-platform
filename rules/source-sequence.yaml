@@ -103,3 +103,9 @@ sources:
     target: silver
     requires: []
     after: [sec.company]
+  # The IPO pipeline: the stage filings of each company that filed an IPO registration, read from the captured
+  # submissions and landed in silver by `silver`, linked to the Company by CIK.
+  sec.ipo:
+    target: silver
+    requires: []
+    after: [sec.company]

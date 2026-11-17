@@ -328,6 +328,15 @@ steps:
     capture: sec.registration/s1-f1-originals
     minutes: 240
     attempts: 4
+  - name: ipo
+    lane: D
+    source: sec.ipo
+    target: silver
+    capture: sec.submissions.company/all-76230
+    facts:
+      observed_at: "2026-09-30T02:20:28+00:00"
+    minutes: 60
+    attempts: 4
   - name: prospectus
     lane: D
     source: sec.prospectus

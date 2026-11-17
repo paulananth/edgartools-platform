@@ -167,7 +167,8 @@ Python JSON formatting policies inside assertions. Assertions run even when
 every table is empty and cannot defer records. The source worker writes no
 source-extract output on rejection; the existing parser and byte limits still apply.
 
-`overlap` tells whether two lists of text share a value: true when
+`overlap` tells whether two lists of text share a value (a fixed list is a
+`sequence` of `const` values; a `const` list reads as null): true when
 they share one, false when they share none (an empty list shares nothing), null
 when either is null or missing. Anything but a list of text refuses with
 `value_type`. Use it where a reading compares two sets, such as the identifiers
@@ -393,7 +394,8 @@ read:
 ```
 
 `path` locates one object; `"."` means the document. `anchor` and every
-`fields` value are array paths relative to that object. Output field names
+`fields` value are array paths relative to that object. A row holds only the
+names in `fields`: name the anchor there too to read it as a column. Output field names
 use letters, digits and underscores. Row order is anchor order, and
 `ordinal` starts at 1. `from: document` reads a column's path against the
 original document, so envelope facts need not be duplicated into every row.
@@ -782,6 +784,11 @@ supplied set of the other kind is refused when it is read, so one is never
 read as the other. Derive the set
 from a verified source extract (version-2 receipt, below) with `value_column`
 beside `column`: the reading is streamed once, with no materialized join.
+
+A lookup between two passes over the same documents, where each document's rows need only that document's values
+(two facts one list in a document states), is a same-file lookup: the pass that makes the set reads `units: {each:
+file}`, the pass that reads it `units: {groups: N}` (at most 16), and each group reads every file's own set. A pass
+cut into byte slices cannot feed one ("a lookup reads the same file's unit of a step whose units are each file").
 
 A read over a combine's pieces (`pieces:`) takes no lookups. Look the value up
 in the earlier read, where lookups work, and carry it inside the member the
