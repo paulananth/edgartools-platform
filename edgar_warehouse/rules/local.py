@@ -6,7 +6,11 @@ the receipts of earlier local units, through `compose_document`. A run in the da
 then opens at the first step that writes the destination, with these receipts as its inputs."""
 from __future__ import annotations
 
+import json
+import os
 from collections import defaultdict
+from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 from edgar_warehouse.bookkeeping.clean.compose import compose_document
 from edgar_warehouse.bookkeeping.clean.config import (LOCAL_OPERATIONS, STEP_CHECKS, Blocked, reference,
@@ -56,8 +60,73 @@ def work_run(book, run_id: str, modules: dict | None = None, *, workers: int = 1
                 "rules": submission["rules"], "ordinal": item["ordinal"],
                 "effect_key": digest({"rules": submission["rules"], "step": step["name"], "key": item["key"],
                                       "unit": item["unit"]})}
-    run_local(config["steps"], items, modules, book.artifacts, every=True, extra=claim, workers=workers)
+    run_local(config["steps"], items, modules, book.artifacts, every=True, extra=claim, workers=workers,
+              extracts=Extracts.of_the_stores(book.artifacts, modules))
     return book.finalize(run_id)
+
+
+class Extracts:
+    """The extracts written under one stores' manifest root, each found by what made it: the operation, its worker
+    code, and the content of everything it read (the rules it read with, each file, each value it was given). Two
+    targets of a source that read the same files the same way then read them once: the second takes the first's
+    receipt. Where a file sits is no part of it, so only content decides. An extract whose file is gone or changed
+    is made again."""
+
+    def __init__(self, folder: Path, runtimes: dict[str, str], artifacts):
+        self.folder, self.runtimes, self.artifacts = folder, runtimes, artifacts
+
+    @classmethod
+    def of_the_stores(cls, artifacts, modules: dict) -> "Extracts | None":
+        from edgar_warehouse.workers.__main__ import runtime
+
+        root = urlparse(os.environ.get("BOOKKEEPING_MANIFEST_ROOT") or "")
+        extracting = {operation: module for operation, module in modules.items() if operation in LOCAL_OPERATIONS}
+        if (root.scheme not in ("", "file") or not root.path
+                or any(not hasattr(module, "__file__") for module in extracting.values())):
+            return None  # no local folder to keep them under, or code with no file to know it by
+        return cls(Path(unquote(root.path)) / "extracts",
+                   {operation: runtime(module) for operation, module in extracting.items()}, artifacts)
+
+    def _file(self, step: dict, envelope: dict) -> Path:
+        from edgar_warehouse.control_contract import digest
+
+        # An input taken whole from an earlier unit is that extract, known by its hash; any other input is the
+        # small document that names what the unit reads.
+        given = envelope["input"]["sha256"] if envelope["whole"] else _content(self.artifacts.json(envelope["input"]))
+        return self.folder / (digest({
+            "operation": step["operation"], "runtime": self.runtimes[step["operation"]],
+            "input": given, "whole": envelope["whole"], "cursor": envelope["cursor"],
+            "keys": {name: value for name, value in envelope["keys"].items() if name != "destination"}}) + ".json")
+
+    def kept(self, step: dict, envelope: dict) -> dict | None:
+        """The receipt of this unit's extract when one is written and still reads as it was written."""
+        try:
+            held = json.loads(self._file(step, envelope).read_text())
+        except (OSError, ValueError):
+            return None
+        found = _written(self.artifacts, held["uri"])
+        return found if found == held else None
+
+    def keep(self, step: dict, envelope: dict, receipt: dict) -> None:
+        file = self._file(step, envelope)
+        file.parent.mkdir(parents=True, exist_ok=True)
+        staged = file.with_name(f".{file.name}.{os.getpid()}")
+        staged.write_text(json.dumps(receipt, sort_keys=True))
+        os.replace(staged, file)
+
+
+def _whole(item: dict) -> bool:
+    source = item["unit"]["input"]
+    return isinstance(source, dict) and set(source) == {"from"}
+
+
+def _content(value):
+    """A document with each file it names given by its content alone: `{uri, sha256}` becomes the hash."""
+    if isinstance(value, dict):
+        if set(value) == {"uri", "sha256"}:
+            return value["sha256"]
+        return {name: _content(inner) for name, inner in value.items()}
+    return [_content(inner) for inner in value] if isinstance(value, list) else value
 
 
 def _work(module, envelope: dict, artifacts, checked: bool) -> tuple[dict, list[str]]:
@@ -79,7 +148,7 @@ def _work_in_process(operation: str, envelope: dict, checked: bool) -> tuple[dic
 
 
 def run_local(steps: list[dict], items: list[dict], modules: dict, artifacts, *, every: bool = False,
-              extra=None, workers: int = 1) -> dict[tuple[str, str], dict]:
+              extra=None, workers: int = 1, extracts: "Extracts | None" = None) -> dict[tuple[str, str], dict]:
     """The receipt of every local unit, by (step, key). `steps` are the target's configured steps in order,
     `items` its worklist, `modules` the worker module of each local operation. With `every`, all the steps run
     here (a target at grain `run`): `extra(step, item)` adds what a worker reads of its run to the envelope, and
@@ -119,8 +188,12 @@ def run_local(steps: list[dict], items: list[dict], modules: dict, artifacts, *,
         if every and not checked:
             # A stopped run worked again: a read or a combine whose output is written is not done again. Its output
             # is written whole or not at all and never replaced, and the same run gives the same unit the same input.
+            # Nor is one another target of the stores wrote from the same content with the same rules and code.
             for item, envelope in ready:
-                if (kept := _written(artifacts, envelope["output"])) is not None:
+                kept = _written(artifacts, envelope["output"])
+                if kept is None and extracts is not None:
+                    kept = extracts.kept(step, {**envelope, "whole": _whole(item)})
+                if kept is not None:
                     done[(step["name"], item["key"])] = kept
             ready = [(item, envelope) for item, envelope in ready if (step["name"], item["key"]) not in done]
         if workers > 1 and len(ready) > 1:
@@ -136,6 +209,9 @@ def run_local(steps: list[dict], items: list[dict], modules: dict, artifacts, *,
             if failed:
                 raise Blocked(f"Step {step['name']} unit {item['key']}: check {', '.join(failed)} failed")
             done[(step["name"], item["key"])] = candidate
+        if extracts is not None and every and not checked:
+            for item, envelope in ready:
+                extracts.keep(step, {**envelope, "whole": _whole(item)}, done[(step["name"], item["key"])])
     return done
 
 

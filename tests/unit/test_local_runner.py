@@ -167,3 +167,69 @@ def test_a_run_held_by_the_unit_stages_every_local_read_as_before():
     local.run_local(steps, [item("read", "one", REF)], {"source.read": read}, Store())
     assert len(read.calls) == 2
 
+
+
+class Extracting:
+    """A read or combine that writes its unit's extract, and counts its calls."""
+
+    def __init__(self):
+        self.calls = []
+
+    def execute(self, envelope, store):
+        self.calls.append(envelope["output"])
+        return store.put_bytes(envelope["output"], ("extract of " + envelope["keys"]["unit"]).encode())
+
+
+def target_of(tmp_path, name, artifacts, *, context="first"):
+    """One target's read and combine over the same captured file, its inputs and outputs in its own folder."""
+    captured = artifacts.put_bytes((tmp_path / "captured.json").as_uri(), b"{}")
+    contract = artifacts.put((tmp_path / name / "inputs").as_uri(), {"read": "the same rules"})
+    request = artifacts.put((tmp_path / name / "inputs").as_uri(), {
+        "contract": contract, "artifacts": [{"input": captured}], "context": context})
+    steps = [{"name": "read", "operation": "source.read", "requires": [], "checks": []},
+             {"name": "combine", "operation": "source.combine", "requires": ["read"], "checks": []}]
+    items = [{"step": "read", "key": "one", "ordinal": 0, "unit": {
+                  "keys": {"unit": "one", "destination": (tmp_path / name / "read").as_uri()}, "input": request,
+                  "output": (tmp_path / name / "read").as_uri(), "cursor": {}}},
+             {"step": "combine", "key": "all", "ordinal": 0, "unit": {
+                  "keys": {"unit": "all", "destination": (tmp_path / name / "combine").as_uri()},
+                  "input": {"from": {"step": "read", "key": "one"}},
+                  "output": (tmp_path / name / "combine").as_uri(), "cursor": {}}}]
+    return steps, items
+
+
+def worked(tmp_path, name, module, runtime="code-1", **options):
+    from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
+
+    artifacts = Artifacts()
+    steps, items = target_of(tmp_path, name, artifacts, **options)
+    extracts = local.Extracts(tmp_path / "extracts", {"source.read": runtime, "source.combine": runtime}, artifacts)
+    return local.run_local(steps, items, {"source.read": module, "source.combine": module}, artifacts, every=True,
+                           extracts=extracts)
+
+
+def test_a_second_target_takes_the_extracts_another_target_wrote_from_the_same_content(tmp_path):
+    """Two targets of a source that read the same files with the same rules read them once: the second target's
+    run does no read and no combine, and its later steps get the first target's receipts."""
+    module = Extracting()
+
+    first = worked(tmp_path, "mastering", module)
+    second = worked(tmp_path, "silver", module)
+
+    assert module.calls == [(tmp_path / "mastering" / "read").as_uri(), (tmp_path / "mastering" / "combine").as_uri()]
+    assert second == first and not (tmp_path / "silver" / "read").exists()
+
+
+@pytest.mark.parametrize("change", ["context", "code", "file gone", "file changed"])
+def test_an_extract_is_made_again_when_what_made_it_differs_or_its_file_is_not_as_written(tmp_path, change):
+    module = Extracting()
+    worked(tmp_path, "mastering", module)
+    if change == "file gone":
+        (tmp_path / "mastering" / "read").unlink()
+    if change == "file changed":
+        (tmp_path / "mastering" / "read").write_bytes(b"other")
+
+    worked(tmp_path, "silver", module, runtime="code-2" if change == "code" else "code-1",
+           context="other" if change == "context" else "first")
+
+    assert (tmp_path / "silver" / "read").as_uri() in module.calls  # read again, into its own folder
