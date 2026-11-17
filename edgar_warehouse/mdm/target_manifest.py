@@ -13,8 +13,7 @@ and freezes every unit's input. Each step by its operation:
   (`read_units`);
 - `source.combine`: one unit, the step's contract over the readings it names;
 - `mdm.prepare`: the readings its `input.readings` names, as one publication,
-  with its `input.keys` (`table`, `record_column`, `dataset`); a target that
-  only reads, for another run to read, has none;
+  with its `input.keys` (`table`, `record_column`, `dataset`);
 - `mastering.merge`: the preparation's manifest through the merge;
 - `journal.record`: each document the run processed, once its merge is verified.
 
@@ -30,7 +29,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from edgar_warehouse.bookkeeping.clean.artifacts import Artifacts
-from edgar_warehouse.bookkeeping.clean.config import COMPOSE_LIST, run_inputs, validate
+from edgar_warehouse.bookkeeping.clean.config import run_inputs, validate
 from edgar_warehouse.control_contract import source_policy_digest
 from edgar_warehouse.rules import files as rules_files
 from . import changed_files, raw_capture, read_units
@@ -72,7 +71,6 @@ class _Run:
     inputs: str
     facts: dict
     run_files: dict
-    others: dict
 
 
 
@@ -136,8 +134,6 @@ def _combine(step: dict, run: _Run, units: dict) -> list[dict]:
         for slot, named in readings.items():
             if "all" in named:
                 slots[slot] = [{"step": named["all"], "key": u["keys"]["unit"]} for u in units[named["all"]]]
-            elif "run" in named:
-                slots[slot] = read_units.run_units(run, named["run"])
             elif mine is not None and named["step"] == each["each"]:
                 slots[slot] = {"step": named["step"], "key": mine["keys"]["unit"]}
             elif len(units[named["step"]]) != 1:
@@ -227,37 +223,6 @@ FORMS = {"source.read": _read, "source.combine": _combine, "mdm.prepare": _prepa
 OPERATIONS = tuple(FORMS)
 
 
-def _other_runs(steps: list[dict], bookkeeping) -> dict:
-    """Ticket 120: each other run's step a combine or a lookup reads, as the verified units of its complete runs."""
-    others, opened = {}, None
-    try:
-        for step in steps:
-            shape = step.get("input", {})
-            for kind, named in [*(("reading", v) for v in shape.get("readings", {}).values()),
-                                *(("lookup", v) for v in shape.get("lookups", {}).values()),
-                                *(("pieces", shape["pieces"]) for _ in [0] if "pieces" in shape)]:
-                if "run" not in named:
-                    continue
-                if step["operation"] != ("source.combine" if kind == "reading" else "source.read"):
-                    raise ValueError(f"Step {step['name']}: a combine's reading or a read's lookup or pieces reads another run's step")
-                label = read_units.run_label(named["run"])
-                if label in others:
-                    continue
-                if bookkeeping is None:
-                    from edgar_warehouse.bookkeeping.clean.database import get_engine
-                    from edgar_warehouse.bookkeeping.clean.engine import Bookkeeping
-                    bookkeeping = opened = Bookkeeping(get_engine())
-                found = bookkeeping.verified_units(**named["run"])
-                if not 1 <= len(found) <= COMPOSE_LIST:
-                    raise ValueError(f"Step {step['name']}: {label} has {len(found)} verified units in complete runs; "
-                                     f"a reading takes 1..{COMPOSE_LIST}")
-                others[label] = found
-        return others
-    finally:
-        if opened is not None:
-            opened.engine.dispose()
-
-
 def run_arguments(facts: list[str] | None, run_files: list[str] | None) -> tuple[dict, dict]:
     """`--fact name=value` (a JSON value, else text) and `--file name=path`, as two maps."""
     def pairs(items):
@@ -302,7 +267,6 @@ def write_manifest(
     journal=None,
     facts: dict | None = None,
     run_files: dict | None = None,
-    bookkeeping=None,
 ) -> dict:
     """The input manifest of `target` for one bundle of captured documents.
 
@@ -350,19 +314,16 @@ def write_manifest(
         if found != capture_properties[match["to"]]:
             raise Conflict(f"The run file {match['file']} did not count this capture's documents "
                            f"({match['path']} differs from the capture's {match['to']})")
-    others = _other_runs(steps, bookkeeping)
     # Another source's reading a step runs with is part of what a file is processed under, and so is
     # every other run's output a combine reads.
     # The target too: two targets over the same files (a source's two Dataset Contracts) each process them.
     shared = [{"name": f"target:{target}", "sha256": digest(target)},
-              *({"name": f"run:{label}", "sha256": digest(sorted(u["sha256"] for u in units))}
-                for label, units in sorted(others.items())),
               *({"name": f"contract:{name}", "sha256": digest(body)} for name, body in sorted(contracts.items())
                 if "/" in name),
               *({"name": f"file:{name}", "sha256": digest(_projected(name, value, declared["projections"]))}
                 for name, value in sorted(loaded.items())),
               *({"name": f"fact:{name}", "sha256": digest(value)} for name, value in sorted(facts.items()))]
-    # A target prepares one publication, or none: a target that only reads, for another run to read (ticket 120).
+    # A target prepares one publication, or none.
     prepare = [step for step in steps if step["operation"] == "mdm.prepare"]
     if len(prepare) > 1:
         raise ValueError("A target prepares one publication: at most one mdm.prepare step")
@@ -434,7 +395,7 @@ def write_manifest(
     root = Path(output).resolve().as_uri()
     run = _Run(source=source, reading=reading, folder=folder, receipts=receipts, rows=rows, companions=paired, keys=keys, always=frozenset(always), sized=sized, limit=limit,
                keys_of=keys_of, policy=policy, processing=processing, force=force, publication=publication, contracts=contracts, by_name=by_name, store=Artifacts(), root=root,
-               inputs=root + "/inputs", facts=facts, run_files=loaded, others=others)
+               inputs=root + "/inputs", facts=facts, run_files=loaded)
     units: dict[str, list[dict]] = {}
     for step in steps:
         units[step["name"]] = FORMS[step["operation"]](step, run, units)

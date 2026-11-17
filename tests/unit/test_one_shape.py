@@ -171,7 +171,7 @@ def test_a_capture_target_is_its_one_step(kind, operation):
 
 
 def test_a_second_pass_over_recorded_files_has_no_record_step():
-    target = shape.expand({"extract": {"record": {"read": "record.yaml", "pieces": {"run": {"source": "s", "target": "t", "step": "c"}}}},
+    target = shape.expand({"extract": {"record": {"read": "record.yaml"}},
                            "master": {"keys": {}}, "record": False})
     assert [s["name"] for s in target["steps"]] == ["record", "prepare", "merge"]
     assert target["checks"] == ["manifest.hash", "work.accounting"]

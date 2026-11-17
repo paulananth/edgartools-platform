@@ -11,7 +11,7 @@ import json
 import random
 import time
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC
 from uuid import uuid4, uuid5, UUID
 
 from sqlalchemy import text
@@ -221,7 +221,7 @@ class Bookkeeping:
                            r=claim.run_id, s=claim.step, k=claim.key, a=claim.attempt, p=canonical(claim.proof), d=config["lease_seconds"])
         return Claim(claim.run_id, claim.step, claim.key, claim.attempt, proof)
 
-    def _resolve_item(self, item: dict, *, context: dict | None = None, store: bool = False) -> dict:
+    def _resolve_item(self, item: dict, *, store: bool = False) -> dict:
         """Materialize an input from its prerequisite units' verified outputs.
 
         The stored unit retains the frozen selector. Capabilities receive an
@@ -232,41 +232,20 @@ class Bookkeeping:
         """
         source = item["unit"]["input"]
         if isinstance(source, dict) and set(source) == {"from"}:
-            context = context or self._context(item)
-            resolved = self._receipt(item, source["from"], context)
+            resolved = self._receipt(item, source["from"])
         elif isinstance(source, dict) and set(source) == {"compose"}:
-            context = context or self._context(item)
-            resolved = self._compose(item, source["compose"], context, store, {})
+            resolved = self._compose(item, source["compose"], store)
         else:
             reference(source)  # a frozen reference; anything else is not an input
             return item
         return {**item, "unit": {**item["unit"], "input": resolved}}
 
-    def _context(self, item: dict) -> dict:
-        run, config, manifest, _ = self._frozen(str(item["run_id"]))
-        return {"run": run, "config": config, "manifest": manifest}
-
-    def _receipt(self, item: dict, dependency: dict, context: dict, others: dict | None = None) -> dict:
-        """One prerequisite unit's verified output, its bytes checked against the hash its receipt holds.
-        A unit of another run is read only from a complete run its step declares. `others` holds each
-        other run's context once per fill."""
-        found = storage.work(self.engine, dependency.get("run", str(item["run_id"])),
+    def _receipt(self, item: dict, dependency: dict) -> dict:
+        """One prerequisite unit's verified output, its bytes checked against the hash its receipt holds."""
+        found = storage.work(self.engine, str(item["run_id"]),
                              step=dependency["step"], key=dependency["key"], states=["verified"])
         if not found:
             raise Blocked("Prerequisite input lacks verified completion")
-        if "run" in dependency:
-            declared = self._other_runs_declared(item, context)
-            run_id = str(found[0]["run_id"])
-            others = {} if others is None else others
-            if run_id not in others:
-                others[run_id] = self._context(found[0])
-            context = others[run_id]
-            other = context["run"]
-            submission = other["submission"]
-            if other["state"] != "complete" or other["compacted_at"] is not None:
-                raise Blocked("Another run's unit is read only from a complete, uncompacted run")
-            if (submission["kind"], submission["name"], submission["target"], dependency["step"]) not in declared:
-                raise Blocked("Another run's unit is read only from the source, target and step its step declares")
         receipt = found[0]["receipt"]
         if not isinstance(receipt, dict) or set(receipt) != {"uri", "sha256", "evidence"}:
             raise Blocked("Prerequisite completion receipt is missing or malformed")
@@ -274,27 +253,15 @@ class Bookkeeping:
         self.artifacts.verified(resolved)
         return resolved
 
-    def _other_runs_declared(self, item: dict, context: dict) -> set:
-        """The other runs' steps the item's step declares (`{run: {source, target, step}}` readings,
-        lookups and pieces), each `(kind, source, target, step)`: a run reads runs of its own kind."""
-        submission = context["run"]["submission"]
-        body = self.artifacts.json(submission["rules"])["body"]
-        step = next(s for s in body["bookkeeping"]["targets"][submission["target"]]["steps"] if s["name"] == item["step"])
-        shape = step.get("input", {})
-        return {(submission["kind"], v["run"]["source"], v["run"]["target"], v["run"]["step"])
-                for v in [*shape.get("readings", {}).values(), *shape.get("lookups", {}).values(),
-                          shape.get("pieces") or {}] if "run" in v}
-
-    def _compose(self, item: dict, body: dict, context: dict, store: bool, seen: dict,
-                 others: dict | None = None) -> dict:
+    def _compose(self, item: dict, body: dict, store: bool) -> dict:
         """Fill a composed document's slots with verified receipts; the same receipts give the same bytes.
-        `seen` holds each unit's receipt once per fill: a unit named in several slots is verified once.
-        `others` holds each other run's checked context once per fill."""
-        others = {} if others is None else others
+        A unit named in several slots is verified once."""
+        seen: dict = {}
+
         def receipt(dependency):
-            unit = (dependency.get("run"), dependency["step"], dependency["key"])
+            unit = (dependency["step"], dependency["key"])
             if unit not in seen:
-                seen[unit] = self._receipt(item, dependency, context, others)
+                seen[unit] = self._receipt(item, dependency)
             return seen[unit]
 
         # Beside the unit's output, named by content: a resume writes the same object.
@@ -509,41 +476,6 @@ class Bookkeeping:
         if not 1 <= limit <= 1000 or state not in (None, "running", "waiting", "blocked", "complete"):
             raise ValueError("Run listing requires a valid state and limit in 1..1000")
         return storage.runs(self.engine, limit, state=state)
-
-    def verified_units(self, *, source: str, target: str, step: str, kind: str = "source") -> list[dict]:
-        """Ticket 120: the verified units of `step` in the complete runs of `source`'s `target`, each
-        `{run, step, key, sha256}`, in run and key order. A reading is deterministic, so the same files
-        read twice give the same output: an output held by several units is listed once.
-
-        Ticket 121 (operator, 2026-10-20: "All runs of latest capture (Recommended)"): only the runs
-        of the capture the newest complete run was written from, so an identifier never comes back
-        from two captures. Runs that name no capture (written before ticket 121) are one capture.
-        The newest capture is the one whose first run started last, so a later rerun of an older
-        capture never stands in for it. It is refused while any of its runs is still running or
-        waiting (a blocked run is abandoned and left out), and when any of its runs is compacted."""
-        import edgar_control
-
-        def observed_time(value):
-            if not isinstance(value, datetime):
-                raise Blocked("Stored run metadata has an invalid time")
-            # Selected-store timestamp columns are UTC; PostgreSQL and SQL
-            # Server retain their offset, while MySQL DATETIME carries none.
-            return (value if value.tzinfo else value.replace(tzinfo=UTC)).isoformat()
-
-        with storage.consistent_read(self.engine) as conn:
-            observations = storage.capture_runs(self.engine, kind=kind, source=source, target=target, connection=conn)
-            for row in observations:
-                row["created_at"] = observed_time(row["created_at"])
-                if row["compacted_at"] is not None:
-                    row["compacted_at"] = observed_time(row["compacted_at"])
-            try:
-                selected = json.loads(edgar_control.select_latest_capture(canonical(observations)))
-                found = storage.verified_units(self.engine, selected, step, connection=conn)
-                for row in found:
-                    row["completed_at"] = observed_time(row["completed_at"])
-                return json.loads(edgar_control.select_verified_units(canonical(found)))
-            except ValueError as error:
-                raise Blocked(str(error)) from None
 
     def finalize(self, run_id: str) -> dict:
         import edgar_control

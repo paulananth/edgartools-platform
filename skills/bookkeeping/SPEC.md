@@ -124,8 +124,7 @@ needs no writer of its own:
   `contract:<source>/<file>`), `keys` (for `mdm.prepare`: `table`, `record_column`,
   `dataset`; `record_column` is optional, and without it each row is the
   record) and `readings` (each name `{all: <step>}`, every unit of a
-  prerequisite as one list, `{step: <step>}`, its one unit, or, for a
-  combine, `{run: {source, target, step}}`: another run's step, below); for a read:
+  prerequisite as one list, or `{step: <step>}`, its one unit); for a read:
   - `files`: a pattern over the bundle's document keys (default every one);
   - `beside: {path, sha256}`: read each document's companion instead, at
     the path the template gives, equal to the sha256 the document's receipt
@@ -155,38 +154,17 @@ needs no writer of its own:
     all` in place of that reads every unit of `from` (1..256) in one reading,
     so a large shared file is read once per bundle, not once per group (a 6 MB
     Name Matching reads in 0.56 s whatever the number of keys; `value_column` may
-    then be left out for a plain set). A set
-    may name `run: {source, target, step}` in place of `from`: another run's
-    step, read whole. Or every set `{file: <name>}`, given whole by a run file;
+    then be left out for a plain set). Or every set `{file: <name>}`, given whole by a run file;
   - `references: {<reference>: {file: <name>}}`: a reference the contract
     leaves empty (an approved scope), filled from a run file;
   - `pieces: {step: <combine step>}`: one unit reading that step's verified
     output piece by piece (read version 4).
 
-**Another run's step.** A reading or a lookup that names `{run:
-{source, target, step}}` reads the verified units of that step in the
-complete runs of that source's target, of the reading run's own kind: when
-the manifest is written, they become the slot's list (1..256 units; an output
-two units share, the same files read twice, is listed once), and the sorted
-digests of their outputs join what each file is processed under as
-`run:<source>/<target>/<step>`. When a unit is filled, Bookkeeping checks
-that its run is complete and not compacted, that the step declares that
-source, target and step, and reverifies the unit against that run's own
-frozen configuration; anything else blocks the unit. The producing target
-runs first. A target that only reads, for another run to read, prepares no
-publication (no `mdm.prepare`). The target is part of what each file is
-processed under, so two targets over the same files (a source's two Dataset
-Contracts) each process them.
-
-**Which runs, over time** (operator: "All runs of
-latest capture (Recommended)"). A manifest written from a capture names it
-(`capture`, the capture's run id); the run's submission keeps it. A reading
-takes only the runs of the capture the newest complete run was written from,
-so an identifier never comes back from two captures; runs that name no
-capture (older manifests) count as one capture. A run another run
-names in a slot is not compacted while that run is not complete (migration
-007); once it completes, compaction treats it as usual, and a later reading
-of a compacted capture finds no units and is refused.
+**A run reads its own steps only.** A target that prepares no publication has no
+`mdm.prepare`. The target is part of what each file is processed under, so two
+targets over the same files (a source's two Dataset Contracts) each process them.
+A manifest written from a capture names it (`capture`, the capture's run id); the
+run's submission keeps it.
 
 A target may declare its run's own inputs, `run: {facts: [names], files:
 [names], projections: {<file>: [parts]}, matches: [{file, path, to}]}`:

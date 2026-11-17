@@ -171,13 +171,6 @@ def steps_of(source, like=None):
     return [s["name"] for s in (same or found)]
 
 
-def test_a_target_that_reads_another_runs_step_follows_that_target():
-    for step in STEPS:
-        for after in INFERRED[key(step)]["after_target"]:
-            earlier = [s["name"] for s in STEPS if s["source"] == step["source"] and s["target"] == after]
-            assert earlier and set(earlier) <= ancestors(step["name"]), step["name"]
-
-
 def test_a_load_follows_the_sources_its_rules_prefer():
     for step in STEPS:
         item = INFERRED[key(step)]
@@ -191,9 +184,7 @@ def test_every_wait_is_explained_by_what_the_rules_declare():
         item = INFERRED[key(step)]
         for waited in step.get("waits_for") or []:
             other = BY_NAME[waited]
-            explained = (other["source"] in item["prefer_after"]
-                         or (other["source"] == step["source"] and other["target"] in item["after_target"]))
-            assert explained, (step["name"], waited)
+            assert other["source"] in item["prefer_after"], (step["name"], waited)
 
 
 def test_a_step_takes_the_chains_defaults_for_what_it_does_not_say(tmp_path):

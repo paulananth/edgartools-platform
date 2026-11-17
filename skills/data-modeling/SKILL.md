@@ -377,7 +377,7 @@ Asked to review the model, check:
   hold.
 - **One kind split by identifier:** two contracts, targets or loads for one
   kind that differ only by the identifier asked; a source's rules that pair
-  two identifiers of one master, or read another run to do it.
+  two identifiers of one master.
 - **A key the data repeats:** a child table or record key whose values
   repeat in the captured data, or that rests on a column read from another.
 - **A master in review for holding many values:** a kind whose Identifier
