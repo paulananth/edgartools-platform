@@ -32,6 +32,10 @@ a contract or starts a load, and reviews the model itself. In scope:
   links to masters, time columns, load mode), as advice.
 - **Gold warehouse:** from those approved final outputs, the technique, one
   fact grain, the conformed dimensions and the current or history scope.
+  Gold uses dimensions and facts, with a separate dimension view per mastered
+  entity and shared master keys for fact joins. The method applies to any
+  business domain: approved configuration supplies entities, fact grains,
+  inputs, keys, relationships and time scope to one reusable modeling path.
   First check whether direct mirror reads satisfy the consumption requirement.
   dbt is needed for required Gold transformations, not for mirroring or direct
   reads; its writable destination needs explicit naming approval. The method
