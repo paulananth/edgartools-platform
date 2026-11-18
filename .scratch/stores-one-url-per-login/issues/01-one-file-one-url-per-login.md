@@ -5,7 +5,7 @@ Type: task
 
 Operator, 2026-11-18: "you cannot have 64 connection string kiss please"; asked how, chose "One file, one URL per login".
 
-The hosted stores folder holds 33 connection strings for 9 logins across `connection.env`, `worker.env`, `governance.env` and `reader.env`: a login repeats under a different variable name for each duty. A review once printed them, each twice.
+The hosted stores folder holds 33 connection strings for 9 logins across `connection.env`, `worker.env`, `governance.env` and `reader.env`: a login repeats under a different variable name for each duty. A review once printed them, each twice. Every load now uses one login, `edgar_loader` (ticket 238); this ticket gathers the rest.
 Do this after the fresh load (ticket 238) finishes; the running lanes read the folder as it is.
 
 ## Parts

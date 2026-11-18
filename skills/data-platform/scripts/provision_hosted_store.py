@@ -30,6 +30,12 @@ FILES = ("connection.env", "worker.env", "governance.env", "reader.env")
 # Its URL is the only one in reader.env, which is made on the first confirmed run.
 READER, READER_FILE, READER_SETTING = "ops_reader", "reader.env", "DIAGNOSE_DATABASE_URL"
 OPTIONAL = {READER_FILE}
+# Every load uses one login, `edgar_loader`: a member of the runtime role of each store, so it holds exactly their
+# privileges and none of its own. None of them can create anything (ddl_free checks it): a load changes rows, never a
+# schema. A store's schema is made and changed by its owner login, with the commands of the initialize runbook.
+LOADER = "edgar_loader"
+RUNTIME_ROLES = ("mdm_runtime", "rdm_runtime", "rules_agent", "bookkeeping_runtime", "change_journal_runtime",
+                 "silver_runtime")
 # Group roles a login is put into: the Bookkeeping worker duty, and the Rules agent's access for Rules governance.
 GROUPS = {"bookkeeping_control": ("bookkeeping_runtime",), "rules_agent": ("rules_governance",)}
 LINE = re.compile(r"^(export )?([A-Z_]+)=(.*)$")
@@ -117,6 +123,48 @@ def rewrite(folder: Path, host: str, port: int, admin: str, admin_password: str)
     return changed
 
 
+def use_loader(folder: Path) -> int:
+    """Point every runtime URL in worker.env at the one loader login, with a new password; worker.env is kept as
+    worker.env.before-loader (mode 0600) the first time. Returns how many URLs changed (0 when all are already it)."""
+    path = folder / "worker.env"
+    password, changed, lines = quote(secrets.token_urlsafe(24), safe=""), 0, []
+    for line in path.read_text().splitlines():
+        match = LINE.match(line.strip())
+        if match and _value(match[3]).startswith("postgres"):
+            part = urlsplit(_value(match[3]))
+            if unquote(part.username or "") in RUNTIME_ROLES:
+                moved = urlunsplit((part.scheme, f"{LOADER}:{password}@{part.hostname}:{part.port}", part.path, part.query, part.fragment))
+                line = f"{match[1] or ''}{match[2]}={shlex.quote(moved)}"
+                changed += 1
+        lines.append(line)
+    if changed:
+        kept = folder / "worker.env.before-loader"
+        if not kept.exists():
+            private_write(kept, path.read_text())
+        private_write(path, "\n".join(lines) + "\n")
+    return changed
+
+
+def ddl_free(conn, role: str, database: str) -> None:
+    """Refuse a login that could change a schema: a CREATE on any schema of the database, an object it owns, or the
+    superuser, create-database or create-role flag."""
+    with conn.cursor() as cur:
+        cur.execute("""SELECT coalesce(string_agg(nspname, ','), '') FROM pg_namespace WHERE nspname !~ '^pg_'
+                       AND nspname <> 'information_schema' AND has_schema_privilege(%s, oid, 'CREATE')""", (role,))
+        creates = cur.fetchone()[0]
+        cur.execute("SELECT count(*) FROM pg_class WHERE relowner = (SELECT oid FROM pg_roles WHERE rolname = %s)", (role,))
+        owned = cur.fetchone()[0]
+        cur.execute("""SELECT count(*) FROM pg_roles WHERE rolname = %s
+                       AND (rolsuper OR rolcreatedb OR rolcreaterole OR rolbypassrls)""", (role,))
+        privileged = cur.fetchone()[0]
+    if creates:
+        raise Refused(f"{role} can create in {database}: {creates}")
+    if owned:
+        raise Refused(f"{role} owns {owned} objects in {database}")
+    if privileged:
+        raise Refused(f"{role} is a superuser, or can create databases or roles")
+
+
 def ensure_reader(folder: Path, host: str, port: int) -> bool:
     """Make reader.env with a new password for the diagnostic login, unless it is there. True when it made it."""
     path = folder / READER_FILE
@@ -157,18 +205,29 @@ def provision(conn, held: dict[str, tuple[str, set[str]]], admin: str, confirm: 
                                 .format(sql.Identifier(role)), (password,))
             elif not row[0]:
                 raise Refused(f"{role} exists and cannot log in")
+        if LOADER in held:
+            for role in RUNTIME_ROLES:
+                cur.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (role,))
+                if cur.fetchone() is None and role not in held:
+                    done.append(f"create group {role}")
+                    if confirm:
+                        cur.execute(sql.SQL("CREATE ROLE {} NOLOGIN").format(sql.Identifier(role)))
+                done.append(f"put {LOADER} in {role}")
+                if confirm:
+                    cur.execute(sql.SQL("GRANT {} TO {}").format(sql.Identifier(role), sql.Identifier(LOADER)))
         if READER in held:
             done.append(f"give {READER} pg_monitor: sessions, locks and statistics, no table")
             if confirm:
                 cur.execute(sql.SQL("GRANT pg_monitor TO {}").format(sql.Identifier(READER)))
         for group, members in GROUPS.items():
             cur.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (group,))
-            if cur.fetchone() is None and group not in held:  # a login made above serves as the group too
+            made = group in held or (LOADER in held and group in RUNTIME_ROLES)  # a login or runtime role made above
+            if cur.fetchone() is None and not made:
                 done.append(f"create group {group}")
                 if confirm:
                     cur.execute(sql.SQL("CREATE ROLE {} NOLOGIN").format(sql.Identifier(group)))
             for member in members:
-                if member not in held:
+                if member not in held and not (LOADER in held and member in RUNTIME_ROLES):
                     raise Refused(f"no URL names {member}, which {group} needs")
                 done.append(f"put {member} in {group}")
                 if confirm:
@@ -183,6 +242,10 @@ def provision(conn, held: dict[str, tuple[str, set[str]]], admin: str, confirm: 
                 if confirm:
                     cur.execute(sql.SQL("CREATE DATABASE {} OWNER {}").format(sql.Identifier(database),
                                                                              sql.Identifier(admin)))
+            if READER in held:  # the diagnostic login reads catalogs and statistics: CONNECT, never a table
+                done.append(f"{database}: connect for {READER}")
+                if confirm:
+                    cur.execute(sql.SQL("GRANT CONNECT ON DATABASE {} TO {}").format(sql.Identifier(database), sql.Identifier(READER)))
             readers = sorted(role for role, (_, databases) in held.items() if database in databases)
             done.append(f"{database}: connect and temporary tables for {', '.join(readers)}")
             if confirm:
@@ -198,6 +261,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--service", required=True, help="The PostgreSQL service the instance's creation saved")
     parser.add_argument("--stores", type=Path, default=Path.home() / ".config/edgartools/hosted")
     parser.add_argument("--confirm", action="store_true", help="Do it (without it, only list it)")
+    parser.add_argument("--loader", action="store_true",
+                        help=f"Point every runtime URL in worker.env at the one login {LOADER}, which creates nothing")
     args = parser.parse_args(argv)
     try:
         import psycopg2
@@ -207,6 +272,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"made {READER_FILE} with a new login {READER}")
         elif not (args.stores / READER_FILE).exists():
             print(f"would make {READER_FILE} with a new login {READER} (diagnosis reads with it, never the owner)")
+        if args.loader and args.confirm:
+            print(f"{use_loader(args.stores)} runtime URLs in worker.env now name {LOADER} (the old file is kept as worker.env.before-loader)")
+        elif args.loader:
+            print(f"would point every runtime URL in worker.env at {LOADER}, a member of {len(RUNTIME_ROLES)} runtime roles")
         urls = read_urls(args.stores)
         held = logins(urls, admin["user"])
         conn = psycopg2.connect(host=admin["host"], port=admin["port"], user=admin["user"], password=admin["password"],
@@ -217,6 +286,12 @@ def main(argv: list[str] | None = None) -> int:
                 print(step)
         finally:
             conn.close()
+        if args.confirm and LOADER in held:
+            for database in DATABASES:
+                with psycopg2.connect(host=admin["host"], port=admin["port"], user=admin["user"], password=admin["password"],
+                                      dbname=database, sslmode="require", connect_timeout=10) as check:
+                    ddl_free(check, LOADER, database)
+            print(f"{LOADER} can create nothing in any of the {len(DATABASES)} databases")
         if args.confirm:
             count = rewrite(args.stores, admin["host"], int(admin["port"]), admin["user"], admin["password"])
             print(f"{count} URLs in {', '.join(FILES)} now name the new instance")

@@ -12,11 +12,17 @@ source's operational runbook and report verified progress with counts and reason
 Acquisition supplies completed deliveries independently. A catalog `Pipeline` entry describes a
 load and never starts or resumes one ([execution boundary](../openmetadata/SKILL.md#pipeline-execution-boundary)).
 
+## One login for every load
+
+A load connects as one login, `edgar_loader` (`worker.env`), for every store. It is a member of each store's runtime
+role and can create nothing: a load changes rows, never a schema, so a load that needs a table stops and names the
+command (below). Diagnosis uses the reader login, not this one.
+
 ## Diagnose with the reader login
 
 Diagnosis (sessions, locks, waits, connections, what a load is doing) reads the database as the diagnostic login in
 the stores folder's `reader.env` (`DIAGNOSE_DATABASE_URL`): it has `pg_monitor`, which shows sessions, locks and
-statistics, and it connects to no store, so it reads no table. Never diagnose as the owner, the administrator or a
+statistics and the catalogs of each store (who holds what), never a table. Never diagnose as the owner, the administrator or a
 runtime login: each can change or read data, and a diagnosis that needs more than the reader shows is a gap to name.
 `load_chain.py --auto` reads the database this way.
 
