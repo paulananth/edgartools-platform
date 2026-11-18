@@ -12,6 +12,11 @@ source's operational runbook and report verified progress with counts and reason
 Acquisition supplies completed deliveries independently. A catalog `Pipeline` entry describes a
 load and never starts or resumes one ([execution boundary](../openmetadata/SKILL.md#pipeline-execution-boundary)).
 
+## Find the root cause, silently
+
+A step that fails, a reading that disagrees with another, a retry about to be the fix, or a surprising time: find the root
+cause by the [five whys](../data-platform/ROOT-CAUSE.md) before acting or reporting, silently, and report the conclusion.
+
 ## Report a running load from its evidence
 
 Never report a load as "running". Run `load_chain.py --status` and report, for each running step, what it prints:
@@ -32,6 +37,8 @@ Read the verdict, not the word "running":
   running the loads is the limit, so more workers on it will not help; run the loaders on more compute;
 - **cannot finish in its remaining attempts**: raise its workers or its minutes now, not at its last attempt.
 
+A step's workers are found by their parentage (a spawned worker's command line names no source) and the count shown is the one
+the load was started with; a step that reads 0% CPU with several workers is a status that missed them, not an idle step.
 A single-document step has no progress in its log: say so, and report its database rows and sessions. A store's rows are
 shared by every step that writes it and cannot be split: say which steps share it. Check a running chain every 30 minutes
 and report what changed, with the evidence, not that it is still going.

@@ -15,6 +15,8 @@ Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#
 The journal records immutable events and verifies durable delivery. It owns no
 loader, acquisition policy, work scheduler, business verifier or producer outbox.
 
+A failure, a surprise or two readings that disagree: find the root cause first, by the [five whys](../data-platform/ROOT-CAUSE.md), silently, and report the conclusion.
+
 ## Skipping and forcing
 
 A file is skipped when the journal records its source, key, content hash and **processing identity**. The identity

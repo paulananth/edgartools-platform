@@ -347,14 +347,17 @@ def test_compute_pressure_is_low_ok_or_high_and_relaxes_when_the_run_is_behind()
     assert chain.pressure(load=17.0, cores=8, swap_used=0.2, relaxed=True) == "high"
 
 
+EVERY = {name: (2, 8) for name in ("long", "mid", "short")}
+
+
 def test_workers_double_on_the_longest_chain_first_and_halve_on_the_shortest_within_the_profiles_range():
     priority = {"long": 900, "mid": 300, "short": 50}
-    assert chain.rescale({"long": 2, "mid": 2, "short": 2}, priority, "low", (2, 8)) == ("long", 4)
-    assert chain.rescale({"long": 8, "mid": 2, "short": 2}, priority, "low", (2, 8)) == ("mid", 4)
-    assert chain.rescale({"long": 8, "mid": 8, "short": 8}, priority, "low", (2, 8)) is None  # the ceiling is the profile's
-    assert chain.rescale({"long": 8, "mid": 4, "short": 4}, priority, "high", (2, 8)) == ("short", 2)
-    assert chain.rescale({"long": 2, "mid": 2, "short": 2}, priority, "high", (2, 8)) is None  # the floor is the profile's
-    assert chain.rescale({"long": 4, "mid": 4, "short": 4}, priority, "ok", (2, 8)) is None
+    assert chain.rescale({"long": 2, "mid": 2, "short": 2}, priority, "low", EVERY) == ("long", 4)
+    assert chain.rescale({"long": 8, "mid": 2, "short": 2}, priority, "low", EVERY) == ("mid", 4)
+    assert chain.rescale({"long": 8, "mid": 8, "short": 8}, priority, "low", EVERY) is None  # the ceiling is the profile's
+    assert chain.rescale({"long": 8, "mid": 4, "short": 4}, priority, "high", EVERY) == ("short", 2)
+    assert chain.rescale({"long": 2, "mid": 2, "short": 2}, priority, "high", EVERY) is None  # the floor is the profile's
+    assert chain.rescale({"long": 4, "mid": 4, "short": 4}, priority, "ok", EVERY) is None
 
 
 def test_a_run_is_behind_when_more_of_the_window_is_used_than_of_the_work_done():
@@ -648,8 +651,8 @@ def test_a_started_step_is_told_the_capacity_it_runs_on_so_its_own_check_uses_th
 
 def test_every_run_mode_holds_a_steps_workers_to_the_capacity_not_only_the_scheduler():
     steps = [{"name": "gleif", "workers": 8}, {"name": "small", "workers": 2}, {"name": "tiny", "workers": 1}]
-    assert [s["workers"] for s in chain.clamped(steps, (1, 4))] == [4, 2, 1]  # a medium task starts GLEIF at 4
-    assert [s["workers"] for s in chain.clamped(steps, (2, 8))] == [8, 2, 2]  # a floor raises the lowest
+    assert [s["workers"] for s in chain.clamped(steps, "local", capacity=(1, 4.0))] == [4, 2, 1]  # a medium task starts GLEIF at 4
+    assert [s["workers"] for s in chain.clamped(steps, "local", capacity=(2, 8.0))] == [8, 2, 1]  # and a larger one at 8
     assert steps[0]["workers"] == 8  # the chain file's own steps are not changed
 
 
@@ -756,3 +759,90 @@ def test_redaction_hides_every_address_form_and_every_value_named_like_a_secret(
     for leaked in ("pw1", "pw2", "pw3", "pw4", "abc123", "k-5", "s6", "h.invalid", "h2.invalid", "h3.invalid", "z.invalid", "u:", "b@c"):
         assert leaked not in hidden, (leaked, hidden)
     assert "ValueError" in hidden and "<addr>" in hidden and "<hidden>" in hidden
+
+
+PS = """  100     1 0:10.00  50000 uv run --no-sync edgar-warehouse load --source gleif --target mastering --capture /c
+  101   100 14:00.00 80000 /x/python /x/edgar_warehouse/driver.py
+  102   101 3:00.00  90000 /x/python -c from edgar_warehouse.cli import main; ... rules run --source gleif --target mastering
+  103   102 15:50.00 40000 /x/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=5)
+  104   102 15:40.00 41000 /x/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=5)
+  200     1 9:00.00  60000 /x/python -c from edgar_warehouse.cli import main; ... rules run --source other --target silver
+  201   200 5:00.00  60000 /x/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=5)
+"""
+
+
+def test_a_loads_processes_include_the_workers_it_started_whose_command_lines_name_no_source():
+    pids = chain.load_pids(PS, "gleif", "mastering")
+    assert sorted(pids) == [100, 101, 102, 103, 104]  # the two spawned workers count; the other load's do not
+    assert chain.load_pids(PS, "other", "silver") == {200: 540.0, 201: 300.0}
+    assert chain.load_pids("", "gleif", "mastering") == {}
+
+
+def test_a_workers_range_can_use_a_steps_measured_memory_not_only_the_default_share():
+    assert chain.workers_range(vcpu=8, memory_gb=4) == (1, 8)  # the default half gigabyte a worker: eight
+    assert chain.workers_range(vcpu=8, memory_gb=4, worker_gb=0.1) == (1, 32)  # measured at 100 MB: four to a vCPU, 32
+    steps = [{"name": "gleif", "workers": 16, "worker_gb": 0.1}, {"name": "plain", "workers": 16}]
+    held = chain.clamped(steps, "local", capacity=(8, 4.0))
+    assert [s["workers"] for s in held] == [16, 8]  # GLEIF keeps its 16; a step with no measure is held to eight
+    assert [s["workers"] for s in chain.clamped(steps, "local", capacity=(1, 2.0))] == [4, 4]  # a 1 vCPU, 2 GB machine
+
+
+def test_the_status_header_says_writes_are_counted_at_commit(tmp_path, monkeypatch):
+    monkeypatch.setattr(chain, "external_loads", lambda: set())
+    header = chain.status([], tmp_path / "state.log", None, sample=0)[0]
+    assert "counted when a transaction commits" in header and "0 running" in header
+
+
+def test_the_workers_a_load_runs_with_are_read_from_its_command_line_not_the_chain_file():
+    assert chain.load_workers(PS.replace("--capture /c", "--capture /c --workers 8"), "gleif", "mastering") == 8
+    assert chain.load_workers(PS, "gleif", "mastering") is None  # no --workers flag on that line
+    assert chain.load_workers(PS, "none", "mastering") is None
+
+
+def test_the_skills_that_operate_and_recover_loads_point_to_the_one_root_cause_method():
+    method = ROOT / "skills/data-platform/ROOT-CAUSE.md"
+    assert method.exists()
+    text = method.read_text()
+    for needed in ("Doubt the instrument first", "answer each why from evidence", "Four lines in business words", "never the chain"):
+        assert needed.lower() in text.lower(), needed
+    for skill in ("data-platform", "data-operations", "bookkeeping", "data-onboarding", "refining-rules", "data-profiling",
+                  "data-quality", "change-journal"):
+        assert "ROOT-CAUSE.md" in (ROOT / f"skills/{skill}/SKILL.md").read_text(), skill  # linked, never copied
+
+
+def test_a_cpu_time_with_days_is_read_and_one_unreadable_row_never_breaks_the_listing():
+    assert chain.cpu_seconds("1-02:03:04") == 86400 + 2 * 3600 + 3 * 60 + 4
+    listing = "  1     0 1-02:03:04 100 /usr/sbin/other\n  100   1 0:10.00 50000 uv run edgar-warehouse load --source gleif --target mastering\n  101   100 not-a-time 1 worker\n"
+    assert chain.load_pids(listing, "gleif", "mastering") == {100: 10.0, 101: 0.0}  # a bad time is zero, never an exception
+
+
+def test_a_listing_row_with_no_arguments_still_reaches_its_workers():
+    listing = "  100     1 0:10.00  50000\n  101   100 5:00.00  9000 /x/python -c from multiprocessing.spawn import spawn_main\n"
+    assert chain.load_pids(listing, "gleif", "mastering") == {}  # nothing names the load: no match, and no crash
+    listing += "  102     1 0:01.00  50000 uv run edgar-warehouse load --source gleif --target mastering\n  103   102 7:00.00 9000\n"
+    assert sorted(chain.load_pids(listing, "gleif", "mastering")) == [102, 103]  # a blank-args child of the driver is its worker
+
+
+def test_a_worker_memory_that_is_not_a_positive_finite_number_is_refused_and_the_division_is_exact(tmp_path):
+    import pytest
+
+    assert chain.workers_range(vcpu=8, memory_gb=4.0, worker_gb=0.4) == (1, 10)  # 4.0 // 0.4 is 9.0 in floating point
+    for bad in (0, -1, float("inf"), float("nan"), 1e9):
+        path = tmp_path / "chain.yaml"
+        path.write_text(yaml.safe_dump({"defaults": {"workers": 2, "bundles": 1}, "steps": [
+            {"name": "x", "minutes": 60, "worker_gb": bad}]}))
+        with pytest.raises(ValueError, match="worker_gb"):
+            chain.chain_steps(path)
+
+
+def test_the_start_count_and_the_rescale_use_each_steps_own_measured_range(monkeypatch, tmp_path):
+    steps = [_step("gleif", "A", minutes=600), _step("plain", "B", minutes=60)]
+    steps[0].update(workers=16, worker_gb=0.4)
+    steps[1].update(workers=16)
+    monkeypatch.setattr(chain, "capacity_of", lambda name: (8, 4.0))  # 4 GB: GLEIF carries 10, a half-gigabyte worker 8
+    state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=10)
+    monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: "ok")
+    chain.auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=30))
+    assert dict(started) == {"gleif": 10, "plain": 8}
+    assert chain.rescale({"gleif": 5}, {"gleif": 1}, "low", {"gleif": (1, 10)}) == ("gleif", 10)
+    assert chain.rescale({"gleif": 5}, {"gleif": 1}, "low", {"gleif": (1, 8)}) == ("gleif", 8)

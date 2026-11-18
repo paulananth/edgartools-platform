@@ -15,6 +15,8 @@ numerical column and every identifying column (keys, codes, links, dates and
 names), and commentary text only when that text is material. It also says how
 the parts connect. The store suggestion is advice only.
 
+A failure, a surprise or two readings that disagree: find the root cause first, by the [five whys](../data-platform/ROOT-CAUSE.md), silently, and report the conclusion.
+
 ## Silver fields
 
 Operator. This is the rule the silver spec follows.

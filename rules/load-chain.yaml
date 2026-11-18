@@ -276,6 +276,10 @@ steps:
     facts:
       publication_count: "3428477"
     minutes: 240
+    # `worker_gb` is the memory one worker of this merge was measured to hold (`load_chain.py --status` shows a load's
+    # memory and CPU). The compute holds the workers to the range it carries; raise `workers` on a task with the memory
+    # and vCPUs for more, and read the effect from the status.
+    worker_gb: 0.4
     workers: 8
     attempts: 40
   - name: adv-custodians-06

@@ -78,6 +78,8 @@ other entities have the same values or defects.
    quality configuration, catalogs, or create tickets as part of this audit.
    Convert an agreed finding into a ticket only when the operator asks.
 
+A failure, a surprise or two readings that disagree: find the root cause first, by the [five whys](../data-platform/ROOT-CAUSE.md), silently, and report the conclusion.
+
 ## Hard stops
 
 | Never | Instead |
