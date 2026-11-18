@@ -59,8 +59,8 @@ including the hosted Bookkeeping control group.
 prints the same checksums when nothing has.
 
 **Where each table's shape is written.** Each store's definition sits beside the code that writes and migrates it, so
-the two change in one commit; no second copy exists to drift. Read the table's columns there, or in the Data Catalog
-for the published tables.
+the two change in one commit. That file is the source: the Data Catalog's columns and the DDL a spec registers are
+made from it, never edited by hand. Read the table's columns there, or in the Data Catalog for the published tables.
 
 | Store | Definition |
 |---|---|
