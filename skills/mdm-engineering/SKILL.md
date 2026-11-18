@@ -194,6 +194,10 @@ run pins (`runtime_files`) is named without importing it, so the processing iden
 dominates a large load: bound what it holds (stream, never collect a whole file) before trimming a library.
 `tests/unit/test_worker_imports_stay_small.py` holds the line.
 
+Every load runs several worker processes. A worker holds a bounded piece of its input, never the whole of it: what must
+span the input (the distinct keys of a receipt and a digest of them) goes to disk in sorted runs and is read back merged
+(`silver_writer/keyset.py`), never held as a set of every key. Measure before and after with the same invented keys.
+
 ## Lookups and indexes
 
 On every engine, a list of keys is one index seek per key. A plan that scans
