@@ -149,7 +149,9 @@ Every part still open in the Rebuild priorities map, in one list, ordered by wha
 
 - [ ] [231] The go-live simple path: its 11 open parts (old documents, what is still deployed, rules gates, schema files, one shape for every target, words, the seven wastes, skills).
 - [ ] [252] One pipeline design: its findings 1 to 9 and the lower-value list, in the order its ticket gives.
-- [ ] [232] Part 3: delete the unreachable guard path.
+- [x] [232] Part 3: delete the unreachable guard path (2026-11-17 19:12 ET): `destinations.py`, `destination_guard.sql`, `bookkeeping init-guard`, `Store(lease_authority=)`, `prepared.authority` and their calls, the local stores' provisioning, the fence test, and the skills' and docs' mentions. Verified: unit and architecture 145 passed; Bookkeeping and local-store integration 45 passed; MDM, 13F, ownership and N-PORT integration 195 passed; Bookkeeping adapter suite on PostgreSQL 18 passed, 10 skipped.
+- [ ] `skills/data-platform/CONNECTIONS.md` still names `DESTINATION_MIGRATION_DATABASE_URL` and "the application guard": two lines to drop once Codex's open hosted-catalog-sync work on that file merges.
+- [ ] The hosted store still holds the installed `bookkeeping_guard` schema, which nothing reads now: dropping it needs the operator's word, at the hosted run (238).
 - [ ] [240] The operator's rulings on the default grain and which sources turn it off.
 - [ ] [248] 6,622 Securities the SEC file does not know, and the 10,177 whose issuer's GLEIF record waits.
 - [ ] [249] The 993 issuer records whose name equals an SEC filer's name would still create a duplicate: measure on a disposable store, then a looser name pass or review.

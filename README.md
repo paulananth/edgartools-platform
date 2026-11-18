@@ -459,7 +459,7 @@ For local development, use
 [Shared PostgreSQL initialization](docs/local-agent-testing.md). Agents share
 one server containing MDM, RDM, Rules, Bookkeeping and the Change Journal.
 Initialization excludes silver by default and provisions worker
-access and MDM's lease guard. Separate data copies are for disruptive tests
+access. Separate data copies are for disruptive tests
 or recovery; reinitialization preserves existing data.
 
 Before loading retained captures, follow the

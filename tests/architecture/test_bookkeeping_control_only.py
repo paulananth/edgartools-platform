@@ -58,7 +58,7 @@ def test_control_package_imports_no_domain_code():
 def test_control_starts_and_builds_every_command_with_domains_blocked():
     result = run_guarded('''
 from edgar_warehouse.cli import main
-from edgar_warehouse.bookkeeping.clean import cli, config, database, destinations, engine, feeds, artifacts
+from edgar_warehouse.bookkeeping.clean import cli, config, database, engine, feeds, artifacts
 for command in ("claim", "renew", "report", "fail", "status", "resume", "finalize"):
     try:
         main(["bookkeeping", command, "--help"])

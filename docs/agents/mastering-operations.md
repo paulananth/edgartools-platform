@@ -70,8 +70,7 @@ The active stores are separate logical responsibilities:
 | Rules | `rules`: mapping/policy versions, proof and approval |
 | Change Journal | `journal`: immutable shared history and source/publication evidence |
 
-`bookkeeping_guard` is destination transaction authority, not a spare
-database. Per-kind Stage/Master views are not duplicate stores. Test template
+Per-kind Stage/Master views are not duplicate stores. Test template
 databases are active while tests use them. A database named `mdm`, `silver`,
 `bookkeeping`, or `change_ledger` is not proved unused by its name.
 

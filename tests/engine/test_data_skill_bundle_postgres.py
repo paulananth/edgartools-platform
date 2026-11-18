@@ -701,7 +701,6 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
     """G3: captured records, read by the engine, prepared and merged into Clean
     MDM in one Rules run, every step by a worker from
     the installed bundle."""
-    from edgar_warehouse.bookkeeping.clean.destinations import migrate_guard
     from edgar_warehouse.mdm.store import migrate, register_policy
     from sqlalchemy import create_engine, text
     from tests.integration import test_mdm_postgres as core
@@ -723,7 +722,6 @@ def test_parse_then_master_runs_through_the_installed_bundle(installed, database
     mdm_admin = create_engine(databases.admin.url.set(database=mdm_name))
     mdm_app = create_engine(mdm_admin.url.set(username="clean_application", password="test"))
     migrate(mdm_admin, application_role="clean_application")
-    migrate_guard(mdm_admin, runtime_role="clean_application")
     with mdm_admin.begin() as conn:
         policy = register_policy(conn, {"version": 1, "required_consumers": ["export"], "automatic_rules": [],
                                         "kinds": {"company": {"version": "1", "defaults": {"sources": ["fixture.filers"]},
