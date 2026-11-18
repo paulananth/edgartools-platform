@@ -1,7 +1,7 @@
 """The distinct keys of what silver.land landed, held on disk in sorted runs, never all in memory.
 
 A receipt names the rows landed, their distinct keys and a digest of those keys; the check then asks silver whether it
-holds each key. A set of every key grows with the input, so a quarter of N-PORT holdings made a 1.2 GB worker. A KeySet
+holds each key. A set of every key grows with the input, so a worker that holds one grows with the largest load. A KeySet
 holds at most `limit` keys in memory, writes each full buffer as a sorted run in a temporary folder, and reads them back
 merged in key order, so the digest is the one `sha256(json.dumps(sorted(keys)))` gave and every stored receipt still
 verifies."""
@@ -67,12 +67,6 @@ class KeySet:
             count += 1
         digest.update(b"]")
         return count, digest.hexdigest()
-
-    def distinct(self) -> int:
-        return self.summary()[0]
-
-    def digest(self) -> str:
-        return self.summary()[1]
 
 
 def missing(keys: Iterator[tuple[str, ...]], fetch: Callable[[list[str]], set[tuple[str, ...]]], group: int = 500) -> int:

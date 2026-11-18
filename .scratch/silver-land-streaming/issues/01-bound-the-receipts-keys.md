@@ -23,7 +23,7 @@ arrive in pieces and land in deliveries of up to 10,000.
   held every key (2026-11-18 09:06 ET; `test_missing_asks_silver_a_group_of_first_key_values_at_a_time_and_counts_what_it_lacks`)
 - [x] Measured on 3 million invented keys of the shape of a holding's key (accession and holding id): the set peaked at 612 MB,
   the key set at 46 MB, with the same digest; the key set takes about half as long again (26.9 s against 17.5 s) (2026-11-18 09:06 ET;
-  local benchmark)
+  `scripts/dev/bench_silver_keys.py set 3000000` and `... keyset 3000000`)
 - [ ] The real effect on the N-PORT silver worker, measured after the hosted load ends (`footprint -p` on the step against its
   1.2 GB): the checkout the load runs from cannot change under it
 - [ ] The rest of that worker's memory, if any: the pieces of the reading and the quality reports are bounded by design
