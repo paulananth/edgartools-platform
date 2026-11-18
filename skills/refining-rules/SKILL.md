@@ -276,12 +276,22 @@ Never invent a command.
   (`waterfall_pass@1`; "name and city or postcode" compares `[[city, postcode]]`); the code in
   `edgar_warehouse/mdm/waterfall.py` and `waterfall_passes.py`. Name a matching rule by what it compares, never by a pass
   number (operator). A rename or a deletion moves the policy
-  digest: add a policy layer in `tests/mdm/policy_layers.py` that restores the
-  old form, then run the whole CI set (`tests/unit tests/architecture
+  digest: give each rule a new version named by what it compares (not by the
+  rename), put the same versions in `policy.yaml`, regenerate the kind's Mapping
+  Document, re-pin the Company mastering fixture's `policy_digest` (the failing
+  test prints it), then run the whole CI set (`tests/unit tests/architecture
   tests/mdm` and the engine and integration files that name the rule), since
   the mapping-document test, the Company mastering fixture digest and the
   installed-bundle test each hold the rule list (missing one cost three extra
   pushes).
+- **A rename stops at what a store already holds.** A word that is only code,
+  a rule's test name or a setting's key renames freely. A word written into a
+  store renames only with a change that reloads it: a name-key role, a key in a
+  record's provenance, a version string a record carries, a reason a set-aside
+  record keeps, and a name inside a stored digest (a matching route's name is
+  in each record's route digest). Renaming one of these alone leaves stored keys
+  that nothing finds, or replays every record. Keep them, list them in the
+  ticket, and rename them with the contract change that reloads the store.
 - Issued identifiers: those with an Identifier Contract in a kind file (today `cik`; GLEIF states `lei`). Name-rule proofs:
   `.scratch/company-mastering/research/08-*` and `12-*`. A proving run:
   `.scratch/company-mastering/research/27_proving_run.py`.
