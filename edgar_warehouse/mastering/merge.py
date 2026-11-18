@@ -14,6 +14,7 @@ from edgar_warehouse.mdm.activation import activated
 from edgar_warehouse.mdm import matching
 from edgar_warehouse.mdm.evidence import PROFILE_KINDS
 from edgar_warehouse.mdm.identifier_types import TYPES
+from edgar_warehouse.mdm.store import identifier_values
 from edgar_warehouse.rules.source_engine import (
     current_record_views,
     link_matching_records,
@@ -116,19 +117,22 @@ def merge_file(store, settings: Settings, records: list[dict], *, again: bool = 
                deferred: list[dict] = (), quiet: dict | None = None, record_updates=(), release_identifiers=()) -> dict:
     """Merge one file, or nothing if it is done. `again` delivers a finished file a second time. A file of new records
     first merges beside the other merges of its kind; one that would create or merge golden records, or meets another
-    merge on a golden record or identifier, is rolled back and merged alone."""
+    merge on a golden record or identifier, is rolled back and merged alone. A batch that holds more identifier values than one merge
+    may claim beside others is cut first (`_parts`). Every result names the files it wrote, `files`: one, or one a part."""
     shareable = store.can_share and records and not (again or record_updates or release_identifiers)
     if shareable:
         parts = _parts(records, stored.CLAIMS)
         if len(parts) > 1:
             return _merge_parts(store, settings, parts, deferred, quiet)
         try:
-            return _merge_file(store, settings, records, again, deferred, quiet, record_updates, release_identifiers,
+            made = _merge_file(store, settings, records, again, deferred, quiet, record_updates, release_identifiers,
                                shared=True)
         except Contended:
-            pass
-    return _merge_file(store, settings, records, again, deferred, quiet, record_updates, release_identifiers,
-                       shared=False)
+            made = None
+        if made is not None:
+            return {**made, "files": [{"file": made["file"], "records": len(records)}]}
+    made = _merge_file(store, settings, records, again, deferred, quiet, record_updates, release_identifiers, shared=False)
+    return {**made, "files": [{"file": made["file"], "records": len(records)}]}
 
 
 def _parts(records: list[dict], cap: int) -> list[list[dict]]:
@@ -138,7 +142,7 @@ def _parts(records: list[dict], cap: int) -> list[list[dict]]:
     parts, current, claimed = [], [], set()
     for record in records:
         values = {(namespace, value) for namespace, held in (record.get("identifiers") or {}).items()
-                  for value in ([held] if isinstance(held, str) else held)}
+                  for value in identifier_values(held)}
         new = values - claimed
         if current and len(claimed) + len(new) > cap:
             parts.append(current)
@@ -154,6 +158,8 @@ def _merge_parts(store, settings: Settings, parts: list[list[dict]], deferred, q
     """A batch that would claim more identifier values than one merge may claim beside others used to merge alone, holding the
     kind's lock while a worker computed. Each part is its own file and transaction and merges beside the others of its kind; the
     set-aside records go with the first. The result names every part's file, which is what a receipt holds."""
+    # Each call cuts its part again and gets one part back: a part holds at most the cap by construction, and a record over it
+    # is a part of its own, so the recursion ends at once.
     made = [merge_file(store, settings, part, deferred=deferred if number == 0 else (), quiet=quiet)
             for number, part in enumerate(parts)]
     totals = Counter()
