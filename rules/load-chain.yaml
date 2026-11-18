@@ -351,6 +351,9 @@ steps:
     capture: sec.submissions.company/all-76230
     facts:
       observed_at: "2026-09-30T02:20:28+00:00"
+    # Its bundles are independent silver landings that wait on the database, not on the machine: several at once (the load's
+    # measured time one at a time is in the load ticket).
+    bundles: 4
     minutes: 120
     attempts: 4
   - name: prospectus

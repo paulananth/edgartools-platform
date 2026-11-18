@@ -509,9 +509,10 @@ def test_a_multi_bundle_logs_progress_is_the_bundles_it_has_completed_of_the_tot
 
 
 def test_the_minutes_left_follow_the_rate_so_far_and_are_unknown_before_one_bundle_is_done():
-    assert chain.minutes_left(done=2, total=149, elapsed=10.0) == 735.0  # five minutes a bundle, 147 to go
-    assert chain.minutes_left(done=0, total=149, elapsed=10.0) is None
-    assert chain.minutes_left(done=149, total=149, elapsed=700.0) == 0.0
+    assert chain.minutes_left(done=2, total=149, elapsed=10.0, ran=2) == 735.0  # five minutes a bundle, 147 to go
+    assert chain.minutes_left(done=0, total=149, elapsed=10.0, ran=0) is None
+    assert chain.minutes_left(done=149, total=149, elapsed=700.0, ran=149) == 0.0
+    assert chain.minutes_left(done=120, total=149, elapsed=7.0, ran=0) is None  # nothing run yet this attempt: no rate
 
 
 def test_a_step_is_progressing_waiting_on_locks_or_possibly_stalled_by_its_own_evidence():
@@ -577,7 +578,9 @@ Bundle 4/149: 512 of 512 documents to load
 
 def test_bundles_already_loaded_by_an_earlier_attempt_count_as_done():
     assert chain.bundle_progress(RESUMED) == (3, 149)  # two skipped and one completed
-    assert chain.minutes_left(done=3, total=149, elapsed=4.5) == 219.0
+    assert chain.bundles_run(RESUMED) == 1  # only the completed one took this attempt's time
+    # the rate is this attempt's minutes over the bundles it ran, never over the ones it skipped
+    assert chain.minutes_left(done=3, total=149, elapsed=4.5, ran=1) == 657.0
 
 
 def test_a_store_is_client_bound_when_more_than_half_its_sessions_wait_on_the_client():
@@ -748,9 +751,10 @@ def test_the_errors_an_attempt_wrote_to_the_shared_error_log_are_kept_with_that_
     assert chain.errors_since(tmp_path / "missing.log", 0, "sec.x", "mastering") == ""
 
 
-def test_ipo_has_a_window_that_fits_its_bundles():
+def test_ipo_has_a_window_that_fits_its_bundles_and_runs_several_at_once():
     ipo = BY_NAME["ipo"]
     assert ipo["minutes"] * ipo["attempts"] >= 300  # 149 bundles at about two minutes each, one at a time
+    assert ipo["bundles"] >= 4  # measured: one at a time took 181 minutes with the machine idle
 
 
 def test_redaction_hides_every_address_form_and_every_value_named_like_a_secret():
@@ -847,6 +851,191 @@ def test_the_start_count_and_the_rescale_use_each_steps_own_measured_range(monke
     assert dict(started) == {"gleif": 10, "plain": 8}
     assert chain.rescale({"gleif": 5}, {"gleif": 1}, "low", {"gleif": (1, 10)}) == ("gleif", 10)
     assert chain.rescale({"gleif": 5}, {"gleif": 1}, "low", {"gleif": (1, 8)}) == ("gleif", 8)
+
+
+STEP_LOG = """Bundle 1/2: 512 of 512 documents to load
+  run 11111111-1111-4111-8111-111111111111 complete in 1.6 min
+Bundle 2/2: 512 of 512 documents to load
+  run 22222222-2222-4222-8222-222222222222 complete in 1.4 min
+Done: 1024 documents loaded, 0 already loaded before
+"""
+
+
+def test_the_run_to_publish_is_the_last_one_a_step_completed():
+    assert chain.last_run_id(STEP_LOG) == "22222222-2222-4222-8222-222222222222"
+    assert chain.last_run_id("Done: 1 documents loaded\n") is None  # a step that finished with no run of its own publishes nothing
+    assert chain.last_run_id("") is None
+
+
+def test_only_the_catalogs_address_and_token_reach_the_status_command_and_only_when_both_are_set(tmp_path):
+    env = tmp_path / ".env"
+    env.write_text("export OPENMETADATA_URL=http://127.0.0.1:8587/api\nOPENMETADATA_TOKEN='t-invented'\n"
+                   "OPENMETADATA_ADMIN_PASSWORD=never-passed\nSOMETHING_ELSE=x\n")
+    assert chain.catalog_env(env) == {"OPENMETADATA_URL": "http://127.0.0.1:8587/api", "OPENMETADATA_TOKEN": "t-invented"}
+    env.write_text("OPENMETADATA_URL=http://127.0.0.1:8587/api\n")
+    assert chain.catalog_env(env) == {}  # no token: nothing is published, and nothing is partly set
+    assert chain.catalog_env(tmp_path / "missing.env") == {}
+
+
+def test_the_catalogs_answer_is_read_as_published_or_not_with_its_cause_and_never_raises():
+    confirmed = '{"ok": true, "status": "confirmed", "pipeline_status": {"execution_status": "Successful", "failed_tasks": 0}}'
+    assert chain.catalog_outcome(confirmed) == "confirmed as Successful"
+    assert chain.catalog_outcome(confirmed.replace("Successful", "Pending")) == "confirmed as Pending"
+    assert chain.catalog_outcome('{"cause": "OpenMetadata endpoint did not answer", "ok": false, "status": "failed"}') == \
+        "not published: OpenMetadata endpoint did not answer"
+    assert chain.catalog_outcome("not json at all") == "not published: no readable answer"
+    assert chain.catalog_outcome("") == "not published: no readable answer"
+    assert chain.catalog_outcome(confirmed + "\n}") == "confirmed as Successful"  # a stray brace after the answer
+
+
+def test_a_steps_catalog_status_is_published_after_it_finishes_and_a_failure_never_fails_the_step(monkeypatch, tmp_path):
+    asked = []
+    monkeypatch.setattr(chain, "publish_catalog_status", lambda step: asked.append(step["name"]) or "published to svc.t")
+    steps = [_step("a1", "A")]
+    state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=10)
+    log = tmp_path / "log"
+    log.write_text(STEP_LOG)
+    notes = []
+    monkeypatch.setattr(chain, "note", lambda message, path: notes.append(message))
+    chain.after_done(steps[0], state)
+    assert asked == ["a1"] and any("catalog status" in n and "published to svc.t" in n for n in notes)
+    monkeypatch.setattr(chain, "publish_catalog_status", lambda step: (_ for _ in ()).throw(RuntimeError("boom")))
+    chain.after_done(steps[0], state)  # raises nothing: the load is done whatever the catalog says
+    assert any("not published" in n for n in notes)
+
+
+def test_a_catch_up_publishes_the_status_of_every_step_already_done_from_its_own_log(monkeypatch, tmp_path):
+    state = tmp_path / "chain.log"
+    state.write_text("11-18 06:40:00 ET a1 done: Done\n11-18 06:50:00 ET b1 done: Done\n")
+    (tmp_path / "chain-fresh-v1-a1.log").write_text(STEP_LOG)
+    monkeypatch.setattr(chain, "LOGS", tmp_path)
+    monkeypatch.setattr(chain, "RUN", "fresh-v1")
+    monkeypatch.setattr(chain, "note", lambda message, path: None)
+    seen = []
+    monkeypatch.setattr(chain, "publish_catalog_status", lambda step: seen.append(step["name"]) or "published to svc.t")
+    steps = [_step("a1", "A"), _step("b1", "B"), _step("c1", "C")]
+    assert chain.catch_up(steps, state) == {"a1": "published to svc.t", "b1": "published to svc.t", "c1": None}
+    assert seen == ["a1", "b1"]  # c1 is not done: nothing to say
+
+
+def test_the_status_command_gets_a_short_environment_the_bookkeeping_login_and_the_catalog_and_nothing_else():
+    base = {"PATH": "/bin", "HOME": "/h", "AWS_SECRET_ACCESS_KEY": "no", "MDM_DATABASE_URL": "no", "OPENMETADATA_ADMIN_PASSWORD": "no"}
+    worker = {"BOOKKEEPING_DATABASE_URL": "postgresql://b:p@h/x", "MDM_DATABASE_URL": "postgresql://m:p@h/y", "SILVER_DATABASE_URL": "no"}
+    catalog = {"OPENMETADATA_URL": "http://127.0.0.1:8587/api", "OPENMETADATA_TOKEN": "t"}
+    given = chain.status_env(base, worker, catalog)
+    assert set(given) == {"PATH", "HOME", "BOOKKEEPING_DATABASE_URL", "OPENMETADATA_URL", "OPENMETADATA_TOKEN"}
+    assert "no" not in given.values()  # no other login, key or password reaches it
+
+
+def test_a_step_that_loaded_nothing_new_in_its_last_attempt_publishes_the_run_of_an_earlier_one(tmp_path, monkeypatch):
+    monkeypatch.setattr(chain, "LOGS", tmp_path)
+    monkeypatch.setattr(chain, "RUN", "fresh-v1")
+    (tmp_path / "chain-fresh-v1-a1.log").write_text("Bundle 1/1: all 5 documents already loaded\nDone: 0 documents loaded, 5 already loaded before\n")
+    (tmp_path / "chain-fresh-v1-a1.log.attempt-1").write_text(STEP_LOG.replace("22222222", "33333333"))
+    (tmp_path / "chain-fresh-v1-a1.log.attempt-2").write_text(STEP_LOG)
+    assert chain.step_run_id("a1") == "22222222-2222-4222-8222-222222222222"  # its newest attempt that ran one
+    assert chain.step_run_id("none") is None
+
+
+def test_a_bad_line_in_the_env_file_never_hides_the_catalog_pair(tmp_path):
+    env = tmp_path / ".env"
+    env.write_text("STUB_NOTE=it's\nOPENMETADATA_URL=http://127.0.0.1:8587/api\nOPENMETADATA_TOKEN='t-invented'\n")
+    assert chain.catalog_env(env) == {"OPENMETADATA_URL": "http://127.0.0.1:8587/api", "OPENMETADATA_TOKEN": "t-invented"}
+
+
+def test_a_catalog_that_hangs_is_cut_off_at_sixty_seconds_with_its_whole_process_group(monkeypatch):
+    killed = []
+
+    class Hung:
+        pid = 4242
+
+        def communicate(self, timeout=None):
+            if timeout == 60:
+                raise chain.subprocess.TimeoutExpired("x", 60)
+            return ("", "")
+
+    monkeypatch.setattr(chain.subprocess, "Popen", lambda *a, **k: Hung())
+    monkeypatch.setattr(chain.os, "killpg", lambda pid, sig: killed.append(pid))
+    assert chain.run_catalog_status(["x"], {})[0] == ""
+    assert killed == [4242]  # the group, so no orphan keeps calling the catalog
+
+
+def test_the_catalogs_private_file_is_found_by_the_variable_then_the_private_folder_then_the_checkout(tmp_path):
+    home, root = tmp_path / "home", tmp_path / "repo"
+    (home / ".config/edgartools").mkdir(parents=True)
+    root.mkdir()
+    (root / ".env").write_text("x=1\n")
+    assert chain.catalog_env_file({}, home, root) == root / ".env"  # the legacy place
+    private = home / ".config/edgartools/openmetadata.env"
+    private.write_text("x=1\n")
+    assert chain.catalog_env_file({}, home, root) == private  # the private folder outside any checkout comes first
+    named = tmp_path / "elsewhere.env"
+    named.write_text("x=1\n")
+    assert chain.catalog_env_file({"OPENMETADATA_ENV_FILE": str(named)}, home, root) == named  # the operator's variable wins
+    assert chain.catalog_env_file({"OPENMETADATA_ENV_FILE": str(tmp_path / "gone.env")}, home, root) == private  # a missing one is skipped
+
+
+RUNS = [
+    {"run_id": "r-old", "name": "sec.nport.security", "target": "silver", "state": "complete", "completed_at": "2026-11-18 11:00:00+00:00"},
+    {"run_id": "r-new", "name": "sec.nport.security", "target": "silver", "state": "complete", "completed_at": "2026-11-18 13:00:00+00:00"},
+    {"run_id": "r-other", "name": "sec.nport.security", "target": "mastering", "state": "complete", "completed_at": "2026-11-18 14:00:00+00:00"},
+    {"run_id": "r-live", "name": "sec.nport.security", "target": "silver", "state": "running", "completed_at": None},
+]
+
+
+def test_the_latest_completed_run_of_a_source_and_target_comes_from_bookkeepings_own_rows():
+    assert chain.latest_run(RUNS, "sec.nport.security", "silver") == "r-new"  # not the older one, not another target's, not a live one
+    assert chain.latest_run(RUNS, "sec.nport.security", "mastering") == "r-other"
+    assert chain.latest_run(RUNS, "gleif", "mastering") is None
+    assert chain.latest_run([], "x", "y") is None
+
+
+def test_a_step_with_no_run_in_any_log_falls_back_to_bookkeepings_latest_for_its_source_and_target(monkeypatch, tmp_path):
+    monkeypatch.setattr(chain, "LOGS", tmp_path)
+    monkeypatch.setattr(chain, "RUN", "fresh-v1")
+    (tmp_path / "chain-fresh-v1-s1.log").write_text("Bundle 1/1: all 1 documents already loaded\n")
+    monkeypatch.setattr(chain, "bookkeeping_runs", lambda: RUNS)
+    step = {"name": "s1", "source": "sec.nport.security", "target": "silver"}
+    assert chain.run_to_publish(step) == "r-new"
+    (tmp_path / "chain-fresh-v1-s1.log").write_text(STEP_LOG)
+    assert chain.run_to_publish(step) == "22222222-2222-4222-8222-222222222222"  # the log, when it names one, wins
+
+
+def test_the_engine_is_the_executable_the_operator_names_else_uv(monkeypatch):
+    assert chain.engine_command({"EDGAR_WAREHOUSE": "/x/venv/bin/edgar-warehouse"}) == ["/x/venv/bin/edgar-warehouse"]
+    assert chain.engine_command({}) == ["uv", "run", "--no-sync", "edgar-warehouse"]
+
+
+def test_an_answer_that_cannot_be_read_names_why_from_the_commands_last_error_line():
+    assert chain.catalog_outcome("", "warning: x\nerror: Failed to spawn: edgar-warehouse\n  cause: No such file or directory") == \
+        "not published: no readable answer (cause: No such file or directory)"
+    assert chain.catalog_outcome("", "") == "not published: no readable answer"
+    assert "postgresql://" not in chain.catalog_outcome("", "boom postgresql://u:pw@h/db")  # an address is hidden
+
+
+def test_bookkeepings_runs_are_asked_for_within_the_commands_own_maximum_and_a_full_page_is_said_to_be_possibly_cut(monkeypatch):
+    seen = {}
+
+    def fake(command, env, timeout=60):
+        seen["limit"] = int(command[command.index("--limit") + 1])
+        return '[{"run_id": "r1"}]', ""
+
+    monkeypatch.setattr(chain, "run_catalog_status", fake)
+    monkeypatch.setattr(chain, "_RUNS", None)
+    assert chain.bookkeeping_runs() == [{"run_id": "r1"}]
+    assert seen["limit"] == chain.RUNS_LIMIT == 1000  # `bookkeeping runs` refuses more than 1000
+    assert chain.runs_may_be_cut([{}] * 1000) and not chain.runs_may_be_cut([{}] * 999)
+
+
+def test_a_missing_worker_env_means_no_bookkeeping_login_not_a_crash(monkeypatch, tmp_path):
+    monkeypatch.setattr(chain, "STORES", tmp_path)  # a machine with no stores folder: CI, or a fresh checkout
+    assert chain.worker_env() == {}
+    (tmp_path / "worker.env").write_text("export BOOKKEEPING_DATABASE_URL='postgresql://b:p@h/x'\n")
+    assert chain.worker_env() == {"BOOKKEEPING_DATABASE_URL": "postgresql://b:p@h/x"}
+    monkeypatch.setattr(chain, "_RUNS", None)
+    monkeypatch.setattr(chain, "run_catalog_status", lambda command, env, timeout=60: ("[]", ""))
+    (tmp_path / "worker.env").unlink()
+    assert chain.bookkeeping_runs() == []  # reads nothing, asks nothing it cannot, never raises
 
 
 def test_a_load_does_not_build_the_name_search_lookups_and_they_are_built_only_when_asked(monkeypatch):

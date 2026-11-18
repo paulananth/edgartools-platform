@@ -8,6 +8,7 @@
     python load_chain.py --only <step>        one step
     python load_chain.py --lane <name>        the steps of one lane; run several lanes at once (see the chain file)
     python load_chain.py --finish             only what follows the loads, once every lane is done
+    python load_chain.py --catalog-status     publish the catalog status of every step already done (a catch-up)
     python load_chain.py --finish --lookups   the same, with the name-search lookups built first (only the context search needs them)
     python load_chain.py --status             what each running step is doing: progress, rate, processes, a verdict
     python load_chain.py --auto [--slots N] [--hours H | --deadline HH:MM]
@@ -46,7 +47,13 @@ ROOTS = {"captures": Path(os.environ.get("CAPTURES") or HOME / ".local/share/edg
          "proving": Path(os.environ.get("PROVING") or HOME / ".local/share/edgartools/mdm/proving")}
 LOGS = Path(os.environ.get("LOGS") or HOME / ".local/share/edgartools/load-logs")
 RUN = os.environ.get("RUN", "fresh-v1")
-ENGINE = ["uv", "run", "--no-sync", "edgar-warehouse"]
+def engine_command(environ: dict) -> list[str]:
+    """The command that runs `edgar-warehouse`: the executable `EDGAR_WAREHOUSE` names (a checkout whose environment is
+    built elsewhere), else `uv run --no-sync` in the checkout."""
+    return [environ["EDGAR_WAREHOUSE"]] if environ.get("EDGAR_WAREHOUSE") else ["uv", "run", "--no-sync", "edgar-warehouse"]
+
+
+ENGINE = engine_command(os.environ)
 
 
 def load_env(path: Path) -> dict:
@@ -57,6 +64,12 @@ def load_env(path: Path) -> dict:
         if match:
             env[match.group(1)] = shlex.split(match.group(2))[0] if match.group(2) else ""
     return env
+
+
+def worker_env() -> dict:
+    """The stores folder's worker.env as data, or nothing when the folder has none (CI, a fresh checkout)."""
+    path = STORES / "worker.env"
+    return load_env(path) if path.exists() else {}
 
 
 def chain_steps(path: Path = ROOT / "rules/load-chain.yaml") -> list[dict]:
@@ -406,9 +419,15 @@ def bundle_progress(text: str) -> tuple[int, int] | None:
     return (finished, int(found[-1])) if found else None
 
 
-def minutes_left(done: int, total: int, elapsed: float) -> float | None:
-    """The minutes left at the rate so far; None before a bundle is done (no rate yet)."""
-    return None if done <= 0 else max(total - done, 0) * elapsed / done
+def bundles_run(text: str) -> int:
+    """The bundles this attempt ran (its `run ... complete in` lines), not the ones an earlier attempt already loaded."""
+    return len(re.findall(r"^\s+run \S+ complete in", text, re.M))
+
+
+def minutes_left(done: int, total: int, elapsed: float, ran: int) -> float | None:
+    """The minutes left at this attempt's rate: its minutes over the bundles it ran (`ran`), for the bundles not yet done.
+    None before it has run one (no rate yet); the bundles an earlier attempt skipped never enter the rate."""
+    return None if ran <= 0 else max(total - done, 0) * elapsed / ran
 
 
 def writes_per_minute(before: dict[str, int], after: dict[str, int], seconds: float) -> dict[str, float]:
@@ -606,7 +625,7 @@ def status(steps: list[dict], state: Path, reader_url: str | None, sample: int =
         mine = rate.get(store, 0.0)
         sharing = [o["name"] for o in running if o is not step and store_of(o["target"]) == store]
         wrote = f"{store} {mine:,.0f} rows/min" + (f" shared with {', '.join(sharing)}" if sharing else "")
-        left = minutes_left(*progress, elapsed) if progress and progress[1] > 1 else None
+        left = minutes_left(*progress, elapsed, bundles_run(log.read_text())) if progress and progress[1] > 1 else None
         warn = outlook(left, elapsed, step["minutes"], attempt, step["attempts"])
         shown = (f"bundles {progress[0]} of {progress[1]}" + (f", about {left:.0f} min left" if left else "")
                  if progress and progress[1] > 1 else "one document, so its log shows no progress; the database does")
@@ -756,6 +775,171 @@ def wait_for(step: dict, state: Path, poll: int = 30) -> None:
             time.sleep(poll)
 
 
+CATALOG_KEYS = ("OPENMETADATA_URL", "OPENMETADATA_TOKEN")
+
+
+def last_run_id(text: str) -> str | None:
+    """The Bookkeeping run a step completed last, from its log: the catalog's status is that of the latest run."""
+    found = re.findall(r"^\s+run ([0-9a-f-]{36}) complete", text, re.M)
+    return found[-1] if found else None
+
+
+def catalog_env_file(environ: dict, home: Path, root: Path) -> Path:
+    """Where the catalog's address and token are kept, first that exists: the file `OPENMETADATA_ENV_FILE` names, the private
+    folder outside every checkout (`~/.config/edgartools/openmetadata.env`), then the checkout's own `.env` (the older place)."""
+    named = environ.get("OPENMETADATA_ENV_FILE")
+    for path in ([Path(named)] if named else []) + [home / ".config/edgartools/openmetadata.env", root / ".env"]:
+        if path.exists():
+            return path
+    return root / ".env"
+
+
+def catalog_env(path: Path) -> dict[str, str]:
+    """Only the catalog's address and token, from the private env file, and only when both are there: nothing else the
+    file holds (a login, a password) reaches the command, and no half-set pair does."""
+    if not path.exists():
+        return {}
+    found = {}
+    for line in path.read_text().splitlines():  # only the two keys are read: another line, however odd, is never parsed
+        match = re.match(rf"^(?:export\s+)?({'|'.join(CATALOG_KEYS)})=(.*)$", line.strip())
+        if match:
+            try:
+                value = shlex.split(match.group(2))
+            except ValueError:
+                continue
+            found[match.group(1)] = value[0] if value else ""
+    return {key: found[key] for key in CATALOG_KEYS} if all(found.get(key) for key in CATALOG_KEYS) else {}
+
+
+def catalog_outcome(answer: str, error: str = "") -> str:
+    """What `rules catalog status` answered (its JSON report on stdout), in a few words: confirmed as the status it read back,
+    or not published and why. Never raises."""
+    try:
+        body = json.JSONDecoder().raw_decode(answer[answer.index("{"):])[0] if "{" in answer else None  # the first whole object
+    except ValueError:
+        body = None
+    if not isinstance(body, dict):
+        lines = [line.strip() for line in redact(error).splitlines() if line.strip()]
+        return f"not published: no readable answer ({lines[-1][:120]})" if lines else "not published: no readable answer"
+    if body.get("ok"):
+        return f"confirmed as {(body.get('pipeline_status') or {}).get('execution_status', 'its status')}"
+    return f"not published: {redact(str(body.get('cause') or 'no cause given'))[:120]}"
+
+
+def step_run_id(step_name: str) -> str | None:
+    """The Bookkeeping run to publish for a step: its last completed run, from its log or, when its last attempt found
+    everything already loaded and ran none, from its newest earlier attempt's."""
+    log = LOGS / f"chain-{RUN}-{step_name}.log"
+    attempts = sorted(log.parent.glob(log.name + ".attempt-*"), key=lambda p: int(p.name.rsplit("-", 1)[1]), reverse=True)
+    for path in [log, *attempts]:
+        if path.exists() and (run := last_run_id(path.read_text())):
+            return run
+    return None
+
+
+def run_catalog_status(command: list[str], env: dict, timeout: int = 60) -> tuple[str, str]:
+    """Run a command and return its stdout and stderr, cut off at `timeout` seconds with its whole process group: a catalog
+    that hangs must not stall the lane or leave a process calling it."""
+    child = subprocess.Popen(command, env=env, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                             start_new_session=True)
+    try:
+        return child.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(child.pid, signal.SIGKILL)
+        return "", "the command did not answer in time"
+
+
+SAFE_BASE = ("PATH", "HOME", "USER", "LANG", "LC_ALL", "TMPDIR", "UV_CACHE_DIR", "UV_PROJECT_ENVIRONMENT", "VIRTUAL_ENV")
+
+
+def status_env(base: dict, worker: dict, catalog: dict) -> dict:
+    """The environment of `rules catalog status`: a short allowlist of the process's own (a path, a home), the Bookkeeping
+    login it reads the run with, and the catalog's address and token. No other login, key or password reaches it."""
+    given = {key: base[key] for key in SAFE_BASE if key in base}
+    if worker.get("BOOKKEEPING_DATABASE_URL"):
+        given["BOOKKEEPING_DATABASE_URL"] = worker["BOOKKEEPING_DATABASE_URL"]
+    return {**given, **catalog}
+
+
+def latest_run(rows: list[dict], source: str, target: str) -> str | None:
+    """The newest completed Bookkeeping run of a source and target, from Bookkeeping's own run rows."""
+    done = [row for row in rows if row.get("name") == source and row.get("target") == target
+            and row.get("state") == "complete" and row.get("completed_at")]
+    return max(done, key=lambda row: row["completed_at"])["run_id"] if done else None
+
+
+_RUNS: list[dict] | None = None
+RUNS_LIMIT = 1000  # `bookkeeping runs` refuses a larger page
+
+
+def runs_may_be_cut(rows: list[dict]) -> bool:
+    """A full page may have more runs behind it (newest first): the oldest steps' runs could be missing."""
+    return len(rows) >= RUNS_LIMIT
+
+
+def bookkeeping_runs() -> list[dict]:
+    """Bookkeeping's run rows (`bookkeeping runs`), read once and kept for the process: the authority on which run is a step's,
+    where its logs name none (a step the lanes re-ran logged only `already loaded`)."""
+    global _RUNS
+    if _RUNS is None:
+        answer, _ = run_catalog_status([*ENGINE, "bookkeeping", "runs", "--limit", str(RUNS_LIMIT)],
+                                       status_env(os.environ, worker_env(), {}), timeout=300)
+        try:
+            _RUNS = json.JSONDecoder().raw_decode(answer[answer.index("["):])[0] if "[" in answer else []
+        except ValueError:
+            _RUNS = []
+    return _RUNS
+
+
+def run_to_publish(step: dict) -> str | None:
+    """A step's run for the catalog: the last one its logs completed, else Bookkeeping's latest for its source and target."""
+    return step_run_id(step["name"]) or latest_run(bookkeeping_runs(), step["source"], step["target"])
+
+
+def publish_catalog_status(step: dict) -> str:
+    """Publish a finished step's latest Bookkeeping run as its target Pipeline's status in the catalog
+    (`rules catalog status --bookkeeping-run`), when the catalog's address and token are configured."""
+    run = run_to_publish(step)
+    env = catalog_env(catalog_env_file(os.environ, Path.home(), ROOT))
+    if not run:
+        return "not published: the step completed no run of its own"
+    if not env:
+        return "not published: no catalog address and token configured"
+    answer, error = run_catalog_status(
+        [*ENGINE, "rules", "catalog", "status", "--bookkeeping-run", run, "--root", str(ROOT / "rules")],
+        status_env(os.environ, worker_env(), env))
+    return catalog_outcome(answer, error)
+
+
+def tell_catalog(step: dict, state: Path) -> str:
+    """Publish a step's status and note the outcome. A status that cannot be published is a note, never a failed load: the
+    catalog describes the load and never decides it."""
+    try:
+        outcome = publish_catalog_status(step)
+    except Exception as error:  # noqa: BLE001  whatever went wrong, the step stays done
+        outcome = f"not published: {type(error).__name__}"
+    note(f"{step['name']} catalog status: {outcome}", state)
+    return outcome
+
+
+def after_done(step: dict, state: Path) -> None:
+    """After a step is done: tell the catalog."""
+    tell_catalog(step, state)
+
+
+def catch_up(steps: list[dict], state: Path) -> dict[str, str | None]:
+    """Publish the status of every step already done, from the step's own log (a step done before the catalog was configured,
+    or while it was unreachable). None for a step not done; a step with no run in any attempt's log is not published."""
+    done, outcomes = done_steps(state), {}
+    for step in steps:
+        if step["name"] not in done:
+            outcomes[step["name"]] = None
+            continue
+        outcomes[step["name"]] = tell_catalog(step, state)
+    return outcomes
+
+
 def attempt_loop(step: dict, env: dict, state: Path) -> bool:
     name, log = step["name"], LOGS / f"chain-{RUN}-{step['name']}.log"
     wait_for(step, state)
@@ -768,6 +952,7 @@ def attempt_loop(step: dict, env: dict, state: Path) -> bool:
         if code == 0 and "Load stopped" not in text:
             done = [line for line in text.splitlines() if line.startswith("Done: ")]
             note(f"{name} done: {done[-1][:200] if done else ''}", state)
+            after_done(step, state)
             return True
         why = [line for line in text.splitlines() if re.search(r"stopped|did not finish|Error", line)]
         note(f"{name} attempt {attempt} stopped rc={code}: "
@@ -810,6 +995,8 @@ def main() -> int:
     parser.add_argument("--lane")
     parser.add_argument("--adopt-state", action="store_true",
                         help="the chain state file has done lines and no store marker: it is this store's")
+    parser.add_argument("--catalog-status", action="store_true",
+                        help="publish the catalog status of every step already done (a catch-up); needs the catalog configured")
     parser.add_argument("--status", action="store_true",
                         help="one line a running step: progress, rate, processes, database writes and a verdict")
     parser.add_argument("--workers", type=int, help="with --only: the step's workers, within the capacity's range, instead of the chain file's")
@@ -872,6 +1059,10 @@ def main() -> int:
     if args.plan:
         for step in steps:
             print(f"{step['name']:30} {plan(step, env)}", flush=True)
+        return 0
+    if args.catalog_status:
+        for name, outcome in catch_up(steps, state).items():
+            print(f"{name:30} {outcome or 'not done'}")
         return 0
     if args.auto:
         deadline = None

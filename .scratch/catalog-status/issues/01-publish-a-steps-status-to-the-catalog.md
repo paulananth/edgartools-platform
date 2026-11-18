@@ -1,0 +1,49 @@
+# The chain publishes each step's status to the catalog
+
+Status: open
+Type: task
+
+Operator, 2026-11-18: "Are you updating the status in open metadata? If not the skills should be updated".
+
+## Findings
+
+- No. The openmetadata skill says to publish a run's status to its target Pipeline (`rules catalog status --bookkeeping-run`), but the
+  data-operations skill and the chain never did, so the hosted load ran without updating the catalog.
+- Tried once on a finished step: the command found the Bookkeeping run and the configured Pipeline, and stopped at "OpenMetadata endpoint
+  did not answer": the private repo-root `.env` names port 8585, the prior stack the operator had just retired and deleted (and a token that
+  belonged to it). The surviving stack answers on 8587 and needs its credentials initialized.
+
+## Parts
+
+- [x] After a step is done the chain publishes its latest run's status when the catalog's address and token are configured; a status
+  that cannot be published is a note in the state file, never a failed load; the command gets a short environment: a path and a home, the Bookkeeping login it reads the run with, and the catalog's address and token
+  (2026-11-18 10:16 ET; `test_the_run_to_publish_is_the_last_one_a_step_completed`, `test_only_the_catalogs_address_and_token_reach_the_status_command_and_only_when_both_are_set`,
+  `test_the_status_command_gets_a_short_environment_the_bookkeeping_login_and_the_catalog_and_nothing_else` (a review found the command inherited every login in `worker.env` and the process environment: `status_env` did not exist),
+  `test_the_catalogs_answer_is_read_as_published_or_not_with_its_cause_and_never_raises`,
+  `test_a_steps_catalog_status_is_published_after_it_finishes_and_a_failure_never_fails_the_step`: `last_run_id`, `catalog_env`,
+  `catalog_outcome`, `after_done` did not exist, `AttributeError`)
+- [x] `--catalog-status` publishes every step already done, from its own log (2026-11-18 10:16 ET;
+  `test_a_catch_up_publishes_the_status_of_every_step_already_done_from_its_own_log`: `catch_up` did not exist)
+- [x] The data-operations skill says it, "Publish a step's status to the catalog" (2026-11-18 10:16 ET; the skill lints pass)
+- [ ] ~~Initialize the surviving catalog's credentials and repoint `.env` to port 8587~~ deferred to
+  .scratch/catalog-status/issues/02-repoint-the-catalog-credentials-to-8587.md: it writes credentials and `init.sh` runs `docker compose up`
+  from the main checkout, which could recreate the stack another runtime started; it needs the operator's word
+- [ ] ~~Publish the catalog plan if the target Pipelines are absent, then run `--catalog-status` to catch the finished steps up~~ deferred to
+  .scratch/catalog-status/issues/02-repoint-the-catalog-credentials-to-8587.md: needs the catalog reachable
+- [x] Spec review of the publication, five findings fixed (2026-11-18 10:21 ET; 97 tests, each failing first):
+  - `--catalog-status` ran before the store check, so it could read a state file marked for another store and append to it: it now runs after it;
+  - a step whose last attempt found everything already loaded ran no run, so it was never published: its newest earlier attempt's run is used
+    (`test_a_step_that_loaded_nothing_new_in_its_last_attempt_publishes_the_run_of_an_earlier_one`: `step_run_id` did not exist);
+  - `catalog_outcome` expected a `pipeline` field the command never emits and a stray brace turned a success into "no readable answer": it reads the
+    real report (`confirmed as Successful`) and the first whole object (`test_the_catalogs_answer_is_read_as_published_or_not_with_its_cause_and_never_raises`:
+    `assert 'not publishe...adable answer' == 'confirmed as Successful'`);
+  - a hung catalog held its lane up to 300 s and the timeout left the command's python child running: 60 s, and the whole process group is killed
+    (`test_a_catalog_that_hangs_is_cut_off_at_sixty_seconds_with_its_whole_process_group`: `run_catalog_status` did not exist);
+  - one odd line in the env file (`STUB_NOTE=it's`) made the pair unreadable: only the two keys are parsed
+    (`test_a_bad_line_in_the_env_file_never_hides_the_catalog_pair`: `ValueError`)
+- [x] Found while watching the live load: the status said `ipo` had "about 2 minutes left" at 122 of 149 bundles, but 27 bundles at
+  about 1.5 minutes each is about 40. The earlier fix counted bundles an earlier attempt already loaded as done, and the rate then
+  divided this attempt's minutes by all of them. The rate is now this attempt's minutes over the bundles it ran
+  (2026-11-18 10:20 ET; `test_bundles_already_loaded_by_an_earlier_attempt_count_as_done` expected `219.0` and now `657.0`, and
+  `minutes_left(done=120, total=149, elapsed=7.0, ran=0)` is `None`: `bundles_run` and `ran` did not exist; live: about 40 min)
+- [x] Learning → skill: data-operations, "Publish a step's status to the catalog" (2026-11-18 10:16 ET)
