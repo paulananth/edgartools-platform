@@ -112,7 +112,7 @@ rest carry on, and the scheduler stops, naming what cannot start, when nothing e
 `chain-<RUN>.log`, which names the store it belongs to: its instance (by the address, never shown) and its database's creation
 identity, so a store whose databases were made again is another store even at the same address. A run whose file was written for
 another store, another generation of this one, or no store at all (an old run's file, from before markers, under a label used
-again) sets it aside beside it (`chain-<RUN>.log.<store>`, `.unmarked`; never deleted, never overwritten) and starts a fresh one,
+again) sets it aside beside it (`chain-<RUN>.log.<store>`, `.<store>-<generation>`, `.unmarked`; never deleted, never overwritten) and starts a fresh one,
 so an earlier load's lines never satisfy a wait and never stop a run. A generation that cannot be read changes nothing.
 `--adopt-state` is for the operator who says an unmarked file is this store's and keeps it.
 

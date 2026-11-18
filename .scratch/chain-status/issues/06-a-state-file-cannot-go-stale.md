@@ -24,6 +24,6 @@ Operator, 2026-11-18, when the scheduler refused to start on an old `chain-fresh
   `test_a_reset_store_at_the_same_address_is_another_store_so_a_reused_label_skips_nothing`:
   `TypeError: ensure_store() got an unexpected keyword argument 'generation'`; live: 7 digits read from the hosted store)
 - [x] A generation read that fails returns nothing and never reports the connection (2026-11-18 12:11 ET;
-  `test_the_database_generation_is_unreadable_as_an_empty_string_never_an_error_or_an_address`: no `database_generation`)
+  `test_the_database_generation_is_unreadable_as_an_empty_string_never_an_error_or_an_address`: `AttributeError: module 'load_chain' has no attribute 'database_generation'`)
 - [x] The init runbook says a label can be used again and what sets a file aside (2026-11-18 12:11 ET; read in the PR)
-- [x] Learning → skill: the init runbook's "A fresh store starts a fresh state file" (2026-11-18 12:11 ET; this ticket)
+- [x] Learning → skill: data-operations says a run label can repeat and a state file that does not name this store and generation is set aside, never a reason to stop; the init runbook holds the detail (2026-11-18 12:11 ET; the skill sentence, read in the PR)

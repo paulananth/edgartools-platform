@@ -681,10 +681,10 @@ def test_a_state_file_with_lines_and_no_marker_is_set_aside_and_kept_never_trust
     assert chain.ensure_store(state, "bbbb2222") == "set aside"  # no marker: its done lines are not this store's to trust
     assert chain.done_steps(state) == set() and state.read_text().endswith("chain store bbbb2222\n")
     kept = [p for p in tmp_path.glob("chain.log.*") if p.suffix != ".lock"]
-    assert len(kept) == 1 and kept[0].read_text() == "11-15 14:21:31 ET company done: Done\n"  # archived, never deleted
+    assert [p.name for p in kept] == ["chain.log.unmarked"] and kept[0].read_text() == "11-15 14:21:31 ET company done: Done\n"  # kept
     state.write_text("11-15 14:21:31 ET company done: Done\n")  # a second old file under the same label: nothing is overwritten
     assert chain.ensure_store(state, "bbbb2222") == "set aside"
-    assert len([p for p in tmp_path.glob("chain.log.*") if p.suffix != ".lock"]) == 2
+    assert sorted(p.name for p in tmp_path.glob("chain.log.*") if p.suffix != ".lock") == ["chain.log.unmarked", "chain.log.unmarked.2"]
     adopted = tmp_path / "adopt.log"
     adopted.write_text("11-15 14:21:31 ET company done: Done\n")
     assert chain.ensure_store(adopted, "bbbb2222", adopt=True) == "adopted"  # the operator's word keeps it, as before
@@ -717,7 +717,6 @@ def test_the_database_generation_is_unreadable_as_an_empty_string_never_an_error
 
     monkeypatch.setattr(psycopg2, "connect", refuse)
     assert chain.database_generation("postgresql+psycopg2://u:p@h.invalid:5432/mdm") == ""
-
 
 
 def test_two_lanes_starting_at_once_against_another_stores_file_set_it_aside_once_and_lose_nothing(tmp_path):

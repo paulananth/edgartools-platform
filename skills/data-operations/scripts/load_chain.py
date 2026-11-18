@@ -736,7 +736,13 @@ def ensure_store(state: Path, store: str, adopt: bool = False, generation: str =
             state.write_text(text + stamp)
             return "adopted"
         if text:
-            keep("unmarked" if not found else f"{found[-1][0]}-{found[-1][1]}" if found[-1][0] == store and found[-1][1] else found[-1][0])
+            if not found:
+                suffix = "unmarked"
+            elif found[-1][0] == store:
+                suffix = f"{store}-{found[-1][1]}"  # this store, made again: its old generation
+            else:
+                suffix = found[-1][0]
+            keep(suffix)
         state.write_text(stamp)
         return "set aside" if text else "fresh"
 
