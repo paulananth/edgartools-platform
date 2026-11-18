@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[2] / "skills/data-platform/scripts"))
 
-from provision_hosted_store import Refused, ensure_reader, logins, main, provision, read_urls, rewrite
+from provision_hosted_store import Refused, ensure_reader, logins, main, provision, read_urls, retire, rewrite
 
 OLD = "old.invalid"
 
@@ -205,7 +205,7 @@ def test_a_login_holding_a_schema_create_or_an_object_is_refused():
         ddl_free(Database("", 0, 1), "edgar_loader", "silver")
 
 
-def test_every_runtime_url_in_worker_env_becomes_the_loader_login_and_the_old_file_is_kept(tmp_path):
+def test_every_runtime_url_in_every_stores_file_becomes_the_loader_login_and_the_old_files_are_kept(tmp_path):
     from provision_hosted_store import use_loader
 
     folder = _folder(tmp_path)
@@ -213,13 +213,96 @@ def test_every_runtime_url_in_worker_env_becomes_the_loader_login_and_the_old_fi
         f"export MDM_DATABASE_URL='postgresql://mdm_runtime:m-invented@{OLD}:5432/mdm'",
         f"export SILVER_DATABASE_URL='postgresql://silver_runtime:s-invented@{OLD}:5432/silver'",
         "export BOOKKEEPING_MANIFEST_ROOT=file:///invented/manifests", ""]))
-    assert use_loader(folder) == 2
-    urls = read_urls(folder)["worker.env"]
-    assert set(urls) == {"MDM_DATABASE_URL", "SILVER_DATABASE_URL"}
-    users = {url.split("//")[1].split(":")[0] for url in urls.values()}
-    passwords = {url.split("//")[1].split(":")[1].split("@")[0] for url in urls.values()}
-    assert users == {"edgar_loader"} and len(passwords) == 1 and "m-invented" not in passwords
-    assert urls["SILVER_DATABASE_URL"].endswith("/silver") and "BOOKKEEPING_MANIFEST_ROOT" in (folder / "worker.env").read_text()
+    assert use_loader(folder) == 4  # worker.env 2, connection.env's runtime URL, governance.env's runtime URL
+    found = read_urls(folder)
+    users = {name: {url.split("//")[1].split(":")[0] for url in urls.values()} for name, urls in found.items()}
+    assert users["worker.env"] == {"edgar_loader"}
+    assert users["connection.env"] == {"admin", "edgar_loader"}  # the administrator's URL stays
+    assert users["governance.env"] == {"mdm_governance", "edgar_loader"}  # so does the governance login
+    passwords = {url.split("//")[1].split(":")[1].split("@")[0] for urls in found.values() for url in urls.values()
+                 if url.split("//")[1].startswith("edgar_loader")}
+    assert len(passwords) == 1 and "m-invented" not in passwords  # one login, one password, in every file
+    assert found["worker.env"]["SILVER_DATABASE_URL"].endswith("/silver") and "BOOKKEEPING_MANIFEST_ROOT" in (folder / "worker.env").read_text()
+    for name in ("worker.env", "connection.env", "governance.env"):
+        assert (folder / f"{name}.before-loader").stat().st_mode & 0o777 == 0o600
     assert "m-invented" in (folder / "worker.env.before-loader").read_text()
-    assert (folder / "worker.env.before-loader").stat().st_mode & 0o777 == 0o600
-    assert use_loader(folder) == 0  # already the loader: nothing changes, the kept file stays
+    assert use_loader(folder) == 0  # already the loader everywhere: nothing changes, the kept files stay
+
+
+def test_a_file_moved_later_takes_the_password_the_loader_urls_already_hold(tmp_path):
+    from provision_hosted_store import use_loader
+
+    folder = _folder(tmp_path)
+    (folder / "worker.env").write_text(f"export MDM_DATABASE_URL='postgresql://edgar_loader:held-invented@{OLD}:5432/mdm'\n")
+    assert use_loader(folder) == 2  # connection.env and governance.env, not worker.env
+    found = read_urls(folder)
+    assert {url.split("//")[1].split(":")[1].split("@")[0] for name in ("connection.env", "governance.env")
+            for url in found[name].values() if url.split("//")[1].startswith("edgar_loader")} == {"held-invented"}
+
+
+class _Roles(_EmptyServer):
+    """An instance whose runtime roles may log in (`login`) and have sessions (`sessions`, by role)."""
+
+    def __init__(self, login=True, sessions=None):
+        super().__init__()
+        self.login, self.sessions, self.asked = login, sessions or {}, None
+
+    def execute(self, statement, *args):
+        super().execute(statement, *args)
+        self.asked = args[0][0] if args else None
+
+    def fetchone(self):
+        if "rolcanlogin" in self.last:
+            return (self.login,) if self.login is not None else None
+        if "pg_stat_activity" in self.last:
+            return (self.sessions.get(self.asked, 0),)
+        return None
+
+
+def test_the_six_runtime_logins_become_groups_and_the_loader_is_never_touched():
+    server = _Roles()
+    assert retire(server, confirm=False) == [f"would retire {role}: NOLOGIN" for role in RUNTIME]
+    assert not [statement for statement in server.statements if "ALTER ROLE" in statement]  # a listing changes nothing, even briefly
+    server = _Roles()
+    steps = retire(server, confirm=True)
+    assert steps == [f"retire {role}: NOLOGIN" for role in RUNTIME]
+    altered = [statement for statement in server.statements if "ALTER ROLE" in statement]
+    assert altered == [f'ALTER ROLE "{role}" NOLOGIN' for role in RUNTIME]  # each runtime role, and no other
+    assert "edgar_loader" not in " ".join(altered)
+
+
+def test_a_session_logged_in_as_a_runtime_role_refuses_the_run_and_leaves_every_role_a_login():
+    server = _Roles(sessions={"rdm_runtime": 2})
+    with pytest.raises(Refused, match="rdm_runtime still has open sessions"):
+        retire(server, confirm=True)
+    altered = [statement for statement in server.statements if "ALTER ROLE" in statement]
+    assert altered == [f'ALTER ROLE "{role}" NOLOGIN' for role in RUNTIME] + [f'ALTER ROLE "{role}" LOGIN' for role in RUNTIME]
+    # made NOLOGIN first and the sessions counted after, so a login made in between cannot slip through; then put back
+    with pytest.raises(Refused, match="still has open sessions"):
+        retire(_Roles(sessions={"mdm_runtime": 1}), confirm=False)  # a listing says it would be refused, and changes nothing
+
+
+def test_a_url_that_still_names_a_runtime_role_refuses_before_anything_changes():
+    server = _Roles()
+    with pytest.raises(Refused, match="still names bookkeeping_runtime, mdm_runtime: run --loader first"):
+        retire(server, confirm=True, named={"mdm_runtime", "bookkeeping_runtime", "edgar_loader", "rules_governance"})
+    assert not server.statements  # not even a read
+
+
+def test_a_role_that_cannot_log_in_or_is_absent_is_left_alone():
+    for login in (False, None):
+        server = _Roles(login=login)
+        steps = retire(server, confirm=True)
+        assert all("cannot log in already" in step for step in steps) and len(steps) == len(RUNTIME)
+        assert not [statement for statement in server.statements if "ALTER ROLE" in statement]
+
+
+def test_provisioning_runs_again_after_the_retirement_once_no_url_names_a_runtime_login(tmp_path):
+    from provision_hosted_store import use_loader
+
+    folder = _folder(tmp_path)
+    use_loader(folder)  # connection.env and governance.env no longer name mdm_runtime or bookkeeping_runtime
+    held = logins(read_urls(folder), "admin")
+    assert not set(held) & set(RUNTIME)
+    held["rules_governance"] = ("g-invented", {"rules"})  # the fixture folder names no Rules governance login
+    provision(_EmptyServer(), held, "admin", confirm=False)  # the existing NOLOGIN groups are not asked to be logins

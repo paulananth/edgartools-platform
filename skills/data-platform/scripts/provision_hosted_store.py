@@ -3,6 +3,8 @@
 
     python <this skill>/scripts/provision_hosted_store.py --service <pg service>            # lists what it would do
     python <this skill>/scripts/provision_hosted_store.py --service <pg service> --confirm  # does it
+    ... --loader   every runtime URL in the stores folder names the one login edgar_loader
+    ... --retire   with --loader: the six runtime logins become NOLOGIN groups (no URL may still name one)
 
 The stores folder (default ~/.config/edgartools/hosted/) is authoritative: each login is created with the password its
 own URL there holds, so no login is rotated. The instance's administrator comes from the PostgreSQL service the
@@ -123,26 +125,48 @@ def rewrite(folder: Path, host: str, port: int, admin: str, admin_password: str)
     return changed
 
 
+LOADER_FILES = ("connection.env", "worker.env", "governance.env")  # the files that name a runtime login; reader.env never does
+
+
+def _loader_password(folder: Path) -> str:
+    """The password the loader's URLs already hold (one login, one password), else a new one."""
+    for name in LOADER_FILES:
+        path = folder / name
+        for line in path.read_text().splitlines() if path.exists() else ():
+            match = LINE.match(line.strip())
+            if match and _value(match[3]).startswith("postgres"):
+                part = urlsplit(_value(match[3]))
+                if unquote(part.username or "") == LOADER and part.password:
+                    return part.password
+    return quote(secrets.token_urlsafe(24), safe="")
+
+
 def use_loader(folder: Path) -> int:
-    """Point every runtime URL in worker.env at the one loader login, with a new password; worker.env is kept as
-    worker.env.before-loader (mode 0600) the first time. Returns how many URLs changed (0 when all are already it)."""
-    path = folder / "worker.env"
-    password, changed, lines = quote(secrets.token_urlsafe(24), safe=""), 0, []
-    for line in path.read_text().splitlines():
-        match = LINE.match(line.strip())
-        if match and _value(match[3]).startswith("postgres"):
-            part = urlsplit(_value(match[3]))
-            if unquote(part.username or "") in RUNTIME_ROLES:
-                moved = urlunsplit((part.scheme, f"{LOADER}:{password}@{part.hostname}:{part.port}", part.path, part.query, part.fragment))
-                line = f"{match[1] or ''}{match[2]}={shlex.quote(moved)}"
-                changed += 1
-        lines.append(line)
-    if changed:
-        kept = folder / "worker.env.before-loader"
-        if not kept.exists():
-            private_write(kept, path.read_text())
-        private_write(path, "\n".join(lines) + "\n")
-    return changed
+    """Point every runtime URL in the stores folder (connection.env, worker.env, governance.env) at the one loader login. The
+    administrator's and the governance logins are not runtime URLs and stay. Each file that changes is kept as
+    `<file>.before-loader` (mode 0600) the first time. Returns how many URLs changed (0 when all are already it)."""
+    password, total = _loader_password(folder), 0
+    for name in LOADER_FILES:
+        path = folder / name
+        if not path.exists():
+            continue
+        changed, lines = 0, []
+        for line in path.read_text().splitlines():
+            match = LINE.match(line.strip())
+            if match and _value(match[3]).startswith("postgres"):
+                part = urlsplit(_value(match[3]))
+                if unquote(part.username or "") in RUNTIME_ROLES:
+                    moved = urlunsplit((part.scheme, f"{LOADER}:{password}@{part.hostname}:{part.port}", part.path, part.query, part.fragment))
+                    line = f"{match[1] or ''}{match[2]}={shlex.quote(moved)}"
+                    changed += 1
+            lines.append(line)
+        if changed:
+            kept = folder / f"{name}.before-loader"
+            if not kept.exists():
+                private_write(kept, path.read_text())
+            private_write(path, "\n".join(lines) + "\n")
+        total += changed
+    return total
 
 
 def ddl_free(conn, role: str, database: str) -> None:
@@ -173,6 +197,42 @@ def ensure_reader(folder: Path, host: str, port: int) -> bool:
     url = f"postgresql://{READER}:{quote(secrets.token_urlsafe(24), safe='')}@{host}:{port}/postgres"
     private_write(path, f"export {READER_SETTING}={shlex.quote(url)}\n")
     return True
+
+
+def retire(conn, confirm: bool, named: frozenset[str] | set[str] = frozenset()) -> list[str]:
+    """The runtime roles stop being logins once every load uses `edgar_loader`: each becomes a NOLOGIN group, and the loader
+    keeps its privileges through its membership. Refused, changing nothing, while a URL in the stores folder still names one
+    (`named`: run `--loader` first). NOLOGIN stops new logins and ends no open session, so the roles are made NOLOGIN first and the
+    sessions logged in as them counted after, and if any remain they are made logins again and the run is refused: a login made
+    between a check and the change cannot slip through. A role that cannot log in, or does not exist, is left alone."""
+    still = sorted(set(named) & set(RUNTIME_ROLES))
+    if still:
+        raise Refused(f"a URL in the stores folder still names {', '.join(still)}: run --loader first")
+    steps, change = [], []
+    with conn.cursor() as cur:
+        for role in RUNTIME_ROLES:
+            cur.execute("SELECT rolcanlogin FROM pg_roles WHERE rolname = %s", (role,))
+            found = cur.fetchone()
+            if not found or not found[0]:
+                steps.append(f"{role} cannot log in already")
+            else:
+                change.append(role)
+                steps.append(f"{'retire' if confirm else 'would retire'} {role}: NOLOGIN")
+        if confirm:
+            for role in change:  # the names are the fixed RUNTIME_ROLES, never read from anywhere
+                cur.execute(f'ALTER ROLE "{role}" NOLOGIN')
+        open_sessions = {}
+        for role in change:
+            cur.execute("SELECT count(*) FROM pg_stat_activity WHERE usename = %s", (role,))
+            count = cur.fetchone()[0]
+            if count:
+                open_sessions[role] = count
+        if open_sessions:
+            if confirm:
+                for role in change:  # a refusal leaves every role as it was
+                    cur.execute(f'ALTER ROLE "{role}" LOGIN')
+            raise Refused(f"{', '.join(sorted(open_sessions))} still has open sessions logged in as it: end them, then run again")
+    return steps
 
 
 def administrator(service: str) -> dict[str, str]:
@@ -263,6 +323,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--confirm", action="store_true", help="Do it (without it, only list it)")
     parser.add_argument("--loader", action="store_true",
                         help=f"Point every runtime URL in worker.env at the one login {LOADER}, which creates nothing")
+    parser.add_argument("--retire", action="store_true",
+                        help="Make the six runtime logins NOLOGIN groups: refused while a URL names one or a session is logged in as one (use with --loader)")
     args = parser.parse_args(argv)
     try:
         import psycopg2
@@ -273,7 +335,7 @@ def main(argv: list[str] | None = None) -> int:
         elif not (args.stores / READER_FILE).exists():
             print(f"would make {READER_FILE} with a new login {READER} (diagnosis reads with it, never the owner)")
         if args.loader and args.confirm:
-            print(f"{use_loader(args.stores)} runtime URLs in worker.env now name {LOADER} (the old file is kept as worker.env.before-loader)")
+            print(f"{use_loader(args.stores)} runtime URLs in the stores folder now name {LOADER} (each changed file is kept as <file>.before-loader)")
         elif args.loader:
             print(f"would point every runtime URL in worker.env at {LOADER}, a member of {len(RUNTIME_ROLES)} runtime roles")
         urls = read_urls(args.stores)
@@ -295,6 +357,15 @@ def main(argv: list[str] | None = None) -> int:
         if args.confirm:
             count = rewrite(args.stores, admin["host"], int(admin["port"]), admin["user"], admin["password"])
             print(f"{count} URLs in {', '.join(FILES)} now name the new instance")
+        if args.retire:  # last: the loader's safety check and the new addresses have passed
+            conn = psycopg2.connect(host=admin["host"], port=admin["port"], user=admin["user"], password=admin["password"],
+                                    dbname="postgres", sslmode="require", connect_timeout=10)
+            conn.autocommit = True
+            try:
+                for step in retire(conn, args.confirm, set(held)):
+                    print(step)
+            finally:
+                conn.close()
         else:
             print("Nothing changed. Run again with --confirm.")
     except Refused as refused:

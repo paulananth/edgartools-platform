@@ -62,7 +62,7 @@ and report what changed, with the evidence, not that it is still going.
 
 A load connects as one login, `edgar_loader` (`worker.env`), for every store. It is a member of each store's runtime
 role and can create nothing: a load changes rows, never a schema, so a load that needs a table stops and names the
-command (below). Diagnosis uses the reader login, not this one.
+command (below). Once nothing holds the six runtime logins, retire them with `provision_hosted_store.py --loader --retire`. Diagnosis uses the reader login, not this one.
 
 ## Diagnose with the reader login
 

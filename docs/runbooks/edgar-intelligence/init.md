@@ -44,7 +44,10 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    runtime URL in `worker.env` names it (the old file is kept as `worker.env.before-loader`). It is a member of the six
    runtime roles, so it holds exactly their privileges, and the command refuses it if it could create in any schema of any
    store, owns an object, or is a superuser or can create databases or roles. A store's schema is made and changed by its
-   owner login in step 3, never by a load.
+   owner login in step 3, never by a load. With `--loader` every runtime URL in the stores folder names it, and `--retire` (with `--confirm`) then makes the six runtime logins
+   NOLOGIN groups; the loader keeps its privileges through its membership. NOLOGIN stops new logins and ends no open session: the command
+   refuses, leaving each role a login, while a URL still names one or a session is logged in as one, so run it after a load that started
+   under them ends.
    The service is the one the instance's creation saved (snowflake-postgres skill, `pg_connect.py --create`). Wait for
    its hostname to resolve first. Done when the second run prints that every URL names the new instance.
 3. **Schemas** (data-platform's step, [STORES.md](../../../skills/data-platform/STORES.md)), each with its owner login, in one shell that holds `connection.env`. MDM and Bookkeeping read the owner
