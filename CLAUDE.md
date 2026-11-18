@@ -95,7 +95,8 @@ Operator rule, 2026-09-24.
 - Stamp each checked part with its completion time in local ET
   (`2026-09-24 14:05 ET`), never UTC. **Never type a time**: write `{{now}}`
   where a stamp goes and `commit_push.sh` stamps it from the clock (a typed
-  time ran ahead of the clock and shipped, 2026-11-10).
+  time ran ahead of the clock and shipped, 2026-11-10). The stamp ends in `ET`
+  itself: write `({{now}})`, never `({{now}} ET)`.
 - A part that is skipped, deferred or moved to another ticket stays on the
   list, marked `- [ ] ~~<part>~~ deferred to <ticket>: <why>`. Never delete it.
 - Before reporting a ticket complete, re-read its checklist. Any unchecked part
