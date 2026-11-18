@@ -66,7 +66,14 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    python infra/scripts/reset-hosted-databases.py --confirm
    ```
    A fresh instance gets its six databases (`mdm`, `rdm`, `rules`, `bookkeeping`, `change_journal`, `silver`) and their
-   restricted logins from the connection section, which names the grants each needs.
+   restricted logins from the stores folder's own files, each login with the password its URL already holds (no login
+   is rotated); every URL then names the new instance, and the administrator's URLs its new password:
+   ```bash
+   python <data-platform skill>/scripts/provision_hosted_store.py --service <the instance's saved service>            # lists
+   python <data-platform skill>/scripts/provision_hosted_store.py --service <the instance's saved service> --confirm
+   ```
+   The service is the one the instance's creation saved (snowflake-postgres skill, `pg_connect.py --create`). Wait for
+   its hostname to resolve first. Done when the second run prints that every URL names the new instance.
 3. **Schemas** (data-platform's step, [STORES.md](../data-platform/STORES.md)), each with its owner login, in one shell that holds `connection.env`. MDM and Bookkeeping read the owner
    from their ordinary variable, for that command only; the others read their `*_MIGRATION_DATABASE_URL`:
    ```bash
