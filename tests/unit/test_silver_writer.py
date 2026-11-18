@@ -377,3 +377,15 @@ def test_not_after_that_could_not_run_is_refused(change, refused):
 def test_reason_if_empty_that_could_not_run_is_refused(change, refused):
     with pytest.raises(Blocked, match=refused):
         specs.check(a_dated_spec(checks=[{**REASON, **change}]))
+
+
+def test_a_refusal_names_the_sqlstate_and_constraint_never_a_value():
+    """A permission error once read as "a value is not its column's type": the reason is now in the message."""
+    from types import SimpleNamespace
+
+    from edgar_warehouse.silver_writer.relational import refusal
+
+    error = SimpleNamespace(orig=SimpleNamespace(pgcode="42501", diag=SimpleNamespace(
+        constraint_name=None, column_name="invented_column", table_name="invented_table")))
+    assert refusal(error) == " (SQLSTATE 42501, column invented_column, table invented_table)"
+    assert refusal(ValueError("a secret value 123")) == " (ValueError)"

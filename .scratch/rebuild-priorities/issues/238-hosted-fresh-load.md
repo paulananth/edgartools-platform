@@ -94,6 +94,11 @@ change).
 
 ## Load (hosted; `python skills/data-operations/scripts/load_chain.py`)
 
+- [ ] The chain on the re-initialized instance, started 2026-11-18 06:33 ET with the eight lanes (runbook, "Load a fresh store"; no script of its own): 43 steps in `--plan`, none blocked. Found in its first 20 minutes, each fixed in the skill or runbook:
+  - [x] Silver loads stopped with "a value is not its column's type": the database said SQLSTATE 42501. The provisioning command revoked PUBLIC and granted only CONNECT, which also took the right to temporary tables the silver writer stages each load in. It now grants CONNECT and TEMPORARY (`test_a_login_may_connect_and_use_temporary_tables_on_its_database` failed first: no `GRANT CONNECT, TEMPORARY`); applied live with the same command, `silver_runtime` TEMP true, `doctor` ok (2026-11-18 07:03 ET)
+  - [x] The silver writer's refusal names the SQLSTATE and the constraint or column, never a value (`test_a_refusal_names_the_sqlstate_and_constraint_never_a_value`: `refusal` did not exist) (2026-11-18 07:03 ET)
+  - [x] OpenFIGI stopped on "no document of the bundle matches '*company_tickers_exchange*'": its rules read the SEC tickers file beside the answers, in each capture folder, and the folders lacked it (the part moved here from ticket 248). Copied from the SEC Company capture that retained it (sha256 equal to that capture's receipt), with a receipt line, in both OpenFIGI capture folders; no provider request. The runbook now lists it as a **Needs** dependency (2026-11-18 07:03 ET)
+  - [x] The runbook leaves the skill: `skills/data-operations/RUNBOOK.md` is now `docs/runbooks/edgar-intelligence.md` (operator: dependencies must be documented in the runbook; the runbook cannot be named for a skill, it takes the product name). Skills name it in words, since an installed skill cannot link outside its folder; the runbook links into the skills (2026-11-18 07:03 ET; portability, role-skill and load-chain tests, 26 passed)
 - [ ] SEC company: started 2026-11-15 13:34 ET, 150 bundles, about 50 minutes expected (54 minutes hosted before)
 - [ ] The rest of the 41 steps in order; each step's time and counts recorded here as it finishes
 - [ ] The lookups built and each silver table's master ids filled (`--finish`)

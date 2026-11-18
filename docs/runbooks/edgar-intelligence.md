@@ -1,4 +1,4 @@
-# Recurring load decisions
+# Edgar Intelligence runbook: recurring loads and hosted stores
 
 Use this reference when operating a source, sizing its backlog or handing an
 unfinished run to another agent. Keep the source's runbook current across runs;
@@ -15,7 +15,7 @@ Copying files into a folder named final establishes neither.
 | Stage | Owner and completion evidence |
 | --- | --- |
 | Author | data-onboarding creates a source; refining-rules changes an existing source/domain. The exact configuration and generated documents are versioned. |
-| Check | Validate only changed documents locally; CI checks the full Rules tree ([LOAD](../data-onboarding/LOAD.md)). |
+| Check | Validate only changed documents locally; CI checks the full Rules tree ([LOAD](../../skills/data-onboarding/LOAD.md)). |
 | Deploy | The rules files ship with the image. `rules register` registers the merge rules and Dataset Contracts in the destination's MDM. |
 | Operate | data-operations checks the completed delivery, capacity and dependencies, then submits/resumes and verifies through Bookkeeping and Change Journal. |
 
@@ -48,7 +48,7 @@ source runbook references the release and its active environment/run IDs.
 
 A hosted PostgreSQL 16 instance (Snowflake Postgres) is initialized with the same commands as the local store, in this
 order, by skills and their own commands only. Use
-[Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment) for the private connection
+[Connection URLs and environment](../../skills/data-platform/SKILL.md#connection-urls-and-environment) for the private connection
 files, roles and credential handling. The commands below are the whole procedure; each prints names and checksums, never
 a connection value.
 
@@ -56,7 +56,7 @@ The stores folder is `~/.config/edgartools/hosted/`, one folder for the store: `
 `worker.env` (the runtime logins and the manifest root), `governance.env` (the registration login). `load --stores`
 takes it. A second copy of these files elsewhere goes stale, and a stale copy fails `doctor` with a login error.
 
-1. **Instance.** [aws-snowflake-operations](../aws-snowflake-operations/SKILL.md) creates it (snowflake-postgres skill,
+1. **Instance.** [aws-snowflake-operations](../../skills/aws-snowflake-operations/SKILL.md) creates it (snowflake-postgres skill,
    `pg_connect.py --create`; its comment takes letters and spaces, a `;` is refused). Wait for `state` to read `READY`,
    then for its hostname to resolve on this machine. A lookup made before the name existed can stay cached as "not
    found" for up to an hour while a public resolver already answers (`dig +short @8.8.8.8 <host>`, count the lines,
@@ -74,14 +74,16 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    ```
    A fresh instance gets its six databases (`mdm`, `rdm`, `rules`, `bookkeeping`, `change_journal`, `silver`) and their
    restricted logins from the stores folder's own files, each login with the password its URL already holds (no login
-   is rotated); every URL then names the new instance, and the administrator's URLs its new password:
+   is rotated). Each login gets CONNECT and TEMPORARY on its databases and PUBLIC gets nothing: a load stages its rows in a
+   temporary table, and without that right a silver load stops with SQLSTATE 42501 in its step's message. Every URL then
+   names the new instance, and the administrator's URLs its new password:
    ```bash
    python <data-platform skill>/scripts/provision_hosted_store.py --service <the instance's saved service>            # lists
    python <data-platform skill>/scripts/provision_hosted_store.py --service <the instance's saved service> --confirm
    ```
    The service is the one the instance's creation saved (snowflake-postgres skill, `pg_connect.py --create`). Wait for
    its hostname to resolve first. Done when the second run prints that every URL names the new instance.
-3. **Schemas** (data-platform's step, [STORES.md](../data-platform/STORES.md)), each with its owner login, in one shell that holds `connection.env`. MDM and Bookkeeping read the owner
+3. **Schemas** (data-platform's step, [STORES.md](../../skills/data-platform/STORES.md)), each with its owner login, in one shell that holds `connection.env`. MDM and Bookkeeping read the owner
    from their ordinary variable, for that command only; the others read their `*_MIGRATION_DATABASE_URL`:
    ```bash
    env MDM_DATABASE_URL="$MDM_MIGRATION_DATABASE_URL" edgar-warehouse mdm migrate --application-role mdm_runtime
@@ -93,7 +95,7 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    ```
    `init` is the whole step on a fresh store; `migrate` follows an `init` only when a later schema file arrives. Done when
    each prints its schema file's checksum.
-4. **RDM codes.** With `worker.env` sourced, `python <this skill>/scripts/rdm_restore_published.py --by <name>
+4. **RDM codes.** With `worker.env` sourced, `python <data-operations skill>/scripts/rdm_restore_published.py --by <name>
    --words "<their exact words>"` (the operator's words go in the approval record). Done when every pin reads `pin ok`.
 5. **Registration login.** With the owner connection, `env MDM_DATABASE_URL="$MDM_MIGRATION_DATABASE_URL" edgar-warehouse
    mdm grant-registration --role mdm_governance`. It lets the restricted login read the stored records and write the
@@ -119,9 +121,9 @@ A missing grant or login that a command names is a gap to fix through the centra
 `scripts/load_chain.py` runs it, so a store is loaded the same way every time and nobody rewrites the list:
 
 ```bash
-python <this skill>/scripts/load_chain.py --plan     # documents and bundles per step; writes nothing
-python <this skill>/scripts/load_chain.py            # the chain; stays awake; each step runs until it reports Done
-python <this skill>/scripts/load_chain.py --from <step>   # carry on; a step that is done costs one call
+python <data-operations skill>/scripts/load_chain.py --plan     # documents and bundles per step; writes nothing
+python <data-operations skill>/scripts/load_chain.py            # the chain; stays awake; each step runs until it reports Done
+python <data-operations skill>/scripts/load_chain.py --from <step>   # carry on; a step that is done costs one call
 ```
 
 Masters come first and each source's silver target last, so silver rows find their masters as they land. A source's later
@@ -139,7 +141,7 @@ stored link waited for, so any load that masters builds, whatever its source sta
 
 ### Dependencies between loads
 
-Loads depend on each other only as the rules say, and `python <this skill>/scripts/infer_dependencies.py` prints it from
+Loads depend on each other only as the rules say, and `python <data-operations skill>/scripts/infer_dependencies.py` prints it from
 the rules files: nothing here comes from a machine's size. No source needs another loaded first: the Merge Stage holds a
 record that finds no master and releases it when a later file gives one, so a load that runs early is never wrong. The
 rules state three kinds of ordering:
@@ -157,11 +159,30 @@ Everything else runs at the same time. The chain file turns that into lanes: `la
 that adds a dependency fails the test until the chain follows it.
 
 ```bash
-for lane in A P S C L O D F; do python <this skill>/scripts/load_chain.py --lane $lane & done   # eight lanes, one process each
-python <this skill>/scripts/load_chain.py --finish          # once every lane reports its last step done
+for lane in A P S C L O D F; do python <data-operations skill>/scripts/load_chain.py --lane $lane & done   # eight lanes, one process each
+python <data-operations skill>/scripts/load_chain.py --finish          # once every lane reports its last step done
 ```
 
 A step waits for the steps of other lanes it needs, and for any other load of its own source and target to end.
+
+**`--plan` proves the documents, not the rest.** It counts what each step would read; it does not open a file a step reads
+beside its capture, and it does not write, so it cannot find a missing right. A fresh store's first minutes find them:
+a lane stops within three attempts and names the step. Read its reason where the step's log points, the stores folder's
+`load-errors.log` (one file for every lane: find the step's own command and its last lines), fix the cause, and run the
+lane again; a step that is done costs one call. A silver step that reports "a value is not its column's type or a storage
+constraint refused the delivery" now adds the database's SQLSTATE and the constraint or column it names; a SQLSTATE
+42501 is a missing right, not a value.
+
+#### Files a load needs beside its capture
+
+Some sources read a second file kept in their own capture folder, which no other load supplies. Such a load is **Needs**: it
+stops until the file is there, and the lane that holds it stops with the reason above. The chain file's steps for
+these sources name the file by its fact (`facts`); the file is an additive copy of one already on this machine, with its
+receipt (the file, its bytes and its sha256), never a provider request.
+
+| Source | File | Where it comes from |
+|---|---|---|
+| OpenFIGI (every capture folder it loads) | the SEC's `company_tickers_exchange` file whose date is the step's `ticker_file_date` fact | the SEC Company capture that retained it (`bronze/reference/sec/company_tickers_exchange/<date>/`); copy it to `company_tickers_exchange/<date>/company_tickers_exchange.json` in the OpenFIGI capture folder, check its sha256 against the Company capture's receipt, and append its receipt line to the folder's `receipts.jsonl` |
 
 #### Examples: this store's dependencies
 
@@ -247,8 +268,8 @@ unknown, wait/report the missing estimate; do not force it or reject the source.
 A slow bundle on a hosted store is waiting on a lock, paying round trips (tens of milliseconds a statement) or computing.
 Find which before adding parallelism, in this order: sample the sessions (who waits on a lock, and how old the holder's
 transaction is); time one batch alone in a transaction rolled back; count one bundle's statements on a disposable local
-store with statement logging (`log_statement = 'all'`, the log streamed to a file while the load runs, since Docker keeps only its last few log files; `<this skill>/scripts/count_statements.py --log` groups them by shape and by database). At `unit` grain most of a bundle's statements are Bookkeeping's (a claim, status
-read and report for each unit); a target at `grain: run` pays none of them ([bookkeeping](../bookkeeping/SKILL.md#grain-how-much-bookkeeping-a-target-uses)).
+store with statement logging (`log_statement = 'all'`, the log streamed to a file while the load runs, since Docker keeps only its last few log files; `<data-operations skill>/scripts/count_statements.py --log` groups them by shape and by database). At `unit` grain most of a bundle's statements are Bookkeeping's (a claim, status
+read and report for each unit); a target at `grain: run` pays none of them ([bookkeeping](../../skills/bookkeeping/SKILL.md#grain-how-much-bookkeeping-a-target-uses)).
 
 `--workers` is the processes on each step, at either grain. A step's units run that many at once; a step with fewer
 units than workers hands each unit its share, and a merge deals its batches out to that share (a one-file
@@ -272,7 +293,7 @@ Bookkeeping/destination leases remain authoritative.
 
 ## Progress, failure and recovery
 
-Use current CLI help and [Bookkeeping recovery](../bookkeeping/RECOVERY.md).
+Use current CLI help and [Bookkeeping recovery](../../skills/bookkeeping/RECOVERY.md).
 Representative inspection commands are:
 
 ```bash
@@ -322,8 +343,8 @@ the selected target declares it; no omitted stage is silently treated as done.
 ## Test and clear a source run
 
 A test proves **Install and enable one source** on the **test** instance from
-[data-platform setup](../data-platform/SKILL.md#0-setup). Select its connections through
-[Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment),
+[data-platform setup](../../skills/data-platform/SKILL.md#0-setup). Select its connections through
+[Connection URLs and environment](../../skills/data-platform/SKILL.md#connection-urls-and-environment),
 not a production container.
 
 Run one source through install, enable and its wired `rules run`. The test

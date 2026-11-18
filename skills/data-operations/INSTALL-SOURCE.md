@@ -38,4 +38,4 @@ submits one source.
    captured. See **Load a capture** below.
 
 A test of this path, and how to clear that test, is
-[Test and clear a source run](RUNBOOK.md#test-and-clear-a-source-run).
+Test and clear a source run (Edgar Intelligence runbook).

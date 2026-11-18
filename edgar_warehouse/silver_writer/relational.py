@@ -13,6 +13,16 @@ from .tables import bound_row, data_table, staging_name
 BATCH = 1000
 
 
+
+def refusal(exc: Exception) -> str:
+    """What the database refused, never a value: its SQLSTATE and the constraint, column or table it names."""
+    orig = getattr(exc, "orig", None)
+    diag = getattr(orig, "diag", None)
+    parts = [f"{label} {value}" for label, value in (
+        ("SQLSTATE", getattr(orig, "pgcode", None)), ("constraint", getattr(diag, "constraint_name", None)),
+        ("column", getattr(diag, "column_name", None)), ("table", getattr(diag, "table_name", None))) if value]
+    return f" ({', '.join(parts)})" if parts else f" ({type(orig or exc).__name__})"
+
 def lock(conn, spec):
     """One delivery at a time merges into a table: its checks and its writes see no other delivery's rows arrive."""
     if conn.dialect.name == "postgresql":
@@ -101,7 +111,7 @@ class DatabaseSink:
                     if conn.dialect.name == "postgresql": stage.drop(conn)
                     else: conn.execute(delete(stage))
         except (DBAPIError, StatementError) as exc:
-            detail = f": {exc.orig}" if isinstance(getattr(exc, "orig", None), Blocked) else ""
+            detail = f": {exc.orig}" if isinstance(getattr(exc, "orig", None), Blocked) else refusal(exc)
             raise Blocked(f"silver.{spec['table']}: a value is not its column's type or a storage constraint refused the delivery{detail}") from None
         return {"table": spec["table"], "rows": count, "inserted": inserted, "changed": changed,
                 "deleted": deleted, **updates}

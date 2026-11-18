@@ -128,7 +128,7 @@ def test_every_step_starts_at_two_workers_and_stays_at_most_eight():
 
 def test_the_skill_names_eight_lanes_and_the_two_to_eight_worker_scale():
     skill = (ROOT / "skills/data-operations/SKILL.md").read_text()
-    runbook = (ROOT / "skills/data-operations/RUNBOOK.md").read_text()
+    runbook = (ROOT / "docs/runbooks/edgar-intelligence.md").read_text()
     assert "A P S C L O D F" in skill and "A P S C L O D F" in runbook
     assert "Start `--workers 2`" in skill
     assert "scales to 8" in skill
