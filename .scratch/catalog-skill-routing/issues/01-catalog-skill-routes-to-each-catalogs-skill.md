@@ -32,9 +32,12 @@ more than one catalog".
   once it covered all three), the sibling-skill pointer went to a file that does not describe a skill's layout (it now points
   to the openmetadata skill's layout and PORTABILITY for qualification), and the duplicated processing-layer rule in the
   openmetadata skill is a link
-- [ ] The operator decides which stack to retire, for memory: the prior `edgartools-catalog` (8585, whose compose file is not in the
-  repository) or `edgartools-openmetadata` (8587, which every script targets). Recommendation: retire the prior one; the tooling
-  needs 8587
+- [x] The operator decided: "Yes retire the prior edgartools-catalog", then "Delete the volumes too" (2026-11-18 10:11 ET): its three running
+  containers were stopped, then its four containers and its two volumes (`edgartools-catalog_db-data`, `edgartools-catalog_es-data`)
+  deleted; nothing outside that project was touched (`docker volume ls`: the AutoOntology, local test store and
+  `edgartools-openmetadata` volumes remain). The stack the repository's tooling uses answers on port 8587 (HTTP 200).
+  `test_the_local_server_doc_names_one_local_instance_not_a_second_one_to_protect` failed first: the doc said the prior instance
+  must not be stopped
 - [ ] ~~Business-meaning passages in the openmetadata skill move to data-catalog~~ deferred to
   .scratch/catalog-skill-routing/issues/02-move-business-meaning-out-of-the-openmetadata-skill.md: glossary scope rules (lines
   233-250) and the domain-membership rule (182-183) are generic, and moving them touches the skill's references

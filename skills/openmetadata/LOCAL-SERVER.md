@@ -9,9 +9,8 @@ Part of the `openmetadata` skill: [SKILL.md](SKILL.md) says when to read this.
 The Edgartools local instance is a separate Compose project named
 `edgartools-openmetadata`, bound to `127.0.0.1:8587`, with its own
 `edgartools-openmetadata_db-data` and `edgartools-openmetadata_es-data`
-volumes. The prior `edgartools-catalog` project on port 8585 is independent;
-starting or initializing this instance must not stop it or remove its volumes.
-The operator handles any retirement of the prior instance separately.
+volumes. It is the one local instance: the prior `edgartools-catalog` project (port 8585) was retired on the operator's word, its
+containers and volumes deleted.
 
 The repository-root `.env` is ignored by Git and must remain mode `0600`.
 `bash infra/openmetadata/init.sh` reads it without printing values. On a fresh

@@ -31,6 +31,12 @@ def test_the_catalog_skills_description_names_no_single_catalog_as_its_scope():
     assert "any destination" in description and "Use for OpenMetadata catalog work" not in description
 
 
+def test_the_local_server_doc_names_one_local_instance_not_a_second_one_to_protect():
+    doc = (ROOT / "skills/openmetadata/LOCAL-SERVER.md").read_text()
+    assert "It is the one local instance" in doc
+    assert "must not stop it or remove its volumes" not in doc
+
+
 def test_a_second_catalogs_skill_is_laid_out_like_the_first_and_the_publisher_commands_live_in_its_own_skill():
     assert "laid out like [openmetadata](../openmetadata/SKILL.md)" in CATALOG
     assert "rules catalog" in OPENMETADATA  # the OpenMetadata publisher's commands are documented where they belong
