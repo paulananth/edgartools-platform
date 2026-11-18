@@ -63,7 +63,7 @@ takes it. A second copy of these files elsewhere goes stale, and a stale copy fa
    never print them): the operator flushes the cache (`sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder`
    on macOS). A rotation of a login's password needs the operator's word, and nothing below needs one.
    Run every command below from a checkout of today's `main` with its environment built
-   (`uv sync --extra mdm --extra s3`, about two minutes) or a bundle installed from it: an older `edgar-warehouse`
+   (`uv sync --extra mdm --extra s3`) or a bundle installed from it: an older `edgar-warehouse`
    creates older schemas.
 2. **Databases.** An instance that holds an old store keeps its logins and gets its databases made again: with the
    operator's word, list them, then drop and create them with the owner and the grants each had:

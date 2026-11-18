@@ -30,6 +30,10 @@ GROUPS = {"bookkeeping_control": ("bookkeeping_runtime",), "rules_agent": ("rule
 LINE = re.compile(r"^(export )?([A-Z_]+)=(.*)$")
 
 
+class Refused(ValueError):
+    """A refusal this script words itself, so its text holds no address and no password."""
+
+
 def private_write(path: Path, value: str) -> None:
     temporary = path.with_name(path.name + "." + uuid4().hex)
     with open(temporary, "w", opener=lambda p, flags: os.open(p, flags, 0o600)) as out:
@@ -59,7 +63,7 @@ def read_urls(folder: Path) -> dict[str, dict[str, str]]:
 
 def logins(urls: dict[str, dict[str, str]], admin: str) -> dict[str, tuple[str, set[str]]]:
     """Each login other than the administrator: its one password and the databases its URLs name.
-    Two URLs that give one login different passwords are refused."""
+    Two URLs that give one login different passwords are refused, and so is a store no login connects to."""
     held: dict[str, tuple[str, set[str]]] = {}
     for name, settings in urls.items():
         for setting, url in settings.items():
@@ -69,8 +73,12 @@ def logins(urls: dict[str, dict[str, str]], admin: str) -> dict[str, tuple[str, 
                 continue
             database = part.path.strip("/")
             if user in held and held[user][0] != password:
-                raise ValueError(f"{setting} in {name} gives {user} another password than its other URLs")
+                raise Refused(f"{setting} in {name} gives {user} another password than its other URLs")
             held.setdefault(user, (password, set()))[1].add(database)
+    named = set().union(*(databases for _, databases in held.values()))
+    missing = [database for database in DATABASES if database not in named]
+    if missing:
+        raise Refused(f"no URL in {', '.join(FILES)} names a login for {', '.join(missing)}")
     return held
 
 
@@ -104,18 +112,18 @@ def administrator(service: str) -> dict[str, str]:
     services = configparser.ConfigParser()
     services.read(Path(os.environ.get("PGSERVICEFILE", Path.home() / ".pg_service.conf")))
     if service not in services:
-        raise ValueError(f"no PostgreSQL service {service}: create the instance through the snowflake-postgres skill")
+        raise Refused(f"no PostgreSQL service {service}: create the instance through the snowflake-postgres skill")
     entry = services[service]
     host, port, user = entry.get("host"), entry.get("port", "5432"), entry.get("user")
     for line in Path(os.environ.get("PGPASSFILE", Path.home() / ".pgpass")).read_text().splitlines():
         fields = re.split(r"(?<!\\):", line, maxsplit=4)
         if len(fields) == 5 and fields[0] in (host, "*") and fields[1] in (port, "*") and fields[3] in (user, "*"):
             return {"host": host, "port": port, "user": user, "password": fields[4].replace("\\:", ":")}
-    raise ValueError(f"no saved password for service {service}")
+    raise Refused(f"no saved password for service {service}")
 
 
 def provision(conn, held: dict[str, tuple[str, set[str]]], admin: str, confirm: bool) -> list[str]:
-    import psycopg2.sql as sql
+    from psycopg2 import sql
 
     done = []
     with conn.cursor() as cur:
@@ -128,7 +136,7 @@ def provision(conn, held: dict[str, tuple[str, set[str]]], admin: str, confirm: 
                     cur.execute(sql.SQL("CREATE ROLE {} LOGIN PASSWORD %s NOSUPERUSER NOCREATEDB NOCREATEROLE")
                                 .format(sql.Identifier(role)), (password,))
             elif not row[0]:
-                raise ValueError(f"{role} exists and cannot log in")
+                raise Refused(f"{role} exists and cannot log in")
         for group, members in GROUPS.items():
             cur.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (group,))
             if cur.fetchone() is None and group not in held:  # a login made above serves as the group too
@@ -136,12 +144,17 @@ def provision(conn, held: dict[str, tuple[str, set[str]]], admin: str, confirm: 
                 if confirm:
                     cur.execute(sql.SQL("CREATE ROLE {} NOLOGIN").format(sql.Identifier(group)))
             for member in members:
+                if member not in held:
+                    raise Refused(f"no URL names {member}, which {group} needs")
                 done.append(f"put {member} in {group}")
                 if confirm:
                     cur.execute(sql.SQL("GRANT {} TO {}").format(sql.Identifier(group), sql.Identifier(member)))
         for database in DATABASES:
-            cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (database,))
-            if cur.fetchone() is None:
+            cur.execute("SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = %s", (database,))
+            row = cur.fetchone()
+            if row is not None and row[0] != admin:
+                raise Refused(f"{database} exists, owned by {row[0]}: reset it (RUNBOOK step 2), never adopt it")
+            if row is None:
                 done.append(f"create database {database}")
                 if confirm:
                     cur.execute(sql.SQL("CREATE DATABASE {} OWNER {}").format(sql.Identifier(database),
@@ -181,10 +194,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{count} URLs in {', '.join(FILES)} now name the new instance")
         else:
             print("Nothing changed. Run again with --confirm.")
-    except ValueError as refused:
+    except Refused as refused:
         print(refused, file=sys.stderr)
         return 1
-    except Exception as error:  # noqa: BLE001  a driver error can quote the address: its class only
+    except Exception as error:  # noqa: BLE001  a driver's or a URL parser's error can quote the address: its class only
         print(f"failed: {type(error).__name__}", file=sys.stderr)
         return 1
     return 0
