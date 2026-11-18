@@ -11,7 +11,7 @@
     python load_chain.py --status             what each running step is doing: progress, rate, processes, a verdict
     python load_chain.py --auto [--slots N] [--hours H | --deadline HH:MM]
                                               watch the loads: start each step when its lane is free, move its
-                                              workers (2 to 8) with the machine, stop at the deadline (see `auto`)
+                                              workers (within --capacity) with the machine, stop at the deadline (see `auto`)
 
 Each step is the same resumable `load` command, run again until it finishes (a stopped attempt names why in its log and
 the next carries on from where it stopped). The chain stops at the first step that does not finish in its attempts.
@@ -21,6 +21,7 @@ and LOGS name the captured files and the logs; RUN labels the capture runs. The 
 """
 import argparse
 import contextlib
+import hashlib
 import json
 import os
 import re
@@ -32,6 +33,7 @@ import sys
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 from zoneinfo import ZoneInfo
 
 import yaml
@@ -59,7 +61,12 @@ def load_env(path: Path) -> dict:
 def chain_steps(path: Path = ROOT / "rules/load-chain.yaml") -> list[dict]:
     """The chain's steps, each with the chain's `defaults` for what it does not say itself."""
     chain = yaml.safe_load(path.read_text())
-    return [{**(chain.get("defaults") or {}), **step} for step in chain["steps"]]
+    steps = [{**(chain.get("defaults") or {}), **step} for step in chain["steps"]]
+    for step in steps:
+        measured = step.get("worker_gb")
+        if measured is not None and not (isinstance(measured, (int, float)) and 0.01 <= measured <= 64):
+            raise ValueError(f"{step['name']}: worker_gb must be a number from 0.01 to 64 gigabytes, not {measured!r}")
+    return steps
 
 
 def needs(steps: list[dict]) -> dict[str, set[str]]:
@@ -169,7 +176,40 @@ def swap_fraction(text: str) -> float | None:
     return float(found.group(2)) / float(found.group(1)) if found and float(found.group(1)) else None
 
 
-MIN_WORKERS, MAX_WORKERS = 2, 8
+WORKER_GB = 0.5  # the memory a worker is sized for
+WORKERS_PER_VCPU = 4  # a worker waits on the database much of the time, so a vCPU carries several
+
+
+def workers_range(vcpu: float, memory_gb: float, worker_gb: float = WORKER_GB) -> tuple[int, int]:
+    """The workers a task can carry, from what it has: its memory in worker-sized shares (`worker_gb`, half a gigabyte
+    unless a step has been measured smaller), at most four to a vCPU, never fewer than one. The range follows the compute
+    (a 1 vCPU, 4 GB task carries up to 4; 2 vCPU, 8 GB up to 8), so it is the configuration's, never a fixed two to eight."""
+    return 1, max(1, min(int(memory_gb / worker_gb + 1e-9), int(vcpu * WORKERS_PER_VCPU)))
+
+
+def capacity_profiles(path: Path = ROOT / "rules/load-chain.yaml") -> dict[str, dict]:
+    """The named compute sizes of the chain file (the AWS ECS task sizes the state machines run on)."""
+    return yaml.safe_load(path.read_text()).get("capacity") or {}
+
+
+def physical_gb() -> float:
+    return os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") / 2**30
+
+
+def capacity_of(name: str) -> tuple[float, float]:
+    """The vCPUs and gigabytes of a capacity: a profile of the chain file, or `local`, this machine measured (half its
+    memory, the rest being the operator's other work)."""
+    if name == "local":
+        return os.cpu_count() or 1, physical_gb() / 2
+    profiles = capacity_profiles()
+    if name not in profiles:
+        raise SystemExit(f"No capacity named {name}: local or {', '.join(sorted(profiles))}")
+    return profiles[name]["vcpu"], profiles[name]["memory_gb"]
+
+
+def bounds_for(name: str, worker_gb: float = WORKER_GB) -> tuple[int, int]:
+    """The workers range of a capacity, for a worker of `worker_gb`."""
+    return workers_range(*capacity_of(name), worker_gb)
 
 
 def pressure(load: float, cores: int, swap_used: float | None, relaxed: bool = False) -> str:
@@ -192,14 +232,27 @@ def machine_pressure(relaxed: bool = False) -> str:
     return pressure(os.getloadavg()[0], os.cpu_count() or 1, swap_fraction(swap), relaxed)
 
 
-def rescale(workers: dict[str, int], priority: dict[str, int], level: str) -> tuple[str, int] | None:
-    """One change of workers: with room (`low`) the step with the longest chain behind it doubles, up to 8; when
-    pressed (`high`) the step with the shortest halves, down to 2. Anything else changes nothing."""
+def clamped(steps: list[dict], name: str, capacity: tuple[float, float] | None = None) -> list[dict]:
+    """The steps with each one's workers held to the named capacity's range, whatever the run mode: the chain file asks
+    for what a step wants, the compute says what a task carries. Each step's range uses its own measured `worker_gb`
+    where the chain file has one (`capacity` replaces the named compute, for a test)."""
+    held = []
+    for step in steps:
+        low, top = workers_range(*(capacity or capacity_of(name)), step.get("worker_gb", WORKER_GB))
+        held.append({**step, "workers": min(max(step["workers"], low), top)})
+    return held
+
+
+def rescale(workers: dict[str, int], priority: dict[str, int], level: str, bounds: dict[str, tuple[int, int]]) -> tuple[str, int] | None:
+    """One change of workers within each step's own range (`bounds` by step: the capacity's, for the step's measured
+    memory): with room (`low`) the step with the longest chain behind it doubles, up to its top; when pressed (`high`) the
+    step with the shortest halves, down to its floor. Anything else changes nothing."""
     order = sorted(workers, key=lambda name: -priority[name])
     if level == "low":
-        return next(((name, min(MAX_WORKERS, workers[name] * 2)) for name in order if workers[name] < MAX_WORKERS), None)
+        return next(((name, min(bounds[name][1], workers[name] * 2)) for name in order if workers[name] < bounds[name][1]), None)
     if level == "high":
-        return next(((name, max(MIN_WORKERS, workers[name] // 2)) for name in reversed(order) if workers[name] > MIN_WORKERS), None)
+        return next(((name, max(bounds[name][0], workers[name] // 2)) for name in reversed(order)
+                     if workers[name] > bounds[name][0]), None)
     return None
 
 
@@ -260,16 +313,21 @@ def stop(child: subprocess.Popen) -> None:
 
 
 def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: datetime | None = None,
-         reader_url: str | None = None, connections: int = 250) -> int:
+         reader_url: str | None = None, connections: int = 250, bounds: tuple[int, int] | None = None,
+         capacity: str = "local") -> int:
     """Watch the loads and start the next ready step whenever a slot is free and the machine is not pressed. One start
     a cycle: the load average lags, so a started step is counted running before the next is judged. Each step runs as
-    `load_chain.py --only <step> --workers <n>` (the attempt loop). The workers follow the machine, 2 to 8: with room
+    `load_chain.py --only <step> --workers <n>` (the attempt loop). The workers follow the machine within the capacity's
+    range (`bounds`; the machine's own when not given): with room
     the step with the longest chain behind it doubles, when pressed the step with the shortest halves, one change a
     cycle, by stopping the step's load and starting it again (a load resumes where it stopped). With a `deadline`, a run
     behind its schedule (more of the window used than of the work done) is allowed twice the cores in load; at the
     deadline every step this started is stopped and the run ends, naming what is left. A step that uses up its attempts
     blocks what follows it and the rest carry on. Ends when every step is done (then the lookups and the links), when
     nothing more can start, or at the deadline."""
+    def range_of(name: str) -> tuple[int, int]:
+        return bounds or bounds_for(capacity, by_name[name].get("worker_gb", WORKER_GB))
+
     children: dict[str, subprocess.Popen] = {}
     workers: dict[str, int] = {}
     failed: set[str] = set()
@@ -281,7 +339,7 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
         workers[name] = count
         began.setdefault(name, clock())
         children[name] = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--only", name,
-                                           "--workers", str(count)], start_new_session=True)
+                                           "--workers", str(count), "--capacity", capacity], start_new_session=True)
 
     while True:
         for name, child in list(children.items()):
@@ -322,10 +380,11 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
         free = slots - max(len(children), len(busy))
         starts = ready(steps, done, set(children), failed, 1, busy, estimate) if free > 0 and level != "high" else []
         for name in starts:
-            count = by_name[name].get("workers", MIN_WORKERS)
+            low, top = range_of(name)
+            count = min(max(by_name[name].get("workers", low), low), top)
             note(f"scheduler starts {name} at {count} workers", state)
             spawn(name, count)
-        if not starts and (change := rescale(workers, {name: length[name] for name in workers}, level)):
+        if not starts and (change := rescale(workers, {name: length[name] for name in workers}, level, {name: range_of(name) for name in workers})):
             name, count = change
             note(f"scheduler moves {name} from {workers[name]} to {count} workers ({level} load)", state)
             stop(children[name])
@@ -360,8 +419,12 @@ def cpu_seconds(text: str) -> float:
     """The CPU time of the processes in `ps -o time=` output (`M:SS.ss` or `H:MM:SS.ss`, one per line), summed."""
     total = 0.0
     for line in text.split():
-        parts = [float(part) for part in line.split(":")]
-        total += sum(value * 60 ** index for index, value in enumerate(reversed(parts)))
+        try:
+            days, _, clock_part = line.rpartition("-")
+            parts = [float(part) for part in clock_part.split(":")]
+        except ValueError:  # a time that is not one: no CPU counted, never an exception for the whole listing
+            continue
+        total += sum(value * 60 ** index for index, value in enumerate(reversed(parts))) + (float(days) * 86400 if days else 0.0)
     return total
 
 
@@ -460,22 +523,51 @@ def is_load_process(args: str, source: str, target: str) -> bool:
         re.search(rf"--source {re.escape(source)} --target {re.escape(target)}( |$)", args))
 
 
+def load_pids(listing: str, source: str, target: str) -> dict[int, float]:
+    """The CPU seconds of every process of the load of one source and target: its driver and the workers it started,
+    found by parentage (a spawned worker's command line names no source). `listing` is `ps -Ao pid,ppid,time,rss,args`."""
+    rows = {}
+    for line in listing.splitlines():
+        parts = line.split(None, 4)
+        if len(parts) >= 4 and parts[0].isdigit() and parts[1].isdigit():
+            rows[int(parts[0])] = (int(parts[1]), cpu_seconds(parts[2]), parts[4] if len(parts) == 5 else "")
+    found = {pid for pid, (_, _, args) in rows.items() if is_load_process(args, source, target)}
+    grown = True
+    while grown:
+        grown = False
+        for pid, (parent, _, _) in rows.items():
+            if pid not in found and parent in found:
+                found.add(pid)
+                grown = True
+    return {pid: rows[pid][1] for pid in sorted(found)}
+
+
+def load_workers(listing: str, source: str, target: str) -> int | None:
+    """The `--workers` the running load of one source and target was started with, from its driver's command line."""
+    for line in listing.splitlines():
+        parts = line.split(None, 4)
+        if len(parts) == 5 and re.search(r"edgar[-_]warehouse load ", parts[4]) and is_load_process(parts[4], source, target):
+            found = re.search(r"--workers (\d+)", parts[4])
+            return int(found.group(1)) if found else None
+    return None
+
+
 def process_use(source: str, target: str) -> tuple[dict[int, float], float]:
     """Each process's CPU seconds so far, by pid, and the memory in MB, of the load running one source and target (its
-    driver and workers); two readings give the CPU percent."""
-    listing = subprocess.run(["ps", "-Ao", "pid,time,rss,args"], check=False, capture_output=True, text=True).stdout
-    seconds: dict[int, float] = {}
+    driver and the workers it started); two readings give the CPU percent."""
+    listing = subprocess.run(["ps", "-Ao", "pid,ppid,time,rss,args"], check=False, capture_output=True, text=True).stdout
+    seconds = load_pids(listing, source, target)
     memory = 0.0
-    for line in listing.splitlines():
-        parts = line.split(None, 3)
-        if len(parts) == 4 and is_load_process(parts[3], source, target):
-            pid, used, rss = parts[:3]
-            seconds[int(pid)] = cpu_seconds(used)
-            footprint = subprocess.run(["footprint", "-p", pid], check=False, capture_output=True, text=True).stdout \
-                if sys.platform == "darwin" else ""
-            sized = re.search(r"Footprint: ([\d.]+) (KB|MB|GB)", footprint)
-            memory += float(sized.group(1)) * {"KB": 1 / 1024, "MB": 1, "GB": 1024}[sized.group(2)] if sized else int(rss) / 1024
+    for pid in seconds:
+        footprint = subprocess.run(["footprint", "-p", str(pid)], check=False, capture_output=True, text=True).stdout \
+            if sys.platform == "darwin" else ""
+        sized = re.search(r"Footprint: ([\d.]+) (KB|MB|GB)", footprint)
+        rss = subprocess.run(["ps", "-o", "rss=", "-p", str(pid)], check=False, capture_output=True, text=True).stdout.strip()
+        memory += float(sized.group(1)) * {"KB": 1 / 1024, "MB": 1, "GB": 1024}[sized.group(2)] if sized else int(rss or 0) / 1024
     return seconds, memory
+
+
+WRITES_NOTE = "rows written a minute are counted when a transaction commits, so a long transaction shows none until it ends"
 
 
 def status(steps: list[dict], state: Path, reader_url: str | None, sample: int = 20) -> list[str]:
@@ -494,10 +586,11 @@ def status(steps: list[dict], state: Path, reader_url: str | None, sample: int =
     time.sleep(sample if before or running else 0)
     rate = writes_per_minute(before, database_writes(reader_url), sample) if before else {}
     waiters = (database_load(reader_url) or {}).get("lock_waiters", 0)
+    listing = subprocess.run(["ps", "-Ao", "pid,ppid,time,rss,args"], check=False, capture_output=True, text=True).stdout
     sessions = database_sessions(reader_url) if reader_url else {}
     lines = [f"{clock():%H:%M} ET: {len(running)} running, {len(done & {s['name'] for s in steps})} of {len(steps)} done; "
              f"database writes a minute: " + (", ".join(f"{k} {v:,.0f}" for k, v in rate.items() if v) or "none") +
-             f"; lock waiters {waiters}"]
+             f"; lock waiters {waiters} ({WRITES_NOTE})"]
     lines += [f"  {session_note(name, counts)}" for name, counts in sorted(sessions.items()) if counts["active"] + counts["waiting_on_client"] > 1]
     for step in running:
         began, attempt = started[step["name"]]
@@ -516,7 +609,8 @@ def status(steps: list[dict], state: Path, reader_url: str | None, sample: int =
         warn = outlook(left, elapsed, step["minutes"], attempt, step["attempts"])
         shown = (f"bundles {progress[0]} of {progress[1]}" + (f", about {left:.0f} min left" if left else "")
                  if progress and progress[1] > 1 else "one document, so its log shows no progress; the database does")
-        lines.append(f"  {step['name']} (lane {step['lane']}, attempt {attempt}, {step.get('workers', 2)} workers): {elapsed:.0f} min of {step['minutes']}; "
+        started_with = load_workers(listing, step["source"], step["target"])
+        lines.append(f"  {step['name']} (lane {step['lane']}, attempt {attempt}, {started_with or step.get('workers', 2)} workers): {elapsed:.0f} min of {step['minutes']}; "
                      f"{shown}; {count} processes, {cpu:.0f}% CPU, {memory:,.0f} MB; wrote {wrote}; log {age:.0f} min old; "
                      + verdict(elapsed, step["minutes"], age, cpu, mine, waiters, sharing) + (f"; {warn}" if warn else ""))
     return lines
@@ -557,6 +651,90 @@ def plan(step: dict, env: dict) -> str:
         return "no plan: " + (done.stderr.strip().splitlines() or ["?"])[-1][:140]
 
 
+def store_id(url: str) -> str:
+    """Eight hex digits naming a store by its instance's address, so a state file can tell which store its lines belong
+    to without showing the address. Any login and database of one instance give the same name; the host's case and the
+    default port do not matter; a socket's directory (`?host=/dir`) is its host. A URL that names no host is an error: it
+    would give distinct stores one name. (`localhost` and `127.0.0.1` are different names.)"""
+    text = url.replace("postgresql+psycopg2", "postgresql")
+    try:
+        part = urlsplit(text)
+        host, port = part.hostname, part.port
+    except ValueError:  # an unescaped `/` or `:` in a password: read the address after the last `@`
+        part = urlsplit("postgresql://" + text.split("@")[-1])
+        host, port = part.hostname, part.port
+    host = host or (parse_qs(part.query).get("host") or [""])[0]
+    if not host:
+        raise ValueError("The URL names no host: a store cannot be told from another")
+    return hashlib.sha256(f"{host.lower()}:{port or 5432}".encode()).hexdigest()[:8]
+
+
+def ensure_store(state: Path, store: str, adopt: bool = False) -> str:
+    """Make the state file this store's, under a lock so lanes starting together do it once.
+    - "same": already this store's; "fresh": there was no file;
+    - "set aside": it was marked for another store, so it is renamed `<file>.<its store>` and its `done` lines never
+      satisfy a wait this store has not earned;
+    - "unmarked": it holds lines and no marker, so it may be another store's: nothing is touched and the operator is
+      asked; with `adopt` (their word that it is this store's) it is marked and kept ("adopted")."""
+    import fcntl
+
+    marker = re.compile(r"chain store (\w+)$", re.M)
+    stamp = f"{datetime.now(ZoneInfo('America/New_York')):%m-%d %H:%M:%S} ET chain store {store}\n"
+    state.parent.mkdir(parents=True, exist_ok=True)
+    with state.with_name(state.name + ".lock").open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        text = state.read_text() if state.exists() else ""  # read again under the lock: another lane may have done it
+        found = marker.findall(text)
+        if found and found[-1] == store:
+            return "same"
+        if text and not found:
+            if not adopt:
+                return "unmarked"
+            state.write_text(text + stamp)
+            return "adopted"
+        if text:
+            state.rename(state.with_name(f"{state.name}.{found[-1]}"))
+        state.write_text(stamp)
+        return "set aside" if text else "fresh"
+
+
+CLEARS_ITSELF = re.compile(r"deadline|deadlock|lock timeout|lock not available|could not obtain lock|could not connect|"
+                           r"connection (?:timed out|refused|reset|closed)|server closed the connection|timed out", re.I)
+
+
+def retry_is_pointless(previous: str, current: str) -> bool:
+    """A failure that comes back exactly as it was, with nothing moved (its bundle and counts are the same), is not one
+    a retry can change. A window that ran out, a lock or deadlock, and a lost connection are not that: they clear when
+    the other load ends or the connection returns, and the next attempt resumes where this one stopped."""
+    return bool(previous) and previous == current and not CLEARS_ITSELF.search(current)
+
+
+SECRET_KEY = r"(?:password|passwd|secret|token|api[_-]?key|private[_-]?key|dsn|url|credential)\w*"
+
+
+def redact(text: str) -> str:
+    """Hide every address (`postgres://`, `postgresql+driver://`, `https://`) and the value of any key named like a secret
+    (`password=`, `token:`, `api_key=`, `dsn=`, `url=`), so a log line kept on disk never carries one."""
+    text = re.sub(r"(?:postgres(?:ql)?(?:\+\w+)?|https?)://\S+", "<addr>", text)
+    text = re.sub(rf"(\b{SECRET_KEY}\s*[=:]\s*)(?:'[^']*'|\"[^\"]*\"|\S+)", r"\1<hidden>", text, flags=re.I)
+    return re.sub(r"\bhost=\S+", "host=<hidden>", text)
+
+
+def errors_since(path: Path, offset: int, source: str | None = None, target: str | None = None) -> str:
+    """What was written to the shared error log after `offset`, addresses hidden, and, given a source and target, only
+    the blocks of that step's own commands (a block opens with `$ <command> --source X --target Y`): the file is shared
+    by every lane and every run, so another lane's errors in the same window are not this step's."""
+    if not path.exists() or path.stat().st_size <= offset:
+        return ""
+    with path.open("rb") as handle:
+        handle.seek(offset)
+        text = handle.read().decode(errors="replace")
+    if source and target:
+        wanted = re.compile(rf"--source {re.escape(source)} --target {re.escape(target)}( |$)")
+        text = "".join(block for block in re.split(r"(?m)^(?=\$ )", text) if wanted.search(block.split("\n", 1)[0]))
+    return redact(text)
+
+
 def done_steps(state: Path) -> set[str]:
     """The steps any lane has finished, read from the shared state file."""
     return set(re.findall(r" ET (\S+) done:", state.read_text())) if state.exists() else set()
@@ -580,8 +758,10 @@ def wait_for(step: dict, state: Path, poll: int = 30) -> None:
 def attempt_loop(step: dict, env: dict, state: Path) -> bool:
     name, log = step["name"], LOGS / f"chain-{RUN}-{step['name']}.log"
     wait_for(step, state)
+    errors, offset, previous = STORES / "load-errors.log", 0, ""
     for attempt in range(1, step["attempts"] + 1):
         note(f"{name} attempt {attempt} start", state)
+        offset = errors.stat().st_size if errors.exists() else 0
         code = run(["load", *arguments(step)], env, log)
         text = log.read_text()
         if code == 0 and "Load stopped" not in text:
@@ -590,8 +770,17 @@ def attempt_loop(step: dict, env: dict, state: Path) -> bool:
             return True
         why = [line for line in text.splitlines() if re.search(r"stopped|did not finish|Error", line)]
         note(f"{name} attempt {attempt} stopped rc={code}: "
-             f"{re.sub(r'(postgres(ql)?|https?)://[^ ]+', '<addr>', why[-1])[:200] if why else ''}", state)
+             f"{redact(why[-1])[:200] if why else ''}", state)
         log.rename(log.with_name(log.name + f".attempt-{attempt}"))
+        kept = errors_since(errors, offset, step["source"], step["target"])
+        if kept:
+            log.with_name(log.name + f".attempt-{attempt}.errors").write_text(kept)
+        current = why[-1] if why else ""
+        if retry_is_pointless(previous, current):
+            note(f"{name} stopped: the same failure came back, so a retry cannot change it (its errors: "
+                 f"{log.name}.attempt-{attempt}.errors)", state)
+            return False
+        previous = current
     note(f"{name} did not finish in {step['attempts']} attempts: the chain stops here", state)
     return False
 
@@ -616,9 +805,13 @@ def main() -> int:
     parser.add_argument("--from", dest="start")
     parser.add_argument("--only")
     parser.add_argument("--lane")
+    parser.add_argument("--adopt-state", action="store_true",
+                        help="the chain state file has done lines and no store marker: it is this store's")
     parser.add_argument("--status", action="store_true",
                         help="one line a running step: progress, rate, processes, database writes and a verdict")
-    parser.add_argument("--workers", type=int, help="with --only: the step's workers, 2 to 8, instead of the chain file's")
+    parser.add_argument("--workers", type=int, help="with --only: the step's workers, within the capacity's range, instead of the chain file's")
+    parser.add_argument("--capacity", default="local",
+                        help="the compute: local (this machine, measured) or a profile of the chain file (aws-small, aws-medium, aws-large)")
     parser.add_argument("--connections", type=int, default=250,
                         help="with --auto: the database connections to aim for; workers rise until they are used")
     parser.add_argument("--deadline", help="with --auto: HH:MM ET today, when every step this started is stopped")
@@ -627,7 +820,7 @@ def main() -> int:
     parser.add_argument("--slots", type=int, default=max(2, min(os.cpu_count() or 2, int(
         os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") / 2**30 // 2))), help="loads running at once")
     args = parser.parse_args()
-    steps = chain_steps()
+    steps = clamped(chain_steps(), args.capacity)
     names = [step["name"] for step in steps]
     for chosen in (args.start, args.only):
         if chosen and chosen not in names:
@@ -647,17 +840,33 @@ def main() -> int:
         return 0
     env = {**os.environ, **load_env(STORES / "worker.env")}
     LOGS.mkdir(parents=True, exist_ok=True)
+    if sys.platform == "darwin":
+        subprocess.Popen(["caffeinate", "-dimsu", "-w", str(os.getpid())])
+    if args.workers is not None:
+        wanted = next((step for step in steps if step["name"] == args.only), {})
+        low, top = bounds_for(args.capacity, wanted.get("worker_gb", WORKER_GB))
+        if not args.only or not low <= args.workers <= top:
+            print(f"--workers goes with --only and is {low} to {top} on {args.capacity}", file=sys.stderr)
+            return 2
+        steps = [{**step, "workers": args.workers} if step["name"] == args.only else step for step in steps]
+    if not args.plan and env.get("MDM_DATABASE_URL"):
+        try:
+            outcome = ensure_store(state, store_id(env["MDM_DATABASE_URL"]), adopt=args.adopt_state)
+        except ValueError as refused:
+            print(refused, file=sys.stderr)
+            return 2
+        if outcome == "set aside":
+            print(f"{state.name} belonged to another store: set aside, this store starts a fresh chain state", flush=True)
+        elif outcome == "adopted":
+            print(f"{state.name} adopted as this store's, on your word", flush=True)
+        elif outcome == "unmarked":
+            print(f"{state.name} holds done lines and no store marker, so it may be another store's. If it is this store's, run "
+                  "again with --adopt-state; if not, move it aside. Nothing was changed.", file=sys.stderr)
+            return 2
     if args.plan:
         for step in steps:
             print(f"{step['name']:30} {plan(step, env)}", flush=True)
         return 0
-    if sys.platform == "darwin":
-        subprocess.Popen(["caffeinate", "-dimsu", "-w", str(os.getpid())])
-    if args.workers is not None:
-        if not args.only or not MIN_WORKERS <= args.workers <= MAX_WORKERS:
-            print(f"--workers goes with --only and is {MIN_WORKERS} to {MAX_WORKERS}", file=sys.stderr)
-            return 2
-        steps = [{**step, "workers": args.workers} if step["name"] == args.only else step for step in steps]
     if args.auto:
         deadline = None
         if args.hours:
@@ -665,7 +874,7 @@ def main() -> int:
         elif args.deadline:
             hour, minute = map(int, args.deadline.split(":"))
             deadline = clock().replace(hour=hour, minute=minute, second=0, microsecond=0)
-        if auto(steps, state, args.slots, deadline=deadline, connections=args.connections,
+        if auto(steps, state, args.slots, deadline=deadline, connections=args.connections, capacity=args.capacity,
                 reader_url=load_env(STORES / "reader.env").get("DIAGNOSE_DATABASE_URL") if (STORES / "reader.env").exists() else None):
             return 1
         finish(env, state)

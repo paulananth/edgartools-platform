@@ -12,6 +12,11 @@ source's operational runbook and report verified progress with counts and reason
 Acquisition supplies completed deliveries independently. A catalog `Pipeline` entry describes a
 load and never starts or resumes one ([execution boundary](../openmetadata/SKILL.md#pipeline-execution-boundary)).
 
+## Find the root cause, silently
+
+A step that fails, a reading that disagrees with another, a retry about to be the fix, or a surprising time: find the root
+cause by the [five whys](../data-platform/ROOT-CAUSE.md) before acting or reporting, silently, and report the conclusion.
+
 ## Report a running load from its evidence
 
 Never report a load as "running". Run `load_chain.py --status` and report, for each running step, what it prints:
@@ -23,6 +28,8 @@ Read the verdict, not the word "running":
 - **progressing**: it wrote rows, its processes worked, or its log moved in the last ten minutes;
 - **unclear**: the step's own processes used no CPU and its log is silent, but its store is written by other running
   steps, so the rows may be theirs: check its log and its processes before calling it alive;
+- a step that **stopped**: read its own errors file (`chain-<RUN>-<step>.log.attempt-<n>.errors`), not the shared error log;
+  an unchanged failure stops the step at once, since a retry cannot change it;
 - **no sign of work**: no CPU, no rows written and a silent log: read its log and the stores folder's `load-errors.log`
   before saying anything else, since it may be stalled;
 - **waiting on database locks** (three or more sessions): the contention ladder of the daily-run runbook;
@@ -30,6 +37,8 @@ Read the verdict, not the word "running":
   running the loads is the limit, so more workers on it will not help; run the loaders on more compute;
 - **cannot finish in its remaining attempts**: raise its workers or its minutes now, not at its last attempt.
 
+A step's workers are found by their parentage (a spawned worker's command line names no source) and the count shown is the one
+the load was started with; a step that reads 0% CPU with several workers is a status that missed them, not an idle step.
 A single-document step has no progress in its log: say so, and report its database rows and sessions. A store's rows are
 shared by every step that writes it and cannot be split: say which steps share it. Check a running chain every 30 minutes
 and report what changed, with the evidence, not that it is still going.
@@ -321,7 +330,7 @@ Work it out from counts before starting:
 2. **Wide and narrow steps.** A wide step has one unit per file or group
    (`source.read`). A narrow step is one unit per bundle (`mastering.merge`,
    `mdm.prepare`). Only more bundles at once shorten narrow steps in total.
-3. **Bundles and readers.** Start `--workers 2`; a long load (the two-minute sample will miss the window, or a step already ran past ten minutes) scales to 8, at most the host's cores. `--workers` is the processes on each step at either grain, shared out to a step with fewer units (Resource sizing (Edgar Intelligence runbook)); keep `--bundles` × `--workers` near the core count. `load` never starts more workers than a step has units left. A merge into shared masters stays at one bundle when memory is the limiter.
+3. **Bundles and readers.** The workers a step can carry come from the compute it runs on, its capacity profile (`load_chain.py --capacity <local | aws-small | aws-medium | aws-large>`, the profiles in `rules/load-chain.yaml`): a worker is sized at half a gigabyte and four share a vCPU, so a 1 vCPU, 4 GB task carries up to 4 and a 2 vCPU, 8 GB task up to 8, and a bigger task a new profile with no code change. A step starts at the chain file's workers held to the profile's range, and `--auto` moves a long step (the two-minute sample will miss the window, or a step already ran past ten minutes) within that range; `local` is this machine measured at half its memory. `--workers` is the processes on each step at either grain, shared out to a step with fewer units (Resource sizing (Edgar Intelligence runbook)); keep `--bundles` × `--workers` near the core count. `load` never starts more workers than a step has units left. A merge into shared masters stays at one bundle when memory is the limiter.
 4. **The bound.** Measure one bundle first (`load` prints each run's
    minutes). The load takes roughly (the number of bundles ÷ `--bundles`,
    rounded up) × that time.

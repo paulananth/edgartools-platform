@@ -5,7 +5,7 @@ description: Bring a NEW data feed or a NEW domain (a kind with no merge rules y
 
 # Data Onboarding
 
-Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#the-seven-wastes) and drop what adds no value.
+Work lean: check each step against [the seven wastes](../data-platform/SKILL.md#the-seven-wastes) and drop what adds no value. Find the root cause of a failure or surprise by the [five whys](../data-platform/ROOT-CAUSE.md), silently.
 
 > Part of the **data-platform** skill, installed as one package with its
 > commands. Start there for setup (install, stores, `edgar-warehouse doctor`)

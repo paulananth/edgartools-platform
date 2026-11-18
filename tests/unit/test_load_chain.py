@@ -123,19 +123,19 @@ def test_the_chain_has_eleven_lanes_and_company_facts_is_beside_the_other_silver
     assert {s["lane"] for s in STEPS if s["source"] == "sec.company-facts"} == {"F"}
 
 
-def test_every_step_starts_at_two_workers_and_stays_at_most_eight():
-    """The skill starts a load at 2 workers and scales a long load to 8."""
+def test_no_step_asks_for_more_workers_than_the_largest_capacity_profile_carries():
+    """A smaller profile clamps a step's workers at start (a medium task starts GLEIF at 4); none may exceed the largest."""
+    largest = max(chain.workers_range(**profile)[1] for profile in chain.capacity_profiles().values())
     counts = {step["name"]: step["workers"] for step in STEPS}
-    assert min(counts.values()) == 2, counts
-    assert max(counts.values()) <= 8, counts
+    assert min(counts.values()) >= 1 and max(counts.values()) <= largest, (counts, largest)
 
 
-def test_the_skill_names_eleven_lanes_and_the_two_to_eight_worker_scale():
+def test_the_skill_names_eleven_lanes_and_the_capacity_profiles():
     skill = (ROOT / "skills/data-operations/SKILL.md").read_text()
     runbook = (ROOT / "docs/runbooks/edgar-intelligence/init.md").read_text()
     assert "A P S C L O D F G N Q" in skill and "A P S C L O D F G N Q" in runbook
-    assert "Start `--workers 2`" in skill
-    assert "scales to 8" in skill
+    assert "capacity profile" in skill and "--capacity" in skill
+    assert "from 2 to 8" not in skill and "scales to 8" not in skill
 
 
 def test_a_step_waits_for_what_another_lane_has_done(tmp_path):
@@ -347,14 +347,17 @@ def test_compute_pressure_is_low_ok_or_high_and_relaxes_when_the_run_is_behind()
     assert chain.pressure(load=17.0, cores=8, swap_used=0.2, relaxed=True) == "high"
 
 
-def test_workers_rise_two_four_eight_on_the_longest_chain_first_and_fall_from_the_shortest():
+EVERY = {name: (2, 8) for name in ("long", "mid", "short")}
+
+
+def test_workers_double_on_the_longest_chain_first_and_halve_on_the_shortest_within_the_profiles_range():
     priority = {"long": 900, "mid": 300, "short": 50}
-    assert chain.rescale({"long": 2, "mid": 2, "short": 2}, priority, "low") == ("long", 4)
-    assert chain.rescale({"long": 8, "mid": 2, "short": 2}, priority, "low") == ("mid", 4)
-    assert chain.rescale({"long": 8, "mid": 8, "short": 8}, priority, "low") is None  # the ceiling is 8
-    assert chain.rescale({"long": 8, "mid": 4, "short": 4}, priority, "high") == ("short", 2)
-    assert chain.rescale({"long": 2, "mid": 2, "short": 2}, priority, "high") is None  # the floor is 2
-    assert chain.rescale({"long": 4, "mid": 4, "short": 4}, priority, "ok") is None
+    assert chain.rescale({"long": 2, "mid": 2, "short": 2}, priority, "low", EVERY) == ("long", 4)
+    assert chain.rescale({"long": 8, "mid": 2, "short": 2}, priority, "low", EVERY) == ("mid", 4)
+    assert chain.rescale({"long": 8, "mid": 8, "short": 8}, priority, "low", EVERY) is None  # the ceiling is the profile's
+    assert chain.rescale({"long": 8, "mid": 4, "short": 4}, priority, "high", EVERY) == ("short", 2)
+    assert chain.rescale({"long": 2, "mid": 2, "short": 2}, priority, "high", EVERY) is None  # the floor is the profile's
+    assert chain.rescale({"long": 4, "mid": 4, "short": 4}, priority, "ok", EVERY) is None
 
 
 def test_a_run_is_behind_when_more_of_the_window_is_used_than_of_the_work_done():
@@ -592,3 +595,254 @@ def test_only_a_chain_loads_own_processes_are_matched_by_command_line():
     assert chain.is_load_process("uv run --no-sync edgar-warehouse load --source gleif --target mastering --capture /c", "gleif", "mastering")
     assert not chain.is_load_process("vim --source gleif --target mastering", "gleif", "mastering")  # not the platform's
     assert not chain.is_load_process("edgar-warehouse load --source gleif --target silver", "gleif", "mastering")
+
+
+def test_a_workers_range_follows_the_tasks_memory_and_vcpus_not_a_fixed_two_to_eight():
+    """A worker is sized at half a gigabyte, and a vCPU carries four workers that wait on the database."""
+    assert chain.workers_range(vcpu=0.5, memory_gb=1) == (1, 2)  # an AWS small task
+    assert chain.workers_range(vcpu=1, memory_gb=4) == (1, 4)  # medium: four vCPU-shares of workers, memory for eight
+    assert chain.workers_range(vcpu=2, memory_gb=8) == (1, 8)  # large
+    assert chain.workers_range(vcpu=16, memory_gb=64) == (1, 64)  # a bigger task goes past eight
+    assert chain.workers_range(vcpu=0.25, memory_gb=0.25) == (1, 1)  # never below one
+
+
+def test_the_chain_file_names_the_aws_task_sizes_the_state_machines_run_on():
+    profiles = chain.capacity_profiles()
+    assert profiles["aws-small"] == {"vcpu": 0.5, "memory_gb": 1}
+    assert profiles["aws-medium"] == {"vcpu": 1, "memory_gb": 4}
+    assert profiles["aws-large"] == {"vcpu": 2, "memory_gb": 8}
+
+
+def test_a_capacity_name_gives_its_bounds_and_the_machine_gives_its_own(monkeypatch):
+    assert chain.bounds_for("aws-large") == (1, 8)
+    assert chain.bounds_for("aws-medium") == (1, 4)
+    monkeypatch.setattr(chain.os, "cpu_count", lambda: 8)
+    monkeypatch.setattr(chain, "physical_gb", lambda: 8.0)
+    assert chain.bounds_for("local") == (1, 8)  # half the machine's memory: 4 GB, 8 workers
+    monkeypatch.setattr(chain, "physical_gb", lambda: 4.0)
+    assert chain.bounds_for("local") == (1, 4)
+    try:
+        chain.bounds_for("aws-huge")
+    except SystemExit as unknown:
+        assert "aws-huge" in str(unknown)
+    else:
+        raise AssertionError("an unknown capacity must be refused")
+
+
+def test_a_started_step_is_held_to_the_profiles_range(monkeypatch, tmp_path):
+    steps = [_step("a1", "A", minutes=600)]
+    steps[0]["workers"] = 8  # the chain file asks for eight; a small task carries two
+    state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=10)
+    monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: "ok")
+    chain.auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=20), bounds=(1, 2))
+    assert started[0] == ("a1", 2)
+
+
+def test_a_started_step_is_told_the_capacity_it_runs_on_so_its_own_check_uses_the_same_range(monkeypatch, tmp_path):
+    commands = []
+    steps = [_step("a1", "A", minutes=600)]
+    state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=10)
+    original = chain.subprocess.Popen
+    monkeypatch.setattr(chain.subprocess, "Popen", lambda command, **kw: commands.append(command) or original(command, **kw))
+    monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: "ok")
+    chain.auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=20), bounds=(1, 4), capacity="aws-medium")
+    assert commands[0][commands[0].index("--capacity") + 1] == "aws-medium"
+
+
+def test_every_run_mode_holds_a_steps_workers_to_the_capacity_not_only_the_scheduler():
+    steps = [{"name": "gleif", "workers": 8}, {"name": "small", "workers": 2}, {"name": "tiny", "workers": 1}]
+    assert [s["workers"] for s in chain.clamped(steps, "local", capacity=(1, 4.0))] == [4, 2, 1]  # a medium task starts GLEIF at 4
+    assert [s["workers"] for s in chain.clamped(steps, "local", capacity=(2, 8.0))] == [8, 2, 1]  # and a larger one at 8
+    assert steps[0]["workers"] == 8  # the chain file's own steps are not changed
+
+
+def test_a_state_file_from_another_store_is_set_aside_so_its_done_lines_never_satisfy_a_wait(tmp_path):
+    state = tmp_path / "chain.log"
+    state.write_text("11-15 14:21:31 ET chain store aaaa1111\n11-15 14:21:31 ET company done: Done\n")
+    assert chain.ensure_store(state, "bbbb2222") == "set aside"  # a different store: the old lines are archived
+    assert chain.done_steps(state) == set()
+    assert state.read_text().endswith("chain store bbbb2222\n")
+    assert (tmp_path / "chain.log.aaaa1111").read_text().count("company done") == 1
+    state.write_text(state.read_text() + "11-18 06:40:00 ET company done: Done\n")
+    assert chain.ensure_store(state, "bbbb2222") == "same"  # the same store: nothing is touched
+    assert chain.done_steps(state) == {"company"}
+    fresh = tmp_path / "new.log"
+    assert chain.ensure_store(fresh, "bbbb2222") == "fresh" and fresh.read_text().endswith("chain store bbbb2222\n")
+
+
+def test_a_state_file_with_lines_and_no_marker_asks_the_operator_and_is_adopted_only_on_their_word(tmp_path):
+    state = tmp_path / "chain.log"
+    state.write_text("11-15 14:21:31 ET company done: Done\n")
+    assert chain.ensure_store(state, "bbbb2222") == "unmarked"  # it may be another store's: stop and ask, touch nothing
+    assert state.read_text() == "11-15 14:21:31 ET company done: Done\n" and not [p for p in tmp_path.glob("chain.log.*") if p.suffix != ".lock"]
+    assert chain.ensure_store(state, "bbbb2222", adopt=True) == "adopted"  # the operator says it is this store's
+    assert chain.done_steps(state) == {"company"} and state.read_text().endswith("chain store bbbb2222\n")
+    assert chain.ensure_store(state, "bbbb2222") == "same"
+
+
+def test_two_lanes_starting_at_once_against_another_stores_file_set_it_aside_once_and_lose_nothing(tmp_path):
+    import threading
+
+    state = tmp_path / "chain.log"
+    state.write_text("11-15 14:21:31 ET chain store aaaa1111\n11-15 14:21:31 ET company done: Done\n")
+    results, start = [], threading.Barrier(2)
+
+    def lane():
+        start.wait()
+        results.append(chain.ensure_store(state, "bbbb2222"))
+
+    threads = [threading.Thread(target=lane) for _ in range(2)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    assert sorted(results) == ["same", "set aside"]
+    assert (tmp_path / "chain.log.aaaa1111").read_text().count("company done") == 1  # the archive kept its lines
+    assert state.read_text().count("chain store bbbb2222") == 1
+
+
+def test_a_store_is_named_by_its_address_without_ever_showing_it():
+    one = chain.store_id("postgresql://a:secret@host-one.invalid:5432/mdm")
+    assert one == chain.store_id("postgresql+psycopg2://b:other@HOST-ONE.invalid:5432/silver")  # any login, database or case
+    assert one == chain.store_id("postgresql://a:secret@host-one.invalid/mdm")  # the default port is 5432
+    assert one != chain.store_id("postgresql://a:secret@host-two.invalid:5432/mdm")
+    assert len(one) == 8 and "host-one" not in one and "secret" not in one
+    assert chain.store_id("postgresql://u:pa/ss@host-one.invalid:5432/mdm") == one  # an unescaped slash in a password
+
+
+def test_a_url_that_names_no_host_is_an_error_not_a_shared_name_and_a_socket_names_its_directory():
+    import pytest
+
+    for url in ("", "postgresql:///mdm", "not a url"):
+        with pytest.raises(ValueError, match="names no host"):
+            chain.store_id(url)
+    assert chain.store_id("postgresql:///mdm?host=/var/run/pg-a") != chain.store_id("postgresql:///mdm?host=/var/run/pg-b")
+
+
+def test_a_retry_is_pointless_only_when_the_same_error_comes_back_with_nothing_moved_and_not_a_lock_or_the_window():
+    error = "ValueError: Step sec_tickers: no document of the bundle matches '*company_tickers_exchange*'"
+    assert chain.retry_is_pointless(error, error)
+    assert chain.retry_is_pointless("Blocked: silver.t: refused (SQLSTATE 42501)", "Blocked: silver.t: refused (SQLSTATE 42501)")
+    assert not chain.retry_is_pointless("", error)  # a first failure is always retried
+    assert not chain.retry_is_pointless(error, "ValueError: another failure")
+    late = "Load stopped: 2 of 149 did not finish: bundle 42 did not finish before the deadline"
+    assert not chain.retry_is_pointless(late, late)  # the window ran out; the next attempt resumes where it stopped
+    moved = ("Load stopped: 1 of 149 did not finish: bundle 17: DeadlockDetected",
+             "Load stopped: 1 of 149 did not finish: bundle 230: DeadlockDetected")
+    assert not chain.retry_is_pointless(*moved)  # the bundle moved: it is making progress
+    for locked in ("DeadlockDetected: deadlock detected", "LockNotAvailable: canceling statement due to lock timeout",
+                   "OperationalError: could not connect to server", "connection timed out"):
+        assert not chain.retry_is_pointless(locked, locked), locked  # these clear when the other load ends
+
+
+def test_the_errors_an_attempt_wrote_to_the_shared_error_log_are_kept_with_that_step_and_not_another_lanes(tmp_path):
+    log = tmp_path / "load-errors.log"
+    log.write_text("$ old command\nOldError: before this attempt\n")
+    offset = log.stat().st_size
+    log.write_text(log.read_text()
+                   + "$ rules run --source sec.x --target mastering --work-run-id r\nValueError: postgresql://u:pw@h:5432/db failed\n"
+                   + "$ mdm prepare-capture --source openfigi --target mastering --capture /c\nKeyError: another lane's block\n")
+    kept = chain.errors_since(log, offset, "sec.x", "mastering")
+    assert "ValueError" in kept and "OldError" not in kept and "another lane" not in kept
+    assert "pw" not in kept and "<addr>" in kept
+    assert "another lane" in chain.errors_since(log, offset)  # with no step named, every block since the offset
+    assert chain.errors_since(tmp_path / "missing.log", 0, "sec.x", "mastering") == ""
+
+
+def test_ipo_has_a_window_that_fits_its_bundles():
+    ipo = BY_NAME["ipo"]
+    assert ipo["minutes"] * ipo["attempts"] >= 300  # 149 bundles at about two minutes each, one at a time
+
+
+def test_redaction_hides_every_address_form_and_every_value_named_like_a_secret():
+    text = ("ValueError: postgresql+psycopg2://u:pw1@h.invalid:5432/mdm and postgres://v:pw2@h2.invalid/x and https://a:b@c.invalid/p; "
+            "host=h.invalid password=pw3 dsn=postgresql://w:pw4@h3.invalid/y token: abc123 api_key='k-5' SECRET=s6 url=http://z.invalid")
+    hidden = chain.redact(text)
+    for leaked in ("pw1", "pw2", "pw3", "pw4", "abc123", "k-5", "s6", "h.invalid", "h2.invalid", "h3.invalid", "z.invalid", "u:", "b@c"):
+        assert leaked not in hidden, (leaked, hidden)
+    assert "ValueError" in hidden and "<addr>" in hidden and "<hidden>" in hidden
+
+
+PS = """  100     1 0:10.00  50000 uv run --no-sync edgar-warehouse load --source gleif --target mastering --capture /c
+  101   100 14:00.00 80000 /x/python /x/edgar_warehouse/driver.py
+  102   101 3:00.00  90000 /x/python -c from edgar_warehouse.cli import main; ... rules run --source gleif --target mastering
+  103   102 15:50.00 40000 /x/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=5)
+  104   102 15:40.00 41000 /x/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=5)
+  200     1 9:00.00  60000 /x/python -c from edgar_warehouse.cli import main; ... rules run --source other --target silver
+  201   200 5:00.00  60000 /x/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=5)
+"""
+
+
+def test_a_loads_processes_include_the_workers_it_started_whose_command_lines_name_no_source():
+    pids = chain.load_pids(PS, "gleif", "mastering")
+    assert sorted(pids) == [100, 101, 102, 103, 104]  # the two spawned workers count; the other load's do not
+    assert chain.load_pids(PS, "other", "silver") == {200: 540.0, 201: 300.0}
+    assert chain.load_pids("", "gleif", "mastering") == {}
+
+
+def test_a_workers_range_can_use_a_steps_measured_memory_not_only_the_default_share():
+    assert chain.workers_range(vcpu=8, memory_gb=4) == (1, 8)  # the default half gigabyte a worker: eight
+    assert chain.workers_range(vcpu=8, memory_gb=4, worker_gb=0.1) == (1, 32)  # measured at 100 MB: four to a vCPU, 32
+    steps = [{"name": "gleif", "workers": 16, "worker_gb": 0.1}, {"name": "plain", "workers": 16}]
+    held = chain.clamped(steps, "local", capacity=(8, 4.0))
+    assert [s["workers"] for s in held] == [16, 8]  # GLEIF keeps its 16; a step with no measure is held to eight
+    assert [s["workers"] for s in chain.clamped(steps, "local", capacity=(1, 2.0))] == [4, 4]  # a 1 vCPU, 2 GB machine
+
+
+def test_the_status_header_says_writes_are_counted_at_commit(tmp_path, monkeypatch):
+    monkeypatch.setattr(chain, "external_loads", lambda: set())
+    header = chain.status([], tmp_path / "state.log", None, sample=0)[0]
+    assert "counted when a transaction commits" in header and "0 running" in header
+
+
+def test_the_workers_a_load_runs_with_are_read_from_its_command_line_not_the_chain_file():
+    assert chain.load_workers(PS.replace("--capture /c", "--capture /c --workers 8"), "gleif", "mastering") == 8
+    assert chain.load_workers(PS, "gleif", "mastering") is None  # no --workers flag on that line
+    assert chain.load_workers(PS, "none", "mastering") is None
+
+
+def test_the_skills_that_operate_and_recover_loads_point_to_the_one_root_cause_method():
+    method = ROOT / "skills/data-platform/ROOT-CAUSE.md"
+    assert method.exists()
+    text = method.read_text()
+    for needed in ("Doubt the instrument first", "answer each why from evidence", "Four lines in business words", "never the chain"):
+        assert needed.lower() in text.lower(), needed
+    for skill in ("data-platform", "data-operations", "bookkeeping", "data-onboarding", "refining-rules", "data-profiling",
+                  "data-quality", "change-journal"):
+        assert "ROOT-CAUSE.md" in (ROOT / f"skills/{skill}/SKILL.md").read_text(), skill  # linked, never copied
+
+
+def test_a_cpu_time_with_days_is_read_and_one_unreadable_row_never_breaks_the_listing():
+    assert chain.cpu_seconds("1-02:03:04") == 86400 + 2 * 3600 + 3 * 60 + 4
+    listing = "  1     0 1-02:03:04 100 /usr/sbin/other\n  100   1 0:10.00 50000 uv run edgar-warehouse load --source gleif --target mastering\n  101   100 not-a-time 1 worker\n"
+    assert chain.load_pids(listing, "gleif", "mastering") == {100: 10.0, 101: 0.0}  # a bad time is zero, never an exception
+
+
+def test_a_listing_row_with_no_arguments_still_reaches_its_workers():
+    listing = "  100     1 0:10.00  50000\n  101   100 5:00.00  9000 /x/python -c from multiprocessing.spawn import spawn_main\n"
+    assert chain.load_pids(listing, "gleif", "mastering") == {}  # nothing names the load: no match, and no crash
+    listing += "  102     1 0:01.00  50000 uv run edgar-warehouse load --source gleif --target mastering\n  103   102 7:00.00 9000\n"
+    assert sorted(chain.load_pids(listing, "gleif", "mastering")) == [102, 103]  # a blank-args child of the driver is its worker
+
+
+def test_a_worker_memory_that_is_not_a_positive_finite_number_is_refused_and_the_division_is_exact(tmp_path):
+    import pytest
+
+    assert chain.workers_range(vcpu=8, memory_gb=4.0, worker_gb=0.4) == (1, 10)  # 4.0 // 0.4 is 9.0 in floating point
+    for bad in (0, -1, float("inf"), float("nan"), 1e9):
+        path = tmp_path / "chain.yaml"
+        path.write_text(yaml.safe_dump({"defaults": {"workers": 2, "bundles": 1}, "steps": [
+            {"name": "x", "minutes": 60, "worker_gb": bad}]}))
+        with pytest.raises(ValueError, match="worker_gb"):
+            chain.chain_steps(path)
+
+
+def test_the_start_count_and_the_rescale_use_each_steps_own_measured_range(monkeypatch, tmp_path):
+    steps = [_step("gleif", "A", minutes=600), _step("plain", "B", minutes=60)]
+    steps[0].update(workers=16, worker_gb=0.4)
+    steps[1].update(workers=16)
+    monkeypatch.setattr(chain, "capacity_of", lambda name: (8, 4.0))  # 4 GB: GLEIF carries 10, a half-gigabyte worker 8
+    state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=10)
+    monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: "ok")
+    chain.auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=30))
+    assert dict(started) == {"gleif": 10, "plain": 8}
+    assert chain.rescale({"gleif": 5}, {"gleif": 1}, "low", {"gleif": (1, 10)}) == ("gleif", 10)
+    assert chain.rescale({"gleif": 5}, {"gleif": 1}, "low", {"gleif": (1, 8)}) == ("gleif", 8)

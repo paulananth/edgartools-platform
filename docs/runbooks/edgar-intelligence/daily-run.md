@@ -72,8 +72,8 @@ Choose concurrency no larger than the tightest CPU, usable-memory,
 database-connection and declared-worker budget, including verification and
 parallelism inside each worker. Choose bundle sizes within the existing supported
 contract bounds. Keep headroom based on observed pressure and shared use. When
-measurements are unavailable but one unit can safely fit, begin with 2 workers
-and conservative bundles, then scale a long load to 8. If even one unit cannot fit or fit is
+measurements are unavailable but one unit can safely fit, begin with the capacity profile's floor of workers
+and conservative bundles, then scale a long load within the profile's range. If even one unit cannot fit or fit is
 unknown, wait/report the missing estimate; do not force it or reject the source.
 
 A slow bundle on a hosted store is waiting on a lock, paying round trips (tens of milliseconds a statement) or computing.
@@ -102,6 +102,24 @@ agent's state, create another permanent server or change platform limits to hide
 contention. Resource planning creates no new scheduler or resource-lease store;
 Bookkeeping/destination leases remain authoritative.
 
+## Capacity: the workers follow the compute
+
+A step's workers are bounded by the compute it runs on, never by a fixed number. `load_chain.py --capacity <name>` picks
+a profile of `rules/load-chain.yaml`:
+
+| Profile | vCPU | Memory | Workers a step can carry |
+|---|---|---|---|
+| `aws-small` | 0.5 | 1 GB | 1 to 2 |
+| `aws-medium` | 1 | 4 GB | 1 to 4 |
+| `aws-large` | 2 | 8 GB | 1 to 8 |
+| `local` | this machine's cores | half its memory | measured |
+
+The three AWS rows are the ECS tasks of the production Step Functions state machines (`edgartools-prod-small`, `-medium`,
+`-large`). A worker is sized at half a gigabyte, and four share a vCPU because a worker waits on the database much of the
+time. A larger task is a new profile; its workers follow with no change to the code. How many steps run at once is the
+Map state's `MaxConcurrency` in AWS (one in the production state machines today, so raise it deliberately: each running
+step opens its own database connections, and the hosted instance allows 500) and `--slots` on a machine.
+
 ## Contention: find the tier, then change the design or the scale
 
 A slow load has one saturated tier. Throttling hides which, so it comes last.
@@ -124,11 +142,15 @@ A slow load has one saturated tier. Throttling hides which, so it comes last.
    - the database, when its CPU or connections are the limit and its lock waits are not: resize the hosted instance
      (an approved, billable change; see aws-snowflake-operations). More compute does not shorten a lock queue;
    - connections: fewer, wider workers, or a pool.
-4. **Throttle last:** workers go from 2 to 8 with the readings, and fall when the database is locking or the machine is
-   pressed.
+4. **Throttle last:** workers move within the capacity profile's range with the readings, and fall when the database is
+   locking or the machine is pressed.
 5. Record the readings, the change and its effect in the ticket.
 
 ## Progress, failure and recovery
+
+A step that stops keeps the errors of that attempt in `chain-<RUN>-<step>.log.attempt-<n>.errors` (the stores folder's
+`load-errors.log` is shared by every lane and run), and a step whose same failure comes back unchanged stops at once: a
+retry cannot change it. Read the step's own errors file first.
 
 Report a running load from `load_chain.py --status` (progress, rate, processes, database sessions and a verdict for each
 step; see the data-operations skill), never as "running".
