@@ -771,6 +771,16 @@ def last_run_id(text: str) -> str | None:
     return found[-1] if found else None
 
 
+def catalog_env_file(environ: dict, home: Path, root: Path) -> Path:
+    """Where the catalog's address and token are kept, first that exists: the file `OPENMETADATA_ENV_FILE` names, the private
+    folder outside every checkout (`~/.config/edgartools/openmetadata.env`), then the checkout's own `.env` (the older place)."""
+    named = environ.get("OPENMETADATA_ENV_FILE")
+    for path in ([Path(named)] if named else []) + [home / ".config/edgartools/openmetadata.env", root / ".env"]:
+        if path.exists():
+            return path
+    return root / ".env"
+
+
 def catalog_env(path: Path) -> dict[str, str]:
     """Only the catalog's address and token, from the private env file, and only when both are there: nothing else the
     file holds (a login, a password) reaches the command, and no half-set pair does."""
@@ -842,7 +852,7 @@ def publish_catalog_status(step_name: str) -> str:
     """Publish a finished step's latest Bookkeeping run as its target Pipeline's status in the catalog
     (`rules catalog status --bookkeeping-run`), when the catalog's address and token are configured."""
     run = step_run_id(step_name)
-    env = catalog_env(ROOT / ".env")
+    env = catalog_env(catalog_env_file(os.environ, Path.home(), ROOT))
     if not run:
         return "not published: the step completed no run of its own"
     if not env:

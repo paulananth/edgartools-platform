@@ -956,3 +956,18 @@ def test_a_catalog_that_hangs_is_cut_off_at_sixty_seconds_with_its_whole_process
     monkeypatch.setattr(chain.os, "killpg", lambda pid, sig: killed.append(pid))
     assert chain.run_catalog_status(["x"], {}) == ""
     assert killed == [4242]  # the group, so no orphan keeps calling the catalog
+
+
+def test_the_catalogs_private_file_is_found_by_the_variable_then_the_private_folder_then_the_checkout(tmp_path):
+    home, root = tmp_path / "home", tmp_path / "repo"
+    (home / ".config/edgartools").mkdir(parents=True)
+    root.mkdir()
+    (root / ".env").write_text("x=1\n")
+    assert chain.catalog_env_file({}, home, root) == root / ".env"  # the legacy place
+    private = home / ".config/edgartools/openmetadata.env"
+    private.write_text("x=1\n")
+    assert chain.catalog_env_file({}, home, root) == private  # the private folder outside any checkout comes first
+    named = tmp_path / "elsewhere.env"
+    named.write_text("x=1\n")
+    assert chain.catalog_env_file({"OPENMETADATA_ENV_FILE": str(named)}, home, root) == named  # the operator's variable wins
+    assert chain.catalog_env_file({"OPENMETADATA_ENV_FILE": str(tmp_path / "gone.env")}, home, root) == private  # a missing one is skipped

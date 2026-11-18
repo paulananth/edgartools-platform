@@ -22,7 +22,8 @@ cause by the [five whys](../data-platform/ROOT-CAUSE.md) before acting or report
 The catalog describes the load; it never starts, resumes or decides one (the
 [openmetadata skill's pipeline execution boundary](../openmetadata/SKILL.md#pipeline-execution-boundary)). After a step is done,
 `load_chain.py` publishes its latest Bookkeeping run as the target Pipeline's status (`rules catalog status --bookkeeping-run`)
-when the catalog's address and token are in the private repo-root `.env`; `--catalog-status` does it for every step already done.
+when the catalog's address and token are in its private file (`OPENMETADATA_ENV_FILE`, else
+`~/.config/edgartools/openmetadata.env`, else the checkout's `.env`); `--catalog-status` does it for every step already done.
 A status that cannot be published (no catalog configured, the endpoint down, the Pipeline not published yet) is a note in the
 chain's state file, never a failed load. Report it with the step: published, or not and why. Initializing the catalog's
 credentials is the openmetadata skill's, never done in a load.
