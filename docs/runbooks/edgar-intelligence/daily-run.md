@@ -72,8 +72,8 @@ Choose concurrency no larger than the tightest CPU, usable-memory,
 database-connection and declared-worker budget, including verification and
 parallelism inside each worker. Choose bundle sizes within the existing supported
 contract bounds. Keep headroom based on observed pressure and shared use. When
-measurements are unavailable but one unit can safely fit, begin with 2 workers
-and conservative bundles, then scale a long load to 8. If even one unit cannot fit or fit is
+measurements are unavailable but one unit can safely fit, begin with the capacity profile's floor of workers
+and conservative bundles, then scale a long load within the profile's range. If even one unit cannot fit or fit is
 unknown, wait/report the missing estimate; do not force it or reject the source.
 
 A slow bundle on a hosted store is waiting on a lock, paying round trips (tens of milliseconds a statement) or computing.

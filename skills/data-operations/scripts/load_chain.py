@@ -296,7 +296,8 @@ def stop(child: subprocess.Popen) -> None:
 
 
 def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: datetime | None = None,
-         reader_url: str | None = None, connections: int = 250, bounds: tuple[int, int] | None = None) -> int:
+         reader_url: str | None = None, connections: int = 250, bounds: tuple[int, int] | None = None,
+         capacity: str = "local") -> int:
     """Watch the loads and start the next ready step whenever a slot is free and the machine is not pressed. One start
     a cycle: the load average lags, so a started step is counted running before the next is judged. Each step runs as
     `load_chain.py --only <step> --workers <n>` (the attempt loop). The workers follow the machine within the capacity's
@@ -319,7 +320,7 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
         workers[name] = count
         began.setdefault(name, clock())
         children[name] = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--only", name,
-                                           "--workers", str(count)], start_new_session=True)
+                                           "--workers", str(count), "--capacity", capacity], start_new_session=True)
 
     while True:
         for name, child in list(children.items()):
@@ -706,7 +707,7 @@ def main() -> int:
         elif args.deadline:
             hour, minute = map(int, args.deadline.split(":"))
             deadline = clock().replace(hour=hour, minute=minute, second=0, microsecond=0)
-        if auto(steps, state, args.slots, deadline=deadline, connections=args.connections, bounds=bounds_for(args.capacity),
+        if auto(steps, state, args.slots, deadline=deadline, connections=args.connections, bounds=bounds_for(args.capacity), capacity=args.capacity,
                 reader_url=load_env(STORES / "reader.env").get("DIAGNOSE_DATABASE_URL") if (STORES / "reader.env").exists() else None):
             return 1
         finish(env, state)

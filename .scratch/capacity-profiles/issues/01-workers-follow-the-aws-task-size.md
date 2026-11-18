@@ -21,11 +21,14 @@ how to get the configuration, the operator chose "Read them from AWS, read-only"
 - [x] A step's workers range comes from the profile: a worker is sized at half a gigabyte and four share a vCPU, so small
   1 to 2, medium 1 to 4, large 1 to 8, and a bigger task more with no code change; the scheduler's rescale, its start
   count and `--workers` all use it (2026-11-18 08:59 ET; `test_a_workers_range_follows_the_tasks_memory_and_vcpus_not_a_fixed_two_to_eight`:
-  `workers_range` did not exist; `test_a_started_step_is_held_to_the_profiles_range`; `rescale` takes the bounds; 68 tests)
+  `workers_range` did not exist; `test_a_started_step_is_held_to_the_profiles_range`; `rescale` takes the bounds; 61 tests)
 - [x] Every run mode holds a step's workers to the capacity, not only `--auto` (`--only <step> --capacity aws-small` once
   started the chain file's 8 workers on a 1 GB task): `clamped` (2026-11-18 09:01 ET; `test_every_run_mode_holds_a_steps_workers_to_the_capacity_not_only_the_scheduler`:
   `clamped` did not exist). The floor is now the profile's, 1, where the fixed range had 2: a 0.5 vCPU, 1 GB task carries
   one or two workers
+- [x] The scheduler passes the capacity to each step it starts, so the step's own `--workers` check uses the same range
+  (2026-11-18 09:03 ET; `test_a_started_step_is_told_the_capacity_it_runs_on_so_its_own_check_uses_the_same_range`: no `--capacity` in the
+  child's command; a `--auto --capacity aws-large` run on a 4 GB machine would have failed its steps at start)
 - [x] The skill and the runbooks say it: data-operations (the workers a step can carry), daily-run "Capacity: the workers
   follow the compute" with the table of profiles (2026-11-18 08:59 ET)
 - [ ] How many steps run at once in AWS is the Map state's `MaxConcurrency`, one in today's state machines: set it with the

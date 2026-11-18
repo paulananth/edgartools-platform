@@ -635,6 +635,17 @@ def test_a_started_step_is_held_to_the_profiles_range(monkeypatch, tmp_path):
     assert started[0] == ("a1", 2)
 
 
+def test_a_started_step_is_told_the_capacity_it_runs_on_so_its_own_check_uses_the_same_range(monkeypatch, tmp_path):
+    commands = []
+    steps = [_step("a1", "A", minutes=600)]
+    state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=10)
+    original = chain.subprocess.Popen
+    monkeypatch.setattr(chain.subprocess, "Popen", lambda command, **kw: commands.append(command) or original(command, **kw))
+    monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: "ok")
+    chain.auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=20), bounds=(1, 4), capacity="aws-medium")
+    assert commands[0][commands[0].index("--capacity") + 1] == "aws-medium"
+
+
 def test_every_run_mode_holds_a_steps_workers_to_the_capacity_not_only_the_scheduler():
     steps = [{"name": "gleif", "workers": 8}, {"name": "small", "workers": 2}, {"name": "tiny", "workers": 1}]
     assert [s["workers"] for s in chain.clamped(steps, (1, 4))] == [4, 2, 1]  # a medium task starts GLEIF at 4
