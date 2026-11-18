@@ -116,3 +116,23 @@ without transaction consistency and can cost more. `$CHANGES` retains seven
 days. Require explicit approval for table removal, restart (full re-snapshot
 and loss of change-feed history), or mirror drop. Grant consumers read access
 only when requested; the mirror owns target writes.
+
+## After the first load: mirror only the exposed subset
+
+The mirror is created after the stores' first load, and again after a reset, for the tables of the repository's exposure list and
+no others (`rules/exposure.yaml`; [Final exposable tables](FINAL-TABLES.md) owns the scope). A listed table must exist before a
+mirror can take it, so the order is the load, then:
+
+1. Resolve the list against the loaded stores, read-only, with the exposure tooling ([its README](scripts/exposure/README.md):
+   `generate`, then `check`). It refuses a listed table or column the stores lack.
+2. Follow [Readiness before changes](#readiness-before-changes) and [Creation and verification](#creation-and-verification) on exactly
+   those tables: explicit `postgres_tables`, `postgres_schemas => NULL`, `target_table_type => 'ICEBERG'`
+   ([the single-database qualification](SINGLE-DATABASE-ICEBERG.md) pins the rest).
+
+**The source-consolidation gate comes first.** One mirror reads one source database and creates one target database, and the stores
+are separate databases. Until the listed tables share one source database, qualified and approved as the qualification requires,
+no mirror is created: never one mirror per store, never a target of several databases, and nothing consolidated as a side effect of
+a load. The create plan names the single source database and says so.
+
+A reset of the stores drops and recreates the databases a mirror reads, which breaks that mirror: plan its drop or restart, with its
+own approval, before the reset, and create it again from the list after the next load.
