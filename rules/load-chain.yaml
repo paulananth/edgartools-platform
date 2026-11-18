@@ -13,6 +13,14 @@
 # those are done); N N-PORT silver (no master first: a row lands with its link key and `--finish` fills the ids);
 # O ownership; D the other silver-only sources; F company-facts.
 version: 1
+# The compute a load runs on, as vCPUs and gigabytes, and so how many workers a step can carry (load_chain.py
+# `--capacity <name>`; `local` is this machine, measured). The AWS sizes are the ECS tasks of the production state
+# machines (edgartools-prod-small, -medium, -large), read from AWS; a bigger task is a new line here, and its workers
+# follow with no change to the code.
+capacity:
+  aws-small: {vcpu: 0.5, memory_gb: 1}
+  aws-medium: {vcpu: 1, memory_gb: 4}
+  aws-large: {vcpu: 2, memory_gb: 8}
 # What a step takes unless it says otherwise.
 defaults: {workers: 2, bundles: 1}
 steps:

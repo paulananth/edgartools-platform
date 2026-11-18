@@ -123,19 +123,19 @@ def test_the_chain_has_eleven_lanes_and_company_facts_is_beside_the_other_silver
     assert {s["lane"] for s in STEPS if s["source"] == "sec.company-facts"} == {"F"}
 
 
-def test_every_step_starts_at_two_workers_and_stays_at_most_eight():
-    """The skill starts a load at 2 workers and scales a long load to 8."""
+def test_no_step_asks_for_more_workers_than_the_largest_capacity_profile_carries():
+    """A smaller profile clamps a step's workers at start (a medium task starts GLEIF at 4); none may exceed the largest."""
+    largest = max(chain.workers_range(**profile)[1] for profile in chain.capacity_profiles().values())
     counts = {step["name"]: step["workers"] for step in STEPS}
-    assert min(counts.values()) == 2, counts
-    assert max(counts.values()) <= 8, counts
+    assert min(counts.values()) >= 1 and max(counts.values()) <= largest, (counts, largest)
 
 
-def test_the_skill_names_eleven_lanes_and_the_two_to_eight_worker_scale():
+def test_the_skill_names_eleven_lanes_and_the_capacity_profiles():
     skill = (ROOT / "skills/data-operations/SKILL.md").read_text()
     runbook = (ROOT / "docs/runbooks/edgar-intelligence/init.md").read_text()
     assert "A P S C L O D F G N Q" in skill and "A P S C L O D F G N Q" in runbook
-    assert "Start `--workers 2`" in skill
-    assert "scales to 8" in skill
+    assert "capacity profile" in skill and "--capacity" in skill
+    assert "from 2 to 8" not in skill and "scales to 8" not in skill
 
 
 def test_a_step_waits_for_what_another_lane_has_done(tmp_path):
@@ -347,14 +347,14 @@ def test_compute_pressure_is_low_ok_or_high_and_relaxes_when_the_run_is_behind()
     assert chain.pressure(load=17.0, cores=8, swap_used=0.2, relaxed=True) == "high"
 
 
-def test_workers_rise_two_four_eight_on_the_longest_chain_first_and_fall_from_the_shortest():
+def test_workers_double_on_the_longest_chain_first_and_halve_on_the_shortest_within_the_profiles_range():
     priority = {"long": 900, "mid": 300, "short": 50}
-    assert chain.rescale({"long": 2, "mid": 2, "short": 2}, priority, "low") == ("long", 4)
-    assert chain.rescale({"long": 8, "mid": 2, "short": 2}, priority, "low") == ("mid", 4)
-    assert chain.rescale({"long": 8, "mid": 8, "short": 8}, priority, "low") is None  # the ceiling is 8
-    assert chain.rescale({"long": 8, "mid": 4, "short": 4}, priority, "high") == ("short", 2)
-    assert chain.rescale({"long": 2, "mid": 2, "short": 2}, priority, "high") is None  # the floor is 2
-    assert chain.rescale({"long": 4, "mid": 4, "short": 4}, priority, "ok") is None
+    assert chain.rescale({"long": 2, "mid": 2, "short": 2}, priority, "low", (2, 8)) == ("long", 4)
+    assert chain.rescale({"long": 8, "mid": 2, "short": 2}, priority, "low", (2, 8)) == ("mid", 4)
+    assert chain.rescale({"long": 8, "mid": 8, "short": 8}, priority, "low", (2, 8)) is None  # the ceiling is the profile's
+    assert chain.rescale({"long": 8, "mid": 4, "short": 4}, priority, "high", (2, 8)) == ("short", 2)
+    assert chain.rescale({"long": 2, "mid": 2, "short": 2}, priority, "high", (2, 8)) is None  # the floor is the profile's
+    assert chain.rescale({"long": 4, "mid": 4, "short": 4}, priority, "ok", (2, 8)) is None
 
 
 def test_a_run_is_behind_when_more_of_the_window_is_used_than_of_the_work_done():
@@ -592,3 +592,62 @@ def test_only_a_chain_loads_own_processes_are_matched_by_command_line():
     assert chain.is_load_process("uv run --no-sync edgar-warehouse load --source gleif --target mastering --capture /c", "gleif", "mastering")
     assert not chain.is_load_process("vim --source gleif --target mastering", "gleif", "mastering")  # not the platform's
     assert not chain.is_load_process("edgar-warehouse load --source gleif --target silver", "gleif", "mastering")
+
+
+def test_a_workers_range_follows_the_tasks_memory_and_vcpus_not_a_fixed_two_to_eight():
+    """A worker is sized at half a gigabyte, and a vCPU carries four workers that wait on the database."""
+    assert chain.workers_range(vcpu=0.5, memory_gb=1) == (1, 2)  # an AWS small task
+    assert chain.workers_range(vcpu=1, memory_gb=4) == (1, 4)  # medium: four vCPU-shares of workers, memory for eight
+    assert chain.workers_range(vcpu=2, memory_gb=8) == (1, 8)  # large
+    assert chain.workers_range(vcpu=16, memory_gb=64) == (1, 64)  # a bigger task goes past eight
+    assert chain.workers_range(vcpu=0.25, memory_gb=0.25) == (1, 1)  # never below one
+
+
+def test_the_chain_file_names_the_aws_task_sizes_the_state_machines_run_on():
+    profiles = chain.capacity_profiles()
+    assert profiles["aws-small"] == {"vcpu": 0.5, "memory_gb": 1}
+    assert profiles["aws-medium"] == {"vcpu": 1, "memory_gb": 4}
+    assert profiles["aws-large"] == {"vcpu": 2, "memory_gb": 8}
+
+
+def test_a_capacity_name_gives_its_bounds_and_the_machine_gives_its_own(monkeypatch):
+    assert chain.bounds_for("aws-large") == (1, 8)
+    assert chain.bounds_for("aws-medium") == (1, 4)
+    monkeypatch.setattr(chain.os, "cpu_count", lambda: 8)
+    monkeypatch.setattr(chain, "physical_gb", lambda: 8.0)
+    assert chain.bounds_for("local") == (1, 8)  # half the machine's memory: 4 GB, 8 workers
+    monkeypatch.setattr(chain, "physical_gb", lambda: 4.0)
+    assert chain.bounds_for("local") == (1, 4)
+    try:
+        chain.bounds_for("aws-huge")
+    except SystemExit as unknown:
+        assert "aws-huge" in str(unknown)
+    else:
+        raise AssertionError("an unknown capacity must be refused")
+
+
+def test_a_started_step_is_held_to_the_profiles_range(monkeypatch, tmp_path):
+    steps = [_step("a1", "A", minutes=600)]
+    steps[0]["workers"] = 8  # the chain file asks for eight; a small task carries two
+    state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=10)
+    monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: "ok")
+    chain.auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=20), bounds=(1, 2))
+    assert started[0] == ("a1", 2)
+
+
+def test_a_started_step_is_told_the_capacity_it_runs_on_so_its_own_check_uses_the_same_range(monkeypatch, tmp_path):
+    commands = []
+    steps = [_step("a1", "A", minutes=600)]
+    state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=10)
+    original = chain.subprocess.Popen
+    monkeypatch.setattr(chain.subprocess, "Popen", lambda command, **kw: commands.append(command) or original(command, **kw))
+    monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: "ok")
+    chain.auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=20), bounds=(1, 4), capacity="aws-medium")
+    assert commands[0][commands[0].index("--capacity") + 1] == "aws-medium"
+
+
+def test_every_run_mode_holds_a_steps_workers_to_the_capacity_not_only_the_scheduler():
+    steps = [{"name": "gleif", "workers": 8}, {"name": "small", "workers": 2}, {"name": "tiny", "workers": 1}]
+    assert [s["workers"] for s in chain.clamped(steps, (1, 4))] == [4, 2, 1]  # a medium task starts GLEIF at 4
+    assert [s["workers"] for s in chain.clamped(steps, (2, 8))] == [8, 2, 2]  # a floor raises the lowest
+    assert steps[0]["workers"] == 8  # the chain file's own steps are not changed
