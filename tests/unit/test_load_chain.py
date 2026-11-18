@@ -441,3 +441,48 @@ def test_workers_fall_while_the_database_is_locking_even_when_the_machine_has_ro
     chain.auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=45), reader_url="x")
     assert started[:2] == [("a1", 8), ("b1", 8)]
     assert ("b1", 4) in started  # the shortest chain halved while the store was locking, with the machine at `low`
+
+
+STATE = """11-18 06:33:30 ET a1 attempt 1 start
+11-18 06:43:30 ET a1 done: Done
+11-18 06:43:31 ET a2 attempt 1 start
+11-18 07:13:31 ET a2 attempt 1 stopped rc=1: x
+11-18 07:13:32 ET a2 attempt 2 start
+11-18 07:23:31 ET a2 done: Done
+"""
+
+
+def test_a_steps_measured_time_runs_from_its_first_start_to_its_done_line():
+    assert chain.measured(STATE) == {"a1": 10.0, "a2": 40.0}
+
+
+def test_a_step_not_done_is_estimated_from_how_fast_the_done_ones_ran_against_their_bounds():
+    steps = [_step("a1", "A", minutes=100), _step("a2", "A", minutes=200), _step("b1", "B", minutes=400)]
+    estimate = chain.estimates(steps, {"a1": 10.0, "a2": 40.0})
+    assert estimate["a1"] == 10.0 and estimate["a2"] == 40.0  # what ran
+    assert estimate["b1"] == pytest.approx(400 * 0.15)  # the median of 10/100 and 40/200 is 0.15 of the bound
+    assert chain.estimates(steps, {})["b1"] == 400  # nothing measured: the bound
+
+
+def test_the_projected_finish_is_the_longest_chain_left_less_what_a_running_step_has_done():
+    steps = [_step("a1", "A"), _step("a2", "A"), _step("b1", "B")]
+    estimate = {"a1": 10.0, "a2": 40.0, "b1": 100.0}
+    assert chain.remaining(steps, done=set(), running={}, estimate=estimate) == 100.0  # b1 alone is longer than a1+a2
+    assert chain.remaining(steps, done={"a1"}, running={"b1": 70.0}, estimate=estimate) == 40.0  # b1 has 30 left, a2 40
+    assert chain.remaining(steps, done={"a1", "a2", "b1"}, running={}, estimate=estimate) == 0.0
+    # b1 is 150 minutes in against an estimate of 100 and a bound of 400 (the `_step` default is 60: give it its own)
+    steps[2]["minutes"] = 400
+    assert chain.remaining(steps, done={"a1", "a2"}, running={"b1": 150.0}, estimate=estimate) == 250.0  # its bound, less used
+
+
+def test_priority_uses_the_measured_time_when_it_is_given():
+    steps = [_step("short_bound", "A", minutes=10), _step("long_bound", "B", minutes=500)]
+    assert chain.chain_length(steps)["long_bound"] == 500
+    assert chain.chain_length(steps, {"short_bound": 300.0, "long_bound": 20.0}) == {"short_bound": 300.0, "long_bound": 20.0}
+
+
+def test_room_to_scale_up_needs_connections_below_the_target_as_well_as_a_machine_with_room():
+    assert chain.room("low", connections=40, target=250) == "low"
+    assert chain.room("low", connections=250, target=250) == "ok"  # the target is used: more workers add nothing
+    assert chain.room("high", connections=10, target=250) == "high"
+    assert chain.room("ok", connections=10, target=250) == "ok"

@@ -25,6 +25,7 @@ import os
 import re
 import shlex
 import signal
+import statistics
 import subprocess
 import sys
 import time
@@ -82,14 +83,14 @@ def blocked(steps: list[dict], failed: set[str]) -> set[str]:
         stuck |= more
 
 
-def chain_length(steps: list[dict]) -> dict[str, int]:
-    """Each step's own `minutes` plus the longest chain of steps that must follow it. `minutes` bounds one attempt, so
-    this is a proxy for how long the steps behind a step wait, which is what starting the long chains first is for."""
+def chain_length(steps: list[dict], minutes: dict[str, float] | None = None) -> dict[str, float]:
+    """Each step's time plus the longest chain of steps that must follow it: its measured or estimated minutes when
+    given, else its `minutes` (a bound on one attempt, so only a proxy). Starting the long chains first is its use."""
     after: dict[str, list[str]] = {step["name"]: [] for step in steps}
     for name, before in needs(steps).items():
         for earlier in before:
             after[earlier].append(name)
-    minutes, memo, walking = {s["name"]: s["minutes"] for s in steps}, {}, set()
+    minutes, memo, walking = minutes or {s["name"]: s["minutes"] for s in steps}, {}, set()
 
     def total(name: str) -> int:
         if name in walking:  # a cycle of waits: counted once, and `auto` stops on it
@@ -103,13 +104,52 @@ def chain_length(steps: list[dict]) -> dict[str, int]:
     return {name: total(name) for name in minutes}
 
 
+def measured(text: str) -> dict[str, float]:
+    """Each done step's minutes, from its first `attempt 1 start` to its `done:` line in the chain's state file."""
+    start, took = {}, {}
+    for found in re.finditer(r"^(\d\d-\d\d \d\d:\d\d:\d\d) ET (\S+) (attempt \d+ start|done:)", text, re.M):
+        when = datetime.strptime(found.group(1), "%m-%d %H:%M:%S")
+        name = found.group(2)
+        if found.group(3).startswith("attempt"):
+            start.setdefault(name, when)
+        elif name in start and name not in took:
+            took[name] = (when - start[name]).total_seconds() / 60 % 1440
+    return took
+
+
+def estimates(steps: list[dict], took: dict[str, float]) -> dict[str, float]:
+    """Each step's minutes: what it took when done, else its bound times the median share of its bound the done steps
+    used (the bound itself while nothing has run). An estimate, labelled so wherever it is shown."""
+    ratios = [took[s["name"]] / s["minutes"] for s in steps if s["name"] in took and s["minutes"]]
+    share = statistics.median(ratios) if ratios else 1.0
+    return {s["name"]: took.get(s["name"], s["minutes"] * share) for s in steps}
+
+
+def remaining(steps: list[dict], done: set[str], running: dict[str, float], estimate: dict[str, float]) -> float:
+    """The minutes left on the longest chain of steps not yet done. A running step counts what it has not yet used of its
+    estimate (`running` gives each one's minutes so far); one that has outrun its estimate has disproved it, so its
+    bound is all that is left to count and the figure is then an upper bound."""
+    def left(step: dict) -> float:
+        name, used = step["name"], running.get(step["name"], 0.0)
+        return max((estimate[name] if used < estimate[name] else step["minutes"]) - used, 0.0)
+
+    cost = {s["name"]: 0.0 if s["name"] in done else left(s) for s in steps}
+    return max(chain_length(steps, cost).values(), default=0.0)
+
+
+def room(level: str, connections: int, target: int) -> str:
+    """Room to add workers needs the database's connections below the target as well as a machine with room: at the
+    target, more workers add nothing the database was asked to carry."""
+    return "ok" if level == "low" and connections >= target else level
+
+
 def ready(steps: list[dict], done: set[str], running: set[str], failed: set[str], free: int,
-          busy: frozenset | set = frozenset()) -> list[str]:
+          busy: frozenset | set = frozenset(), estimate: dict[str, float] | None = None) -> list[str]:
     """The steps to start now: each follows only done steps, is not blocked by a failure, and does not share its source
     and target with a load already running (two loads of one pair write the same outputs). The longest chain first (see
     `chain_length`); at most `free`."""
     follows, stuck = needs(steps), blocked(steps, failed)
-    length = chain_length(steps)
+    length = chain_length(steps, estimate)
     taken = set(busy) | {(s["source"], s["target"]) for s in steps if s["name"] in running}
     chosen: list[dict] = []
     for step in sorted(steps, key=lambda s: -length[s["name"]]):
@@ -219,7 +259,7 @@ def stop(child: subprocess.Popen) -> None:
 
 
 def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: datetime | None = None,
-         reader_url: str | None = None) -> int:
+         reader_url: str | None = None, connections: int = 250) -> int:
     """Watch the loads and start the next ready step whenever a slot is free and the machine is not pressed. One start
     a cycle: the load average lags, so a started step is counted running before the next is judged. Each step runs as
     `load_chain.py --only <step> --workers <n>` (the attempt loop). The workers follow the machine, 2 to 8: with room
@@ -233,11 +273,12 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
     workers: dict[str, int] = {}
     failed: set[str] = set()
     by_name = {step["name"]: step for step in steps}
-    length, started = chain_length(steps), clock()
+    started, cycle, began = clock(), 0, {}
     total = sum(step["minutes"] for step in steps)
 
     def spawn(name: str, count: int) -> None:
         workers[name] = count
+        began.setdefault(name, clock())
         children[name] = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--only", name,
                                            "--workers", str(count)], start_new_session=True)
 
@@ -264,9 +305,21 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
             note(f"database pressed: {reading['lock_waiters']} waiting on locks (longest {reading['longest_wait']:.0f} s), "
                  f"{reading['connections']} of {reading['max_connections']} connections", state)
         level = worst(machine_pressure(relaxed=slow), database)
+        if reading:
+            level = room(level, reading["connections"], connections)
+        estimate = estimates(steps, measured(state.read_text()) if state.exists() else {})
+        length = chain_length(steps, estimate)
+        cycle += 1
+        if cycle % 10 == 1:
+            minutes_in = {n: (clock() - began.get(n, clock())).total_seconds() / 60 for n in children}
+            left = remaining(steps, done, minutes_in, estimate)
+            ends = clock() + timedelta(minutes=left)
+            note(f"projected end {ends:%H:%M} ET (an estimate from the {len(measured(state.read_text()) if state.exists() else {})} "
+                 f"steps done){f' against the deadline {deadline:%H:%M} ET' if deadline else ''}; "
+                 f"{reading['connections'] if reading else '?'} of {connections} target connections in use", state)
         busy = external_loads()
         free = slots - max(len(children), len(busy))
-        starts = ready(steps, done, set(children), failed, 1, busy) if free > 0 and level != "high" else []
+        starts = ready(steps, done, set(children), failed, 1, busy, estimate) if free > 0 and level != "high" else []
         for name in starts:
             count = by_name[name].get("workers", MIN_WORKERS)
             note(f"scheduler starts {name} at {count} workers", state)
@@ -379,6 +432,8 @@ def main() -> int:
     parser.add_argument("--only")
     parser.add_argument("--lane")
     parser.add_argument("--workers", type=int, help="with --only: the step's workers, 2 to 8, instead of the chain file's")
+    parser.add_argument("--connections", type=int, default=250,
+                        help="with --auto: the database connections to aim for; workers rise until they are used")
     parser.add_argument("--deadline", help="with --auto: HH:MM ET today, when every step this started is stopped")
     parser.add_argument("--hours", type=float, help="with --auto: a deadline this many hours from now")
     parser.add_argument("--auto", action="store_true", help="watch the loads and start each step when its lane is free")
@@ -419,7 +474,7 @@ def main() -> int:
         elif args.deadline:
             hour, minute = map(int, args.deadline.split(":"))
             deadline = clock().replace(hour=hour, minute=minute, second=0, microsecond=0)
-        if auto(steps, state, args.slots, deadline=deadline,
+        if auto(steps, state, args.slots, deadline=deadline, connections=args.connections,
                 reader_url=load_env(STORES / "reader.env").get("DIAGNOSE_DATABASE_URL") if (STORES / "reader.env").exists() else None):
             return 1
         finish(env, state)

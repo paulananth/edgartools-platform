@@ -92,7 +92,12 @@ headroom (a load average under one and a half times the cores, swap under three 
 less than four fifths of its connections are in use), and it starts one step a
 cycle, since the load average lags. It moves each running step's workers from 2 to 8 by the readings: the step with the
 longest chain behind it doubles when there is room, and the step with the shortest halves when the machine or the
-database is pressed, by stopping its load and starting it again (a load resumes where it stopped). With `--hours H` or
+database is pressed, by stopping its load and starting it again (a load resumes where it stopped). Priorities and the projected end use each step's measured minutes (its first start to its `done` line) where it has run, and
+an estimate where it has not: its bound times the share of its bound the done steps used. A running step that outruns its
+estimate has disproved it, and the projection then counts its bound, so it is an upper bound, never a promise. The
+scheduler aims for `--connections N` database connections (250 by default): workers rise while fewer are in use and the
+machine has room, and it says when the machine, not the database, is the limit; to use more connections, run the loaders
+on more compute (production runs them on AWS). With `--hours H` or
 `--deadline HH:MM ET` the run is held to a strict deadline: a run behind its schedule is allowed twice the cores in load, and
 at the deadline every step it started is stopped and it names what is left. A step that uses up its attempts blocks its lane and whatever waits for it; the
 rest carry on, and the scheduler stops, naming what cannot start, when nothing else can. Every step runs as
