@@ -204,3 +204,15 @@ last build, follows Form ADV and ownership. Form ADV follows the Company registr
 ownership follows SEC Company, and ownership's ticker symbols follow OpenFIGI, 13F and N-PORT securities. OpenFIGI,
 13F securities and N-PORT security each prefer the others: either order. SEC persons, the silver-only sources and each
 quarter's N-CEN registrants and advisers have nothing to follow, so they start at once.
+
+## Mirror the final tables
+
+After the load (and `--finish`), the Snowflake mirror of the final tables is created from the repository's exposure list, which
+selects a subset of the stores' tables (`rules/exposure.yaml`; the silver and MDM final outputs, not the stage, control or
+reading tables). It is never created for a schema or for every table, and never before the load: a listed table must exist.
+The procedure, its read-only checks and its approvals are
+[the data-platform skill's hosted mirroring guide](../../../skills/data-platform/HOSTED-MIRRORING.md#after-the-first-load-mirror-only-the-exposed-subset).
+Done when the mirror lists exactly the configured tables, each replicating, with none missing or unexpected.
+
+A store **reset** (step 2) drops the databases a mirror reads: say so first, and plan the mirror's drop or restart with its own
+approval, then create it again from the list after the next load.
