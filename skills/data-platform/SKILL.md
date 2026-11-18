@@ -36,6 +36,9 @@ it against the seven, and drop what adds no value:
 | Over-production | Building a feature, a target or a check before a source needs it | Build only what the step in hand needs |
 | Defects | Guessed times, unchecked limits, a skill word CI refuses: rework | Read the clock; check bounds first; run the checks the change can affect |
 
+**Find the root cause** of every surprise, failure and disagreement of two readings before fixing or reporting it, by the
+[five whys](ROOT-CAUSE.md): silently, answered from evidence, reported as a conclusion and never as a chain.
+
 **Carry a proof forward** instead of running it again: when and how is in
 [mdm-engineering](../mdm-engineering/SKILL.md#choose-the-cheapest-proof),
 "Choose the cheapest proof", its last row.

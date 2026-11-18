@@ -276,6 +276,11 @@ steps:
     facts:
       publication_count: "3428477"
     minutes: 240
+    # Measured on the hosted load: each worker held 324 to 421 MB and used 15 to 20% of a core, waiting on round trips to
+    # the database (one session of 25 working, no lock waiters). Sixteen workers would hold about 6 GB and use about 3 cores:
+    # more than this machine (8 GB) or a 2 vCPU task carries, so the compute holds the workers at its range. Raise them on a
+    # task with the memory and vCPUs, and read the effect from `load_chain.py --status`.
+    worker_gb: 0.4
     workers: 8
     attempts: 40
   - name: adv-custodians-06

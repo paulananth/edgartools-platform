@@ -175,11 +175,11 @@ WORKER_GB = 0.5  # the memory a worker is sized for
 WORKERS_PER_VCPU = 4  # a worker waits on the database much of the time, so a vCPU carries several
 
 
-def workers_range(vcpu: float, memory_gb: float) -> tuple[int, int]:
-    """The workers a task can carry, from what it has: its memory in worker-sized shares, at most four to a vCPU, never
-    fewer than one. The range follows the compute (a 1 vCPU, 4 GB task carries up to 4; 2 vCPU, 8 GB up to 8), so it is
-    the configuration's, never a fixed two to eight."""
-    return 1, max(1, min(int(memory_gb // WORKER_GB), int(vcpu * WORKERS_PER_VCPU)))
+def workers_range(vcpu: float, memory_gb: float, worker_gb: float = WORKER_GB) -> tuple[int, int]:
+    """The workers a task can carry, from what it has: its memory in worker-sized shares (`worker_gb`, half a gigabyte
+    unless a step has been measured smaller), at most four to a vCPU, never fewer than one. The range follows the compute
+    (a 1 vCPU, 4 GB task carries up to 4; 2 vCPU, 8 GB up to 8), so it is the configuration's, never a fixed two to eight."""
+    return 1, max(1, min(int(memory_gb // worker_gb), int(vcpu * WORKERS_PER_VCPU)))
 
 
 def capacity_profiles(path: Path = ROOT / "rules/load-chain.yaml") -> dict[str, dict]:
@@ -191,15 +191,20 @@ def physical_gb() -> float:
     return os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") / 2**30
 
 
-def bounds_for(name: str) -> tuple[int, int]:
-    """The workers range of a capacity: a profile of the chain file, or `local`, this machine measured (half its memory,
-    the rest being the operator's other work)."""
+def capacity_of(name: str) -> tuple[float, float]:
+    """The vCPUs and gigabytes of a capacity: a profile of the chain file, or `local`, this machine measured (half its
+    memory, the rest being the operator's other work)."""
     if name == "local":
-        return workers_range(os.cpu_count() or 1, physical_gb() / 2)
+        return os.cpu_count() or 1, physical_gb() / 2
     profiles = capacity_profiles()
     if name not in profiles:
         raise SystemExit(f"No capacity named {name}: local or {', '.join(sorted(profiles))}")
-    return workers_range(**profiles[name])
+    return profiles[name]["vcpu"], profiles[name]["memory_gb"]
+
+
+def bounds_for(name: str, worker_gb: float = WORKER_GB) -> tuple[int, int]:
+    """The workers range of a capacity, for a worker of `worker_gb`."""
+    return workers_range(*capacity_of(name), worker_gb)
 
 
 def pressure(load: float, cores: int, swap_used: float | None, relaxed: bool = False) -> str:
@@ -222,10 +227,16 @@ def machine_pressure(relaxed: bool = False) -> str:
     return pressure(os.getloadavg()[0], os.cpu_count() or 1, swap_fraction(swap), relaxed)
 
 
-def clamped(steps: list[dict], bounds: tuple[int, int]) -> list[dict]:
+def clamped(steps: list[dict], bounds: tuple[int, int] | str, capacity: tuple[float, float] | None = None) -> list[dict]:
     """The steps with each one's workers held to the capacity's range, whatever the run mode: the chain file asks for
-    what a step wants, the compute says what a task carries."""
-    return [{**step, "workers": min(max(step["workers"], bounds[0]), bounds[1])} for step in steps]
+    what a step wants, the compute says what a task carries. Given a capacity name, each step's range uses its own
+    measured `worker_gb` where the chain file has one (`capacity` overrides the named compute, for a test)."""
+    held = []
+    for step in steps:
+        low, top = bounds if isinstance(bounds, tuple) else workers_range(
+            *(capacity or capacity_of(bounds)), step.get("worker_gb", WORKER_GB))
+        held.append({**step, "workers": min(max(step["workers"], low), top)})
+    return held
 
 
 def rescale(workers: dict[str, int], priority: dict[str, int], level: str, bounds: tuple[int, int]) -> tuple[str, int] | None:
@@ -501,22 +512,51 @@ def is_load_process(args: str, source: str, target: str) -> bool:
         re.search(rf"--source {re.escape(source)} --target {re.escape(target)}( |$)", args))
 
 
+def load_pids(listing: str, source: str, target: str) -> dict[int, float]:
+    """The CPU seconds of every process of the load of one source and target: its driver and the workers it started,
+    found by parentage (a spawned worker's command line names no source). `listing` is `ps -Ao pid,ppid,time,rss,args`."""
+    rows = {}
+    for line in listing.splitlines():
+        parts = line.split(None, 4)
+        if len(parts) == 5 and parts[0].isdigit():
+            rows[int(parts[0])] = (int(parts[1]), cpu_seconds(parts[2]), parts[4])
+    found = {pid for pid, (_, _, args) in rows.items() if is_load_process(args, source, target)}
+    grown = True
+    while grown:
+        grown = False
+        for pid, (parent, _, _) in rows.items():
+            if pid not in found and parent in found:
+                found.add(pid)
+                grown = True
+    return {pid: rows[pid][1] for pid in sorted(found)}
+
+
+def load_workers(listing: str, source: str, target: str) -> int | None:
+    """The `--workers` the running load of one source and target was started with, from its driver's command line."""
+    for line in listing.splitlines():
+        parts = line.split(None, 4)
+        if len(parts) == 5 and re.search(r"edgar[-_]warehouse load ", parts[4]) and is_load_process(parts[4], source, target):
+            found = re.search(r"--workers (\d+)", parts[4])
+            return int(found.group(1)) if found else None
+    return None
+
+
 def process_use(source: str, target: str) -> tuple[dict[int, float], float]:
     """Each process's CPU seconds so far, by pid, and the memory in MB, of the load running one source and target (its
-    driver and workers); two readings give the CPU percent."""
-    listing = subprocess.run(["ps", "-Ao", "pid,time,rss,args"], check=False, capture_output=True, text=True).stdout
-    seconds: dict[int, float] = {}
+    driver and the workers it started); two readings give the CPU percent."""
+    listing = subprocess.run(["ps", "-Ao", "pid,ppid,time,rss,args"], check=False, capture_output=True, text=True).stdout
+    seconds = load_pids(listing, source, target)
     memory = 0.0
-    for line in listing.splitlines():
-        parts = line.split(None, 3)
-        if len(parts) == 4 and is_load_process(parts[3], source, target):
-            pid, used, rss = parts[:3]
-            seconds[int(pid)] = cpu_seconds(used)
-            footprint = subprocess.run(["footprint", "-p", pid], check=False, capture_output=True, text=True).stdout \
-                if sys.platform == "darwin" else ""
-            sized = re.search(r"Footprint: ([\d.]+) (KB|MB|GB)", footprint)
-            memory += float(sized.group(1)) * {"KB": 1 / 1024, "MB": 1, "GB": 1024}[sized.group(2)] if sized else int(rss) / 1024
+    for pid in seconds:
+        footprint = subprocess.run(["footprint", "-p", str(pid)], check=False, capture_output=True, text=True).stdout \
+            if sys.platform == "darwin" else ""
+        sized = re.search(r"Footprint: ([\d.]+) (KB|MB|GB)", footprint)
+        rss = subprocess.run(["ps", "-o", "rss=", "-p", str(pid)], check=False, capture_output=True, text=True).stdout.strip()
+        memory += float(sized.group(1)) * {"KB": 1 / 1024, "MB": 1, "GB": 1024}[sized.group(2)] if sized else int(rss or 0) / 1024
     return seconds, memory
+
+
+WRITES_NOTE = "rows written a minute are counted when a transaction commits, so a long transaction shows none until it ends"
 
 
 def status(steps: list[dict], state: Path, reader_url: str | None, sample: int = 20) -> list[str]:
@@ -538,7 +578,7 @@ def status(steps: list[dict], state: Path, reader_url: str | None, sample: int =
     sessions = database_sessions(reader_url) if reader_url else {}
     lines = [f"{clock():%H:%M} ET: {len(running)} running, {len(done & {s['name'] for s in steps})} of {len(steps)} done; "
              f"database writes a minute: " + (", ".join(f"{k} {v:,.0f}" for k, v in rate.items() if v) or "none") +
-             f"; lock waiters {waiters}"]
+             f"; lock waiters {waiters} ({WRITES_NOTE})"]
     lines += [f"  {session_note(name, counts)}" for name, counts in sorted(sessions.items()) if counts["active"] + counts["waiting_on_client"] > 1]
     for step in running:
         began, attempt = started[step["name"]]
@@ -557,7 +597,9 @@ def status(steps: list[dict], state: Path, reader_url: str | None, sample: int =
         warn = outlook(left, elapsed, step["minutes"], attempt, step["attempts"])
         shown = (f"bundles {progress[0]} of {progress[1]}" + (f", about {left:.0f} min left" if left else "")
                  if progress and progress[1] > 1 else "one document, so its log shows no progress; the database does")
-        lines.append(f"  {step['name']} (lane {step['lane']}, attempt {attempt}, {step.get('workers', 2)} workers): {elapsed:.0f} min of {step['minutes']}; "
+        started_with = load_workers(subprocess.run(["ps", "-Ao", "pid,ppid,time,rss,args"], check=False, capture_output=True,
+                                                   text=True).stdout, step["source"], step["target"])
+        lines.append(f"  {step['name']} (lane {step['lane']}, attempt {attempt}, {started_with or step.get('workers', 2)} workers): {elapsed:.0f} min of {step['minutes']}; "
                      f"{shown}; {count} processes, {cpu:.0f}% CPU, {memory:,.0f} MB; wrote {wrote}; log {age:.0f} min old; "
                      + verdict(elapsed, step["minutes"], age, cpu, mine, waiters, sharing) + (f"; {warn}" if warn else ""))
     return lines
@@ -767,7 +809,7 @@ def main() -> int:
     parser.add_argument("--slots", type=int, default=max(2, min(os.cpu_count() or 2, int(
         os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") / 2**30 // 2))), help="loads running at once")
     args = parser.parse_args()
-    steps = clamped(chain_steps(), bounds_for(args.capacity))
+    steps = clamped(chain_steps(), args.capacity)
     names = [step["name"] for step in steps]
     for chosen in (args.start, args.only):
         if chosen and chosen not in names:
@@ -790,7 +832,8 @@ def main() -> int:
     if sys.platform == "darwin":
         subprocess.Popen(["caffeinate", "-dimsu", "-w", str(os.getpid())])
     if args.workers is not None:
-        low, top = bounds_for(args.capacity)
+        wanted = next((step for step in steps if step["name"] == args.only), {})
+        low, top = bounds_for(args.capacity, wanted.get("worker_gb", WORKER_GB))
         if not args.only or not low <= args.workers <= top:
             print(f"--workers goes with --only and is {low} to {top} on {args.capacity}", file=sys.stderr)
             return 2

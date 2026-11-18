@@ -379,7 +379,8 @@ attempt and an error. This aggregate omits unit keys and error text; do not copy
 
 ## Recover mode
 
-Read [RECOVERY.md](RECOVERY.md). `edgar-warehouse bookkeeping resume <run-id>`
+Before resuming a run that stopped, find why it stopped by the [five whys](../data-platform/ROOT-CAUSE.md), silently: resuming
+an unchanged cause only fails again. Read [RECOVERY.md](RECOVERY.md). `edgar-warehouse bookkeeping resume <run-id>`
 reopens the run (exit 3 means it is not complete yet); then run the workers
 again. A completed unit is not checked again. A worker
 reconciles an earlier attempt's effect before writing. Delivery to the Journal

@@ -756,3 +756,49 @@ def test_redaction_hides_every_address_form_and_every_value_named_like_a_secret(
     for leaked in ("pw1", "pw2", "pw3", "pw4", "abc123", "k-5", "s6", "h.invalid", "h2.invalid", "h3.invalid", "z.invalid", "u:", "b@c"):
         assert leaked not in hidden, (leaked, hidden)
     assert "ValueError" in hidden and "<addr>" in hidden and "<hidden>" in hidden
+
+
+PS = """  100     1 0:10.00  50000 uv run --no-sync edgar-warehouse load --source gleif --target mastering --capture /c
+  101   100 14:00.00 80000 /x/python /x/edgar_warehouse/driver.py
+  102   101 3:00.00  90000 /x/python -c from edgar_warehouse.cli import main; ... rules run --source gleif --target mastering
+  103   102 15:50.00 40000 /x/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=5)
+  104   102 15:40.00 41000 /x/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=5)
+  200     1 9:00.00  60000 /x/python -c from edgar_warehouse.cli import main; ... rules run --source other --target silver
+  201   200 5:00.00  60000 /x/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=5)
+"""
+
+
+def test_a_loads_processes_include_the_workers_it_started_whose_command_lines_name_no_source():
+    pids = chain.load_pids(PS, "gleif", "mastering")
+    assert sorted(pids) == [100, 101, 102, 103, 104]  # the two spawned workers count; the other load's do not
+    assert chain.load_pids(PS, "other", "silver") == {200: 540.0, 201: 300.0}
+    assert chain.load_pids("", "gleif", "mastering") == {}
+
+
+def test_a_workers_range_can_use_a_steps_measured_memory_not_only_the_default_share():
+    assert chain.workers_range(vcpu=8, memory_gb=4) == (1, 8)  # the default half gigabyte a worker: eight
+    assert chain.workers_range(vcpu=8, memory_gb=4, worker_gb=0.1) == (1, 32)  # measured at 100 MB: four to a vCPU, 32
+    steps = [{"name": "gleif", "workers": 16, "worker_gb": 0.1}, {"name": "plain", "workers": 16}]
+    held = chain.clamped(steps, "local", capacity=(8, 4.0))
+    assert [s["workers"] for s in held] == [16, 8]  # GLEIF keeps its 16; a step with no measure is held to eight
+    assert [s["workers"] for s in chain.clamped(steps, (1, 4))] == [4, 4]  # an explicit range still holds every step
+
+
+def test_the_status_header_says_writes_are_counted_at_commit():
+    assert "counted when a transaction commits" in chain.WRITES_NOTE
+
+
+def test_the_workers_a_load_runs_with_are_read_from_its_command_line_not_the_chain_file():
+    assert chain.load_workers(PS.replace("--capture /c", "--capture /c --workers 8"), "gleif", "mastering") == 8
+    assert chain.load_workers(PS, "gleif", "mastering") is None  # no --workers flag on that line
+    assert chain.load_workers(PS, "none", "mastering") is None
+
+
+def test_the_skills_that_operate_and_recover_loads_point_to_the_one_root_cause_method():
+    method = ROOT / "skills/data-platform/ROOT-CAUSE.md"
+    assert method.exists()
+    text = method.read_text()
+    for needed in ("Doubt the instrument first", "answer each why from evidence", "Four lines at most", "never the chain"):
+        assert needed.lower() in text.lower(), needed
+    for skill in ("data-platform", "data-operations", "bookkeeping"):
+        assert "ROOT-CAUSE.md" in (ROOT / f"skills/{skill}/SKILL.md").read_text(), skill  # linked, never copied
