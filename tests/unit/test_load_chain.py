@@ -1189,6 +1189,31 @@ def test_the_memory_edges_of_pressure():
     assert chain.pressure(13.0, 8, 0.95, relaxed=True, memory_free=0.5) == "ok"  # behind: the relaxed load limit still holds
 
 
+def test_a_running_step_is_moved_at_most_once_in_ten_minutes_however_the_pressure_swings(monkeypatch, tmp_path):
+    """Each move stops the step's load and starts it again, abandoning the bundles in flight and paying a start: the second
+    hosted load moved IPO between 1 and 2 workers five times in twenty minutes as the load average crossed a line."""
+    steps = [_step("a1", "A", minutes=600)]
+    steps[0]["workers"] = 1
+    state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=1, cycles=25)
+    swings = iter(["low", "high"] * 40)
+    monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: next(swings))
+    _run_auto(steps, state, slots=2)
+    assert len(started) - 1 <= 4  # a raise, its shedding the next minute, and the same again ten minutes later: not a move a minute
+    assert len(started) - 1 >= 1  # and a step is still moved when the machine says so
+
+
+def test_a_pressed_machine_sheds_the_step_with_the_shortest_chain_even_when_it_moved_lately(monkeypatch, tmp_path):
+    steps = [_step("long", "A", minutes=600), _step("short", "B", minutes=60)]
+    for step in steps:
+        step["workers"] = 8
+    state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=5, cycles=6)
+    levels = iter(["ok", "ok", "high", "high", "high", "high"])
+    monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: next(levels, "high"))
+    _run_auto(steps, state, slots=2)
+    moves = [move for move in started[2:]]
+    assert moves[:2] == [("short", 4), ("short", 2)]  # the second shed lands on the same step: its last move does not shield it
+
+
 def test_a_higher_priority_step_starts_before_one_with_a_longer_chain_behind_it():
     steps = [_step("long", "A", minutes=500), _step("tail", "A", minutes=500), _step("urgent", "B", minutes=5)]
     steps[2]["priority"] = 1

@@ -193,6 +193,7 @@ def swap_fraction(text: str) -> float | None:
     return float(found.group(2)) / float(found.group(1)) if found and float(found.group(1)) else None
 
 
+MOVE_EVERY = timedelta(minutes=10)  # a step is raised (stopped and started again) at most this often: each move abandons its bundles in flight
 WORKER_GB = 0.5  # the memory a worker is sized for
 WORKERS_PER_VCPU = 4  # a worker waits on the database much of the time, so a vCPU carries several
 
@@ -358,7 +359,7 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
     workers: dict[str, int] = {}
     failed: set[str] = set()
     by_name = {step["name"]: step for step in steps}
-    started, cycle, began, missed = clock(), 0, {}, False
+    started, cycle, began, moved, missed = clock(), 0, {}, {}, False
     total = sum(step["minutes"] for step in steps)
 
     def spawn(name: str, count: int) -> None:
@@ -410,11 +411,15 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
             count = min(max(by_name[name].get("workers", low), low), top)
             note(f"scheduler starts {name} (priority {by_name[name].get('priority', 3)}) at {count} workers", state)
             spawn(name, count)
-        if not starts and (change := rescale(workers, {name: length[name] for name in workers}, level, {name: range_of(name) for name in workers})):
+        # Raising a step waits for it to settle; a pressed machine sheds the step with the shortest chain at once, whenever it last moved
+        settled = set(workers) if level == "high" else {name for name in workers if clock() - moved.get(name, began[name]) >= MOVE_EVERY}
+        if not starts and (change := rescale({n: workers[n] for n in settled}, {n: length[n] for n in settled}, level,
+                                             {n: range_of(n) for n in settled})):
             name, count = change
             note(f"scheduler moves {name} from {workers[name]} to {count} workers ({level} load)", state)
             stop(children[name])
             spawn(name, count)
+            moved[name] = clock()
         if not children and not busy and not ready(steps, done, set(), failed, len(steps)):
             left = sorted(set(by_name) - done)
             blockers = f"{', '.join(sorted(failed))} failed, so " if failed else "no step can follow what it waits for, so "
