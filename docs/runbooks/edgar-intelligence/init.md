@@ -93,7 +93,7 @@ python <data-operations skill>/scripts/load_chain.py --from <step>   # carry on;
 
 **`--auto` is the way to load a store.** It starts the step at the head of every lane whose dependencies are done, longest
 first, while a slot is free (`--slots`, by default half the machine's gigabytes, at most its cores, at least two) and the machine has
-headroom (a load average under one and a half times the cores, swap under three quarters used); it also reads the database as the reader login (a step starts only while fewer than three sessions wait on locks, none for a minute, and
+headroom (a load average under one and a half times the cores, and memory not short: swap over three quarters used counts only while less than a quarter of memory is free, since the system keeps swap long after the load that filled it); it also reads the database as the reader login (a step starts only while fewer than three sessions wait on locks, none for a minute, and
 less than four fifths of its connections are in use), and it starts one step a
 cycle, since the load average lags. It moves each running step's workers within its capacity profile's range (`--capacity`) by the readings: the step with the
 longest chain behind it doubles when there is room, and the step with the shortest halves when the machine or the

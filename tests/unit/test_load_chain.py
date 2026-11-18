@@ -1055,3 +1055,14 @@ def test_lookups_are_refused_beside_a_partial_run_that_would_never_reach_them(mo
     monkeypatch.setattr(sys, "argv", ["load_chain.py", "--lookups", "--lane", "A"])
     assert chain.main() == 2
     assert "--lookups" in capsys.readouterr().err
+
+
+def test_full_swap_with_memory_to_spare_is_not_pressure_and_a_short_memory_is():
+    """Swap used is a stock: macOS keeps it long after the pages that filled it are gone, so it cannot say the machine is pressed
+    now. A scheduler that read it alone started nothing for a load it had just restarted (swap 85%, memory 56% free)."""
+    assert chain.pressure(load=2.0, cores=8, swap_used=0.85, memory_free=0.56) == "low"  # room, so the workers may rise
+    assert chain.pressure(load=2.0, cores=8, swap_used=0.85, memory_free=0.20) == "high"  # swap and little memory
+    assert chain.pressure(load=2.0, cores=8, swap_used=0.10, memory_free=0.05) == "high"  # almost no memory, whatever the swap
+    assert chain.pressure(load=2.0, cores=8, swap_used=0.85, memory_free=None) == "high"  # memory unreadable: the swap rule stands
+    assert chain.memory_free_fraction("System-wide memory free percentage: 56%\n") == 0.56
+    assert chain.memory_free_fraction("nothing here") is None

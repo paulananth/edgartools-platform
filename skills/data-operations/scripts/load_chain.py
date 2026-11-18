@@ -226,14 +226,24 @@ def bounds_for(name: str, worker_gb: float = WORKER_GB) -> tuple[int, int]:
     return workers_range(*capacity_of(name), worker_gb)
 
 
-def pressure(load: float, cores: int, swap_used: float | None, relaxed: bool = False) -> str:
+def memory_free_fraction(text: str) -> float | None:
+    """The share of memory free, from `memory_pressure` (macOS); None when it cannot be read."""
+    found = re.search(r"memory free percentage: (\d+)%", text)
+    return int(found.group(1)) / 100 if found else None
+
+
+def pressure(load: float, cores: int, swap_used: float | None, relaxed: bool = False, memory_free: float | None = None) -> str:
     """How hard the machine is pressed: `high` above one and a half times the cores in load average, or three quarters
-    of swap used (a run behind its deadline is `relaxed` to twice the cores and nine tenths of swap); `low` below three
-    quarters of the cores and half the swap; else `ok`."""
+    of swap used while memory is short (a run behind its deadline is `relaxed` to twice the cores and nine tenths of swap),
+    or under a tenth of memory free; `low` below three quarters of the cores with half the swap or plenty of memory free
+    (four tenths); else `ok`. Swap used is a stock the system keeps long after the load that filled it has gone, so it
+    presses only when memory is short too (or unreadable); the memory free is the reading of now."""
     heavy, swap_limit = (2.0, 0.9) if relaxed else (1.5, 0.75)
-    if load > heavy * cores or (swap_used is not None and swap_used > swap_limit):
+    short = memory_free is None or memory_free < 0.25
+    if load > heavy * cores or (swap_used is not None and swap_used > swap_limit and short) or (memory_free is not None and memory_free < 0.10):
         return "high"
-    return "low" if load < 0.75 * cores and (swap_used is None or swap_used < 0.5) else "ok"
+    roomy = swap_used is None or swap_used < 0.5 or (memory_free is not None and memory_free >= 0.40)
+    return "low" if load < 0.75 * cores and roomy else "ok"
 
 
 def has_headroom(load: float, cores: int, swap_used: float | None, relaxed: bool = False) -> bool:
@@ -243,7 +253,9 @@ def has_headroom(load: float, cores: int, swap_used: float | None, relaxed: bool
 def machine_pressure(relaxed: bool = False) -> str:
     swap = subprocess.run(["sysctl", "-n", "vm.swapusage"], check=False, capture_output=True,
                           text=True).stdout if sys.platform == "darwin" else ""
-    return pressure(os.getloadavg()[0], os.cpu_count() or 1, swap_fraction(swap), relaxed)
+    memory = subprocess.run(["memory_pressure"], check=False, capture_output=True,
+                            text=True).stdout if sys.platform == "darwin" else ""
+    return pressure(os.getloadavg()[0], os.cpu_count() or 1, swap_fraction(swap), relaxed, memory_free_fraction(memory))
 
 
 def clamped(steps: list[dict], name: str, capacity: tuple[float, float] | None = None) -> list[dict]:
