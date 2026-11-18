@@ -3,7 +3,7 @@
 
     python load_chain.py --list               the steps, in order
     python load_chain.py --plan               what each step would load (documents and bundles); writes nothing
-    python load_chain.py                      the whole chain, then the lookups and each silver table's master ids
+    python load_chain.py                      the whole chain, then the links table and each silver table's master ids
     python load_chain.py --from <step>        carry on from a step (a done step costs one call: nothing is loaded twice)
     python load_chain.py --only <step>        one step
     python load_chain.py --lane <name>        the steps of one lane; run several lanes at once (see the chain file)
@@ -324,7 +324,7 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
     cycle, by stopping the step's load and starting it again (a load resumes where it stopped). With a `deadline`, a run
     behind its schedule (more of the window used than of the work done) is allowed twice the cores in load; at the
     deadline every step this started is stopped and the run ends, naming what is left. A step that uses up its attempts
-    blocks what follows it and the rest carry on. Ends when every step is done (then the lookups and the links), when
+    blocks what follows it and the rest carry on. Ends when every step is done (then the links table and the master ids), when
     nothing more can start, or at the deadline."""
     def range_of(name: str) -> tuple[int, int]:
         return bounds or bounds_for(capacity, by_name[name].get("worker_gb", WORKER_GB))
@@ -831,6 +831,9 @@ def main() -> int:
             return 2
     if args.lane and args.lane not in {step["lane"] for step in steps}:
         print(f"No lane named {args.lane}", file=sys.stderr)
+        return 2
+    if args.lookups and (args.only or args.lane or not args.finish and (args.list or args.plan)):
+        print("--lookups goes with --finish (or the whole chain), never a partial run that does not reach the finish", file=sys.stderr)
         return 2
     if args.list:
         for step in steps:

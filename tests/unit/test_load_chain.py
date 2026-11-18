@@ -1,5 +1,6 @@
 """The load chain names every target a store loads, each with the facts its target declares."""
 import importlib.util
+import sys
 from pathlib import Path
 
 import pytest
@@ -859,3 +860,9 @@ def test_a_load_does_not_build_the_name_search_lookups_and_they_are_built_only_w
     chain.finish({}, Path("/dev/null"), lookups=True)
     assert calls[0] == ["mdm", "build-lookups"]  # asked for: built first, then the links and the master ids
     assert ["silver", "links"] in calls
+
+
+def test_lookups_are_refused_beside_a_partial_run_that_would_never_reach_them(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["load_chain.py", "--lookups", "--lane", "A"])
+    assert chain.main() == 2
+    assert "--lookups" in capsys.readouterr().err
