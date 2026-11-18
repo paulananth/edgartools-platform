@@ -605,20 +605,24 @@ def store_id(url: str) -> str:
     return hashlib.sha256(f"{part.hostname}:{part.port}".encode()).hexdigest()[:8]
 
 
-def ensure_store(state: Path, store: str) -> bool:
-    """Make the state file this store's: a file written for another store is set aside (`<file>.<its store>`), so its
-    `done` lines never satisfy a wait the new store has not earned. Returns whether it set a file aside."""
+def ensure_store(state: Path, store: str) -> str:
+    """Make the state file this store's. A file marked for another store is set aside (`<file>.<its store>`), so its `done`
+    lines never satisfy a wait the new store has not earned ("set aside"). A file with lines and no marker belongs to a run
+    that began before markers existed: it is adopted, not set aside, so that run keeps its done lines ("adopted"; the
+    operator checks it is this store's). Else "same" (already this store's) or "fresh" (no file)."""
     marker = re.compile(r"chain store (\w+)$", re.M)
     stamp = f"{datetime.now(ZoneInfo('America/New_York')):%m-%d %H:%M:%S} ET chain store {store}\n"
     text = state.read_text() if state.exists() else ""
     found = marker.findall(text)
     if found and found[-1] == store:
-        return False
-    aside = bool(text)
-    if aside:
-        state.rename(state.with_name(f"{state.name}.{found[-1] if found else 'unmarked'}"))
+        return "same"
+    if text and not found:
+        state.write_text(text + stamp)
+        return "adopted"
+    if text:
+        state.rename(state.with_name(f"{state.name}.{found[-1]}"))
     state.write_text(stamp)
-    return aside
+    return "set aside" if text else "fresh"
 
 
 def retry_is_pointless(previous: str, current: str) -> bool:
@@ -629,6 +633,17 @@ def retry_is_pointless(previous: str, current: str) -> bool:
     return re.sub(r"\d+", "N", previous) == re.sub(r"\d+", "N", current)
 
 
+SECRET_KEY = r"(?:password|passwd|secret|token|api[_-]?key|private[_-]?key|dsn|url|credential)\w*"
+
+
+def redact(text: str) -> str:
+    """Hide every address (`postgres://`, `postgresql+driver://`, `https://`) and the value of any key named like a secret
+    (`password=`, `token:`, `api_key=`, `dsn=`, `url=`), so a log line kept on disk never carries one."""
+    text = re.sub(r"(?:postgres(?:ql)?(?:\+\w+)?|https?)://\S+", "<addr>", text)
+    text = re.sub(rf"(\b{SECRET_KEY}\s*[=:]\s*)(?:'[^']*'|\"[^\"]*\"|\S+)", r"\1<hidden>", text, flags=re.I)
+    return re.sub(r"\bhost=\S+", "host=<hidden>", text)
+
+
 def errors_since(path: Path, offset: int) -> str:
     """What was written to the shared error log after `offset`, with every address hidden: the attempt's own errors,
     kept with its step (the file is shared by every lane and every run)."""
@@ -636,7 +651,7 @@ def errors_since(path: Path, offset: int) -> str:
         return ""
     with path.open("rb") as handle:
         handle.seek(offset)
-        return re.sub(r"(postgres(ql)?(\+\w+)?|https?)://[^ \"'\s]+", "<addr>", handle.read().decode(errors="replace"))
+        return redact(handle.read().decode(errors="replace"))
 
 
 def done_steps(state: Path) -> set[str]:
@@ -674,7 +689,7 @@ def attempt_loop(step: dict, env: dict, state: Path) -> bool:
             return True
         why = [line for line in text.splitlines() if re.search(r"stopped|did not finish|Error", line)]
         note(f"{name} attempt {attempt} stopped rc={code}: "
-             f"{re.sub(r'(postgres(ql)?|https?)://[^ ]+', '<addr>', why[-1])[:200] if why else ''}", state)
+             f"{redact(why[-1])[:200] if why else ''}", state)
         log.rename(log.with_name(log.name + f".attempt-{attempt}"))
         kept = errors_since(errors, offset)
         if kept:
@@ -743,8 +758,11 @@ def main() -> int:
     env = {**os.environ, **load_env(STORES / "worker.env")}
     LOGS.mkdir(parents=True, exist_ok=True)
     if not args.plan and env.get("MDM_DATABASE_URL"):
-        if ensure_store(state, store_id(env["MDM_DATABASE_URL"])):
+        outcome = ensure_store(state, store_id(env["MDM_DATABASE_URL"]))
+        if outcome == "set aside":
             print(f"{state.name} belonged to another store: set aside, this store starts a fresh chain state", flush=True)
+        elif outcome == "adopted":
+            print(f"{state.name} had no store marker: adopted as this store's (check it is, or move it aside)", flush=True)
     if args.plan:
         for step in steps:
             print(f"{step['name']:30} {plan(step, env)}", flush=True)

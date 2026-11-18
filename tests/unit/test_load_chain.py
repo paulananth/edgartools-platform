@@ -656,15 +656,24 @@ def test_every_run_mode_holds_a_steps_workers_to_the_capacity_not_only_the_sched
 def test_a_state_file_from_another_store_is_set_aside_so_its_done_lines_never_satisfy_a_wait(tmp_path):
     state = tmp_path / "chain.log"
     state.write_text("11-15 14:21:31 ET chain store aaaa1111\n11-15 14:21:31 ET company done: Done\n")
-    assert chain.ensure_store(state, "bbbb2222") is True  # a different store: the old lines are archived
+    assert chain.ensure_store(state, "bbbb2222") == "set aside"  # a different store: the old lines are archived
     assert chain.done_steps(state) == set()
     assert state.read_text().endswith("chain store bbbb2222\n")
     assert (tmp_path / "chain.log.aaaa1111").read_text().count("company done") == 1
     state.write_text(state.read_text() + "11-18 06:40:00 ET company done: Done\n")
-    assert chain.ensure_store(state, "bbbb2222") is False  # the same store: nothing is touched
+    assert chain.ensure_store(state, "bbbb2222") == "same"  # the same store: nothing is touched
     assert chain.done_steps(state) == {"company"}
     fresh = tmp_path / "new.log"
-    assert chain.ensure_store(fresh, "bbbb2222") is False and fresh.read_text().endswith("chain store bbbb2222\n")
+    assert chain.ensure_store(fresh, "bbbb2222") == "fresh" and fresh.read_text().endswith("chain store bbbb2222\n")
+
+
+def test_a_state_file_with_lines_and_no_marker_is_adopted_not_set_aside_so_a_run_in_progress_keeps_its_done_lines(tmp_path):
+    state = tmp_path / "chain.log"
+    state.write_text("11-18 06:40:00 ET company done: Done\n11-18 07:00:00 ET person done: Done\n")
+    assert chain.ensure_store(state, "bbbb2222") == "adopted"
+    assert chain.done_steps(state) == {"company", "person"}  # a run started before the marker existed resumes whole
+    assert state.read_text().endswith("chain store bbbb2222\n")
+    assert chain.ensure_store(state, "bbbb2222") == "same"
 
 
 def test_a_store_is_named_by_its_address_without_ever_showing_it():
@@ -699,3 +708,12 @@ def test_the_errors_an_attempt_wrote_to_the_shared_error_log_are_kept_with_that_
 def test_ipo_has_a_window_that_fits_its_bundles():
     ipo = BY_NAME["ipo"]
     assert ipo["minutes"] * ipo["attempts"] >= 300  # 149 bundles at about two minutes each, one at a time
+
+
+def test_redaction_hides_every_address_form_and_every_value_named_like_a_secret():
+    text = ("ValueError: postgresql+psycopg2://u:pw1@h.invalid:5432/mdm and postgres://v:pw2@h2.invalid/x and https://a:b@c.invalid/p; "
+            "host=h.invalid password=pw3 dsn=postgresql://w:pw4@h3.invalid/y token: abc123 api_key='k-5' SECRET=s6 url=http://z.invalid")
+    hidden = chain.redact(text)
+    for leaked in ("pw1", "pw2", "pw3", "pw4", "abc123", "k-5", "s6", "h.invalid", "h2.invalid", "h3.invalid", "z.invalid", "u:", "b@c"):
+        assert leaked not in hidden, (leaked, hidden)
+    assert "ValueError" in hidden and "<addr>" in hidden and "<hidden>" in hidden

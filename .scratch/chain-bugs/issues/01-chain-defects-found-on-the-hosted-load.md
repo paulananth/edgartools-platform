@@ -30,5 +30,13 @@ No new cause appeared in today's run.
 - [ ] `load-errors.log` is never rotated and mixes runs; the load names "its message" without saying which block (the load
   code)
 - [ ] The scheduler (`--auto`) has run only against fakes: run it once on a disposable store before trusting it on a real one
+- [x] A review found address redaction missed `postgresql+psycopg2://` in the attempt note and hid no value named like a secret:
+  one `redact` hides every address form and the value of any key named `password`, `secret`, `token`, `key`, `dsn` or `url`
+  (2026-11-18 09:23 ET; `test_redaction_hides_every_address_form_and_every_value_named_like_a_secret`: `redact` did not exist, and the old
+  pattern left `postgresql+psycopg2://u:pw@h` unchanged)
+- [x] A state file with lines and no marker (the live run's, started before markers existed) is adopted, not set aside, so a run
+  in progress keeps its done lines (2026-11-18 09:23 ET; `test_a_state_file_with_lines_and_no_marker_is_adopted_not_set_aside_so_a_run_in_progress_keeps_its_done_lines`:
+  `ensure_store` would have archived it)
 - [x] Learning → skill: the data-operations skill and the initialize and daily-run runbooks say the state file names its
-  store, a step's errors are kept with it, and an unchanged failure stops (2026-11-18 09:21 ET)
+  store, a step's errors are kept with it, and an unchanged failure stops (2026-11-18 09:23 ET; the skill lints pass: bundle
+  portability, role skills, no tickets in skills)
