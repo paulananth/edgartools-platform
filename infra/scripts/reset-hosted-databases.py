@@ -9,7 +9,7 @@ Uses the owner login's connection (MDM_MIGRATION_DATABASE_URL, the instance's ad
 create databases. The roles stay (they belong to the instance), so no password changes and no login is rotated.
 Each database's owner and CONNECT list are read before it is dropped and put back after, so the runtime, registration
 and any read-only logins reach it as before. Refuses while another session is connected to one of them.
-The stores' schemas come next (docs/runbooks/edgar-intelligence.md, "Initialize a hosted store", step 3). Prints names and sizes only.
+The stores' schemas come next (docs/runbooks/edgar-intelligence/init.md, "Initialize a hosted store", step 3). Prints names and sizes only.
 """
 import argparse
 import os

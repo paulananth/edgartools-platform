@@ -223,7 +223,7 @@ id, state, source and target, so it shows the run with no change. What differs f
   written again as the same file, and the Change Journal skips each batch it recorded as merged. A read or combine
   whose output is written is not done again, by this run or by another target's run over the same content with the same
   rules and worker code.
-- The loader does the run's steps; `--workers` still splits each step (data-operations Resource sizing (Edgar Intelligence runbook)), and bundles still load at once (`--bundles`).
+- The loader does the run's steps; `--workers` still splits each step (data-operations Resource sizing (Edgar Intelligence daily-run runbook)), and bundles still load at once (`--bundles`).
 - A run reads only its own steps. A target that needs what another target read names the same last rules file and reads
   the files itself, with its own `context` (`extract: [{file: ..., context: ...}]`). Per-unit quality results are not published.
 - The grain is no part of a source's processing identity: changing it loads no file again.

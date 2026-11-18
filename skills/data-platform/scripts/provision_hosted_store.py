@@ -8,7 +8,7 @@ The stores folder (default ~/.config/edgartools/hosted/) is authoritative: each 
 own URL there holds, so no login is rotated. The instance's administrator comes from the PostgreSQL service the
 instance's creation saved (~/.pg_service.conf and ~/.pgpass); every URL in the folder then gets the new instance's
 address, and the administrator's URLs its new password. Prints names and counts only, never an address or a password.
-The schemas come next (docs/runbooks/edgar-intelligence.md, "Initialize a hosted store", step 3).
+The schemas come next (docs/runbooks/edgar-intelligence/init.md, "Initialize a hosted store", step 3).
 """
 
 from __future__ import annotations

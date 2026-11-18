@@ -126,6 +126,8 @@ def test_a_url_the_parser_refuses_prints_its_class_never_its_password(tmp_path, 
 def test_a_login_may_connect_and_use_temporary_tables_on_its_database():
     """Revoking PUBLIC takes the default right to temporary tables too; the silver writer stages each load in one."""
     server = _EmptyServer(owner="admin")
-    provision(server, HELD, "admin", confirm=True)
-    grants = " ".join(server.statements)
-    assert "GRANT CONNECT, TEMPORARY ON DATABASE" in grants
+    held = {**HELD, "silver_runtime": ("s-invented", {"silver"})}
+    provision(server, held, "admin", confirm=True)
+    grants = [statement for statement in server.statements if "GRANT CONNECT, TEMPORARY" in statement]
+    assert any("silver_runtime" in statement for statement in grants)
+    assert len(grants) == 4  # rules_agent, rules_governance, bookkeeping_runtime, silver_runtime
