@@ -57,6 +57,10 @@ Size at the execution boundary: a Mac host's CPU/RAM does not describe a
 container's allocation, and server connection limits do not describe its free
 budget. Read available resources and active runs before each new dispatch.
 
+Read the machine before adding a load: a load average above one and a half times the cores, or swap over three
+quarters used, means every running load slows (`load_chain.py --auto` checks both before each start). Memory is the
+limit on a small machine, not the cores.
+
 Record the ready backlog's file count and compressed/expanded byte estimates,
 measured peak memory per unit, worker throughput, temporary/output
 disk needs, connection consumption and other agents' reservations/current work.

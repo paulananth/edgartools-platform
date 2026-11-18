@@ -7,8 +7,10 @@
 # Every `waits_for` comes from `infer_dependencies.py` (what the rules declare; a test holds the two equal), never from
 # a machine's size: a load waits only for the source whose golden records its own records join. Links set no order:
 # the links table is built once, after the last load (`load_chain.py --finish`).
-# Eight lanes: A the Companies the others follow; P the Persons; S the Securities; C the other Companies; L funds, share
-# classes, N-PORT Securities and GLEIF; O ownership; D the other silver-only sources; F company-facts.
+# Ten lanes: A the Companies the others follow; P the Persons; S the Securities; C the other Companies; L funds, share
+# classes and N-PORT Securities; G GLEIF and what follows it (it joins only the SEC Company masters, so it starts when
+# those are done, not behind the Securities); N N-PORT silver (it needs no master but its funds' and registrants');
+# O ownership; D the other silver-only sources; F company-facts.
 version: 1
 # What a step takes unless it says otherwise.
 defaults: {workers: 2, bundles: 1}
@@ -243,21 +245,21 @@ steps:
     minutes: 60
     attempts: 3
   - name: nport-security-silver
-    lane: L
+    lane: N
     source: sec.nport.security
     target: silver
     capture: sec.nport-datasets/2026q2
     minutes: 240
     attempts: 3
   - name: gleif-pairs
-    lane: L
+    lane: G
     source: gleif
     target: subfund-pairs
     capture: gleif/20260911-1600
     minutes: 60
     attempts: 3
   - name: gleif
-    lane: L
+    lane: G
     waits_for: [company]
     source: gleif
     target: mastering
@@ -265,9 +267,10 @@ steps:
     facts:
       publication_count: "3428477"
     minutes: 240
+    workers: 8
     attempts: 40
   - name: adv-custodians-06
-    lane: L
+    lane: G
     waits_for: [nport-registrant, ncen-adviser-2026q3, gleif]
     source: iapd.adv
     target: custodians
@@ -275,7 +278,7 @@ steps:
     minutes: 60
     attempts: 3
   - name: adv-custodians-03
-    lane: L
+    lane: G
     waits_for: [nport-registrant, gleif]
     source: iapd.adv
     target: custodians

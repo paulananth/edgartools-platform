@@ -103,6 +103,10 @@ Before discovering or configuring any service URL, `.env`, connection profile
 or database duty, read [Connection setup](CONNECTIONS.md). Data Platform is
 the sole owner of these instructions; other skills link here.
 
+No agent, reviewer or subagent opens the stores folder or prints a connection URL: a reviewer that needs to know
+what a login can do asks for the login's name and reads the database's own grants. A review that reads the folder puts every
+password in its transcript.
+
 ## 0. Setup
 
 Before selecting tables for managed mirroring or AutoOntology, apply

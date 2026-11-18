@@ -113,9 +113,11 @@ def test_the_chain_builds_the_links_table_once_after_the_loads_and_no_target_bui
     assert calls.count(["silver", "links"]) == 1 and calls.index(["silver", "links"]) < calls.index(next(c for c in calls if c[1] == "refresh-ids"))
 
 
-def test_the_chain_has_eight_lanes_and_company_facts_is_the_eighth():
-    """A P S C L O D plus F: company-facts runs beside the other silver-only sources."""
-    assert {step["lane"] for step in STEPS} == set("APSCLODF")
+def test_the_chain_has_ten_lanes_and_company_facts_is_beside_the_other_silver_only_sources():
+    """GLEIF and N-PORT silver each have a lane: neither waits for the Securities that came before in one lane."""
+    assert {step["lane"] for step in STEPS} == set("APSCLODFGN")
+    assert {s["lane"] for s in STEPS if s["source"] == "gleif"} == {"G"}
+    assert {s["lane"] for s in STEPS if s["name"] == "nport-security-silver"} == {"N"}
     assert {s["lane"] for s in STEPS if s["source"] == "sec.company-facts"} == {"F"}
 
 
@@ -126,10 +128,10 @@ def test_every_step_starts_at_two_workers_and_stays_at_most_eight():
     assert max(counts.values()) <= 8, counts
 
 
-def test_the_skill_names_eight_lanes_and_the_two_to_eight_worker_scale():
+def test_the_skill_names_ten_lanes_and_the_two_to_eight_worker_scale():
     skill = (ROOT / "skills/data-operations/SKILL.md").read_text()
     runbook = (ROOT / "docs/runbooks/edgar-intelligence/init.md").read_text()
-    assert "A P S C L O D F" in skill and "A P S C L O D F" in runbook
+    assert "A P S C L O D F G N" in skill and "A P S C L O D F G N" in runbook
     assert "Start `--workers 2`" in skill
     assert "scales to 8" in skill
 
@@ -197,3 +199,107 @@ def test_a_step_takes_the_chains_defaults_for_what_it_does_not_say(tmp_path):
 
 def test_every_step_of_the_chain_has_its_sizes():
     assert all(type(step[size]) is int and step[size] >= 1 for step in STEPS for size in ("workers", "bundles", "attempts"))
+
+
+def _step(name, lane, minutes=60, waits=(), source=None, target="mastering"):
+    return {"name": name, "lane": lane, "minutes": minutes, "waits_for": list(waits), "source": source or name,
+            "target": target}
+
+
+def test_a_lane_offers_only_its_next_step_and_only_once_its_waits_are_done():
+    steps = [_step("a1", "A"), _step("a2", "A"), _step("b1", "B", waits=["a1"])]
+    assert chain.ready(steps, done=set(), running=set(), failed=set(), free=5) == ["a1"]
+    assert chain.ready(steps, done={"a1"}, running=set(), failed=set(), free=5) == ["a2", "b1"]
+    assert chain.ready(steps, done={"a1"}, running={"a2"}, failed=set(), free=5) == ["b1"]  # a2 holds its lane
+
+
+def test_the_longest_step_starts_first_and_free_slots_bound_how_many_start():
+    steps = [_step("short", "A", minutes=10), _step("long", "B", minutes=400), _step("mid", "C", minutes=90)]
+    assert chain.ready(steps, set(), set(), set(), free=2) == ["long", "mid"]
+    assert chain.ready(steps, set(), set(), set(), free=0) == []
+
+
+def test_two_loads_of_one_source_and_target_never_start_together():
+    steps = [_step("x1", "A", source="one"), _step("x2", "B", source="one"), _step("y", "C", source="two")]
+    assert chain.ready(steps, set(), running=set(), failed=set(), free=5) == ["x1", "y"]
+    assert chain.ready(steps, set(), running={"x1"}, failed=set(), free=5) == ["y"]  # x2 waits for x1's source and target
+
+
+def test_a_failed_step_blocks_its_lane_and_whatever_waits_for_it_but_nothing_else():
+    steps = [_step("a1", "A"), _step("a2", "A"), _step("b1", "B", waits=["a1"]), _step("c1", "C")]
+    assert chain.ready(steps, done=set(), running=set(), failed={"a1"}, free=5) == ["c1"]
+
+
+def test_a_failure_blocks_everything_after_it_through_the_lane_and_the_waits():
+    steps = [_step("a1", "A"), _step("a2", "A"), _step("a3", "A"), _step("b1", "B", waits=["a2"]),
+             _step("b2", "B")]
+    assert chain.ready(steps, done=set(), running=set(), failed={"a1"}, free=5) == []  # a2, a3, b1, b2 all follow a1
+    assert chain.blocked(steps, failed={"a2"}) == {"a3", "b1", "b2"}
+
+
+def test_a_load_already_running_outside_the_scheduler_keeps_its_source_and_target_busy():
+    steps = [_step("x1", "A", source="one"), _step("y", "B", source="two")]
+    assert chain.ready(steps, set(), running=set(), failed=set(), free=5, busy={("one", "mastering")}) == ["y"]
+
+
+def test_the_machine_has_headroom_only_below_the_load_and_swap_limits():
+    swap = "total = 9216.00M  used = 5751.50M  free = 1416.50M  (encrypted)"
+    assert chain.swap_fraction(swap) == 5751.5 / 9216
+    assert chain.swap_fraction("not a reading") is None
+    assert chain.has_headroom(load=5.0, cores=8, swap_used=0.62)
+    assert not chain.has_headroom(load=13.0, cores=8, swap_used=0.2)  # more than 1.5 x the cores
+    assert not chain.has_headroom(load=2.0, cores=8, swap_used=0.8)  # swap over 75%
+    assert chain.has_headroom(load=2.0, cores=8, swap_used=None)  # no reading is no reason to wait
+
+
+def test_the_scheduler_stops_when_nothing_runs_nothing_is_ready_and_a_step_is_blocked():
+    steps = [_step("a1", "A"), _step("a2", "A")]
+    assert chain.stalled(steps, done=set(), running=set(), failed={"a1"}) == ["a2"]
+    assert chain.stalled(steps, done={"a1", "a2"}, running=set(), failed=set()) == []
+    assert chain.stalled(steps, done=set(), running={"a1"}, failed=set()) == []
+
+
+class _Child:
+    """A started step that has already ended with `code`."""
+
+    def __init__(self, code):
+        self.returncode = code
+
+    def poll(self):
+        return self.returncode
+
+
+def _scheduler(monkeypatch, tmp_path, outcomes):
+    """Run `auto` with each step ending as `outcomes` says (a step done writes the line the state file holds)."""
+    state = tmp_path / "state.log"
+    started = []
+
+    def popen(command, **_):
+        name = command[-1]
+        started.append(name)
+        if outcomes[name] == 0:
+            with state.open("a") as handle:
+                handle.write(f"11-18 07:00:00 ET {name} done: Done\n")
+        return _Child(outcomes[name])
+
+    monkeypatch.setattr(chain.subprocess, "Popen", popen)
+    monkeypatch.setattr(chain, "external_loads", lambda: set())
+    monkeypatch.setattr(chain, "machine_headroom", lambda: True)
+    monkeypatch.setattr(chain.time, "sleep", lambda _: None)
+    monkeypatch.setattr(chain, "note", lambda message, path: None)
+    return state, started
+
+
+def test_the_scheduler_starts_each_step_when_its_lane_is_free_and_ends_when_all_are_done(monkeypatch, tmp_path):
+    steps = [_step("a1", "A"), _step("a2", "A"), _step("b1", "B", waits=["a1"])]
+    state, started = _scheduler(monkeypatch, tmp_path, {"a1": 0, "a2": 0, "b1": 0})
+    assert chain.auto(steps, state, slots=2) == 0
+    assert started.index("a1") < started.index("a2") and started.index("a1") < started.index("b1")
+    assert sorted(started) == ["a1", "a2", "b1"]
+
+
+def test_the_scheduler_carries_on_past_a_failed_step_and_stops_when_only_blocked_steps_remain(monkeypatch, tmp_path):
+    steps = [_step("a1", "A"), _step("a2", "A"), _step("c1", "C")]
+    state, started = _scheduler(monkeypatch, tmp_path, {"a1": 1, "a2": 0, "c1": 0})
+    assert chain.auto(steps, state, slots=2) == 1
+    assert sorted(started) == ["a1", "c1"]  # a2 follows the failed a1 and never starts

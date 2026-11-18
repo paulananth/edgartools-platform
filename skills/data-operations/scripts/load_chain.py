@@ -8,6 +8,7 @@
     python load_chain.py --only <step>        one step
     python load_chain.py --lane <name>        the steps of one lane; run several lanes at once (see the chain file)
     python load_chain.py --finish             only what follows the loads, once every lane is done
+    python load_chain.py --auto [--slots N]   watch the loads; start each step when its lane is free (see `auto`)
 
 Each step is the same resumable `load` command, run again until it finishes (a stopped attempt names why in its log and
 the next carries on from where it stopped). The chain stops at the first step that does not finish in its attempts.
@@ -53,6 +54,106 @@ def chain_steps(path: Path = ROOT / "rules/load-chain.yaml") -> list[dict]:
     """The chain's steps, each with the chain's `defaults` for what it does not say itself."""
     chain = yaml.safe_load(path.read_text())
     return [{**(chain.get("defaults") or {}), **step} for step in chain["steps"]]
+
+
+def needs(steps: list[dict]) -> dict[str, set[str]]:
+    """What each step follows: the step before it in its lane (a lane is a queue) and every step it waits for."""
+    follows: dict[str, set[str]] = {}
+    previous: dict[str, str] = {}
+    for step in steps:
+        follows[step["name"]] = set(step.get("waits_for") or [])
+        if step["lane"] in previous:
+            follows[step["name"]].add(previous[step["lane"]])
+        previous[step["lane"]] = step["name"]
+    return follows
+
+
+def blocked(steps: list[dict], failed: set[str]) -> set[str]:
+    """Every step that follows a failed step, through its lane and its waits, however far."""
+    follows, stuck = needs(steps), set()
+    while True:
+        more = {name for name, before in follows.items() if name not in stuck and (before & (failed | stuck))}
+        if not more:
+            return stuck
+        stuck |= more
+
+
+def ready(steps: list[dict], done: set[str], running: set[str], failed: set[str], free: int,
+          busy: frozenset | set = frozenset()) -> list[str]:
+    """The steps to start now: each follows only done steps, is not blocked by a failure, and does not share its source
+    and target with a load already running (two loads of one pair write the same outputs). The longest chain first,
+    judged by the step's `minutes` (a bound on one attempt, so only a proxy for its length); at most `free`."""
+    follows, stuck = needs(steps), blocked(steps, failed)
+    taken = set(busy) | {(s["source"], s["target"]) for s in steps if s["name"] in running}
+    chosen: list[dict] = []
+    for step in sorted(steps, key=lambda s: -s["minutes"]):
+        pair = (step["source"], step["target"])
+        if (step["name"] in done or step["name"] in running or step["name"] in failed or step["name"] in stuck
+                or not follows[step["name"]] <= done or pair in taken or len(chosen) >= free):
+            continue
+        chosen.append(step)
+        taken.add(pair)
+    return [step["name"] for step in chosen]
+
+
+def stalled(steps: list[dict], done: set[str], running: set[str], failed: set[str]) -> list[str]:
+    """The steps that can never start: nothing runs, and each is blocked by a failure or follows one that is."""
+    if running:
+        return []
+    stuck = blocked(steps, failed)
+    return [s["name"] for s in steps if s["name"] in stuck and s["name"] not in done]
+
+
+def swap_fraction(text: str) -> float | None:
+    """The share of swap in use, from `sysctl vm.swapusage` (macOS); None when it cannot be read."""
+    found = re.search(r"total = ([\d.]+)M\s+used = ([\d.]+)M", text)
+    return float(found.group(2)) / float(found.group(1)) if found and float(found.group(1)) else None
+
+
+def has_headroom(load: float, cores: int, swap_used: float | None) -> bool:
+    """A load average over one and a half times the cores, or swap over three quarters used, slows every running load."""
+    return load <= 1.5 * cores and (swap_used is None or swap_used <= 0.75)
+
+
+def machine_headroom() -> bool:
+    swap = subprocess.run(["sysctl", "-n", "vm.swapusage"], check=False, capture_output=True, text=True).stdout if sys.platform == "darwin" else ""
+    return has_headroom(os.getloadavg()[0], os.cpu_count() or 1, swap_fraction(swap))
+
+
+def external_loads() -> set[tuple[str, str]]:
+    """The (source, target) of every `load` running on this machine, whoever started it."""
+    listing = subprocess.run(["ps", "-Ao", "args"], check=False, capture_output=True, text=True).stdout
+    return {(m.group(1), m.group(2)) for line in listing.splitlines() if "edgar-warehouse load " in line
+            for m in [re.search(r"--source (\S+) --target (\S+)", line)] if m}
+
+
+def auto(steps: list[dict], state: Path, slots: int, poll: int = 30) -> int:
+    """Watch the loads and start the next ready step whenever a slot is free and the machine has headroom. One start
+    a cycle: the load average lags, so a started step is counted running before the next is judged. Each step runs as
+    `load_chain.py --only <step>` (the attempt loop); a step that uses up its attempts blocks what follows it and the
+    rest carry on. Ends when every step is done (then the lookups and the links) or nothing more can start."""
+    children: dict[str, subprocess.Popen] = {}
+    failed: set[str] = set()
+    names = {step["name"] for step in steps}
+    while True:
+        for name, child in list(children.items()):
+            if child.poll() is not None:
+                del children[name]
+                if child.returncode != 0:
+                    failed.add(name)
+        done = done_steps(state)
+        if names <= done:
+            return 0
+        busy = external_loads()
+        free = slots - max(len(children), len(busy))
+        starts = ready(steps, done, set(children), failed, 1, busy) if free > 0 and machine_headroom() else []
+        for name in starts:
+            note(f"scheduler starts {name}", state)
+            children[name] = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--only", name])
+        if not starts and not children and not busy and (stuck := stalled(steps, done, set(), failed)):
+            note(f"scheduler stops: {', '.join(sorted(failed))} failed, so {', '.join(stuck)} cannot start", state)
+            return 1
+        time.sleep(poll)
 
 
 def arguments(step: dict) -> list[str]:
@@ -149,6 +250,9 @@ def main() -> int:
     parser.add_argument("--from", dest="start")
     parser.add_argument("--only")
     parser.add_argument("--lane")
+    parser.add_argument("--auto", action="store_true", help="watch the loads and start each step when its lane is free")
+    parser.add_argument("--slots", type=int, default=max(2, min(os.cpu_count() or 2, int(
+        os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") / 2**30 // 2))), help="loads running at once")
     args = parser.parse_args()
     steps = chain_steps()
     names = [step["name"] for step in steps]
@@ -172,6 +276,11 @@ def main() -> int:
         return 0
     if sys.platform == "darwin":
         subprocess.Popen(["caffeinate", "-dimsu", "-w", str(os.getpid())])
+    if args.auto:
+        if auto(steps, state, args.slots):
+            return 1
+        finish(env, state)
+        return 0
     if not args.finish:
         started = args.start is None
         for step in steps:

@@ -146,6 +146,9 @@ front of it silently orders by the wrong one, so order by the alias instead.
 
 ## The hosted MDM store
 
+- **A login needs `TEMPORARY` as well as `CONNECT`.** Revoking PUBLIC from a database removes its default right to
+  temporary tables, and a silver load stages each write in one: it stops with SQLSTATE 42501, which the writer used to
+  report as "a value is not its column's type". `provision_hosted_store.py` grants both.
 - **One instance holds all six stores.** The hosted instance carries the databases `mdm`, `rdm`, `rules`,
   `bookkeeping`, `change_journal` and `silver`, not MDM alone. Before any drop, list its databases and name every
   store it holds to the operator: `DROP POSTGRES INSTANCE` deletes them all, with no undrop and no backup unless one

@@ -118,7 +118,7 @@ edgar-warehouse load \
   --workers <readers> --bundles <runs at once> --minutes <window>
 ```
 
-**A load uses `grain: run`**: one run row, no units or leases ([bookkeeping grain](../bookkeeping/SKILL.md#grain-how-much-bookkeeping-a-target-uses)). Write `grain: run` on every target (a test refuses one that does not); a run started without it is [By the unit](UNIT-GRAIN.md). Load every captured source through the load chain (Edgar Intelligence initialize runbook) (`load_chain.py --lane` A P S C L O D F, eight lanes, then `--finish`); `waits_for` is the dependency order. Size `--workers` and `--bundles` by **Fit the load into the window**.
+**A load uses `grain: run`**: one run row, no units or leases ([bookkeeping grain](../bookkeeping/SKILL.md#grain-how-much-bookkeeping-a-target-uses)). Write `grain: run` on every target (a test refuses one that does not); a run started without it is [By the unit](UNIT-GRAIN.md). Load every captured source through the load chain (Edgar Intelligence initialize runbook) with `load_chain.py --auto`: it watches the loads and starts each step when its lane is free (`--lane` A P S C L O D F G N and then `--finish` is the same by hand); `waits_for` is the dependency order, and a fresh store starts a fresh chain state file. Size `--workers` and `--bundles` by **Fit the load into the window**.
 
 - `--stores` is the stores folder configured through
   [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
