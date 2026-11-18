@@ -2,6 +2,7 @@
 import importlib.util
 from pathlib import Path
 
+import pytest
 import yaml
 
 from edgar_warehouse.rules import files
@@ -202,6 +203,12 @@ def test_every_step_of_the_chain_has_its_sizes():
     assert all(type(step[size]) is int and step[size] >= 1 for step in STEPS for size in ("workers", "bundles", "attempts"))
 
 
+@pytest.fixture(autouse=True)
+def _no_database(monkeypatch):
+    """No test reads a real database."""
+    monkeypatch.setattr(chain, "database_load", lambda owner_url: None)
+
+
 def _step(name, lane, minutes=60, waits=(), source=None, target="mastering"):
     return {"name": name, "lane": lane, "minutes": minutes, "waits_for": list(waits), "source": source or name,
             "target": target}
@@ -270,7 +277,7 @@ def _scheduler(monkeypatch, tmp_path, outcomes):
     started = []
 
     def popen(command, **_):
-        name = command[-1]
+        name = command[command.index("--only") + 1]
         started.append(name)
         if outcomes[name] == 0:
             with state.open("a") as handle:
@@ -279,7 +286,7 @@ def _scheduler(monkeypatch, tmp_path, outcomes):
 
     monkeypatch.setattr(chain.subprocess, "Popen", popen)
     monkeypatch.setattr(chain, "external_loads", lambda: set())
-    monkeypatch.setattr(chain, "machine_headroom", lambda: True)
+    monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: "ok")
     monkeypatch.setattr(chain.time, "sleep", lambda _: None)
     monkeypatch.setattr(chain, "note", lambda message, path: None)
     return state, started
@@ -325,7 +332,112 @@ def test_a_short_step_that_gates_a_long_tail_starts_before_a_longer_step_that_ga
 def test_a_failure_with_low_headroom_does_not_stop_the_scheduler_while_a_step_can_still_start(monkeypatch, tmp_path):
     steps = [_step("a1", "A"), _step("a2", "A"), _step("c1", "C")]
     state, started = _scheduler(monkeypatch, tmp_path, {"a1": 1, "a2": 0, "c1": 0})
-    readings = iter([True, False, False, True, True, True, True, True, True])
-    monkeypatch.setattr(chain, "machine_headroom", lambda: next(readings))
+    readings = iter(["ok", "high", "high", "ok", "ok", "ok", "ok", "ok", "ok"])
+    monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: next(readings))
     assert chain.auto(steps, state, slots=2) == 1
     assert "c1" in started  # the machine was too busy for two cycles, and the chain waited rather than stopping
+
+
+def test_compute_pressure_is_low_ok_or_high_and_relaxes_when_the_run_is_behind():
+    assert chain.pressure(load=3.0, cores=8, swap_used=0.2) == "low"
+    assert chain.pressure(load=7.0, cores=8, swap_used=0.2) == "ok"
+    assert chain.pressure(load=13.0, cores=8, swap_used=0.2) == "high"  # over 1.5 x the cores
+    assert chain.pressure(load=2.0, cores=8, swap_used=0.8) == "high"  # swap over 75%
+    assert chain.pressure(load=13.0, cores=8, swap_used=0.8, relaxed=True) == "ok"  # behind: up to 2 x cores, 90% swap
+    assert chain.pressure(load=17.0, cores=8, swap_used=0.2, relaxed=True) == "high"
+
+
+def test_workers_rise_two_four_eight_on_the_longest_chain_first_and_fall_from_the_shortest():
+    priority = {"long": 900, "mid": 300, "short": 50}
+    assert chain.rescale({"long": 2, "mid": 2, "short": 2}, priority, "low") == ("long", 4)
+    assert chain.rescale({"long": 8, "mid": 2, "short": 2}, priority, "low") == ("mid", 4)
+    assert chain.rescale({"long": 8, "mid": 8, "short": 8}, priority, "low") is None  # the ceiling is 8
+    assert chain.rescale({"long": 8, "mid": 4, "short": 4}, priority, "high") == ("short", 2)
+    assert chain.rescale({"long": 2, "mid": 2, "short": 2}, priority, "high") is None  # the floor is 2
+    assert chain.rescale({"long": 4, "mid": 4, "short": 4}, priority, "ok") is None
+
+
+def test_a_run_is_behind_when_more_of_the_window_is_used_than_of_the_work_done():
+    assert not chain.behind(elapsed=30, window=120, done=300, total=1000)  # 25% of the time, 30% of the work
+    assert not chain.behind(elapsed=36, window=120, done=200, total=1000)  # 30% against 20%: within a tenth
+    assert chain.behind(elapsed=60, window=120, done=200, total=1000)  # half the time, a fifth of the work
+
+
+class _Live(_Child):
+    """A started step that keeps running until it is told to stop."""
+
+    def __init__(self, command):
+        super().__init__(None)
+        self.pid, self.command = id(self) % 90000 + 1000, command
+
+    def wait(self, timeout=None):
+        self.returncode = -15
+
+
+def _timed(monkeypatch, tmp_path, steps, ticks):
+    """`auto` with children that never end by themselves and a clock that moves `ticks` minutes a cycle."""
+    state = tmp_path / "state.log"
+    started, killed = [], []
+    now = {"t": chain.datetime(2026, 11, 18, 8, 0, tzinfo=chain.ZoneInfo("America/New_York"))}
+
+    def popen(command, **_):
+        child = _Live(command)
+        started.append((command[command.index("--only") + 1], int(command[command.index("--workers") + 1])))
+        return child
+
+    def sleep(_):
+        now["t"] += chain.timedelta(minutes=ticks)
+
+    monkeypatch.setattr(chain.subprocess, "Popen", popen)
+    monkeypatch.setattr(chain.os, "killpg", lambda pid, sig: killed.append(pid))
+    monkeypatch.setattr(chain, "external_loads", lambda: set())
+    monkeypatch.setattr(chain, "clock", lambda: now["t"])
+    monkeypatch.setattr(chain.time, "sleep", sleep)
+    monkeypatch.setattr(chain, "note", lambda message, path: None)
+    return state, started, killed, now
+
+
+def test_at_the_deadline_the_scheduler_stops_what_it_started_and_names_what_is_left(monkeypatch, tmp_path):
+    steps = [_step("a1", "A", minutes=60), _step("a2", "A", minutes=60)]
+    state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=30)
+    monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: "ok")
+    deadline = now["t"] + chain.timedelta(minutes=90)
+    assert chain.auto(steps, state, slots=2, deadline=deadline) == 2
+    assert [name for name, _ in started] == ["a1"] and len(killed) == 1  # a1 ran to the deadline; a2 never began
+
+
+def test_a_running_step_is_restarted_with_more_workers_when_the_machine_has_room(monkeypatch, tmp_path):
+    steps = [_step("a1", "A", minutes=600)]
+    steps[0]["workers"] = 2
+    state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=10)
+    levels = iter(["ok", "low", "low", "low", "ok", "ok", "ok", "ok", "ok", "ok"])
+    monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: next(levels, "ok"))
+    chain.auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=90))
+    assert [workers for _, workers in started][:3] == [2, 4, 8]  # doubled while there was room, stopping at 8
+    assert len(killed) >= 2
+
+
+def test_the_database_is_pressed_by_lock_waits_or_by_connections_and_pressure_takes_the_worse():
+    ok = {"active": 4, "connections": 20, "max_connections": 100, "lock_waiters": 0, "longest_wait": 0.0}
+    assert chain.db_level(**ok) == "ok"
+    assert chain.db_level(**{**ok, "lock_waiters": 3}) == "high"
+    assert chain.db_level(**{**ok, "lock_waiters": 1, "longest_wait": 75.0}) == "high"
+    assert chain.db_level(**{**ok, "connections": 80}) == "high"
+    assert chain.worst("low", "high") == "high" and chain.worst("high", "ok") == "high"
+    assert chain.worst("low", "ok") == "low" and chain.worst("ok", "ok") == "ok"
+    assert chain.database_load(None) is None
+
+
+def test_workers_fall_while_the_database_is_locking_even_when_the_machine_has_room(monkeypatch, tmp_path):
+    steps = [_step("a1", "A", minutes=600), _step("b1", "B", minutes=60)]
+    for step in steps:
+        step["workers"] = 8
+    state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=10)
+    monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: "low")
+    locking = {"active": 9, "connections": 30, "max_connections": 100, "lock_waiters": 5, "longest_wait": 90.0}
+    quiet = {**locking, "lock_waiters": 0, "longest_wait": 0.0}
+    readings = iter([quiet, quiet])  # both steps start while the store is quiet, then it locks
+    monkeypatch.setattr(chain, "database_load", lambda owner_url: next(readings, locking))
+    chain.auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=45), owner_url="x")
+    assert started[:2] == [("a1", 8), ("b1", 8)]
+    assert ("b1", 4) in started  # the shortest chain halved while the store was locking, with the machine at `low`

@@ -87,8 +87,13 @@ python <data-operations skill>/scripts/load_chain.py --from <step>   # carry on;
 
 **`--auto` is the way to load a store.** It starts the step at the head of every lane whose dependencies are done, longest
 first, while a slot is free (`--slots`, by default half the machine's gigabytes, at most its cores, at least two) and the machine has
-headroom (a load average under one and a half times the cores, swap under three quarters used); it starts one step a
-cycle, since the load average lags. A step that uses up its attempts blocks its lane and whatever waits for it; the
+headroom (a load average under one and a half times the cores, swap under three quarters used); it also reads the database (a step starts only while fewer than three sessions wait on locks, none for a minute, and
+less than four fifths of its connections are in use), and it starts one step a
+cycle, since the load average lags. It moves each running step's workers from 2 to 8 by the readings: the step with the
+longest chain behind it doubles when there is room, and the step with the shortest halves when the machine or the
+database is pressed, by stopping its load and starting it again (a load resumes where it stopped). With `--hours H` or
+`--deadline HH:MM ET` the run is held to a strict deadline: a run behind its schedule is allowed twice the cores in load, and
+at the deadline every step it started is stopped and it names what is left. A step that uses up its attempts blocks its lane and whatever waits for it; the
 rest carry on, and the scheduler stops, naming what cannot start, when nothing else can. Every step runs as
 `load_chain.py --only <step>`, so the attempts and the one-load-of-a-source-and-target rule are the same as by hand.
 

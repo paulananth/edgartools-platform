@@ -102,6 +102,31 @@ agent's state, create another permanent server or change platform limits to hide
 contention. Resource planning creates no new scheduler or resource-lease store;
 Bookkeeping/destination leases remain authoritative.
 
+## Contention: find the tier, then change the design or the scale
+
+A slow load has one saturated tier. Throttling hides which, so it comes last.
+
+1. **Measure each tier** (`load_chain.py --auto` reads the first two every cycle and acts on them):
+   - the machine running the loads: load average against its cores, and swap;
+   - the database: sessions active, sessions waiting on locks and the longest wait, connections against the limit;
+   - the source: how fast one reader opens a file.
+2. **Remove a shared hot spot by design** when the database is the tier that waits on locks:
+   - merges of one kind of master data that join stored records take turns, so they share a lane; merges that only
+     create by an identifier run side by side, since each new identifier value is claimed under its own lock and read
+     again;
+   - a lock held for a step instead of a transaction, or one lock taken where a lock per value would do, is a defect in
+     the engine: fix it there, not by running fewer loads;
+   - keep a unit of work (a bundle) small and committed in order, so a lock lasts one transaction.
+3. **Scale the tier that is saturated:**
+   - the machine running the loads: run them where the capacity is (production runs the same loader on AWS, so a laptop's
+     rate is a local figure);
+   - the database, when its CPU or connections are the limit and its lock waits are not: resize the hosted instance
+     (an approved, billable change; see aws-snowflake-operations). More compute does not shorten a lock queue;
+   - connections: fewer, wider workers, or a pool.
+4. **Throttle last:** workers go from 2 to 8 with the readings, and fall when the database is locking or the machine is
+   pressed.
+5. Record the readings, the change and its effect in the ticket.
+
 ## Progress, failure and recovery
 
 Use current CLI help and [Bookkeeping recovery](../../../skills/bookkeeping/RECOVERY.md).
