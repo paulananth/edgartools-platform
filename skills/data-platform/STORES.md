@@ -24,7 +24,7 @@ merge capability. Preserve the selected engine when a command refuses it;
 route the missing implementation to its owning engineering work instead of
 substituting PostgreSQL.
 
-A hosted instance is initialized in the order of [the runbook](../data-operations/RUNBOOK.md#initialize-a-hosted-store); its schema and silver-table steps are this skill's.
+A hosted instance is initialized in the order of the Edgar Intelligence initialize runbook; its schema and silver-table steps are this skill's.
 
 Apply these five schemas into the databases [Setup](SKILL.md#0-setup) created: `mdm`, `rdm`,
 `bookkeeping`, `change_journal`, and `silver`. Read each command's `--help` before the

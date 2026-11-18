@@ -8,7 +8,7 @@ The stores folder (default ~/.config/edgartools/hosted/) is authoritative: each 
 own URL there holds, so no login is rotated. The instance's administrator comes from the PostgreSQL service the
 instance's creation saved (~/.pg_service.conf and ~/.pgpass); every URL in the folder then gets the new instance's
 address, and the administrator's URLs its new password. Prints names and counts only, never an address or a password.
-The schemas come next (data-operations RUNBOOK, "Initialize a hosted store", step 3).
+The schemas come next (docs/runbooks/edgar-intelligence/init.md, "Initialize a hosted store", step 3).
 """
 
 from __future__ import annotations
@@ -153,18 +153,18 @@ def provision(conn, held: dict[str, tuple[str, set[str]]], admin: str, confirm: 
             cur.execute("SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = %s", (database,))
             row = cur.fetchone()
             if row is not None and row[0] != admin:
-                raise Refused(f"{database} exists, owned by {row[0]}: reset it (RUNBOOK step 2), never adopt it")
+                raise Refused(f"{database} exists, owned by {row[0]}: reset it (the runbook's step 2), never adopt it")
             if row is None:
                 done.append(f"create database {database}")
                 if confirm:
                     cur.execute(sql.SQL("CREATE DATABASE {} OWNER {}").format(sql.Identifier(database),
                                                                              sql.Identifier(admin)))
             readers = sorted(role for role, (_, databases) in held.items() if database in databases)
-            done.append(f"{database}: connect for {', '.join(readers)}")
+            done.append(f"{database}: connect and temporary tables for {', '.join(readers)}")
             if confirm:
                 cur.execute(sql.SQL("REVOKE ALL ON DATABASE {} FROM PUBLIC").format(sql.Identifier(database)))
                 for role in readers:
-                    cur.execute(sql.SQL("GRANT CONNECT ON DATABASE {} TO {}").format(sql.Identifier(database),
+                    cur.execute(sql.SQL("GRANT CONNECT, TEMPORARY ON DATABASE {} TO {}").format(sql.Identifier(database),
                                                                                     sql.Identifier(role)))
     return done
 

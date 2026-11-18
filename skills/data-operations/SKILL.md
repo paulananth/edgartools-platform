@@ -19,7 +19,7 @@ configuration and evidence. Reuse the current authorization for that scope.
 Read the source's runbook and live Bookkeeping runs/leases before starting work;
 another agent's in-flight work is a dependency, not a cleanup target.
 
-Use [RUNBOOK.md](RUNBOOK.md) for last-run lookup, delivery, file-change, capacity and recovery.
+Use the Edgar Intelligence runbook (`docs/runbooks/edgar-intelligence/` in the repository: initialize, daily run and CI/CD, kept outside this skill so their steps and dependencies change without it) for last-run lookup, delivery, file-change, capacity and recovery.
 Discover actual command capabilities with `edgar-warehouse doctor` and
 CLI help. Report missing enforcement or unsupported stages as runtime gaps;
 instructions cannot make them available. An offline sequence check is not a
@@ -29,7 +29,7 @@ captured delivery, use **Load a capture**: one command for every source. Recover
 retained progress before making a new run.
 
 When deploying tested configuration to an environment, follow **Configuration
-promotion** in RUNBOOK.md. Reuse the existing Rules approval procedure and exact
+promotion** in the Edgar Intelligence CI/CD runbook. Reuse the existing Rules approval procedure and exact
 release evidence; distinguish an approved release from its active deployment.
 For timing reports, use the [five-minute workflow](TIMING-REPORTS.md).
 
@@ -47,7 +47,7 @@ the whole list.
 1. **Stores.** Confirm the five schemas in **Apply store DDL** and Rules are
    current on the selected engine. Route a dialect refusal as missing engine
    support; retain that target's blocker while independent targets proceed.
-2. **MDM, per domain.** Follow **Configuration promotion** in RUNBOOK.md for
+2. **MDM, per domain.** Follow **Configuration promotion** in the Edgar Intelligence CI/CD runbook for
    that source and its merge policy. Read back the active version. A domain
    whose source or policy is still a draft, or whose activation is refused,
    stays blocked. Record the refusal and go on to the next domain. Loading
@@ -118,7 +118,7 @@ edgar-warehouse load \
   --workers <readers> --bundles <runs at once> --minutes <window>
 ```
 
-**A load uses `grain: run`**: one run row, no units or leases ([bookkeeping grain](../bookkeeping/SKILL.md#grain-how-much-bookkeeping-a-target-uses)). Write `grain: run` on every target (a test refuses one that does not); a run started without it is [By the unit](UNIT-GRAIN.md). Load every captured source through [the load chain](RUNBOOK.md) (`load_chain.py --lane` A P S C L O D F, eight lanes, then `--finish`); `waits_for` is the dependency order. Size `--workers` and `--bundles` by **Fit the load into the window**.
+**A load uses `grain: run`**: one run row, no units or leases ([bookkeeping grain](../bookkeeping/SKILL.md#grain-how-much-bookkeeping-a-target-uses)). Write `grain: run` on every target (a test refuses one that does not); a run started without it is [By the unit](UNIT-GRAIN.md). Load every captured source through the load chain (Edgar Intelligence initialize runbook) (`load_chain.py --lane` A P S C L O D F, eight lanes, then `--finish`); `waits_for` is the dependency order. Size `--workers` and `--bundles` by **Fit the load into the window**.
 
 - `--stores` is the stores folder configured through
   [Connection URLs and environment](../data-platform/SKILL.md#connection-urls-and-environment).
@@ -285,7 +285,7 @@ Work it out from counts before starting:
 2. **Wide and narrow steps.** A wide step has one unit per file or group
    (`source.read`). A narrow step is one unit per bundle (`mastering.merge`,
    `mdm.prepare`). Only more bundles at once shorten narrow steps in total.
-3. **Bundles and readers.** Start `--workers 2`; a long load (the two-minute sample will miss the window, or a step already ran past ten minutes) scales to 8, at most the host's cores. `--workers` is the processes on each step at either grain, shared out to a step with fewer units ([Resource sizing](RUNBOOK.md#resource-sizing)); keep `--bundles` × `--workers` near the core count. `load` never starts more workers than a step has units left. A merge into shared masters stays at one bundle when memory is the limiter.
+3. **Bundles and readers.** Start `--workers 2`; a long load (the two-minute sample will miss the window, or a step already ran past ten minutes) scales to 8, at most the host's cores. `--workers` is the processes on each step at either grain, shared out to a step with fewer units (Resource sizing (Edgar Intelligence runbook)); keep `--bundles` × `--workers` near the core count. `load` never starts more workers than a step has units left. A merge into shared masters stays at one bundle when memory is the limiter.
 4. **The bound.** Measure one bundle first (`load` prints each run's
    minutes). The load takes roughly (the number of bundles ÷ `--bundles`,
    rounded up) × that time.
@@ -352,7 +352,7 @@ A second target stays only where it is a second publication or lands another tab
    genuinely dependent work. Never start acquisition to resolve a missing delivery.
 2. **Changes.** Compare with the last verified inventory and consult the Change
    Journal under the actual processing identity. Distinguish new bytes, changed
-   rules/shared inputs, suspected renames and schema drift using RUNBOOK.md. Route
+   rules/shared inputs, suspected renames and schema drift using the Edgar Intelligence daily-run runbook. Route
    new feeds to [data-onboarding](../data-onboarding/SKILL.md), shape/meaning changes
    to [data-profiling](../data-profiling/SKILL.md), and existing rule changes to
    [refining-rules](../refining-rules/SKILL.md). Routine deliveries reuse applicable

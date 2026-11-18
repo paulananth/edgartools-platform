@@ -69,7 +69,7 @@ class _EmptyServer:
     """An instance with no roles and no databases; `owner` makes every database exist, owned by that role."""
 
     def __init__(self, owner=None):
-        self.owner, self.last = owner, ""
+        self.owner, self.last, self.statements = owner, "", []
 
     def cursor(self):
         return self
@@ -82,6 +82,7 @@ class _EmptyServer:
 
     def execute(self, statement, *args):
         self.last = str(statement)
+        self.statements.append(self.last)
 
     def fetchone(self):
         return (self.owner,) if self.owner and "pg_database" in self.last else None
@@ -106,7 +107,7 @@ def test_a_group_member_no_url_names_is_refused_before_anything_is_made():
 def test_a_database_another_role_owns_is_never_adopted():
     with pytest.raises(Refused, match="mdm exists, owned by someone_else"):
         provision(_EmptyServer(owner="someone_else"), HELD, "admin", confirm=False)
-    assert "mdm: connect for " in " ".join(provision(_EmptyServer(owner="admin"), HELD, "admin", confirm=False))
+    assert "mdm: connect and temporary tables for " in " ".join(provision(_EmptyServer(owner="admin"), HELD, "admin", confirm=False))
 
 
 def test_a_url_the_parser_refuses_prints_its_class_never_its_password(tmp_path, monkeypatch, capsys):
@@ -120,3 +121,13 @@ def test_a_url_the_parser_refuses_prints_its_class_never_its_password(tmp_path, 
     assert main(["--service", "invented", "--stores", str(stores)]) == 1
     printed = capsys.readouterr()
     assert printed.err.strip() == "failed: ValueError" and "p-invented" not in printed.out + printed.err
+
+
+def test_a_login_may_connect_and_use_temporary_tables_on_its_database():
+    """Revoking PUBLIC takes the default right to temporary tables too; the silver writer stages each load in one."""
+    server = _EmptyServer(owner="admin")
+    held = {**HELD, "silver_runtime": ("s-invented", {"silver"})}
+    provision(server, held, "admin", confirm=True)
+    grants = [statement for statement in server.statements if "GRANT CONNECT, TEMPORARY" in statement]
+    assert any("silver_runtime" in statement for statement in grants)
+    assert len(grants) == 4  # rules_agent, rules_governance, bookkeeping_runtime, silver_runtime

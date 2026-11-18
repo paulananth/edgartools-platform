@@ -1,6 +1,6 @@
 # The order a fresh store is loaded in: every captured source and target, each one's capture and the facts and
-# revision no capture states, read by `skills/data-operations/scripts/load_chain.py` (RUNBOOK, "Load a fresh
-# store"). `capture` is a folder under the captures root (or the proving root where `capture_root: proving`);
+# revision no capture states, read by `skills/data-operations/scripts/load_chain.py` (Edgar Intelligence initialize
+# runbook, "Load a fresh store"). `capture` is a folder under the captures root (or the proving root where `capture_root: proving`);
 # `{run}` in a fact is the chain's run label. `minutes` bounds one attempt, which carries on where the last stopped.
 # Steps that may run at the same time are in different `lane`s, and `waits_for` names a step of another lane that must
 # be done first. Each lane runs its steps in file order (`load_chain.py --lane <name>`), so every lane can start at once.
