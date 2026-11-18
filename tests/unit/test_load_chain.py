@@ -374,11 +374,16 @@ class _Live(_Child):
         self.returncode = -15
 
 
-def _timed(monkeypatch, tmp_path, steps, ticks):
-    """`auto` with children that never end by themselves and a clock that moves `ticks` minutes a cycle."""
+class _Ended(Exception):
+    """The test's own end for a run whose children never finish."""
+
+
+def _timed(monkeypatch, tmp_path, steps, ticks, cycles=40):
+    """`auto` with children that never end by themselves and a clock that moves `ticks` minutes a cycle, for `cycles` cycles."""
     state = tmp_path / "state.log"
     started, killed = [], []
     now = {"t": chain.datetime(2026, 11, 18, 8, 0, tzinfo=chain.ZoneInfo("America/New_York"))}
+    cycle = {"n": 0}
 
     def popen(command, **_):
         child = _Live(command)
@@ -387,6 +392,9 @@ def _timed(monkeypatch, tmp_path, steps, ticks):
 
     def sleep(_):
         now["t"] += chain.timedelta(minutes=ticks)
+        cycle["n"] += 1
+        if cycle["n"] > cycles:
+            raise _Ended()
 
     monkeypatch.setattr(chain.subprocess, "Popen", popen)
     monkeypatch.setattr(chain.os, "killpg", lambda pid, sig: killed.append(pid))
@@ -397,13 +405,45 @@ def _timed(monkeypatch, tmp_path, steps, ticks):
     return state, started, killed, now
 
 
-def test_at_the_deadline_the_scheduler_stops_what_it_started_and_names_what_is_left(monkeypatch, tmp_path):
-    steps = [_step("a1", "A", minutes=60), _step("a2", "A", minutes=60)]
-    state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=30)
+def _run_auto(*args, **kwargs):
+    """`auto` until the test's cycles end."""
+    try:
+        return chain.auto(*args, **kwargs)
+    except _Ended:
+        return None
+
+
+def test_a_deadline_is_reported_as_missed_once_and_never_stops_a_load(monkeypatch, tmp_path):
+    """Operator, 2026-11-18, after a deadline stopped four running steps that had hours of work in them: "Deadline must not
+    stop loading". The deadline holds the run to its schedule and reports the miss; the loads go on."""
+    steps = [_step("a1", "A", minutes=600), _step("b1", "B", minutes=600)]
+    state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=30, cycles=12)
     monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: "ok")
-    deadline = now["t"] + chain.timedelta(minutes=90)
-    assert chain.auto(steps, state, slots=2, deadline=deadline) == 2
-    assert [name for name, _ in started] == ["a1"] and len(killed) == 1  # a1 ran to the deadline; a2 never began
+    notes = []
+    monkeypatch.setattr(chain, "note", lambda message, path: notes.append(message))
+    assert _run_auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=90)) is None  # still going: the test ended it
+    assert killed == [] and [name for name, _ in started] == ["a1", "b1"]  # nothing was stopped, six hours on
+    missed = [m for m in notes if "deadline" in m and "passed" in m]
+    assert len(missed) == 1 and "still loading" in missed[0] and "a1" in missed[0]  # said once, naming what is left
+
+
+def test_a_run_that_finishes_after_its_deadline_says_by_how_much(monkeypatch, tmp_path):
+    steps = [_step("a1", "A", minutes=60)]
+    state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=30, cycles=12)
+    monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: "ok")
+    notes = []
+    monkeypatch.setattr(chain, "note", lambda message, path: notes.append(message))
+    finished = {"n": 0}
+    monkeypatch.setattr(chain, "done_steps", lambda path: {"a1"} if finished["n"] else set())
+    original = chain.time.sleep
+
+    def sleeping(seconds):
+        finished["n"] += int(now["t"] > chain.datetime(2026, 11, 18, 10, 30, tzinfo=chain.ZoneInfo("America/New_York")))
+        original(seconds)
+
+    monkeypatch.setattr(chain.time, "sleep", sleeping)
+    assert _run_auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=90)) == 0
+    assert any("after the deadline" in m for m in notes) and killed == []
 
 
 def test_a_running_step_is_restarted_with_more_workers_when_the_machine_has_room(monkeypatch, tmp_path):
@@ -412,7 +452,7 @@ def test_a_running_step_is_restarted_with_more_workers_when_the_machine_has_room
     state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=10)
     levels = iter(["ok", "low", "low", "low", "ok", "ok", "ok", "ok", "ok", "ok"])
     monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: next(levels, "ok"))
-    chain.auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=90))
+    _run_auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=90))
     assert [workers for _, workers in started][:3] == [2, 4, 8]  # doubled while there was room, stopping at 8
     assert len(killed) >= 2
 
@@ -438,7 +478,7 @@ def test_workers_fall_while_the_database_is_locking_even_when_the_machine_has_ro
     quiet = {**locking, "lock_waiters": 0, "longest_wait": 0.0}
     readings = iter([quiet, quiet])  # both steps start while the store is quiet, then it locks
     monkeypatch.setattr(chain, "database_load", lambda reader_url: next(readings, locking))
-    chain.auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=45), reader_url="x")
+    _run_auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=45), reader_url="x")
     assert started[:2] == [("a1", 8), ("b1", 8)]
     assert ("b1", 4) in started  # the shortest chain halved while the store was locking, with the machine at `low`
 
@@ -634,7 +674,7 @@ def test_a_started_step_is_held_to_the_profiles_range(monkeypatch, tmp_path):
     steps[0]["workers"] = 8  # the chain file asks for eight; a small task carries two
     state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=10)
     monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: "ok")
-    chain.auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=20), bounds=(1, 2))
+    _run_auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=20), bounds=(1, 2))
     assert started[0] == ("a1", 2)
 
 
@@ -645,7 +685,7 @@ def test_a_started_step_is_told_the_capacity_it_runs_on_so_its_own_check_uses_th
     original = chain.subprocess.Popen
     monkeypatch.setattr(chain.subprocess, "Popen", lambda command, **kw: commands.append(command) or original(command, **kw))
     monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: "ok")
-    chain.auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=20), bounds=(1, 4), capacity="aws-medium")
+    _run_auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=20), bounds=(1, 4), capacity="aws-medium")
     assert commands[0][commands[0].index("--capacity") + 1] == "aws-medium"
 
 
@@ -843,7 +883,7 @@ def test_the_start_count_and_the_rescale_use_each_steps_own_measured_range(monke
     monkeypatch.setattr(chain, "capacity_of", lambda name: (8, 4.0))  # 4 GB: GLEIF carries 10, a half-gigabyte worker 8
     state, started, killed, now = _timed(monkeypatch, tmp_path, steps, ticks=10)
     monkeypatch.setattr(chain, "machine_pressure", lambda relaxed=False: "ok")
-    chain.auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=30))
+    _run_auto(steps, state, slots=2, deadline=now["t"] + chain.timedelta(minutes=30))
     assert dict(started) == {"gleif": 10, "plain": 8}
     assert chain.rescale({"gleif": 5}, {"gleif": 1}, "low", {"gleif": (1, 10)}) == ("gleif", 10)
     assert chain.rescale({"gleif": 5}, {"gleif": 1}, "low", {"gleif": (1, 8)}) == ("gleif", 8)

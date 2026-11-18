@@ -108,8 +108,9 @@ estimate has disproved it, and the projection then counts its bound, so it is an
 scheduler aims for `--connections N` database connections (250 by default): workers rise while fewer are in use and the
 machine has room, and it says when the machine, not the database, is the limit; to use more connections, run the loaders
 on more compute (production runs them on AWS). With `--hours H` or
-`--deadline HH:MM ET` the run is held to a strict deadline: a run behind its schedule is allowed twice the cores in load, and
-at the deadline every step it started is stopped and it names what is left. A step that uses up its attempts blocks its lane and whatever waits for it; the
+`--deadline HH:MM ET` the run is held to that schedule: a run behind it is allowed twice the cores in load, and at the
+deadline the miss is reported once, naming what is left, while every load goes on (a deadline never stops one; the run says how long
+after it the last step finished). A step that uses up its attempts blocks its lane and whatever waits for it; the
 rest carry on, and the scheduler stops, naming what cannot start, when nothing else can. Every step runs as
 `load_chain.py --only <step>`, so the attempts and the one-load-of-a-source-and-target rule are the same as by hand.
 
