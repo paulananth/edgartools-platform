@@ -213,6 +213,23 @@ ownership follows SEC Company, and ownership's ticker symbols follow OpenFIGI, 1
 13F securities and N-PORT security each prefer the others: either order. SEC persons, the silver-only sources and each
 quarter's N-CEN registrants and advisers have nothing to follow, so they start at once.
 
+## Load priority
+
+When several steps can start at once, `load_chain.py --auto` starts them in the order of the chain file's `priority`, then the longest
+chain behind a step (its own time plus the longest run of steps waiting on it, by measured times). A priority orders only what is ready:
+a step still waits for its lane and its `waits_for`. The rule that sets a tier, and the measured chain that placed each step in it
+from the first full load, so a change of tier is a change of evidence (edit `priority` in `rules/load-chain.yaml`; a test holds this
+table to that file):
+
+| Priority | Steps | Why |
+|---|---|---|
+| 1 | `13f-filings`, `registration`, `ipo`, `company`, `nport-security`, `gleif-pairs`, `gleif`, `openfigi-answers` | The critical path: 100 minutes or more of chain behind each. `13f-filings` and `registration` are short but hold `ipo` (the longest step) behind them in their lane; `company` and `gleif-pairs` hold GLEIF behind them |
+| 2 | `company-facts`, `nport-security-silver`, `person` | 30 to 100 minutes of chain: long, but nothing waits on them |
+| 3 | every other step | Under 30 minutes of chain |
+
+Every other step is priority 3, and a step added without a `priority` is priority 3. Measure again after a load that changed the
+critical path (`load_chain.py --status` shows each step's progress and `chain-<RUN>.log` its time) and move a step only on that evidence.
+
 ## Mirror the final tables
 
 After the load (and `--finish`), the Snowflake mirror of the final tables is created from the repository's exposure list

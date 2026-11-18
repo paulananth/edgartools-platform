@@ -1,5 +1,6 @@
 """The load chain names every target a store loads, each with the facts its target declares."""
 import importlib.util
+import re
 import sys
 from pathlib import Path
 
@@ -1134,3 +1135,36 @@ def test_the_memory_edges_of_pressure():
     assert chain.pressure(2.0, 8, 0.60, memory_free=0.39) == "ok"
     assert chain.pressure(2.0, 8, 0.76, memory_free=None) == "high"  # unreadable memory counts as short
     assert chain.pressure(13.0, 8, 0.95, relaxed=True, memory_free=0.5) == "ok"  # behind: the relaxed load limit still holds
+
+
+def test_a_higher_priority_step_starts_before_one_with_a_longer_chain_behind_it():
+    steps = [_step("long", "A", minutes=500), _step("tail", "A", minutes=500), _step("urgent", "B", minutes=5)]
+    steps[2]["priority"] = 1
+    assert chain.ready(steps, done=set(), running=set(), failed=set(), free=1) == ["urgent"]  # priority first, the chain second
+    steps[2]["priority"] = 3
+    assert chain.ready(steps, done=set(), running=set(), failed=set(), free=1) == ["long"]  # equal priority: the longest chain
+
+
+def test_every_step_has_a_priority_of_one_two_or_three_and_a_step_without_one_is_three():
+    assert {step["priority"] for step in STEPS} <= {1, 2, 3}
+    assert chain.chain_steps()[0]["priority"] in (1, 2, 3)
+    bad = ROOT / "rules" / "load-chain.yaml"
+    text = bad.read_text().replace("defaults: {workers: 2, bundles: 1, priority: 3}", "defaults: {workers: 2, bundles: 1, priority: 4}")
+    other = bad.parent / "load-chain-priority-test.yaml"
+    other.write_text(text)
+    try:
+        with pytest.raises(ValueError, match="priority"):
+            chain.chain_steps(other)
+    finally:
+        other.unlink()
+
+
+def test_the_runbook_names_exactly_the_steps_the_chain_file_gives_priority_one_and_two():
+    section = (ROOT / "docs/runbooks/edgar-intelligence/init.md").read_text().split("## Load priority", 1)[1].split("\n## ", 1)[0]
+    listed = {}
+    for line in section.splitlines():
+        row = re.match(r"\|\s*([12])\s*\|(.*?)\|", line)
+        if row:
+            listed[int(row.group(1))] = set(re.findall(r"`([a-z0-9-]+)`", row.group(2)))
+    assert listed == {tier: {s["name"] for s in STEPS if s["priority"] == tier} for tier in (1, 2)}
+    assert "Every other step is priority 3" in section

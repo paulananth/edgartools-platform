@@ -77,6 +77,8 @@ def chain_steps(path: Path = ROOT / "rules/load-chain.yaml") -> list[dict]:
     chain = yaml.safe_load(path.read_text())
     steps = [{**(chain.get("defaults") or {}), **step} for step in chain["steps"]]
     for step in steps:
+        if step.get("priority", 3) not in (1, 2, 3):
+            raise ValueError(f"{step['name']}: priority must be 1, 2 or 3, not {step.get('priority')!r}")
         measured = step.get("worker_gb")
         if measured is not None and not (isinstance(measured, (int, float)) and 0.01 <= measured <= 64):
             raise ValueError(f"{step['name']}: worker_gb must be a number from 0.01 to 64 gigabytes, not {measured!r}")
@@ -168,13 +170,13 @@ def room(level: str, connections: int, target: int) -> str:
 def ready(steps: list[dict], done: set[str], running: set[str], failed: set[str], free: int,
           busy: frozenset | set = frozenset(), estimate: dict[str, float] | None = None) -> list[str]:
     """The steps to start now: each follows only done steps, is not blocked by a failure, and does not share its source
-    and target with a load already running (two loads of one pair write the same outputs). The longest chain first (see
-    `chain_length`); at most `free`."""
+    and target with a load already running (two loads of one pair write the same outputs). The chain file's `priority` first
+    (1 before 2 before 3), then the longest chain (see `chain_length`); at most `free`."""
     follows, stuck = needs(steps), blocked(steps, failed)
     length = chain_length(steps, estimate)
     taken = set(busy) | {(s["source"], s["target"]) for s in steps if s["name"] in running}
     chosen: list[dict] = []
-    for step in sorted(steps, key=lambda s: -length[s["name"]]):
+    for step in sorted(steps, key=lambda s: (s.get("priority", 3), -length[s["name"]])):
         pair = (step["source"], step["target"])
         if (step["name"] in done or step["name"] in running or step["name"] in failed or step["name"] in stuck
                 or not follows[step["name"]] <= done or pair in taken or len(chosen) >= free):

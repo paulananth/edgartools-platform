@@ -21,11 +21,15 @@ capacity:
   aws-small: {vcpu: 0.5, memory_gb: 1}
   aws-medium: {vcpu: 1, memory_gb: 4}
   aws-large: {vcpu: 2, memory_gb: 8}
-# What a step takes unless it says otherwise.
-defaults: {workers: 2, bundles: 1}
+# What a step takes unless it says otherwise. `priority` (1 first, then 2, then 3) is the order among steps that can start now:
+# 1 the critical path, the steps with 100 minutes or more of chain behind them (their own time plus the longest run of steps
+# waiting on them, by the first full load's measured times), 2 the steps with 30 to 100 minutes, 3 every other step. A step
+# that says nothing is 3. The init runbook's "Load priority" lists each tier, and a test holds that list to this file.
+defaults: {workers: 2, bundles: 1, priority: 3}
 steps:
   - name: company
     lane: A
+    priority: 1
     source: sec.company
     target: mastering
     capture: sec.submissions.company/all-76230
@@ -54,6 +58,7 @@ steps:
     attempts: 3
   - name: person
     lane: P
+    priority: 2
     source: sec.submissions.person
     target: mastering
     capture: sec.submissions.company/all-76230
@@ -63,6 +68,7 @@ steps:
     attempts: 5
   - name: openfigi-answers
     lane: S
+    priority: 1
     source: openfigi
     target: mastering
     capture: openfigi/2026q2-nport
@@ -212,6 +218,7 @@ steps:
     attempts: 3
   - name: nport-security
     lane: Q
+    priority: 1
     source: sec.nport.security
     target: mastering
     capture: sec.nport-datasets/2026q2
@@ -255,6 +262,7 @@ steps:
     attempts: 3
   - name: nport-security-silver
     lane: N
+    priority: 2
     source: sec.nport.security
     target: silver
     capture: sec.nport-datasets/2026q2
@@ -262,6 +270,7 @@ steps:
     attempts: 3
   - name: gleif-pairs
     lane: G
+    priority: 1
     source: gleif
     target: subfund-pairs
     capture: gleif/20260911-1600
@@ -269,6 +278,7 @@ steps:
     attempts: 3
   - name: gleif
     lane: G
+    priority: 1
     waits_for: [company]
     source: gleif
     target: mastering
@@ -322,6 +332,7 @@ steps:
     attempts: 3
   - name: 13f-filings
     lane: D
+    priority: 1
     source: sec.thirteenf.filings
     target: silver
     capture: sec.thirteenf.filings/p07-managers
@@ -329,6 +340,7 @@ steps:
     attempts: 3
   - name: company-facts
     lane: F
+    priority: 2
     source: sec.company-facts
     target: silver
     capture: company-facts/cohort-json
@@ -339,6 +351,7 @@ steps:
     attempts: 4
   - name: registration
     lane: D
+    priority: 1
     source: sec.registration
     target: silver
     capture: sec.registration/s1-f1-originals
@@ -346,6 +359,7 @@ steps:
     attempts: 4
   - name: ipo
     lane: D
+    priority: 1
     source: sec.ipo
     target: silver
     capture: sec.submissions.company/all-76230
