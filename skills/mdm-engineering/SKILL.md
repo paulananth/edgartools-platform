@@ -316,7 +316,11 @@ location: `Path(__file__).parents[N]` and `.parent`. Before the move, grep `pare
 - A merge takes the lock of its own kind only (`Store.take_lock(kind)`), so merges of two kinds run together.
   Of one kind, a merge runs beside the others under the kind's shared lock, and that includes creating a golden
   record for an identifier no one holds: the identifier values it newly gives are locked, one lock a value, then read
-  again, so a merge that gives a value another golden record took meanwhile is sent to join it. A kind lock
+  again, so a merge that gives a value another golden record took meanwhile is sent to join it. A batch that holds more
+  identifier values than one merge may claim beside others (the cap) is cut, before its first attempt, into parts that each hold
+  at most the cap, in order, so the cut is a pure function of the records and a rerun finds each part's file done: each part
+  is a file and a transaction of its own, and only a part that needs a merge alone holds the kind's lock, for its own short time,
+  never the whole piece's. A kind lock
   serializes what a key lock allows: the batches of one source file carry disjoint keys. What only a merge alone may
   do (merge golden records, create by exact name, which no lock covers, or survive a deadlock) rolls it back, and it
   merges again holding the lock alone. Beside others it locks the golden records it rewrites (not one it created)

@@ -182,7 +182,7 @@ def _merge_batches(envelope: dict, manifest: dict, folder: str, work: list[tuple
                 if kind not in settings:
                     settings[kind] = _settings(engine, manifest, kind)
                 made = merge.merge_file(db, settings[kind], records, deferred=deferred, quiet=quiet)
-                files.append({"file": made["file"], "records": len(records)})
+                files.extend(made.get("files") or [{"file": made["file"], "records": len(records)}])
                 deferred = ()
             if key is not None:
                 _record(journal, envelope, manifest, batch["input"], key, files)

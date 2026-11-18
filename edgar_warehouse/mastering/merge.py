@@ -8,6 +8,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from uuid import uuid4
 
+from edgar_warehouse.mastering import store as stored
 from edgar_warehouse.mastering.store import Contended
 from edgar_warehouse.mdm.activation import activated
 from edgar_warehouse.mdm import matching
@@ -118,6 +119,9 @@ def merge_file(store, settings: Settings, records: list[dict], *, again: bool = 
     merge on a golden record or identifier, is rolled back and merged alone."""
     shareable = store.can_share and records and not (again or record_updates or release_identifiers)
     if shareable:
+        parts = _parts(records, stored.CLAIMS)
+        if len(parts) > 1:
+            return _merge_parts(store, settings, parts, deferred, quiet)
         try:
             return _merge_file(store, settings, records, again, deferred, quiet, record_updates, release_identifiers,
                                shared=True)
@@ -125,6 +129,38 @@ def merge_file(store, settings: Settings, records: list[dict], *, again: bool = 
             pass
     return _merge_file(store, settings, records, again, deferred, quiet, record_updates, release_identifiers,
                        shared=False)
+
+
+def _parts(records: list[dict], cap: int) -> list[list[dict]]:
+    """The batch cut, in order, into parts that each hold at most `cap` distinct identifier values, the most one merge claims
+    beside others of its kind. The cut is a pure function of the records, so a rerun cuts the same parts and finds each one's
+    file done. A record that alone holds more than `cap` is a part of its own, and merges alone as before."""
+    parts, current, claimed = [], [], set()
+    for record in records:
+        values = {(namespace, value) for namespace, held in (record.get("identifiers") or {}).items()
+                  for value in ([held] if isinstance(held, str) else held)}
+        new = values - claimed
+        if current and len(claimed) + len(new) > cap:
+            parts.append(current)
+            current, claimed, new = [], set(), values
+        current.append(record)
+        claimed |= new
+    if current:
+        parts.append(current)
+    return parts
+
+
+def _merge_parts(store, settings: Settings, parts: list[list[dict]], deferred, quiet) -> dict:
+    """A batch that would claim more identifier values than one merge may claim beside others used to merge alone, holding the
+    kind's lock while a worker computed. Each part is its own file and transaction and merges beside the others of its kind; the
+    set-aside records go with the first. The result names every part's file, which is what a receipt holds."""
+    made = [merge_file(store, settings, part, deferred=deferred if number == 0 else (), quiet=quiet)
+            for number, part in enumerate(parts)]
+    totals = Counter()
+    for one in made:
+        totals.update({key: value for key, value in one.items() if isinstance(value, int) and not isinstance(value, bool)})
+    return {"file": made[0]["file"], "skipped": all(one["skipped"] for one in made), **totals,
+            "files": [{"file": one["file"], "records": len(part)} for one, part in zip(made, parts)]}
 
 
 def _merge_file(store, settings, records, again, deferred, quiet, record_updates, release_identifiers, *,

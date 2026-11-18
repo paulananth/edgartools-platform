@@ -527,6 +527,45 @@ def test_a_merge_that_creates_golden_records_by_identifier_runs_beside_one_in_fl
         assert len(live(first)) == 2
 
 
+def test_a_batch_over_the_claim_cap_merges_in_parts_beside_one_in_flight_of_its_kind(database_factory, monkeypatch):
+    """A fresh load's pieces claim more identifier values than the cap, and used to merge alone, holding the kind's lock
+    while a worker computed (measured: 84% of the active sessions waiting on it). They are split by what they claim, and each
+    part merges beside the others."""
+    with two_stores(database_factory) as (first, second):
+        if first.dialect == "mysql":
+            pytest.skip("MySQL merges one kind at a time")
+        monkeypatch.setattr(stores, "CLAIMS", 3)
+        merge.merge_file(first, COMPANY, [record(SEC, "1", cik="0000000017")])
+        first.take_lock("company", shared=True)  # a merge of the same kind is in flight
+        pool = ThreadPoolExecutor(1)
+        try:
+            batch = [record(SEC, str(n), cik=f"00000001{n:02d}") for n in range(20, 32)]
+            made = pool.submit(merge.merge_file, second, COMPANY, batch).result(timeout=20)  # not waiting for the first
+            assert made["skipped"] is False
+            assert len(made["files"]) > 1 and sum(part["records"] for part in made["files"]) == 12
+        finally:
+            first.rollback()
+            pool.shutdown(wait=False)
+        assert len(live(first)) == 13
+
+
+def test_a_batch_with_one_record_that_merges_golden_records_is_split_and_gives_the_same_masters(database_factory, monkeypatch):
+    with opened(database_factory) as db:
+        if db.dialect == "mysql":
+            pytest.skip("MySQL merges one kind at a time")
+        monkeypatch.setattr(stores, "CLAIMS", 4)
+        a, b = figi("00TSTX01"), figi("00TSTX02")
+        merge.merge_file(db, SECURITY, [record(FIGI, "a", "security", figi=a), record(FIGI, "b", "security", figi=b)])
+        batch = [record(FIGI, f"n{n}", "security", figi=figi(f"00TSTY{n:02d}")) for n in range(6)]
+        batch.append(record(FIGI, "c", "security", figi=[a, b]))  # joins the two golden records: a decision for a merge alone
+        made = merge.merge_file(db, SECURITY, batch)
+        assert sum(part["records"] for part in made["files"]) == 7
+        assert len(live(db)) == 1 + 6  # a and b became one; the six are new
+        assert sum(m.get("status") == "alias" for m in masters(db).values()) == 1
+        merge.merge_file(db, SECURITY, batch)  # the same batch again changes nothing
+        assert len(live(db)) == 7
+
+
 @pytest.mark.parametrize("engine", ["postgresql", "mysql"])
 def test_every_integer_column_is_bigint(engine):
     schema = (Path(stores.__file__).parent / "schema" / f"{engine}.sql").read_text()
