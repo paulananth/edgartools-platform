@@ -128,6 +128,13 @@ def _owned(tags: list[dict]) -> list[str]:
     return sorted(t["tagFQN"] for t in tags if t["tagFQN"].startswith(OWNED))
 
 
+def retagged(tags: list[dict], wanted: list[str]) -> list[dict] | None:
+    """The table's tags with the owned ones made exactly `wanted` and every other tag kept; None if already so."""
+    if _owned(tags) == wanted:
+        return None
+    return [t for t in tags if not t["tagFQN"].startswith(OWNED)] + _labels(wanted)
+
+
 def _require_vocabulary(call: Call, plan: dict) -> None:
     """The data class tags belong to the rules catalog: refuse rather than create them."""
     needed = {t for tags in plan["tags"].values() for t in tags if t != APPROVED}
@@ -158,9 +165,9 @@ def publish(manifest: dict, call: Call, *, service: str = SERVICE) -> dict:
     changed = 0
     for table, wanted in sorted(plan["tags"].items()):
         table_id, tags = _held(call, table)
-        if _owned(tags) != wanted:
-            kept = [t for t in tags if not t["tagFQN"].startswith(OWNED)]
-            call("PATCH", f"/tables/{table_id}", [{"op": "add", "path": "/tags", "value": kept + _labels(wanted)}])
+        value = retagged(tags, wanted)
+        if value is not None:
+            call("PATCH", f"/tables/{table_id}", [{"op": "add", "path": "/tags", "value": value}])
             changed += 1
     return {"published": published, "tags_set": changed, "verified": verify(manifest, call, service=service)}
 
@@ -180,13 +187,6 @@ def verify(manifest: dict, call: Call, *, service: str = SERVICE) -> dict:
     if differences:
         raise PublishError("the catalog differs from the manifest: " + "; ".join(differences))
     return {"tables": len(plan["tables"]), "lineage": len(plan["lineage"]), "differences": []}
-
-
-def versions(call: Call, manifest: dict, *, service: str = SERVICE) -> dict[str, float]:
-    """Each manifest table's entity version: a repeat publish that changes nothing leaves them all as they were."""
-    plan = exposure_plan(manifest, service=service)
-    return {name: (call("GET", f"/tables/name/{escape(name, safe='')}") or {}).get("version")
-            for name in sorted(plan["tags"])}
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -37,9 +37,8 @@ An expired token answers HTTP 401 on every call but `/system/version`: renew the
 
 ## The other scripts (unqualified)
 
-`autoontology.py`, `exposure_parity.py` and `exposure_operations.py` carry the open
-findings of the connectivity tracker (`.scratch/snowflake-openmetadata-autoontology-connectivity-20261116/`).
-Do not run them against a live service until their ticket is closed.
+`autoontology.py`, `exposure_parity.py` and `exposure_operations.py` are not qualified yet.
+Do not run them against a live service.
 
 ## Local verification
 

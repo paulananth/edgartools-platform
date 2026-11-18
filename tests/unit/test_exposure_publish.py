@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[2] / "skills/data-platform/scripts/exposure"))
 
-from exposure_publish import APPROVED, PublishError, _owned, column_type, exposure_plan  # noqa: E402
+from exposure_publish import APPROVED, PublishError, _owned, column_type, exposure_plan, retagged  # noqa: E402
 
 from tests.support.exposure import invented_manifest  # noqa: E402
 
@@ -75,3 +75,10 @@ def test_an_unknown_layer_is_refused_not_dropped():
 def test_only_the_tags_of_the_two_owned_classifications_are_this_publications():
     tags = [{"tagFQN": APPROVED}, {"tagFQN": "data_class.master_data"}, {"tagFQN": "PII.None"}]
     assert _owned(tags) == sorted([APPROVED, "data_class.master_data"])
+
+
+def test_a_republish_replaces_only_the_owned_tags_and_keeps_a_stewards():
+    wanted = sorted([APPROVED, "data_class.transaction_data"])
+    held = [{"tagFQN": "data_class.master_data"}, {"tagFQN": "PII.None"}]
+    assert [t["tagFQN"] for t in retagged(held, wanted)] == ["PII.None", *wanted]
+    assert retagged([{"tagFQN": "PII.None"}, *({"tagFQN": t} for t in wanted)], wanted) is None
