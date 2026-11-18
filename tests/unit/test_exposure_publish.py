@@ -5,22 +5,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[2] / "skills/data-platform/scripts/exposure"))
 
-from exposure_manifest import build_manifest
+from tests.support.exposure import invented_manifest
 from exposure_publish import exposure_plan, publish_exposure
 
 
 def _manifest():
-    return build_manifest({
-        "tables": [{
-            "database": "EDGARTOOLS_PROD",
-            "schema": "EDGARTOOLS_GOLD",
-            "table": "COMPANY",
-            "description": "Mastered companies.",
-            "authority": "mdm",
-            "columns": [{"name": "company_id", "data_type": "BIGINT", "description": "Master key."}],
-            "lineage": ["not-in-manifest"],
-        }]
-    })
+    return invented_manifest({"layer": "mdm", "table": "company", "description": "Mastered companies.",
+                              "columns": [("company_id", "BIGINT", "Master key.")]},
+                             schemas={"mdm": "EDGARTOOLS_GOLD"})
 
 
 class _Catalog:
@@ -88,10 +80,10 @@ def test_plan_uses_physical_identity_and_omits_unverified_lineage():
     plan = exposure_plan(_manifest())
     table = plan["tables"][0]
     assert table["name"] == "COMPANY"
-    assert table["databaseSchema"] == "edgartools-snowflake.EDGARTOOLS_PROD.EDGARTOOLS_GOLD"
+    assert table["databaseSchema"] == "edgartools-snowflake.INVENTED_MIRROR.EDGARTOOLS_GOLD"
     assert table["columns"][0]["dataType"] == "BIGINT"
     assert plan["certifications"] == [{
-        "table": "edgartools-snowflake.EDGARTOOLS_PROD.EDGARTOOLS_GOLD.COMPANY",
+        "table": "edgartools-snowflake.INVENTED_MIRROR.EDGARTOOLS_GOLD.COMPANY",
         "tag": "Certification.Gold",
     }]
     assert plan["data_class_marks"][0]["tag"] == "data_class.master_data"
@@ -103,6 +95,6 @@ def test_publish_matches_catalog_readback_without_inventing_glossary_terms():
     result = publish_exposure(_manifest(), server)
     assert result["verified"]["differences"] == []
     assert server.glossary_writes == []
-    assert server.certification["edgartools-snowflake.EDGARTOOLS_PROD.EDGARTOOLS_GOLD.COMPANY"]["tagLabel"]["tagFQN"] == "Certification.Gold"
+    assert server.certification["edgartools-snowflake.INVENTED_MIRROR.EDGARTOOLS_GOLD.COMPANY"]["tagLabel"]["tagFQN"] == "Certification.Gold"
     assert "edgartools-snowflake" in server.entities
-    assert "edgartools-snowflake.EDGARTOOLS_PROD.EDGARTOOLS_GOLD" in server.entities
+    assert "edgartools-snowflake.INVENTED_MIRROR.EDGARTOOLS_GOLD" in server.entities

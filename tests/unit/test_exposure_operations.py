@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[2] / "skills/data-platform/scripts/exposure"))
 
-from exposure_manifest import build_manifest
+from tests.support.exposure import invented_manifest
 from exposure_operations import (
     ExposureRunError,
     production_policy,
@@ -16,14 +16,12 @@ from exposure_operations import (
 
 
 def manifest():
-    return build_manifest({"tables": [{
-        "database": "EDGARTOOLS_PROD", "schema": "EDGARTOOLS_GOLD", "table": "COMPANY",
-        "description": "Mastered companies.", "authority": "mdm", "columns": [], "lineage": [],
-    }]})
+    return invented_manifest({"layer": "mdm", "table": "company", "description": "Mastered companies.",
+                              "columns": [("company_id", "BIGINT", "Key.")]})
 
 
 def snapshots(_manifest):
-    table = {"database": "EDGARTOOLS_PROD", "schema": "EDGARTOOLS_GOLD", "table": "COMPANY", "description": "Mastered companies.", "authority": "mdm", "columns": []}
+    table = {"database": "INVENTED_MIRROR", "schema": "MDM", "table": "COMPANY", "description": "Mastered companies.", "authority": "mdm", "columns": [{"name": "company_id", "data_type": "BIGINT"}]}
     return {"snowflake": {"tables": [table]}, "openmetadata": {"tables": [table]}, "autoontology": {"tables": [table]}}
 
 

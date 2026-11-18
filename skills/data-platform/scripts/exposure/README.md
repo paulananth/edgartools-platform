@@ -1,8 +1,28 @@
 # Snowflake exposure connectivity operations
 
-Unqualified: these scripts carry the open findings of the connectivity tracker
-(`.scratch/snowflake-openmetadata-autoontology-connectivity-20261116/`). Do not run them against a live
-service until their ticket is closed.
+## The manifest (qualified)
+
+`exposure_manifest.py` resolves an exposure list (the repository's is `rules/exposure.yaml`) against the
+stores it names: each listed table's columns, types and comments are read from its PostgreSQL catalog,
+read-only. Run it with the store's private env file, never a value on the command line:
+
+```bash
+uv run --no-project --with pyyaml --with 'psycopg[binary]' python <SKILL_DIR>/scripts/exposure/exposure_manifest.py \
+  generate --config rules/exposure.yaml --env <private worker.env> --out <manifest.json>
+uv run --no-project --with pyyaml python <SKILL_DIR>/scripts/exposure/exposure_manifest.py \
+  check --config rules/exposure.yaml --manifest <manifest.json>
+```
+
+A table or column the store lacks, a table with no definition in the store or the list, and a name with a
+dot are refused; `check` refuses a manifest its list no longer makes. A store is named by its setting
+only: a driver's error can carry the address, so only its class is reported. The env files hold
+SQLAlchemy addresses (`postgresql+psycopg2://`); the script drops the driver for libpq.
+
+## The other scripts (unqualified)
+
+`exposure_publish.py`, `autoontology.py`, `exposure_parity.py` and `exposure_operations.py` carry the open
+findings of the connectivity tracker (`.scratch/snowflake-openmetadata-autoontology-connectivity-20261116/`).
+Do not run them against a live service until their ticket is closed.
 
 ## Local verification
 
