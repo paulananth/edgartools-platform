@@ -24,3 +24,13 @@ def test_the_catalog_skill_is_not_the_home_of_openmetadata_mechanics():
 def test_the_openmetadata_skill_says_it_holds_only_that_catalogs_mechanics():
     description = re.search(r"^description: (.*)$", OPENMETADATA, re.M).group(1)
     assert "data-catalog" in description and "OpenMetadata" in description
+
+
+def test_the_catalog_skills_description_names_no_single_catalog_as_its_scope():
+    description = re.search(r"^description: (.*)$", CATALOG, re.M).group(1)
+    assert "any destination" in description and "Use for OpenMetadata catalog work" not in description
+
+
+def test_the_local_server_doc_names_the_instance_kept_running():
+    doc = (ROOT / "skills/openmetadata/LOCAL-SERVER.md").read_text()
+    assert "`edgartools-catalog` instance is the one kept running" in doc
