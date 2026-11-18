@@ -13,7 +13,7 @@
     python load_chain.py --status             what each running step is doing: progress, rate, processes, a verdict
     python load_chain.py --auto [--slots N] [--hours H | --deadline HH:MM]
                                               watch the loads: start each step when its lane is free, move its
-                                              workers (within --capacity) with the machine, stop at the deadline (see `auto`)
+                                              workers (within --capacity) with the machine, report a missed deadline and go on (see `auto`)
 
 Each step is the same resumable `load` command, run again until it finishes (a stopped attempt names why in its log and
 the next carries on from where it stopped). The chain stops at the first step that does not finish in its attempts.
@@ -77,6 +77,9 @@ def chain_steps(path: Path = ROOT / "rules/load-chain.yaml") -> list[dict]:
     chain = yaml.safe_load(path.read_text())
     steps = [{**(chain.get("defaults") or {}), **step} for step in chain["steps"]]
     for step in steps:
+        priority = step.get("priority", 3)
+        if type(priority) is not int or priority not in (1, 2, 3):  # `true` and `2.0` are not tiers
+            raise ValueError(f"{step['name']}: priority must be 1, 2 or 3, not {priority!r}")
         measured = step.get("worker_gb")
         if measured is not None and not (isinstance(measured, (int, float)) and 0.01 <= measured <= 64):
             raise ValueError(f"{step['name']}: worker_gb must be a number from 0.01 to 64 gigabytes, not {measured!r}")
@@ -168,13 +171,13 @@ def room(level: str, connections: int, target: int) -> str:
 def ready(steps: list[dict], done: set[str], running: set[str], failed: set[str], free: int,
           busy: frozenset | set = frozenset(), estimate: dict[str, float] | None = None) -> list[str]:
     """The steps to start now: each follows only done steps, is not blocked by a failure, and does not share its source
-    and target with a load already running (two loads of one pair write the same outputs). The longest chain first (see
-    `chain_length`); at most `free`."""
+    and target with a load already running (two loads of one pair write the same outputs). The chain file's `priority` first
+    (1 before 2 before 3), then the longest chain (see `chain_length`); at most `free`."""
     follows, stuck = needs(steps), blocked(steps, failed)
     length = chain_length(steps, estimate)
     taken = set(busy) | {(s["source"], s["target"]) for s in steps if s["name"] in running}
     chosen: list[dict] = []
-    for step in sorted(steps, key=lambda s: -length[s["name"]]):
+    for step in sorted(steps, key=lambda s: (s.get("priority", 3), -length[s["name"]])):
         pair = (step["source"], step["target"])
         if (step["name"] in done or step["name"] in running or step["name"] in failed or step["name"] in stuck
                 or not follows[step["name"]] <= done or pair in taken or len(chosen) >= free):
@@ -281,7 +284,7 @@ def rescale(workers: dict[str, int], priority: dict[str, int], level: str, bound
 
 def behind(elapsed: float, window: float, done: int, total: int) -> bool:
     """More of the window used than of the work done (by the steps' `minutes`), with a tenth of slack."""
-    return total > 0 and elapsed / window > done / total + 0.1
+    return total > 0 and (elapsed >= window or elapsed / window > done / total + 0.1)  # a window that has run out is behind
 
 
 def db_level(active: int, connections: int, max_connections: int, lock_waiters: int, longest_wait: float) -> str:
@@ -345,9 +348,10 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
     the step with the longest chain behind it doubles, when pressed the step with the shortest halves, one change a
     cycle, by stopping the step's load and starting it again (a load resumes where it stopped). With a `deadline`, a run
     behind its schedule (more of the window used than of the work done) is allowed twice the cores in load; at the
-    deadline every step this started is stopped and the run ends, naming what is left. A step that uses up its attempts
-    blocks what follows it and the rest carry on. Ends when every step is done (then the links table and the master ids), when
-    nothing more can start, or at the deadline."""
+    deadline the miss is reported once, naming what is left, and the loads go on: a deadline never stops one (a stopped step
+    loses the work of its attempt), and the run says how long after the deadline it finished. A step that uses up its attempts
+    blocks what follows it and the rest carry on. Ends when every step is done (then the links table and the master ids) or when
+    nothing more can start."""
     def range_of(name: str) -> tuple[int, int]:
         return bounds or bounds_for(capacity, by_name[name].get("worker_gb", WORKER_GB))
 
@@ -355,7 +359,7 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
     workers: dict[str, int] = {}
     failed: set[str] = set()
     by_name = {step["name"]: step for step in steps}
-    started, cycle, began, moved = clock(), 0, {}, {}
+    started, cycle, began, moved, missed = clock(), 0, {}, {}, False
     total = sum(step["minutes"] for step in steps)
 
     def spawn(name: str, count: int) -> None:
@@ -373,12 +377,12 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
                     failed.add(name)
         done = done_steps(state)
         if set(by_name) <= done:
+            if deadline and clock() >= deadline:  # also when the deadline passed in this very cycle
+                note(f"all steps done {(clock() - deadline).total_seconds() / 60:.0f} min after the deadline", state)
             return 0
-        if deadline and clock() >= deadline:
-            for child in children.values():
-                stop(child)
-            note(f"deadline: stopped {', '.join(sorted(children)) or 'nothing'}; left: {', '.join(sorted(set(by_name) - done))}", state)
-            return 2
+        if deadline and clock() >= deadline and not missed:
+            missed = True  # said once; the loads go on (a step stopped now would lose the work its attempt has done)
+            note(f"deadline {deadline:%H:%M} ET passed: still loading; left: {', '.join(sorted(set(by_name) - done))}", state)
         slow = bool(deadline) and behind((clock() - started).total_seconds(), (deadline - started).total_seconds(),
                                          sum(by_name[n]["minutes"] for n in done if n in by_name), total)
         reading = database_load(reader_url)
@@ -405,7 +409,7 @@ def auto(steps: list[dict], state: Path, slots: int, poll: int = 30, deadline: d
         for name in starts:
             low, top = range_of(name)
             count = min(max(by_name[name].get("workers", low), low), top)
-            note(f"scheduler starts {name} at {count} workers", state)
+            note(f"scheduler starts {name} (priority {by_name[name].get('priority', 3)}) at {count} workers", state)
             spawn(name, count)
         # Raising a step waits for it to settle; a pressed machine sheds the step with the shortest chain at once, whenever it last moved
         settled = set(workers) if level == "high" else {name for name in workers if clock() - moved.get(name, began[name]) >= MOVE_EVERY}
@@ -1070,7 +1074,7 @@ def main() -> int:
                         help="the compute: local (this machine, measured) or a profile of the chain file (aws-small, aws-medium, aws-large)")
     parser.add_argument("--connections", type=int, default=250,
                         help="with --auto: the database connections to aim for; workers rise until they are used")
-    parser.add_argument("--deadline", help="with --auto: HH:MM ET today, when every step this started is stopped")
+    parser.add_argument("--deadline", help="with --auto: HH:MM ET today, the run's schedule: a miss is reported once and the loads go on")
     parser.add_argument("--hours", type=float, help="with --auto: a deadline this many hours from now")
     parser.add_argument("--auto", action="store_true", help="watch the loads and start each step when its lane is free")
     parser.add_argument("--slots", type=int, default=max(2, min(os.cpu_count() or 2, int(
@@ -1090,7 +1094,7 @@ def main() -> int:
         return 2
     if args.list:
         for step in steps:
-            print(f"{step['lane']} {step['name']:30} {step['source']} {step['target']} {step['capture']}")
+            print(f"{step['lane']} p{step.get('priority', 3)} {step['name']:30} {step['source']} {step['target']} {step['capture']}")
         return 0
     state = LOGS / f"chain-{RUN}.log"
     if args.status:  # read-only: the reader login only, no loader login, no wake lock, nothing written
