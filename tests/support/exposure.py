@@ -47,4 +47,4 @@ def invented_manifest(*tables: dict, database: str = "INVENTED_MIRROR", schemas:
                 for name, kind, words in t["columns"]
             ],
         }
-    return build_manifest(config, stores, config_digest="0" * 64)
+    return build_manifest(config, stores, config_digest="0" * 64, requirements={"invented.yaml": "1" * 64})

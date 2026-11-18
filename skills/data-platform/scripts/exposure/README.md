@@ -21,8 +21,8 @@ SQLAlchemy addresses (`postgresql+psycopg2://`); the script drops the driver for
 ## The other scripts (unqualified)
 
 `exposure_publish.py`, `autoontology.py`, `exposure_parity.py` and `exposure_operations.py` carry the open
-findings of the connectivity tracker (`.scratch/snowflake-openmetadata-autoontology-connectivity-20261116/`,
-tickets 02 to 05). Do not run them against a live service until their ticket is closed.
+findings of the connectivity tracker (`.scratch/snowflake-openmetadata-autoontology-connectivity-20261116/`).
+Do not run them against a live service until their ticket is closed.
 
 ## Local verification
 

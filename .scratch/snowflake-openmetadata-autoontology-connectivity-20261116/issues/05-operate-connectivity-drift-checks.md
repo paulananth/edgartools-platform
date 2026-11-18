@@ -28,6 +28,7 @@ Blocked by: 04
 - [ ] Freshness from the manifest's own binding, not a caller-supplied creation time; naive and future dates refused; replay versus freshness stated for a rollback
 - [ ] A runnable local workflow on invented tables, not a snippet with undefined inputs
 - [ ] Tests that inject a secret to prove redaction, cover future dates and callback exceptions, and do not pin internal order
+- [ ] Every consumer checks staleness: it calls `validate_manifest` with the exposure list and the rules root, so a manifest whose list or requirement changed is refused (today the consumers check shape and digest only); the 24-hour age check reads a creation time no manifest carries
 - [ ] Nothing outside its tests calls these scripts: the runnable workflow is their first caller
 - [ ] ~~The production target, role and warehouse~~ deferred to the mirror's qualification
 - [ ] Learning → skill

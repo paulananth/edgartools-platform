@@ -83,6 +83,7 @@ def store(postgres):
 
 
 def write(tmp_path: Path, body: dict) -> Path:
+    (tmp_path / "invented.yaml").write_text("definition: invented\n")
     path = tmp_path / "exposure.yaml"
     path.write_text(yaml.safe_dump(body))
     return path
@@ -91,8 +92,8 @@ def write(tmp_path: Path, body: dict) -> Path:
 def test_each_listed_tables_columns_types_and_comments_come_from_its_store(store, tmp_path):
     env = {"INVENTED_SILVER_URL": store, "INVENTED_MDM_URL": store}
     config = write(tmp_path, LIST)
-    manifest = generate(config, env)
-    validate_manifest(manifest, config=config)
+    manifest = generate(config, env, tmp_path)
+    validate_manifest(manifest, config=config, root=tmp_path)
     sale, golden = (
         next(t for t in manifest["tables"] if t["source"]["table"] == n) for n in ("widget_sale", "golden")
     )
@@ -124,14 +125,14 @@ def test_a_listed_table_its_store_lacks_is_refused(store, tmp_path):
         ],
     }
     with pytest.raises(ValueError, match="widget_missing is not in its store"):
-        generate(write(tmp_path, body), {"INVENTED_SILVER_URL": store, "INVENTED_MDM_URL": store})
+        generate(write(tmp_path, body), {"INVENTED_SILVER_URL": store, "INVENTED_MDM_URL": store}, tmp_path)
 
 
 def test_an_unset_or_unreachable_store_is_named_by_its_setting_never_its_address(store, tmp_path):
     config = write(tmp_path, LIST)
     with pytest.raises(ValueError, match="INVENTED_MDM_URL is not set"):
-        generate(config, {"INVENTED_SILVER_URL": store})
+        generate(config, {"INVENTED_SILVER_URL": store}, tmp_path)
     unreachable = "postgresql+psycopg2://invented_user:invented-secret@127.0.0.1:1/none"
     with pytest.raises(ValueError) as refused:
-        generate(config, {"INVENTED_SILVER_URL": unreachable, "INVENTED_MDM_URL": store})
+        generate(config, {"INVENTED_SILVER_URL": unreachable, "INVENTED_MDM_URL": store}, tmp_path)
     assert "INVENTED_SILVER_URL" in str(refused.value) and "invented-secret" not in str(refused.value)

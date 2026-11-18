@@ -74,8 +74,11 @@ STORES = {
 }
 
 
+PINS = {"rules/invented/silver-sale.yaml": "b" * 64, "rules/invented/definitions.yaml": "c" * 64}
+
+
 def build(config=CONFIG, stores=STORES):
-    return build_manifest(copy.deepcopy(config), copy.deepcopy(stores), config_digest="a" * 64)
+    return build_manifest(copy.deepcopy(config), copy.deepcopy(stores), config_digest="a" * 64, requirements=PINS)
 
 
 def test_each_listed_table_keeps_its_store_identity_its_snowflake_identity_and_its_meaning_apart():
@@ -128,6 +131,10 @@ def test_the_manifest_is_the_same_whatever_order_the_list_names_its_tables():
         (lambda c, s: c["tables"][0].update({"scope": "forever"}), "scope"),
         (lambda c, s: c["approval"].update({"words": []}), "operator's words"),
         (lambda c, s: c["target"].update({"verified": "no"}), "true or false"),
+        (
+            lambda c, s: c["layers"]["silver"].update({"connection": "postgresql://u:invented-secret@h/d"}),
+            "environment variable",
+        ),
         (lambda c, s: c["tables"].append(dict(c["tables"][0])), "listed twice"),
         (lambda c, s: c["tables"][0].update({"surprise": 1}), "a table entry"),
     ],
@@ -135,8 +142,9 @@ def test_the_manifest_is_the_same_whatever_order_the_list_names_its_tables():
 def test_the_list_is_refused_when_it_does_not_prove_a_table(change, refusal):
     config, stores = copy.deepcopy(CONFIG), copy.deepcopy(STORES)
     change(config, stores)
-    with pytest.raises(ValueError, match=refusal):
+    with pytest.raises(ValueError, match=refusal) as refused:
         build(config, stores)
+    assert "invented-secret" not in str(refused.value)
 
 
 def test_two_tables_the_mirror_would_give_one_name_are_refused():
@@ -161,11 +169,39 @@ def test_a_changed_or_reshaped_manifest_is_refused():
         validate_manifest({**manifest, "extra": True})
 
 
-def test_a_manifest_its_list_no_longer_makes_is_stale(tmp_path):
+def test_a_manifest_its_list_or_a_requirement_no_longer_makes_is_stale(tmp_path):
+    import yaml
+
+    from exposure_manifest import requirement_digests
+
+    (tmp_path / "rules/invented").mkdir(parents=True)
+    for name in ("silver-sale.yaml", "definitions.yaml"):
+        (tmp_path / "rules/invented" / name).write_text("definition: invented\n")
     path = tmp_path / "exposure.yaml"
-    path.write_text("version: invented\n")
-    manifest = build_manifest(copy.deepcopy(CONFIG), copy.deepcopy(STORES), config_digest=config_sha256(path))
-    validate_manifest(manifest, config=path)
-    path.write_text("version: invented-and-changed\n")
+    path.write_text(yaml.safe_dump(CONFIG))
+    manifest = build_manifest(
+        copy.deepcopy(CONFIG),
+        copy.deepcopy(STORES),
+        config_digest=config_sha256(path, tmp_path),
+        requirements=requirement_digests(CONFIG, tmp_path),
+    )
+    sale = next(t for t in manifest["tables"] if t["source"]["table"] == "widget_sale")
+    assert (
+        sale["requirement"]["path"] == "rules/invented/silver-sale.yaml" and len(sale["requirement"]["sha256"]) == 64
+    )
+    validate_manifest(manifest, config=path, root=tmp_path)
+    (tmp_path / "rules/invented/silver-sale.yaml").write_text("definition: invented and changed\n")
     with pytest.raises(ValueError, match="stale"):
-        validate_manifest(manifest, config=path)
+        validate_manifest(manifest, config=path, root=tmp_path)
+    (tmp_path / "rules/invented/silver-sale.yaml").write_text("definition: invented\n")
+    validate_manifest(manifest, config=path, root=tmp_path)
+    path.write_text(yaml.safe_dump({**CONFIG, "version": "invented-and-changed"}))
+    with pytest.raises(ValueError, match="stale"):
+        validate_manifest(manifest, config=path, root=tmp_path)
+
+
+def test_a_requirement_that_does_not_exist_is_refused(tmp_path):
+    from exposure_manifest import requirement_digests
+
+    with pytest.raises(ValueError, match="does not exist"):
+        requirement_digests(CONFIG, tmp_path)

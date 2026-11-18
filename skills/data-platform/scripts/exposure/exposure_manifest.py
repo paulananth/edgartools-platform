@@ -15,7 +15,7 @@ database is written here. The list is the approval (data-platform FINAL-TABLES.m
       table: <PostgreSQL table>
       scope: current | history
       grain: <one row per ...>
-      requirement: <the file that states what the table must hold>
+      requirement: <the file or folder that states what the table must hold, pinned by its sha256>
       definition: <optional; else the table's comment in the store>
       columns: {<column>: <optional definition; else the column's comment>}
       lineage: [<layer>.<table> another listed table it is filled from]
@@ -23,7 +23,8 @@ database is written here. The list is the approval (data-platform FINAL-TABLES.m
 Each listed table's columns, types and comments are read back from its store, so the manifest describes the
 tables that exist, not a copy of their specs. A table or column the store lacks, or one with no definition in
 either place, is refused. Identities are held as parts, never one dotted string. `config_sha256` binds the
-manifest to the list it was made from: a consumer given the list refuses a manifest it no longer makes.
+manifest to the list and to the version of every requirement it names: given them, a consumer refuses a
+manifest they no longer make.
 
     uv run --no-project --with pyyaml --with 'psycopg[binary]' python exposure_manifest.py generate \\
         --config rules/exposure.yaml --env <private env file> --out <manifest.json>
@@ -36,6 +37,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -73,8 +75,15 @@ def _name(value: Any, what: str) -> str:
     """One identifier part as written; the parts are never joined, so a dot or quote in one is refused."""
     text = _words(value, what)
     if any(c in text for c in '." ') or text != str(value).strip():
-        raise ValueError(f"{what} {value!r} must be one plain name")
+        raise ValueError(f"{what} must be one plain name, with no dot, quote or space")
     return text
+
+
+def _setting(value: Any, what: str) -> str:
+    """An environment variable's name. Its value is never echoed: a pasted address would carry a password."""
+    if not isinstance(value, str) or not re.fullmatch(r"[A-Z_][A-Z0-9_]*", value):
+        raise ValueError(f"{what} must name an environment variable (capitals, digits and _), never hold a value")
+    return value
 
 
 def _flag(value: Any, what: str) -> bool:
@@ -92,8 +101,33 @@ def _keys(value: Any, expected: set, what: str, *, optional: set = frozenset()) 
     return value
 
 
-def config_sha256(path: Path) -> str:
-    return _sha256(Path(path).read_bytes())
+def requirement_digests(config: dict, root: Path) -> dict[str, str]:
+    """Each table's requirement file (or every file of a requirement folder) by its sha256, read under `root`."""
+    found = {}
+    for entry in config.get("tables") or []:
+        path = _words(entry.get("requirement"), f"{entry.get('table')} requirement")
+        where = Path(root) / path
+        if where.is_file():
+            found[path] = _sha256(where.read_bytes())
+        elif where.is_dir():
+            found[path] = _sha256(
+                _canonical(
+                    [
+                        [str(f.relative_to(where)), _sha256(f.read_bytes())]
+                        for f in sorted(where.rglob("*"))
+                        if f.is_file()
+                    ]
+                )
+            )
+        else:
+            raise ValueError(f"{entry.get('table')} names a requirement that does not exist: {path}")
+    return found
+
+
+def config_sha256(path: Path, root: Path | None = None) -> str:
+    """The list's own bytes and the version of every requirement it names: either changing makes a manifest stale."""
+    root = Path.cwd() if root is None else Path(root)
+    return _sha256(_canonical([_sha256(Path(path).read_bytes()), requirement_digests(load_config(path), root)]))
 
 
 def load_config(path: Path) -> dict:
@@ -107,7 +141,7 @@ def requested(config: dict) -> dict[str, dict]:
     layers = config.get("layers") or {}
     found = {
         name: {
-            "connection": _name(body.get("connection"), f"{name} connection"),
+            "connection": _setting(body.get("connection"), f"{name} connection"),
             "schema": _name(body.get("source_schema"), f"{name} source schema"),
             "tables": [],
         }
@@ -142,7 +176,7 @@ def read_store(connection, schema: str, tables: list[str]) -> dict[str, dict]:
     return found
 
 
-def _table(entry: dict, layer: dict, layer_name: str, target: dict, stored: dict) -> dict:
+def _table(entry: dict, layer: dict, layer_name: str, target: dict, stored: dict, requirements: dict) -> dict:
     _keys(entry, _ENTRY, "a table entry", optional={"definition", "columns", "lineage"})
     table = _name(entry["table"], "a table")
     if table not in stored:
@@ -180,14 +214,20 @@ def _table(entry: dict, layer: dict, layer_name: str, target: dict, stored: dict
             "authority": layer["authority"],
             "scope": entry["scope"],
         },
-        "requirement": _words(entry["requirement"], f"{table} requirement"),
+        "requirement": {
+            "path": _words(entry["requirement"], f"{table} requirement"),
+            "sha256": _words(requirements.get(entry["requirement"]), f"{table} requirement's sha256"),
+        },
         "columns": columns,
         "lineage": [],
     }
 
 
-def build_manifest(config: dict, stores: dict[str, dict], *, config_digest: str) -> dict:
-    """The manifest from a parsed exposure list and each layer's store readback (`read_store`)."""
+def build_manifest(
+    config: dict, stores: dict[str, dict], *, config_digest: str, requirements: dict[str, str]
+) -> dict:
+    """The manifest from a parsed exposure list, each layer's store readback (`read_store`) and each requirement's
+    sha256 (`requirement_digests`)."""
     _keys(config, {"version", "approval", "target", "layers", "tables"}, "the exposure list")
     target = _keys(config["target"], {"database", "verified"}, "target")
     target = {
@@ -200,13 +240,15 @@ def build_manifest(config: dict, stores: dict[str, dict], *, config_digest: str)
     layers = {}
     for name, body in config["layers"].items():
         _keys(body, _LAYER, f"layer {name}")
-        layers[_name(name, "a layer")] = {key: _name(body[key], f"{name} {key}") for key in _LAYER}
+        layers[_name(name, "a layer")] = {
+            key: (_setting if key == "connection" else _name)(body[key], f"{name} {key}") for key in _LAYER
+        }
     tables, by_name = [], {}
     for entry in config["tables"] or []:
         layer = entry.get("layer")
         if layer not in layers:
             raise ValueError(f"table {entry.get('table')!r} names an undeclared layer {layer!r}")
-        built = _table(entry, layers[layer], layer, target, stores.get(layer) or {})
+        built = _table(entry, layers[layer], layer, target, stores.get(layer) or {}, requirements)
         key = (layer, built["source"]["table"])
         if key in by_name:
             raise ValueError(f"{layer}.{key[1]} is listed twice")
@@ -240,7 +282,7 @@ def build_manifest(config: dict, stores: dict[str, dict], *, config_digest: str)
     return manifest
 
 
-def validate_manifest(manifest: dict, *, config: Path | None = None) -> None:
+def validate_manifest(manifest: dict, *, config: Path | None = None, root: Path | None = None) -> None:
     """Refuse a manifest of another version, a changed one, one of the wrong shape, or, given its exposure list, one
     that list no longer makes. A valid manifest is a consistent list; the list's approval is what authorizes."""
     _keys(manifest, _TOP, "the manifest")
@@ -258,6 +300,7 @@ def validate_manifest(manifest: dict, *, config: Path | None = None) -> None:
         _keys(table["source"], _SOURCE, "a table's source")
         _keys(table["physical"], _PHYSICAL, "a table's physical identity")
         _keys(table["business"], _BUSINESS, "a table's business meaning")
+        _keys(table["requirement"], {"path", "sha256"}, "a table's requirement")
         if table["business"]["scope"] not in SCOPES:
             raise ValueError("a table's scope must be current or history")
         if not isinstance(table["columns"], list) or not table["columns"]:
@@ -266,11 +309,13 @@ def validate_manifest(manifest: dict, *, config: Path | None = None) -> None:
             _keys(column, _COLUMN, "a column")
         for reference in table["lineage"]:
             _keys(reference, _REFERENCE, "a lineage reference")
-    if config is not None and manifest["config_sha256"] != config_sha256(config):
-        raise ValueError("the manifest is stale: its exposure list changed since it was generated")
+    if config is not None and manifest["config_sha256"] != config_sha256(config, root):
+        raise ValueError(
+            "the manifest is stale: its exposure list or a requirement it names changed since it was generated"
+        )
 
 
-def generate(config_path: Path, env: dict[str, str]) -> dict:
+def generate(config_path: Path, env: dict[str, str], root: Path | None = None) -> dict:
     """Read each layer's store through the connection setting the list names (from `env`), then build."""
     import psycopg
 
@@ -292,7 +337,10 @@ def generate(config_path: Path, env: dict[str, str]) -> dict:
             raise ValueError(
                 f"the {layer} store ({wanted['connection']}) could not be read: {type(error).__name__}"
             ) from None
-    return build_manifest(config, stores, config_digest=config_sha256(config_path))
+    root = Path.cwd() if root is None else Path(root)
+    return build_manifest(
+        config, stores, config_digest=config_sha256(config_path, root), requirements=requirement_digests(config, root)
+    )
 
 
 def _env(path: str | None) -> dict[str, str]:
@@ -310,21 +358,25 @@ def main(argv: list[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     making = commands.add_parser("generate", help="Read the stores and write the manifest")
     making.add_argument("--config", required=True, type=Path)
+    making.add_argument("--root", type=Path, default=Path.cwd(), help="The folder requirement paths are under")
     making.add_argument("--env", help="A private env file with the stores' connection settings")
     making.add_argument("--out", required=True, type=Path)
     checking = commands.add_parser("check", help="Refuse a manifest that is malformed or stale")
     checking.add_argument("--config", required=True, type=Path)
+    checking.add_argument("--root", type=Path, default=Path.cwd(), help="The folder requirement paths are under")
     checking.add_argument("--manifest", required=True, type=Path)
     args = parser.parse_args(argv)
     try:
         if args.command == "generate":
-            manifest = generate(args.config, _env(args.env))
+            manifest = generate(args.config, _env(args.env), args.root)
             args.out.write_text(
                 json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=1) + "\n", encoding="utf-8"
             )
             print(json.dumps({"tables": len(manifest["tables"]), "digest": manifest["digest"]}))
         else:
-            validate_manifest(json.loads(args.manifest.read_text(encoding="utf-8")), config=args.config)
+            validate_manifest(
+                json.loads(args.manifest.read_text(encoding="utf-8")), config=args.config, root=args.root
+            )
             print("current")
     except ValueError as error:
         print(error, file=sys.stderr)
